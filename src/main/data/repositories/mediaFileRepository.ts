@@ -10,6 +10,8 @@ import {
   MediaClipboardImageInput,
   MediaFile,
   MediaGroup,
+  MediaGroupListResult,
+  MediaGroupMembership,
   MediaStorageSettings,
   MediaUploadFailure,
   MediaUploadResult
@@ -515,13 +517,14 @@ async function assertMediaGroupForStaff(groupId: number, staffId: number): Promi
   if (!data) throw new Error('Không tìm thấy thư mục media.')
 }
 
-async function countMediaFilesByGroup(groupIds: number[], staffId: number): Promise<Map<number, number>> {
+async function listActiveMediaGroupMembershipRows(
+  groupIds: number[],
+  staffId: number
+): Promise<MediaGroupMembership[]> {
   const ids = normalizeIds(groupIds)
-  const counts = new Map<number, number>()
-  for (const id of ids) counts.set(id, 0)
-  if (ids.length === 0) return counts
+  if (ids.length === 0) return []
 
-  const memberships: Record<string, unknown>[] = []
+  const rows: Record<string, unknown>[] = []
   for (let groupFrom = 0; groupFrom < ids.length; groupFrom += MEDIA_ID_QUERY_CHUNK_SIZE) {
     const groupChunk = ids.slice(groupFrom, groupFrom + MEDIA_ID_QUERY_CHUNK_SIZE)
     for (let from = 0; ; from += MEDIA_QUERY_PAGE_SIZE) {
@@ -533,25 +536,42 @@ async function countMediaFilesByGroup(groupIds: number[], staffId: number): Prom
         .order('media_file_id', { ascending: true })
         .range(from, from + MEDIA_QUERY_PAGE_SIZE - 1)
 
-      if (error) throw formatMediaGroupError(error, 'Không thể tải số lượng media trong thư mục')
+      if (error) throw formatMediaGroupError(error, 'Không thể tải media trong thư mục')
       const page = (data || []) as Record<string, unknown>[]
-      memberships.push(...page)
+      rows.push(...page)
       if (page.length < MEDIA_QUERY_PAGE_SIZE) break
     }
   }
-  const mediaIds = normalizeIds(memberships.map(row => row.media_file_id))
-  const activeMediaIds = new Set(await listActiveMediaFileIds(staffId, mediaIds))
-  for (const row of memberships) {
+
+  const activeMediaIds = new Set(await listActiveMediaFileIds(
+    staffId,
+    rows.map(row => normalizeId(row.media_file_id))
+  ))
+  const memberships: MediaGroupMembership[] = []
+  for (const row of rows) {
     const groupId = normalizeId(row.group_id)
     const mediaFileId = normalizeId(row.media_file_id)
     if (!groupId || !activeMediaIds.has(mediaFileId)) continue
-    counts.set(groupId, (counts.get(groupId) || 0) + 1)
+    memberships.push({ groupId, mediaFileId })
+  }
+  return memberships
+}
+
+async function countMediaFilesByGroup(groupIds: number[], staffId: number): Promise<Map<number, number>> {
+  const ids = normalizeIds(groupIds)
+  const counts = new Map<number, number>()
+  for (const id of ids) counts.set(id, 0)
+  if (ids.length === 0) return counts
+
+  const memberships = await listActiveMediaGroupMembershipRows(ids, staffId)
+  for (const membership of memberships) {
+    counts.set(membership.groupId, (counts.get(membership.groupId) || 0) + 1)
   }
 
   return counts
 }
 
-export async function listMediaGroups(): Promise<MediaGroup[]> {
+export async function listMediaGroups(): Promise<MediaGroupListResult> {
   const user = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_media_groups')
@@ -562,8 +582,15 @@ export async function listMediaGroups(): Promise<MediaGroup[]> {
 
   if (error) throw formatMediaGroupError(error, 'Không thể tải thư mục media')
   const groups = (data || []).map(row => mapMediaGroupFromDB(row))
-  const counts = await countMediaFilesByGroup(groups.map(group => group.id), user.staffId)
-  return groups.map(group => ({ ...group, fileCount: counts.get(group.id) || 0 }))
+  const memberships = await listActiveMediaGroupMembershipRows(groups.map(group => group.id), user.staffId)
+  const counts = new Map<number, number>(groups.map(group => [group.id, 0]))
+  for (const membership of memberships) {
+    counts.set(membership.groupId, (counts.get(membership.groupId) || 0) + 1)
+  }
+  return {
+    groups: groups.map(group => ({ ...group, fileCount: counts.get(group.id) || 0 })),
+    memberships
+  }
 }
 
 export async function createMediaGroup(input: Partial<MediaGroup>): Promise<MediaGroup> {

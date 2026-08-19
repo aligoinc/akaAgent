@@ -1,6 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardPaste, Cloud, Copy, Edit3, FileText, Folder, FolderPlus, Image, Plus, RefreshCw, Save, Search, Trash2, Upload, X } from 'lucide-react'
+import {
+  ArrowUpDown,
+  Calendar,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardPaste,
+  Cloud,
+  Download,
+  Edit3,
+  FileText,
+  Folder,
+  FolderPlus,
+  Grid2X2,
+  HardDrive,
+  Image,
+  LayoutGrid,
+  List,
+  MoreVertical,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Settings,
+  Trash2,
+  Upload,
+  Video,
+  X
+} from 'lucide-react'
 import {
   CampaignMediaInput,
   CampaignMediaSnapshot,
@@ -16,7 +45,7 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import MediaPreviewHover from './MediaPreviewHover'
-import { isImageMediaSource } from './mediaImage'
+import { isImageMediaSource, isVideoMediaSource } from './mediaImage'
 import {
   IMAGE_FILE_ACCEPT,
   IMAGE_VIDEO_FILE_ACCEPT,
@@ -26,8 +55,44 @@ import {
 } from '../../../../shared/mediaTypes'
 
 type MediaPickerMode = MediaSelectionMode
-const MEDIA_TABLE_PAGE_SIZE = 100
+type MediaCategory = 'all' | 'image' | 'video' | 'document'
+type MediaView = 'grid' | 'large' | 'list'
+type MediaSort = 'newest' | 'oldest' | 'name-asc' | 'name-desc' | 'size-desc' | 'size-asc'
+type MediaDateFilter = 'all' | 'today' | 'yesterday' | '7-days' | '30-days' | '90-days' | 'this-month' | 'last-month' | 'this-quarter' | 'this-year' | 'custom'
+type MediaOpenMenu = 'sort' | 'extension' | 'date' | null
+
+const MEDIA_GRID_PAGE_SIZE = 24
+const MEDIA_LIST_PAGE_SIZE = 100
 const MEDIA_GROUP_MANAGE_PAGE_SIZE = 50
+
+const MEDIA_CATEGORY_LABELS: Record<MediaCategory, string> = {
+  all: 'Tất cả',
+  image: 'Ảnh',
+  video: 'Video',
+  document: 'File tài liệu'
+}
+
+const MEDIA_SORT_OPTIONS: Array<{ value: MediaSort; label: string }> = [
+  { value: 'newest', label: 'Mới nhất' },
+  { value: 'oldest', label: 'Cũ nhất' },
+  { value: 'name-asc', label: 'Tên A → Z' },
+  { value: 'name-desc', label: 'Tên Z → A' },
+  { value: 'size-desc', label: 'Dung lượng lớn nhất' },
+  { value: 'size-asc', label: 'Dung lượng nhỏ nhất' }
+]
+
+const MEDIA_DATE_OPTIONS: Array<{ value: MediaDateFilter; label: string }> = [
+  { value: 'all', label: 'Tất cả thời gian' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: '7-days', label: '7 ngày qua' },
+  { value: '30-days', label: '30 ngày qua' },
+  { value: '90-days', label: '90 ngày qua' },
+  { value: 'this-month', label: 'Tháng này' },
+  { value: 'last-month', label: 'Tháng trước' },
+  { value: 'this-quarter', label: 'Quý này' },
+  { value: 'this-year', label: 'Năm nay' }
+]
 
 interface MediaLibraryModalProps {
   onClose: () => void
@@ -150,6 +215,118 @@ const formatDateTime = (value?: string): string => {
   return date.toLocaleString('vi-VN')
 }
 
+const formatMediaCardDate = (value?: string): string => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+const getMediaExtension = (file: MediaFile): string => {
+  const sources = [file.originalName, file.objectKey, file.cloudUrl, file.localPath]
+  for (const source of sources) {
+    const clean = String(source || '').split(/[?#]/, 1)[0]
+    const fileName = clean.split(/[\\/]/).pop() || ''
+    const dotIndex = fileName.lastIndexOf('.')
+    if (dotIndex > 0 && dotIndex < fileName.length - 1) return fileName.slice(dotIndex + 1).toUpperCase()
+  }
+  const mimeSubtype = String(file.mimeType || '').split('/')[1]?.split(';')[0]?.trim()
+  return mimeSubtype ? mimeSubtype.toUpperCase() : 'FILE'
+}
+
+const getMediaCategory = (file: MediaFile): Exclude<MediaCategory, 'all'> => {
+  if (isImageMediaSource(file.mimeType, file.originalName, file.localPath, file.cloudUrl)) return 'image'
+  if (isVideoMediaSource(file.mimeType, file.originalName, file.localPath, file.cloudUrl)) return 'video'
+  return 'document'
+}
+
+const getMediaExtensionBadgeClass = (file: MediaFile, compact = false): string => {
+  const extension = getMediaExtension(file).toLocaleLowerCase('vi').replace(/[^a-z0-9]+/g, '-')
+  return `media-file-extension-badge extension-${extension} ${compact ? 'is-compact' : ''}`.trim()
+}
+
+const getMediaTimestamp = (file: MediaFile): number => {
+  const value = new Date(file.createdAt || 0).getTime()
+  return Number.isFinite(value) ? value : 0
+}
+
+const startOfDay = (date: Date): Date => {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+const endOfDay = (date: Date): Date => {
+  const next = new Date(date)
+  next.setHours(23, 59, 59, 999)
+  return next
+}
+
+const getMediaDateRange = (
+  filter: MediaDateFilter,
+  customStart: string,
+  customEnd: string
+): { start: number; end: number } | null => {
+  if (filter === 'all') return null
+  const now = new Date()
+
+  if (filter === 'custom') {
+    const start = customStart ? startOfDay(new Date(`${customStart}T00:00:00`)).getTime() : Number.NEGATIVE_INFINITY
+    const end = customEnd ? endOfDay(new Date(`${customEnd}T00:00:00`)).getTime() : Number.POSITIVE_INFINITY
+    return { start, end }
+  }
+
+  if (filter === 'today') return { start: startOfDay(now).getTime(), end: endOfDay(now).getTime() }
+  if (filter === 'yesterday') {
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    return { start: startOfDay(yesterday).getTime(), end: endOfDay(yesterday).getTime() }
+  }
+  if (filter === 'this-month') {
+    return {
+      start: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+      end: endOfDay(now).getTime()
+    }
+  }
+  if (filter === 'last-month') {
+    return {
+      start: new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime(),
+      end: endOfDay(new Date(now.getFullYear(), now.getMonth(), 0)).getTime()
+    }
+  }
+  if (filter === 'this-quarter') {
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
+    return {
+      start: new Date(now.getFullYear(), quarterStartMonth, 1).getTime(),
+      end: endOfDay(now).getTime()
+    }
+  }
+  if (filter === 'this-year') {
+    return {
+      start: new Date(now.getFullYear(), 0, 1).getTime(),
+      end: endOfDay(now).getTime()
+    }
+  }
+
+  const days = filter === '7-days' ? 7 : filter === '30-days' ? 30 : 90
+  const start = startOfDay(now)
+  start.setDate(start.getDate() - days + 1)
+  return { start: start.getTime(), end: endOfDay(now).getTime() }
+}
+
+const sortMediaFiles = (files: MediaFile[], sort: MediaSort): MediaFile[] => {
+  const next = [...files]
+  next.sort((a, b) => {
+    if (sort === 'oldest') return getMediaTimestamp(a) - getMediaTimestamp(b) || a.id - b.id
+    if (sort === 'name-asc') return a.originalName.localeCompare(b.originalName, 'vi', { sensitivity: 'base' }) || a.id - b.id
+    if (sort === 'name-desc') return b.originalName.localeCompare(a.originalName, 'vi', { sensitivity: 'base' }) || b.id - a.id
+    if (sort === 'size-desc') return Number(b.sizeBytes || 0) - Number(a.sizeBytes || 0) || b.id - a.id
+    if (sort === 'size-asc') return Number(a.sizeBytes || 0) - Number(b.sizeBytes || 0) || a.id - b.id
+    return getMediaTimestamp(b) - getMediaTimestamp(a) || b.id - a.id
+  })
+  return next
+}
+
 const mediaMatchesSearch = (file: MediaFile, query: string): boolean =>
   [
     file.originalName,
@@ -175,6 +352,7 @@ export default function MediaLibraryModal({
   const deleteSelectAllRef = useRef<HTMLInputElement>(null)
   const uploadInFlightRef = useRef(false)
   const groupMembershipRequestRef = useRef(0)
+  const groupSnapshotRequestRef = useRef(0)
   const selectedGroupIdRef = useRef<number | null>(null)
   const [settings, setSettings] = useState<MediaStorageSettings>(EMPTY_SETTINGS)
   const [settingsExpanded, setSettingsExpanded] = useState(false)
@@ -185,15 +363,34 @@ export default function MediaLibraryModal({
   const [groups, setGroups] = useState<MediaGroup[]>([])
   const [groupsLoading, setGroupsLoading] = useState(true)
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
+  const [ungroupedSelected, setUngroupedSelected] = useState(false)
+  const [groupIdsByFileId, setGroupIdsByFileId] = useState<Map<number, number[]>>(() => new Map())
+  const [groupIndexLoading, setGroupIndexLoading] = useState(true)
+  const [groupIndexError, setGroupIndexError] = useState<string | null>(null)
   const [groupFileIds, setGroupFileIds] = useState<Set<number>>(new Set())
   const [groupMembershipLoading, setGroupMembershipLoading] = useState(false)
   const [groupSaving, setGroupSaving] = useState(false)
   const [groupManageMode, setGroupManageMode] = useState(false)
+  const [groupFormOpen, setGroupFormOpen] = useState(false)
   const [groupFormName, setGroupFormName] = useState('')
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
+  const [groupSearch, setGroupSearch] = useState('')
+  const [category, setCategory] = useState<MediaCategory>(() => {
+    if (!pickerMode || pickerMode === 'file') return 'all'
+    if (pickerMode === 'video') return 'video'
+    return 'image'
+  })
+  const [view, setView] = useState<MediaView>('grid')
+  const [sort, setSort] = useState<MediaSort>('newest')
+  const [openMenu, setOpenMenu] = useState<MediaOpenMenu>(null)
+  const [selectedExtensions, setSelectedExtensions] = useState<Set<string>>(() => new Set())
+  const [dateFilter, setDateFilter] = useState<MediaDateFilter>('all')
+  const [customDateStart, setCustomDateStart] = useState('')
+  const [customDateEnd, setCustomDateEnd] = useState('')
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set())
   const [selectedDeleteIds, setSelectedDeleteIds] = useState<Set<number>>(() => new Set())
   const [mediaPage, setMediaPage] = useState(1)
@@ -206,14 +403,20 @@ export default function MediaLibraryModal({
   const pickerMediaLabel = getPickerMediaLabel(pickerMode)
   const activeMediaCount = files.length
   const mediaLibraryMaxFiles = normalizeMediaLibraryMaxFiles(settings.maxFilesPerStaff)
-  const selectedGroup = selectedGroupId ? groups.find(group => group.id === selectedGroupId) || null : null
   const canDeleteMedia = !isPicker && selectedGroupId === null
-  const showSelectionColumn = isPicker || canDeleteMedia
-  const tableColSpan = showSelectionColumn ? 9 : 8
+  const allGroupedFileIds = useMemo(
+    () => new Set(groupIdsByFileId.keys()),
+    [groupIdsByFileId]
+  )
   const groupFileOrder = useMemo(
     () => new Map(Array.from(groupFileIds).map((id, index) => [id, index])),
     [groupFileIds]
   )
+  const usedStorageBytes = useMemo(
+    () => files.reduce((total, file) => total + Math.max(0, Number(file.sizeBytes || 0)), 0),
+    [files]
+  )
+  const quotaPercent = Math.min(100, (activeMediaCount / Math.max(1, mediaLibraryMaxFiles)) * 100)
 
   const loadSettings = async () => {
     setSettingsLoading(true)
@@ -239,15 +442,33 @@ export default function MediaLibraryModal({
   }
 
   const loadGroups = async () => {
+    const requestId = groupSnapshotRequestRef.current + 1
+    groupSnapshotRequestRef.current = requestId
     setGroupsLoading(true)
+    setGroupIndexLoading(true)
+    setGroupIndexError(null)
     try {
-      const rows = await window.electronAPI.listMediaGroups()
+      const snapshot = await window.electronAPI.listMediaGroups()
+      if (requestId !== groupSnapshotRequestRef.current) return
+      const rows = snapshot.groups
+      const next = new Map<number, number[]>()
+      for (const membership of snapshot.memberships) {
+        const groupIds = next.get(membership.mediaFileId)
+        if (groupIds) groupIds.push(membership.groupId)
+        else next.set(membership.mediaFileId, [membership.groupId])
+      }
       setGroups(rows)
+      setGroupIdsByFileId(next)
       setSelectedGroupId(current => current && rows.some(group => group.id === current) ? current : null)
     } catch (err) {
-      showAlert(err instanceof Error ? err.message : 'Không thể tải thư mục media.', 'error')
+      if (requestId !== groupSnapshotRequestRef.current) return
+      const message = err instanceof Error ? err.message : 'Không thể tải thư mục media.'
+      setGroupIndexError(message)
+      showAlert(message, 'error')
     } finally {
+      if (requestId !== groupSnapshotRequestRef.current) return
       setGroupsLoading(false)
+      setGroupIndexLoading(false)
     }
   }
 
@@ -276,7 +497,6 @@ export default function MediaLibraryModal({
 
   useEffect(() => {
     selectedGroupIdRef.current = selectedGroupId
-    setGroupManageMode(false)
 
     const requestId = groupMembershipRequestRef.current + 1
     groupMembershipRequestRef.current = requestId
@@ -290,24 +510,78 @@ export default function MediaLibraryModal({
     void loadGroupFileIds(selectedGroupId, requestId)
   }, [selectedGroupId])
 
+  const groupScopedFiles = useMemo(
+    () => ungroupedSelected
+      ? groupIndexError ? [] : files.filter(file => !allGroupedFileIds.has(file.id))
+      : selectedGroupId ? files.filter(file => groupFileIds.has(file.id)) : files,
+    [allGroupedFileIds, files, groupFileIds, groupIndexError, selectedGroupId, ungroupedSelected]
+  )
+  const ungroupedFileCount = files.reduce((count, file) => count + (allGroupedFileIds.has(file.id) ? 0 : 1), 0)
+  const categoryCounts = useMemo(() => ({
+    all: groupScopedFiles.length,
+    image: groupScopedFiles.filter(file => getMediaCategory(file) === 'image').length,
+    video: groupScopedFiles.filter(file => getMediaCategory(file) === 'video').length,
+    document: groupScopedFiles.filter(file => getMediaCategory(file) === 'document').length
+  }), [groupScopedFiles])
+  const extensionOptions = useMemo(() => {
+    const counts = new Map<string, { count: number; category: Exclude<MediaCategory, 'all'> }>()
+    for (const file of groupScopedFiles) {
+      if (category !== 'all' && getMediaCategory(file) !== category) continue
+      const extension = getMediaExtension(file)
+      const current = counts.get(extension)
+      counts.set(extension, {
+        count: (current?.count || 0) + 1,
+        category: current?.category || getMediaCategory(file)
+      })
+    }
+    return Array.from(counts.entries())
+      .map(([extension, metadata]) => ({ extension, ...metadata }))
+      .sort((a, b) => a.extension.localeCompare(b.extension, 'vi'))
+  }, [category, groupScopedFiles])
+  const dateRange = useMemo(
+    () => getMediaDateRange(dateFilter, customDateStart, customDateEnd),
+    [customDateEnd, customDateStart, dateFilter]
+  )
+  const matchesCurrentMediaFilters = (file: MediaFile, query: string): boolean => {
+    if (category !== 'all' && getMediaCategory(file) !== category) return false
+    if (selectedExtensions.size > 0 && !selectedExtensions.has(getMediaExtension(file))) return false
+    if (dateRange) {
+      const timestamp = getMediaTimestamp(file)
+      if (timestamp < dateRange.start || timestamp > dateRange.end) return false
+    }
+    return !query || mediaMatchesSearch(file, query)
+  }
   const filteredFiles = useMemo(() => {
     const q = search.trim().toLowerCase()
-    const rows = files.filter(file => {
-      if (selectedGroupId && !groupFileIds.has(file.id)) return false
-      if (!q) return true
-      return mediaMatchesSearch(file, q)
+    const rows = groupScopedFiles.filter(file => matchesCurrentMediaFilters(file, q))
+    return sortMediaFiles(rows, sort)
+  }, [category, dateRange, groupScopedFiles, search, selectedExtensions, sort])
+  const dateOptionCounts = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    const baseFiles = groupScopedFiles.filter(file => {
+      if (category !== 'all' && getMediaCategory(file) !== category) return false
+      if (selectedExtensions.size > 0 && !selectedExtensions.has(getMediaExtension(file))) return false
+      return !query || mediaMatchesSearch(file, query)
     })
-    return selectedGroupId
-      ? [...rows].sort((a, b) => (groupFileOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (groupFileOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.id - b.id)
-      : rows
-  }, [files, groupFileIds, groupFileOrder, search, selectedGroupId])
+    return new Map(MEDIA_DATE_OPTIONS.map(option => {
+      const range = getMediaDateRange(option.value, customDateStart, customDateEnd)
+      const count = !range ? baseFiles.length : baseFiles.filter(file => {
+        const timestamp = getMediaTimestamp(file)
+        return timestamp >= range.start && timestamp <= range.end
+      }).length
+      return [option.value, count] as const
+    }))
+  }, [category, customDateEnd, customDateStart, groupScopedFiles, search, selectedExtensions])
 
-  const mediaPageCount = Math.max(1, Math.ceil(filteredFiles.length / MEDIA_TABLE_PAGE_SIZE))
+  const mediaPageSize = category === 'all'
+    ? Number.MAX_SAFE_INTEGER
+    : view === 'list' ? MEDIA_LIST_PAGE_SIZE : MEDIA_GRID_PAGE_SIZE
+  const mediaPageCount = Math.max(1, Math.ceil(filteredFiles.length / mediaPageSize))
   const resolvedMediaPage = Math.min(mediaPage, mediaPageCount)
   const pagedFiles = useMemo(() => {
-    const start = (resolvedMediaPage - 1) * MEDIA_TABLE_PAGE_SIZE
-    return filteredFiles.slice(start, start + MEDIA_TABLE_PAGE_SIZE)
-  }, [filteredFiles, resolvedMediaPage])
+    const start = (resolvedMediaPage - 1) * mediaPageSize
+    return filteredFiles.slice(start, start + mediaPageSize)
+  }, [filteredFiles, mediaPageSize, resolvedMediaPage])
 
   const visibleDeleteIds = useMemo(
     () => canDeleteMedia ? pagedFiles.map(file => file.id) : [],
@@ -370,14 +644,14 @@ export default function MediaLibraryModal({
   const visibleAvailableGroupManageFiles = useMemo(() => {
     if (!selectedGroupId) return []
     const q = search.trim().toLowerCase()
-    return groupAvailableFiles.filter(file => !q || mediaMatchesSearch(file, q))
-  }, [groupAvailableFiles, search, selectedGroupId])
+    return sortMediaFiles(groupAvailableFiles.filter(file => matchesCurrentMediaFilters(file, q)), sort)
+  }, [category, dateRange, groupAvailableFiles, search, selectedExtensions, selectedGroupId, sort])
 
   const visibleGroupManageFiles = useMemo(() => {
     if (!selectedGroupId) return []
     const q = search.trim().toLowerCase()
-    return groupManageFiles.filter(file => !q || mediaMatchesSearch(file, q))
-  }, [groupManageFiles, search, selectedGroupId])
+    return sortMediaFiles(groupManageFiles.filter(file => matchesCurrentMediaFilters(file, q)), sort)
+  }, [category, dateRange, groupManageFiles, search, selectedExtensions, selectedGroupId, sort])
 
   const availableManagePageCount = Math.max(1, Math.ceil(visibleAvailableGroupManageFiles.length / MEDIA_GROUP_MANAGE_PAGE_SIZE))
   const resolvedAvailableManagePage = Math.min(availableManagePage, availableManagePageCount)
@@ -397,7 +671,7 @@ export default function MediaLibraryModal({
     setMediaPage(1)
     setAvailableManagePage(1)
     setGroupManagePage(1)
-  }, [groupManageMode, search, selectedGroupId])
+  }, [category, dateFilter, groupManageMode, search, selectedExtensions, selectedGroupId, sort, ungroupedSelected, view])
 
   const handleSaveSettings = async () => {
     if (!isAdmin || settingsSaving) return
@@ -427,15 +701,33 @@ export default function MediaLibraryModal({
   }
 
   const selectGroup = (groupId: number | null) => {
-    setGroupFileIds(new Set())
-    setGroupMembershipLoading(!!groupId)
+    const groupChanged = selectedGroupId !== groupId
+    if (groupChanged) {
+      setGroupFileIds(new Set())
+      setGroupMembershipLoading(!!groupId)
+    }
     setGroupManageMode(false)
+    setSelectedDeleteIds(new Set())
+    setOpenMenu(null)
+    setUngroupedSelected(false)
     setSelectedGroupId(groupId)
+  }
+
+  const selectUngrouped = () => {
+    if (groupIndexLoading || groupIndexError) return
+    setGroupFileIds(new Set())
+    setGroupMembershipLoading(false)
+    setGroupManageMode(false)
+    setSelectedDeleteIds(new Set())
+    setOpenMenu(null)
+    setSelectedGroupId(null)
+    setUngroupedSelected(true)
   }
 
   const resetGroupForm = () => {
     setGroupFormName('')
     setEditingGroupId(null)
+    setGroupFormOpen(false)
   }
 
   const handleSaveGroup = async () => {
@@ -469,6 +761,7 @@ export default function MediaLibraryModal({
   const handleEditGroup = (group: MediaGroup) => {
     setGroupFormName(group.name)
     setEditingGroupId(group.id)
+    setGroupFormOpen(true)
   }
 
   const handleDeleteGroup = (group: MediaGroup) => {
@@ -479,6 +772,14 @@ export default function MediaLibraryModal({
         try {
           await window.electronAPI.deleteMediaGroup(group.id)
           setGroups(current => current.filter(item => item.id !== group.id))
+          setGroupIdsByFileId(current => {
+            const next = new Map<number, number[]>()
+            current.forEach((groupIds, mediaFileId) => {
+              const remainingGroupIds = groupIds.filter(groupId => groupId !== group.id)
+              if (remainingGroupIds.length > 0) next.set(mediaFileId, remainingGroupIds)
+            })
+            return next
+          })
           if (selectedGroupId === group.id) selectGroup(null)
           if (editingGroupId === group.id) resetGroupForm()
           showAlert('Đã xoá thư mục media.', 'success')
@@ -496,6 +797,17 @@ export default function MediaLibraryModal({
     const next = new Set(savedIds)
     if (selectedGroupIdRef.current === groupId) setGroupFileIds(next)
     setGroups(current => current.map(group => group.id === groupId ? { ...group, fileCount: savedIds.length } : group))
+    setGroupIdsByFileId(current => {
+      const updated = new Map<number, number[]>()
+      current.forEach((groupIds, mediaFileId) => {
+        const remainingGroupIds = groupIds.filter(id => id !== groupId)
+        if (remainingGroupIds.length > 0) updated.set(mediaFileId, remainingGroupIds)
+      })
+      for (const mediaFileId of savedIds) {
+        updated.set(mediaFileId, [...(updated.get(mediaFileId) || []), groupId])
+      }
+      return updated
+    })
   }
 
   const handleAddToGroup = async (file: MediaFile) => {
@@ -804,6 +1116,55 @@ export default function MediaLibraryModal({
     )
   }
 
+  const handleAddSelectedToGroup = async (groupId: number) => {
+    if (groupSaving || selectedDeleteFiles.length === 0) return
+    setGroupSaving(true)
+    try {
+      const savedIds = await window.electronAPI.addMediaGroupFiles(groupId, selectedDeleteFiles.map(file => file.id))
+      applySavedGroupFileIds(groupId, savedIds)
+      setSelectedDeleteIds(new Set())
+      const group = groups.find(item => item.id === groupId)
+      showAlert(`Đã thêm ${selectedDeleteFiles.length} media vào nhóm "${group?.name || ''}".`, 'success')
+    } catch (err) {
+      showAlert(err instanceof Error ? err.message : 'Không thể thêm media vào nhóm.', 'error')
+    } finally {
+      setGroupSaving(false)
+    }
+  }
+
+  const handleDownloadSelected = async () => {
+    if (downloading || selectedDeleteFiles.length === 0) return
+    setDownloading(true)
+    try {
+      const result = await window.electronAPI.downloadMediaFiles(selectedDeleteFiles.map(file => file.id))
+      if (result.canceled) return
+      if (result.failed === 0) showAlert(`Đã tải xuống ${result.downloaded} media.`, 'success')
+      else if (result.downloaded > 0) showAlert(`Đã tải xuống ${result.downloaded}/${result.downloaded + result.failed} media.`, 'info')
+      else showAlert('Không thể tải xuống media đã chọn. Vui lòng kiểm tra kết nối kho media.', 'error')
+    } catch (err) {
+      showAlert(err instanceof Error ? err.message : 'Không thể tải xuống media đã chọn.', 'error')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const toggleExtension = (extension: string) => {
+    setSelectedExtensions(current => {
+      const next = new Set(current)
+      if (next.has(extension)) next.delete(extension)
+      else next.add(extension)
+      return next
+    })
+  }
+
+  const clearMediaFilters = () => {
+    setSelectedExtensions(new Set())
+    setDateFilter('all')
+    setCustomDateStart('')
+    setCustomDateEnd('')
+    setOpenMenu(null)
+  }
+
   const toggleSelect = (file: MediaFile) => {
     if (!isPicker) return
     if (!mediaFileMatchesPickerMode(file, pickerMode)) return
@@ -819,6 +1180,16 @@ export default function MediaLibraryModal({
       }
       return next
     })
+  }
+
+  const toggleMediaSelection = (file: MediaFile) => {
+    if (isPicker) toggleSelect(file)
+    else if (canDeleteMedia) toggleDeleteSelect(file.id)
+  }
+
+  const isMediaSelected = (file: MediaFile): boolean => {
+    if (isPicker) return selectedKeys.has(getSnapshotKey(fileToSnapshot(file)))
+    return selectedDeleteIds.has(file.id)
   }
 
   const handleConfirm = () => {
@@ -842,141 +1213,210 @@ export default function MediaLibraryModal({
   }
 
   const renderSettings = () => {
-    if (!isAdmin) return null
+    if (!isAdmin || !settingsExpanded) return null
     return (
-      <section className="media-library-section">
+      <section className="media-library-section media-settings-panel">
         <div className="media-settings-head">
           <div className="media-library-section-title">
             <Cloud size={16} />
             <span>Cấu hình cloud</span>
           </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSettingsExpanded(current => !current)}>
-            {settingsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            <span>{settingsExpanded ? 'Ẩn' : 'Hiện'}</span>
+          <button type="button" className="btn-icon" onClick={() => setSettingsExpanded(false)} title="Đóng cấu hình">
+            <X size={14} />
           </button>
         </div>
-        {settingsExpanded && (
-          <>
-            <div className="media-settings-grid">
-              <label>
-                <span>Provider</span>
-                <input className="stepper-input" value={settings.provider} onChange={e => setSettings(p => ({ ...p, provider: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Endpoint URL</span>
-                <input className="stepper-input" value={settings.endpointUrl} onChange={e => setSettings(p => ({ ...p, endpointUrl: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Access key ID</span>
-                <input className="stepper-input" value={settings.accessKeyId} onChange={e => setSettings(p => ({ ...p, accessKeyId: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Secret access key</span>
-                <input className="stepper-input" type="password" value={settings.secretAccessKey || ''} onChange={e => setSettings(p => ({ ...p, secretAccessKey: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Bucket</span>
-                <input className="stepper-input" value={settings.bucket} onChange={e => setSettings(p => ({ ...p, bucket: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Public base URL</span>
-                <input className="stepper-input" value={settings.publicBaseUrl} onChange={e => setSettings(p => ({ ...p, publicBaseUrl: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-              <label>
-                <span>Key prefix</span>
-                <input className="stepper-input" value={settings.keyPrefix || ''} onChange={e => setSettings(p => ({ ...p, keyPrefix: e.target.value }))} disabled={settingsSaving || settingsLoading} />
-              </label>
-            </div>
-            <div className="media-library-actions">
-              <button type="button" className="btn btn-secondary btn-sm" onClick={handleTestSettings} disabled={settingsSaving || settingsLoading}>
-                {settingsSaving ? <RefreshCw size={14} className="spin" /> : <Cloud size={14} />}
-                <span>Test</span>
-              </button>
-              <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveSettings} disabled={settingsSaving || settingsLoading}>
-                {settingsSaving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
-                <span>Lưu</span>
-              </button>
-            </div>
-          </>
-        )}
+        <div className="media-settings-grid">
+          <label>
+            <span>Provider</span>
+            <input className="stepper-input" value={settings.provider} onChange={e => setSettings(p => ({ ...p, provider: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Endpoint URL</span>
+            <input className="stepper-input" value={settings.endpointUrl} onChange={e => setSettings(p => ({ ...p, endpointUrl: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Access key ID</span>
+            <input className="stepper-input" value={settings.accessKeyId} onChange={e => setSettings(p => ({ ...p, accessKeyId: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Secret access key</span>
+            <input className="stepper-input" type="password" value={settings.secretAccessKey || ''} onChange={e => setSettings(p => ({ ...p, secretAccessKey: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Bucket</span>
+            <input className="stepper-input" value={settings.bucket} onChange={e => setSettings(p => ({ ...p, bucket: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Public base URL</span>
+            <input className="stepper-input" value={settings.publicBaseUrl} onChange={e => setSettings(p => ({ ...p, publicBaseUrl: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+          <label>
+            <span>Key prefix</span>
+            <input className="stepper-input" value={settings.keyPrefix || ''} onChange={e => setSettings(p => ({ ...p, keyPrefix: e.target.value }))} disabled={settingsSaving || settingsLoading} />
+          </label>
+        </div>
+        <div className="media-library-actions">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleTestSettings} disabled={settingsSaving || settingsLoading}>
+            {settingsSaving ? <RefreshCw size={14} className="spin" /> : <Cloud size={14} />}
+            <span>Test</span>
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveSettings} disabled={settingsSaving || settingsLoading}>
+            {settingsSaving ? <RefreshCw size={14} className="spin" /> : <Save size={14} />}
+            <span>Lưu</span>
+          </button>
+        </div>
       </section>
     )
   }
 
-  const renderGroupList = () => (
-    <aside className="media-group-panel">
-      <div className="media-group-panel-head">
-        <div className="media-library-section-title">
-          <Folder size={16} />
-          <span>Thư mục media</span>
-        </div>
-      </div>
+  const renderGroupList = () => {
+    const groupQuery = groupSearch.trim().toLocaleLowerCase('vi')
+    const visibleGroups = groups.filter(group => !groupQuery || group.name.toLocaleLowerCase('vi').includes(groupQuery))
 
-      <div className="media-group-form">
-        <input
-          className="stepper-input"
-          value={groupFormName}
-          onChange={event => setGroupFormName(event.target.value)}
-          placeholder="Tên thư mục media"
-          disabled={groupSaving}
-        />
-        <div className="media-group-form-actions">
-          <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveGroup} disabled={groupSaving}>
-            {groupSaving ? <RefreshCw size={14} className="spin" /> : editingGroupId ? <Save size={14} /> : <Plus size={14} />}
-            <span>{editingGroupId ? 'Lưu' : 'Thêm'}</span>
+    return (
+      <aside className="media-group-panel">
+        <div className="media-group-panel-top">
+          <div className="media-group-panel-head">
+            <span>Nhóm media</span>
+            <button
+              type="button"
+              className="media-group-add-button"
+              onClick={() => {
+                if (groupFormOpen && !editingGroupId) resetGroupForm()
+                else {
+                  setEditingGroupId(null)
+                  setGroupFormName('')
+                  setGroupFormOpen(true)
+                }
+              }}
+              title="Tạo nhóm mới"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="media-group-search">
+            <Search size={14} />
+            <input
+              value={groupSearch}
+              onChange={event => setGroupSearch(event.target.value)}
+              placeholder="Tìm nhóm..."
+            />
+          </div>
+          {groupFormOpen && (
+            <div className="media-group-form">
+              <input
+                className="stepper-input"
+                value={groupFormName}
+                onChange={event => setGroupFormName(event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') void handleSaveGroup()
+                  if (event.key === 'Escape') resetGroupForm()
+                }}
+                placeholder={editingGroupId ? 'Tên nhóm' : 'Tên nhóm mới...'}
+                disabled={groupSaving}
+                autoFocus
+              />
+              <div className="media-group-form-actions">
+                <button type="button" className="btn btn-primary btn-sm" onClick={handleSaveGroup} disabled={groupSaving}>
+                  {groupSaving ? <RefreshCw size={13} className="spin" /> : <Save size={13} />}
+                  <span>Lưu</span>
+                </button>
+                {editingGroupId && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetGroupForm} disabled={groupSaving}>
+                    <X size={13} />
+                    <span>Huỷ</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="media-group-list">
+          <button
+            type="button"
+            className={`media-group-item ${selectedGroupId === null && !ungroupedSelected ? 'active' : ''}`}
+            onClick={() => selectGroup(null)}
+          >
+            <span className="media-group-item-main">
+              <Folder size={15} />
+              <span>Tất cả media</span>
+            </span>
+            <span className="media-group-count">{activeMediaCount}</span>
           </button>
-          {editingGroupId && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={resetGroupForm} disabled={groupSaving}>
-              <X size={14} />
-              <span>Hủy</span>
+
+          <button
+            type="button"
+            className={`media-group-item ${ungroupedSelected ? 'active' : ''}`}
+            onClick={selectUngrouped}
+            disabled={groupIndexLoading || !!groupIndexError}
+            title={groupIndexError || undefined}
+          >
+            <span className="media-group-item-main">
+              <Folder size={15} />
+              <span>Chưa phân nhóm</span>
+            </span>
+            <span className="media-group-count">{groupIndexLoading ? '…' : groupIndexError ? '!' : ungroupedFileCount}</span>
+          </button>
+
+          {groupsLoading ? (
+            <div className="media-group-empty">Đang tải...</div>
+          ) : groups.length === 0 ? (
+            <div className="media-group-empty">Chưa có nhóm media</div>
+          ) : visibleGroups.length === 0 ? (
+            <div className="media-group-empty">Không tìm thấy nhóm</div>
+          ) : visibleGroups.map(group => (
+            <div key={group.id} className={`media-group-row ${selectedGroupId === group.id ? 'active' : ''}`}>
+              <button type="button" className="media-group-item" onClick={() => selectGroup(group.id)}>
+                <span className="media-group-item-main">
+                  <Folder size={15} />
+                  <span title={group.name}>{group.name}</span>
+                </span>
+                <span className="media-group-count">{group.fileCount || 0}</span>
+              </button>
+              <div className="media-group-row-actions">
+                <button
+                  type="button"
+                  className="btn-icon"
+                  onClick={() => {
+                    selectGroup(group.id)
+                    setGroupManageMode(true)
+                  }}
+                  title="Quản lý media trong nhóm"
+                >
+                  <FolderPlus size={13} />
+                </button>
+                <button type="button" className="btn-icon" onClick={() => handleEditGroup(group)} title="Sửa nhóm">
+                  <Edit3 size={13} />
+                </button>
+                <button type="button" className="btn-icon text-error" onClick={() => handleDeleteGroup(group)} title="Xoá nhóm">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="media-group-storage-status">
+          <Cloud size={14} />
+          <span>{settings.provider === 'r2' ? 'Cloudflare R2' : settings.provider.toUpperCase()} · {settings.isConfigured ? 'đã kết nối' : 'chưa cấu hình'}</span>
+          {isAdmin && (
+            <button type="button" className="btn-icon" onClick={() => setSettingsExpanded(current => !current)} title="Cấu hình cloud">
+              <Settings size={13} />
             </button>
           )}
         </div>
-      </div>
-
-      <div className="media-group-list">
-        <button
-          type="button"
-          className={`media-group-item ${selectedGroupId === null ? 'active' : ''}`}
-          onClick={() => selectGroup(null)}
-        >
-          <span className="media-group-item-main">
-            <FolderPlus size={15} />
-            <span>Tất cả media</span>
-          </span>
-          <span className="media-group-count">{activeMediaCount}</span>
-        </button>
-
-        {groupsLoading ? (
-          <div className="media-group-empty">Đang tải...</div>
-        ) : groups.length === 0 ? (
-          <div className="media-group-empty">Chưa có thư mục media</div>
-        ) : groups.map(group => (
-          <div key={group.id} className={`media-group-row ${selectedGroupId === group.id ? 'active' : ''}`}>
-            <button type="button" className="media-group-item" onClick={() => selectGroup(group.id)}>
-              <span className="media-group-item-main">
-                <Folder size={15} />
-                <span title={group.name}>{group.name}</span>
-              </span>
-              <span className="media-group-count">{group.fileCount || 0}</span>
-            </button>
-            <div className="media-group-row-actions">
-              <button type="button" className="btn-icon" onClick={() => handleEditGroup(group)} title="Sửa thư mục">
-                <Edit3 size={13} />
-              </button>
-              <button type="button" className="btn-icon text-error" onClick={() => handleDeleteGroup(group)} title="Xoá thư mục">
-                <Trash2 size={13} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </aside>
-  )
+      </aside>
+    )
+  }
 
   const getEmptyMediaText = (): string => {
-    if (filesLoading || (selectedGroupId && groupMembershipLoading)) return 'Đang tải...'
-    if (selectedGroupId) return `Thư mục này chưa có ${pickerMediaLabel}`
+    if (filesLoading || (selectedGroupId && groupMembershipLoading) || (ungroupedSelected && groupIndexLoading)) return 'Đang tải...'
+    if (ungroupedSelected && groupIndexError) return 'Không thể xác định media chưa phân nhóm. Vui lòng tải lại.'
+    if (search.trim() || selectedExtensions.size > 0 || dateFilter !== 'all') return 'Không có media phù hợp với bộ lọc.'
+    if (category !== 'all') return `Chưa có ${MEDIA_CATEGORY_LABELS[category].toLocaleLowerCase('vi')}`
+    if (ungroupedSelected) return 'Không có media chưa phân nhóm'
+    if (selectedGroupId) return 'Nhóm này chưa có media'
     return 'Chưa có media'
   }
 
@@ -1012,6 +1452,260 @@ export default function MediaLibraryModal({
         >
           <ChevronRight size={14} />
         </button>
+      </div>
+    )
+  }
+
+  const renderMediaThumbnail = (file: MediaFile, compact = false) => {
+    const mediaCategory = getMediaCategory(file)
+    const extension = getMediaExtension(file)
+    const previewPath = getMediaFilePreviewPath(file)
+    const remotePreview = /^https?:\/\//i.test(previewPath) || /^data:/i.test(previewPath)
+
+    if (mediaCategory === 'image' && remotePreview) {
+      return <img src={previewPath} alt="" loading="lazy" />
+    }
+    if (mediaCategory === 'video' && remotePreview && !compact) {
+      return <video src={previewPath} muted playsInline preload="metadata" />
+    }
+    if (mediaCategory === 'video') {
+      return <Video size={compact ? 16 : 28} />
+    }
+    if (mediaCategory === 'image') {
+      return <Image size={compact ? 16 : 28} />
+    }
+    return <span className={getMediaExtensionBadgeClass(file, compact)}>{extension}</span>
+  }
+
+  const renderMediaCard = (file: MediaFile) => {
+    const selected = isMediaSelected(file)
+    const mediaCategory = getMediaCategory(file)
+    const pickerCompatible = !isPicker || mediaFileMatchesPickerMode(file, pickerMode)
+    const selectable = pickerCompatible && (isPicker || canDeleteMedia)
+    const disabled = isPicker && !pickerCompatible
+    const extension = getMediaExtension(file)
+    return (
+      <div
+        key={file.id}
+        className={`media-card category-${mediaCategory} ${selected ? 'selected' : ''} ${selectable ? 'selectable' : ''} ${disabled ? 'is-disabled' : ''}`.trim()}
+        role={selectable ? 'checkbox' : undefined}
+        aria-checked={selectable ? selected : undefined}
+        tabIndex={selectable ? 0 : -1}
+        onClick={() => selectable && toggleMediaSelection(file)}
+        onKeyDown={event => {
+          if (event.target !== event.currentTarget || !selectable || (event.key !== 'Enter' && event.key !== ' ')) return
+          event.preventDefault()
+          toggleMediaSelection(file)
+        }}
+      >
+        <div className={`media-card-preview is-${mediaCategory}`}>
+          {renderMediaThumbnail(file)}
+          {mediaCategory === 'video' && <span className="media-video-play" aria-hidden="true" />}
+          <span className="media-card-extension">{extension}</span>
+          {selectable && (
+            <span className={`media-card-check ${selected ? 'checked' : ''}`}>
+              {selected && <Check size={11} />}
+            </span>
+          )}
+        </div>
+        <div className="media-card-details">
+          <div className="media-card-name" title={file.originalName}>{file.originalName}</div>
+          <div className="media-card-meta">{extension} · {formatBytes(file.sizeBytes)} · {formatMediaCardDate(file.createdAt)}</div>
+        </div>
+        <div className="media-card-actions" onClick={event => event.stopPropagation()}>
+          <MediaPreviewHover
+            name={file.originalName}
+            path={getMediaFilePreviewPath(file)}
+            mimeType={file.mimeType}
+            sizeBytes={file.sizeBytes}
+          />
+          {canDeleteMedia && (
+            <button type="button" className="btn-icon text-error" onClick={() => handleDelete(file)} disabled={deleting} title="Xoá media">
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderMediaGrid = (
+    rows: MediaFile[],
+    overview = false,
+    displayCategory: Exclude<MediaCategory, 'all'> = category === 'all' ? 'image' : category
+  ) => (
+    <div className={`media-card-grid is-${overview ? 'overview' : view} category-${displayCategory}`}>
+      {rows.map(renderMediaCard)}
+    </div>
+  )
+
+  const renderMediaList = (rows: MediaFile[]) => {
+    const listCategory: Exclude<MediaCategory, 'all'> = category === 'all' ? 'image' : category
+    const groupNameById = new Map(groups.map(group => [group.id, group.name]))
+    const getMediaGroupLabel = (mediaFileId: number): string => {
+      if (ungroupedSelected) return 'Chưa phân nhóm'
+      if (selectedGroupId) return groupNameById.get(selectedGroupId) || 'Không xác định'
+      if (groupIndexLoading) return 'Đang tải…'
+      if (groupIndexError) return 'Không xác định'
+      const names = (groupIdsByFileId.get(mediaFileId) || [])
+        .map(groupId => groupNameById.get(groupId))
+        .filter((name): name is string => !!name)
+      return names.length > 0 ? names.join(', ') : 'Chưa phân nhóm'
+    }
+    const renderSelectAll = () => canDeleteMedia ? (
+      <input
+        ref={deleteSelectAllRef}
+        type="checkbox"
+        checked={allVisibleDeleteSelected}
+        onChange={toggleAllVisibleDelete}
+        disabled={deleting || visibleDeleteIds.length === 0}
+        aria-label="Chọn tất cả media trên trang"
+        aria-checked={someVisibleDeleteSelected && !allVisibleDeleteSelected ? 'mixed' : allVisibleDeleteSelected}
+      />
+    ) : null
+
+    return (
+      <div className={`media-list-shell category-${listCategory}`}>
+        <table className="media-list-table">
+          <thead>
+            <tr>
+              <th className="media-list-check-cell">{renderSelectAll()}</th>
+              {listCategory === 'document' ? (
+                <>
+                  <th className="media-list-extension-cell">Đuôi</th>
+                  <th>Tên file</th>
+                  <th className="media-list-size-cell">Dung lượng</th>
+                  <th className="media-list-date-cell">Ngày tải lên</th>
+                  <th className="media-list-group-cell">Nhóm</th>
+                </>
+              ) : (
+                <>
+                  <th className="media-list-preview-cell">Xem</th>
+                  <th>{listCategory === 'video' ? 'Tên video' : 'Tên file'}</th>
+                  <th className="media-list-extension-cell">{listCategory === 'video' ? 'Thời lượng' : 'Đuôi'}</th>
+                  <th className="media-list-size-cell">Dung lượng</th>
+                  <th className="media-list-date-cell">Ngày tải lên</th>
+                </>
+              )}
+              <th className="media-list-action-cell"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(file => {
+              const selected = isMediaSelected(file)
+              const groupLabel = getMediaGroupLabel(file.id)
+              const pickerCompatible = !isPicker || mediaFileMatchesPickerMode(file, pickerMode)
+              const selectable = pickerCompatible && (isPicker || canDeleteMedia)
+              const disabled = isPicker && !pickerCompatible
+              return (
+                <tr
+                  key={file.id}
+                  className={`${selected ? 'selected' : ''} ${selectable ? 'selectable' : ''} ${disabled ? 'is-disabled' : ''}`.trim()}
+                  onClick={() => selectable && toggleMediaSelection(file)}
+                >
+                  <td className="media-list-check-cell">
+                    {selectable && (
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleMediaSelection(file)}
+                        onClick={event => event.stopPropagation()}
+                        aria-label={`Chọn media ${file.originalName}`}
+                      />
+                    )}
+                  </td>
+                  {listCategory === 'document' ? (
+                    <>
+                      <td className="media-list-extension-cell"><span className={getMediaExtensionBadgeClass(file, true)}>{getMediaExtension(file)}</span></td>
+                      <td><span className="media-list-file-name" title={file.originalName}>{file.originalName}</span></td>
+                      <td className="media-list-size-cell">{formatBytes(file.sizeBytes)}</td>
+                      <td className="media-list-date-cell">{formatDateTime(file.createdAt)}</td>
+                      <td className="media-list-group-cell" title={groupLabel}><span>{groupLabel}</span></td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="media-list-preview-cell">
+                        <span className={`media-list-thumbnail is-${listCategory}`}>{renderMediaThumbnail(file, true)}</span>
+                      </td>
+                      <td><span className="media-list-file-name" title={file.originalName}>{file.originalName}</span></td>
+                      <td className="media-list-extension-cell">
+                        {listCategory === 'video' ? '—' : <span className={getMediaExtensionBadgeClass(file, true)}>{getMediaExtension(file)}</span>}
+                      </td>
+                      <td className="media-list-size-cell">{formatBytes(file.sizeBytes)}</td>
+                      <td className="media-list-date-cell">{formatDateTime(file.createdAt)}</td>
+                    </>
+                  )}
+                  <td className="media-list-action-cell" onClick={event => event.stopPropagation()}>
+                    <MediaPreviewHover
+                      name={file.originalName}
+                      path={getMediaFilePreviewPath(file)}
+                      mimeType={file.mimeType}
+                      sizeBytes={file.sizeBytes}
+                    />
+                    {canDeleteMedia ? (
+                      <button type="button" className="btn-icon text-error" onClick={() => handleDelete(file)} disabled={deleting} title="Xoá media">
+                        <Trash2 size={13} />
+                      </button>
+                    ) : <MoreVertical size={15} />}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  const renderAllMediaOverview = () => {
+    const sections: Array<{ category: Exclude<MediaCategory, 'all'>; limit: number }> = [
+      { category: 'image', limit: 6 },
+      { category: 'video', limit: 3 },
+      { category: 'document', limit: 3 }
+    ]
+    return (
+      <div className="media-overview">
+        {sections.map(section => {
+          const rows = filteredFiles.filter(file => getMediaCategory(file) === section.category)
+          if (rows.length === 0) return null
+          return (
+            <section key={section.category} className="media-overview-section">
+              <div className="media-overview-head">
+                <strong>{MEDIA_CATEGORY_LABELS[section.category]}</strong>
+                <span>{rows.length}</span>
+                <button type="button" onClick={() => {
+                  setCategory(section.category)
+                  if (section.category === 'document') setView('list')
+                }}>
+                  {section.category === 'image' ? 'Xem tất cả ảnh' : section.category === 'video' ? 'Xem tất cả video' : 'Xem tất cả file'}
+                </button>
+              </div>
+              {section.category === 'document' ? (
+                <div className="media-overview-doc-list">
+                  {rows.slice(0, section.limit).map(file => {
+                    const selected = isMediaSelected(file)
+                    const pickerCompatible = !isPicker || mediaFileMatchesPickerMode(file, pickerMode)
+                    const selectable = pickerCompatible && (isPicker || canDeleteMedia)
+                    return (
+                      <button
+                        key={file.id}
+                        type="button"
+                        className={selected ? 'selected' : ''}
+                        onClick={() => selectable && toggleMediaSelection(file)}
+                        disabled={!selectable}
+                      >
+                        <span className={getMediaExtensionBadgeClass(file, true)}>{getMediaExtension(file)}</span>
+                        <strong title={file.originalName}>{file.originalName}</strong>
+                        <span>{formatBytes(file.sizeBytes)}</span>
+                        <time>{formatMediaCardDate(file.createdAt)}</time>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : renderMediaGrid(rows.slice(0, section.limit), true, section.category)}
+            </section>
+          )
+        })}
       </div>
     )
   }
@@ -1122,261 +1816,332 @@ export default function MediaLibraryModal({
     )
   }
 
+  const dateFilterLabel = dateFilter === 'custom'
+    ? [customDateStart, customDateEnd].filter(Boolean).map(value => new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN')).join(' – ') || 'Khoảng ngày'
+    : MEDIA_DATE_OPTIONS.find(option => option.value === dateFilter)?.label || 'Ngày tải lên'
+  const sortLabel = MEDIA_SORT_OPTIONS.find(option => option.value === sort)?.label || 'Mới nhất'
+  const hasActiveFilters = selectedExtensions.size > 0 || dateFilter !== 'all' || !!selectedGroupId || ungroupedSelected
+  const mediaLoading = filesLoading || (!!selectedGroupId && groupMembershipLoading) || (ungroupedSelected && groupIndexLoading)
+  const selectedCount = isPicker ? selectedSnapshots.length : selectedDeleteFiles.length
+  const pagerFrom = filteredFiles.length === 0 ? 0 : (resolvedMediaPage - 1) * mediaPageSize + 1
+  const pagerTo = Math.min(filteredFiles.length, resolvedMediaPage * mediaPageSize)
+
   return createPortal(
     <div className="modal-overlay media-library-overlay">
       <div className="modal media-library-modal" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">{isPicker ? 'Chọn media' : 'Media'}</span>
-          <button type="button" className="btn-icon" onClick={onClose}>
+        <div className="media-library-header">
+          <div className="media-library-header-icon">
+            <Image size={18} />
+          </div>
+          <div className="media-library-heading">
+            <h2>{isPicker ? 'Chọn Media' : 'Quản lý Media'}</h2>
+            <p>{isPicker ? `Chọn ${pickerMediaLabel} cho chiến dịch` : 'Tải lên và quản lý ảnh, video, file tài liệu theo nhóm'}</p>
+          </div>
+          <div className="media-library-header-usage" title={`${formatBytes(usedStorageBytes)} đã lưu`}>
+            <div>
+              <span>Đã dùng</span>
+              <strong>{activeMediaCount}<small>/{mediaLibraryMaxFiles} file</small></strong>
+            </div>
+            <div className="media-library-usage-meter">
+              <span><i style={{ width: `${quotaPercent}%` }} /></span>
+              <small>{formatBytes(usedStorageBytes)} đã lưu</small>
+            </div>
+          </div>
+          <button type="button" className="btn-icon media-library-close" onClick={onClose} title="Đóng">
             <X size={18} />
           </button>
         </div>
         <div className="modal-body media-library-body">
           {renderSettings()}
+          <div className="media-library-split">
+            {renderGroupList()}
 
-          <section className="media-library-section media-library-list-section">
-            <div className="media-library-split">
-              {renderGroupList()}
-
-              <div className="media-files-panel">
-                <div className="media-library-toolbar">
-                  <div className="media-library-toolbar-main">
+            <div className="media-files-panel">
+              <div className="media-library-viewbar">
+                <div className="media-category-tabs">
+                  {(Object.keys(MEDIA_CATEGORY_LABELS) as MediaCategory[]).map(value => (
                     <button
+                      key={value}
                       type="button"
-                      className="btn btn-primary btn-sm media-library-upload-button"
-                      onClick={() => uploadInputRef.current?.click()}
-                      disabled={uploading || settingsLoading || !settings.isConfigured || (!!selectedGroupId && groupMembershipLoading)}
+                      className={category === value ? 'active' : ''}
+                      onClick={() => setCategory(value)}
                     >
-                      {uploading ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
-                      <span>{uploading ? 'Đang upload' : selectedGroupId ? 'Upload vào thư mục' : 'Upload'}</span>
+                      {MEDIA_CATEGORY_LABELS[value]}
+                      <span>{categoryCounts[value]}</span>
                     </button>
-                    <input
-                      ref={uploadInputRef}
-                      type="file"
-                      multiple
-                      accept={getPickerInputAccept(pickerMode)}
-                      style={{ display: 'none' }}
-                      onChange={handleUploadChange}
-                    />
-                    <div className="media-library-paste-hint" title="Sao chép ảnh rồi dán trực tiếp vào cửa sổ Media">
-                      <ClipboardPaste size={14} />
-                      <span>Dán ảnh</span>
-                      <kbd>{window.electronAPI.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'}</kbd>
-                    </div>
-                    <div className="media-library-quota" title={`Đã dùng ${activeMediaCount}/${mediaLibraryMaxFiles} media`}>
-                      <span>Đã dùng</span>
-                      <strong>{activeMediaCount}/{mediaLibraryMaxFiles}</strong>
-                    </div>
-                    <div className="media-library-active-group" title={selectedGroup?.name || 'Tất cả media'}>
-                      <Folder size={14} />
-                      <span>{selectedGroup?.name || 'Tất cả media'}</span>
-                    </div>
-                  </div>
-                  <div className="media-library-toolbar-tools">
-                    {selectedGroupId && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => setGroupManageMode(current => !current)}
-                        disabled={groupMembershipLoading}
-                      >
-                        {groupManageMode ? <Folder size={14} /> : <Edit3 size={14} />}
-                        <span>{groupManageMode ? 'Xem thư mục' : 'Quản lý thư mục'}</span>
-                      </button>
-                    )}
-                    <div className="media-library-search">
-                      <Search size={15} />
-                      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm media" />
-                    </div>
-                    <button type="button" className="btn-icon media-library-refresh" onClick={handleRefresh} disabled={filesLoading || groupsLoading || groupMembershipLoading} title="Tải lại">
-                      <RefreshCw size={15} className={(filesLoading || groupsLoading || groupMembershipLoading) ? 'spin' : ''} />
-                    </button>
-                  </div>
+                  ))}
                 </div>
-
-                {canDeleteMedia && selectedDeleteFiles.length > 0 && (
-                  <div className="campaign-bulk-action-bar media-library-bulk-action-bar">
-                    <span>Đã chọn <strong>{selectedDeleteFiles.length}</strong> media</span>
-                    <div className="bulk-action-buttons">
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        disabled={deleting}
-                        onClick={handleBulkDelete}
-                        title="Xoá media đã chọn"
-                      >
-                        {deleting ? <RefreshCw size={12} className="spin" /> : <Trash2 size={12} />}
-                        <span>{deleting ? 'Đang xoá' : 'Xoá'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-icon"
-                        disabled={deleting}
-                        onClick={() => setSelectedDeleteIds(new Set())}
-                        title="Bỏ chọn tất cả"
-                      >
-                        <X size={12} />
-                      </button>
+                <div className="media-sort-menu">
+                  <button
+                    type="button"
+                    className={openMenu === 'sort' ? 'active' : ''}
+                    onClick={() => setOpenMenu(current => current === 'sort' ? null : 'sort')}
+                  >
+                    <ArrowUpDown size={14} />
+                    <span>{sortLabel}</span>
+                    <ChevronDown size={13} />
+                  </button>
+                  {openMenu === 'sort' && (
+                    <div className="media-sort-popover">
+                      {MEDIA_SORT_OPTIONS.map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={sort === option.value ? 'active' : ''}
+                          onClick={() => {
+                            setSort(option.value)
+                            setOpenMenu(null)
+                          }}
+                        >
+                          <span>{option.label}</span>
+                          {sort === option.value && <Check size={14} />}
+                        </button>
+                      ))}
                     </div>
-                  </div>
-                )}
-
-                {selectedGroupId && groupManageMode ? renderGroupManagePanel() : (
-                <>
-                <div className="stepper-grid-container media-library-grid">
-                  <table className="campaign-grid">
-                    <thead>
-                      <tr>
-                        {isPicker && <th style={{ width: 44 }}></th>}
-                        {canDeleteMedia && (
-                          <th style={{ width: 44, textAlign: 'center' }} className="text-center">
-                            <input
-                              ref={deleteSelectAllRef}
-                              type="checkbox"
-                              checked={allVisibleDeleteSelected}
-                              onChange={toggleAllVisibleDelete}
-                              disabled={deleting || visibleDeleteIds.length === 0}
-                              title="Chọn tất cả media trên trang"
-                              aria-label="Chọn tất cả media trên trang"
-                              aria-checked={someVisibleDeleteSelected && !allVisibleDeleteSelected ? 'mixed' : allVisibleDeleteSelected}
-                            />
-                          </th>
-                        )}
-                        <th style={{ width: 56, textAlign: 'center' }}>STT</th>
-                        <th style={{ width: canDeleteMedia ? 76 : 44 }}></th>
-                        <th style={{ width: 240 }}>Tên file</th>
-                        <th style={{ width: 132 }}>Loại</th>
-                        <th style={{ width: 104, whiteSpace: 'nowrap' }}>Dung lượng</th>
-                        <th style={{ width: 160 }}>Local path</th>
-                        <th style={{ width: 200 }}>Cloud URL</th>
-                        <th style={{ width: 180, whiteSpace: 'nowrap' }}>Ngày upload</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filesLoading || (selectedGroupId && groupMembershipLoading) ? (
-                        <tr><td colSpan={tableColSpan} className="text-center text-muted">Đang tải...</td></tr>
-                      ) : filteredFiles.length === 0 ? (
-                        <tr><td colSpan={tableColSpan} className="text-center text-muted">{getEmptyMediaText()}</td></tr>
-                      ) : pagedFiles.map((file, index) => {
-                        const snapshot = fileToSnapshot(file)
-                        const key = getSnapshotKey(snapshot)
-                        const selectable = !isPicker || mediaFileMatchesPickerMode(file, pickerMode)
-                        const pickerSelected = isPicker && selectable && selectedKeys.has(key)
-                        const deleteSelected = canDeleteMedia && selectedDeleteIds.has(file.id)
-                        const selected = pickerSelected || deleteSelected
-                        return (
-                          <tr
-                            key={file.id}
-                            className={`${selected ? 'selected' : ''} ${isPicker && !selectable ? 'is-disabled' : ''}`.trim()}
-                            onDoubleClick={() => toggleSelect(file)}
-                          >
-                            {isPicker && (
-                              <td className="text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={pickerSelected}
-                                  onChange={() => toggleSelect(file)}
-                                  disabled={!selectable}
-                                  title={!selectable ? `Chỉ chọn được ${pickerMediaLabel} trong mục này` : undefined}
-                                />
-                              </td>
-                            )}
-                            {canDeleteMedia && (
-                              <td className="text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={deleteSelected}
-                                  onChange={() => toggleDeleteSelect(file.id)}
-                                  disabled={deleting}
-                                  aria-label={`Chọn media ${file.originalName}`}
-                                />
-                              </td>
-                            )}
-                            <td className="text-center" style={{ width: 56 }}>{(resolvedMediaPage - 1) * MEDIA_TABLE_PAGE_SIZE + index + 1}</td>
-                            <td className="text-center">
-                              <span className="media-library-row-tools">
-                                <MediaPreviewHover
-                                  name={file.originalName}
-                                  path={getMediaFilePreviewPath(file)}
-                                  mimeType={file.mimeType}
-                                  sizeBytes={file.sizeBytes}
-                                />
-                                {canDeleteMedia && (
-                                  <button
-                                    type="button"
-                                    className="btn-icon text-error action-btn"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      handleDelete(file)
-                                    }}
-                                    disabled={deleting}
-                                    title="Xoá"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
-                              </span>
-                            </td>
-                            <td className="media-library-file-name-cell">
-                              <div className="media-library-name-cell">
-                                {isMediaFileImage(file) ? <Image size={16} /> : <FileText size={16} />}
-                                <span>{file.originalName}</span>
-                              </div>
-                            </td>
-                            <td className="media-library-type-cell" title={file.mimeType || ''}>{file.mimeType || '-'}</td>
-                            <td style={{ width: 104, whiteSpace: 'nowrap' }}>{formatBytes(file.sizeBytes)}</td>
-                            <td className="media-library-path-cell" title={file.localPath || ''}>{file.localPath || '-'}</td>
-                            <td className="media-library-url-cell" title={file.cloudUrl}>
-                              {file.cloudUrl ? (
-                                <span className="media-url-cell">
-                                  <span>{file.cloudUrl}</span>
-                                  <button type="button" className="btn-icon" title="Copy link" onClick={() => navigator.clipboard?.writeText(file.cloudUrl)}>
-                                    <Copy size={14} />
-                                  </button>
-                                </span>
-                              ) : '-'}
-                            </td>
-                            <td style={{ width: 180, whiteSpace: 'nowrap' }}>{formatDateTime(file.createdAt)}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                  )}
                 </div>
-                {renderPagination(
-                  filteredFiles.length,
-                  resolvedMediaPage,
-                  mediaPageCount,
-                  MEDIA_TABLE_PAGE_SIZE,
-                  setMediaPage
-                )}
-                </>
+                {category !== 'all' && (
+                  <div className="media-view-switcher">
+                    <button type="button" className={view === 'grid' ? 'active' : ''} onClick={() => setView('grid')} title="Lưới nhỏ"><Grid2X2 size={15} /></button>
+                    <button type="button" className={view === 'large' ? 'active' : ''} onClick={() => setView('large')} title="Lưới lớn"><LayoutGrid size={15} /></button>
+                    <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} title="Danh sách chi tiết"><List size={15} /></button>
+                  </div>
                 )}
               </div>
-            </div>
-          </section>
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Đóng</button>
-          {isPicker && (
-            <>
-              {selectedGroupId && !isSingleSelectPicker && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={handleConfirmGroup}
-                  disabled={groupMembershipLoading || selectedGroupSnapshots.length === 0}
-                >
-                  <Check size={15} />
-                  <span>Chọn thư mục</span>
+
+              <div className="media-library-toolbar">
+                <div className="media-library-upload-split">
+                  <button
+                    type="button"
+                    className="media-library-upload-button"
+                    onClick={() => uploadInputRef.current?.click()}
+                    disabled={uploading || settingsLoading || !settings.isConfigured || (!!selectedGroupId && groupMembershipLoading)}
+                  >
+                    {uploading ? <RefreshCw size={15} className="spin" /> : <Upload size={15} />}
+                    <span>{uploading ? 'Đang upload' : 'Tải lên'}</span>
+                  </button>
+                  <span />
+                  <button
+                    type="button"
+                    className="media-library-upload-chevron"
+                    onClick={() => uploadInputRef.current?.click()}
+                    disabled={uploading || settingsLoading || !settings.isConfigured || (!!selectedGroupId && groupMembershipLoading)}
+                    title={selectedGroupId ? 'Tải lên vào nhóm đang chọn' : 'Chọn file để tải lên'}
+                  >
+                    <ChevronDown size={13} />
+                  </button>
+                </div>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  multiple
+                  accept={getPickerInputAccept(pickerMode)}
+                  style={{ display: 'none' }}
+                  onChange={handleUploadChange}
+                />
+                <div className="media-library-paste-hint" title="Sao chép ảnh rồi dán trực tiếp vào cửa sổ Media">
+                  <ClipboardPaste size={14} />
+                  <span>Dán ảnh</span>
+                  <kbd>{window.electronAPI.platform === 'darwin' ? 'Cmd+V' : 'Ctrl+V'}</kbd>
+                </div>
+                <div className="media-library-search">
+                  <Search size={15} />
+                  <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm theo tên file, đuôi file hoặc link..." />
+                </div>
+
+                <div className="media-filter-menu">
+                  <button
+                    type="button"
+                    className={selectedExtensions.size > 0 || openMenu === 'extension' ? 'active' : ''}
+                    onClick={() => setOpenMenu(current => current === 'extension' ? null : 'extension')}
+                  >
+                    <FileText size={14} />
+                    <span>{selectedExtensions.size === 0 ? 'Đuôi file' : selectedExtensions.size === 1 ? Array.from(selectedExtensions)[0] : `Đuôi file · ${selectedExtensions.size}`}</span>
+                    <ChevronDown size={13} />
+                  </button>
+                  {openMenu === 'extension' && (
+                    <div className="media-filter-popover media-extension-popover">
+                      <div className="media-filter-scroll">
+                        {extensionOptions.map(option => (
+                          <label key={option.extension} className={selectedExtensions.has(option.extension) ? 'active' : ''}>
+                            <input type="checkbox" checked={selectedExtensions.has(option.extension)} onChange={() => toggleExtension(option.extension)} />
+                            <span className={`media-file-extension-badge is-compact extension-${option.extension.toLocaleLowerCase('vi').replace(/[^a-z0-9]+/g, '-')}`}>{option.extension}</span>
+                            <span>{MEDIA_CATEGORY_LABELS[option.category]}</span>
+                            <small>{option.count}</small>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="media-filter-popover-actions">
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedExtensions(new Set())}>Bỏ chọn</button>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpenMenu(null)}>Áp dụng</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="media-filter-menu">
+                  <button
+                    type="button"
+                    className={dateFilter !== 'all' || openMenu === 'date' ? 'active' : ''}
+                    onClick={() => setOpenMenu(current => current === 'date' ? null : 'date')}
+                  >
+                    <Calendar size={14} />
+                    <span>{dateFilter === 'all' ? 'Ngày tải lên' : dateFilterLabel}</span>
+                    <ChevronDown size={13} />
+                  </button>
+                  {openMenu === 'date' && (
+                    <div className="media-filter-popover media-date-popover">
+                      <div className="media-filter-scroll">
+                        {MEDIA_DATE_OPTIONS.map(option => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={dateFilter === option.value ? 'active' : ''}
+                            onClick={() => {
+                              setDateFilter(option.value)
+                              setOpenMenu(null)
+                            }}
+                          >
+                            <span>{option.label}</span>
+                            <small>{dateOptionCounts.get(option.value) || 0}</small>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="media-custom-date">
+                        <strong>Tùy chọn khoảng ngày</strong>
+                        <div>
+                          <input type="date" value={customDateStart} onChange={event => setCustomDateStart(event.target.value)} aria-label="Từ ngày" />
+                          <span>–</span>
+                          <input type="date" value={customDateEnd} onChange={event => setCustomDateEnd(event.target.value)} aria-label="Đến ngày" />
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            setDateFilter('custom')
+                            setOpenMenu(null)
+                          }}
+                          disabled={!customDateStart && !customDateEnd}
+                        >
+                          Áp dụng khoảng ngày
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="btn-icon media-library-refresh" onClick={handleRefresh} disabled={filesLoading || groupsLoading || groupMembershipLoading} title="Tải lại">
+                  <RefreshCw size={15} className={(filesLoading || groupsLoading || groupMembershipLoading) ? 'spin' : ''} />
                 </button>
+              </div>
+
+              {hasActiveFilters && (
+                <div className="media-filter-chips">
+                  <span>Đang lọc</span>
+                  {Array.from(selectedExtensions).map(extension => (
+                    <button key={extension} type="button" onClick={() => toggleExtension(extension)}>{extension}<X size={11} /></button>
+                  ))}
+                  {dateFilter !== 'all' && (
+                    <button type="button" onClick={() => setDateFilter('all')}>{dateFilterLabel}<X size={11} /></button>
+                  )}
+                  {selectedGroupId && (
+                    <button type="button" onClick={() => selectGroup(null)}>Nhóm: {groups.find(group => group.id === selectedGroupId)?.name || 'Media'}<X size={11} /></button>
+                  )}
+                  {ungroupedSelected && (
+                    <button type="button" onClick={() => selectGroup(null)}>Nhóm: Chưa phân nhóm<X size={11} /></button>
+                  )}
+                  <button
+                    type="button"
+                    className="clear"
+                    onClick={() => {
+                      clearMediaFilters()
+                      if (selectedGroupId || ungroupedSelected) selectGroup(null)
+                    }}
+                  >
+                    Xóa tất cả
+                  </button>
+                  <small>Tìm thấy {filteredFiles.length} media</small>
+                </div>
               )}
-              <button type="button" className="btn btn-primary" onClick={handleConfirm}>
-                <Check size={15} />
-                <span>Chọn {selectedSnapshots.length > 0 ? `(${selectedSnapshots.length})` : ''}</span>
-              </button>
-            </>
-          )}
+
+              <div className="media-library-content">
+                {selectedGroupId && groupManageMode ? renderGroupManagePanel() : mediaLoading ? (
+                  <div className="media-library-empty"><RefreshCw size={20} className="spin" /><span>Đang tải media...</span></div>
+                ) : filteredFiles.length === 0 ? (
+                  <div className="media-library-empty"><HardDrive size={24} /><span>{getEmptyMediaText()}</span></div>
+                ) : category === 'all' ? (
+                  renderAllMediaOverview()
+                ) : view === 'list' ? (
+                  renderMediaList(pagedFiles)
+                ) : (
+                  renderMediaGrid(pagedFiles)
+                )}
+              </div>
+
+              {selectedCount > 0 && (
+                <div className="media-library-selection-bar">
+                  <span>Đã chọn <strong>{selectedCount}</strong> media</span>
+                  <span className="spacer" />
+                  {!isPicker && (
+                    <>
+                      <details className="media-selection-group-menu">
+                        <summary><FolderPlus size={14} />Thêm vào nhóm</summary>
+                        <div>
+                          {groups.length === 0 ? <span>Chưa có nhóm media</span> : groups.map(group => (
+                            <button key={group.id} type="button" onClick={() => void handleAddSelectedToGroup(group.id)}>{group.name}<small>{group.fileCount || 0}</small></button>
+                          ))}
+                        </div>
+                      </details>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleDownloadSelected()} disabled={downloading}>
+                        {downloading ? <RefreshCw size={13} className="spin" /> : <Download size={14} />}
+                        {downloading ? 'Đang tải' : 'Tải xuống'}
+                      </button>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={deleting}>
+                        {deleting ? <RefreshCw size={13} className="spin" /> : <Trash2 size={14} />}
+                        {deleting ? 'Đang xoá' : 'Xoá'}
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-icon"
+                    onClick={() => isPicker ? setSelectedKeys(new Set()) : setSelectedDeleteIds(new Set())}
+                    title="Bỏ chọn"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              <div className="media-library-footer">
+                <span>
+                  {category === 'all'
+                    ? `${filteredFiles.length} media · sắp xếp ${sortLabel.toLocaleLowerCase('vi')}`
+                    : `Hiển thị ${pagerFrom}–${pagerTo} / ${filteredFiles.length} media · sắp xếp ${sortLabel.toLocaleLowerCase('vi')}`}
+                </span>
+                <div className="media-library-footer-actions">
+                  {category !== 'all' && (
+                    <div className="media-library-pager">
+                      <button type="button" onClick={() => setMediaPage(Math.max(1, resolvedMediaPage - 1))} disabled={resolvedMediaPage <= 1}><ChevronLeft size={15} /></button>
+                      <span>Trang {resolvedMediaPage} / {mediaPageCount}</span>
+                      <button type="button" onClick={() => setMediaPage(Math.min(mediaPageCount, resolvedMediaPage + 1))} disabled={resolvedMediaPage >= mediaPageCount}><ChevronRight size={15} /></button>
+                    </div>
+                  )}
+                  <i />
+                  <button type="button" className="btn btn-secondary" onClick={onClose}>Đóng</button>
+                  {isPicker && selectedGroupId && !isSingleSelectPicker && (
+                    <button type="button" className="btn btn-secondary" onClick={handleConfirmGroup} disabled={groupMembershipLoading || selectedGroupSnapshots.length === 0}>
+                      <Folder size={14} />Chọn nhóm
+                    </button>
+                  )}
+                  {isPicker && (
+                    <button type="button" className="btn btn-primary" onClick={handleConfirm}>
+                      <Check size={15} />Chọn {selectedSnapshots.length > 0 ? `(${selectedSnapshots.length})` : ''}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>,
