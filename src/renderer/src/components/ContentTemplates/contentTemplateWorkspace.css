@@ -2009,6 +2009,26 @@ body.theme-light .ctw-workspace {
   grid-template-columns: 1fr;
 }
 
+.ctw-preview-images.facebook-post.count-3 {
+  grid-template-rows: repeat(2, minmax(80px, 1fr));
+}
+
+.ctw-preview-images.facebook-post.count-3 .ctw-preview-image:first-child {
+  grid-row: 1 / 3;
+}
+
+.ctw-preview-images.facebook-post.count-5 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ctw-preview-images.facebook-post.count-5 .ctw-preview-image:nth-child(-n + 2) {
+  grid-column: span 3;
+}
+
+.ctw-preview-images.facebook-post.count-5 .ctw-preview-image:nth-child(n + 3) {
+  grid-column: span 2;
+}
+
 .ctw-preview-image {
   position: relative;
   min-height: 80px;
