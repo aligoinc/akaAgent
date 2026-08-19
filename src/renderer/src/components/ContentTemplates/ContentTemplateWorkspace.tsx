@@ -11,10 +11,13 @@ import {
   FolderCog,
   Image as ImageIcon,
   Info,
+  LayoutGrid,
+  List,
   Loader2,
   MessageSquareText,
   Plus,
   RefreshCw,
+  Rows3,
   Save,
   Search,
   Trash2,
@@ -94,9 +97,22 @@ const CHANNEL_META: Record<ContentTemplateChannelName, {
 
 type WorkspaceView = 'list' | 'editor'
 type TemplateFilter = 'all' | ContentTemplateChannelName
+type ManagerListView = 'card' | 'list' | 'detail'
+type ManagerSort = 'newest' | 'oldest' | 'name' | 'variants'
+type GroupStatusFilter = 'all' | 'active' | 'inactive'
 type ChannelRecord = Record<ContentTemplateChannelName, ContentTemplateChannelConfig>
 type PersonalizationDateOption = 'TODAY' | 'TOMORROW' | 'YESTERDAY'
 type PersonalizationDateFormat = 'DD/MM/YYYY' | 'MM/DD/YYYY'
+
+const contentTemplateGroupMatchesManagerFilters = (
+  group: ContentTemplateGroup,
+  status: GroupStatusFilter,
+  normalizedQuery: string
+) => (
+  !group.isDelete &&
+  (status === 'all' || (status === 'active' ? group.isActive : !group.isActive)) &&
+  (!normalizedQuery || `${group.name}\n${group.description || ''}`.toLocaleLowerCase('vi').includes(normalizedQuery))
+)
 
 interface PersonalizationToken {
   label: string
@@ -168,6 +184,11 @@ const createVariantIndexRecord = (): Record<ContentTemplateChannelName, number> 
   facebook_comment: 0,
   email: 0
 })
+
+const getContentTemplateDateValue = (template: ContentTemplate): number => {
+  const value = new Date(template.updatedAt || template.createdAt || 0).getTime()
+  return Number.isNaN(value) ? 0 : value
+}
 
 interface ContentTemplateWorkspaceProps {
   isActive?: boolean
@@ -807,6 +828,12 @@ export default function ContentTemplateWorkspace({
   const [groupFilter, setGroupFilter] = useState<string>('all')
   const [channelFilter, setChannelFilter] = useState<TemplateFilter>(initialChannel || 'all')
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  const [managerListView, setManagerListView] = useState<ManagerListView>('card')
+  const [managerSort, setManagerSort] = useState<ManagerSort>('newest')
+  const [managerGroupSearch, setManagerGroupSearch] = useState('')
+  const [managerGroupStatus, setManagerGroupStatus] = useState<GroupStatusFilter>('all')
+  const [managerSelectedTemplateId, setManagerSelectedTemplateId] = useState<number | null>(null)
+  const [managerPreviewChannel, setManagerPreviewChannel] = useState<ContentTemplateChannelName | null>(initialChannel || null)
   const [editor, setEditor] = useState<TemplateEditorState>(() => makeEditorState())
   const [editorChannel, setEditorChannel] = useState<ContentTemplateChannelName>(preferredChannel)
   const [showPreviewSampleData, setShowPreviewSampleData] = useState(true)
@@ -864,11 +891,18 @@ export default function ContentTemplateWorkspace({
     [groups]
   )
 
+  const normalizedManagerGroupSearch = managerGroupSearch.trim().toLocaleLowerCase('vi')
+  const selectedManagerGroupIsVisible = groupFilter === 'all' || groupFilter === 'ungrouped' || groups.some(group => (
+    group.id === Number(groupFilter) &&
+    contentTemplateGroupMatchesManagerFilters(group, managerGroupStatus, normalizedManagerGroupSearch)
+  ))
+  const effectiveGroupFilter = selectedManagerGroupIsVisible ? groupFilter : 'all'
+
   const filteredTemplates = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('vi')
     return templates.filter(template => {
-      if (groupFilter === 'ungrouped' && template.groupId !== null) return false
-      if (groupFilter !== 'all' && groupFilter !== 'ungrouped' && template.groupId !== Number(groupFilter)) return false
+      if (effectiveGroupFilter === 'ungrouped' && template.groupId !== null) return false
+      if (effectiveGroupFilter !== 'all' && effectiveGroupFilter !== 'ungrouped' && template.groupId !== Number(effectiveGroupFilter)) return false
       if (channelFilter !== 'all' && !template.channels[channelFilter]?.enabled) return false
       if (!query) return true
       const channelText = CHANNELS.flatMap(channelName => {
@@ -878,9 +912,74 @@ export default function ContentTemplateWorkspace({
       }).join('\n')
       return `${template.name}\n${template.groupName || ''}\n${channelText}`.toLocaleLowerCase('vi').includes(query)
     })
-  }, [channelFilter, groupFilter, search, templates])
+  }, [channelFilter, effectiveGroupFilter, search, templates])
+
+  const managerTemplates = useMemo(() => {
+    const items = [...filteredTemplates]
+    const variantCount = (template: ContentTemplate) => {
+      if (channelFilter !== 'all') return template.channels[channelFilter]?.variants.length || 0
+      return enabledChannels(template).reduce(
+        (total, channelName) => total + (template.channels[channelName]?.variants.length || 0),
+        0
+      )
+    }
+    items.sort((left, right) => {
+      if (managerSort === 'name') return left.name.localeCompare(right.name, 'vi')
+      if (managerSort === 'variants') return variantCount(right) - variantCount(left)
+      const leftTime = getContentTemplateDateValue(left)
+      const rightTime = getContentTemplateDateValue(right)
+      return managerSort === 'oldest' ? leftTime - rightTime : rightTime - leftTime
+    })
+    return items
+  }, [channelFilter, filteredTemplates, managerSort])
+
+  const managerVisibleGroups = useMemo(() => {
+    return groups
+      .filter(group => contentTemplateGroupMatchesManagerFilters(group, managerGroupStatus, normalizedManagerGroupSearch))
+      .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name, 'vi'))
+  }, [groups, managerGroupStatus, normalizedManagerGroupSearch])
+
+  const updateManagerGroupFilters = (nextSearch: string, nextStatus: GroupStatusFilter) => {
+    setManagerGroupSearch(nextSearch)
+    setManagerGroupStatus(nextStatus)
+    if (groupFilter === 'all' || groupFilter === 'ungrouped') return
+    const selectedGroupId = Number(groupFilter)
+    const query = nextSearch.trim().toLocaleLowerCase('vi')
+    const selectedGroupIsVisible = groups.some(group => (
+      group.id === selectedGroupId &&
+      contentTemplateGroupMatchesManagerFilters(group, nextStatus, query)
+    ))
+    if (!selectedGroupIsVisible) setGroupFilter('all')
+  }
+
+  const managerGroupCounts = useMemo(() => {
+    const counts = new Map<number | 'ungrouped', number>()
+    for (const template of templates) {
+      if (channelFilter !== 'all' && !template.channels[channelFilter]?.enabled) continue
+      const key = template.groupId ?? 'ungrouped'
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return counts
+  }, [channelFilter, templates])
+
+  const managerSelectedTemplate = managerTemplates.find(template => template.id === managerSelectedTemplateId)
+    || managerTemplates[0]
+    || null
+  const managerSelectedChannels = managerSelectedTemplate ? enabledChannels(managerSelectedTemplate) : []
+  const managerResolvedPreviewChannel = managerSelectedTemplate && managerPreviewChannel && managerSelectedTemplate.channels[managerPreviewChannel]?.enabled
+    ? managerPreviewChannel
+    : managerSelectedChannels[0] || preferredChannel
+
+  const selectManagerTemplate = (template: ContentTemplate) => {
+    const nextChannel = template.channels[preferredChannel]?.enabled
+      ? preferredChannel
+      : enabledChannels(template)[0] || preferredChannel
+    setManagerSelectedTemplateId(template.id)
+    setManagerPreviewChannel(nextChannel)
+  }
 
   const startCreate = () => {
+    if (busy) return
     const next = makeEditorState()
     next.channels[preferredChannel].enabled = true
     setEditor(next)
@@ -890,6 +989,7 @@ export default function ContentTemplateWorkspace({
   }
 
   const startEdit = (template: ContentTemplate) => {
+    if (busy) return
     const nextChannel = template.channels[preferredChannel]?.enabled
       ? preferredChannel
       : enabledChannels(template)[0] || preferredChannel
@@ -997,6 +1097,7 @@ export default function ContentTemplateWorkspace({
   }
 
   const deleteTemplate = (template: ContentTemplate) => {
+    if (busy) return
     showConfirm(
       `Bạn có muốn xoá mẫu nội dung “${template.name}” không?`,
       async () => {
@@ -1030,51 +1131,199 @@ export default function ContentTemplateWorkspace({
     ))
   }
 
-  const renderList = () => (
-    <>
-      <header className="ctw-page-header">
-        <div><div className="ctw-title-row"><MessageSquareText size={23} /><h1>Mẫu nội dung</h1></div><p>Soạn nội dung và ảnh riêng cho từng loại chiến dịch.</p></div>
-        <div className="ctw-header-actions"><button type="button" className="btn btn-secondary" onClick={() => setGroupDialogOpen(true)}><FolderCog size={16} /> Quản lý nhóm</button><button type="button" className="btn btn-primary" onClick={startCreate}><Plus size={16} /> Thêm nội dung</button>{modal && onClose && <button type="button" className="btn-icon ctw-close" onClick={onClose} title="Đóng"><X size={19} /></button>}</div>
-      </header>
-      <div className="ctw-list-body">
-        <section className="ctw-filter-card">
-          <div className="ctw-search-field"><Search size={16} /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm theo tên hoặc nội dung..." /></div>
-          <select className="stepper-select" value={groupFilter} onChange={event => setGroupFilter(event.target.value)} aria-label="Lọc theo nhóm"><option value="all">Tất cả nhóm</option><option value="ungrouped">Chưa phân nhóm</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? '' : ' (ngừng hoạt động)'}</option>)}</select>
-          <select className="stepper-select" value={channelFilter} onChange={event => setChannelFilter(event.target.value as TemplateFilter)} aria-label="Lọc theo loại nội dung"><option value="all">Tất cả loại nội dung</option>{orderedTypes.map(type => <option key={type.name} value={type.name}>{CHANNEL_META[type.name].label}</option>)}</select>
-          <button type="button" className="btn-icon" title="Tải lại" onClick={() => void loadData(true)} disabled={refreshing}><RefreshCw size={16} className={refreshing ? 'ctw-spin' : ''} /></button>
-        </section>
-        <div className="ctw-list-summary"><strong>{filteredTemplates.length} mẫu nội dung</strong>{(search || groupFilter !== 'all' || channelFilter !== 'all') && <span>theo bộ lọc hiện tại</span>}</div>
-        {loading ? (
-          <div className="ctw-empty"><Loader2 size={32} className="ctw-spin" /><strong>Đang tải mẫu nội dung...</strong></div>
-        ) : filteredTemplates.length === 0 ? (
-          <div className="ctw-empty"><FileText size={38} /><strong>{templates.length === 0 ? 'Chưa có mẫu nội dung' : 'Không tìm thấy mẫu phù hợp'}</strong><span>{templates.length === 0 ? 'Tạo mẫu đầu tiên để sử dụng lại trong các chiến dịch.' : 'Thử thay đổi từ khóa hoặc bộ lọc.'}</span>{templates.length === 0 && <button type="button" className="btn btn-primary" onClick={startCreate}><Plus size={15} /> Thêm nội dung</button>}</div>
-        ) : (
-          <div className="ctw-template-grid">
-            {filteredTemplates.map(template => {
-              const activeChannels = enabledChannels(template)
-              const displayedChannels = channelFilter === 'all' ? activeChannels : [channelFilter]
-              const firstChannel = displayedChannels[0]
-              const preview = firstChannel && template.channels[firstChannel]
-                ? getVariantPreview(firstChannel, template.channels[firstChannel]!)
-                : ''
-              const variantCount = displayedChannels.reduce((total, channelName) => total + (template.channels[channelName]?.variants.length || 0), 0)
-              const imageCount = channelFilter === 'all'
-                ? templateImageCount(template)
-                : template.channels[channelFilter]?.imageUrls.length || 0
-              return (
-                <article className="ctw-template-card" key={template.id}>
-                  <div className="ctw-template-card-head"><div className="ctw-template-icon"><FileText size={18} /></div><div className="ctw-template-title"><h3 title={template.name}>{template.name}</h3><span>{template.groupName || 'Chưa phân nhóm'}</span></div><div className="ctw-row-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={15} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={15} /></button></div></div>
-                  <div className="ctw-channel-badges">{activeChannels.map(channelName => <span className={`ctw-channel-badge ${channelName}`} key={channelName}>{CHANNEL_META[channelName].shortLabel}</span>)}</div>
-                  <p className="ctw-template-excerpt">{preview || 'Chưa có nội dung v2 cho các loại đang bật'}</p>
-                  <div className="ctw-template-card-foot"><span><MessageSquareText size={13} /> {variantCount} biến thể</span><span><ImageIcon size={13} /> {imageCount} media</span><span>{template.updatedAt ? `Cập nhật ${new Date(template.updatedAt).toLocaleDateString('vi-VN')}` : ''}</span></div>
-                </article>
-              )
-            })}
+  const renderManagerList = () => {
+    const selectedChannelConfig = managerSelectedTemplate?.channels[managerResolvedPreviewChannel]
+    const selectedVariantCount = selectedChannelConfig?.variants.length || 0
+    const selectedImageUrls = selectedChannelConfig?.imageUrls || []
+    const groupLabel = effectiveGroupFilter === 'all'
+      ? 'Tất cả mẫu'
+      : effectiveGroupFilter === 'ungrouped'
+        ? 'Chưa phân nhóm'
+        : groups.find(group => group.id === Number(effectiveGroupFilter))?.name || 'Nhóm mẫu'
+
+    const renderTemplateSummary = (template: ContentTemplate) => {
+      const activeChannels = enabledChannels(template)
+      const displayedChannels = channelFilter === 'all' ? activeChannels : [channelFilter]
+      const firstChannel = displayedChannels[0]
+      const preview = firstChannel && template.channels[firstChannel]
+        ? getVariantPreview(firstChannel, template.channels[firstChannel]!)
+        : ''
+      const variantCount = displayedChannels.reduce(
+        (total, channelName) => total + (template.channels[channelName]?.variants.length || 0),
+        0
+      )
+      const imageCount = channelFilter === 'all'
+        ? templateImageCount(template)
+        : template.channels[channelFilter]?.imageUrls.length || 0
+      return { activeChannels, displayedChannels, preview, variantCount, imageCount }
+    }
+
+    return (
+      <>
+        <header className="ctw-manager-header">
+          <div className="ctw-manager-heading">
+            <span className="ctw-manager-heading-icon"><MessageSquareText size={19} /></span>
+            <div>
+              <h1>Mẫu nội dung</h1>
+              <p>Quản lý thư viện mẫu dùng lại cho các chiến dịch.</p>
+            </div>
           </div>
-        )}
-      </div>
-    </>
-  )
+          <div className="ctw-manager-header-actions">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setGroupDialogOpen(true)} disabled={busy}><FolderCog size={15} /> Quản lý nhóm</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={startCreate} disabled={busy}><Plus size={15} /> Thêm mẫu</button>
+            {onClose && <button type="button" className="btn-icon" onClick={onClose} title="Đóng" aria-label="Đóng kho mẫu"><X size={18} /></button>}
+          </div>
+        </header>
+
+        <div className="ctw-manager-body">
+          <aside className="ctw-manager-groups">
+            <div className="ctw-manager-panel-title"><strong>NHÓM MẪU</strong><span>{groups.filter(group => !group.isDelete).length}</span></div>
+            <label className="ctw-manager-compact-search">
+              <Search size={14} />
+              <input value={managerGroupSearch} onChange={event => updateManagerGroupFilters(event.target.value, managerGroupStatus)} placeholder="Tìm nhóm..." />
+            </label>
+            <div className="ctw-manager-segments" role="group" aria-label="Trạng thái nhóm">
+              {(['all', 'active', 'inactive'] as const).map(status => (
+                <button
+                  type="button"
+                  key={status}
+                  className={managerGroupStatus === status ? 'active' : ''}
+                  aria-pressed={managerGroupStatus === status}
+                  onClick={() => updateManagerGroupFilters(managerGroupSearch, status)}
+                >
+                  {status === 'all' ? 'Tất cả' : status === 'active' ? 'Đang dùng' : 'Đã tắt'}
+                </button>
+              ))}
+            </div>
+            <select className="stepper-select ctw-manager-type-filter" value={channelFilter} onChange={event => setChannelFilter(event.target.value as TemplateFilter)} aria-label="Lọc theo loại nội dung">
+              <option value="all">Tất cả loại nội dung</option>
+              {orderedTypes.map(type => <option key={type.name} value={type.name}>{CHANNEL_META[type.name].label}</option>)}
+            </select>
+            <div className="ctw-manager-group-list">
+              <button type="button" className={effectiveGroupFilter === 'all' ? 'active' : ''} aria-pressed={effectiveGroupFilter === 'all'} onClick={() => setGroupFilter('all')}>
+                <MessageSquareText size={15} /><span><strong>Tất cả mẫu</strong><small>Toàn bộ thư viện</small></span><em>{templates.filter(template => channelFilter === 'all' || template.channels[channelFilter]?.enabled).length}</em>
+              </button>
+              <button type="button" className={effectiveGroupFilter === 'ungrouped' ? 'active' : ''} aria-pressed={effectiveGroupFilter === 'ungrouped'} onClick={() => setGroupFilter('ungrouped')}>
+                <FileText size={15} /><span><strong>Chưa phân nhóm</strong><small>Mẫu độc lập</small></span><em>{managerGroupCounts.get('ungrouped') || 0}</em>
+              </button>
+              {managerVisibleGroups.map(group => (
+                <button type="button" key={group.id} className={`${effectiveGroupFilter === String(group.id) ? 'active' : ''}${group.isActive ? '' : ' inactive'}`} aria-pressed={effectiveGroupFilter === String(group.id)} onClick={() => setGroupFilter(String(group.id))}>
+                  <FolderCog size={15} /><span><strong>{group.name}</strong><small>{group.isActive ? 'Đang sử dụng' : 'Ngừng hoạt động'}</small></span><em>{managerGroupCounts.get(group.id) || 0}</em>
+                </button>
+              ))}
+            </div>
+            <button type="button" className="ctw-manager-add-group" onClick={() => setGroupDialogOpen(true)} disabled={busy}><Plus size={14} /> Thêm nhóm mẫu</button>
+          </aside>
+
+          <main className="ctw-manager-library">
+            <div className="ctw-manager-toolbar">
+              <label className="ctw-search-field">
+                <Search size={15} />
+                <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm theo tên hoặc nội dung..." />
+              </label>
+              <button type="button" className="btn-icon" title="Tải lại" aria-label="Tải lại mẫu nội dung" onClick={() => void loadData(true)} disabled={refreshing || busy}><RefreshCw size={16} className={refreshing ? 'ctw-spin' : ''} /></button>
+            </div>
+            <div className="ctw-manager-listbar">
+              <div><strong>{groupLabel}</strong><span>{managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại</span></div>
+              <select value={managerSort} onChange={event => setManagerSort(event.target.value as ManagerSort)} aria-label="Sắp xếp mẫu nội dung">
+                <option value="newest">Mới cập nhật</option>
+                <option value="oldest">Cũ nhất</option>
+                <option value="name">Tên A–Z</option>
+                <option value="variants">Nhiều biến thể</option>
+              </select>
+              <div className="ctw-manager-view-switch" role="group" aria-label="Kiểu hiển thị">
+                <button type="button" className={managerListView === 'card' ? 'active' : ''} aria-label="Xem dạng thẻ" aria-pressed={managerListView === 'card'} onClick={() => setManagerListView('card')} title="Thẻ"><LayoutGrid size={14} /></button>
+                <button type="button" className={managerListView === 'list' ? 'active' : ''} aria-label="Xem dạng danh sách" aria-pressed={managerListView === 'list'} onClick={() => setManagerListView('list')} title="Danh sách"><List size={14} /></button>
+                <button type="button" className={managerListView === 'detail' ? 'active' : ''} aria-label="Xem chi tiết biến thể" aria-pressed={managerListView === 'detail'} onClick={() => setManagerListView('detail')} title="Chi tiết"><Rows3 size={14} /></button>
+              </div>
+            </div>
+            <div className="ctw-manager-results">
+              {loading ? (
+                <div className="ctw-manager-empty"><Loader2 size={30} className="ctw-spin" /><strong>Đang tải mẫu nội dung...</strong></div>
+              ) : managerTemplates.length === 0 ? (
+                <div className="ctw-manager-empty"><FileText size={34} /><strong>{templates.length === 0 ? 'Chưa có mẫu nội dung' : 'Không tìm thấy mẫu phù hợp'}</strong><span>Thử thay đổi từ khoá hoặc bộ lọc.</span></div>
+              ) : managerListView === 'card' ? (
+                <div className="ctw-manager-card-grid">
+                  {managerTemplates.map(template => {
+                    const summary = renderTemplateSummary(template)
+                    const selected = managerSelectedTemplate?.id === template.id
+                    return (
+                      <article key={template.id} className={`ctw-manager-card${selected ? ' is-selected' : ''}`}>
+                        <button type="button" className="ctw-manager-card-main" aria-pressed={selected} onClick={() => selectManagerTemplate(template)} onDoubleClick={() => startEdit(template)}>
+                          <span className="ctw-manager-card-title"><FileText size={15} /><strong title={template.name}>{template.name}</strong></span>
+                          <span className="ctw-manager-card-group">{template.groupName || 'Chưa phân nhóm'}</span>
+                          <span className="ctw-channel-badges">{summary.activeChannels.map(channelName => <span className={`ctw-channel-badge ${channelName}`} key={channelName}>{CHANNEL_META[channelName].shortLabel}</span>)}</span>
+                          <span className="ctw-manager-excerpt">{summary.preview || 'Chưa có nội dung xem trước.'}</span>
+                          <span className="ctw-manager-card-meta"><span><MessageSquareText size={12} /> {summary.variantCount}</span><span><ImageIcon size={12} /> {summary.imageCount}</span></span>
+                        </button>
+                        <div className="ctw-manager-card-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={14} /></button></div>
+                      </article>
+                    )
+                  })}
+                </div>
+              ) : managerListView === 'list' ? (
+                <div className="ctw-manager-table">
+                  <div className="ctw-manager-table-head"><span>Tên mẫu</span><span>Nhóm</span><span>Biến thể</span><span>Media</span><span /></div>
+                  {managerTemplates.map(template => {
+                    const summary = renderTemplateSummary(template)
+                    const selected = managerSelectedTemplate?.id === template.id
+                    return (
+                      <div key={template.id} className={selected ? 'is-selected' : ''}>
+                        <button type="button" className="ctw-manager-table-select" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={14} /><strong>{template.name}</strong></button>
+                        <span>{template.groupName || 'Chưa phân nhóm'}</span><span>{summary.variantCount}</span><span>{summary.imageCount}</span>
+                        <div className="ctw-manager-row-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={14} /></button></div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="ctw-manager-detail-list">
+                  {managerTemplates.map(template => {
+                    const summary = renderTemplateSummary(template)
+                    const selected = managerSelectedTemplate?.id === template.id
+                    return (
+                      <article key={template.id} className={selected ? 'is-selected' : ''}>
+                        <button type="button" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={15} /><strong>{template.name}</strong><span>{template.groupName || 'Chưa phân nhóm'}</span></button>
+                        <p>{summary.preview || 'Chưa có nội dung xem trước.'}</p>
+                        <div><span>{summary.variantCount} biến thể · {summary.imageCount} media</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={13} /> Sửa mẫu</button></div>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </main>
+
+          <aside className="ctw-manager-preview">
+            <div className="ctw-manager-preview-heading"><div><strong>XEM TRƯỚC</strong><span>{managerSelectedTemplate?.name || 'Chưa chọn mẫu'}</span></div>{managerSelectedTemplate && <button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(managerSelectedTemplate)} disabled={busy}><Edit3 size={13} /> Sửa</button>}</div>
+            {managerSelectedTemplate ? (
+              <>
+                <div className="ctw-manager-preview-channels" role="tablist" aria-label="Loại nội dung xem trước">
+                  {managerSelectedChannels.map(channelName => <button type="button" role="tab" aria-selected={managerResolvedPreviewChannel === channelName} className={managerResolvedPreviewChannel === channelName ? 'active' : ''} key={channelName} onClick={() => setManagerPreviewChannel(channelName)}>{CHANNEL_META[channelName].shortLabel}</button>)}
+                </div>
+                <div className="ctw-manager-preview-meta"><span>{CHANNEL_META[managerResolvedPreviewChannel].label}</span><em>{selectedVariantCount} biến thể</em></div>
+                <div className="ctw-manager-preview-scroll">
+                  <ContentTemplatePreview
+                    key={`${managerSelectedTemplate.id}-${managerResolvedPreviewChannel}`}
+                    channel={managerResolvedPreviewChannel}
+                    variants={selectedChannelConfig?.variants.map(variant => variant.text) || []}
+                    formatted={selectedChannelConfig ? isRichChannel(managerResolvedPreviewChannel, selectedChannelConfig) : false}
+                    subject={selectedChannelConfig?.subject}
+                    imageUrls={selectedImageUrls}
+                    showSampleData
+                  />
+                </div>
+                <div className="ctw-manager-sample-data"><strong>DỮ LIỆU THAY THẾ KHI GỬI</strong><span><code>{'#{FULL_NAME}'}</code> Nguyễn Thị Lan</span><span><code>{'#{PHONE}'}</code> 0938 xxx 214</span></div>
+              </>
+            ) : (
+              <div className="ctw-manager-preview-empty"><FileText size={32} /><strong>Chưa có mẫu để xem trước</strong><span>Tạo mẫu mới hoặc thay đổi bộ lọc.</span></div>
+            )}
+          </aside>
+        </div>
+        <footer className="ctw-manager-footer"><span>{managerSelectedTemplate ? `Đang xem: ${managerSelectedTemplate.name}` : `${managerTemplates.length} mẫu nội dung`}</span>{onClose && <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Đóng</button>}</footer>
+      </>
+    )
+  }
 
   const renderEditor = () => (
     <>
@@ -1152,7 +1401,7 @@ export default function ContentTemplateWorkspace({
 
   return (
     <div className={`ctw-workspace${modal ? ' modal-mode' : ''}`}>
-      {view === 'list' ? renderList() : renderEditor()}
+      {view === 'list' ? renderManagerList() : renderEditor()}
       {groupDialogOpen && <GroupManagerDialog groups={groups} onClose={() => setGroupDialogOpen(false)} onChanged={async () => { await loadData(true) }} />}
     </div>
   )

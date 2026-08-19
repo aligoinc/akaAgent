@@ -41,18 +41,26 @@ const renderRichPreview = (
   return channel === 'zalo_message' ? formattedContentToZaloPreviewHtml(rendered) : rendered
 }
 
-function ChannelImagePreview({ imageUrls }: { imageUrls: string[] }) {
+function ChannelImagePreview({
+  imageUrls,
+  facebookPost = false
+}: {
+  imageUrls: string[]
+  facebookPost?: boolean
+}) {
   if (imageUrls.length === 0) return null
-  const visible = imageUrls.slice(0, 4)
+  const visibleLimit = facebookPost ? 5 : 4
+  const visible = imageUrls.slice(0, visibleLimit)
+  const hiddenCount = imageUrls.length - visible.length
 
   return (
-    <div className={`ctw-preview-images count-${Math.min(visible.length, 4)}`}>
+    <div className={`ctw-preview-images${facebookPost ? ' facebook-post' : ''} count-${visible.length}`}>
       {visible.map((url, index) => (
         <div className="ctw-preview-image" key={`${url}-${index}`}>
           {isVideoMediaSource('', url)
             ? <video src={url} aria-label={`Video ${index + 1}`} muted controls preload="metadata" />
             : <img src={url} alt={`Ảnh ${index + 1}`} />}
-          {index === 3 && imageUrls.length > 4 && <span>+{imageUrls.length - 4}</span>}
+          {index === visible.length - 1 && hiddenCount > 0 && <span>+{hiddenCount}</span>}
         </div>
       ))}
     </div>
@@ -168,7 +176,7 @@ export default function ContentTemplatePreview({
               <div><strong>Nguyễn Minh Anh</strong><span>Vừa xong · 🌐</span></div>
             </div>
             <div className="ctw-preview-facebook-content">{contentNode}</div>
-            <ChannelImagePreview imageUrls={compatibleMediaUrls} />
+            <ChannelImagePreview imageUrls={compatibleMediaUrls} facebookPost />
             <div className="ctw-preview-facebook-actions"><span>Thích</span><span>Bình luận</span><span>Chia sẻ</span></div>
           </div>
         )}

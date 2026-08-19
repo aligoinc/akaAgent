@@ -148,6 +148,16 @@ const getMediaName = (url: string, index: number): string => {
   }
 }
 
+const hasUrlPathExtension = (url: string): boolean => {
+  try {
+    const fileName = new URL(url).pathname.split('/').filter(Boolean).pop() || ''
+    const dotIndex = fileName.lastIndexOf('.')
+    return dotIndex > 0 && dotIndex < fileName.length - 1
+  } catch {
+    return false
+  }
+}
+
 export const contentTemplateImagesToSnapshots = (
   imageUrls: string[],
   mode: MediaSelectionMode = 'image'
@@ -159,7 +169,20 @@ export const contentTemplateImagesToSnapshots = (
         invalidCount += 1
         return []
       }
-      const mimeType = inferMediaMimeType(url)
+      const inferredMimeType = inferMediaMimeType(url)
+      // Content templates persist only cloud URLs. CDN and signed image URLs often
+      // have no file extension, even though the response has a valid image
+      // Content-Type. Let those URLs reach CampaignScheduler, which downloads the
+      // media and derives the temporary extension from the response Content-Type.
+      // The JPEG value is only a pre-validation hint; it does not override that
+      // response Content-Type.
+      // Extensionless videos are still rejected because their type cannot be
+      // distinguished safely after the template has discarded the original MIME.
+      const mimeType = inferredMimeType || (
+        !hasUrlPathExtension(url) && (mode === 'image' || mode === 'image-video')
+          ? 'image/jpeg'
+          : ''
+      )
       const name = getMediaName(url, index)
       if (!runtimeMediaSourceMatchesSelectionMode(mode, {
         cloudUrl: url,
