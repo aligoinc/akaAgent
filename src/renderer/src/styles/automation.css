@@ -275,7 +275,7 @@ body.theme-light .automation-filter-field input[type="date"] { color-scheme: lig
 .automation-final-summary-grid { display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 7px 10px; font-size: 12px; }.automation-final-summary-grid > span { color: var(--text-tertiary); }.automation-final-summary-grid > strong { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }.automation-final-summary-grid > strong.automation-schedule-summary-value { line-height: 1.4; white-space: normal; }
 .automation-form-footer { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 0 0 auto; padding: 10px 16px; border-top: 1px solid var(--border-default); background: var(--bg-primary); }.automation-form-footer > div { gap: 8px; }
 .automation-form-modal .automation-button { min-height: 36px; padding-right: 13px; padding-left: 13px; font-size: 12px; }
-body.theme-light .automation-modal-backdrop { background: rgba(15,23,42,.44); }
+body.theme-light .automation-modal-backdrop { background: var(--modal-backdrop); }
 
 @media(max-width:1360px){
   .automation-filters { grid-template-columns: minmax(180px,1.35fr) repeat(3,minmax(118px,1fr)) auto; }
