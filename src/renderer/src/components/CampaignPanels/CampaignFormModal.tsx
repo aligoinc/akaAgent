@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3 } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
@@ -54,6 +54,7 @@ import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
+import { isImageMediaSource, isVideoMediaSource } from '../Media/mediaImage'
 import EmailHtmlEditor, { type EmailHtmlEditorHandle } from './EmailHtmlEditor'
 import {
   campaignMediaMatchesRuntimeSelectionMode,
@@ -65,6 +66,7 @@ import {
   summarizeLocalCampaignMediaFailures
 } from './localCampaignMedia'
 import ContentPreviewModal, {
+  renderPreviewSampleTokens,
   type ContentPreviewMediaItem,
   type ContentPreviewModalData,
   type ContentPreviewPlatform,
@@ -79,8 +81,14 @@ import {
   normalizeEntitlements
 } from '../../utils/entitlements'
 import { getAccountPlatformLabel, isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
-import { countSmsContentVariants, MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
-import { renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
+import {
+  countSingleSmsContent,
+  countSmsContentVariants,
+  MAX_SMS_ADVANCED_CONTENT_ITEMS,
+  normalizeSmsContentForSend,
+  stripVietnameseDiacritics
+} from '../../../../shared/smsContent'
+import { renderContentSpin, renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
@@ -93,7 +101,8 @@ import {
   sanitizeFormattedContent,
   serializeFormattedContentVariants,
   splitFormattedContentVariants,
-  supportsFormattedContent
+  supportsFormattedContent,
+  transformFormattedContentTextNodes
 } from '../../../../shared/formattedContent'
 import {
   buildContentTemplateGroupCandidate,
@@ -1390,6 +1399,113 @@ const getCampaignMediaStableKey = (item: CampaignMediaInput): string => {
   return item.cloudUrl || item.localPath || item.name
 }
 
+const isDirectCampaignMediaPreviewUrl = (path: string): boolean => /^(https?:|data:)/i.test(path)
+
+const hashCampaignPreviewSeed = (value: string): number => {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
+const createCampaignPreviewRng = (seed: string): (() => number) => {
+  let state = hashCampaignPreviewSeed(seed)
+  return () => {
+    state += 0x6d2b79f5
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function sampleCampaignPreviewMedia<T>(items: readonly T[], count: number, rng: () => number): T[] {
+  const shuffled = [...items]
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const pickedIndex = Math.floor(rng() * (index + 1))
+    const current = shuffled[index]
+    shuffled[index] = shuffled[pickedIndex]
+    shuffled[pickedIndex] = current
+  }
+  return shuffled.slice(0, Math.min(shuffled.length, Math.max(1, count)))
+}
+
+function CampaignManualMediaPreview({ media }: { media: CampaignMediaInput }) {
+  const path = getCampaignMediaPreviewPath(media).trim()
+  const cloudPreviewPath = getCampaignMediaCloudUrl(media).trim()
+  const directCloudPreviewPath = isDirectCampaignMediaPreviewUrl(cloudPreviewPath) ? cloudPreviewPath : ''
+  const mimeType = getCampaignMediaMimeType(media)
+  const label = getCampaignMediaDisplayName(media)
+  const isImage = isImageMediaSource(mimeType, path)
+  const isVideo = isVideoMediaSource(mimeType, path)
+  const [previewSrc, setPreviewSrc] = useState(() => isDirectCampaignMediaPreviewUrl(path) ? path : '')
+  const [previewStatus, setPreviewStatus] = useState<'loading' | 'ready' | 'fallback'>(() => (
+    isDirectCampaignMediaPreviewUrl(path) ? 'ready' : isImage && path ? 'loading' : 'fallback'
+  ))
+
+  useEffect(() => {
+    let disposed = false
+    if (!path || (!isImage && !isVideo)) {
+      setPreviewSrc('')
+      setPreviewStatus('fallback')
+      return () => { disposed = true }
+    }
+    if (isDirectCampaignMediaPreviewUrl(path)) {
+      setPreviewSrc(path)
+      setPreviewStatus('ready')
+      return () => { disposed = true }
+    }
+    if (isVideo) {
+      setPreviewSrc(directCloudPreviewPath)
+      setPreviewStatus(directCloudPreviewPath ? 'ready' : 'fallback')
+      return () => { disposed = true }
+    }
+
+    setPreviewSrc('')
+    setPreviewStatus('loading')
+    window.electronAPI.readCampaignPreviewFileDataUrl(path)
+      .then(result => {
+        if (disposed) return
+        setPreviewSrc(result.dataUrl)
+        setPreviewStatus('ready')
+      })
+      .catch(() => {
+        if (disposed) return
+        setPreviewSrc(directCloudPreviewPath)
+        setPreviewStatus(directCloudPreviewPath ? 'ready' : 'fallback')
+      })
+    return () => { disposed = true }
+  }, [directCloudPreviewPath, isImage, isVideo, path])
+
+  const handlePreviewLoadError = () => {
+    if (directCloudPreviewPath && previewSrc !== directCloudPreviewPath) {
+      setPreviewSrc(directCloudPreviewPath)
+      setPreviewStatus('ready')
+      return
+    }
+    setPreviewSrc('')
+    setPreviewStatus('fallback')
+  }
+
+  return (
+    <span className={`campaign-manual-preview-media-tile is-${previewStatus}`} title={label}>
+      {previewStatus === 'ready' && previewSrc ? (
+        isVideo
+          ? <video src={previewSrc} muted playsInline preload="metadata" aria-label={label} onError={handlePreviewLoadError} />
+          : <img src={previewSrc} alt={label} loading="lazy" onError={handlePreviewLoadError} />
+      ) : (
+        <span className="campaign-manual-preview-media-fallback">
+          {isVideo ? <FileText size={20} /> : <Image size={20} />}
+          <small>{previewStatus === 'loading' ? 'Đang tải ảnh…' : label}</small>
+        </span>
+      )}
+      {previewStatus === 'ready' && <small className="campaign-manual-preview-media-name">{label}</small>}
+    </span>
+  )
+}
+
 const createAdvancedContentItem = (overrides: Partial<CampaignAdvancedContentItem> = {}): CampaignAdvancedContentItem => ({
   id: overrides.id || `advanced-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   content: overrides.content || '',
@@ -2103,9 +2219,18 @@ export default function CampaignFormModal({
       : 'content'
   )
   const [manualAdvancedContentModalOpen, setManualAdvancedContentModalOpen] = useState(false)
+  const [manualAdvancedContentSelectedId, setManualAdvancedContentSelectedId] = useState<string | null>(
+    initialAdvancedContentItems[0]?.id ?? null
+  )
+  const [manualAdvancedPreviewUsesSampleData, setManualAdvancedPreviewUsesSampleData] = useState(true)
+  const [manualAdvancedPreviewSeed, setManualAdvancedPreviewSeed] = useState(0)
+  const [manualAdvancedTemplatePickerOpen, setManualAdvancedTemplatePickerOpen] = useState(false)
+  const [manualAdvancedPickedVariants, setManualAdvancedPickedVariants] = useState<string[]>([])
   const manualAdvancedContentTriggerRef = useRef<HTMLButtonElement>(null)
   const manualAdvancedContentCloseRef = useRef<HTMLButtonElement>(null)
   const manualAdvancedContentModalRef = useRef<HTMLDivElement>(null)
+  const manualAdvancedTemplatePickerRef = useRef<HTMLDivElement>(null)
+  const manualAdvancedTemplatePickerReturnFocusRef = useRef<HTMLElement | null>(null)
   const [candidateContentTemplateGroupId, setCandidateContentTemplateGroupId] = useState<number | null>(
     savedAdvancedGroupSnapshot?.groupId ?? null
   )
@@ -2124,13 +2249,19 @@ export default function CampaignFormModal({
     }
   }, [advancedContentSourceMode, formData.advancedContentItems])
   useEffect(() => {
+    if (!manualAdvancedContentModalOpen) return
+    const items = formData.advancedContentItems
+    if (manualAdvancedContentSelectedId && items.some(item => item.id === manualAdvancedContentSelectedId)) return
+    setManualAdvancedContentSelectedId(items[0]?.id ?? null)
+  }, [formData.advancedContentItems, manualAdvancedContentModalOpen, manualAdvancedContentSelectedId])
+  useEffect(() => {
     if (!manualAdvancedContentModalOpen || uiAlert.isOpen || uiConfirm.isOpen) return
 
     const focusFrame = window.requestAnimationFrame(() => {
       manualAdvancedContentCloseRef.current?.focus()
     })
     const handleKeyDown = (event: KeyboardEvent) => {
-      const hasNestedOverlay = document.querySelector('.media-library-overlay, .content-preview-overlay') !== null
+      const hasNestedOverlay = document.querySelector('.media-library-overlay, .content-preview-overlay, .campaign-manual-template-picker-overlay, .content-template-save-modal') !== null
       if (hasNestedOverlay) return
 
       if (event.key === 'Escape') {
@@ -2169,6 +2300,58 @@ export default function CampaignFormModal({
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [manualAdvancedContentModalOpen, uiAlert.isOpen, uiConfirm.isOpen])
+  useEffect(() => {
+    if (!manualAdvancedTemplatePickerOpen || uiAlert.isOpen || uiConfirm.isOpen) return
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const picker = manualAdvancedTemplatePickerRef.current
+      const firstFocusable = picker?.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      const focusTarget = firstFocusable || picker
+      focusTarget?.focus()
+    })
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const picker = manualAdvancedTemplatePickerRef.current
+      if (!picker) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setManualAdvancedTemplatePickerOpen(false)
+        setManualAdvancedPickedVariants([])
+        const returnFocusTarget = manualAdvancedTemplatePickerReturnFocusRef.current
+        manualAdvancedTemplatePickerReturnFocusRef.current = null
+        window.requestAnimationFrame(() => returnFocusTarget?.focus())
+        return
+      }
+      if (event.key !== 'Tab') return
+      event.stopPropagation()
+
+      const focusable = Array.from(picker.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      )).filter(element => element.getAttribute('aria-hidden') !== 'true')
+      if (focusable.length === 0) {
+        event.preventDefault()
+        picker.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const activeElement = document.activeElement
+      if (event.shiftKey && (activeElement === first || !picker.contains(activeElement))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (activeElement === last || !picker.contains(activeElement))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [manualAdvancedTemplatePickerOpen, uiAlert.isOpen, uiConfirm.isOpen])
   const campaignNameValueRef = useRef(formData.name)
   const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()))
   const lastAiCampaignNameRef = useRef('')
@@ -12965,7 +13148,10 @@ export default function CampaignFormModal({
         const compatibleState = checked && current.formattedContentEnabled
           ? convertFormattedStateToPlain(current)
           : current
-        return { ...compatibleState, postWithBackground: checked }
+        return {
+          ...compatibleState,
+          postWithBackground: checked
+        }
       })
     }
     if (checked && (isFormattedContentEnabled || groupSnapshotSaveEffectiveRich)) {
@@ -13138,13 +13324,15 @@ export default function CampaignFormModal({
       showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
+    const nextItem = createAdvancedContentItem({
+      ...(isEmailCampaign ? { emailSubject: formData.emailSubject } : {}),
+      ...(isCommentSeedingCampaign ? { randomMediaCount: 1 } : {})
+    })
+    setManualAdvancedContentSelectedId(nextItem.id)
     setFormData(prev => {
       const nextItems = [
         ...prev.advancedContentItems,
-        createAdvancedContentItem({
-          ...(isEmailCampaign ? { emailSubject: formData.emailSubject } : {}),
-          ...(isCommentSeedingCampaign ? { randomMediaCount: 1 } : {})
-        })
+        nextItem
       ]
       manualAdvancedContentItemsRef.current = nextItems
       return { ...prev, advancedContentItems: nextItems }
@@ -13156,16 +13344,18 @@ export default function CampaignFormModal({
       showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
       return
     }
+    const duplicateItem = createAdvancedContentItem({
+      content: item.content,
+      mediaOption: item.mediaOption || 'none',
+      mediaItems: [...(item.mediaItems || [])],
+      randomMediaCount: isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3),
+      emailSubject: item.emailSubject
+    })
+    setManualAdvancedContentSelectedId(duplicateItem.id)
     setFormData(prev => {
       const nextItems = [
         ...prev.advancedContentItems,
-        createAdvancedContentItem({
-          content: item.content,
-          mediaOption: item.mediaOption || 'none',
-          mediaItems: [...(item.mediaItems || [])],
-          randomMediaCount: isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3),
-          emailSubject: item.emailSubject
-        })
+        duplicateItem
       ]
       manualAdvancedContentItemsRef.current = nextItems
       return { ...prev, advancedContentItems: nextItems }
@@ -13176,6 +13366,13 @@ export default function CampaignFormModal({
     delete advancedContentEditorRefs.current[itemId]
     delete advancedContentTextareaRefs.current[itemId]
     if (activeRichContentEditorRef.current?.itemId === itemId) activeRichContentEditorRef.current = null
+    if (manualAdvancedContentSelectedId === itemId) {
+      const currentIndex = formData.advancedContentItems.findIndex(item => item.id === itemId)
+      const remainingItems = formData.advancedContentItems.filter(item => item.id !== itemId)
+      setManualAdvancedContentSelectedId(
+        remainingItems[Math.min(Math.max(0, currentIndex), remainingItems.length - 1)]?.id ?? null
+      )
+    }
     setFormData(prev => {
       const nextItems = prev.advancedContentItems.filter(item => item.id !== itemId)
       manualAdvancedContentItemsRef.current = nextItems
@@ -13197,8 +13394,59 @@ export default function CampaignFormModal({
 
   const closeManualAdvancedContentModal = () => {
     setManualAdvancedContentModalOpen(false)
+    setManualAdvancedTemplatePickerOpen(false)
+    setManualAdvancedPickedVariants([])
+    manualAdvancedTemplatePickerReturnFocusRef.current = null
     if (activeRichContentEditorRef.current?.itemId) activeRichContentEditorRef.current = null
     window.requestAnimationFrame(() => manualAdvancedContentTriggerRef.current?.focus())
+  }
+
+  const openManualAdvancedContentModal = () => {
+    const selectedExists = manualAdvancedContentSelectedId && formData.advancedContentItems.some(item => (
+      item.id === manualAdvancedContentSelectedId
+    ))
+    if (!selectedExists) setManualAdvancedContentSelectedId(formData.advancedContentItems[0]?.id ?? null)
+    setManualAdvancedContentModalOpen(true)
+  }
+
+  const openManualAdvancedTemplatePicker = () => {
+    manualAdvancedTemplatePickerReturnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    setManualAdvancedPickedVariants([])
+    setManualAdvancedTemplatePickerOpen(true)
+    if (contentTemplates.length === 0) void loadContentTemplates()
+  }
+
+  const closeManualAdvancedTemplatePicker = () => {
+    setManualAdvancedTemplatePickerOpen(false)
+    setManualAdvancedPickedVariants([])
+    const returnFocusTarget = manualAdvancedTemplatePickerReturnFocusRef.current
+    manualAdvancedTemplatePickerReturnFocusRef.current = null
+    window.requestAnimationFrame(() => returnFocusTarget?.focus())
+  }
+
+  const insertAdvancedContentSnippet = (item: CampaignAdvancedContentItem, snippet: string) => {
+    const richEditor = advancedContentEditorRefs.current[item.id]
+    if (richEditor) {
+      richEditor.chain().focus().insertContent(snippet).run()
+      return
+    }
+
+    const textarea = advancedContentTextareaRefs.current[item.id]
+    const selectionStart = textarea?.selectionStart ?? item.content.length
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart
+    const spacer = selectionStart > 0 && !/\s$/.test(item.content.slice(0, selectionStart)) ? ' ' : ''
+    const inserted = `${spacer}${snippet}`
+    const nextContent = `${item.content.slice(0, selectionStart)}${inserted}${item.content.slice(selectionEnd)}`
+    setAdvancedContentItem(item.id, { content: nextContent })
+    window.requestAnimationFrame(() => {
+      const nextTextarea = advancedContentTextareaRefs.current[item.id]
+      if (!nextTextarea) return
+      const nextCursor = selectionStart + inserted.length
+      nextTextarea.focus()
+      nextTextarea.setSelectionRange(nextCursor, nextCursor)
+    })
   }
 
   const switchToSimpleContentMode = () => {
@@ -13452,12 +13700,16 @@ export default function CampaignFormModal({
     const note = isSourceContentMode
       ? 'Chỉ dùng nội dung từ bài viết nguồn; có thể lấy kèm hình ảnh hoặc đăng bài bằng cách chia sẻ.'
       : isManualAdvancedMode
-        ? 'Tạo nhiều nội dung thủ công, mỗi nội dung là một biến thể hoàn chỉnh với media riêng.'
+        ? isSmsCampaign
+          ? 'Tạo nhiều nội dung SMS thủ công, mỗi nội dung là một biến thể hoàn chỉnh.'
+          : 'Tạo nhiều nội dung thủ công, mỗi nội dung là một biến thể hoàn chỉnh với media riêng.'
         : isDataGroupMode
           ? 'Dùng snapshot từ một nhóm mẫu có sẵn. Mỗi lượt chạy sẽ xoay vòng qua các nội dung phù hợp trong nhóm.'
           : isRichContentEditorEnabled
             ? 'Dùng dấu | để phân tách các nội dung có định dạng gửi luân phiên. Nhập \\| nếu muốn hiển thị dấu |.'
-            : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
+            : isSmsCampaign
+              ? 'Dùng một nội dung SMS cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu | để xoay vòng khi gửi.'
+              : 'Dùng một nội dung và bộ media chung cho chiến dịch. Có thể nhập nhiều biến thể bằng dấu |. Mỗi lượt chạy sẽ xoay vòng qua các biến thể.'
 
     return (
       <div className="campaign-content-mode-row">
@@ -13511,6 +13763,7 @@ export default function CampaignFormModal({
 
     const mediaItems = item.mediaItems || []
     const mediaOption = item.mediaOption || 'none'
+    const mediaBlocked = isPostBackgroundActive
     const randomMediaCount = isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3)
     const radioName = `advanced-media-${item.id}`
     const isFileMedia = isZaloMessageCampaign || isEmailCampaign
@@ -13518,15 +13771,16 @@ export default function CampaignFormModal({
     const isFacebookImageVideoMedia = mediaSelectionMode === 'image-video'
     const isVideoOnlyMedia = mediaSelectionMode === 'video'
     const mediaTitle = isCommentSeedingCampaign ? 'Kho ảnh/video đã chọn' : isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : isVideoOnlyMedia ? 'Video đã chọn' : isFacebookImageVideoMedia ? 'Ảnh/video đã chọn' : 'Ảnh đã chọn'
-    const mediaDisabled = isPostBackgroundActive
 
     return (
-      <div className="campaign-advanced-media-panel">
+      <div className={`campaign-advanced-media-panel${mediaBlocked ? ' is-blocked' : ''}`}>
+        {mediaBlocked && (
+          <div className="schedule-hint campaign-advanced-media-blocked-hint">
+            Đăng bài với phông nền không gửi kèm media. Các media đã chọn vẫn được giữ lại khi bạn tắt phông nền.
+          </div>
+        )}
         {isCommentSeedingCampaign && (
           <div className="schedule-hint">Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi media đã chọn dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.</div>
-        )}
-        {mediaDisabled && (
-          <div className="schedule-hint">Đăng bài với phông nền không hỗ trợ gửi media.</div>
         )}
         <div className="campaign-advanced-media-layout">
           <div className="campaign-advanced-media-options">
@@ -13535,7 +13789,7 @@ export default function CampaignFormModal({
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setMediaPickerTarget({ kind: 'advanced', itemId: item.id })}
-                disabled={mediaOption === 'none' || mediaDisabled}
+                disabled={mediaBlocked || mediaOption === 'none'}
               >
                 <Image size={14} />
                 <span>Chọn từ Media</span>
@@ -13544,7 +13798,7 @@ export default function CampaignFormModal({
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => openLocalMediaPicker({ kind: 'advanced', itemId: item.id })}
-                disabled={mediaOption === 'none' || mediaDisabled || usesZaloServerAccount}
+                disabled={mediaBlocked || mediaOption === 'none' || usesZaloServerAccount}
                 title={usesZaloServerAccount ? 'Zalo Server chỉ dùng được media đã upload lên cloud' : 'Chọn file trực tiếp từ máy'}
               >
                 <FolderOpen size={14} />
@@ -13556,6 +13810,7 @@ export default function CampaignFormModal({
                 type="radio"
                 name={radioName}
                 checked={mediaOption === 'none'}
+                disabled={mediaBlocked}
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'none' })}
               />
               <span>{isEmailCampaign ? 'Không đính kèm file' : isZaloMessageCampaign ? 'Không gửi file' : isVideoOnlyMedia ? 'Không đăng video' : isFacebookImageVideoMedia ? 'Không gửi ảnh/video' : 'Không gửi ảnh'}</span>
@@ -13565,8 +13820,8 @@ export default function CampaignFormModal({
                 type="radio"
                 name={radioName}
                 checked={mediaOption === 'all'}
+                disabled={mediaBlocked}
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'all' })}
-                disabled={mediaDisabled}
               />
               <span>{isCommentSeedingCampaign ? 'Gửi media đã chọn' : isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : isVideoOnlyMedia ? 'Đăng video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ảnh/video đã chọn' : 'Gửi ảnh đã chọn'}</span>
             </label>
@@ -13576,8 +13831,8 @@ export default function CampaignFormModal({
                   type="radio"
                   name={radioName}
                   checked={mediaOption === 'random'}
+                  disabled={mediaBlocked}
                   onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'random', randomMediaCount: 1 })}
-                  disabled={mediaDisabled}
                 />
                 <span>{isCommentSeedingCampaign ? 'Gửi ngẫu nhiên 1 ảnh/video trong các media đã chọn' : isFileMedia ? 'Gửi ngẫu nhiên số file trong file đã chọn' : isVideoOnlyMedia ? 'Đăng ngẫu nhiên 1 video trong các video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ngẫu nhiên số media trong các media đã chọn' : 'Gửi ngẫu nhiên số ảnh trong ảnh đã chọn'}</span>
               </label>
@@ -13588,7 +13843,7 @@ export default function CampaignFormModal({
                 value={isVideoOnlyMedia ? 1 : randomMediaCount}
                 onChange={event => setAdvancedContentItem(item.id, { randomMediaCount: Math.max(1, Number(event.target.value) || 1) })}
                 className="stepper-input"
-                disabled={isCommentSeedingCampaign || isVideoOnlyMedia || mediaOption !== 'random' || mediaDisabled}
+                disabled={mediaBlocked || isCommentSeedingCampaign || isVideoOnlyMedia || mediaOption !== 'random'}
               />
             </div>
           </div>
@@ -13637,6 +13892,7 @@ export default function CampaignFormModal({
                             type="button"
                             className="btn-icon text-error action-btn"
                             onClick={() => removeAdvancedContentMedia(item.id, mediaIndex)}
+                            disabled={mediaBlocked}
                             title="Xóa media"
                           >
                             <Trash2 size={14} />
@@ -13675,7 +13931,9 @@ export default function CampaignFormModal({
               <span>
                 {items.length > 0
                   ? `Đã thêm ${items.length} nội dung. Mở modal để thêm hoặc chỉnh sửa biến thể.`
-                  : 'Thêm các biến thể nội dung và media riêng trong modal.'}
+                  : isSmsCampaign
+                    ? 'Thêm các biến thể nội dung SMS riêng trong modal.'
+                    : 'Thêm các biến thể nội dung và media riêng trong modal.'}
               </span>
             </div>
           </div>
@@ -13687,7 +13945,7 @@ export default function CampaignFormModal({
               ref={manualAdvancedContentTriggerRef}
               type="button"
               className="btn btn-primary btn-sm"
-              onClick={() => setManualAdvancedContentModalOpen(true)}
+              onClick={openManualAdvancedContentModal}
             >
               <Plus size={14} />
               <span>Thêm nội dung</span>
@@ -13698,121 +13956,548 @@ export default function CampaignFormModal({
     )
   }
 
-  const renderManualAdvancedContentItems = () => {
-    const items = formData.advancedContentItems
+  const getManualAdvancedItemPlainText = (item: CampaignAdvancedContentItem): string => (
+    isRichContentEditorEnabled ? formattedContentToPlainText(item.content) : item.content
+  )
+
+  const getManualAdvancedItemWarning = (item: CampaignAdvancedContentItem): string => {
+    const plainText = getManualAdvancedItemPlainText(item)
+    const mediaItems = item.mediaItems || []
+    const hasSendableMedia = !isMobileManagedSmsCampaign && !isPostBackgroundActive && item.mediaOption !== 'none' && mediaItems.length > 0
+    const randomMediaCount = isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3)
+    if (isPostBackgroundActive && renderContentSpinMax(plainText).length > 130) return 'Vượt 130 ký tự của phông nền'
+    if (isPostBackgroundActive && plainText.split(/\r?\n/).length > 3) return 'Phông nền chỉ hiển thị tối đa 3 dòng'
+    if (isPostBackgroundActive && mediaItems.length > 0) return 'Phông nền không gửi kèm media'
+    if (item.mediaOption === 'random' && randomMediaCount > mediaItems.length) {
+      return `Chọn ngẫu nhiên ${randomMediaCount} nhưng kho chỉ có ${mediaItems.length}`
+    }
+    if (!plainText.trim() && !hasSendableMedia) {
+      return isSmsCampaign
+        ? 'Biến thể đang rỗng — nhập nội dung SMS'
+        : 'Biến thể đang rỗng — nhập nội dung hoặc chọn media'
+    }
+    return ''
+  }
+
+  const renderManualAdvancedItemSettings = () => (
+    <div className="campaign-manual-content-item-settings">
+      {canUseFormattedContent && (
+        <label className="campaign-manual-content-setting-row">
+          <input
+            type="checkbox"
+            checked={isFormattedContentEnabled}
+            onChange={event => setFormattedContentEnabled(event.target.checked)}
+          />
+          <span>
+            <strong>Nội dung có định dạng</strong>
+            <small>
+              {isZaloMessageCampaign
+                ? 'In đậm, in nghiêng và danh sách được giữ nguyên khi gửi Zalo.'
+                : 'Định dạng được áp dụng riêng cho từng biến thể nội dung.'}
+            </small>
+          </span>
+        </label>
+      )}
+      {isPostBackgroundCampaign && (
+        <label className={`campaign-manual-content-setting-row${isPostBackgroundDisabled ? ' is-disabled' : ''}`}>
+          <input
+            type="checkbox"
+            checked={isPostBackgroundActive}
+            disabled={isPostBackgroundDisabled}
+            onChange={event => setPostBackgroundEnabled(event.target.checked)}
+          />
+          <span>
+            <strong>Đăng bài với phông nền</strong>
+            <small>
+              {isFormattedContentEnabled
+                ? 'Tắt “Nội dung có định dạng” để dùng phông nền.'
+                : 'Tối đa 130 ký tự, 3 dòng và không gửi media.'}
+            </small>
+          </span>
+        </label>
+      )}
+      {isEmailCampaign && (
+        <label className="campaign-manual-content-setting-row">
+          <input
+            type="checkbox"
+            checked={formData.emailBodyIsHtml}
+            onChange={event => {
+              const checked = event.target.checked
+              if (!checked) normalizeManualAdvancedContentItemsToPlain()
+              setFormData(current => checked
+                ? { ...current, emailBodyIsHtml: true, rewriteContentEachRun: false }
+                : convertFormattedStateToPlain(current))
+            }}
+          />
+          <span>
+            <strong>Nội dung dạng HTML</strong>
+            <small>Bật trình soạn thảo có định dạng cho nội dung email.</small>
+          </span>
+        </label>
+      )}
+      {isSmsCampaign && (
+        <>
+          <label className="campaign-manual-content-setting-row compact">
+            <input
+              type="checkbox"
+              checked={formData.smsUseUnicode}
+              onChange={event => setFormData(current => ({ ...current, smsUseUnicode: event.target.checked }))}
+            />
+            <span><strong>Gửi có dấu (Unicode)</strong><small>70 ký tự mỗi tin khi có dấu.</small></span>
+          </label>
+          <label className="campaign-manual-content-setting-row compact">
+            <input
+              type="checkbox"
+              checked={formData.smsKeepNewLines}
+              onChange={event => setFormData(current => ({ ...current, smsKeepNewLines: event.target.checked }))}
+            />
+            <span><strong>Giữ xuống dòng</strong><small>Không gộp các dòng trước khi gửi.</small></span>
+          </label>
+        </>
+      )}
+    </div>
+  )
+
+  const renderManualAdvancedItemEditor = (item: CampaignAdvancedContentItem, itemIndex: number) => {
+    const plainText = getManualAdvancedItemPlainText(item)
+    const mediaCount = (item.mediaItems || []).length
+    const warning = getManualAdvancedItemWarning(item)
+    const smsPreviewText = isSmsCampaign
+      ? normalizeSmsContentForSend(renderContentSpinMax(plainText), {
+          useUnicode: formData.smsUseUnicode,
+          keepNewLines: formData.smsKeepNewLines
+        })
+      : ''
+    const smsCount = countSingleSmsContent(smsPreviewText, formData.smsUseUnicode)
+    const sourceLabel = item.sourceTemplateName
+      ? `${item.sourceTemplateName}${item.sourceVariantIndex !== undefined ? ` · biến thể ${item.sourceVariantIndex + 1}` : ''}`
+      : 'Tự soạn'
 
     return (
-      <>
-        {items.length === 0 ? (
-          <div className="campaign-advanced-content-entry">
-            <div className="campaign-advanced-content-empty">
-              Chưa có biến thể nội dung nào.
-            </div>
-            <div className="campaign-advanced-content-add-row">
-              <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
-                <Plus size={14} />
-                <span>Thêm biến thể</span>
-              </button>
-            </div>
+      <div className="campaign-manual-content-editor-scroll">
+        <div className="campaign-manual-content-editor-heading">
+          <div>
+            <strong>Nội dung {itemIndex + 1}</strong>
+            <span className={item.sourceTemplateName ? 'is-template' : ''}><FileText size={11} />{sourceLabel}</span>
           </div>
-        ) : items.map((item, itemIndex) => (
-          <div className="campaign-advanced-content-entry" key={`${item.id}-${itemIndex}`}>
-            <div className="campaign-advanced-content-card">
-              <div className="campaign-advanced-content-card-header">
-                <strong>
-                  Nội dung {itemIndex + 1}
-                  {item.sourceTemplateName ? ` · ${item.sourceTemplateName}` : ''}
-                  {item.sourceVariantIndex !== undefined ? ` · biến thể ${item.sourceVariantIndex + 1}` : ''}
-                </strong>
-                <div className="campaign-advanced-content-actions">
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    onClick={() => openAdvancedContentPreview(item, itemIndex)}
-                    title={`Xem trước nội dung ${itemIndex + 1}`}
-                    aria-label={`Xem trước nội dung ${itemIndex + 1}`}
-                  >
-                    <Eye size={14} />
-                  </button>
-                  {isMessageCampaign && !isZaloShareMessageMode && (
-                    renderMessagePersonalizationDropdown('content', 'action', item.id)
-                  )}
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    onClick={() => duplicateAdvancedContentItem(item)}
-                    title="Nhân bản nội dung"
-                  >
-                    <Copy size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-icon text-error"
-                    onClick={() => removeAdvancedContentItem(item.id)}
-                    title="Xóa nội dung"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-              {isEmailCampaign && (
-                <div className="stepper-form-group" style={{ marginBottom: 10 }}>
-                  <label>Tiêu đề email <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    className="stepper-input"
-                    value={resolveLegacyManualEmailSubject(item)}
-                    onChange={event => setAdvancedContentItem(item.id, { emailSubject: event.target.value })}
-                    placeholder="Nhập tiêu đề cho nội dung email này..."
-                  />
-                </div>
-              )}
-              {isRichContentEditorEnabled ? (
-                <EmailHtmlEditor
-                  value={item.content}
-                  onChange={html => setAdvancedContentItem(item.id, { content: html })}
-                  onEditorReady={editor => {
-                    if (editor) advancedContentEditorRefs.current[item.id] = editor
-                    else delete advancedContentEditorRefs.current[item.id]
-                  }}
-                  onFocus={editor => {
-                    activeRichContentEditorRef.current = { itemId: item.id, editor }
-                  }}
-                />
-              ) : (
-                <textarea
-                  ref={textarea => {
-                    if (textarea) advancedContentTextareaRefs.current[item.id] = textarea
-                    else delete advancedContentTextareaRefs.current[item.id]
-                  }}
-                  className={`stepper-textarea ${isMessageCampaign ? 'message-content-textarea' : ''}`}
-                  placeholder="Nhập nội dung..."
-                  value={item.content}
-                  onChange={event => setAdvancedContentItem(item.id, { content: event.target.value })}
-                  rows={5}
-                />
-              )}
-              {renderAdvancedContentItemMedia(item)}
-            </div>
-            {itemIndex === items.length - 1 && (
-              <div className="campaign-advanced-content-add-row">
-                <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem}>
-                  <Plus size={14} />
-                  <span>Thêm biến thể</span>
-                </button>
-              </div>
+          <div className="campaign-manual-content-editor-actions">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => duplicateAdvancedContentItem(item)}>
+              <Copy size={13} /> Nhân bản
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm text-error" onClick={() => removeAdvancedContentItem(item.id)}>
+              <Trash2 size={13} /> Xoá
+            </button>
+          </div>
+        </div>
+
+        {renderManualAdvancedItemSettings()}
+
+        {isEmailCampaign && (
+          <div className="stepper-form-group campaign-manual-content-email-subject">
+            <label>Tiêu đề email <span className="required">*</span></label>
+            <input
+              type="text"
+              className="stepper-input"
+              value={resolveLegacyManualEmailSubject(item)}
+              onChange={event => setAdvancedContentItem(item.id, { emailSubject: event.target.value })}
+              placeholder="Nhập tiêu đề cho nội dung email này..."
+            />
+          </div>
+        )}
+
+        <div className="campaign-manual-content-composer">
+          <div className="campaign-manual-content-editor-toolbar">
+            {(isMessageCampaign || isSmsCampaign) && !isZaloShareMessageMode && (
+              renderMessagePersonalizationDropdown('content', 'action', item.id)
             )}
+            {isSmsCampaign && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setAdvancedContentItem(item.id, { content: stripVietnameseDiacritics(item.content) })}
+              >
+                Bỏ dấu ngay
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => insertAdvancedContentSnippet(item, '{chào|xin chào|kính chào}')}
+              title="Chèn cụm xoay vòng ngẫu nhiên"
+            >
+              <Shuffle size={13} /> Spin {'{a|b|c}'}
+            </button>
+            <span className="campaign-manual-content-toolbar-hint">
+              {isPostBackgroundActive
+                ? 'Phông nền: chữ căn giữa, không định dạng'
+                : isSmsCampaign
+                  ? (formData.smsUseUnicode ? 'Đang giữ dấu tiếng Việt' : 'Sẽ gửi bản không dấu')
+                  : isRichContentEditorEnabled ? 'Định dạng đang bật' : 'Nội dung văn bản thường'}
+            </span>
           </div>
-        ))}
-      </>
+          {isRichContentEditorEnabled ? (
+            <EmailHtmlEditor
+              value={item.content}
+              onChange={html => setAdvancedContentItem(item.id, { content: html })}
+              onEditorReady={editor => {
+                if (editor) advancedContentEditorRefs.current[item.id] = editor
+                else delete advancedContentEditorRefs.current[item.id]
+              }}
+              onFocus={editor => {
+                activeRichContentEditorRef.current = { itemId: item.id, editor }
+              }}
+            />
+          ) : (
+            <textarea
+              ref={textarea => {
+                if (textarea) advancedContentTextareaRefs.current[item.id] = textarea
+                else delete advancedContentTextareaRefs.current[item.id]
+              }}
+              className="stepper-textarea campaign-manual-content-textarea"
+              placeholder={isSmsCampaign ? 'Nhập nội dung SMS...' : isEmailCampaign ? 'Nhập nội dung email...' : 'Nhập nội dung...'}
+              value={item.content}
+              onChange={event => setAdvancedContentItem(item.id, { content: event.target.value })}
+              rows={7}
+            />
+          )}
+        </div>
+
+        <div className="campaign-manual-content-item-meta">
+          <span>
+            {isSmsCampaign
+              ? `${smsCount.countChar} ký tự · ${smsCount.countSms} tin · ${formData.smsUseUnicode ? 'Unicode' : 'GSM không dấu'}`
+              : isPostBackgroundActive
+                ? `${renderContentSpinMax(plainText).length}/130 ký tự · ${plainText.split(/\r?\n/).length}/3 dòng`
+                : `${plainText.length} ký tự · ${plainText ? plainText.split(/\r?\n/).length : 0} dòng · ${mediaCount > 0 ? `${mediaCount} media` : 'chưa có media'}`}
+          </span>
+          {warning && <span className="campaign-manual-content-warning"><AlertTriangle size={12} />{warning}</span>}
+        </div>
+
+        {renderAdvancedContentItemMedia(item)}
+      </div>
+    )
+  }
+
+  const renderManualAdvancedPreview = (item: CampaignAdvancedContentItem, itemIndex: number) => {
+    const itemPlainText = getManualAdvancedItemPlainText(item)
+    const previewSeed = `${item.id}:${manualAdvancedPreviewSeed}`
+    const spunPlainText = renderContentSpin(itemPlainText, {
+      rng: createCampaignPreviewRng(`${previewSeed}:plain`)
+    })
+    const sampledPlainText = manualAdvancedPreviewUsesSampleData
+      ? renderPreviewSampleTokens(spunPlainText)
+      : spunPlainText
+    const previewText = isSmsCampaign
+      ? normalizeSmsContentForSend(sampledPlainText, {
+          useUnicode: formData.smsUseUnicode,
+          keepNewLines: formData.smsKeepNewLines
+        })
+      : sampledPlainText
+    const spunSubject = renderContentSpin(resolveLegacyManualEmailSubject(item), {
+      rng: createCampaignPreviewRng(`${previewSeed}:subject`)
+    })
+    const renderedSubject = manualAdvancedPreviewUsesSampleData
+      ? renderPreviewSampleTokens(spunSubject)
+      : spunSubject
+    const richContentRng = createCampaignPreviewRng(`${previewSeed}:rich`)
+    const renderedRichContent = isRichContentEditorEnabled
+      ? transformFormattedContentTextNodes(
+          sanitizeFormattedContent(item.content),
+          text => {
+            const spun = renderContentSpin(text, { rng: richContentRng })
+            return manualAdvancedPreviewUsesSampleData ? renderPreviewSampleTokens(spun) : spun
+          }
+        )
+      : ''
+    const selectedMediaItems = item.mediaItems || []
+    const mediaItems = item.mediaOption === 'none' || isPostBackgroundActive
+      ? []
+      : item.mediaOption === 'random'
+        ? sampleCampaignPreviewMedia(
+            selectedMediaItems,
+            Math.max(1, item.randomMediaCount || 1),
+            createCampaignPreviewRng(`${previewSeed}:media`)
+          )
+        : selectedMediaItems
+    const smsCount = countSingleSmsContent(previewText, formData.smsUseUnicode)
+    const isFacebookChat = advancedContentTargetChannel === 'facebook_message'
+    const isFacebookComment = advancedContentTargetChannel === 'facebook_comment'
+    const isZaloGroupChat = isZaloMessageGroupCampaign
+    const notes: string[] = []
+    if (isPostBackgroundActive) notes.push('Phông nền giới hạn 130 ký tự, 3 dòng và không gửi media.')
+    if (!isPostBackgroundActive && item.mediaOption === 'random') notes.push(`Mỗi lượt lấy ngẫu nhiên ${Math.max(1, item.randomMediaCount || 1)} media trong ${item.mediaItems?.length || 0} đã chọn.`)
+    if (item.mediaOption === 'all' && mediaItems.length > 0) notes.push(`Gửi đủ ${mediaItems.length} media đã chọn theo thứ tự.`)
+    if (/\{[^{}]*\|[^{}]*\}/.test(itemPlainText)) notes.push('Cụm {a|b} được bốc ngẫu nhiên ở từng lượt gửi.')
+    if (isSmsCampaign) notes.push(formData.smsUseUnicode ? 'Gửi có dấu: mỗi tin 70 ký tự khi có dấu.' : 'Tự bỏ dấu khi gửi: mỗi tin 160 ký tự.')
+    if (isZaloMessageCampaign && usesZaloServerAccount) notes.push('Zalo Server chỉ gửi media đã upload lên cloud.')
+    if (isReelsMediaMode) notes.push('Reels dùng một video cho mỗi lượt đăng.')
+    notes.push('Các biến thể chạy xoay vòng theo thứ tự qua từng mục tiêu.')
+
+    const previewContent = isRichContentEditorEnabled
+      ? <div className="campaign-manual-preview-rich" dangerouslySetInnerHTML={{ __html: renderedRichContent }} />
+      : <>{previewText || 'Nội dung xem trước sẽ hiển thị tại đây.'}</>
+
+    return (
+      <aside className="campaign-manual-content-preview-pane">
+        <div className="campaign-manual-content-preview-header">
+          <div><strong>Xem trước</strong><span>{getAdvancedContentCampaignLabel(advancedContentTargetChannel || 'facebook_post')} · {manualAdvancedPreviewUsesSampleData ? 'dữ liệu khách mẫu' : 'giữ nguyên biến'}</span></div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setManualAdvancedPreviewSeed(seed => seed + 1)}>
+            <RefreshCw size={13} /> Đổi mẫu ngẫu nhiên
+          </button>
+        </div>
+        <div className="campaign-manual-content-preview-nav">
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => {
+              const items = formData.advancedContentItems
+              const previousItem = items[(itemIndex - 1 + items.length) % items.length]
+              if (previousItem) setManualAdvancedContentSelectedId(previousItem.id)
+            }}
+            aria-label="Nội dung trước"
+          ><ChevronLeft size={14} /></button>
+          <strong>Nội dung {itemIndex + 1} / {formData.advancedContentItems.length}</strong>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={() => {
+              const items = formData.advancedContentItems
+              const nextItem = items[(itemIndex + 1) % items.length]
+              if (nextItem) setManualAdvancedContentSelectedId(nextItem.id)
+            }}
+            aria-label="Nội dung tiếp theo"
+          ><ChevronRight size={14} /></button>
+          <label className="campaign-manual-content-sample-toggle">
+            <input
+              type="checkbox"
+              checked={manualAdvancedPreviewUsesSampleData}
+              onChange={event => setManualAdvancedPreviewUsesSampleData(event.target.checked)}
+            />
+            <span>Điền dữ liệu khách mẫu</span>
+          </label>
+        </div>
+        <div className="campaign-manual-content-preview-scroll">
+          {isEmailCampaign ? (
+            <div className="campaign-manual-preview-card email">
+              <div className="campaign-manual-preview-email-head">
+                <small>Tiêu đề</small><strong>{renderedSubject || 'Chưa có tiêu đề'}</strong>
+                <span>Từ: akaBiz &lt;cskh@akabiz.vn&gt; · Tới: lan.nguyen@gmail.com</span>
+              </div>
+              <div className="campaign-manual-preview-body">{previewContent}</div>
+              {mediaItems.length > 0 && <div className="campaign-manual-preview-files">{mediaItems.map((media, index) => <span key={`${index}-${getCampaignMediaStableKey(media)}`}><FileText size={13} />{getCampaignMediaDisplayName(media)}</span>)}</div>}
+            </div>
+          ) : isSmsCampaign ? (
+            <div className="campaign-manual-preview-card sms">
+              <div className="campaign-manual-preview-sms-head"><MessageCircle size={15} /><span><strong>AKABIZ</strong><small>Brandname · 0938 xxx 214</small></span></div>
+              <div className="campaign-manual-preview-sms-bubble">{previewContent}</div>
+              <div className="campaign-manual-preview-sms-meta">{smsCount.countChar} ký tự · {smsCount.countSms} tin · {formData.smsUseUnicode ? 'Unicode (70/tin)' : 'GSM (160/tin)'}</div>
+            </div>
+          ) : isFacebookComment ? (
+            <div className="campaign-manual-preview-card comment">
+              <div className="campaign-manual-preview-post-head"><span className="campaign-manual-preview-avatar">B</span><span><strong>Bài viết mẫu</strong><small>Vừa xong · Facebook</small></span></div>
+              <div className="campaign-manual-preview-comment-source">Nội dung bài viết sẽ xuất hiện phía trên bình luận.</div>
+              <div className="campaign-manual-preview-comment-thread">
+                <span className="campaign-manual-preview-avatar small">a</span>
+                <div>
+                  <strong>akaBiz Automation</strong>
+                  <div className="campaign-manual-preview-comment-bubble">{previewContent}</div>
+                  {mediaItems.length > 0 && <div className="campaign-manual-preview-media-grid compact count-1">{mediaItems.map((media, index) => <CampaignManualMediaPreview media={media} key={`${index}-${getCampaignMediaStableKey(media)}`} />)}</div>}
+                  <small>Vừa xong · Thích · Trả lời</small>
+                </div>
+              </div>
+            </div>
+          ) : isReelsMediaMode ? (
+            <div className="campaign-manual-preview-card reels">
+              <div className="campaign-manual-preview-reels-stage">
+                {mediaItems[0]
+                  ? <CampaignManualMediaPreview media={mediaItems[0]} />
+                  : <div className="campaign-manual-preview-reels-empty"><Image size={28} /><span>Video Reels sẽ hiển thị tại đây</span></div>}
+                <div className="campaign-manual-preview-reels-shade" />
+                <div className="campaign-manual-preview-reels-copy"><strong>@akaBiz Automation</strong><div>{previewContent}</div><small>Âm thanh gốc · akaBiz</small></div>
+                <div className="campaign-manual-preview-reels-actions"><span><ThumbsUp size={16} />0</span><span><MessageCircle size={16} />0</span><span><Share2 size={16} /></span></div>
+              </div>
+            </div>
+          ) : isZaloMessageCampaign || isFacebookChat ? (
+            <div className={`campaign-manual-preview-card chat${isFacebookChat ? ' facebook' : isZaloGroupChat ? ' zalo group' : ' zalo'}`}>
+              <div className="campaign-manual-preview-chat-head">
+                <span className="campaign-manual-preview-avatar">{isFacebookChat ? 'f' : isZaloGroupChat ? <Users size={15} /> : 'Z'}</span>
+                <span><strong>{isZaloGroupChat ? 'Nhóm kinh doanh akaBiz' : 'Nguyễn Thị Lan'}</strong><small>{isFacebookChat ? 'Tin nhắn Facebook' : isZaloGroupChat ? 'Nhóm Zalo · 24 thành viên' : 'Tin nhắn Zalo cá nhân'}</small></span>
+              </div>
+              <div className="campaign-manual-preview-chat-bubble">{previewContent}</div>
+              {mediaItems.length > 0 && <div className={`campaign-manual-preview-media-grid compact count-${Math.min(mediaItems.length, 4)}`}>{mediaItems.map((media, index) => <CampaignManualMediaPreview media={media} key={`${index}-${getCampaignMediaStableKey(media)}`} />)}</div>}
+              <small className="campaign-manual-preview-sent">Đã gửi · 10:42</small>
+            </div>
+          ) : (
+            <div className="campaign-manual-preview-card post">
+              <div className="campaign-manual-preview-post-head"><span className="campaign-manual-preview-avatar">a</span><span><strong>akaBiz Automation</strong><small>Vừa xong · Facebook</small></span></div>
+              <div className={`campaign-manual-preview-body${isPostBackgroundActive ? ' is-background' : ''}`}>{previewContent}</div>
+              {mediaItems.length > 0 && <div className={`campaign-manual-preview-media-grid count-${Math.min(mediaItems.length, 4)}`}>{mediaItems.map((media, index) => <CampaignManualMediaPreview media={media} key={`${index}-${getCampaignMediaStableKey(media)}`} />)}</div>}
+              <div className="campaign-manual-preview-post-actions"><span><ThumbsUp size={13} />Thích</span><span><MessageCircle size={13} />Bình luận</span><span><Share2 size={13} />Chia sẻ</span></div>
+            </div>
+          )}
+
+          <div className="campaign-manual-preview-notes">
+            <strong>Khi chạy thật</strong>
+            {notes.map((note, index) => <span key={`${index}-${note}`}><i>•</i>{note}</span>)}
+          </div>
+        </div>
+      </aside>
+    )
+  }
+
+  const renderManualAdvancedTemplatePicker = () => {
+    if (!manualAdvancedTemplatePickerOpen || !advancedContentTargetChannel) return null
+
+    const targetChannel = advancedContentTargetChannel
+    const targetMediaMode: MediaSelectionMode = targetChannel === 'facebook_post' || targetChannel === 'facebook_message' || targetChannel === 'facebook_comment'
+      ? mainMediaSelectionMode
+      : 'image'
+    const compatibleTemplates = contentTemplates.flatMap(template => {
+      const resolved = resolveContentTemplate(template, targetChannel)
+      return !template.isDelete && resolved.variants.length > 0 ? [{ template, resolved }] : []
+    })
+    const selectedVariantCount = manualAdvancedPickedVariants.length
+    const isPicked = (templateId: number, variantIndex: number) => manualAdvancedPickedVariants.includes(`${templateId}:${variantIndex}`)
+    const toggleVariant = (templateId: number, variantIndex: number) => {
+      const key = `${templateId}:${variantIndex}`
+      setManualAdvancedPickedVariants(current => current.includes(key)
+        ? current.filter(item => item !== key)
+        : [...current, key])
+    }
+    const addPickedVariants = () => {
+      const pickedEntries = compatibleTemplates.flatMap(({ template, resolved }) => (
+        resolved.variants.flatMap((variant, variantIndex) => isPicked(template.id, variantIndex)
+          ? [{ template, resolved, variant, variantIndex }]
+          : [])
+      ))
+      if (pickedEntries.length === 0) return
+      if (isSmsCampaign && formData.advancedContentItems.length + pickedEntries.length > MAX_SMS_ADVANCED_CONTENT_ITEMS) {
+        showAlert(`Nội dung nâng cao SMS chỉ được tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} mục.`, 'error')
+        return
+      }
+
+      const targetSupportsRich = targetChannel === 'email' || supportsFormattedContent(formData.actionId)
+      const shouldUseRich = !isPostBackgroundActive && (
+        isRichContentEditorEnabled || (targetSupportsRich && pickedEntries.some(entry => entry.resolved.rich))
+      )
+      const newItems = pickedEntries.map(({ template, resolved, variant, variantIndex }) => {
+        const content = shouldUseRich
+          ? (resolved.rich ? sanitizeFormattedContent(variant) : plainTextToFormattedContent(variant))
+          : (resolved.rich ? formattedContentToPlainText(variant) : variant)
+        const snapshots = targetChannel === 'sms'
+          ? []
+          : contentTemplateImagesToSnapshots(resolved.imageUrls, targetMediaMode).snapshots
+        const mediaOption: ImageOption = snapshots.length === 0
+          ? 'none'
+          : (isCommentSeedingCampaign || isReelsMediaMode) && snapshots.length > 1
+            ? 'random'
+            : 'all'
+        return createAdvancedContentItem({
+          content,
+          mediaOption,
+          mediaItems: snapshots,
+          randomMediaCount: isCommentSeedingCampaign || isReelsMediaMode ? 1 : 3,
+          emailSubject: targetChannel === 'email' ? String(resolved.subject || '') : undefined,
+          sourceTemplateId: template.id,
+          sourceTemplateName: template.name,
+          sourceVariantIndex: variantIndex
+        })
+      })
+
+      setManualAdvancedContentSelectedId(newItems[0]?.id ?? null)
+      setFormData(current => {
+        const existingItems = shouldUseRich && !isRichContentEditorEnabled
+          ? current.advancedContentItems.map(item => ({ ...item, content: plainTextToFormattedContent(item.content) }))
+          : current.advancedContentItems
+        const nextItems = [...existingItems, ...newItems]
+        manualAdvancedContentItemsRef.current = nextItems
+        return {
+          ...current,
+          advancedContentEnabled: true,
+          advancedContentItems: nextItems,
+          formattedContentEnabled: targetChannel !== 'email' && shouldUseRich && supportsFormattedContent(current.actionId),
+          emailBodyIsHtml: targetChannel === 'email' ? shouldUseRich : current.emailBodyIsHtml,
+          rewriteContentEachRun: shouldUseRich ? false : current.rewriteContentEachRun,
+          postWithBackground: shouldUseRich ? false : current.postWithBackground,
+          zaloMessageSendMode: shouldUseRich ? 'normal' : current.zaloMessageSendMode
+        }
+      })
+      setManualAdvancedPickedVariants([])
+      setManualAdvancedTemplatePickerOpen(false)
+      manualAdvancedTemplatePickerReturnFocusRef.current = null
+      showAlert(`Đã thêm ${newItems.length} biến thể từ mẫu nội dung.`, 'success')
+    }
+
+    return (
+      <div
+        className="campaign-manual-template-picker-overlay"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) closeManualAdvancedTemplatePicker()
+        }}
+      >
+        <div
+          ref={manualAdvancedTemplatePickerRef}
+          className="campaign-manual-template-picker"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Chọn từ mẫu nội dung"
+          tabIndex={-1}
+        >
+          <div className="modal-header">
+            <div><span className="modal-title">Chọn từ mẫu nội dung</span><small>Chỉ hiện mẫu có {getContentTemplateChannelLabel(targetChannel)} · mỗi biến thể chọn thành một nội dung nâng cao.</small></div>
+            <button type="button" className="btn-icon" onClick={closeManualAdvancedTemplatePicker} aria-label="Đóng danh sách mẫu"><X size={18} /></button>
+          </div>
+          <div className="campaign-manual-template-picker-body">
+            {contentTemplatesLoading ? (
+              <div className="campaign-manual-template-picker-empty"><Loader2 size={20} className="animate-spin" />Đang tải mẫu nội dung...</div>
+            ) : compatibleTemplates.length === 0 ? (
+              <div className="campaign-manual-template-picker-empty"><FileText size={26} />Chưa có mẫu phù hợp với chiến dịch này.</div>
+            ) : compatibleTemplates.map(({ template, resolved }) => {
+              const pickedCount = resolved.variants.filter((_, index) => isPicked(template.id, index)).length
+              return (
+                <section className="campaign-manual-template-card" key={template.id}>
+                  <div className="campaign-manual-template-card-head">
+                    <span><strong>{template.name}</strong><small>{template.groupName || 'Chưa phân nhóm'} · {resolved.variants.length} biến thể · {resolved.imageUrls.length} media</small></span>
+                    {pickedCount > 0 && <em>Đã chọn {pickedCount}</em>}
+                  </div>
+                  <div className="campaign-manual-template-variants">
+                    {resolved.variants.map((variant, variantIndex) => {
+                      const picked = isPicked(template.id, variantIndex)
+                      const excerpt = resolved.rich ? formattedContentToPlainText(variant) : variant
+                      return (
+                        <button type="button" className={picked ? 'is-picked' : ''} key={variantIndex} onClick={() => toggleVariant(template.id, variantIndex)}>
+                          <span className="campaign-manual-template-check">{picked && <Check size={11} />}</span>
+                          <em>BT {variantIndex + 1}</em>
+                          <span>{excerpt}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+          <div className="modal-footer">
+            <span>{selectedVariantCount > 0 ? `Đã chọn ${selectedVariantCount} biến thể` : 'Chưa chọn biến thể nào'}</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={closeManualAdvancedTemplatePicker}>Huỷ</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addPickedVariants} disabled={selectedVariantCount === 0}>
+              <Plus size={14} /> Thêm {selectedVariantCount > 0 ? `${selectedVariantCount} biến thể` : 'biến thể'}
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 
   const renderManualAdvancedContentModal = () => {
     if (!manualAdvancedContentModalOpen) return null
 
-    const itemCount = formData.advancedContentItems.length
+    const items = formData.advancedContentItems
+    const selectedItem = items.find(item => item.id === manualAdvancedContentSelectedId) || items[0] || null
+    const selectedIndex = selectedItem ? items.indexOf(selectedItem) : -1
+    const itemCount = items.length
     const titleId = `campaign-manual-content-title-${modalZIndex || 3000}`
+    const channelLabel = getAdvancedContentCampaignLabel(advancedContentTargetChannel || 'facebook_post')
 
     return (
       <div
@@ -13828,45 +14513,102 @@ export default function CampaignFormModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
+          inert={manualAdvancedTemplatePickerOpen || undefined}
         >
-          <div className="modal-header">
+          <div className="modal-header campaign-manual-content-modal-header">
             <div className="campaign-manual-content-modal-title">
               <span className="campaign-manual-content-launcher-icon"><Edit3 size={17} /></span>
               <div>
                 <span className="modal-title" id={titleId}>Nội dung nâng cao</span>
-                <span>{itemCount} biến thể · mỗi biến thể có thể dùng nội dung và media riêng</span>
+                <span>{itemCount} biến thể · {channelLabel} · {isSmsCampaign ? 'mỗi biến thể có nội dung riêng' : 'mỗi biến thể có nội dung và media riêng'}</span>
               </div>
             </div>
-            <button
-              ref={manualAdvancedContentCloseRef}
-              type="button"
-              className="btn-icon"
-              onClick={closeManualAdvancedContentModal}
-              title="Đóng"
-              aria-label="Đóng modal nội dung nâng cao"
-            >
-              <X size={18} />
-            </button>
+            <div className="campaign-manual-content-modal-header-actions">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={openManualAdvancedTemplatePicker}>
+                <FileText size={14} /> Chọn từ mẫu
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => openSaveContentTemplateModal('content')} disabled={itemCount === 0}>
+                <Save size={14} /> Lưu thành mẫu
+              </button>
+              <button
+                ref={manualAdvancedContentCloseRef}
+                type="button"
+                className="btn-icon"
+                onClick={closeManualAdvancedContentModal}
+                title="Đóng"
+                aria-label="Đóng modal nội dung nâng cao"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div className="campaign-manual-content-modal-body">
-            {(isEmailCampaign || canUseFormattedContent) && (
-              <div className="campaign-manual-content-modal-settings">
-                {isEmailCampaign ? renderEmailBodyHtmlOption() : renderFormattedContentOption()}
+            <aside className="campaign-manual-content-rail">
+              <div className="campaign-manual-content-rail-head"><strong>Biến thể</strong><span>{itemCount}</span></div>
+              <div className="campaign-manual-content-rail-list">
+                {items.length === 0 ? (
+                  <div className="campaign-manual-content-rail-empty">Chưa có biến thể nào.<br />Thêm mới hoặc lấy từ mẫu nội dung.</div>
+                ) : items.map((item, index) => {
+                  const plainText = getManualAdvancedItemPlainText(item)
+                  const selected = selectedItem?.id === item.id
+                  return (
+                    <div
+                      className={`campaign-manual-content-rail-item${selected ? ' is-selected' : ''}`}
+                      key={item.id}
+                    >
+                      <button
+                        type="button"
+                        className="campaign-manual-content-rail-select"
+                        onClick={() => setManualAdvancedContentSelectedId(item.id)}
+                        aria-pressed={selected}
+                      >
+                        <span className="campaign-manual-content-rail-number">{index + 1}</span>
+                        <span className="campaign-manual-content-rail-copy">
+                          <strong>{plainText.split(/\r?\n/)[0] || 'Biến thể rỗng'}</strong>
+                          <small>{plainText.length} ký tự{item.sourceTemplateName ? <em>mẫu</em> : null}</small>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="campaign-manual-content-rail-delete"
+                        title="Xoá biến thể"
+                        aria-label={`Xoá nội dung ${index + 1}`}
+                        onClick={() => removeAdvancedContentItem(item.id)}
+                      ><Trash2 size={12} /></button>
+                    </div>
+                  )
+                })}
               </div>
+              <div className="campaign-manual-content-rail-footer">
+                <button type="button" className="btn btn-primary btn-sm" onClick={addAdvancedContentItem} disabled={isSmsCampaign && itemCount >= MAX_SMS_ADVANCED_CONTENT_ITEMS}>
+                  <Plus size={14} /> Thêm biến thể
+                </button>
+                <small>{isSmsCampaign ? `SMS tối đa ${MAX_SMS_ADVANCED_CONTENT_ITEMS} biến thể` : 'Chạy xoay vòng theo thứ tự'}</small>
+              </div>
+            </aside>
+
+            <main className="campaign-manual-content-editor-pane">
+              {selectedItem ? renderManualAdvancedItemEditor(selectedItem, selectedIndex) : (
+                <div className="campaign-manual-content-empty-state">
+                  <span><FileText size={23} /></span>
+                  <div><strong>Chưa có biến thể nội dung nào</strong><small>Mỗi lượt chạy sẽ xoay vòng qua các biến thể. Lấy sẵn từ mẫu nội dung hoặc tự soạn mới.</small></div>
+                  <div><button type="button" className="btn btn-primary btn-sm" onClick={openManualAdvancedTemplatePicker}>Chọn từ mẫu nội dung</button><button type="button" className="btn btn-ghost btn-sm" onClick={addAdvancedContentItem}>Soạn biến thể mới</button></div>
+                </div>
+              )}
+            </main>
+
+            {selectedItem ? renderManualAdvancedPreview(selectedItem, selectedIndex) : (
+              <aside className="campaign-manual-content-preview-pane is-empty"><Eye size={24} /><span>Thêm một biến thể để xem trước.</span></aside>
             )}
-            {renderManualAdvancedContentItems()}
           </div>
 
-          <div className="modal-footer">
-            <span className="campaign-manual-content-modal-footer-note">
-              Các thay đổi sẽ được lưu khi bạn lưu chiến dịch.
-            </span>
-            <button type="button" className="btn btn-primary btn-sm" onClick={closeManualAdvancedContentModal}>
-              Xong
-            </button>
+          <div className="modal-footer campaign-manual-content-modal-footer">
+            <span className="campaign-manual-content-modal-footer-note">Các thay đổi sẽ được lưu khi bạn lưu chiến dịch.</span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={closeManualAdvancedContentModal}>Xong</button>
           </div>
         </div>
+        {renderManualAdvancedTemplatePicker()}
       </div>
     )
   }
