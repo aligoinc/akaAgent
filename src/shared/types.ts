@@ -196,6 +196,16 @@ export interface MediaGroup {
   updatedAt?: string
 }
 
+export interface MediaGroupMembership {
+  groupId: number
+  mediaFileId: number
+}
+
+export interface MediaGroupListResult {
+  groups: MediaGroup[]
+  memberships: MediaGroupMembership[]
+}
+
 export interface MediaStorageSettings {
   provider: string
   endpointUrl: string
@@ -212,6 +222,12 @@ export interface MediaStorageSettings {
 export interface MediaUploadFailure {
   localPath: string
   error: string
+}
+
+export interface MediaDownloadResult {
+  canceled: boolean
+  downloaded: number
+  failed: number
 }
 
 export interface MediaClipboardImageInput {
@@ -2904,6 +2920,7 @@ export const IPC_EVENTS = {
   MEDIA_STORAGE_SETTINGS_TEST: 'media:storage-settings:test',
   MEDIA_FILES_LIST: 'media:files:list',
   MEDIA_FILES_UPLOAD: 'media:files:upload',
+  MEDIA_FILES_DOWNLOAD: 'media:files:download',
   MEDIA_CLIPBOARD_IMAGES_UPLOAD: 'media:clipboard-images:upload',
   MEDIA_FILES_DELETE: 'media:files:delete',
   MEDIA_FILES_DELETE_MANY: 'media:files:delete-many',
