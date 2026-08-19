@@ -5111,7 +5111,7 @@ export default function CampaignFormModal({
       setContentTemplatePicker(null)
       showAlert(
         invalidCount > 0
-          ? `Đã áp dụng mẫu và bỏ qua ${invalidCount} URL media không hợp lệ.`
+          ? `Đã áp dụng mẫu và bỏ qua ${invalidCount} media không nhận diện được hoặc không phù hợp với chiến dịch.`
           : 'Đã áp dụng mẫu nội dung.',
         invalidCount > 0 ? 'info' : 'success'
       )
@@ -13412,7 +13412,7 @@ export default function CampaignFormModal({
                       {warning ? <X size={16} /> : <Check size={16} />}
                       <span>
                         {candidateCanBeUsed
-                          ? `Dùng ${candidate.compatibleTemplateCount}/${candidate.totalTemplateCount} mẫu · ${candidate.variantCount} biến thể · bỏ qua ${candidate.skippedTemplateCount} mẫu không có ${channel ? getContentTemplateChannelLabel(channel) : 'kênh phù hợp'}${candidate.skippedVariantCount > 0 ? ` · ${candidate.skippedVariantCount} biến thể rỗng` : ''}${candidate.invalidMediaCount > 0 ? ` · ${candidate.invalidMediaCount} media không hợp lệ` : ''}.`
+                          ? `Dùng ${candidate.compatibleTemplateCount}/${candidate.totalTemplateCount} mẫu · ${candidate.variantCount} biến thể · bỏ qua ${candidate.skippedTemplateCount} mẫu không có ${channel ? getContentTemplateChannelLabel(channel) : 'kênh phù hợp'}${candidate.skippedVariantCount > 0 ? ` · ${candidate.skippedVariantCount} biến thể rỗng` : ''}${candidate.invalidMediaCount > 0 ? ` · ${candidate.invalidMediaCount} media không nhận diện được hoặc không phù hợp` : ''}.`
                           : 'Không thể dùng nhóm này ở trạng thái hiện tại. Xem lý do và cách xử lý bên dưới.'}
                       </span>
                     </div>
