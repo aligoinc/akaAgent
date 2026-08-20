@@ -90,6 +90,13 @@ import {
 } from '../../../../shared/smsContent'
 import { renderContentSpin, renderContentSpinMax, serializeContentVariants, splitContentVariants } from '../../../../shared/contentSpin'
 import {
+  DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS,
+  MAX_RECENT_DELIVERY_COOLDOWN_DAYS,
+  MIN_RECENT_DELIVERY_COOLDOWN_DAYS,
+  normalizeRecentDeliveryCooldownDays,
+  supportsRecentDeliveryCooldown
+} from '../../../../shared/campaignDeliveryCooldown'
+import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
 } from '../../../../shared/advancedContent'
@@ -1726,6 +1733,13 @@ const ALL_STEPS: StepDef[] = [
     ]
   },
   {
+    id: 'deliveryCooldown',
+    title: 'Kiểm tra trùng lặp',
+    fields: [
+      { key: 'recentDeliveryCooldownDays', label: 'Không gửi nội dung trùng lặp trong X ngày' }
+    ]
+  },
+  {
     id: 'content',
     title: 'Nội dung',
     fields: [
@@ -2069,6 +2083,10 @@ export default function CampaignFormModal({
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes
       ?? (initialActionId === VOICE_CALL_ACTION_ID ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES : DEFAULT_RATE_LIMIT_MINUTES),
     continueWhenActionLimitReached: initialContinueWhenActionLimitReached,
+    recentDeliveryCooldownEnabled: campaign?.extraSettings?.recentDeliveryCooldownEnabled ?? false,
+    recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(
+      campaign?.extraSettings?.recentDeliveryCooldownDays ?? DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS
+    ),
     actionLimitsByCode: Object.fromEntries(
       Object.entries(campaign?.extraSettings?.actionLimits?.byActionCode || {}).map(([code, limit]) => [
         code,
@@ -3442,7 +3460,22 @@ export default function CampaignFormModal({
     ? visibleLimitActionCodes.filter(code => code !== 'fb_comment')
     : visibleLimitActionCodes
   const showGroupPostCommentLimit = isFacebookGroupPostCampaign && visibleLimitActionCodes.includes('fb_comment')
-  const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 || isCommentSeedingFeedCampaign
+  const canUseRecentDeliveryCooldown = supportsRecentDeliveryCooldown(formData.actionId, {
+    enableMessage: formData.enableMessage
+  })
+  const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 ||
+    isCommentSeedingFeedCampaign
+  const recentDeliveryCooldownPrompt = isFacebookGroupPostCampaign
+    ? 'Không đăng bài vào những group có bài đăng trước đó cách số ngày là:'
+    : isPagePostCampaign
+      ? 'Không đăng bài lên những Page có bài đăng trước đó cách số ngày là:'
+      : isEmailCampaign
+        ? 'Không gửi email cho những địa chỉ có email gửi trước đó cách số ngày là:'
+        : isSmsCampaign
+          ? 'Không gửi SMS cho những số điện thoại có SMS gửi trước đó cách số ngày là:'
+          : isZaloMessageGroupCampaign
+            ? 'Không gửi tin cho những group có tin gửi trước đó cách số ngày là:'
+            : 'Không gửi tin cho những người có tin gửi trước đó cách số ngày là:'
   const showContentSection = canShowContentSection
   const visibleScheduleFields: StepDef['fields'] = [
     ...(isMobileManagedSmsCampaign ? [] : [{ key: 'scheduleType', label: 'Loại lịch' }]),
@@ -3473,6 +3506,13 @@ export default function CampaignFormModal({
         fields: step.fields.some(field => field.key === 'postsPerTarget')
           ? [...visibleLimitFields, { key: 'postsPerTarget', label: 'Số bài cần comment trên mỗi group/page/profile' }]
           : visibleLimitFields
+      }]
+    }
+    if (step.id === 'deliveryCooldown') {
+      if (!canUseRecentDeliveryCooldown) return []
+      return [{
+        ...step,
+        fields: [{ key: 'recentDeliveryCooldownDays', label: recentDeliveryCooldownPrompt }]
       }]
     }
     return [step]
@@ -4840,6 +4880,12 @@ export default function CampaignFormModal({
       case 'dailyStopTime': return true
       case 'findDataRerun': return !formData.findDataRerunEnabled || formData.findDataRerunAfterHours >= 1
       case 'sleepBetweenActions': return formData.sleepBetweenActions >= 0
+      case 'recentDeliveryCooldownDays':
+        return !formData.recentDeliveryCooldownEnabled || (
+          Number.isInteger(formData.recentDeliveryCooldownDays) &&
+          formData.recentDeliveryCooldownDays >= MIN_RECENT_DELIVERY_COOLDOWN_DAYS &&
+          formData.recentDeliveryCooldownDays <= MAX_RECENT_DELIVERY_COOLDOWN_DAYS
+        )
       case 'dailyLimit': return formData.dailyLimit >= 0
       case 'rateLimitCount': return formData.rateLimitCount >= 0
       case 'rateLimitMinutes': return formData.rateLimitMinutes >= 0
@@ -6350,6 +6396,8 @@ export default function CampaignFormModal({
               continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
               byActionCode
             },
+            recentDeliveryCooldownEnabled: canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled,
+            recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(formData.recentDeliveryCooldownDays),
             imageOption: (isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: isReelsMediaMode ? 1 : formData.randomImageCount,
             commentImageOption: formData.commentImages.length > 0 && formData.commentImageOption !== 'none'
@@ -6561,6 +6609,16 @@ export default function CampaignFormModal({
     if (savingCampaign) return
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
+      return
+    }
+    if (
+      canUseRecentDeliveryCooldown &&
+      formData.recentDeliveryCooldownEnabled &&
+      (!Number.isInteger(formData.recentDeliveryCooldownDays) ||
+        formData.recentDeliveryCooldownDays < MIN_RECENT_DELIVERY_COOLDOWN_DAYS ||
+        formData.recentDeliveryCooldownDays > MAX_RECENT_DELIVERY_COOLDOWN_DAYS)
+    ) {
+      showAlert(`Số ngày không gửi/đăng lặp phải là số nguyên từ ${MIN_RECENT_DELIVERY_COOLDOWN_DAYS} đến ${MAX_RECENT_DELIVERY_COOLDOWN_DAYS}.`, 'error')
       return
     }
     if (isDataGroupSource && (!Number.isSafeInteger(formData.dataGroupId) || Number(formData.dataGroupId) <= 0)) {
@@ -16161,6 +16219,61 @@ export default function CampaignFormModal({
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canUseRecentDeliveryCooldown && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['deliveryCooldown'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('deliveryCooldown')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('deliveryCooldown')}</span>
+                    <span className="stepper-section-title">Kiểm tra trùng lặp</span>
+                  </div>
+                  {collapsedSections['deliveryCooldown'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['deliveryCooldown'] && (
+                  <div className="stepper-section-body">
+                    <div className="stepper-form-group" style={{ maxWidth: 620 }}>
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.recentDeliveryCooldownEnabled}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            recentDeliveryCooldownEnabled: e.target.checked,
+                            recentDeliveryCooldownDays: e.target.checked && !Number.isInteger(p.recentDeliveryCooldownDays)
+                              ? DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS
+                              : p.recentDeliveryCooldownDays
+                          }))}
+                        />
+                        <span>{recentDeliveryCooldownPrompt}</span>
+                      </label>
+                      <div className="stepper-input-unit-wrap" style={{ maxWidth: 220, marginTop: 10 }}>
+                        <input
+                          type="number"
+                          min={MIN_RECENT_DELIVERY_COOLDOWN_DAYS}
+                          max={MAX_RECENT_DELIVERY_COOLDOWN_DAYS}
+                          step={1}
+                          value={formData.recentDeliveryCooldownDays}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            recentDeliveryCooldownDays: Number(e.target.value)
+                          }))}
+                          className="stepper-input stepper-input-with-unit"
+                          disabled={!formData.recentDeliveryCooldownEnabled}
+                        />
+                        <span className="stepper-input-unit">ngày</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

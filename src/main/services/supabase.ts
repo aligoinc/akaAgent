@@ -364,6 +364,9 @@ export class SupabaseService {
   clearCampaignInputData(campaignId: number) { return campaignRepo.clearCampaignInputData(campaignId) }
   deleteCampaignInputData(id: number) { return campaignRepo.deleteCampaignInputData(id) }
   deleteCampaignInputDataBatch(ids: number[]) { return campaignRepo.deleteCampaignInputDataBatch(ids) }
+  applyCampaignDeliveryCooldown(campaignId: number, accountId: number, inputDataIds: number[]) {
+    return campaignRepo.applyCampaignDeliveryCooldown(campaignId, accountId, inputDataIds)
+  }
 
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========
   listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }

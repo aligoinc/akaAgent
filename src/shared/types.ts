@@ -557,6 +557,8 @@ export interface CampaignExtraSettings {
   newsfeedCommentContent?: string
   newsfeedCommentUseAI?: boolean
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
+  recentDeliveryCooldownEnabled?: boolean // chặn gửi/đăng lại cùng target theo ngày Việt Nam
+  recentDeliveryCooldownDays?: number // số ngày lịch phải chênh, từ 1 đến 3650
   emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
   emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)
   emailCheckLinkClicks?: boolean // Kiểm tra click vào link trong email_send
