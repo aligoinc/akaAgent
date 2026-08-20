@@ -138,11 +138,7 @@ const isIncomingCampaignOlder = (existing: CampaignListItem, incoming: CampaignL
   const existingTime = getCampaignUpdatedAtTime(existing)
   const incomingTime = getCampaignUpdatedAtTime(incoming)
   if (existingTime === null || incomingTime === null) return false
-  if (incomingTime !== existingTime) return incomingTime < existingTime
-
-  const existingStamp = existing.updatedAt || ''
-  const incomingStamp = incoming.updatedAt || ''
-  return !!existingStamp && !!incomingStamp && incomingStamp < existingStamp
+  return incomingTime < existingTime
 }
 
 const mergeCampaignPreservingNewest = (existing: CampaignListItem | undefined, incoming: CampaignListItem): CampaignListItem => {
