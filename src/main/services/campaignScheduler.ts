@@ -114,7 +114,7 @@ interface DeliveryCooldownBatchResult {
   allowedInputDataIds: Set<number>
   pausedInputDataIds: Set<number>
   deferredInputDataIds: Set<number>
-  pausedNotes: string[]
+  pausedNotesByInputDataId: Map<number, string>
 }
 
 export type CampaignSchedulerRuntimeTarget = 'desktop' | 'server'
@@ -3016,7 +3016,6 @@ export class CampaignScheduler {
     let stoppedBeforeCompletion = false
     let earliestFutureInputSchedule: Date | null = null
     let zaloFriendBlocklistSkippedCount = 0
-    let recentDeliveryCooldownPausedCount = 0
     const consumedGroupPostInputDataIds = new Set<number>()
     const loggedSkippedLimitActionCodes = new Set<string>()
 
@@ -3108,9 +3107,7 @@ export class CampaignScheduler {
           if (!cooldown.allowedInputDataIds.has(detail.id)) {
             if (cooldown.pausedInputDataIds.has(detail.id)) {
               detail.status = 'tạm dừng'
-              recentDeliveryCooldownPausedCount += 1
-              const cooldownNote = cooldown.pausedNotes[0]
-              if (cooldownNote) await this.logCampaignProgress(campaign.id, `⏸️ ${cooldownNote}`)
+              await this.logRecentDeliveryCooldownPauses(campaign, [detail], cooldown)
             }
             continue
           }
@@ -3252,7 +3249,14 @@ export class CampaignScheduler {
               const pausedDetail = details.find(item => item.id === pausedId)
               if (pausedDetail) pausedDetail.status = 'tạm dừng'
             }
-            recentDeliveryCooldownPausedCount += cooldown.pausedInputDataIds.size
+            await this.logRecentDeliveryCooldownPauses(
+              campaign,
+              [
+                detail,
+                ...groupPostShareTargets.map(target => details.find(item => item.id === target.id))
+              ],
+              cooldown
+            )
             groupPostShareTargets = groupPostShareTargets.filter(target =>
               cooldown.allowedInputDataIds.has(target.id)
             )
@@ -3719,9 +3723,6 @@ export class CampaignScheduler {
       }
     }
 
-    if (recentDeliveryCooldownPausedCount > 0) {
-      await this.logCampaignProgress(campaign.id, `⏸️ Đã tạm dừng ${recentDeliveryCooldownPausedCount} data do giới hạn gửi/đăng lặp`)
-    }
     if (!stoppedBeforeCompletion) {
       if (earliestFutureInputSchedule) {
         await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
@@ -4424,7 +4425,6 @@ export class CampaignScheduler {
       }
 
       let zaloFriendBlocklistSkippedCount = 0
-      let recentDeliveryCooldownPausedCount = 0
       if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
         const scheduleNow = details.some(detail =>
           detail.status === 'chờ xử lý' && Boolean(detail.schedule)
@@ -4578,10 +4578,10 @@ export class CampaignScheduler {
               batchCandidates.map(detail => detail.id)
             )
             allowedBatchCandidateIds = cooldown.allowedInputDataIds
-            recentDeliveryCooldownPausedCount += cooldown.pausedInputDataIds.size
             for (const candidate of batchCandidates) {
               if (cooldown.pausedInputDataIds.has(candidate.id)) candidate.status = 'tạm dừng'
             }
+            await this.logRecentDeliveryCooldownPauses(campaign, batchCandidates, cooldown)
           } catch (err) {
             const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
             await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
@@ -4781,10 +4781,6 @@ export class CampaignScheduler {
       if (zaloFriendBlocklistSkippedCount > 0) {
         await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
       }
-      if (recentDeliveryCooldownPausedCount > 0) {
-        await this.logCampaignProgress(campaign.id, `⏸️ Đã tạm dừng ${recentDeliveryCooldownPausedCount} data do giới hạn gửi/đăng lặp`)
-      }
-
       if (!stoppedBeforeCompletion) {
         if (earliestFutureInputSchedule) {
           await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
@@ -5387,7 +5383,7 @@ export class CampaignScheduler {
         allowedInputDataIds: new Set(uniqueIds),
         pausedInputDataIds: new Set(),
         deferredInputDataIds: new Set(),
-        pausedNotes: []
+        pausedNotesByInputDataId: new Map()
       }
     }
 
@@ -5400,13 +5396,16 @@ export class CampaignScheduler {
     const allowedInputDataIds = new Set<number>()
     const pausedInputDataIds = new Set<number>()
     const deferredInputDataIds = new Set<number>()
-    const pausedNotes: string[] = []
+    const pausedNotesByInputDataId = new Map<number, string>()
     for (const row of rows) {
       if (row.decision === 'allowed') {
         allowedInputDataIds.add(row.inputDataId)
       } else if (row.decision === 'paused_recent_delivery' || row.decision === 'paused_unidentifiable') {
         pausedInputDataIds.add(row.inputDataId)
-        if (row.note) pausedNotes.push(row.note)
+        pausedNotesByInputDataId.set(
+          row.inputDataId,
+          row.note || 'Tạm dừng vì giới hạn gửi/đăng lặp.'
+        )
       } else if (row.decision === 'deferred_batch_duplicate') {
         deferredInputDataIds.add(row.inputDataId)
       } else if (row.decision !== 'not_pending') {
@@ -5414,7 +5413,48 @@ export class CampaignScheduler {
       }
     }
 
-    return { allowedInputDataIds, pausedInputDataIds, deferredInputDataIds, pausedNotes }
+    return {
+      allowedInputDataIds,
+      pausedInputDataIds,
+      deferredInputDataIds,
+      pausedNotesByInputDataId
+    }
+  }
+
+  private getRecentDeliveryCooldownTargetName(
+    campaign: Campaign,
+    detail: CampaignInputData | null | undefined
+  ): string {
+    if (!detail) return 'N/A'
+    const values = campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID || campaign.actionId === SMS_SEND_ACTION_ID
+      ? [detail.phone, detail.name, detail.uid]
+      : campaign.actionId === EMAIL_SEND_ACTION_ID
+        ? [detail.email, detail.name, detail.uid]
+        : [detail.name, detail.uid, detail.phone, detail.email]
+    const distinct = values
+      .map(value => String(value || '').trim())
+      .filter((value, index, all) => value && all.indexOf(value) === index)
+    return distinct.slice(0, 2).join(' - ') || 'N/A'
+  }
+
+  private async logRecentDeliveryCooldownPauses(
+    campaign: Campaign,
+    details: Array<CampaignInputData | null | undefined>,
+    cooldown: DeliveryCooldownBatchResult
+  ): Promise<void> {
+    if (cooldown.pausedInputDataIds.size === 0) return
+    const detailById = new Map(
+      details.filter((detail): detail is CampaignInputData => Boolean(detail))
+        .map(detail => [detail.id, detail] as const)
+    )
+    for (const inputDataId of cooldown.pausedInputDataIds) {
+      const rawNote = cooldown.pausedNotesByInputDataId.get(inputDataId) || 'do giới hạn gửi/đăng lặp.'
+      const note = rawNote.trim()
+        .replace(/^Tạm dừng:\s*/iu, '')
+        .replace(/^Tạm dừng vì\s*/iu, '') || 'do giới hạn gửi/đăng lặp.'
+      const targetName = this.getRecentDeliveryCooldownTargetName(campaign, detailById.get(inputDataId))
+      await this.logCampaignProgress(campaign.id, `⏸️ Bỏ qua "${targetName}": ${note}`)
+    }
   }
 
   private async markZaloFriendBlocklistSkipped(
