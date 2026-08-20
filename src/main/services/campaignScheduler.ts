@@ -28,6 +28,7 @@ import {
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
+import { isRecentDeliveryCooldownEnabled } from '../../shared/campaignDeliveryCooldown'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -107,6 +108,13 @@ interface BackgroundPreviewOverride {
 
 interface SchedulerStartOptions {
   initialDelayMs?: number
+}
+
+interface DeliveryCooldownBatchResult {
+  allowedInputDataIds: Set<number>
+  pausedInputDataIds: Set<number>
+  deferredInputDataIds: Set<number>
+  pausedNotes: string[]
 }
 
 export type CampaignSchedulerRuntimeTarget = 'desktop' | 'server'
@@ -3008,6 +3016,7 @@ export class CampaignScheduler {
     let stoppedBeforeCompletion = false
     let earliestFutureInputSchedule: Date | null = null
     let zaloFriendBlocklistSkippedCount = 0
+    let recentDeliveryCooldownPausedCount = 0
     const consumedGroupPostInputDataIds = new Set<number>()
     const loggedSkippedLimitActionCodes = new Set<string>()
 
@@ -3091,6 +3100,26 @@ export class CampaignScheduler {
         await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!)
         zaloFriendBlocklistSkippedCount += 1
         continue
+      }
+
+      if (detail && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+        try {
+          const cooldown = await this.applyRecentDeliveryCooldown(account, campaign, [detail.id])
+          if (!cooldown.allowedInputDataIds.has(detail.id)) {
+            if (cooldown.pausedInputDataIds.has(detail.id)) {
+              detail.status = 'tạm dừng'
+              recentDeliveryCooldownPausedCount += 1
+              const cooldownNote = cooldown.pausedNotes[0]
+              if (cooldownNote) await this.logCampaignProgress(campaign.id, `⏸️ ${cooldownNote}`)
+            }
+            continue
+          }
+        } catch (err) {
+          const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
+          await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+          await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+          return
+        }
       }
 
       const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
@@ -3204,7 +3233,7 @@ export class CampaignScheduler {
           groupPostApproval.skipPostByKnownApproval
         )
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        const groupPostShareTargets = await this.buildGroupPostShareTargets(
+        let groupPostShareTargets = await this.buildGroupPostShareTargets(
           campaign,
           details,
           detail,
@@ -3212,6 +3241,28 @@ export class CampaignScheduler {
           groupPostShareMaxCount,
           targetBusinessNow
         )
+        if (groupPostShareTargets.length > 0 && detail && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+          try {
+            const cooldown = await this.applyRecentDeliveryCooldown(
+              account,
+              campaign,
+              [detail.id, ...groupPostShareTargets.map(target => target.id)]
+            )
+            for (const pausedId of cooldown.pausedInputDataIds) {
+              const pausedDetail = details.find(item => item.id === pausedId)
+              if (pausedDetail) pausedDetail.status = 'tạm dừng'
+            }
+            recentDeliveryCooldownPausedCount += cooldown.pausedInputDataIds.size
+            groupPostShareTargets = groupPostShareTargets.filter(target =>
+              cooldown.allowedInputDataIds.has(target.id)
+            )
+          } catch (err) {
+            const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
+            await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+            return
+          }
+        }
         const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths, skippedLimitActionCodes)
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const variables = {
@@ -3668,6 +3719,9 @@ export class CampaignScheduler {
       }
     }
 
+    if (recentDeliveryCooldownPausedCount > 0) {
+      await this.logCampaignProgress(campaign.id, `⏸️ Đã tạm dừng ${recentDeliveryCooldownPausedCount} data do giới hạn gửi/đăng lặp`)
+    }
     if (!stoppedBeforeCompletion) {
       if (earliestFutureInputSchedule) {
         await this.deferCampaignUntilFutureInput(campaign, earliestFutureInputSchedule)
@@ -4370,6 +4424,7 @@ export class CampaignScheduler {
       }
 
       let zaloFriendBlocklistSkippedCount = 0
+      let recentDeliveryCooldownPausedCount = 0
       if (zaloFriendBlocklist && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
         const scheduleNow = details.some(detail =>
           detail.status === 'chờ xử lý' && Boolean(detail.schedule)
@@ -4464,10 +4519,11 @@ export class CampaignScheduler {
           break
         }
 
+        const batchCandidates: CampaignInputData[] = []
         const batch: ZaloShareMessageTarget[] = []
         let stopAfterInvalidTarget = false
 
-        while (index < details.length && batch.length < capacity.capacity) {
+        while (index < details.length && batchCandidates.length < capacity.capacity) {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
             return
@@ -4509,6 +4565,33 @@ export class CampaignScheduler {
             zaloFriendBlocklistSkippedCount += 1
             continue
           }
+
+          batchCandidates.push(detail)
+        }
+
+        let allowedBatchCandidateIds = new Set(batchCandidates.map(detail => detail.id))
+        if (batchCandidates.length > 0 && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+          try {
+            const cooldown = await this.applyRecentDeliveryCooldown(
+              account,
+              campaign,
+              batchCandidates.map(detail => detail.id)
+            )
+            allowedBatchCandidateIds = cooldown.allowedInputDataIds
+            recentDeliveryCooldownPausedCount += cooldown.pausedInputDataIds.size
+            for (const candidate of batchCandidates) {
+              if (cooldown.pausedInputDataIds.has(candidate.id)) candidate.status = 'tạm dừng'
+            }
+          } catch (err) {
+            const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
+            await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+            return
+          }
+        }
+
+        for (const detail of batchCandidates) {
+          if (!allowedBatchCandidateIds.has(detail.id)) continue
 
           const target = this.createZaloShareMessageTarget(campaign, detail)
           if (!target) {
@@ -4697,6 +4780,9 @@ export class CampaignScheduler {
 
       if (zaloFriendBlocklistSkippedCount > 0) {
         await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
+      }
+      if (recentDeliveryCooldownPausedCount > 0) {
+        await this.logCampaignProgress(campaign.id, `⏸️ Đã tạm dừng ${recentDeliveryCooldownPausedCount} data do giới hạn gửi/đăng lặp`)
       }
 
       if (!stoppedBeforeCompletion) {
@@ -5288,6 +5374,47 @@ export class CampaignScheduler {
     if (campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID || !detail || !blocklist || blocklist.invalidReason) return false
     const uid = this.normalizeUidForCompare(this.firstNonEmptyString(detail.uid))
     return Boolean(uid && blocklist.uidKeys.has(uid))
+  }
+
+  private async applyRecentDeliveryCooldown(
+    account: AutoAccount,
+    campaign: Campaign,
+    inputDataIds: number[]
+  ): Promise<DeliveryCooldownBatchResult> {
+    const uniqueIds = [...new Set(inputDataIds)]
+    if (!isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+      return {
+        allowedInputDataIds: new Set(uniqueIds),
+        pausedInputDataIds: new Set(),
+        deferredInputDataIds: new Set(),
+        pausedNotes: []
+      }
+    }
+
+    const rows = await this.supabase.applyCampaignDeliveryCooldown(campaign.id, account.id, uniqueIds)
+    const returnedIds = new Set(rows.map(row => row.inputDataId))
+    if (rows.length !== uniqueIds.length || uniqueIds.some(id => !returnedIds.has(id))) {
+      throw new Error('RPC giới hạn gửi/đăng lặp trả về batch không đầy đủ.')
+    }
+
+    const allowedInputDataIds = new Set<number>()
+    const pausedInputDataIds = new Set<number>()
+    const deferredInputDataIds = new Set<number>()
+    const pausedNotes: string[] = []
+    for (const row of rows) {
+      if (row.decision === 'allowed') {
+        allowedInputDataIds.add(row.inputDataId)
+      } else if (row.decision === 'paused_recent_delivery' || row.decision === 'paused_unidentifiable') {
+        pausedInputDataIds.add(row.inputDataId)
+        if (row.note) pausedNotes.push(row.note)
+      } else if (row.decision === 'deferred_batch_duplicate') {
+        deferredInputDataIds.add(row.inputDataId)
+      } else if (row.decision !== 'not_pending') {
+        throw new Error(`RPC giới hạn gửi/đăng lặp trả về quyết định không hợp lệ: ${row.decision}`)
+      }
+    }
+
+    return { allowedInputDataIds, pausedInputDataIds, deferredInputDataIds, pausedNotes }
   }
 
   private async markZaloFriendBlocklistSkipped(

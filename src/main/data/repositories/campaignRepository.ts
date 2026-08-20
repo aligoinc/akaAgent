@@ -67,6 +67,23 @@ import {
 import { randomUUID } from 'node:crypto'
 
 const client = () => getSupabaseClient()
+
+export type CampaignDeliveryCooldownDecisionCode =
+  | 'allowed'
+  | 'paused_recent_delivery'
+  | 'paused_unidentifiable'
+  | 'deferred_batch_duplicate'
+  | 'not_pending'
+
+export interface CampaignDeliveryCooldownDecision {
+  inputDataId: number
+  decision: CampaignDeliveryCooldownDecisionCode
+  note: string | null
+  lastSentAt: string | null
+  eligibleDate: string | null
+  sourceCampaignId: number | null
+  sourceCampaignName: string | null
+}
 const CAMPAIGN_PRIMARY_ACCOUNT_RELATION =
   'primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, flatform_type, is_zalo_show_web, is_zalo_server)'
 const CAMPAIGN_RELATIONS =
@@ -6186,6 +6203,38 @@ export async function getAccountActionDisabledStatus(
     actionCode: normalizedActionCode,
     actionName
   }
+}
+
+export async function applyCampaignDeliveryCooldown(
+  campaignId: number,
+  accountId: number,
+  inputDataIds: number[]
+): Promise<CampaignDeliveryCooldownDecision[]> {
+  const user = requireCurrentUser()
+  const normalizedIds = [...new Set(inputDataIds.filter(id => Number.isSafeInteger(id) && id > 0))]
+  if (!Number.isSafeInteger(campaignId) || campaignId <= 0 ||
+      !Number.isSafeInteger(accountId) || accountId <= 0 ||
+      normalizedIds.length < 1 || normalizedIds.length > 500) {
+    throw new Error('Dữ liệu kiểm tra giới hạn gửi/đăng lặp không hợp lệ.')
+  }
+
+  const { data, error } = await client().rpc('aka_agent_apply_campaign_delivery_cooldown', {
+    p_campaign_id: campaignId,
+    p_account_id: accountId,
+    p_staff_id: user.staffId,
+    p_input_data_ids: normalizedIds
+  })
+  if (error) throw new Error(`Không thể kiểm tra lịch sử gửi/đăng gần nhất: ${error.message}`)
+
+  return ((data || []) as Record<string, unknown>[]).map(row => ({
+    inputDataId: Number(row.input_data_id),
+    decision: String(row.decision || 'not_pending') as CampaignDeliveryCooldownDecisionCode,
+    note: row.note == null ? null : String(row.note),
+    lastSentAt: row.last_sent_at == null ? null : String(row.last_sent_at),
+    eligibleDate: row.eligible_date == null ? null : String(row.eligible_date),
+    sourceCampaignId: row.source_campaign_id == null ? null : Number(row.source_campaign_id),
+    sourceCampaignName: row.source_campaign_name == null ? null : String(row.source_campaign_name)
+  }))
 }
 
 export async function peekAccountActionDisabledStatus(

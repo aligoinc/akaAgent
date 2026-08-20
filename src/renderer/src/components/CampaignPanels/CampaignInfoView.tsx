@@ -15,6 +15,7 @@ import {
   splitFormattedContentVariants,
   supportsFormattedContent
 } from '../../../../shared/formattedContent'
+import { isRecentDeliveryCooldownEnabled } from '../../../../shared/campaignDeliveryCooldown'
 import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 
 interface CampaignInfoViewProps {
@@ -739,6 +740,11 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Hành động kiểm tra quota ngày/giờ', value: formatActionCodeChips(limitCodes) },
     { label: 'Khi một action đạt giới hạn', value: continueWhenActionLimitReached ? 'Tiếp tục chạy action còn quota' : 'Dừng khi một action đạt giới hạn' },
     { label: 'Nghỉ giữa actions', value: `${extra.actionLimits?.sleepBetweenActions ?? 0} giây`, hidden: actionId === FACEBOOK_GROUP_INVITE_ACTION_ID },
+    {
+      label: 'Không gửi/đăng lặp',
+      value: `${extra.recentDeliveryCooldownDays ?? 3} ngày (theo ngày Việt Nam)`,
+      hidden: !isRecentDeliveryCooldownEnabled(actionId, extra)
+    },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,
       value: formatLimitValue(limit, limitWindowMinutes)
