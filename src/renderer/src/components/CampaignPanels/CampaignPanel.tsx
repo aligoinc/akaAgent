@@ -1526,7 +1526,7 @@ const parseCampaignRunLog = (log: string): RunLogEntry[] => {
     }
 
     const lastEntry = entries[entries.length - 1]
-    if (lastEntry) {
+    if (lastEntry?.timestamp) {
       const parsedMessage = stripScreenshotEventMarker(`${lastEntry.message}\n${text.trimEnd()}`)
       lastEntry.message = parsedMessage.message
       if (parsedMessage.screenshotEventId) lastEntry.screenshotEventId = parsedMessage.screenshotEventId
