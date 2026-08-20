@@ -2025,6 +2025,27 @@ export async function upsertContacts(
   const validContacts = dedupeValidContacts(contacts)
   if (validContacts.length === 0) return 0
   const existingExtraDataByKey = await loadExistingContactExtraData(validContacts, u.staffId)
+  const accountIds = Array.from(new Set(
+    validContacts
+      .map(contact => Number(contact.accountId))
+      .filter(accountId => Number.isSafeInteger(accountId) && accountId > 0)
+  ))
+  const accountPlatformById = new Map<number, string>()
+  for (const accountIdChunk of chunkArray(accountIds, 100)) {
+    const { data: accountRows, error: accountError } = await client()
+      .from('auto_accounts')
+      .select('id, flatform_type')
+      .in('id', accountIdChunk)
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+    if (accountError) throw new Error(`Failed to resolve contact platforms: ${accountError.message}`)
+    for (const row of accountRows || []) {
+      const platform = String(row.flatform_type || '').trim().toLowerCase()
+      if (platform === 'facebook' || platform === 'zalo') {
+        accountPlatformById.set(Number(row.id), platform)
+      }
+    }
+  }
 
   let totalSaved = 0
   const chunkSize = 100
@@ -2033,9 +2054,15 @@ export async function upsertContacts(
     const chunk = validContacts.slice(i, i + chunkSize)
     const payloads = chunk.map(c => {
       const existingExtraData = existingExtraDataByKey.get(contactUpsertKey(c.accountId, c.contactType, c.uid))
+      const explicitPlatform = String(c.flatformType || '').trim().toLowerCase()
+      const inferredPlatform = accountPlatformById.get(Number(c.accountId)) || null
+      const contactPlatform = ['person', 'group', 'page', 'page_inbox_customer'].includes(String(c.contactType))
+        ? (explicitPlatform === 'facebook' || explicitPlatform === 'zalo' ? explicitPlatform : inferredPlatform)
+        : null
       const payload: any = {
         account_id: c.accountId,
         contact_type: c.contactType,
+        flatform_type: contactPlatform,
         name: c.name,
         uid: c.uid,
         url: c.url || null,
@@ -2346,6 +2373,7 @@ export async function upsertZaloCampaignUserContacts(
       const payload: Record<string, unknown> = {
         account_id: contact.accountId,
         contact_type: 'person',
+        flatform_type: 'zalo',
         uid: contact.zaloUid,
         name: firstNullableString(
           contact.displayName,

@@ -1612,6 +1612,8 @@ export interface AutoAccountContact {
   id: number
   accountId: number
   contactType: ContactType
+  /** Authoritative platform persisted in auto_account_contacts.flatform_type. */
+  flatformType?: string | null
   name: string
   uid?: string
   url?: string

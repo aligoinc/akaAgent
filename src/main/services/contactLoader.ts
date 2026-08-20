@@ -11,6 +11,7 @@ import * as localContactRepo from '../data/repositories/localAccountContactRepos
 import type { ZaloGroupContactInput, ZaloGroupMemberContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import type { ZaloContactScanSource } from './zaloContactScanSource'
+import { getContactDatasetScanTypeCode } from '../../shared/dataGroupSemantics'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -139,6 +140,7 @@ export class ContactLoader {
   private engineV2 = new WorkflowEngineV2()
   private backgroundPreviewTimers = new Map<number, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<number>()
+  private dataTypeCategoryIdByCode: Map<string, number> | null = null
   private proxyRuntime?: ProxyRuntimeService
   private readonly zaloRuntimeTarget: 'desktop' | 'server'
   private zaloRuntimeBlockedForRestart = false
@@ -2136,6 +2138,15 @@ export class ContactLoader {
     if (targetNameOrUid) descriptionParts.push(targetNameOrUid)
     if (link) descriptionParts.push(link)
 
+    const dataTypeCode = getContactDatasetScanTypeCode(input.context.scanType)
+    if (!dataTypeCode) throw new Error('Không xác định được loại data của danh sách vừa quét.')
+    if (!this.dataTypeCategoryIdByCode) {
+      const items = await this.supabase.listDataTypeCategoryItems()
+      this.dataTypeCategoryIdByCode = new Map(items.map(item => [item.code, item.id]))
+    }
+    const dataTypeCategoryItemId = this.dataTypeCategoryIdByCode.get(dataTypeCode)
+    if (!dataTypeCategoryItemId) throw new Error(`Loại data “${dataTypeCode}” chưa được cấu hình.`)
+
     const finalizeInput: ContactDatasetFinalizeInput = {
       accountId: input.accountId,
       scanType: input.context.scanType,
@@ -2145,6 +2156,7 @@ export class ContactLoader {
       link: link || null,
       description: descriptionParts.join(' - '),
       status: input.status || (input.stopped ? 'partial' : 'completed'),
+      dataTypeCategoryItemId,
       contactUids: Array.from(new Set(
         input.contactUids
           .map(uid => String(uid || '').trim())

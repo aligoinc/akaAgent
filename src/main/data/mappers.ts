@@ -343,6 +343,7 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     id: row.id as number,
     accountId: row.account_id as number,
     contactType: row.contact_type as ContactType,
+    flatformType: (row.flatform_type as string | null | undefined) ?? null,
     name: row.name as string,
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,

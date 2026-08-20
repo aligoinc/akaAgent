@@ -67,6 +67,7 @@ const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const FACEBOOK_JOIN_GROUP_ACTION_ID = 'facebook_join_group'
 const FACEBOOK_FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
 const FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID = 'facebook_comment_seeding_post'
+const DATA_GROUP_ZALO_PERSON_UID_ACTION_ID = 'data_group_zalo_person_uid'
 const MAX_IMPORT_ROW_COUNT = 10_000
 const IMPORT_PREVIEW_PAGE_SIZE = 100
 const IMPORT_ROW_LIMIT_MESSAGE = 'Mỗi lần chỉ được nhập tối đa 10.000 dòng dữ liệu. Vui lòng chia nhỏ dữ liệu rồi thử lại.'
@@ -75,6 +76,7 @@ const isZaloAddGroupMemberAction = (actionId?: string | null): boolean => action
 const isFacebookJoinGroupAction = (actionId?: string | null): boolean => actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
 const isFacebookFindDataSearchAction = (actionId?: string | null): boolean => actionId === FACEBOOK_FIND_DATA_SEARCH_ACTION_ID
 const isFacebookCommentSeedingPostAction = (actionId?: string | null): boolean => actionId === FACEBOOK_COMMENT_SEEDING_POST_ACTION_ID
+const isDataGroupZaloPersonUidAction = (actionId?: string | null): boolean => actionId === DATA_GROUP_ZALO_PERSON_UID_ACTION_ID
 
 const waitForNextBrowserPaint = (): Promise<void> => (
   new Promise(resolve => {
@@ -90,6 +92,7 @@ const getImportTargetField = (platform: CampaignImportPlatform, actionId: string
   // Direct upload for add-group-member is intentionally phone-only. The
   // account-bound Zalo UID branch remains available through scans/Data Groups.
   if (isZaloAddGroupMemberAction(actionId)) return 'phone'
+  if (isDataGroupZaloPersonUidAction(actionId)) return 'uid'
   const requiredField = getCampaignInputDataRequirement(actionId)?.field
   if (requiredField === 'phone' || requiredField === 'uid' || requiredField === 'email' || requiredField === 'phone_or_uid') {
     return requiredField
@@ -126,6 +129,12 @@ const normalizeUid = (value: unknown): string => {
   const lower = text.toLowerCase()
   if (!text || ['uid', 'url', 'link', 'group', 'profile', 'facebook', 'facebookuid'].includes(lower)) return ''
   return text
+}
+
+const normalizeZaloUserUid = (value: unknown): string => {
+  const uid = getCellText(value).replace(/\s+/g, '')
+  if (!/^\d{5,30}$/.test(uid)) return ''
+  return uid
 }
 
 const normalizeFindDataSearchKeyword = (value: unknown): string => {
@@ -279,7 +288,7 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
   if (targetField === 'uid') {
     return [
       { key: 'name', label: 'Tên' },
-      { key: 'uid', label: getCampaignInputDataRequirement(actionId)?.label || 'Uid', required: true },
+      { key: 'uid', label: isDataGroupZaloPersonUidAction(actionId) ? 'UID Zalo' : getCampaignInputDataRequirement(actionId)?.label || 'Uid', required: true },
       ...INFO_FIELDS
     ]
   }
@@ -352,6 +361,20 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
   const output: CampaignImportDataRow[] = []
 
   for (const row of rows) {
+    if (isDataGroupZaloPersonUidAction(actionId)) {
+      const uid = normalizeZaloUserUid(firstText(row.uid, row.name))
+      if (!uid || seen.has(uid)) continue
+      const rawName = getCellText(row.name)
+      seen.add(uid)
+      output.push({
+        ...row,
+        name: normalizeZaloUserUid(rawName) === uid ? '' : rawName,
+        phone: '',
+        uid,
+        email: ''
+      })
+      continue
+    }
     if (isZaloJoinGroupLinkAction(actionId)) {
       const link = normalizeZaloGroupInviteLink(row.uid)
       if (!link || seen.has(link)) continue

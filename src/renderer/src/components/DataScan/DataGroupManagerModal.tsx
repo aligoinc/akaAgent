@@ -56,6 +56,7 @@ import type {
   DataGroupPanelData,
   DataProvenance
 } from '../../../../shared/types'
+import { getDataScanActionTypeCode } from '../../../../shared/dataGroupSemantics'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
@@ -95,7 +96,7 @@ const IMPORT_TARGETS: ImportTarget[] = [
   { value: 'facebook_group', label: 'Facebook · Group', dataTypeCode: 'facebook_group', flatformType: 'facebook', contactType: 'group', importPlatform: 'facebook', actionId: 'facebook_join_group' },
   { value: 'facebook_page', label: 'Facebook · Page', dataTypeCode: 'facebook_page', flatformType: 'facebook', contactType: 'page', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
   { value: 'zalo_person_phone', label: 'Zalo · User theo SĐT', dataTypeCode: 'phone', flatformType: 'zalo', contactType: 'phone', importPlatform: 'zalo', actionId: 'zalo_message_phone' },
-  { value: 'zalo_person_uid', label: 'Zalo · User theo UID', dataTypeCode: 'zalo_person', flatformType: 'zalo', contactType: 'person', importPlatform: 'facebook', actionId: 'facebook_message_uid' },
+  { value: 'zalo_person_uid', label: 'Zalo · User theo UID', dataTypeCode: 'zalo_person', flatformType: 'zalo', contactType: 'person', importPlatform: 'zalo', actionId: 'data_group_zalo_person_uid' },
   { value: 'zalo_group', label: 'Zalo · Group/link', dataTypeCode: 'zalo_group', flatformType: 'zalo', contactType: 'group', importPlatform: 'zalo', actionId: 'zalo_join_group_link' }
 ]
 
@@ -112,20 +113,6 @@ const DATA_GROUP_SCAN_ACTIONS: DataScanAction[] = [
   'zalo_group_members',
   'zalo_remarketing_customers'
 ]
-
-const SCAN_DATA_TYPE_CODE_BY_ACTION: Partial<Record<DataScanAction, string>> = {
-  facebook_friends: 'facebook_person',
-  facebook_groups: 'facebook_group',
-  facebook_pages: 'facebook_page',
-  facebook_post_commenters: 'facebook_person',
-  facebook_post_likes: 'facebook_person',
-  facebook_profile_friends: 'facebook_person',
-  facebook_group_members: 'facebook_person',
-  zalo_friends: 'zalo_person',
-  zalo_groups: 'zalo_group',
-  zalo_group_members: 'zalo_person',
-  zalo_remarketing_customers: 'zalo_person'
-}
 
 const STATUS_FILTER_OPTIONS: Array<{ value: DataGroupMemberStatusFilter; label: string }> = [
   { value: 'all', label: 'Tất cả' },
@@ -706,7 +693,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const availableScanActions = useMemo(
     () => activeGroupDataTypeCode
       ? DATA_GROUP_SCAN_ACTIONS.filter(action => (
-        SCAN_DATA_TYPE_CODE_BY_ACTION[action] === activeGroupDataTypeCode
+        getDataScanActionTypeCode(action) === activeGroupDataTypeCode
       ))
       : DATA_GROUP_SCAN_ACTIONS,
     [activeGroupDataTypeCode]
@@ -1573,7 +1560,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     }
     const rows: DataGroupIngestRow[] = submission.rows.map(rawRow => {
       const uid = String(rawRow.uid || '').trim()
-      const looksLikeUrl = /^https?:\/\//i.test(uid) || /(?:facebook\.com|zalo\.me|zaloapp\.com)\//i.test(uid)
+      const looksLikeUrl = target.value !== 'zalo_person_uid'
+        && (/^https?:\/\//i.test(uid) || /(?:facebook\.com|zalo\.me|zaloapp\.com)\//i.test(uid))
       const row: DataGroupIngestRow = {
         name: String(rawRow.name || '').trim() || null,
         phone: String(rawRow.phone || '').trim() || null,
@@ -1651,7 +1639,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     })
     const destinationGroup = scanTargetGroup?.id === targetGroupId ? scanTargetGroup : activeGroup
     const scanDataTypeCode = context?.action
-      ? SCAN_DATA_TYPE_CODE_BY_ACTION[context.action]
+      ? getDataScanActionTypeCode(context.action)
       : undefined
     const dataTypeCategoryItemId = getGroupDataTypeId(destinationGroup)
       ?? dataTypeItems.find(item => item.code === scanDataTypeCode)?.id
