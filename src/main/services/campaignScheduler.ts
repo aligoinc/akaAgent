@@ -5451,7 +5451,8 @@ export class CampaignScheduler {
       const rawNote = cooldown.pausedNotesByInputDataId.get(inputDataId) || 'do giới hạn gửi/đăng lặp.'
       const note = rawNote.trim()
         .replace(/^Tạm dừng:\s*/iu, '')
-        .replace(/^Tạm dừng vì\s*/iu, '') || 'do giới hạn gửi/đăng lặp.'
+        .replace(/^Tạm dừng vì\s*/iu, '')
+        .replace(/\s+(?:Gửi|Đăng) lại từ \d{2}\/\d{2}\/\d{4}\.?$/iu, '') || 'do giới hạn gửi/đăng lặp.'
       const targetName = this.getRecentDeliveryCooldownTargetName(campaign, detailById.get(inputDataId))
       await this.logCampaignProgress(campaign.id, `⏸️ Bỏ qua "${targetName}": ${note}`)
     }
