@@ -5,6 +5,34 @@
 
 BEGIN;
 
+INSERT INTO public.auto_elements (
+  name,
+  xpath,
+  description,
+  category,
+  is_builtin,
+  staff_id,
+  organization_id,
+  updated_at
+)
+VALUES (
+  'fb_see_less_inner',
+  $xpath$//*[@role='button' and (normalize-space(.)='Ẩn bớt' or normalize-space(.)='See less')]$xpath$,
+  'Nút Ẩn bớt sau khi mở rộng nội dung bài viết',
+  'facebook',
+  true,
+  NULL,
+  NULL,
+  now()
+)
+ON CONFLICT (name) DO UPDATE
+SET
+  xpath = EXCLUDED.xpath,
+  description = EXCLUDED.description,
+  category = EXCLUDED.category,
+  is_builtin = true,
+  updated_at = now();
+
 DO $$
 DECLARE
   v_missing text;
@@ -27,8 +55,8 @@ BEGIN
   END IF;
 END $$;
 
--- Keep the existing scrape DOM implementation byte-for-byte. Only separate
--- copied plain text from the campaign's canonical HTML at its final assembly.
+-- First keep the existing scrape DOM implementation byte-for-byte while
+-- separating copied plain text from the campaign's canonical HTML.
 DO $$
 DECLARE
   v_code text;
@@ -118,6 +146,190 @@ BEGIN
     OR strpos(v_code, 'copiedSourcePlainText: sourceContentPlain') = 0
   THEN
     RAISE EXCEPTION 'Migration v173 failed to separate fb_scrape_post formatted content';
+  END IF;
+END $$;
+
+-- The content extractor intentionally selects the first matching source-post
+-- marker. Scope source images to that same marker instead of collecting the
+-- ordered snapshot from every matching post container on the page.
+DO $$
+DECLARE
+  v_code text;
+  v_old_scope text := $old_scope$// === SCRAPE IMAGES — fallback vars.includeSourceImages (scheduler set tên này) ===
+let scrapedImages = []
+const shouldIncludeImages = input.includeImages === true || vars.includeSourceImages === true
+if (shouldIncludeImages) {
+  // XPath ảnh: từ wrapper dir=auto chứa marker, lấy following-sibling/div//img
+  const imgInner = '//*[@dir="auto" and .//*[@data-ad-comet-preview="message" or @data-ad-rendering-role="story_message" or @data-ad-preview="message" or @class="xh8yej3" or @id]]/following-sibling::*[1]/div[1]//img'
+  const imgSel = containerSel.split('|').map(c => c.trim() + imgInner).join(' | ')
+  const imgEvalCode =
+    'var sel = ' + JSON.stringify(imgSel) + ';' +
+    'var r = document.evaluate(sel, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);' +
+    'var srcs = [];' +
+    'for (var i = 0; i < r.snapshotLength && i < 10; i++) {' +
+    '  var el = r.snapshotItem(i);' +
+    '  var src = el.src || el.getAttribute("src");' +
+    '  if (src && src.indexOf("data:") !== 0) srcs.push(src);' +
+    '}' +
+    'return srcs;'
+$old_scope$;
+  v_new_scope text := $new_scope$// === SCRAPE IMAGES — fallback vars.includeSourceImages (scheduler set tên này) ===
+let scrapedImages = []
+const shouldIncludeImages = input.includeImages === true || vars.includeSourceImages === true
+if (shouldIncludeImages) {
+  // Neo ảnh vào đúng marker nội dung đầu tiên, không quét mọi post container.
+  const imgEvalCode =
+    'var contentSel = ' + JSON.stringify(contentSel) + ';' +
+    'var marker = null;' +
+    'try {' +
+    '  var markerResult = document.evaluate(contentSel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);' +
+    '  marker = markerResult.singleNodeValue;' +
+    '} catch(e) {}' +
+    'if (!marker) return [];' +
+    'var candidates = [];' +
+    'var node = marker;' +
+    'var depth = 0;' +
+    'while (node && node !== document.body && depth < 20) {' +
+    '  if (node.nodeType === 1 && node.tagName === "DIV" && node.getAttribute("dir") === "auto") {' +
+    '    candidates.push(node);' +
+    '  }' +
+    '  node = node.parentElement;' +
+    '  depth++;' +
+    '}' +
+    'var relativeImageXPath = "./following-sibling::*[1]/div[1]//img";' +
+    'var srcs = [];' +
+    'for (var c = 0; c < candidates.length; c++) {' +
+    '  var r = document.evaluate(relativeImageXPath, candidates[c], null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);' +
+    '  if (r.snapshotLength === 0) continue;' +
+    '  for (var i = 0; i < r.snapshotLength && srcs.length < 10; i++) {' +
+    '    var el = r.snapshotItem(i);' +
+    '    var src = el.src || el.getAttribute("src");' +
+    '    if (src && src.indexOf("data:") !== 0) srcs.push(src);' +
+    '  }' +
+    '  break;' +
+    '}' +
+    'return srcs;'
+$new_scope$;
+BEGIN
+  SELECT block.code
+  INTO v_code
+  FROM public.auto_blocks AS block
+  WHERE block.name = 'fb_scrape_post'
+  FOR UPDATE;
+
+  v_code := replace(v_code, E'\r\n', E'\n');
+
+  IF strpos(v_code, 'var candidates = [];') = 0 THEN
+    IF strpos(v_code, v_old_scope) = 0 THEN
+      RAISE EXCEPTION 'Migration v173 cannot safely scope fb_scrape_post images; expected global image fragment was not found';
+    END IF;
+
+    UPDATE public.auto_blocks
+    SET
+      code = replace(v_code, v_old_scope, v_new_scope),
+      updated_at = now()
+    WHERE name = 'fb_scrape_post';
+  END IF;
+
+  SELECT block.code
+  INTO v_code
+  FROM public.auto_blocks AS block
+  WHERE block.name = 'fb_scrape_post';
+
+  IF strpos(v_code, 'const imgInner =') > 0
+    OR strpos(v_code, 'var candidates = [];') = 0
+    OR strpos(v_code, 'var relativeImageXPath = "./following-sibling::*[1]/div[1]//img";') = 0
+  THEN
+    RAISE EXCEPTION 'Migration v173 failed to scope fb_scrape_post images to the selected content marker';
+  END IF;
+END $$;
+
+-- Remove the expanded-state UI label only when the supplied see-less XPath
+-- matches inside the same wrapper whose text was selected for the source post.
+DO $$
+DECLARE
+  v_code text;
+  v_old_content_selectors text := $old_content_selectors$const contentInner = await helpers.element('fb_post_content_inner')
+const contentSel = containerSel.split('|').map(c => c.trim() + contentInner).join(' | ')$old_content_selectors$;
+  v_new_content_selectors text := $new_content_selectors$const contentInner = await helpers.element('fb_post_content_inner')
+const contentSel = containerSel.split('|').map(c => c.trim() + contentInner).join(' | ')
+const seeLessInner = await helpers.element('fb_see_less_inner')
+const seeLessSel = containerSel.split('|').map(c => c.trim() + seeLessInner).join(' | ')$new_content_selectors$;
+  v_old_eval_header text := $old_eval_header$const evalCode =
+  'var sel = ' + JSON.stringify(contentSel) + ';' +
+  'var marker = null;' +$old_eval_header$;
+  v_new_eval_header text := $new_eval_header$const evalCode =
+  'var sel = ' + JSON.stringify(contentSel) + ';' +
+  'var seeLessSel = ' + JSON.stringify(seeLessSel) + ';' +
+  'var marker = null;' +$new_eval_header$;
+  v_old_eval_return text := $old_eval_return$  'for (var i = 1; i < pool.length; i++) { if (pool[i].text.length > best.text.length) best = pool[i]; }' +
+  'return best.text;'$old_eval_return$;
+  v_new_eval_return text := $new_eval_return$  'for (var i = 1; i < pool.length; i++) { if (pool[i].text.length > best.text.length) best = pool[i]; }' +
+  'var seeLessLabel = "";' +
+  'try {' +
+  '  var seeLessResult = document.evaluate(seeLessSel, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);' +
+  '  for (var i = 0; i < seeLessResult.snapshotLength; i++) {' +
+  '    var seeLessButton = seeLessResult.snapshotItem(i);' +
+  '    if (wrapper.contains(seeLessButton)) {' +
+  '      seeLessLabel = (seeLessButton.innerText || seeLessButton.textContent || seeLessButton.getAttribute("aria-label") || "").trim();' +
+  '      break;' +
+  '    }' +
+  '  }' +
+  '} catch(e) {}' +
+  'var finalExtractedText = best.text.trim();' +
+  'if (seeLessLabel && finalExtractedText.slice(-seeLessLabel.length) === seeLessLabel) {' +
+  '  finalExtractedText = finalExtractedText.slice(0, -seeLessLabel.length).trim();' +
+  '}' +
+  'return finalExtractedText;'$new_eval_return$;
+BEGIN
+  SELECT block.code
+  INTO v_code
+  FROM public.auto_blocks AS block
+  WHERE block.name = 'fb_scrape_post'
+  FOR UPDATE;
+
+  v_code := replace(v_code, E'\r\n', E'\n');
+
+  IF strpos(v_code, 'fb_see_less_inner') = 0
+    AND strpos(v_code, 'var seeLessResult = document.evaluate') = 0
+  THEN
+    IF strpos(v_code, v_old_content_selectors) = 0
+      OR strpos(v_code, v_old_eval_header) = 0
+      OR strpos(v_code, v_old_eval_return) = 0
+    THEN
+      RAISE EXCEPTION 'Migration v173 cannot safely remove fb_scrape_post see-less text; expected extraction fragments were not found';
+    END IF;
+
+    UPDATE public.auto_blocks
+    SET
+      code = replace(
+        replace(
+          replace(v_code, v_old_content_selectors, v_new_content_selectors),
+          v_old_eval_header,
+          v_new_eval_header
+        ),
+        v_old_eval_return,
+        v_new_eval_return
+      ),
+      updated_at = now()
+    WHERE name = 'fb_scrape_post';
+  ELSIF strpos(v_code, 'fb_see_less_inner') = 0
+    OR strpos(v_code, 'var seeLessResult = document.evaluate') = 0
+  THEN
+    RAISE EXCEPTION 'Migration v173 found a partial fb_scrape_post see-less patch';
+  END IF;
+
+  SELECT block.code
+  INTO v_code
+  FROM public.auto_blocks AS block
+  WHERE block.name = 'fb_scrape_post';
+
+  IF strpos(v_code, 'fb_see_less_inner') = 0
+    OR strpos(v_code, 'var seeLessResult = document.evaluate') = 0
+    OR strpos(v_code, 'return finalExtractedText;') = 0
+    OR strpos(v_code, 'return best.text;') > 0
+  THEN
+    RAISE EXCEPTION 'Migration v173 failed to remove the see-less label from fb_scrape_post output';
   END IF;
 END $$;
 
