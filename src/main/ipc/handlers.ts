@@ -167,14 +167,34 @@ export function registerIpcHandlers(
   const zaloChatApiClient = new ZaloChatApiClient(
     emitZaloLoginQrEvent,
     event => {
-      if (event.channel !== IPC_EVENTS.CAMPAIGN_LOG) return
       try {
-        if (!mainWindow.isDestroyed()) {
+        if (mainWindow.isDestroyed()) return
+        if (event.channel === IPC_EVENTS.CAMPAIGN_LOG) {
           const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
             ? { ...event.payload, source: 'server' }
             : event.payload
           mainWindow.webContents.send(event.channel, payload)
+          return
         }
+        if (event.channel === IPC_EVENTS.CAMPAIGN_STATUS_UPDATED) {
+          const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
+            ? event.payload
+            : {}
+          mainWindow.webContents.send(event.channel, payload)
+          return
+        }
+        if (event.channel === IPC_EVENTS.ACCOUNT_STATUS_UPDATED) {
+          mainWindow.webContents.send(event.channel)
+        }
+      } catch {
+        // Renderer có thể đang đóng.
+      }
+    },
+    () => {
+      try {
+        if (mainWindow.isDestroyed()) return
+        mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+        mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, {})
       } catch {
         // Renderer có thể đang đóng.
       }

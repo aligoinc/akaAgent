@@ -5,6 +5,7 @@ import type {
   ZaloLoginQrStartResult,
   ZaloSessionCheckResult
 } from '../../shared/types'
+import { IPC_EVENTS } from '../../shared/types'
 import type {
   ZaloGroupInfoBatch,
   ZaloGroupMembersResult
@@ -138,6 +139,12 @@ interface ChatRealtimeHello {
   events?: unknown
 }
 
+const CHAT_CAMPAIGN_REALTIME_CHANNELS = new Set<string>([
+  IPC_EVENTS.CAMPAIGN_LOG,
+  IPC_EVENTS.CAMPAIGN_STATUS_UPDATED,
+  IPC_EVENTS.ACCOUNT_STATUS_UPDATED
+])
+
 export type ZaloChatBindingConflictCode =
   | 'zalo_already_linked'
   | 'account_already_has_another_zalo'
@@ -250,7 +257,8 @@ export class ZaloChatApiClient {
 
   public constructor(
     private readonly emitLoginQrEvent: (event: ZaloLoginQrEvent) => void,
-    private readonly emitRealtimeEvent: (event: ChatRealtimeEvent) => void = () => undefined
+    private readonly emitRealtimeEvent: (event: ChatRealtimeEvent) => void = () => undefined,
+    private readonly emitDatabaseSnapshotRefresh: () => void = () => undefined
   ) {
     this.origin = String(
       process.env.AKA_AGENT_CHAT_API_URL || ZALO_CHAT_API_DEFAULT_ORIGIN
@@ -823,8 +831,13 @@ export class ZaloChatApiClient {
       for (const buffered of bufferedEvents) {
         if (!buffered || typeof buffered !== 'object' || Array.isArray(buffered)) continue
         const event = buffered as Partial<ChatRealtimeEvent>
-        if (event.channel === 'campaign:log') this.markRealtimeEventSeen(event)
+        if (CHAT_CAMPAIGN_REALTIME_CHANNELS.has(String(event.channel || ''))) {
+          this.markRealtimeEventSeen(event)
+        }
       }
+      // Giống App Server: khi socket vừa nối/reconnect, DB là source-of-truth
+      // cho trạng thái campaign/account thay vì replay event live đã cũ.
+      this.emitDatabaseSnapshotRefresh()
       if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
       this.realtimeStableConnectionTimer = setTimeout(() => {
         this.realtimeStableConnectionTimer = null
@@ -837,7 +850,7 @@ export class ZaloChatApiClient {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return
     const event = value as Partial<ChatRealtimeEvent>
     if (
-      event.channel !== 'campaign:log' ||
+      !CHAT_CAMPAIGN_REALTIME_CHANNELS.has(String(event.channel || '')) ||
       !this.user ||
       event.staffId !== this.user.staffId ||
       event.organizationId !== this.user.organizationId
