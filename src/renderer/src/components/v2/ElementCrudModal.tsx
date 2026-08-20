@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useElementLibraryStore } from '../../stores/elementLibraryStore'
 import { ElementDef } from '../../../../shared/v2Types'
 
@@ -11,6 +11,8 @@ export default function ElementCrudModal({ open, onClose }: Props) {
   const { elements, loadElements, upsertElement, removeElement } = useElementLibraryStore()
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Partial<ElementDef> | null>(null)
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
 
   useEffect(() => {
     if (open) loadElements()
@@ -29,7 +31,10 @@ export default function ElementCrudModal({ open, onClose }: Props) {
   if (!open) return null
 
   const onSave = async () => {
+    if (busyRef.current) return
     if (!editing?.name || !editing?.xpath) { alert('Cần name + xpath'); return }
+    busyRef.current = true
+    setBusy(true)
     try {
       const saved = await window.electronAPI.v2.saveElement({
         name: editing.name,
@@ -41,33 +46,42 @@ export default function ElementCrudModal({ open, onClose }: Props) {
       setEditing(null)
     } catch (err: any) {
       alert('Lỗi: ' + err.message)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
   const onDelete = async (el: ElementDef) => {
+    if (busyRef.current) return
     if (el.isBuiltin) { alert('Không xóa được element built-in'); return }
     if (!confirm(`Xóa element "${el.name}"?`)) return
+    busyRef.current = true
+    setBusy(true)
     try {
       await window.electronAPI.v2.deleteElement(el.id)
       removeElement(el.id)
     } catch (err: any) {
       alert('Lỗi xóa: ' + err.message)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={() => { if (!busyRef.current) onClose() }}>
       <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 800, maxWidth: '95vw', height: '85vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header">
           <span className="modal-title">XPath Elements ({elements.length})</span>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} disabled={busy}>✕</button>
         </div>
         <div style={{ display: 'flex', gap: 8, padding: 12, alignItems: 'center', borderBottom: '1px solid var(--border, #2a2a35)' }}>
           <input
             type="text" placeholder="Tìm element..." value={search} onChange={e => setSearch(e.target.value)}
             style={{ flex: 1, padding: '6px 8px', fontSize: 12, background: 'var(--bg-primary, #0e0e15)', border: '1px solid var(--border, #2a2a35)', borderRadius: 4, color: 'var(--text, #e0e0e0)' }}
           />
-          <button className="btn btn-sm" onClick={() => setEditing({ name: '', xpath: '', category: 'custom' })}>+ Tạo mới</button>
+          <button className="btn btn-sm" onClick={() => setEditing({ name: '', xpath: '', category: 'custom' })} disabled={busy}>+ Tạo mới</button>
         </div>
 
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: editing ? '1fr 360px' : '1fr', minHeight: 0 }}>
@@ -86,7 +100,7 @@ export default function ElementCrudModal({ open, onClose }: Props) {
                   {el.category && <span style={{ fontSize: 10, color: '#888' }}>· {el.category}</span>}
                   <div style={{ flex: 1 }} />
                   {!el.isBuiltin && (
-                    <button className="btn btn-sm btn-ghost" onClick={(ev) => { ev.stopPropagation(); onDelete(el) }}>Xóa</button>
+                    <button className="btn btn-sm btn-ghost" onClick={(ev) => { ev.stopPropagation(); onDelete(el) }} disabled={busy}>Xóa</button>
                   )}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#888', wordBreak: 'break-all', marginTop: 4 }}>{el.xpath}</div>
@@ -114,8 +128,8 @@ export default function ElementCrudModal({ open, onClose }: Props) {
                 <input value={editing.category ?? ''} onChange={e => setEditing({ ...editing, category: e.target.value })} placeholder="facebook | common | custom" style={fieldStyle} />
               </Field>
               <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)}>Hủy</button>
-                <button className="btn btn-sm" onClick={onSave}>Lưu</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setEditing(null)} disabled={busy}>Hủy</button>
+                <button className="btn btn-sm" onClick={onSave} disabled={busy}>{busy ? 'Đang lưu...' : 'Lưu'}</button>
               </div>
             </div>
           )}

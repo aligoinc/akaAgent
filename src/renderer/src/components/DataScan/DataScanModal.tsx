@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import jsQR from 'jsqr'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
-import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetScanType, ContactStatusFilter, ContactType, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
+import { AccountContactListQuery, AkaBizContactTag, AutoAccountContact, AutoAccountContactDataset, ContactDatasetScanType, ContactStatusFilter, ContactType, DataGroup, DataGroupIngestRow, DataTypeCategoryItem, PageInboxMessageFilterMode, PageInboxPhoneFilter, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanMode, ZaloRemarketingCustomerListQuery } from '../../../../shared/types'
 import { normalizeVietnamMobilePhone } from '../../../../shared/phone'
+import { getContactTypeForDataTypeCode, getDataScanActionTypeCode, getDataTypeDisplayName, inferDataTypeCodeFromContact, isDataGroupTypeCompatible } from '../../../../shared/dataGroupSemantics'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataGroupManagerModal from './DataGroupManagerModal'
@@ -12,7 +13,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
 import { getAccountPlatformLabel } from '../../utils/accountLabels'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
-import type { AuthEntitlements, DataGroup } from '../../../../shared/types'
+import type { AuthEntitlements } from '../../../../shared/types'
 import type { ContactLoadResult } from '../../../../shared/types'
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
@@ -49,6 +50,23 @@ const DEFAULT_PROFILE_FRIEND_LIMIT = 1000
 const DEFAULT_GROUP_MEMBER_LIMIT = 1000
 const PAGE_INBOX_PAGE_SIZE = 100
 const DEFAULT_PAGE_INBOX_TIME_PRESET: PageInboxTimePreset = 'all'
+
+const createDataGroupRequestId = (): string => (
+  globalThis.crypto?.randomUUID?.()
+  || `data-scan-${Date.now()}-${Math.random().toString(16).slice(2)}`
+)
+
+const listAllDataGroupsForScan = async (): Promise<DataGroup[]> => {
+  const groups: DataGroup[] = []
+  const limit = 200
+  let offset = 0
+  while (true) {
+    const page = await window.electronAPI.listDataGroups({ offset, limit })
+    groups.push(...page.groups)
+    offset += page.groups.length
+    if (page.groups.length === 0 || offset >= page.total) return groups
+  }
+}
 
 const ZALO_REMARKETING_ACTION_FILTER_OPTIONS = [
   { value: 'zalo_message_phone', label: 'Zalo - Gửi tin nhắn đến SĐT (Kiêm kết bạn)' },
@@ -894,17 +912,6 @@ const getContactStatusLabel = (contact: AutoAccountContact) => {
   return ''
 }
 
-const getContactTypeLabel = (contactType: ContactType, platform: string = 'facebook') => {
-  const isZalo = platform === 'zalo'
-  if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
-  if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
-  if (contactType === 'page_inbox_customer') return 'Khách inbox Page'
-  if (contactType === 'phone') return 'Số điện thoại'
-  if (contactType === 'email') return 'Email'
-  if (contactType === 'campaign_input') return 'Data chiến dịch'
-  return 'Page Facebook'
-}
-
 const getPlatformLabel = (platform: DataScanPlatform) => {
   if (platform === 'zalo') return 'Zalo'
   if (platform === 'email') return 'Email'
@@ -1058,14 +1065,16 @@ export default function DataScanModal({
   const [progressMessages, setProgressMessages] = useState<string[]>([])
   const [progressExpanded, setProgressExpanded] = useState(true)
   const [minimized, setMinimized] = useState(false)
-  const [contactGroups, setContactGroups] = useState<AutoAccountContactGroup[]>([])
-  const [allContactGroups, setAllContactGroups] = useState<AutoAccountContactGroup[]>([])
+  const [contactGroups, setContactGroups] = useState<DataGroup[]>([])
+  const [allContactGroups, setAllContactGroups] = useState<DataGroup[]>([])
+  const [dataTypeItems, setDataTypeItems] = useState<DataTypeCategoryItem[]>([])
   const [groupsLoading, setGroupsLoading] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [showAddGroupModal, setShowAddGroupModal] = useState(false)
   const [showNewGroupInput, setShowNewGroupInput] = useState(false)
   const [modalSelectedGroupIds, setModalSelectedGroupIds] = useState<Set<number>>(new Set())
   const [savingGroupMembers, setSavingGroupMembers] = useState(false)
+  const savingGroupMembersRef = useRef(false)
   const [showGroupPanel, setShowGroupPanel] = useState(initialShowGroupPanel)
   const [showGroupSelectionModal, setShowGroupSelectionModal] = useState(false)
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null)
@@ -1139,6 +1148,9 @@ export default function DataScanModal({
     [accounts, actionDef.platform, isUploadDataAction]
   )
   const selectedPlatform = (selectedAccount?.flatformType || (actionDef.platform === 'all' ? 'facebook' : actionDef.platform)) as DataScanPlatform
+  const effectiveDataTypeCode = selectedDataset?.dataTypeCode
+    || getDataScanActionTypeCode(action)
+    || inferDataTypeCodeFromContact(selectedPlatform, effectiveContactType)
   const showGroupApprovalColumn = !isUploadDataAction && actionDef.contactType === 'group' && actionDef.platform === 'facebook'
   const showAvatarColumn = !isUploadDataAction && actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
   const showLinkColumn = !isUploadDataAction && !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
@@ -1197,12 +1209,10 @@ export default function DataScanModal({
   )
   const compatibleContactGroups = useMemo(
     () => contactGroups.filter(group => (
-      group.accountId === accountId
-      && group.contactType === effectiveContactType
-      && group.purpose === 'data_group'
+      isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode)
       && !group.isDelete
     )),
-    [accountId, contactGroups, effectiveContactType]
+    [contactGroups, effectiveDataTypeCode]
   )
   const effectiveContactGroupFilterId = useMemo(
     () => supportsContactGroups
@@ -1983,14 +1993,12 @@ export default function DataScanModal({
     }
     setGroupsLoading(true)
     try {
-      const [groups, allGroups] = await Promise.all([
-        window.electronAPI.listContactGroups(accountId, effectiveContactType),
-        window.electronAPI.listContactGroups(accountId)
-      ])
+      const allGroups = await listAllDataGroupsForScan()
+      const groups = allGroups.filter(group => isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode))
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       setContactGroups(groups)
       setAllContactGroups(allGroups)
-      setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
+      setActiveGroupId(prev => prev && groups.some(group => group.id === prev) ? prev : groups[0]?.id || null)
     } catch (err: any) {
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       console.error('Failed to load contact groups:', err)
@@ -1998,7 +2006,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, effectiveContactType, showAlert, showLegacyContactGroupControls])
+  }, [accountId, effectiveDataTypeCode, showAlert, supportsContactGroups])
 
   const loadContactsForGroup = useCallback(async (groupId: number, force = false): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI) return []
@@ -2027,10 +2035,8 @@ export default function DataScanModal({
 
     setGroupsLoading(true)
     try {
-      const [groups, allGroups] = await Promise.all([
-        window.electronAPI.listContactGroups(accountId, effectiveContactType),
-        window.electronAPI.listContactGroups(accountId)
-      ])
+      const allGroups = await listAllDataGroupsForScan()
+      const groups = allGroups.filter(group => isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode))
       if (!mountedRef.current || contactGroupsLoadIdRef.current !== loadId) return
       const currentGroupIds = new Set(groups.map(group => group.id))
       const nextSelectedGroupIds = Array.from(selectedGroupIds).filter(groupId => currentGroupIds.has(groupId))
@@ -2042,7 +2048,7 @@ export default function DataScanModal({
 
       setContactGroups(groups)
       setAllContactGroups(allGroups)
-      setActiveGroupId(prev => prev && allGroups.some(group => group.id === prev) ? prev : allGroups[0]?.id || null)
+      setActiveGroupId(prev => prev && groups.some(group => group.id === prev) ? prev : groups[0]?.id || null)
       setSelectedGroupIds(new Set(nextSelectedGroupIds))
       setGroupContactCache(nextGroupContactCache)
       if (contactGroupFilterId !== '') {
@@ -2059,7 +2065,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactGroupsLoadIdRef.current === loadId) setGroupsLoading(false)
     }
-  }, [accountId, contactGroupFilterId, effectiveContactType, refreshContactsAfterGroupMembershipChange, selectedGroupIds, showAlert, supportsContactGroups])
+  }, [accountId, contactGroupFilterId, effectiveContactType, effectiveDataTypeCode, refreshContactsAfterGroupMembershipChange, selectedGroupIds, showAlert, supportsContactGroups])
 
   useEffect(() => {
     pageInboxPageUidRef.current = pageInboxPageUid
@@ -2230,6 +2236,21 @@ export default function DataScanModal({
     lastAutoLoadBaseQueryKeyRef.current = baseQueryKey
     loadCachedContacts()
   }, [buildContactsLoadQueryKey, clearCachedContactsForPendingQuery, loadCachedContacts, pageInboxPage])
+
+  useEffect(() => {
+    let cancelled = false
+    window.electronAPI.listDataTypeCategoryItems()
+      .then(items => {
+        if (!cancelled) setDataTypeItems(items)
+      })
+      .catch(error => {
+        console.error('Failed to load data type catalog for DataScan:', error)
+        if (!cancelled) setDataTypeItems([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     loadContactGroups()
@@ -2703,7 +2724,7 @@ export default function DataScanModal({
     () => allContactGroups.find(group => group.id === activeGroupId) || null,
     [activeGroupId, allContactGroups]
   )
-  const activeGroupContactType = activeContactGroup?.contactType || effectiveContactType
+  const activeGroupContactType = getContactTypeForDataTypeCode(activeContactGroup?.dataTypeCode) || effectiveContactType
   const activeGroupShowApprovalColumn = activeGroupContactType === 'group' && selectedPlatform === 'facebook'
   const activeGroupShowAvatarColumn = selectedPlatform === 'zalo'
   const activeGroupShowLinkColumn = selectedPlatform === 'facebook' || (activeGroupContactType === 'group' && selectedPlatform === 'zalo')
@@ -2940,7 +2961,7 @@ export default function DataScanModal({
     }
 
     const group = allContactGroups.find(item => item.id === groupId)
-    if (!group || group.contactType !== effectiveContactType) {
+    if (!group || !isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode)) {
       showAlert('Nhóm này không đúng loại data hiện tại nên không thể đưa vào danh sách chọn.', 'error')
       return
     }
@@ -2973,8 +2994,8 @@ export default function DataScanModal({
     setShowAddGroupModal(true)
   }
 
-  const handleToggleModalGroup = (group: AutoAccountContactGroup) => {
-    if (group.contactType !== effectiveContactType) return
+  const handleToggleModalGroup = (group: DataGroup) => {
+    if (!isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode)) return
     setModalSelectedGroupIds(prev => {
       const next = new Set(prev)
       if (next.has(group.id)) next.delete(group.id)
@@ -2991,37 +3012,79 @@ export default function DataScanModal({
   }
 
   const handleSaveSelectedToGroups = async () => {
-    if (!window.electronAPI || !accountId) return
-    const selectedContacts = await loadSelectedContacts()
-    const contactIds = selectedContacts.map(contact => contact.id)
-    if (contactIds.length === 0) {
-      showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
-      return
-    }
-
-    const newName = newGroupName.trim()
-    const shouldCreateGroup = showNewGroupInput && newName.length > 0
-    if (modalSelectedGroupIds.size === 0 && !shouldCreateGroup) {
-      showAlert('Vui lòng chọn nhóm hoặc nhập tên nhóm mới.', 'error')
-      return
-    }
-
+    if (!window.electronAPI || !accountId || savingGroupMembersRef.current) return
+    savingGroupMembersRef.current = true
     setSavingGroupMembers(true)
     try {
+      const selectedContacts = await loadSelectedContacts()
+      const contactIds = selectedContacts.map(contact => contact.id)
+      if (contactIds.length === 0) {
+        showAlert('Vui lòng tích chọn data trước khi thêm vào nhóm.', 'error')
+        return
+      }
+
+      const newName = newGroupName.trim()
+      const shouldCreateGroup = showNewGroupInput && newName.length > 0
+      if (modalSelectedGroupIds.size === 0 && !shouldCreateGroup) {
+        showAlert('Vui lòng chọn nhóm hoặc nhập tên nhóm mới.', 'error')
+        return
+      }
+
       const groupIds = Array.from(modalSelectedGroupIds).filter(groupId => {
         const group = allContactGroups.find(item => item.id === groupId)
-        return group?.contactType === effectiveContactType
+        return !!group && isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode)
       })
-      let createdGroup: AutoAccountContactGroup | null = null
+      const dataTypeCategoryItemId = dataTypeItems.find(item => item.code === effectiveDataTypeCode)?.id ?? null
+      if (!dataTypeCategoryItemId) {
+        throw new Error('Không xác định được loại data của dữ liệu đang chọn.')
+      }
+
+      let createdGroup: DataGroup | null = null
       if (shouldCreateGroup) {
-        createdGroup = await window.electronAPI.createContactGroup(accountId, effectiveContactType, newName)
+        createdGroup = await window.electronAPI.createDataGroup({
+          name: newName,
+          requestId: createDataGroupRequestId(),
+          dataTypeCategoryItemId
+        })
         groupIds.push(createdGroup.id)
       }
 
+      const relationshipKind = action === ZALO_GROUP_MEMBERS_ACTION_ID
+        ? 'zalo_group_members'
+        : undefined
+      const sourceAccountById = new Map(accounts.map(item => [item.id, item]))
+      const rows: DataGroupIngestRow[] = selectedContacts.map(contact => {
+        const sourceAccount = sourceAccountById.get(contact.accountId)
+        return {
+          contactId: contact.id,
+          sourceAccountId: contact.accountId,
+          relationshipKind,
+          contactType: contact.contactType,
+          flatformType: contact.flatformType || sourceAccount?.flatformType || null,
+          name: contact.name || null,
+          uid: contact.uid || null,
+          url: contact.url || null,
+          phone: String(contact.extraData?.phone || '').trim() || null,
+          extraData: contact.extraData
+        }
+      })
+      const provenanceKind = selectedDataset?.source === 'upload' ? 'upload' : 'scan'
       let addedCount = 0
       for (const groupId of groupIds) {
-        const result = await window.electronAPI.addContactsToGroup(groupId, contactIds)
-        addedCount += result.count
+        const destinationGroup = createdGroup?.id === groupId
+          ? createdGroup
+          : allContactGroups.find(item => item.id === groupId)
+        const result = await window.electronAPI.ingestDataGroup({
+          requestId: createDataGroupRequestId(),
+          groupId,
+          kind: provenanceKind,
+          rows,
+          datasetId: selectedDataset?.id ?? null,
+          sourceAccountId: typeof accountId === 'number' ? accountId : null,
+          sourceName: selectedDataset?.name || actionDef.label,
+          dataTypeCategoryItemId: destinationGroup?.dataTypeCategoryItemId ?? dataTypeCategoryItemId
+        })
+        addedCount += result.insertedMembershipCount + result.reactivatedMembershipCount
       }
 
       setGroupContactCache(prev => {
@@ -3052,6 +3115,7 @@ export default function DataScanModal({
       console.error('Failed to add contacts to group:', err)
       showAlert(err?.message || 'Không thể thêm data vào nhóm.', 'error')
     } finally {
+      savingGroupMembersRef.current = false
       setSavingGroupMembers(false)
     }
   }
@@ -4753,7 +4817,7 @@ export default function DataScanModal({
         {showLegacyContactGroupControls && showGroupPanel && (
           <DataGroupManagerModal
             initialAccountId={typeof accountId === 'number' ? accountId : null}
-            initialGroupId={activeContactGroup?.contactType === effectiveContactType ? activeGroupId : null}
+            initialGroupId={activeContactGroup && isDataGroupTypeCompatible(activeContactGroup.dataTypeCode, effectiveDataTypeCode) ? activeGroupId : null}
             initialPlatform={selectedPlatform}
             initialContactType={effectiveContactType}
             lockContext
@@ -4766,8 +4830,7 @@ export default function DataScanModal({
 
         {showLegacyContactGroupControls && showGroupSelectionModal && (
           <DataScanGroupSelectionModal
-            contactType={effectiveContactType}
-            platform={selectedPlatform}
+            dataTypeCode={effectiveDataTypeCode}
             groupsLoading={groupsLoading}
             contactGroups={allContactGroups}
             selectedGroupIds={selectedGroupIds}
@@ -4809,7 +4872,7 @@ export default function DataScanModal({
                     <div className="data-scan-group-empty">Chưa có nhóm data.</div>
                   ) : (
                     allContactGroups.map(group => {
-                      const isCompatible = group.contactType === effectiveContactType
+                      const isCompatible = isDataGroupTypeCompatible(group.dataTypeCode, effectiveDataTypeCode)
                       return (
                       <label
                         key={group.id}
@@ -4823,10 +4886,10 @@ export default function DataScanModal({
                         />
                         <span className="data-scan-group-modal-option-main">
                           <span className="data-scan-group-modal-option-name">{group.name}</span>
-                          <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType, selectedPlatform)}</span>
+                          <span className="data-scan-contact-type-badge">{getDataTypeDisplayName(group.dataTypeCode, group.dataTypeName)}</span>
                         </span>
                         <span className="data-scan-group-count">
-                          {isCompatible ? `${group.contactCount || 0} data` : 'Không đúng loại'}
+                          {isCompatible ? `${group.activeMembershipCount || 0} data` : 'Không đúng loại'}
                         </span>
                       </label>
                       )

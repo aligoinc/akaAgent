@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import BlockLibraryPanel from './BlockLibraryPanel'
 import WorkflowCanvasV2 from './WorkflowCanvasV2'
 import ConfigPanelV2 from './ConfigPanelV2'
@@ -17,6 +17,8 @@ export default function WorkflowEditorV2() {
   const [showWorkflowList, setShowWorkflowList] = useState(false)
   const [showElementModal, setShowElementModal] = useState(false)
   const [editingMeta, setEditingMeta] = useState(false)
+  const [savingWorkflow, setSavingWorkflow] = useState(false)
+  const savingWorkflowRef = useRef(false)
 
   const handleSaveMeta = async (meta: { variablesSchema?: WorkflowDef['variablesSchema']; defaultVariables?: Record<string, unknown> }) => {
     if (meta.variablesSchema !== undefined) setVariables(meta.variablesSchema)
@@ -36,12 +38,17 @@ export default function WorkflowEditorV2() {
   }, [loadBlocks, loadWorkflows])
 
   const handleSave = async () => {
-    if (!workflow) return
+    if (!workflow || savingWorkflowRef.current) return
+    savingWorkflowRef.current = true
+    setSavingWorkflow(true)
     try {
       await saveCurrent()
       alert('Lưu workflow thành công')
     } catch (err: any) {
       alert('Lỗi lưu: ' + err.message)
+    } finally {
+      savingWorkflowRef.current = false
+      setSavingWorkflow(false)
     }
   }
 
@@ -58,7 +65,7 @@ export default function WorkflowEditorV2() {
         )}
         <div style={{ flex: 1 }} />
         <button className="btn btn-sm btn-ghost" onClick={() => setShowElementModal(true)}><Search size={13} /> Elements</button>
-        <button className="btn btn-sm" onClick={handleSave} disabled={!workflow}><Save size={13} /> Lưu</button>
+        <button className="btn btn-sm" onClick={handleSave} disabled={!workflow || savingWorkflow}><Save size={13} /> {savingWorkflow ? 'Đang lưu...' : 'Lưu'}</button>
       </div>
 
       {/* Body */}

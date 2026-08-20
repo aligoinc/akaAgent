@@ -1,27 +1,19 @@
 import { X } from 'lucide-react'
-import { AutoAccountContactGroup, ContactType } from '../../../../shared/types'
+import { DataGroup, DataTypeCategoryCode } from '../../../../shared/types'
+import { getDataTypeDisplayName, isDataGroupTypeCompatible } from '../../../../shared/dataGroupSemantics'
 
 interface DataScanGroupSelectionModalProps {
-  contactType: ContactType
-  platform?: string
+  dataTypeCode: DataTypeCategoryCode | null
   groupsLoading: boolean
-  contactGroups: AutoAccountContactGroup[]
+  contactGroups: DataGroup[]
   selectedGroupIds: Set<number>
   onClose: () => void
   onToggleGroup: (groupId: number) => void
   onConfirm: () => void
 }
 
-const getContactTypeLabel = (contactType: ContactType, platform: string = 'facebook') => {
-  const isZalo = platform === 'zalo'
-  if (contactType === 'person') return isZalo ? 'User Zalo' : 'User Facebook'
-  if (contactType === 'group') return isZalo ? 'Group Zalo' : 'Group Facebook'
-  return 'Page Facebook'
-}
-
 export default function DataScanGroupSelectionModal({
-  contactType,
-  platform = 'facebook',
+  dataTypeCode,
   groupsLoading,
   contactGroups,
   selectedGroupIds,
@@ -53,7 +45,7 @@ export default function DataScanGroupSelectionModal({
               <div className="data-scan-group-empty">Chưa có nhóm data.</div>
             ) : (
               contactGroups.map(group => {
-                const isCompatible = group.contactType === contactType
+                const isCompatible = isDataGroupTypeCompatible(group.dataTypeCode, dataTypeCode)
                 return (
                   <label
                     key={group.id}
@@ -67,10 +59,10 @@ export default function DataScanGroupSelectionModal({
                     />
                     <span className="data-scan-group-modal-option-main">
                       <span className="data-scan-group-modal-option-name">{group.name}</span>
-                      <span className="data-scan-contact-type-badge">{getContactTypeLabel(group.contactType, platform)}</span>
+                      <span className="data-scan-contact-type-badge">{getDataTypeDisplayName(group.dataTypeCode, group.dataTypeName)}</span>
                     </span>
                     <span className="data-scan-group-count">
-                      {isCompatible ? `${group.contactCount || 0} data` : 'Không đúng loại'}
+                      {isCompatible ? `${group.activeMembershipCount || 0} data` : 'Không đúng loại'}
                     </span>
                   </label>
                 )

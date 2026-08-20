@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import CodeEditorDrawer from './CodeEditorDrawer'
 import { useBlockLibraryStore } from '../../stores/blockLibraryStore'
 import { BlockDef, BlockCategory } from '../../../../shared/v2Types'
@@ -22,6 +22,8 @@ export default function BlockCrudModal({ open, initialBlock, onClose }: Props) {
   const [outputJson, setOutputJson] = useState('[]')
   const [defaultJson, setDefaultJson] = useState('{}')
   const [codeOpen, setCodeOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
 
   useEffect(() => {
     if (open) {
@@ -50,12 +52,15 @@ export default function BlockCrudModal({ open, initialBlock, onClose }: Props) {
   if (!open) return null
 
   const onSave = async () => {
+    if (busyRef.current) return
     let configSchema, outputSchema, defaultConfig
     try { configSchema = JSON.parse(configJson) } catch { alert('configSchema không hợp lệ'); return }
     try { outputSchema = JSON.parse(outputJson) } catch { alert('outputSchema không hợp lệ'); return }
     try { defaultConfig = JSON.parse(defaultJson) } catch { alert('defaultConfig không hợp lệ'); return }
     if (!name.trim()) { alert('Phải có name'); return }
 
+    busyRef.current = true
+    setBusy(true)
     try {
       const saved = await window.electronAPI.v2.saveBlock({
         name, description, icon, category, kind: 'js',
@@ -65,28 +70,36 @@ export default function BlockCrudModal({ open, initialBlock, onClose }: Props) {
       onClose()
     } catch (err: any) {
       alert('Lỗi save block: ' + err.message)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
   const onDelete = async () => {
-    if (!initialBlock || initialBlock.isBuiltin) return
+    if (busyRef.current || !initialBlock || initialBlock.isBuiltin) return
     if (!confirm(`Xóa block "${initialBlock.name}"? Workflow đang dùng sẽ bị broken.`)) return
+    busyRef.current = true
+    setBusy(true)
     try {
       await window.electronAPI.v2.deleteBlock(initialBlock.id)
       removeBlock(initialBlock.id)
       onClose()
     } catch (err: any) {
       alert('Lỗi xóa: ' + err.message)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
     }
   }
 
   return (
     <>
-      <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-overlay" onClick={() => { if (!busyRef.current) onClose() }}>
         <div className="modal" onClick={e => e.stopPropagation()} style={{ width: 600, maxWidth: '90vw' }}>
           <div className="modal-header">
             <span className="modal-title">{initialBlock ? `Edit block: ${initialBlock.name}` : 'Tạo block custom'}</span>
-            <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
+            <button className="btn btn-ghost btn-icon" onClick={onClose} disabled={busy}>✕</button>
           </div>
           <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <FieldRow label="Name (UNIQUE, snake_case)">
@@ -104,7 +117,7 @@ export default function BlockCrudModal({ open, initialBlock, onClose }: Props) {
               </select>
             </FieldRow>
             <FieldRow label="Code">
-              <button className="btn btn-sm" onClick={() => setCodeOpen(true)}>Sửa code (Monaco)</button>
+              <button className="btn btn-sm" onClick={() => setCodeOpen(true)} disabled={busy}>Sửa code (Monaco)</button>
             </FieldRow>
             <FieldRow label="configSchema (JSON array)">
               <textarea value={configJson} onChange={(e) => setConfigJson(e.target.value)} style={{ ...fieldStyle, fontFamily: 'monospace', minHeight: 80 }} />
@@ -118,11 +131,11 @@ export default function BlockCrudModal({ open, initialBlock, onClose }: Props) {
           </div>
           <div style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border, #2a2a35)' }}>
             {initialBlock && !initialBlock.isBuiltin && (
-              <button className="btn btn-sm" onClick={onDelete} style={{ background: '#ef4444' }}>Xóa</button>
+              <button className="btn btn-sm" onClick={onDelete} disabled={busy} style={{ background: '#ef4444' }}>Xóa</button>
             )}
             <div style={{ flex: 1 }} />
-            <button className="btn btn-sm btn-ghost" onClick={onClose}>Hủy</button>
-            <button className="btn btn-sm" onClick={onSave}>Lưu</button>
+            <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={busy}>Hủy</button>
+            <button className="btn btn-sm" onClick={onSave} disabled={busy}>{busy ? 'Đang lưu...' : 'Lưu'}</button>
           </div>
         </div>
       </div>

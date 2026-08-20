@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Edit3, Plus, Save, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -65,6 +65,8 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
   const [formData, setFormData] = useState<ActionFormData>(emptyForm)
   const [isEditing, setIsEditing] = useState(false)
   const [testModeSaving, setTestModeSaving] = useState(false)
+  const [actionSaving, setActionSaving] = useState(false)
+  const actionSavingRef = useRef(false)
 
   useEffect(() => {
     loadAllCampaignActions()
@@ -163,6 +165,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
   }
 
   const handleSubmit = async () => {
+    if (actionSavingRef.current) return
     if (!formData.id.trim() || !formData.name.trim()) {
       useUiStore.getState().showAlert('Vui lòng nhập ID và tên hành động.', 'error')
       return
@@ -188,6 +191,8 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
+    actionSavingRef.current = true
+    setActionSaving(true)
     try {
       if (editingAction) {
         await updateCampaignAction(editingAction.id, payload)
@@ -199,6 +204,9 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
     } catch (err) {
       console.error('Failed to save action:', err)
       useUiStore.getState().showAlert('Không thể lưu hành động chiến dịch.', 'error')
+    } finally {
+      actionSavingRef.current = false
+      setActionSaving(false)
     }
   }
 
@@ -210,7 +218,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
             <h2>Quản lý Hành động Chiến dịch</h2>
             <span>{allCampaignActions.length} hành động</span>
           </div>
-          <button className="btn-icon" onClick={onClose} title="Đóng">
+          <button className="btn-icon" onClick={onClose} title="Đóng" disabled={actionSaving}>
             <X size={18} />
           </button>
         </div>
@@ -237,7 +245,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
           <div className="action-manager-list-pane">
             <div className="action-manager-list-toolbar">
               <strong>Danh sách</strong>
-              <button className="btn btn-primary btn-sm" onClick={openCreateForm}>
+              <button className="btn btn-primary btn-sm" onClick={openCreateForm} disabled={actionSaving}>
                 <Plus size={13} /> Thêm
               </button>
             </div>
@@ -251,6 +259,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                     key={action.id}
                     className={`action-manager-list-item ${editingAction?.id === action.id ? 'active' : ''}`}
                     onClick={() => openEditForm(action)}
+                    disabled={actionSaving}
                   >
                     <div className="action-manager-list-item-main">
                       <span>{action.name}</span>
@@ -287,7 +296,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                     <span>{formData.id || 'Hành động mới'}</span>
                   </div>
                   {editingAction && (
-                    <button className="btn-icon text-error" onClick={() => handleDelete(editingAction)} title="Xoá">
+                    <button className="btn-icon text-error" onClick={() => handleDelete(editingAction)} title="Xoá" disabled={actionSaving}>
                       <Trash2 size={15} />
                     </button>
                   )}
@@ -418,9 +427,9 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                 </div>
 
                 <div className="action-manager-footer">
-                  <button className="btn btn-ghost" onClick={() => setIsEditing(false)}>Huỷ</button>
-                  <button className="btn btn-primary" onClick={handleSubmit}>
-                    <Save size={14} /> Lưu
+                  <button className="btn btn-ghost" onClick={() => setIsEditing(false)} disabled={actionSaving}>Huỷ</button>
+                  <button className="btn btn-primary" onClick={handleSubmit} disabled={actionSaving}>
+                    <Save size={14} /> {actionSaving ? 'Đang lưu...' : 'Lưu'}
                   </button>
                 </div>
               </>
