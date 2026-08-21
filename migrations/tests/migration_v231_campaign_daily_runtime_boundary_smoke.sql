@@ -493,19 +493,19 @@ BEGIN
   INSERT INTO public.auto_campaigns (
     id, name, action_id, account_id, status, content,
     schedule, original_schedule, schedule_type, daily_stop_time,
-    data_target_source_mode,
+    continue_next_day, data_target_source_mode,
     staff_id, organization_id, is_delete
   ) OVERRIDING SYSTEM VALUE VALUES (
     v_campaign_id, '__v231_boundary_campaign__', v_action_id,
     v_account_id, 'chờ xử lý', '',
     v_schedule, v_original_schedule, 'daily', NULL,
-    'direct',
+    true, 'direct',
     v_staff_id, v_organization_id, false
   ), (
     v_server_campaign_id, '__v231_boundary_server_campaign__',
     v_zalo_action_id, v_server_account_id, 'chờ xử lý', '',
     v_schedule, v_original_schedule, 'daily', NULL,
-    'direct',
+    true, 'direct',
     v_staff_id, v_organization_id, false
   );
 
