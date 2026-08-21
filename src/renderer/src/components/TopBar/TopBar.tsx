@@ -43,6 +43,7 @@ interface TopBarProps {
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
   currentVersion: string
+  availableUpdateVersion?: string
   checkingUpdate: boolean
   onCheckUpdate: () => void
 }
@@ -75,6 +76,7 @@ export default function TopBar({
   onOpenGeneralSettings,
   onOpenChangePassword,
   currentVersion,
+  availableUpdateVersion,
   checkingUpdate,
   onCheckUpdate
 }: TopBarProps) {
@@ -85,6 +87,11 @@ export default function TopBar({
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
   const canOpenWorkflowEditor = isAdminAkabiz
+  const updateButtonLabel = checkingUpdate
+    ? 'Đang kiểm tra'
+    : availableUpdateVersion
+      ? `Có phiên bản mới ${availableUpdateVersion}`
+      : 'Cập nhật'
 
   useEffect(() => {
     if (!accountMenuOpen) return
@@ -319,13 +326,16 @@ export default function TopBar({
               </button>
               <button
                 type="button"
-                className="app-sidebar-flyout-item"
+                className={`app-sidebar-flyout-item ${availableUpdateVersion ? 'has-update' : ''}`}
                 onClick={handleCheckUpdate}
                 disabled={checkingUpdate}
                 role="menuitem"
               >
                 {checkingUpdate ? <RefreshCw size={16} className="animate-spin" /> : <UpdateBadgeIcon />}
-                <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
+                <span>{updateButtonLabel}</span>
+                {availableUpdateVersion && !checkingUpdate
+                  ? <span className="app-update-available-dot" aria-hidden="true" />
+                  : null}
               </button>
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenGeneralSettings} role="menuitem">
                 <SlidersHorizontal size={16} />

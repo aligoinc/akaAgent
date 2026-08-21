@@ -41,6 +41,10 @@ Windows packaging có native module `better-sqlite3`; luôn dùng `npm run build
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC event constants (cả 2 phía import) |
 
+### Auto-update
+
+Renderer kiểm tra phiên bản khi mở app và mỗi 60 phút. Với phiên bản local `>= 6.0.0`, auto-check chỉ đổi button thành `Có phiên bản mới X.Y.Z` (kèm trạng thái nổi bật), tuyệt đối không tự mở modal; modal chỉ mở khi user bấm button. Riêng client legacy `< 6.0.0` vẫn tự mở modal ở lần startup khi có bản mới và chỉ tiếp tục auth bootstrap sau khi user đóng modal. Auto-check định kỳ không tự mở modal ở bất kỳ phiên bản nào.
+
 ### Webview controller
 
 [src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. Visible webviews vẫn dùng cho login, status checks và test thủ công trong editor.
