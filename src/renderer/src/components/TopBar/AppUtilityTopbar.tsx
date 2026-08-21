@@ -4,6 +4,7 @@ import { useUiStore } from '../../stores/uiStore'
 
 interface AppUtilityTopbarProps {
   currentVersion: string
+  availableUpdateVersion?: string
   checkingUpdate: boolean
   onCheckUpdate: () => void
 }
@@ -19,10 +20,16 @@ function UpdateBadgeIcon() {
 
 export default function AppUtilityTopbar({
   currentVersion,
+  availableUpdateVersion,
   checkingUpdate,
   onCheckUpdate
 }: AppUtilityTopbarProps) {
   const { logout } = useAuthStore()
+  const updateButtonLabel = checkingUpdate
+    ? 'Đang kiểm tra'
+    : availableUpdateVersion
+      ? `Có phiên bản mới ${availableUpdateVersion}`
+      : 'Cập nhật'
 
   const handleCheckUpdate = () => {
     if (checkingUpdate) return
@@ -46,13 +53,20 @@ export default function AppUtilityTopbar({
         <span className="app-utility-version">v{currentVersion || '...'}</span>
         <button
           type="button"
-          className="app-utility-button"
+          className={`app-utility-button ${availableUpdateVersion ? 'has-update' : ''}`}
           onClick={handleCheckUpdate}
           disabled={checkingUpdate}
-          title={checkingUpdate ? 'Đang kiểm tra cập nhật' : 'Kiểm tra cập nhật'}
+          title={checkingUpdate
+            ? 'Đang kiểm tra cập nhật'
+            : availableUpdateVersion
+              ? `Có phiên bản mới ${availableUpdateVersion}`
+              : 'Kiểm tra cập nhật'}
         >
           {checkingUpdate ? <RefreshCw size={16} className="animate-spin" /> : <UpdateBadgeIcon />}
-          <span>{checkingUpdate ? 'Đang kiểm tra' : 'Cập nhật'}</span>
+          <span>{updateButtonLabel}</span>
+          {availableUpdateVersion && !checkingUpdate
+            ? <span className="app-update-available-dot" aria-hidden="true" />
+            : null}
         </button>
         <button
           type="button"

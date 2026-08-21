@@ -28,12 +28,19 @@ import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequ
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 
-type UpdatePromptSource = 'startup' | 'manual'
-
 interface UpdateInfo {
   localVersion: string
   remoteVersion: string
-  source: UpdatePromptSource
+}
+
+type UpdateCheckSource = 'startup' | 'manual' | 'periodic'
+
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
+const SILENT_STARTUP_UPDATE_MIN_VERSION = 6
+
+function requiresLegacyStartupUpdatePrompt(version: string): boolean {
+  const majorVersion = Number.parseInt(version.split('.')[0] || '', 10)
+  return Number.isFinite(majorVersion) && majorVersion < SILENT_STARTUP_UPDATE_MIN_VERSION
 }
 
 export default function App() {
@@ -78,7 +85,8 @@ export default function App() {
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateInfo | null>(null)
+  const [showUpdateModal, setShowUpdateModal] = useState(false)
   const authBootstrapStarted = useRef(false)
   const startupUpdateCheckStarted = useRef(false)
   const accountRealtimeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -155,9 +163,9 @@ export default function App() {
   }, [])
 
   const handleCheckForUpdate = useCallback(async (
-    manual = true,
-    source: UpdatePromptSource = manual ? 'manual' : 'startup'
+    source: UpdateCheckSource = 'manual'
   ): Promise<boolean> => {
+    const manual = source === 'manual'
     if (!window.electronAPI?.checkForUpdate) {
       if (manual) useUiStore.getState().showAlert('Chức năng cập nhật chưa sẵn sàng.', 'error')
       return false
@@ -168,9 +176,15 @@ export default function App() {
       const res = await window.electronAPI.checkForUpdate()
       setLocalVersion(res.localVersion)
       if (res.hasUpdate) {
-        setUpdateInfo({ localVersion: res.localVersion, remoteVersion: res.remoteVersion, source })
-        return true
-      } else if (manual) {
+        setAvailableUpdate({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
+        const requiresStartupPrompt = source === 'startup'
+          && requiresLegacyStartupUpdatePrompt(res.localVersion)
+        if (manual || requiresStartupPrompt) setShowUpdateModal(true)
+        return requiresStartupPrompt
+      }
+
+      if (!res.error) setAvailableUpdate(null)
+      if (manual) {
         if (res.error) {
           useUiStore.getState().showAlert(`Không kiểm tra được cập nhật: ${res.error}`, 'error')
         } else {
@@ -193,24 +207,37 @@ export default function App() {
     }
   }, [])
 
-  // Check startup updates before auth bootstrap so auto-login cannot start scheduler first.
+  // Modern versions check silently at startup. Versions below 6.0.0 retain the
+  // legacy prompt-before-auth flow so very old clients still surface upgrades.
   useEffect(() => {
     if (startupUpdateCheckStarted.current) return
     startupUpdateCheckStarted.current = true
 
     void (async () => {
-      const hasUpdate = await handleCheckForUpdate(false, 'startup')
-      if (!hasUpdate) startAuthBootstrap()
+      const openedLegacyUpdatePrompt = await handleCheckForUpdate('startup')
+      if (!openedLegacyUpdatePrompt) startAuthBootstrap()
     })()
   }, [handleCheckForUpdate, startAuthBootstrap])
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void handleCheckForUpdate('periodic')
+    }, UPDATE_CHECK_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [handleCheckForUpdate])
+
   const handleCloseUpdateModal = useCallback(() => {
-    const source = updateInfo?.source
-    setUpdateInfo(null)
-    if (source === 'startup') {
-      startAuthBootstrap()
+    setShowUpdateModal(false)
+    startAuthBootstrap()
+  }, [startAuthBootstrap])
+
+  const handleUpdateButtonClick = useCallback(() => {
+    if (availableUpdate) {
+      setShowUpdateModal(true)
+      return
     }
-  }, [startAuthBootstrap, updateInfo?.source])
+    void handleCheckForUpdate('manual')
+  }, [availableUpdate, handleCheckForUpdate])
 
   const openGeneralSettings = (menu: GeneralSettingsMenu = 'akabiz') => {
     setGeneralSettingsInitialMenu(menu)
@@ -311,10 +338,10 @@ export default function App() {
         <AlertModal />
         <ConfirmModal />
         {runtimeRestartModal}
-        {updateInfo && (
+        {showUpdateModal && availableUpdate && (
           <UpdateModal
-            localVersion={updateInfo.localVersion}
-            remoteVersion={updateInfo.remoteVersion}
+            localVersion={availableUpdate.localVersion}
+            remoteVersion={availableUpdate.remoteVersion}
             onClose={handleCloseUpdateModal}
           />
         )}
@@ -330,10 +357,10 @@ export default function App() {
         <AlertModal />
         <ConfirmModal />
         {runtimeRestartModal}
-        {updateInfo && (
+        {showUpdateModal && availableUpdate && (
           <UpdateModal
-            localVersion={updateInfo.localVersion}
-            remoteVersion={updateInfo.remoteVersion}
+            localVersion={availableUpdate.localVersion}
+            remoteVersion={availableUpdate.remoteVersion}
             onClose={handleCloseUpdateModal}
           />
         )}
@@ -346,8 +373,9 @@ export default function App() {
       <div className="app-window-drag-frame" aria-hidden="true" />
       <AppUtilityTopbar
         currentVersion={localVersion}
+        availableUpdateVersion={availableUpdate?.remoteVersion}
         checkingUpdate={checkingUpdate}
-        onCheckUpdate={() => { void handleCheckForUpdate(true) }}
+        onCheckUpdate={handleUpdateButtonClick}
       />
       <AppNotificationBar />
       <div className="app-content-shell">
@@ -362,8 +390,9 @@ export default function App() {
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
           currentVersion={localVersion}
+          availableUpdateVersion={availableUpdate?.remoteVersion}
           checkingUpdate={checkingUpdate}
-          onCheckUpdate={() => { void handleCheckForUpdate(true) }}
+          onCheckUpdate={handleUpdateButtonClick}
         />
 
         <div className="app-main">
@@ -477,10 +506,10 @@ export default function App() {
       {showAccountProfile && (
         <AccountProfileModal onClose={() => setShowAccountProfile(false)} />
       )}
-      {updateInfo && (
+      {showUpdateModal && availableUpdate && (
         <UpdateModal
-          localVersion={updateInfo.localVersion}
-          remoteVersion={updateInfo.remoteVersion}
+          localVersion={availableUpdate.localVersion}
+          remoteVersion={availableUpdate.remoteVersion}
           onClose={handleCloseUpdateModal}
         />
       )}
