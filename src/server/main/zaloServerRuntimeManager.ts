@@ -864,6 +864,7 @@ export class ZaloServerRuntimeManager {
             }
             eventWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, signal)
           }
+          await scheduler.sweepExpiredDataGroupCampaignsForMaintenance()
         }, {
           // runtimeClockRepository coalesces concurrent staff startup/ticks in
           // this App Server process into one in-flight clock RPC.

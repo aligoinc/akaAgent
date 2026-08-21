@@ -3464,22 +3464,17 @@ export async function maintainCampaignSchedules(
         if (campaign.status !== 'chờ xử lý') continue
 
         // continueNextDay controls timing, not whether stale daily data continues.
-        // true waits until today's original scheduled time; false is anchored at
-        // today's midnight so it remains immediately due without leaving an
-        // old-day schedule behind. The v2 DB claim treats every stale pending
-        // schedule as maintenance-required, including a campaign resumed after
-        // it was paused across midnight.
+        // true advances to today's configured run time. false deliberately keeps
+        // the already-due timestamp unchanged so the campaign can continue as
+        // soon as the scheduler runs after midnight.
         if (campaign.continueNextDay) {
           const updated = await updateCampaign(campaign.id, {
             schedule: nextSchedule.toISOString(),
             note: null
           })
           updatedCampaigns.push(updated)
-        } else {
-          const updated = await updateCampaign(campaign.id, {
-            schedule: todayStart.toISOString(),
-            note: null
-          })
+        } else if (campaign.note != null) {
+          const updated = await updateCampaign(campaign.id, { note: null })
           updatedCampaigns.push(updated)
         }
         continue

@@ -256,6 +256,7 @@ export function registerIpcHandlers(
     if (updatedCampaigns.length > 0) {
       console.log(`[ScheduleMaintenance] updated ${updatedCampaigns.length} campaign schedules.`)
     }
+    await campaignScheduler.sweepExpiredDataGroupCampaignsForMaintenance()
   }, {
     loadClock: () => supabase.getRuntimeClock(),
     beforeMaintenance: async (dateKey, signal) => {

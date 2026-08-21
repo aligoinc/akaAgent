@@ -1105,12 +1105,6 @@ export class CampaignScheduler {
       await this.getReadyRuntimeClock()
       if (!this.running) return
 
-      // Hard end belongs to the DB subscription lifecycle, so sweep it before
-      // looking at eligible/logged-in accounts. This also covers paused campaigns
-      // and accounts that are hidden, deleted or temporarily unlicensed.
-      await this.sweepExpiredDataGroupCampaigns()
-      if (!this.running) return
-
       await this.supabase.enableDueAccountActions().catch(err => {
         console.error('Failed to enable due account actions:', err)
       })
@@ -1386,7 +1380,13 @@ export class CampaignScheduler {
     return !Number.isNaN(hardEndAt) && now.getTime() >= hardEndAt
   }
 
-  private async sweepExpiredDataGroupCampaigns(): Promise<void> {
+  /**
+   * Campaign forms store scheduleEndDate at 23:59:59 of the selected date, so
+   * the next daily maintenance boundary is sufficient to close expired sources.
+   * Keep this out of every scheduler tick; callers run it once per maintained
+   * staff/runtime/date after the old-day durable barrier has opened.
+   */
+  async sweepExpiredDataGroupCampaignsForMaintenance(): Promise<void> {
     const batchSize = 200
     // A bounded loop drains ordinary backlogs in one tick without letting a very
     // large tenant monopolize the scheduler forever.
