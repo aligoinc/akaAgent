@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
 import { AutoAccount } from '../../../shared/types'
 import { getAccountPlatformLabel, isZaloWebAccount } from '../utils/accountLabels'
@@ -31,6 +31,10 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   const [accountsLoadAttempted, setAccountsLoadAttempted] = useState(false)
   const [pendingOpenRequest, setPendingOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const [webviewReadyVersion, setWebviewReadyVersion] = useState(0)
+  const [navigationStateByAccountId, setNavigationStateByAccountId] = useState<Map<number, {
+    canGoBack: boolean
+    canGoForward: boolean
+  }>>(new Map())
   const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
     active: boolean
     image?: string
@@ -40,6 +44,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   }>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const webviewDomReadyHandlers = useRef<Map<number, EventListener>>(new Map())
+  const webviewNavigationHandlers = useRef<Map<number, EventListener>>(new Map())
   const registeredIds = useRef<Set<number>>(new Set())
   const initializationPromises = useRef<Map<number, Promise<boolean>>>(new Map())
   const preparingSessionKeys = useRef<Set<string>>(new Set())
@@ -157,10 +162,16 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     Array.from(registeredIds.current).forEach((accountId) => {
       if (!browserAccountIds.has(accountId)) {
         const wv = webviewRefs.current.get(accountId)
-        const handler = webviewDomReadyHandlers.current.get(accountId)
-        if (wv && handler) wv.removeEventListener('dom-ready', handler)
+        const domReadyHandler = webviewDomReadyHandlers.current.get(accountId)
+        const navigationHandler = webviewNavigationHandlers.current.get(accountId)
+        if (wv && domReadyHandler) wv.removeEventListener('dom-ready', domReadyHandler)
+        if (wv && navigationHandler) {
+          wv.removeEventListener('did-navigate', navigationHandler)
+          wv.removeEventListener('did-navigate-in-page', navigationHandler)
+        }
         webviewRefs.current.delete(accountId)
         webviewDomReadyHandlers.current.delete(accountId)
+        webviewNavigationHandlers.current.delete(accountId)
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
         registeredIds.current.delete(accountId)
       }
@@ -172,13 +183,19 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     return () => {
       registeredIds.current.forEach((accountId) => {
         const wv = webviewRefs.current.get(accountId)
-        const handler = webviewDomReadyHandlers.current.get(accountId)
-        if (wv && handler) wv.removeEventListener('dom-ready', handler)
+        const domReadyHandler = webviewDomReadyHandlers.current.get(accountId)
+        const navigationHandler = webviewNavigationHandlers.current.get(accountId)
+        if (wv && domReadyHandler) wv.removeEventListener('dom-ready', domReadyHandler)
+        if (wv && navigationHandler) {
+          wv.removeEventListener('did-navigate', navigationHandler)
+          wv.removeEventListener('did-navigate-in-page', navigationHandler)
+        }
         window.electronAPI?.unregisterWebview(accountId).catch(() => {})
       })
       registeredIds.current.clear()
       initializationPromises.current.clear()
       webviewDomReadyHandlers.current.clear()
+      webviewNavigationHandlers.current.clear()
       webviewRefs.current.clear()
     }
   }, [])
@@ -224,7 +241,16 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
       if (!registered) return false
       const currentUrl = String((wv as any).getURL?.() || '')
       if (!currentUrl || currentUrl === 'about:blank') {
-        wv.loadURL(getInitialUrl(account))
+        await wv.loadURL(getInitialUrl(account))
+        // The webview starts at about:blank before its first real URL. Remove
+        // that bootstrap entry so Back cannot return to blank and trigger the
+        // initialization flow again (which looks like an unexpected reload).
+        wv.clearHistory()
+        setNavigationStateByAccountId(previous => {
+          const next = new Map(previous)
+          next.set(account.id, { canGoBack: false, canGoForward: false })
+          return next
+        })
       }
       return true
     })()
@@ -255,6 +281,37 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     if (wv) wv.reload()
   }
 
+  const updateNavigationState = useCallback((accountId: number, wv: Electron.WebviewTag) => {
+    const nextState = {
+      canGoBack: wv.canGoBack(),
+      canGoForward: wv.canGoForward()
+    }
+    setNavigationStateByAccountId(previous => {
+      const currentState = previous.get(accountId)
+      if (
+        currentState?.canGoBack === nextState.canGoBack
+        && currentState.canGoForward === nextState.canGoForward
+      ) {
+        return previous
+      }
+      const next = new Map(previous)
+      next.set(accountId, nextState)
+      return next
+    })
+  }, [])
+
+  const handleGoBack = () => {
+    if (!activeAccountId) return
+    const wv = webviewRefs.current.get(activeAccountId)
+    if (wv?.canGoBack()) wv.goBack()
+  }
+
+  const handleGoForward = () => {
+    if (!activeAccountId) return
+    const wv = webviewRefs.current.get(activeAccountId)
+    if (wv?.canGoForward()) wv.goForward()
+  }
+
   const activeBackgroundPreview = activeAccountId ? backgroundPreviews.get(activeAccountId) : null
   const isBrowserSessionPrepared = (account: AutoAccount) => (
     webviewRefs.current.has(account.id) || preparedProxyByAccountId.get(account.id) === (account.proxyId ?? null)
@@ -262,6 +319,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   const preparedBrowserAccounts = browserAccounts.filter(isBrowserSessionPrepared)
   const activeAccount = activeAccountId ? browserAccounts.find(account => account.id === activeAccountId) : null
   const activeAccountPreparing = Boolean(activeAccount && !isBrowserSessionPrepared(activeAccount))
+  const activeNavigationState = activeAccountId ? navigationStateByAccountId.get(activeAccountId) : null
   const previewTitle = activeBackgroundPreview?.title || (activeBackgroundPreview?.context === 'contact-scan' ? 'Đang quét data nền' : 'Đang chạy nền')
   const previewDescription = activeBackgroundPreview?.context === 'contact-scan'
     ? 'Quét data đang chạy trong trình duyệt nền.'
@@ -318,8 +376,13 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     }
 
     const previousHandler = webviewDomReadyHandlers.current.get(account.id)
+    const previousNavigationHandler = webviewNavigationHandlers.current.get(account.id)
     if (existing && previousHandler) {
       existing.removeEventListener('dom-ready', previousHandler)
+    }
+    if (existing && previousNavigationHandler) {
+      existing.removeEventListener('did-navigate', previousNavigationHandler)
+      existing.removeEventListener('did-navigate-in-page', previousNavigationHandler)
     }
 
     webviewRefs.current.set(account.id, wv)
@@ -327,12 +390,17 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
 
     const onDomReady = () => {
       void initializeWebview(account, wv)
+      updateNavigationState(account.id, wv)
     }
+    const onNavigation = () => updateNavigationState(account.id, wv)
     webviewDomReadyHandlers.current.set(account.id, onDomReady)
+    webviewNavigationHandlers.current.set(account.id, onNavigation)
 
     void initializeWebview(account, wv)
     wv.addEventListener('dom-ready', onDomReady)
-  }, [initializeWebview])
+    wv.addEventListener('did-navigate', onNavigation)
+    wv.addEventListener('did-navigate-in-page', onNavigation)
+  }, [initializeWebview, updateNavigationState])
 
   return (
     <div className="browser-page">
@@ -355,6 +423,24 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
         </div>
 
         <div className="browser-tab-actions">
+          <button
+            className="btn-icon"
+            onClick={handleGoBack}
+            title="Quay lại"
+            aria-label="Quay lại trang trước đó"
+            disabled={!activeNavigationState?.canGoBack}
+          >
+            <ArrowLeft size={14} />
+          </button>
+          <button
+            className="btn-icon"
+            onClick={handleGoForward}
+            title="Tiếp theo"
+            aria-label="Đi tới trang tiếp theo"
+            disabled={!activeNavigationState?.canGoForward}
+          >
+            <ArrowRight size={14} />
+          </button>
           <button className="btn-icon" onClick={handleReload} title="Tải lại">
             <RefreshCw size={14} />
           </button>
