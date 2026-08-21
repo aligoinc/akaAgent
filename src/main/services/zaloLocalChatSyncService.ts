@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import WebSocket from 'ws'
-import { CloseReason, ThreadType } from 'zca-js'
+import { CloseReason, ThreadType, ZaloApiError } from 'zca-js'
 import type { AttachmentSource, API } from 'zca-js'
 
 import type { AutoAccount, ZaloLoginQrEvent } from '../../shared/types'
@@ -218,6 +218,11 @@ interface ActiveStickerDetailLookup {
   pendingKeys: string[]
 }
 
+type UserPresenceRequest = { userId: string }
+type UserPresenceApi = API & {
+  akaGetUserPresence?: (input: UserPresenceRequest) => Promise<unknown>
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -236,6 +241,48 @@ function text(...values: unknown[]): string | undefined {
 function finiteNumber(value: unknown): number | undefined {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : undefined
+}
+
+async function getUserPresence(api: API, userId: string): Promise<{
+  userId: string
+  lastOnlineAt: number | null
+  checkedAt: number
+}> {
+  const normalizedUserId = userId.trim()
+  if (!normalizedUserId) throw new Error('Thiếu Zalo ID cần kiểm tra trạng thái.')
+  const customApi = api as UserPresenceApi
+  if (typeof customApi.akaGetUserPresence !== 'function') {
+    api.custom<Promise<unknown>, UserPresenceRequest>(
+      'akaGetUserPresence',
+      async ({ ctx, utils, props }) => {
+        const encrypted = utils.encodeAES(JSON.stringify({
+          uid: props.userId,
+          is_group: false,
+          imei: ctx.imei
+        }))
+        if (!encrypted) throw new ZaloApiError('Failed to encrypt user presence params')
+        const response = await utils.request(utils.makeURL(
+          `${api.zpwServiceMap.profile[0]}/api/social/profile/lastOnline`,
+          { params: encrypted }
+        ))
+        return utils.resolve(response)
+      }
+    )
+  }
+  const loadPresence = customApi.akaGetUserPresence
+  if (!loadPresence) throw new Error('Không khởi tạo được API trạng thái người dùng Zalo.')
+  const result = record(await loadPresence({ userId: normalizedUserId }))
+  const value = finiteNumber(result.lastOnline)
+  const normalizedLastOnline = value !== undefined && value > 0
+    ? value < 100_000_000_000 ? value * 1_000 : value
+    : null
+  return {
+    userId: normalizedUserId,
+    lastOnlineAt: normalizedLastOnline !== null && Number.isSafeInteger(normalizedLastOnline)
+      ? normalizedLastOnline
+      : null,
+    checkedAt: Date.now()
+  }
 }
 
 function nullableInteger(value: unknown): number | null {
@@ -2110,6 +2157,8 @@ export class ZaloLocalChatSyncService {
         }
         return null
       }
+      case 'get_user_presence':
+        return getUserPresence(api, String(payload.userId || ''))
       case 'send_friend_request':
         return this.zaloRuntime.sendFriendRequestToUser(
           accountId,
