@@ -1,4 +1,4 @@
-import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignUpdate, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
+import { AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignUpdate, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -616,6 +616,12 @@ export class SupabaseService {
   }
   getDataGroupPanel(groupId: number) {
     return dataGroupRepo.getDataGroupPanel(groupId)
+  }
+  getDataGroupDynamicFilter(groupId: number) {
+    return dataGroupRepo.getDataGroupDynamicFilter(groupId)
+  }
+  saveDataGroupDynamicFilter(request: SaveDataGroupDynamicFilterRequest) {
+    return dataGroupRepo.saveDataGroupDynamicFilter(request)
   }
   updateDataGroupNote(groupId: number, note: string | null) {
     return dataGroupRepo.updateDataGroupNote(groupId, note)

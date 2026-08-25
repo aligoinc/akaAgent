@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -308,6 +308,14 @@ export function registerAccountContactHandlers(
 
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_UPDATE_NOTE, async (_, groupId: number, note: string | null) => {
     return supabase.updateDataGroupNote(groupId, note)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_GET_DYNAMIC_FILTER, async (_, groupId: number) => {
+    return supabase.getDataGroupDynamicFilter(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_SAVE_DYNAMIC_FILTER, async (_, request: SaveDataGroupDynamicFilterRequest) => {
+    return supabase.saveDataGroupDynamicFilter(request)
   })
 
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_EXPORT_MEMBERS, async (_, query: DataGroupMemberListQuery) => {
