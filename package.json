@@ -1,6 +1,6 @@
 {
   "name": "aka-biz-auto",
-  "version": "6.6.0",
+  "version": "6.7.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",
@@ -19,8 +19,9 @@
     "test:zalo-ticket-verifier": "node scripts/run-zalo-server-ticket-verifier-smoke-test.cjs",
     "test:zalo-local-chat-sync-status": "node scripts/run-zalo-local-chat-sync-status-smoke-test.cjs",
     "test:zalo-chat-data-scan": "node scripts/run-zalo-chat-data-scan-smoke-test.cjs",
+    "test:windows-installer-contract": "node scripts/verify-windows-installer-contract.cjs",
     "load-test:zalo-gateway": "node scripts/run-zalo-server-gateway-load-test.cjs",
-    "build:mac": "npm run build && electron-builder --mac dir --arm64 --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaBizAuto.app && electron-builder --mac dmg --arm64 --prepackaged dist/mac-arm64 --config.mac.identity=null --config.mac.artifactName='akaAgent.${ext}' --publish never",
+    "build:mac": "npm run build && electron-builder --mac dir --arm64 --config.mac.identity=null --publish never && node scripts/sign-mac-adhoc.cjs dist/mac-arm64/akaAgent.app && electron-builder --mac dmg --arm64 --prepackaged dist/mac-arm64 --config.mac.identity=null --config.mac.artifactName='akaAgent.${ext}' --publish never",
     "build:mac:intel": "node scripts/build-mac-intel.cjs"
   },
   "dependencies": {
@@ -69,7 +70,7 @@
   },
   "build": {
     "appId": "com.akabiz.auto",
-    "productName": "akaBizAuto",
+    "productName": "akaAgent",
     "directories": {
       "buildResources": "build"
     },
@@ -101,8 +102,11 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "shortcutName": "akaBizAuto",
-      "artifactName": "akaBizAuto-Setup-${version}.${ext}"
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "akaAgent",
+      "artifactName": "akaAgent-Setup-${version}.${ext}"
     },
     "mac": {
       "target": [

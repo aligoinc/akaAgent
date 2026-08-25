@@ -8,8 +8,8 @@ const betterSqliteDir = join(projectRoot, 'node_modules', 'better-sqlite3')
 const betterSqliteNativePath = join(betterSqliteDir, 'build', 'Release', 'better_sqlite3.node')
 const nativeBackupDir = mkdtempSync(join(tmpdir(), 'akabiz-mac-intel-native-'))
 const betterSqliteBackupPath = join(nativeBackupDir, 'better_sqlite3.node')
-const intelAppPath = join(projectRoot, 'dist', 'mac', 'akaBizAuto.app')
-const intelExecutablePath = join(intelAppPath, 'Contents', 'MacOS', 'akaBizAuto')
+const intelAppPath = join(projectRoot, 'dist', 'mac', 'akaAgent.app')
+const intelExecutablePath = join(intelAppPath, 'Contents', 'MacOS', 'akaAgent')
 const packagedNativePath = join(
   intelAppPath,
   'Contents',

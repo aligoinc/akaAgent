@@ -1,7 +1,17 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { spawn } from 'child_process'
-import { createWriteStream, existsSync, readFileSync, unlinkSync } from 'fs'
-import { join } from 'path'
+import {
+  closeSync,
+  createWriteStream,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  statSync,
+  unlinkSync
+} from 'fs'
+import { basename, extname, join } from 'path'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
@@ -17,7 +27,9 @@ const UPDATE_CONFIGS: Record<string, PlatformUpdateConfig> = {
   win32: {
     versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt',
     installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe',
-    installerFilename: 'akaAgent.exe'
+    // Keep Setup's process name distinct from the installed akaAgent.exe so
+    // NSIS can reliably detect and close a running application.
+    installerFilename: 'akaAgent-Setup.exe'
   }
 }
 
@@ -109,7 +121,7 @@ function httpGet(url: string, maxRedirects = 5): Promise<http.IncomingMessage> {
   return new Promise((resolve, reject) => {
     const u = new URL(url)
     const lib = u.protocol === 'http:' ? http : https
-    const req = lib.get(url, { headers: { 'User-Agent': 'akaBizAuto-Updater' } }, (res) => {
+    const req = lib.get(url, { headers: { 'User-Agent': 'akaAgent-Updater' } }, (res) => {
       const status = res.statusCode || 0
       if (status >= 300 && status < 400 && res.headers.location && maxRedirects > 0) {
         res.resume()
@@ -181,54 +193,146 @@ async function downloadInstaller(
   const res = await httpGet(installerUrl)
   const total = parseInt(res.headers['content-length'] || '0', 10) || 0
   let transferred = 0
+  const partialPath = `${targetPath}.download`
 
-  // Remove stale file if exists
-  try { if (existsSync(targetPath)) unlinkSync(targetPath) } catch { /* ignore */ }
+  // Never expose a stale or partial download as the executable installer.
+  for (const pathToRemove of [targetPath, partialPath]) {
+    try { if (existsSync(pathToRemove)) unlinkSync(pathToRemove) } catch { /* ignore */ }
+  }
 
-  const out = createWriteStream(targetPath)
+  const out = createWriteStream(partialPath)
 
-  await new Promise<void>((resolve, reject) => {
-    let lastEmitted = 0
-    res.on('data', (chunk: Buffer) => {
-      transferred += chunk.length
-      const now = Date.now()
-      // Throttle progress events to at most every 150ms
-      if (now - lastEmitted > 150) {
-        lastEmitted = now
-        const percent = total > 0 ? Math.min(99, Math.floor((transferred / total) * 100)) : 0
-        onProgress({ phase: 'downloading', percent, transferred, total })
-      }
-    })
-    res.pipe(out)
-    out.on('finish', () => {
-      onProgress({
-        phase: 'downloading',
-        percent: 100,
-        transferred,
-        total: total || transferred
+  try {
+    await new Promise<void>((resolve, reject) => {
+      let lastEmitted = 0
+      res.on('data', (chunk: Buffer) => {
+        transferred += chunk.length
+        const now = Date.now()
+        // Throttle progress events to at most every 150ms
+        if (now - lastEmitted > 150) {
+          lastEmitted = now
+          const percent = total > 0 ? Math.min(99, Math.floor((transferred / total) * 100)) : 0
+          onProgress({ phase: 'downloading', percent, transferred, total })
+        }
       })
-      out.close(() => resolve())
+      res.pipe(out)
+      out.on('finish', () => out.close(() => resolve()))
+      out.on('error', reject)
+      res.on('error', reject)
     })
-    out.on('error', reject)
-    res.on('error', reject)
+
+    if (total > 0 && transferred !== total) {
+      throw new Error(`File cập nhật tải chưa đủ (${transferred}/${total} byte).`)
+    }
+
+    renameSync(partialPath, targetPath)
+    onProgress({
+      phase: 'downloading',
+      percent: 100,
+      transferred,
+      total: total || transferred
+    })
+  } catch (err) {
+    try { out.destroy() } catch { /* ignore */ }
+    try { if (existsSync(partialPath)) unlinkSync(partialPath) } catch { /* ignore */ }
+    throw err
+  }
+}
+
+function assertWindowsInstallerFile(installerPath: string): void {
+  const fileSize = statSync(installerPath).size
+  if (fileSize < 1024 * 1024) {
+    throw new Error('File cập nhật Windows không hợp lệ hoặc quá nhỏ.')
+  }
+
+  const header = Buffer.alloc(2)
+  const descriptor = openSync(installerPath, 'r')
+  try {
+    readSync(descriptor, header, 0, header.length, 0)
+  } finally {
+    closeSync(descriptor)
+  }
+
+  if (header.toString('ascii') !== 'MZ') {
+    throw new Error('File cập nhật Windows không phải bộ cài PE hợp lệ.')
+  }
+}
+
+function escapePowerShellSingleQuoted(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+function buildWindowsUpdateHelperScript(installerPath: string): string {
+  const sourcePid = process.pid
+  const processName = basename(process.execPath, extname(process.execPath))
+  const logPath = join(app.getPath('temp'), 'akaAgent-update-helper.log')
+
+  return `
+$ErrorActionPreference = 'Stop'
+$installerPath = '${escapePowerShellSingleQuoted(installerPath)}'
+$sourcePid = ${sourcePid}
+$sourceProcessName = '${escapePowerShellSingleQuoted(processName)}'
+$logPath = '${escapePowerShellSingleQuoted(logPath)}'
+
+function Write-UpdateHelperLog([string] $message) {
+  try {
+    Add-Content -LiteralPath $logPath -Value ("{0:o} {1}" -f (Get-Date), $message) -Encoding UTF8
+  } catch {}
+}
+
+try {
+  Write-UpdateHelperLog "Waiting for PID $sourcePid ($sourceProcessName) to exit."
+  Wait-Process -Id $sourcePid -ErrorAction SilentlyContinue
+
+  while (Get-Process -Name $sourceProcessName -ErrorAction SilentlyContinue) {
+    Start-Sleep -Milliseconds 250
+  }
+
+  if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+    throw "Downloaded installer is missing: $installerPath"
+  }
+
+  Write-UpdateHelperLog "Application exited; starting installer with --updated."
+  $installerProcess = Start-Process -FilePath $installerPath -ArgumentList @('--updated') -PassThru
+  Write-UpdateHelperLog "Installer started with PID $($installerProcess.Id)."
+  exit 0
+} catch {
+  Write-UpdateHelperLog "Update helper failed: $($_.Exception.Message)"
+  exit 1
+}
+`.trim()
+}
+
+function runWindowsInstallerAfterAppExits(installerPath: string): Promise<void> {
+  const encodedScript = Buffer
+    .from(buildWindowsUpdateHelperScript(installerPath), 'utf16le')
+    .toString('base64')
+
+  return new Promise((resolve, reject) => {
+    const child = spawn('powershell.exe', [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle',
+      'Hidden',
+      '-EncodedCommand',
+      encodedScript
+    ], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    })
+
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
   })
 }
 
-function runWindowsInstaller(installerPath: string): void {
-  // Detach and let the NSIS installer take over. When the user confirms,
-  // the installer will overwrite the running app.
-  const child = spawn(installerPath, [], {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: false
-  })
-  child.unref()
-}
-
-function quitAppAfterInstallerOpens(delayMs = 1500): void {
-  setTimeout(() => {
-    app.quit()
-  }, delayMs)
+function quitMacAppAfterDmgOpens(delayMs = 1500): void {
+  setTimeout(() => app.quit(), delayMs)
 }
 
 export async function downloadAndInstall(
@@ -252,22 +356,21 @@ export async function downloadAndInstall(
     emit({ phase: 'downloading', percent: 0, transferred: 0, total: 0 })
     await downloadInstaller(installerPath, config.installerUrl, emit)
 
+    if (process.platform === 'win32') {
+      assertWindowsInstallerFile(installerPath)
+    }
+
     emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đang khởi chạy bộ cài đặt…' })
 
     if (process.platform === 'win32') {
-      try {
-        runWindowsInstaller(installerPath)
-      } catch (spawnErr) {
-        // Fallback: ask the shell to open it
-        const openError = await shell.openPath(installerPath)
-        if (openError) throw new Error(openError)
-        if (spawnErr instanceof Error) console.warn('spawn installer failed, used shell.openPath:', spawnErr.message)
-      }
+      await runWindowsInstallerAfterAppExits(installerPath)
 
-      emit({ phase: 'done', message: 'Bộ cài đặt đã khởi chạy. Ứng dụng sẽ tự thoát để tiếp tục cài đặt.' })
+      emit({
+        phase: 'done',
+        message: 'Ứng dụng đang thoát an toàn. Bộ cài đặt sẽ tự mở sau khi mọi tiến trình đã kết thúc.'
+      })
 
-      // Give the installer ~1.5s to appear before we quit ourselves so it can replace the exe.
-      quitAppAfterInstallerOpens()
+      app.quit()
 
       return { success: true }
     }
@@ -277,10 +380,10 @@ export async function downloadAndInstall(
 
     emit({
       phase: 'done',
-      message: 'File cập nhật đã mở. Ứng dụng sẽ tự thoát để bạn kéo akaBizAuto vào Applications.'
+      message: 'File cập nhật đã mở. Ứng dụng sẽ tự thoát để bạn kéo akaAgent vào Applications.'
     })
 
-    quitAppAfterInstallerOpens()
+    quitMacAppAfterDmgOpens()
 
     return { success: true }
   } catch (err) {
