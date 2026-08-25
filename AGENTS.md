@@ -25,6 +25,7 @@ npx tsc --noEmit -p tsconfig.web.json    # Renderer
 Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smoke test. Sau migration_v4 (drop engine v1) typecheck phải sạch 0 errors — bất kỳ error nào là regression.
 
 Windows packaging có native module `better-sqlite3`; luôn dùng `npm run build:win` để script prepare `win32-x64` `.node`, verify header `MZ`, rồi restore native module host. Không chạy trực tiếp `electron-builder --win` sau khi build macOS/Intel vì có thể đóng gói nhầm Mach-O vào installer Windows.
+Zalo Server Windows cũng phải build bằng `npm run build:server:win`; package bắt buộc unpack `node_modules/playwright-core/**/*`. Electron Builder đặt dependency đã hoist dưới `node_modules/playwright/node_modules/playwright-core` trong package, và verifier phải fail nếu dependency runtime tại layout đã đóng gói này bị thiếu.
 
 ## Architecture
 

@@ -20,6 +20,7 @@ extraResources:
     to: icon.png
 
 asarUnpack:
+  - node_modules/playwright-core/**/*
   - node_modules/better-sqlite3/**/*
 
 npmRebuild: false
