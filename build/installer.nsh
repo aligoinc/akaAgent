@@ -1,6 +1,11 @@
 !ifndef AKA_AGENT_INSTALLER_NSH_INCLUDED
 !define AKA_AGENT_INSTALLER_NSH_INCLUDED
 
+# These hooks implement the akaAgent desktop upgrade contract. Electron Builder
+# also auto-loads this file for the Zalo Server package, so keep every custom
+# macro compile-time scoped to the desktop product.
+!if "${PRODUCT_NAME}" == "akaAgent"
+
 !include LogicLib.nsh
 
 !ifndef BUILD_UNINSTALLER
@@ -137,4 +142,5 @@
   StrCpy $akaInstallCommitStarted "0"
 !macroend
 
+!endif
 !endif

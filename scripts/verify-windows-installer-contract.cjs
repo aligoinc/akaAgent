@@ -41,6 +41,10 @@ for (const [pattern, message] of forbiddenInstallerPatterns) {
   requireContract(!pattern.test(installerScript), message)
 }
 
+requireContract(
+  /!if\s+"\$\{PRODUCT_NAME\}"\s*==\s*"akaAgent"/i.test(installerScript),
+  'Desktop installer hooks must be compile-time scoped away from the Zalo Server package.'
+)
 requireContract(/!macro\s+customInstall\b/i.test(installerScript), 'Legacy shortcut cleanup must run only from customInstall.')
 requireContract(/!insertmacro\s+_CHECK_APP_RUNNING/i.test(installerScript), 'Installer must retain the standard app-running guard.')
 requireContract(/FIND_PROCESS\s+"akaBizAuto\.exe"/i.test(installerScript), 'Installer must also guard the legacy akaBizAuto.exe process.')

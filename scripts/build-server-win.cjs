@@ -138,6 +138,7 @@ function assertServerBuildOutput() {
 
 try {
   cleanServerWindowsDist()
+  run(process.execPath, [join(projectRoot, 'scripts', 'verify-windows-installer-contract.cjs')])
   run(command('npm'), ['run', 'build:server'])
   assertServerBuildOutput()
   prepareWindowsNativeModules()
