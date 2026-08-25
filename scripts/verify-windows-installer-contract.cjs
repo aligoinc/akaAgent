@@ -46,25 +46,63 @@ requireContract(
   'Desktop installer hooks must be compile-time scoped away from the Zalo Server package.'
 )
 requireContract(/!macro\s+customInstall\b/i.test(installerScript), 'Legacy shortcut cleanup must run only from customInstall.')
-requireContract(/!insertmacro\s+_CHECK_APP_RUNNING/i.test(installerScript), 'Installer must retain the standard app-running guard.')
-requireContract(/FIND_PROCESS\s+"akaBizAuto\.exe"/i.test(installerScript), 'Installer must also guard the legacy akaBizAuto.exe process.')
+requireContract(
+  /GetOptions[^\n]+--aka-source-pid=/i.test(installerScript) &&
+    /WaitForSingleObject/i.test(installerScript),
+  'Fixed-to-fixed installer must parse and wait for the exact updater source PID.'
+)
+requireContract(
+  /!insertmacro\s+akaCloseIfRunning\s+"akaBizAuto\.exe"\s+"akaBizAuto"/i.test(installerScript),
+  'Installer must automatically request the legacy akaBizAuto process to close.'
+)
+requireContract(
+  !/akaCloseIfRunning\s+"\$\{APP_EXECUTABLE_FILENAME\}"/i.test(installerScript),
+  'Fixed-to-fixed installer must never terminate akaAgent by image name.'
+)
+requireContract(
+  /\$R3\s*==\s*"\$\{APP_EXECUTABLE_FILENAME\}"[\s\S]+Skipped akaAgent image-name guard because the installer itself/i.test(installerScript),
+  'Legacy-named Setup must skip the akaAgent image-name guard so it cannot terminate itself.'
+)
+requireContract(
+  !/\/F\s+\/IM|nsProcess::KillProcess/i.test(installerScript),
+  'Installer must not force-kill the running desktop process.'
+)
+requireContract(
+  /akaAgent-installer\.log/i.test(installerScript),
+  'Installer must persist running-app guard diagnostics in the Windows temp directory.'
+)
 requireContract(/MUI_CUSTOMFUNCTION_ABORT\s+akaGuardInstallAbort/i.test(installerScript), 'Installer must guard against cancelling during file replacement.')
 requireContract(/resources\\app\.asar/.test(installerScript), 'Installer must verify resources\\app.asar after extraction.')
 requireContract(!/akaDeleteShortcut\s+"\$DESKTOP\\akaAgent\.lnk"/i.test(installerScript), 'Legacy cleanup must not delete the new akaAgent desktop shortcut.')
 
 requireContract(
-  /Wait-Process\s+-Id\s+\$sourcePid/.test(updaterSource),
-  'Windows update helper must wait for the current app PID to exit.'
+  /Start-Process\s+-FilePath/.test(updaterSource),
+  'Windows updater must open the elevated Setup directly.'
 )
 requireContract(
-  /Get-Process\s+-Name\s+\$sourceProcessName/.test(updaterSource),
-  'Windows update helper must wait for every remaining app process.'
+  /-ArgumentList\s+@\('\-\-updated','--aka-source-pid=\$\{process\.pid\}'\)/.test(updaterSource),
+  'Fixed-to-fixed updates must launch NSIS with --updated and the exact source PID.'
 )
 requireContract(
-  /ArgumentList\s+@\('--updated'\)/.test(updaterSource),
-  'Fixed-to-fixed updates must launch NSIS with --updated so InstallLocation is reused.'
+  /-Verb\s+RunAs/.test(updaterSource),
+  'Per-machine updates must explicitly request UAC elevation.'
 )
-requireContract(!/quitAppAfterInstallerOpens/.test(updaterSource), 'Windows updater must not use the legacy 1.5-second launch race.')
+requireContract(
+  /spawn\('powershell\.exe'/.test(updaterSource) && /'-Command',\s*\n\s*command/.test(updaterSource),
+  'Windows updater must invoke only the direct one-line PowerShell launcher.'
+)
+requireContract(
+  /windowsHide:\s*true/.test(updaterSource) && !/detached:\s*true/.test(updaterSource),
+  'Direct Windows launcher must stay hidden and attached until Setup launch succeeds.'
+)
+requireContract(
+  !/Wait-Process|Get-Process\s+-Name|-EncodedCommand|runWindowsInstallerAfterAppExits|spawn\(installerPath/.test(updaterSource),
+  'Windows updater must not use a post-exit helper or spawn Setup with CreateProcess.'
+)
+requireContract(
+  /quitAppAfterInstallerOpens\(0\)/.test(updaterSource),
+  'Direct update flow must begin graceful quit immediately after elevated Setup opens.'
+)
 requireContract(
   /installerFilename:\s*'akaAgent-Setup\.exe'/.test(updaterSource),
   'Downloaded Setup filename must not collide with the installed akaAgent.exe process name.'

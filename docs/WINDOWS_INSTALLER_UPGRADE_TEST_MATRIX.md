@@ -49,8 +49,8 @@ a remembered app login, a Zalo session, and a known row in
 | ID | Scenario | Expected result |
 |---|---|---|
 | B1 | Update while not logged into akaBizAuto | New assisted installer defaults to `C:\Program Files\akaAgent`; successful install preserves all data. |
-| B2 | Update while logged in, no active runtime | Installer waits for legacy `akaBizAuto.exe` to finish its delayed quit, then completes migration without startup ENOENT. |
-| B3 | Update while campaign/Zalo/automation cleanup is active | Installer never removes files before its running-app guard; successful migration preserves data. |
+| B2 | Update while logged in, no active runtime | Setup downloaded by the legacy client as `akaAgent.exe` skips the self-matching akaAgent guard, closes only `akaBizAuto.exe`, and completes migration without startup ENOENT. |
+| B3 | Update while campaign/Zalo/automation cleanup is active | Installer requests a normal close and waits for cleanup before replacing files. |
 | B4 | Cancel the legacy updater's `app is running` prompt | Legacy installation remains launchable; all required package manifests remain. |
 | B5 | Choose default `Program Files` | Old per-user program files are removed by the standard old uninstaller; new HKLM path is correct. |
 | B6 | Choose custom `D:` directory | App launches from `D:` and future updates use that exact path. |
@@ -61,10 +61,10 @@ a remembered app login, a Zalo session, and a known row in
 
 | ID | Scenario | Expected result |
 |---|---|---|
-| C1 | Update default `Program Files` install while logged out | Helper waits for app exit, starts Setup with `--updated`, and reuses the HKLM path. |
-| C2 | Update default install while logged in | Cleanup completes before Setup starts; no `app is running` prompt appears. |
+| C1 | Update default `Program Files` install while logged out | Hidden PowerShell starts Setup with `--updated` and the exact main-process PID; the exact HKLM path is reused. |
+| C2 | Update default install while logged in | Electron begins graceful quit as soon as Setup opens; NSIS waits only for the validated source PID and never terminates `akaAgent.exe` by image name. |
 | C3 | Update custom `D:` install | Directory page is skipped for in-app update and the exact existing path is reused. |
-| C4 | Update with campaign/Zalo/automation active | Helper waits for every `akaAgent` process; data/session remains valid. |
+| C4 | Update with campaign/Zalo/automation active | Setup waits for the normal asynchronous cleanup before replacing application files. |
 | C5 | Cancel UAC after the app has exited | Existing installed files remain intact; reopening the app works and update can be retried. |
 | C6 | Run the new Setup manually while app is open, then Cancel its running-app prompt | Existing version remains intact because no destructive `customInit` runs. |
 | C7 | Run Setup manually and change the install directory | Old program files are uninstalled normally, new path is registered, userData remains unchanged. |
@@ -80,8 +80,8 @@ a remembered app login, a Zalo session, and a known row in
 | D4 | Reboot immediately after successful update | New app launches; no akaBizAuto/akaAgent pending-delete entry exists. |
 | D5 | Install as administrator, run as the original standard Windows user | Program files are shared; that user's existing Electron userData/session is retained. |
 | D6 | A different Windows user launches the per-machine app | Program files work; Electron creates/uses that user's separate userData as expected. |
-| D7 | Path contains an apostrophe and spaces | Update helper quoting and NSIS path persistence remain correct. |
-| D8 | PowerShell helper cannot be spawned | Update reports an error and keeps the currently running application open. |
+| D7 | Path contains an apostrophe and spaces | Direct PowerShell quoting and NSIS path persistence remain correct. |
+| D8 | User cancels UAC or direct PowerShell launch fails | Update reports an error and keeps the currently running application open. |
 
 ## Evidence to capture
 
@@ -91,6 +91,7 @@ For each release candidate, retain:
 - selected path and registry `InstallLocation` before/after;
 - `Test-Path` results for required package files;
 - filtered `PendingFileRenameOperations` before reboot and after update;
-- update helper log from `%TEMP%\akaAgent-update-helper.log`;
+- whether UAC and Setup opened before the desktop began graceful quit;
+- `%TEMP%\akaAgent-installer.log` with the source-PID wait or legacy `taskkill.exe` result;
 - screenshots/results for login, Facebook/Zalo session, and SQLite sentinel;
 - Setup exit result and whether repair was required.
