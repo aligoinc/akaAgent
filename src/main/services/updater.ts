@@ -11,7 +11,7 @@ import {
   statSync,
   unlinkSync
 } from 'fs'
-import { basename, extname, join } from 'path'
+import { join } from 'path'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
@@ -27,8 +27,6 @@ const UPDATE_CONFIGS: Record<string, PlatformUpdateConfig> = {
   win32: {
     versionUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/version_win.txt',
     installerUrl: 'https://akabiz.net/UpdateAutoSqlite/akaAgent/akaAgent.exe',
-    // Keep Setup's process name distinct from the installed akaAgent.exe so
-    // NSIS can reliably detect and close a running application.
     installerFilename: 'akaAgent-Setup.exe'
   }
 }
@@ -262,51 +260,16 @@ function escapePowerShellSingleQuoted(value: string): string {
   return value.replace(/'/g, "''")
 }
 
-function buildWindowsUpdateHelperScript(installerPath: string): string {
-  const sourcePid = process.pid
-  const processName = basename(process.execPath, extname(process.execPath))
-  const logPath = join(app.getPath('temp'), 'akaAgent-update-helper.log')
-
-  return `
-$ErrorActionPreference = 'Stop'
-$installerPath = '${escapePowerShellSingleQuoted(installerPath)}'
-$sourcePid = ${sourcePid}
-$sourceProcessName = '${escapePowerShellSingleQuoted(processName)}'
-$logPath = '${escapePowerShellSingleQuoted(logPath)}'
-
-function Write-UpdateHelperLog([string] $message) {
-  try {
-    Add-Content -LiteralPath $logPath -Value ("{0:o} {1}" -f (Get-Date), $message) -Encoding UTF8
-  } catch {}
-}
-
-try {
-  Write-UpdateHelperLog "Waiting for PID $sourcePid ($sourceProcessName) to exit."
-  Wait-Process -Id $sourcePid -ErrorAction SilentlyContinue
-
-  while (Get-Process -Name $sourceProcessName -ErrorAction SilentlyContinue) {
-    Start-Sleep -Milliseconds 250
-  }
-
-  if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
-    throw "Downloaded installer is missing: $installerPath"
-  }
-
-  Write-UpdateHelperLog "Application exited; starting installer with --updated."
-  $installerProcess = Start-Process -FilePath $installerPath -ArgumentList @('--updated') -PassThru
-  Write-UpdateHelperLog "Installer started with PID $($installerProcess.Id)."
-  exit 0
-} catch {
-  Write-UpdateHelperLog "Update helper failed: $($_.Exception.Message)"
-  exit 1
-}
-`.trim()
-}
-
-function runWindowsInstallerAfterAppExits(installerPath: string): Promise<void> {
-  const encodedScript = Buffer
-    .from(buildWindowsUpdateHelperScript(installerPath), 'utf16le')
-    .toString('base64')
+function launchWindowsInstallerDirectly(installerPath: string): Promise<void> {
+  // Open Setup first and pass the exact main-process PID. NSIS waits for this
+  // PID to exit and never has to terminate an executable by image name.
+  // PowerShell RunAs avoids CreateProcess EACCES when akaAgent is not elevated;
+  // --updated keeps the existing install location and enables NSIS upgrade guards.
+  const command = [
+    `Start-Process -FilePath '${escapePowerShellSingleQuoted(installerPath)}'`,
+    `-ArgumentList @('--updated','--aka-source-pid=${process.pid}')`,
+    '-Verb RunAs'
+  ].join(' ')
 
   return new Promise((resolve, reject) => {
     const child = spawn('powershell.exe', [
@@ -315,23 +278,27 @@ function runWindowsInstallerAfterAppExits(installerPath: string): Promise<void> 
       '-NonInteractive',
       '-WindowStyle',
       'Hidden',
-      '-EncodedCommand',
-      encodedScript
+      '-Command',
+      command
     ], {
-      detached: true,
       stdio: 'ignore',
       windowsHide: true
     })
 
     child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve()
+    child.once('exit', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+      reject(new Error(
+        `Không thể mở bộ cài cập nhật Windows (PowerShell mã ${code ?? 'không xác định'}).`
+      ))
     })
   })
 }
 
-function quitMacAppAfterDmgOpens(delayMs = 1500): void {
+function quitAppAfterInstallerOpens(delayMs = 1500): void {
   setTimeout(() => app.quit(), delayMs)
 }
 
@@ -363,14 +330,16 @@ export async function downloadAndInstall(
     emit({ phase: 'installing', message: process.platform === 'darwin' ? 'Đang mở file cập nhật…' : 'Đang khởi chạy bộ cài đặt…' })
 
     if (process.platform === 'win32') {
-      await runWindowsInstallerAfterAppExits(installerPath)
+      await launchWindowsInstallerDirectly(installerPath)
 
       emit({
         phase: 'done',
-        message: 'Ứng dụng đang thoát an toàn. Bộ cài đặt sẽ tự mở sau khi mọi tiến trình đã kết thúc.'
+        message: 'Bộ cài đặt đã khởi chạy. Ứng dụng sẽ tự thoát để tiếp tục cài đặt.'
       })
 
-      app.quit()
+      // Setup is already running at this point. Start Electron's asynchronous
+      // cleanup immediately so it is normally gone before the user clicks Install.
+      quitAppAfterInstallerOpens(0)
 
       return { success: true }
     }
@@ -383,7 +352,7 @@ export async function downloadAndInstall(
       message: 'File cập nhật đã mở. Ứng dụng sẽ tự thoát để bạn kéo akaAgent vào Applications.'
     })
 
-    quitMacAppAfterDmgOpens()
+    quitAppAfterInstallerOpens()
 
     return { success: true }
   } catch (err) {
