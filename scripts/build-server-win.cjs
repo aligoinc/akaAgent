@@ -153,7 +153,9 @@ try {
   assertWindowsNativeModule(packagedNativePath)
   run(process.execPath, [
     join(projectRoot, 'scripts', 'verify-win-native-modules.cjs'),
-    join('dist-server', 'win-unpacked')
+    join('dist-server', 'win-unpacked'),
+    'akaAgent Zalo Server.exe',
+    'server'
   ])
   console.log('Verified packaged better-sqlite3 Windows x64 native module for akaAgent Zalo Server.')
 } finally {

@@ -2,6 +2,13 @@ const { existsSync, readFileSync, readdirSync } = require('fs')
 const { join, relative, resolve } = require('path')
 
 const packageRoot = resolve(process.argv[2] || join('dist', 'win-unpacked'))
+const expectedExecutableName = process.argv[3] || 'akaAgent.exe'
+const runtimeProfile = process.argv[4] || 'desktop'
+
+if (!['desktop', 'server'].includes(runtimeProfile)) {
+  console.error(`Unsupported Windows runtime profile: ${runtimeProfile}`)
+  process.exit(1)
+}
 
 function listFiles(directory) {
   const files = []
@@ -27,10 +34,10 @@ for (const backupFile of backupFiles) {
   failed = true
 }
 
-const expectedExecutable = join(packageRoot, 'akaAgent.exe')
+const expectedExecutable = join(packageRoot, expectedExecutableName)
 const legacyExecutable = join(packageRoot, 'akaBizAuto.exe')
 if (!existsSync(expectedExecutable)) {
-  console.error(`Missing renamed Windows application executable: ${relative(packageRoot, expectedExecutable)}`)
+  console.error(`Missing Windows application executable: ${relative(packageRoot, expectedExecutable)}`)
   failed = true
 } else {
   console.log(`Verified Windows application executable: ${relative(packageRoot, expectedExecutable)}`)
@@ -43,7 +50,11 @@ if (existsSync(legacyExecutable)) {
 const requiredRuntimeFiles = [
   join(packageRoot, 'resources', 'app.asar'),
   join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'better-sqlite3', 'package.json'),
-  join(
+  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'quickjs-wasi', 'package.json')
+]
+
+if (runtimeProfile === 'desktop') {
+  requiredRuntimeFiles.push(join(
     packageRoot,
     'resources',
     'app.asar.unpacked',
@@ -52,9 +63,8 @@ const requiredRuntimeFiles = [
     'node_modules',
     'playwright-core',
     'package.json'
-  ),
-  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'quickjs-wasi', 'package.json')
-]
+  ))
+}
 
 for (const requiredFile of requiredRuntimeFiles) {
   if (!existsSync(requiredFile)) {
