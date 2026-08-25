@@ -111,7 +111,10 @@ function cleanWindowsDist() {
     join(distDir, 'builder-debug.yml'),
     join(distDir, 'builder-effective-config.yaml'),
     join(distDir, 'latest.yml'),
-    join(distDir, `akaBizAuto-Setup-${appVersion}.exe`)
+    join(distDir, `akaBizAuto-Setup-${appVersion}.exe`),
+    join(distDir, `akaBizAuto-Setup-${appVersion}.exe.blockmap`),
+    join(distDir, `akaAgent-Setup-${appVersion}.exe`),
+    join(distDir, `akaAgent-Setup-${appVersion}.exe.blockmap`)
   ]
 
   for (const pathToRemove of paths) {
@@ -121,6 +124,7 @@ function cleanWindowsDist() {
 
 try {
   cleanWindowsDist()
+  run(process.execPath, [join(projectRoot, 'scripts', 'verify-windows-installer-contract.cjs')])
   run(command('npm'), ['run', 'build'])
   prepareWindowsNativeModules()
   run(command('npx'), ['electron-builder', '--win', '--x64', '--config'])

@@ -27,6 +27,44 @@ for (const backupFile of backupFiles) {
   failed = true
 }
 
+const expectedExecutable = join(packageRoot, 'akaAgent.exe')
+const legacyExecutable = join(packageRoot, 'akaBizAuto.exe')
+if (!existsSync(expectedExecutable)) {
+  console.error(`Missing renamed Windows application executable: ${relative(packageRoot, expectedExecutable)}`)
+  failed = true
+} else {
+  console.log(`Verified Windows application executable: ${relative(packageRoot, expectedExecutable)}`)
+}
+if (existsSync(legacyExecutable)) {
+  console.error(`Unexpected legacy Windows application executable: ${relative(packageRoot, legacyExecutable)}`)
+  failed = true
+}
+
+const requiredRuntimeFiles = [
+  join(packageRoot, 'resources', 'app.asar'),
+  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'better-sqlite3', 'package.json'),
+  join(
+    packageRoot,
+    'resources',
+    'app.asar.unpacked',
+    'node_modules',
+    'playwright',
+    'node_modules',
+    'playwright-core',
+    'package.json'
+  ),
+  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'quickjs-wasi', 'package.json')
+]
+
+for (const requiredFile of requiredRuntimeFiles) {
+  if (!existsSync(requiredFile)) {
+    console.error(`Missing required Windows runtime file: ${relative(packageRoot, requiredFile)}`)
+    failed = true
+  } else {
+    console.log(`Verified Windows runtime file: ${relative(packageRoot, requiredFile)}`)
+  }
+}
+
 const nativeModules = packagedFiles.filter(filePath => filePath.endsWith('.node'))
 if (nativeModules.length === 0) {
   console.error(`No native modules found in Windows package: ${packageRoot}`)

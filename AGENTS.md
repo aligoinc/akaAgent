@@ -45,6 +45,8 @@ Windows packaging có native module `better-sqlite3`; luôn dùng `npm run build
 
 Renderer kiểm tra phiên bản khi mở app và mỗi 60 phút. Với phiên bản local `>= 6.0.0`, auto-check chỉ đổi button thành `Có phiên bản mới X.Y.Z` (kèm trạng thái nổi bật), tuyệt đối không tự mở modal; modal chỉ mở khi user bấm button. Riêng client legacy `< 6.0.0` vẫn tự mở modal ở lần startup khi có bản mới và chỉ tiếp tục auth bootstrap sau khi user đóng modal. Auto-check định kỳ không tự mở modal ở bất kỳ phiên bản nào.
 
+Windows installer từ v6.7.0 là NSIS assisted per-machine, cài mới mặc định vào `C:\Program Files\akaAgent` với `akaAgent.exe` nhưng phải giữ nguyên package `name='aka-biz-auto'` và `appId='com.akabiz.auto'` để tiếp tục dùng đúng Electron `userData`/registry upgrade identity. Installer cho chọn thư mục và fixed-to-fixed update phải dùng lại chính xác `InstallLocation`; tuyệt đối không thêm lại `customInit` xóa `$INSTDIR`, registry install key hoặc `Delete /REBOOTOK`. Updater phải tải ra tên Setup khác `akaAgent.exe`, đợi toàn bộ tiến trình app thoát rồi mới chạy Setup với `--updated`; installer vẫn phải nhận diện `akaBizAuto.exe` của client legacy và chỉ dọn shortcut cũ sau khi cài thành công. Trước mọi Windows package, `npm run build:win` bắt buộc chạy contract [verify-windows-installer-contract.cjs](scripts/verify-windows-installer-contract.cjs), và installer không được đụng tới dữ liệu dưới `app.getPath('userData')`.
+
 ### Webview controller
 
 [src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. Visible webviews vẫn dùng cho login, status checks và test thủ công trong editor.
