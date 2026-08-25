@@ -2,6 +2,7 @@ import type {
   CreateDataGroupRequest,
   DataGroup,
   DataGroupDataset,
+  DataGroupDynamicFilterConfig,
   DataGroupIngestRequest,
   DataGroupIngestResult,
   DataGroupLatestIngestStats,
@@ -16,6 +17,7 @@ import type {
   DataGroupNoteUpdateResult,
   DataGroupPanelData,
   MoveDataGroupMembersRequest,
+  SaveDataGroupDynamicFilterRequest,
   UpdateDataGroupRequest
 } from '../../../../shared/types'
 
@@ -42,6 +44,8 @@ export interface DataGroupElectronAPI {
   getDataGroupLatestIngestStats: (groupId: number) => Promise<DataGroupLatestIngestStats>
   getDataGroupPanel: (groupId: number) => Promise<DataGroupPanelData>
   updateDataGroupNote: (groupId: number, note: string | null) => Promise<DataGroupNoteUpdateResult>
+  getDataGroupDynamicFilter: (groupId: number) => Promise<DataGroupDynamicFilterConfig>
+  saveDataGroupDynamicFilter: (request: SaveDataGroupDynamicFilterRequest) => Promise<DataGroupDynamicFilterConfig>
   ingestDataGroup: (request: DataGroupIngestRequest) => Promise<DataGroupIngestResult>
   removeDataGroupMembers: (request: DataGroupMemberMutationRequest) => Promise<DataGroupMutationResult>
   moveDataGroupMembers: (request: MoveDataGroupMembersRequest) => Promise<DataGroupMutationResult>

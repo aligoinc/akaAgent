@@ -12,6 +12,9 @@ import {
   DataGroupIngestResult,
   DataGroupLatestIngestStats,
   DataGroupDataset,
+  DataGroupDynamicFilterCatalogItem,
+  DataGroupDynamicFilterConfig,
+  DataGroupDynamicFilterRule,
   DataGroupListQuery,
   DataGroupListResult,
   DataGroupMember,
@@ -31,6 +34,7 @@ import {
   MoveDataGroupMembersRequest,
   SnapshotDataGroupToCampaignRequest,
   SnapshotDataGroupToCampaignResult,
+  SaveDataGroupDynamicFilterRequest,
   UpdateDataGroupRequest
 } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
@@ -698,6 +702,70 @@ function mapPanelCampaign(row: DbRow): DataGroupPanelCampaign {
   }
 }
 
+function mapDynamicFilterCatalogItems(value: unknown): DataGroupDynamicFilterCatalogItem[] {
+  return asObjectArray(value).map(row => ({
+    id: asNumber(row.id),
+    code: asString(row.code),
+    name: asString(row.name),
+    description: asNullableString(row.description),
+    sortOrder: asNumber(row.sort_order),
+    metadata: asObject(row.metadata)
+  }))
+}
+
+function mapDynamicFilterRule(row: DbRow): DataGroupDynamicFilterRule {
+  return {
+    id: asNullableNumber(row.id) ?? undefined,
+    scopeCode: asString(row.scope_code, 'enter') as DataGroupDynamicFilterRule['scopeCode'],
+    joinCode: asString(row.join_code, 'and') as DataGroupDynamicFilterRule['joinCode'],
+    fieldCode: asString(row.field_code, 'zalo_tag') as DataGroupDynamicFilterRule['fieldCode'],
+    operatorCode: asString(row.operator_code, 'contains') as DataGroupDynamicFilterRule['operatorCode'],
+    accountId: asNullableNumber(row.account_id),
+    sortOrder: asNumber(row.sort_order),
+    valueKeys: Array.isArray(row.value_keys) ? row.value_keys.map(value => asString(value)).filter(Boolean) : [],
+    valueLabels: Array.isArray(row.value_labels) ? row.value_labels.map(value => asString(value)).filter(Boolean) : []
+  }
+}
+
+function mapDynamicFilterConfig(payloadValue: unknown, groupId: number): DataGroupDynamicFilterConfig {
+  const payload = asObject(payloadValue)
+  const filter = asObject(payload.filter)
+  const catalog = asObject(payload.catalog)
+  return {
+    id: asNullableNumber(filter.id),
+    groupId: asNumber(filter.group_id, groupId),
+    isEnabled: filter.is_enabled === true,
+    revision: asNumber(filter.revision),
+    evaluationIntervalMinutes: asNumber(filter.evaluation_interval_minutes, 15),
+    lastEvaluatedAt: asNullableString(filter.last_evaluated_at),
+    nextEvaluationAt: asNullableString(filter.next_evaluation_at),
+    matchedCount: asNumber(filter.matched_count),
+    lastEnteredCount: asNumber(filter.last_entered_count),
+    lastExitedCount: asNumber(filter.last_exited_count),
+    queueCount: asNumber(payload.queue_count),
+    rules: asObjectArray(payload.rules).map(mapDynamicFilterRule),
+    catalog: {
+      scopes: mapDynamicFilterCatalogItems(catalog.scopes),
+      joins: mapDynamicFilterCatalogItems(catalog.joins),
+      operators: mapDynamicFilterCatalogItems(catalog.operators),
+      fields: mapDynamicFilterCatalogItems(catalog.fields)
+    },
+    accounts: asObjectArray(payload.accounts).map(row => ({
+      id: asNumber(row.id),
+      name: asString(row.name, 'Tài khoản Zalo'),
+      isDelete: row.is_delete === true
+    })),
+    values: asObjectArray(payload.values).map(row => ({
+      key: asString(row.key),
+      label: asString(row.label),
+      fieldCode: asString(row.field_code) as DataGroupDynamicFilterConfig['values'][number]['fieldCode'],
+      accountId: asNullableNumber(row.account_id),
+      accountName: asNullableString(row.account_name),
+      secondaryLabel: asNullableString(row.secondary_label)
+    }))
+  }
+}
+
 export async function getDataGroupPanel(groupId: number): Promise<DataGroupPanelData> {
   const { data, error } = await client().rpc('aka_agent_get_data_group_panel', {
     ...identityParams(),
@@ -785,6 +853,38 @@ export async function updateDataGroupNote(groupId: number, note: string | null):
     note: asNullableString(row.note),
     updatedAt: asNullableString(row.updated_at)
   }
+}
+
+export async function getDataGroupDynamicFilter(groupId: number): Promise<DataGroupDynamicFilterConfig> {
+  const { data, error } = await client().rpc('aka_agent_get_data_group_dynamic_filter', {
+    ...identityParams(),
+    p_group_id: groupId
+  })
+  if (error) throwRpcError('Failed to get Data Group dynamic filter', error)
+  return mapDynamicFilterConfig(unwrapRpcRow(data), groupId)
+}
+
+export async function saveDataGroupDynamicFilter(
+  request: SaveDataGroupDynamicFilterRequest
+): Promise<DataGroupDynamicFilterConfig> {
+  const rules = request.rules.map(rule => ({
+    scope_code: rule.scopeCode,
+    join_code: rule.joinCode,
+    field_code: rule.fieldCode,
+    operator_code: rule.operatorCode,
+    account_id: rule.accountId ?? null,
+    sort_order: rule.sortOrder,
+    value_keys: rule.valueKeys,
+    value_labels: rule.valueLabels
+  }))
+  const { error } = await client().rpc('aka_agent_save_data_group_dynamic_filter', {
+    ...identityParams(),
+    p_group_id: request.groupId,
+    p_is_enabled: request.isEnabled,
+    p_rules: rules
+  })
+  if (error) throwRpcError('Failed to save Data Group dynamic filter', error)
+  return getDataGroupDynamicFilter(request.groupId)
 }
 
 export async function createCampaignCreationBundle(

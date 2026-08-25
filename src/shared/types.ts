@@ -1665,6 +1665,7 @@ export type DataProvenanceKind =
   | 'upload'
   | 'scan'
   | 'automation'
+  | 'dynamic_filter'
   | 'api'
   | 'legacy'
   | 'legacy_unknown'
@@ -1794,6 +1795,87 @@ export interface DataGroupNoteUpdateResult {
   updatedAt?: string | null
 }
 
+export type DataGroupDynamicFilterScopeCode = 'enter' | 'leave'
+export type DataGroupDynamicFilterJoinCode = 'and' | 'or'
+export type DataGroupDynamicFilterFieldCode =
+  | 'zalo_tag'
+  | 'akabiz_tag'
+  | 'zalo_friend_status'
+  | 'zalo_group_membership'
+export type DataGroupDynamicFilterOperatorCode =
+  | 'contains'
+  | 'not_contains'
+  | 'equals'
+  | 'not_equals'
+  | 'in'
+  | 'out'
+
+export interface DataGroupDynamicFilterCatalogItem {
+  id: number
+  code: string
+  name: string
+  description?: string | null
+  sortOrder: number
+  metadata: Record<string, unknown>
+}
+
+export interface DataGroupDynamicFilterValueOption {
+  key: string
+  label: string
+  fieldCode: DataGroupDynamicFilterFieldCode
+  accountId?: number | null
+  accountName?: string | null
+  secondaryLabel?: string | null
+}
+
+export interface DataGroupDynamicFilterAccountOption {
+  id: number
+  name: string
+  isDelete: boolean
+}
+
+export interface DataGroupDynamicFilterRule {
+  id?: number
+  scopeCode: DataGroupDynamicFilterScopeCode
+  joinCode: DataGroupDynamicFilterJoinCode
+  fieldCode: DataGroupDynamicFilterFieldCode
+  operatorCode: DataGroupDynamicFilterOperatorCode
+  accountId?: number | null
+  sortOrder: number
+  valueKeys: string[]
+  valueLabels: string[]
+}
+
+export interface DataGroupDynamicFilterConfig {
+  id?: number | null
+  groupId: number
+  isEnabled: boolean
+  revision: number
+  evaluationIntervalMinutes: number
+  lastEvaluatedAt?: string | null
+  nextEvaluationAt?: string | null
+  matchedCount: number
+  lastEnteredCount: number
+  lastExitedCount: number
+  queueCount: number
+  rules: DataGroupDynamicFilterRule[]
+  catalog: {
+    scopes: DataGroupDynamicFilterCatalogItem[]
+    joins: DataGroupDynamicFilterCatalogItem[]
+    operators: DataGroupDynamicFilterCatalogItem[]
+    fields: DataGroupDynamicFilterCatalogItem[]
+  }
+  accounts: DataGroupDynamicFilterAccountOption[]
+  values: DataGroupDynamicFilterValueOption[]
+}
+
+export interface SaveDataGroupDynamicFilterRequest {
+  groupId: number
+  isEnabled: boolean
+  evaluationIntervalMinutes?: number
+  rules: DataGroupDynamicFilterRule[]
+}
+
 export interface DataGroupCampaignNavigationRequest {
   requestId: number
   mode: 'open' | 'create'
@@ -1858,7 +1940,7 @@ export interface DataGroupMember {
   /** One display source selected by the membership's primary provenance origin. */
   primaryOriginId?: number | null
   sourceCategoryItemId?: number | null
-  sourceCode?: 'upload' | 'scan' | 'automation' | null
+  sourceCode?: 'upload' | 'scan' | 'automation' | 'dynamic_filter' | null
   sourceName?: string | null
   sourceAutomationId?: number | null
   sourceAutomationName?: string | null
@@ -3041,6 +3123,8 @@ export const IPC_EVENTS = {
   DATA_GROUPS_GET_LATEST_INGEST_STATS: 'data-groups:get-latest-ingest-stats',
   DATA_GROUPS_GET_PANEL: 'data-groups:get-panel',
   DATA_GROUPS_UPDATE_NOTE: 'data-groups:update-note',
+  DATA_GROUPS_GET_DYNAMIC_FILTER: 'data-groups:get-dynamic-filter',
+  DATA_GROUPS_SAVE_DYNAMIC_FILTER: 'data-groups:save-dynamic-filter',
   DATA_GROUPS_INGEST: 'data-groups:ingest',
   DATA_GROUPS_REMOVE_MEMBERS: 'data-groups:remove-members',
   DATA_GROUPS_MOVE_MEMBERS: 'data-groups:move-members',

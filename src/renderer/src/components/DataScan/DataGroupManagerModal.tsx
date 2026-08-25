@@ -65,6 +65,7 @@ import {
   getDataGroupApi,
   type DataGroupElectronAPI
 } from '../DataGroups/dataGroupApi'
+import DataGroupDynamicFilterPanel from '../DataGroups/DataGroupDynamicFilterPanel'
 import CampaignDataUploadModal, {
   type CampaignDataUploadSubmission
 } from '../CampaignPanels/CampaignDataUploadModal'
@@ -428,6 +429,7 @@ const PROVENANCE_LABELS: Record<string, string> = {
   upload: 'Upload data',
   scan: 'Quét data',
   automation: 'Tự động hóa',
+  dynamic_filter: 'Bộ lọc động',
   api: 'API',
   legacy: 'Dữ liệu cũ',
   legacy_unknown: 'Dữ liệu cũ'
@@ -466,6 +468,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     initialPlatform,
     initialContactType,
     lockContext = false,
+    zaloTagNameById,
+    akaBizTagNameById,
     onGroupsChanged,
     onClose,
     selectionMode = false,
@@ -536,6 +540,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [panelLoading, setPanelLoading] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [panelRefreshRevision, setPanelRefreshRevision] = useState(0)
+  const [infoPanelTab, setInfoPanelTab] = useState<'info' | 'dynamic-filter'>('info')
+  const [dynamicFilterRuleCount, setDynamicFilterRuleCount] = useState(0)
   const [noteEditing, setNoteEditing] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
   const [campaignStatusFilter, setCampaignStatusFilter] = useState<'all' | 'running' | 'paused' | 'error' | 'completed'>('all')
@@ -634,6 +640,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     () => groups.find(group => group.id === activeGroupId) || (activeGroupSnapshot?.id === activeGroupId ? activeGroupSnapshot : null),
     [activeGroupId, activeGroupSnapshot, groups]
   )
+
+  useEffect(() => {
+    setDynamicFilterRuleCount(0)
+  }, [activeGroupId])
   const loadPanel = useCallback(async () => {
     if (!activeGroupId || selectionMode) {
       panelLoadSeqRef.current += 1
@@ -1788,6 +1798,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     }))
   }
 
+  const dataGroupApi = getDataGroupApi()
+
   const modal = (
     <div className="data-group-manager-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
@@ -2323,16 +2335,36 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           {!selectionMode && (
             <aside className="data-group-info-panel" aria-label="Thông tin nhóm data">
               <div className="data-group-info-header">
-                <div><strong>Thông tin nhóm</strong></div>
-                <div className="data-group-info-header-actions">
-                  <button type="button" className="btn-icon" onClick={() => activeGroup && void copyGroupId(activeGroup.id)} disabled={!activeGroup} title="Sao chép ID"><Copy size={14} /></button>
-                  <button type="button" className="btn-icon" onClick={() => activeGroup && requestDuplicateGroup(activeGroup)} disabled={!activeGroup || busyAction !== null} title="Nhân bản nhóm"><Copy size={14} /></button>
-                  <button type="button" className="btn-icon" onClick={() => void handleExport()} disabled={!activeGroup || busyAction !== null} title="Xuất Excel"><Download size={14} /></button>
-                  <button type="button" className="btn-icon is-primary" onClick={() => setAddMenuOpen(true)} disabled={!activeGroup} title="Thêm data"><Plus size={14} /></button>
+                <div className="data-group-info-tabs" role="tablist" aria-label="Panel nhóm data">
+                  <button type="button" role="tab" aria-selected={infoPanelTab === 'info'} className={infoPanelTab === 'info' ? 'is-active' : ''} onClick={() => setInfoPanelTab('info')}>Thông tin</button>
+                  <button type="button" role="tab" aria-selected={infoPanelTab === 'dynamic-filter'} className={infoPanelTab === 'dynamic-filter' ? 'is-active' : ''} onClick={() => setInfoPanelTab('dynamic-filter')}>Bộ lọc động <span>{dynamicFilterRuleCount}</span></button>
                 </div>
+                {infoPanelTab === 'info' && (
+                  <div className="data-group-info-header-actions">
+                    <button type="button" className="btn-icon" onClick={() => activeGroup && void copyGroupId(activeGroup.id)} disabled={!activeGroup} title="Sao chép ID"><Copy size={14} /></button>
+                    <button type="button" className="btn-icon" onClick={() => activeGroup && requestDuplicateGroup(activeGroup)} disabled={!activeGroup || busyAction !== null} title="Nhân bản nhóm"><Copy size={14} /></button>
+                    <button type="button" className="btn-icon" onClick={() => void handleExport()} disabled={!activeGroup || busyAction !== null} title="Xuất Excel"><Download size={14} /></button>
+                    <button type="button" className="btn-icon is-primary" onClick={() => setAddMenuOpen(true)} disabled={!activeGroup} title="Thêm data"><Plus size={14} /></button>
+                  </div>
+                )}
               </div>
 
-              <div className="data-group-info-scroll">
+              {infoPanelTab === 'dynamic-filter' && activeGroup && dataGroupApi ? (
+                <DataGroupDynamicFilterPanel
+                  api={dataGroupApi}
+                  groupId={activeGroup.id}
+                  groupName={activeGroup.name}
+                  groupDataTypeName={panelData?.group.dataTypeName || 'Zalo · User theo UID'}
+                  isSupported={activeGroupDataTypeCode === 'zalo_person'}
+                  zaloTagNameById={zaloTagNameById}
+                  akaBizTagNameById={akaBizTagNameById}
+                  onRuleCountChange={setDynamicFilterRuleCount}
+                  onSaved={notifyGroupsChanged}
+                  showAlert={showAlert}
+                />
+              ) : infoPanelTab === 'dynamic-filter' ? (
+                <div className="data-group-info-scroll"><div className="data-group-info-empty"><Database size={28} /><span>Chọn một nhóm để cấu hình bộ lọc động.</span></div></div>
+              ) : <div className="data-group-info-scroll">
                 {!activeGroup ? (
                   <div className="data-group-info-empty"><Database size={28} /><span>Chọn một nhóm để xem thông tin.</span></div>
                 ) : panelLoading && !panelData ? (
@@ -2481,7 +2513,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     </section>
                   </>
                 )}
-              </div>
+              </div>}
             </aside>
           )}
         </div>
