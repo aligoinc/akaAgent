@@ -50,7 +50,11 @@ if (existsSync(legacyExecutable)) {
 const requiredRuntimeFiles = [
   join(packageRoot, 'resources', 'app.asar'),
   join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'better-sqlite3', 'package.json'),
-  join(
+  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'quickjs-wasi', 'package.json')
+]
+
+if (runtimeProfile === 'desktop') {
+  requiredRuntimeFiles.push(join(
     packageRoot,
     'resources',
     'app.asar.unpacked',
@@ -59,9 +63,8 @@ const requiredRuntimeFiles = [
     'node_modules',
     'playwright-core',
     'package.json'
-  ),
-  join(packageRoot, 'resources', 'app.asar.unpacked', 'node_modules', 'quickjs-wasi', 'package.json')
-]
+  ))
+}
 
 for (const requiredFile of requiredRuntimeFiles) {
   if (!existsSync(requiredFile)) {
