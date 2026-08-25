@@ -128,7 +128,9 @@ export interface ZaloActionDetailOutput {
   countsTowardLimit?: boolean
   countsTowardBadTarget?: boolean
   resetInputToPending?: boolean
-  /** The target was partially sent and must be completed instead of retried. */
+  /** An irreversible send completed during this run. */
+  deliveryCommitted?: boolean
+  /** An irreversible send succeeded in this run, so the input must not be retried. */
   preventInputRetry?: boolean
   pendingNote?: string
   stopAfterTarget?: boolean
