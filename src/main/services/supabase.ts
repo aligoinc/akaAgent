@@ -470,7 +470,9 @@ export class SupabaseService {
   enableAccountActionNow(accountId: number, actionCode: string) { return accountActionRepo.enableAccountActionNow(accountId, actionCode) }
   enableDueAccountActions() { return accountActionRepo.enableDueAccountActions() }
   getErrorPolicy(errorCode: string) { return errorPolicyRepo.getErrorPolicy(errorCode) }
-  getZaloErrorPolicyByCode(code: string | number) { return errorPolicyRepo.getZaloErrorPolicyByCode(code) }
+  getZaloErrorPolicyByCode(code: string | number, actionCode?: string | null) {
+    return errorPolicyRepo.getZaloErrorPolicyByCode(code, actionCode)
+  }
   createZaloApiErrorLog(input: zaloApiErrorLogRepo.ZaloApiErrorLogInput) { return zaloApiErrorLogRepo.createZaloApiErrorLog(input) }
   listErrorPolicies() { return errorPolicyRepo.listErrorPolicies() }
   incrementConsecutiveError(accountId: number, actionCode: string | null | undefined, errorCode: string) {

@@ -450,6 +450,8 @@ export interface AutoErrorPolicy {
   disableActionMode: AutoErrorDisableActionMode
   countConsecutiveErrors?: number | null
   zaloErrorCodes: string[]
+  /** Empty means the Zalo error policy applies to every action. */
+  zaloActionCodes: string[]
   detailStatus?: string | null
   countsTowardLimit: boolean
   countsTowardBadTarget: boolean

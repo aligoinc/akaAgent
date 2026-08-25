@@ -174,6 +174,7 @@ export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErro
       : 'fixed_minutes',
     countConsecutiveErrors: (row.count_consecutive_errors as number | null) ?? null,
     zaloErrorCodes: Array.isArray(row.zalo_error_codes) ? row.zalo_error_codes as string[] : [],
+    zaloActionCodes: Array.isArray(row.zalo_action_codes) ? row.zalo_action_codes as string[] : [],
     detailStatus: (row.detail_status as string | null) ?? null,
     countsTowardLimit: (row.counts_toward_limit as boolean | null | undefined) ?? true,
     countsTowardBadTarget: (row.counts_toward_bad_target as boolean | null | undefined) ?? true,

@@ -1495,7 +1495,7 @@ export class ZaloRuntimeService {
     errorCode: string
   ): Promise<ZaloPhoneSearchLimitScope | null> {
     try {
-      const policy = await this.supabase.getZaloErrorPolicyByCode(errorCode)
+      const policy = await this.supabase.getZaloErrorPolicyByCode(errorCode, ZALO_PHONE_SEARCH_ACTION_CODE)
       if (!policy?.disableActionCodes.includes(ZALO_PHONE_SEARCH_ACTION_CODE)) return null
       if (policy.disableActionMode === 'end_of_day') return 'day'
       if (

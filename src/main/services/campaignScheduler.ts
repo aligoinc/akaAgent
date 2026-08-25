@@ -153,6 +153,7 @@ interface MilestoneSummary {
   failureRootReasons: string[]
   errorRootReasons: string[]
   resetInputToPending?: boolean
+  deliveryCommitted?: boolean
   preventInputRetry?: boolean
   pendingNote?: string
   inputCompletionNote?: string
@@ -3434,26 +3435,33 @@ export class CampaignScheduler {
           const runtimeModeStopRequested = runtimeStopReason !== null
           if (runtimeModeStopRequested && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           let runtimeStopTriggered = false
+          const committedDeliveryMustNotRetry = milestoneSummary.preventInputRetry || (
+            milestoneSummary.deliveryCommitted === true && (Boolean(accountStopReason) || pauseCancelledRun)
+          )
 
           if (accountStopReason && !runtimeModeStopRequested) {
-            if (detail && !milestoneSummary.preventInputRetry) {
+            if (detail && !committedDeliveryMustNotRetry) {
               await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
             }
             await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
             shouldStopAfterTarget = true
           }
 
-          if (detail && (runtimeModeStopRequested || !accountStopReason || milestoneSummary.preventInputRetry)) {
+          if (detail && (runtimeModeStopRequested || !accountStopReason || committedDeliveryMustNotRetry)) {
             if (runtimeModeStopRequested) {
               await this.supabase.updateCampaignInputData(detail.id, {
                 status: 'hoàn thành',
                 note: this.getZaloRuntimeUncertainNote(runtimeStopReason)
               })
               consumedGroupPostInputDataIds.add(detail.id)
-            } else if (milestoneSummary.preventInputRetry) {
+            } else if (committedDeliveryMustNotRetry) {
               await this.supabase.updateCampaignInputData(detail.id, {
                 status: 'hoàn thành',
-                note: milestoneSummary.inputCompletionNote || 'Tin nhắn đã gửi một phần; không tự động gửi lại để tránh trùng nội dung hoặc file.'
+                note: milestoneSummary.inputCompletionNote || (
+                  accountStopReason
+                    ? `${accountStopReason}. Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.`
+                    : 'Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.'
+                )
               })
               consumedGroupPostInputDataIds.add(detail.id)
             } else if (result.status === 'completed') {
@@ -8424,15 +8432,33 @@ export class CampaignScheduler {
       const actionDetail = this.getZaloActionDetailFromStep(step)
       if (!actionDetail) continue
 
+      if (actionDetail.deliveryCommitted) {
+        summary.deliveryCommitted = true
+        if (summary.resetInputToPending) {
+          summary.preventInputRetry = true
+          summary.resetInputToPending = false
+          summary.inputCompletionNote = `${summary.pendingNote || actionDetail.log || 'Tin nhắn đã gửi'}. Không tự chạy lại data để tránh gửi trùng.`
+        }
+      }
       if (actionDetail.preventInputRetry) {
         // A successful first send cannot be rolled back. This terminal marker
         // wins over retry requests from every action before or after it.
         summary.preventInputRetry = true
         summary.resetInputToPending = false
         summary.inputCompletionNote = actionDetail.log || summary.inputCompletionNote
-      } else if (actionDetail.resetInputToPending && !summary.preventInputRetry) {
-        summary.resetInputToPending = true
-        summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
+      }
+      if (actionDetail.resetInputToPending) {
+        if (summary.deliveryCommitted || summary.preventInputRetry) {
+          summary.preventInputRetry = true
+          summary.resetInputToPending = false
+          const downstreamFailure = actionDetail.pendingNote || actionDetail.log
+          if (downstreamFailure) {
+            summary.inputCompletionNote = `${downstreamFailure}. Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.`
+          }
+        } else {
+          summary.resetInputToPending = true
+          summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
+        }
       }
       if (actionDetail.stopAfterTarget) {
         summary.stopAfterTarget = true
@@ -11601,9 +11627,12 @@ export class CampaignScheduler {
     return trimmed
   }
 
-  private async getZaloPolicyByErrorCode(errorCode: string | null): Promise<AutoErrorPolicy | null> {
+  private async getZaloPolicyByErrorCode(
+    errorCode: string | null,
+    actionCode?: string | null
+  ): Promise<AutoErrorPolicy | null> {
     if (errorCode) {
-      const mapped = await this.supabase.getZaloErrorPolicyByCode(errorCode)
+      const mapped = await this.supabase.getZaloErrorPolicyByCode(errorCode, actionCode)
       if (mapped) return mapped
     }
     return this.supabase.getErrorPolicy(ZALO_API_BUSINESS_FAILED_ERROR_CODE)
@@ -11787,7 +11816,7 @@ export class CampaignScheduler {
   }): Promise<void> {
     const rawMessage = this.getZaloErrorMessage(input.err)
     const zaloCode = this.getZaloErrorCode(input.err)
-    const policy = await this.getZaloPolicyByErrorCode(zaloCode)
+    const policy = await this.getZaloPolicyByErrorCode(zaloCode, input.actionCode)
     await this.logZaloApiError({
       account: input.account,
       campaign: input.campaign,
@@ -11814,7 +11843,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
     const rawMessage = this.getZaloErrorMessage(err)
     const zaloCode = this.getZaloErrorCode(err)
-    const policy = await this.getZaloPolicyByErrorCode(zaloCode)
+    const policy = await this.getZaloPolicyByErrorCode(zaloCode, actionCode)
     this.throwIfZaloRuntimeStopping(campaign.id)
     const log = this.renderZaloPolicyLog(policy, rawMessage, {
       actionName,
@@ -11913,15 +11942,22 @@ export class CampaignScheduler {
     data?: Record<string, unknown>
     countsTowardLimit?: boolean
   }): ZaloActionDetailOutput {
+    const status = input.status || 'thành công'
+    const commitsDelivery = status === 'thành công' && [
+      'zalo_message_stranger',
+      'zalo_message_friend',
+      'zalo_message_group'
+    ].includes(input.actionCode)
     return {
       createDetail: true,
       actionCode: input.actionCode,
       actionName: input.actionName,
-      status: input.status || 'thành công',
+      status,
       log: input.log,
       data: input.data || {},
       countsTowardLimit: input.countsTowardLimit ?? true,
-      countsTowardBadTarget: !this.isAuxiliaryZaloTargetAction(input.actionCode)
+      countsTowardBadTarget: !this.isAuxiliaryZaloTargetAction(input.actionCode),
+      ...(commitsDelivery ? { deliveryCommitted: true } : {})
     }
   }
 
