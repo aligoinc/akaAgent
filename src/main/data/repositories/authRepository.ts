@@ -532,7 +532,7 @@ export async function updateStartupSettingForCurrentDevice(
 }
 
 function hasAcceptedPolicy(staff: StaffRow): boolean {
-  return staff.is_policy_accepted === true && !!staff.policy_accepted_at
+  return staff.is_policy_accepted === true
 }
 
 async function verifyStaffLogin(username: string, password: string): Promise<StaffRow> {
@@ -593,7 +593,6 @@ export async function acceptPolicyAndLogin(username: string, password: string): 
       })
       .eq('id', staffRow.id)
       .eq('is_policy_accepted', false)
-      .is('policy_accepted_at', null)
 
     if (error) {
       throwAuthTechnicalError(
@@ -605,7 +604,7 @@ export async function acceptPolicyAndLogin(username: string, password: string): 
   }
 
   // Re-read and revalidate after the conditional update. This makes concurrent
-  // confirmations idempotent and ensures the first acceptance timestamp wins.
+  // confirmations idempotent while allowing an admin to reset only the boolean.
   const acceptedStaff = await verifyStaffLogin(username, password)
   if (!hasAcceptedPolicy(acceptedStaff)) {
     throw new Error('Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.')
