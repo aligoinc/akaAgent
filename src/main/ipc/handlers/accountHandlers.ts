@@ -162,6 +162,22 @@ export function registerAccountHandlers(
     }
   })())
 
+  const syncAndPersistZaloLabels = async (
+    accountId: number,
+    loadLabels: () => Promise<ZaloLabelOption[]>
+  ): Promise<ZaloLabelOption[]> => {
+    const labels = await loadLabels()
+    if (labels.length === 0) {
+      await supabase.deleteContacts(accountId, 'zalo_tag')
+    } else {
+      await supabase.upsertContacts(labels.map(label => mapZaloLabelToContact(accountId, label)), {
+        markMissingDeleted: true
+      })
+    }
+    await supabase.syncZaloLabelMemberships(accountId, labels)
+    return labels
+  }
+
   const releaseLocalQrClaim = (accountId: number): Promise<void> => {
     const existingRelease = localQrReleasePromises.get(accountId)
     if (existingRelease) return existingRelease
@@ -577,23 +593,17 @@ export function registerAccountHandlers(
   ipcMain.handle(IPC_EVENTS.ZALO_SYNC_LABELS, async (_, accountId: number) => {
     await ensureCurrentUserFeatureActive('zalo')
     const account = await requireZaloAccount(accountId)
+    if (shouldRouteZaloAccountToChatApi(account)) {
+      return syncAndPersistZaloLabels(accountId, () => zaloChatApiClient!.listLabels(accountId))
+    }
     if (shouldRouteZaloAccountToServer(account)) {
       return zaloServerClient?.executeCommand('zalo.labels.sync', accountId)
         ?? Promise.reject(new Error('Chưa kết nối akaAgent Zalo Server'))
     }
     if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
-    return runClaimedLocalZaloOperation(accountId, true, async () => {
-      const labels = await zaloRuntime.listLabels(accountId)
-      if (labels.length === 0) {
-        await supabase.deleteContacts(accountId, 'zalo_tag')
-      } else {
-        await supabase.upsertContacts(labels.map(label => mapZaloLabelToContact(accountId, label)), {
-          markMissingDeleted: true
-        })
-      }
-      await supabase.syncZaloLabelMemberships(accountId, labels)
-      return labels
-    })
+    return runClaimedLocalZaloOperation(accountId, true, () => (
+      syncAndPersistZaloLabels(accountId, () => zaloRuntime.listLabels(accountId))
+    ))
   })
 
   ipcMain.handle(IPC_EVENTS.EMAIL_GET_CONFIG, async (_, accountId: number) => {
