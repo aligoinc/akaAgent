@@ -83,6 +83,59 @@ async function testIdempotentQueryAndDedicatedScope(): Promise<void> {
   }
 }
 
+async function testListLabelsUsesChatDataScanRoute(): Promise<void> {
+  const originalFetch = globalThis.fetch
+  let receivedQueryType = ''
+  let receivedPayload: unknown
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input))
+    if (url.pathname === '/api/chat/desktop/data-scan-session') {
+      return response({
+        token: 'scan-token',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        staffId: '7',
+        organizationId: '9'
+      })
+    }
+    if (url.pathname === '/api/chat/zalo/accounts/71/data-scan-queries') {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      receivedQueryType = String(body.queryType)
+      receivedPayload = body.payload
+      return response({
+        requestId: body.requestId,
+        autoAccountId: '71',
+        queryType: body.queryType,
+        status: 'succeeded',
+        result: [{
+          id: 12,
+          text: 'Khách VIP',
+          textKey: 'vip',
+          color: '#ff0000',
+          emoji: '🔥',
+          conversations: ['friend-1', 'friend-1', '']
+        }]
+      })
+    }
+    throw new Error(`Unexpected request ${url.pathname}`)
+  }
+
+  try {
+    const labels = await enabledClient().listLabels(71)
+    assert.equal(receivedQueryType, 'list_labels')
+    assert.deepEqual(receivedPayload, {})
+    assert.deepEqual(labels, [{
+      id: 12,
+      text: 'Khách VIP',
+      textKey: 'vip',
+      color: '#ff0000',
+      emoji: '🔥',
+      conversations: ['friend-1']
+    }])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
 async function testCancelUsesCurrentRequestId(): Promise<void> {
   const originalFetch = globalThis.fetch
   let requestId = ''
@@ -314,6 +367,7 @@ async function testGroupMembershipMetadataIsPreserved(): Promise<void> {
 
 async function main(): Promise<void> {
   await testIdempotentQueryAndDedicatedScope()
+  await testListLabelsUsesChatDataScanRoute()
   await testCancelUsesCurrentRequestId()
   await testFailedPollCancelsAcceptedOperation()
   await testLegacyProxySettingNormalization()

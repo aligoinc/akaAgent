@@ -50,6 +50,8 @@ Windows installer từ v6.7.0 là NSIS assisted per-machine, cài mới mặc đ
 
 ### Webview controller
 
+Đồng bộ tag Zalo trong form chiến dịch của tenant Chat phải gọi `ZaloChatApiClient.listLabels()` (`queryType='list_labels'`) rồi persist `zalo_tag`/membership tại Desktop; không được rơi về `ZaloServerClient` chỉ vì socket App Server đang offline.
+
 [src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. Visible webviews vẫn dùng cho login, status checks và test thủ công trong editor.
 
 `WebviewRegistry` maps `accountId -> webContentsId`. Scheduler uses `isRegistered()` to ensure the account has mounted a browser tab at least once; accountPoller uses `listRegistered()` to skip dead tabs. Runtime uses `accountId` and partition `persist:account_${accountId}`; browser profiles from the previous partition prefix are not reused. For browser-based accounts, account proxy is prepared by `ProxyRuntimeService` on this same partition before background page loads and when user manually reloads visible webview; editing/assigning proxy only saves DB and must not auto-reload, close connections, or destroy visible/background pages. Account context actions "Hiển thị & xem trang web" and "Load lại trang web" must ensure BrowserPage opens/mounts the visible webview when `WebviewRegistry` has no tab yet; do not surface "Tab trình duyệt chưa được mở" for these user-triggered open/reload actions.
