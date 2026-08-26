@@ -1,13 +1,135 @@
-import { FormEvent, useEffect, useState } from 'react'
-import { LogIn, Loader2 } from 'lucide-react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
+import { ExternalLink, FileCheck2, LogIn, Loader2, X } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
 const appIconUrl = new URL('../assets/app-icon.png', import.meta.url).href
+const POLICY_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/chinh-sach-akabiz.pdf'
+
+interface PolicyConsentModalProps {
+  busy: boolean
+  errorMessage: string | null
+  onAccept: () => Promise<void>
+  onCancel: () => void
+}
+
+function PolicyConsentModal({ busy, errorMessage, onAccept, onCancel }: PolicyConsentModalProps) {
+  const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const [agreed, setAgreed] = useState(false)
+  const [pdfLoadFailed, setPdfLoadFailed] = useState(false)
+
+  useEffect(() => {
+    const webview = webviewRef.current
+    if (!webview) return
+
+    const handleStartLoading = () => setPdfLoadFailed(false)
+    const handleFailedLoading = () => setPdfLoadFailed(true)
+    webview.addEventListener('did-start-loading', handleStartLoading)
+    webview.addEventListener('did-fail-load', handleFailedLoading)
+    return () => {
+      webview.removeEventListener('did-start-loading', handleStartLoading)
+      webview.removeEventListener('did-fail-load', handleFailedLoading)
+    }
+  }, [])
+
+  const handleAccept = async () => {
+    if (!agreed || busy) return
+    try {
+      await onAccept()
+    } catch {
+      // Store keeps the modal open and exposes a user-facing error below.
+    }
+  }
+
+  return (
+    <div className="modal-overlay" role="presentation">
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="policy-consent-title"
+        style={{
+          width: 'min(1040px, calc(100vw - 48px))',
+          height: 'min(860px, calc(100vh - 64px))',
+          maxHeight: 'calc(100vh - 64px)'
+        }}
+      >
+        <div className="modal-header">
+          <div className="modal-title" id="policy-consent-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileCheck2 size={18} />
+            <span>Chính sách sử dụng akaBiz</span>
+          </div>
+          <button type="button" className="btn-icon" onClick={onCancel} disabled={busy} title="Đóng">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            Vui lòng đọc chính sách dưới đây và xác nhận đồng ý để tiếp tục đăng nhập.
+          </div>
+
+          <div style={{ position: 'relative', flex: 1, minHeight: 320, border: '1px solid var(--border-default)', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+            <webview
+              ref={(element: Electron.WebviewTag | null) => { webviewRef.current = element }}
+              src={POLICY_URL}
+              style={{ width: '100%', height: '100%' }}
+              /* @ts-ignore Electron's webview custom attributes are not represented by React's JSX types. */
+              plugins="true"
+            />
+            {pdfLoadFailed && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24, background: 'var(--bg-primary)', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                <span>Không thể tải PDF trong ứng dụng.</span>
+                <a className="btn btn-secondary" href={POLICY_URL} target="_blank" rel="noreferrer">
+                  <ExternalLink size={14} /> Mở chính sách trên trình duyệt
+                </a>
+              </div>
+            )}
+          </div>
+
+          <a href={POLICY_URL} target="_blank" rel="noreferrer" style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--accent-primary)' }}>
+            <ExternalLink size={13} /> Mở chính sách trên trình duyệt
+          </a>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: busy ? 'default' : 'pointer', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.5 }}>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={event => setAgreed(event.target.checked)}
+              disabled={busy}
+              style={{ width: 16, height: 16, marginTop: 2, accentColor: 'var(--accent-primary)' }}
+            />
+            <span>Tôi đã đọc, hiểu và đồng ý với chính sách sử dụng akaBiz.</span>
+          </label>
+
+          {errorMessage && (
+            <div style={{ fontSize: 12, color: 'var(--accent-error)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 6, padding: '8px 10px' }}>
+              {errorMessage}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
+            Hủy
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => { void handleAccept() }} disabled={!agreed || busy}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <FileCheck2 size={14} />}
+            {busy ? 'Đang ghi nhận…' : 'Đồng ý và tiếp tục'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function LoginPage() {
   const {
     login,
     loggingIn,
+    acceptingPolicy,
+    policyAcceptanceRequired,
+    acceptPolicyAndLogin,
+    cancelPolicyAcceptance,
     recoveringCredentials,
     errorMessage,
     clearError,
@@ -207,6 +329,14 @@ export default function LoginPage() {
           {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
         </button>
       </form>
+      {policyAcceptanceRequired && (
+        <PolicyConsentModal
+          busy={acceptingPolicy}
+          errorMessage={errorMessage}
+          onAccept={acceptPolicyAndLogin}
+          onCancel={cancelPolicyAcceptance}
+        />
+      )}
     </div>
   )
 }

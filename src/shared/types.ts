@@ -2700,6 +2700,10 @@ export interface AuthUser {
   deviceLastSeenAt?: string | null
 }
 
+export type AuthLoginResult =
+  | { status: 'authenticated'; user: AuthUser }
+  | { status: 'policy_required' }
+
 export interface LoginPreferences {
   rememberLogin: boolean
   autoLogin: boolean
@@ -2715,6 +2719,7 @@ export interface AuthBootstrapResult {
   user: AuthUser | null
   loginOptions: LoginPreferences
   savedCredentials: SavedLoginCredentials | null
+  policyAcceptanceRequired?: boolean
   errorMessage?: string | null
 }
 
@@ -2883,6 +2888,7 @@ export const IPC_EVENTS = {
 
   // Auth
   AUTH_LOGIN: 'auth:login',
+  AUTH_ACCEPT_POLICY_AND_LOGIN: 'auth:accept-policy-and-login',
   AUTH_BOOTSTRAP: 'auth:bootstrap',
   AUTH_REVOKE_REMEMBERED_LOGIN: 'auth:revoke-remembered-login',
   AUTH_UPDATE_LOGIN_PREFERENCES: 'auth:update-login-preferences',
