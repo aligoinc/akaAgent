@@ -13,8 +13,11 @@ const electronAPI = {
   bootstrapAuth: (): Promise<AuthBootstrapResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_BOOTSTRAP),
 
-  login: (username: string, password: string, options?: Partial<LoginPreferences>): Promise<AuthUser> =>
+  login: (username: string, password: string, options?: Partial<LoginPreferences>): Promise<import('../shared/types').AuthLoginResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_LOGIN, username, password, options),
+
+  acceptPolicyAndLogin: (username: string, password: string, options?: Partial<LoginPreferences>): Promise<AuthUser> =>
+    ipcRenderer.invoke(IPC_EVENTS.AUTH_ACCEPT_POLICY_AND_LOGIN, username, password, options),
 
   revokeRememberedLogin: (): Promise<AuthBootstrapResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTH_REVOKE_REMEMBERED_LOGIN),

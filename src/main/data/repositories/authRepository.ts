@@ -1,5 +1,6 @@
 import {
   AuthBootstrapResult,
+  AuthLoginResult,
   AuthUser,
   DeviceLockResetResult,
   LoginPreferences,
@@ -42,6 +43,8 @@ interface StaffRow extends StaffDeviceColumns {
   is_active: boolean
   is_admin_akabiz: boolean
   use_test_workflow: boolean
+  is_policy_accepted: boolean
+  policy_accepted_at?: string | null
 }
 
 interface DeviceLoginSettingsRow {
@@ -71,6 +74,8 @@ const STAFF_SELECT = [
   'is_active',
   'is_admin_akabiz',
   'use_test_workflow',
+  'is_policy_accepted',
+  'policy_accepted_at',
   'device_fingerprint_hash',
   'device_label',
   'device_platform',
@@ -526,7 +531,11 @@ export async function updateStartupSettingForCurrentDevice(
   })
 }
 
-export async function login(username: string, password: string): Promise<AuthUser> {
+function hasAcceptedPolicy(staff: StaffRow): boolean {
+  return staff.is_policy_accepted === true && !!staff.policy_accepted_at
+}
+
+async function verifyStaffLogin(username: string, password: string): Promise<StaffRow> {
   const u = (username || '').trim()
   const p = password || ''
   if (!u || !p) throw new Error('Vui lòng nhập tên đăng nhập và mật khẩu.')
@@ -550,8 +559,59 @@ export async function login(username: string, password: string): Promise<AuthUse
   if (!staffRow.is_active) throw new Error('Tài khoản đã bị khoá.')
   await ensureStaffSubscriptionActive(staffRow)
 
+  return staffRow
+}
+
+async function completeStaffLogin(staffRow: StaffRow): Promise<AuthUser> {
   const deviceRecord = await ensureStaffDeviceLock(staffRow)
   return buildAuthUser(staffRow, deviceRecord)
+}
+
+export async function login(username: string, password: string): Promise<AuthLoginResult> {
+  const staffRow = await verifyStaffLogin(username, password)
+  if (!hasAcceptedPolicy(staffRow)) {
+    return { status: 'policy_required' }
+  }
+
+  return {
+    status: 'authenticated',
+    user: await completeStaffLogin(staffRow)
+  }
+}
+
+export async function acceptPolicyAndLogin(username: string, password: string): Promise<AuthUser> {
+  const staffRow = await verifyStaffLogin(username, password)
+
+  if (!hasAcceptedPolicy(staffRow)) {
+    const now = new Date().toISOString()
+    const { error } = await client()
+      .from('org_staff')
+      .update({
+        is_policy_accepted: true,
+        policy_accepted_at: now,
+        updated_at: now
+      })
+      .eq('id', staffRow.id)
+      .eq('is_policy_accepted', false)
+      .is('policy_accepted_at', null)
+
+    if (error) {
+      throwAuthTechnicalError(
+        'accept staff policy',
+        'Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.',
+        error
+      )
+    }
+  }
+
+  // Re-read and revalidate after the conditional update. This makes concurrent
+  // confirmations idempotent and ensures the first acceptance timestamp wins.
+  const acceptedStaff = await verifyStaffLogin(username, password)
+  if (!hasAcceptedPolicy(acceptedStaff)) {
+    throw new Error('Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.')
+  }
+
+  return completeStaffLogin(acceptedStaff)
 }
 
 export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetResult> {
