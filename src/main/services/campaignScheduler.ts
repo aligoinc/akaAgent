@@ -3268,7 +3268,17 @@ export class CampaignScheduler {
             return
           }
         }
-        const baseVariables = await this.buildVariablesV2(campaign, detail, account.id, currentSourceLink, i, groupPostApproval, mediaTempPaths, skippedLimitActionCodes)
+        const contentRotation = this.resolveCampaignContentRotation(campaign, i)
+        const baseVariables = await this.buildVariablesV2(
+          campaign,
+          detail,
+          account.id,
+          currentSourceLink,
+          contentRotation.index,
+          groupPostApproval,
+          mediaTempPaths,
+          skippedLimitActionCodes
+        )
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const variables = {
           ...baseVariables,
@@ -3400,6 +3410,10 @@ export class CampaignScheduler {
           // retryable or successfully completed by this obsolete runtime.
           if (account.flatformType === 'zalo') {
             this.throwIfZaloRuntimeStopping(campaign.id)
+          }
+
+          if (result.status === 'completed' && contentRotation.count > 1) {
+            await this.advanceCampaignContentRotation(campaign, contentRotation)
           }
 
           // Per-milestone logging — scan steps theo block_name
@@ -14077,6 +14091,55 @@ export class CampaignScheduler {
 
     const variants = this.splitContentVariants(campaign.content)
     return this.cycleVariant(variants, index)
+  }
+
+  private resolveCampaignContentRotation(
+    campaign: Campaign,
+    fallbackIndex: number
+  ): { index: number; count: number } {
+    if (campaign.actionId !== 'facebook_timeline_post') {
+      return { index: fallbackIndex, count: 0 }
+    }
+
+    const count = this.shouldUseAdvancedContent(campaign)
+      ? getAdvancedContentItems(campaign.extraSettings).length
+      : this.splitContentVariants(campaign.content).length
+    if (count <= 1) return { index: 0, count }
+
+    const rawIndex = Math.floor(Number(campaign.extraSettings?.contentRotationIndex ?? 0))
+    const index = Number.isFinite(rawIndex)
+      ? ((rawIndex % count) + count) % count
+      : 0
+    return { index, count }
+  }
+
+  private async advanceCampaignContentRotation(
+    campaign: Campaign,
+    rotation: { index: number; count: number }
+  ): Promise<void> {
+    if (campaign.actionId !== 'facebook_timeline_post' || rotation.count <= 1) return
+
+    const latestCampaign = await this.supabase.getCampaign(campaign.id)
+    if (!latestCampaign) throw new Error('Không tìm thấy chiến dịch để cập nhật lượt nội dung kế tiếp')
+
+    const latestExtra = latestCampaign.extraSettings || {}
+    const rawLatestIndex = Math.floor(Number(latestExtra.contentRotationIndex ?? 0))
+    const latestIndex = Number.isFinite(rawLatestIndex)
+      ? ((rawLatestIndex % rotation.count) + rotation.count) % rotation.count
+      : 0
+
+    // A config edit that wins while the workflow is running owns the next
+    // cursor. Do not overwrite it with the stale index used by this run.
+    if (latestIndex !== rotation.index) return
+
+    const nextExtraSettings = {
+      ...latestExtra,
+      contentRotationIndex: (rotation.index + 1) % rotation.count
+    }
+    const updated = await this.updateCampaignAndBroadcast(campaign.id, {
+      extraSettings: nextExtraSettings
+    })
+    campaign.extraSettings = updated.extraSettings
   }
 
   private async resolveCampaignMediaForIndex(

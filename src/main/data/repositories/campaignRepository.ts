@@ -551,6 +551,7 @@ const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: un
     ? { ...(extraSettings as Record<string, unknown>) }
     : {}
   delete extra.internalSmsCreatedCampaignIdsByAccount
+  if (actionId === 'facebook_timeline_post') extra.contentRotationIndex = 0
   if (!shouldSkipCloneCampaignInputData(actionId, extraSettings)) return extra
   delete extra.zaloFriendDataMaterializedAt
   delete extra.zaloFriendMaterializedCount
