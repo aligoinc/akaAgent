@@ -8462,6 +8462,11 @@ export class CampaignScheduler {
       }
       if (actionDetail.stopAfterTarget) {
         summary.stopAfterTarget = true
+        // A terminal policy detail (for example Zalo duplicate/fast message)
+        // does not reset the input to pending, but its campaign notice still
+        // has to survive so the outer stop handler does not use the generic
+        // "Tài khoản Zalo cần kiểm tra lại" fallback.
+        summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
       }
 
       if (actionDetail.createDetail === false || !actionDetail.status) {
@@ -11662,6 +11667,25 @@ export class CampaignScheduler {
     return rendered || rawMessage || policy?.errorName || this.buildZaloFallbackErrorLog(replacements.actionName || replacements.action || '', '', zaloCode)
   }
 
+  private renderZaloPolicyCampaignNote(
+    policy: AutoErrorPolicy | null,
+    rawMessage: string,
+    replacements: Record<string, string | undefined>,
+    fallbackLog: string
+  ): string {
+    if (!policy) return fallbackLog
+
+    const disableMinutes = policy.timeDisableActions && policy.timeDisableActions > 0
+      ? String(policy.timeDisableActions)
+      : undefined
+    return this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, {
+      ...replacements,
+      message: rawMessage,
+      x: disableMinutes || rawMessage,
+      t: disableMinutes
+    }) || fallbackLog
+  }
+
   private async applyZaloPolicySideEffects(
     account: AutoAccount,
     campaign: Campaign,
@@ -11850,6 +11874,11 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, zaloCode)
+    const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
+      actionName,
+      action: actionName,
+      actionCode
+    }, log)
     const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
@@ -11876,7 +11905,7 @@ export class CampaignScheduler {
       countsTowardLimit: policy?.countsTowardLimit ?? true,
       countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
-      pendingNote: log,
+      pendingNote,
       stopAfterTarget: sideEffects.stopAfterTarget,
       data: {
         ...data,
@@ -11907,6 +11936,11 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, zaloCode)
+    const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
+      actionName,
+      action: actionName,
+      actionCode
+    }, log)
     const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
@@ -11920,7 +11954,7 @@ export class CampaignScheduler {
       countsTowardLimit: policy?.countsTowardLimit ?? true,
       countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
-      pendingNote: log,
+      pendingNote,
       stopAfterTarget: sideEffects.stopAfterTarget,
       data: {
         ...data,
