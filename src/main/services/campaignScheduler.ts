@@ -7835,9 +7835,20 @@ export class CampaignScheduler {
       policyReplacements.message || notice
     )
     const count = state.countConsecutiveBadTargets
+    // Page inbox messaging gets one scheduler restart before the policy is
+    // applied. Keep the counter so the restarted run must add a full second
+    // threshold of consecutive bad targets; any success resets it as usual.
+    const shouldRetryPageInboxOnce = campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
+    const finalThreshold = shouldRetryPageInboxOnce ? threshold * 2 : threshold
 
     if (count < threshold) {
       const message = `${notice} (${count}/${threshold})`
+      return { triggered: false, message, policy, count, threshold }
+    }
+
+    if (shouldRetryPageInboxOnce && count > threshold && count < finalThreshold) {
+      const retryCount = count - threshold
+      const message = `${notice} (${retryCount}/${threshold} trong lượt tự chạy lại)`
       return { triggered: false, message, policy, count, threshold }
     }
 
@@ -7856,7 +7867,23 @@ export class CampaignScheduler {
         thresholdReason
       ) || thresholdReason
     }
-    await this.logCampaignProgress(campaign.id, `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`)
+
+    if (shouldRetryPageInboxOnce && count === threshold) {
+      const message = `Tự chạy lại thêm 1 lần sau ${threshold} lỗi/thất bại liên tiếp: ${thresholdReason}`
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+      await this.logCampaignProgress(
+        campaign.id,
+        `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần; chuyển về chờ xử lý để tự chạy lại thêm 1 lần: ${thresholdReason}`
+      )
+      return { triggered: true, message, policy, count, threshold }
+    }
+
+    await this.logCampaignProgress(
+      campaign.id,
+      shouldRetryPageInboxOnce
+        ? `⚠️ Lượt tự chạy lại tiếp tục lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
+        : `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
+    )
 
     const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
     return { ...handled, count, threshold }
