@@ -6526,6 +6526,7 @@ export default function CampaignFormModal({
             postAsReels: !isSourceContentMode && supportsSourceReels && !isPostBackgroundActive ? formData.postAsReels : false,
             sourceLinks: formData.sourceLinks,
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
+            contentRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.contentRotationIndex ?? 0),
             pagePostMode: formData.pagePostMode,
             isFindPhone: normalizedFindData.isFindPhone,
             isFindLinkGroupZalo: normalizedFindData.isFindLinkGroupZalo,
