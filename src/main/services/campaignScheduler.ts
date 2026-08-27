@@ -11690,7 +11690,7 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     policy: AutoErrorPolicy | null,
-    message: string
+    messages: { runningProcess: string; campaign: string }
   ): Promise<{ stopAfterTarget: boolean }> {
     let stopAfterTarget = false
     if (!policy) return { stopAfterTarget }
@@ -11710,7 +11710,7 @@ export class CampaignScheduler {
     if (policy.disableActionCodes.length > 0) {
       await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
         errorCode: policy.errorCode,
-        reason: message,
+        reason: messages.runningProcess,
         dateEnable: await this.resolvePolicyActionDateEnable(policy)
       })
       try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
@@ -11720,7 +11720,7 @@ export class CampaignScheduler {
     if (policy.updateStatusCampaign) {
       await this.updateCampaignAndBroadcast(campaign.id, {
         status: policy.updateStatusCampaign,
-        note: message
+        note: messages.campaign
       })
       this.throwIfZaloRuntimeStopping(campaign.id)
       stopAfterTarget = true
@@ -11879,7 +11879,10 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, log)
-    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, {
+      runningProcess: log,
+      campaign: pendingNote
+    })
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
     await this.logZaloApiError({
@@ -11941,7 +11944,10 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, log)
-    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, log)
+    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, {
+      runningProcess: log,
+      campaign: pendingNote
+    })
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
     return {
