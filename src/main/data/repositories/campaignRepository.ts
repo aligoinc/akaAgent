@@ -2413,6 +2413,44 @@ export async function updateClaimedZaloServerCampaign(
 }
 
 /**
+ * Desktop scheduler boundary writes must not overwrite a newer client status.
+ * Only the still-running row may move to the scheduler's requested stop state;
+ * a CAS conflict returns the current winner for broadcast.
+ */
+export async function updateRunningDesktopCampaign(
+  id: number,
+  updates: Pick<CampaignUpdate, 'status' | 'note'>
+): Promise<Campaign> {
+  if (updates.status !== 'chờ xử lý' && updates.status !== 'tạm dừng') {
+    throw new Error('Desktop running campaign transition requires a pending or paused status')
+  }
+
+  const u = requireCurrentUser()
+  const payload: Record<string, unknown> = {
+    status: updates.status,
+    updated_at: new Date().toISOString()
+  }
+  if (updates.note !== undefined) payload.note = updates.note
+
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update(payload)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'đang chạy')
+    .eq('is_delete', false)
+    .select(CAMPAIGN_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to transition running Desktop campaign: ${error.message}`)
+  if (data) return mapCampaignFromDB(data)
+
+  const current = await getCampaign(id)
+  if (!current) throw new Error('Không tìm thấy chiến dịch Desktop sau xung đột trạng thái')
+  return current
+}
+
+/**
  * A find-data producer inserts rows outside the target campaign run. If the
  * target finalizer committed first, reopen only that completed snapshot; a
  * newer pause or already-running state must win the CAS.
