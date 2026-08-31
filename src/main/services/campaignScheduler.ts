@@ -161,6 +161,8 @@ interface CampaignBadTargetResult extends RuntimeErrorResult {
   threshold?: number | null
 }
 
+type ZaloFailurePolicyHandling = 'full' | 'target-only' | 'batch-followup'
+
 interface MilestoneSummary {
   hasSuccess: boolean
   hasFailure: boolean
@@ -5157,6 +5159,20 @@ export class CampaignScheduler {
       let stopAfterBatch = false
       let shareSuccessCount = 0
       let shareFailCount = 0
+      const forwardHasSuccessfulTarget = textBatch.some(item => (
+        forwardResult?.results.some(result => result.threadId === item.threadId && result.ok) === true
+      ))
+      const forwardBatchPolicyInputDataId = forwardError || !trimmedMessage
+        ? null
+        : await this.selectZaloForwardBatchPolicyInputDataId(
+          actionDescriptor.code,
+          textBatch.flatMap(item => {
+            const result = this.findZaloForwardTargetResult(forwardResult, item.threadId)
+            if (result?.ok || (result !== null && forwardHasSuccessfulTarget)) return []
+            return [{ inputDataId: item.detail.id, errorCode: result?.errorCode || null }]
+          })
+        )
+      let forwardErrorPolicyApplied = false
       for (const item of batch) {
         const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeDetailStopReason) {
@@ -5171,19 +5187,42 @@ export class CampaignScheduler {
         if (mediaFailure) {
           actionDetail = mediaFailure
         } else if (forwardError) {
+          const policyHandling: ZaloFailurePolicyHandling = forwardErrorPolicyApplied
+            ? 'batch-followup'
+            : 'full'
           actionDetail = await this.createZaloErrorDetail(
             account,
             campaign,
             forwardError,
             actionDescriptor.code,
             actionDescriptor.name,
-            { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' }
+            { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' },
+            { policyHandling }
           )
+          forwardErrorPolicyApplied = true
         } else if (trimmedMessage) {
           forwardTargetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
-          actionDetail = forwardTargetResult?.ok
-            ? this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
-            : await this.createZaloForwardFailureDetail(account, campaign, actionDescriptor, item, forwardTargetResult, trimmedMessage, attachments, forwardResult?.response)
+          if (forwardTargetResult?.ok) {
+            actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
+          } else {
+            const isIsolatedTargetFailure = forwardTargetResult !== null && forwardHasSuccessfulTarget
+            const policyHandling: ZaloFailurePolicyHandling = isIsolatedTargetFailure
+              ? 'target-only'
+              : item.detail.id === forwardBatchPolicyInputDataId
+                ? 'full'
+                : 'batch-followup'
+            actionDetail = await this.createZaloForwardFailureDetail(
+              account,
+              campaign,
+              actionDescriptor,
+              item,
+              forwardTargetResult,
+              trimmedMessage,
+              attachments,
+              forwardResult?.response,
+              policyHandling
+            )
+          }
         } else {
           actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null)
         }
@@ -5297,6 +5336,38 @@ export class CampaignScheduler {
     return forwardResult?.results.find(item => item.threadId === threadId) || null
   }
 
+  private getZaloPolicySideEffectPriority(policy: AutoErrorPolicy | null): number {
+    if (!policy) return 0
+    return (policy.updateLoginStatus ? 8 : 0)
+      + (policy.updateStatusAccount ? 4 : 0)
+      + (policy.updateStatusCampaign ? 2 : 0)
+      + (policy.disableActionCodes.length > 0 ? 1 : 0)
+  }
+
+  private async selectZaloForwardBatchPolicyInputDataId(
+    actionCode: string,
+    candidates: Array<{ inputDataId: number; errorCode: string | null }>
+  ): Promise<number | null> {
+    let selectedInputDataId: number | null = null
+    let selectedPriority = -1
+    const priorityByErrorCode = new Map<string, number>()
+    for (const candidate of candidates) {
+      const cacheKey = candidate.errorCode || '__fallback__'
+      let priority = priorityByErrorCode.get(cacheKey)
+      if (priority === undefined) {
+        priority = this.getZaloPolicySideEffectPriority(
+          await this.getZaloPolicyByErrorCode(candidate.errorCode, actionCode)
+        )
+        priorityByErrorCode.set(cacheKey, priority)
+      }
+      if (priority > selectedPriority) {
+        selectedPriority = priority
+        selectedInputDataId = candidate.inputDataId
+      }
+    }
+    return selectedInputDataId
+  }
+
   private createZaloShareSuccessDetail(
     actionDescriptor: CampaignActionDescriptor,
     item: ZaloShareMessageTarget,
@@ -5332,22 +5403,31 @@ export class CampaignScheduler {
     targetResult: ZaloForwardMessageTargetResult | null,
     message: string,
     attachments: string[],
-    forwardResponse: unknown
+    forwardResponse: unknown,
+    policyHandling: ZaloFailurePolicyHandling
   ): Promise<ZaloActionDetailOutput> {
     const rawMessage = targetResult?.errorMessage || 'Chia sẻ tin nhắn Zalo thất bại'
     const err = {
       message: rawMessage,
       code: targetResult?.errorCode
     }
-    return this.createZaloErrorDetail(account, campaign, err, actionDescriptor.code, actionDescriptor.name, {
-      target: item.target,
-      threadId: item.threadId,
-      message,
-      attachments,
-      sendMode: 'share',
-      forwardTargetResult: targetResult || undefined,
-      forwardResponse: forwardResponse as Record<string, unknown> | undefined
-    })
+    return this.createZaloErrorDetail(
+      account,
+      campaign,
+      err,
+      actionDescriptor.code,
+      actionDescriptor.name,
+      {
+        target: item.target,
+        threadId: item.threadId,
+        message,
+        attachments,
+        sendMode: 'share',
+        forwardTargetResult: targetResult || undefined,
+        forwardResponse: forwardResponse as Record<string, unknown> | undefined
+      },
+      { policyHandling }
+    )
   }
 
   private async recordZaloShareActionDetail(
@@ -12194,7 +12274,8 @@ export class CampaignScheduler {
     err: unknown,
     actionCode: string,
     actionName: string,
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
+    options: { policyHandling?: ZaloFailurePolicyHandling } = {}
   ): Promise<ZaloActionDetailOutput> {
     this.throwIfZaloRuntimeStopping(campaign.id)
     const rawMessage = this.getZaloErrorMessage(err)
@@ -12211,12 +12292,19 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, log)
-    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, {
-      runningProcess: log,
-      campaign: pendingNote
-    })
+    const policyHandling = options.policyHandling ?? 'full'
+    // A mixed forward batch can contain one target failure among successful
+    // targets. Keep its normalized detail/log, but only the first batch-level
+    // failure may mutate account/campaign state.
+    const sideEffects = policyHandling !== 'full'
+      ? { stopAfterTarget: false }
+      : await this.applyZaloPolicySideEffects(account, campaign, policy, {
+        runningProcess: log,
+        campaign: pendingNote
+      })
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+      || (policyHandling === 'target-only' ? 'thất bại' : null)
     await this.logZaloApiError({
       account,
       campaign,
@@ -12238,7 +12326,9 @@ export class CampaignScheduler {
       errorCode: policy?.errorCode || null,
       log,
       countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
+      countsTowardBadTarget: policyHandling === 'target-only'
+        ? false
+        : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
       pendingNote,
       stopAfterTarget: sideEffects.stopAfterTarget,
