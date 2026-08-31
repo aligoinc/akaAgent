@@ -117,6 +117,24 @@ interface DeliveryCooldownBatchResult {
   pausedNotesByInputDataId: Map<number, string>
 }
 
+type ZaloCampaignReadResult<T> =
+  | { status: 'completed'; value: T }
+  | { status: 'interrupted' }
+
+type CampaignSleepResult =
+  | { status: 'paused' | 'boundary' | 'stopped' | 'completed' }
+  | { status: 'hard-stop'; reason: string }
+
+class ZaloCampaignReadError extends Error {
+  constructor(
+    public readonly originalError: unknown,
+    public readonly safeUserMessage?: string
+  ) {
+    super(safeUserMessage || 'Không đọc được dữ liệu từ Zalo')
+    this.name = 'ZaloCampaignReadError'
+  }
+}
+
 export type CampaignSchedulerRuntimeTarget = 'desktop' | 'server'
 
 export interface CampaignSchedulerLogEntry extends CampaignLogEntry {}
@@ -511,6 +529,9 @@ const ZALO_FRIEND_TARGET_MODES = new Set([
   ZALO_FRIEND_TARGET_MODE_TAGGED
 ])
 const ZALO_FRIEND_PAGE_SIZE = 500
+const ZALO_CAMPAIGN_READ_MIN_DELAY_MS = 2_000
+const ZALO_CAMPAIGN_READ_MAX_DELAY_MS = 5_000
+const ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const
 const EMAIL_SEND_ACTION_ID = 'email_send'
 const EMAIL_RECIPIENT_NOT_FOUND_ERROR_CODE = 'err_email_recipient_not_found'
 const ZALO_FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
@@ -1037,16 +1058,16 @@ export class CampaignScheduler {
     campaign: Campaign,
     seconds: number,
     account?: AutoAccount
-  ): Promise<'paused' | 'boundary' | 'stopped' | 'completed'> {
+  ): Promise<CampaignSleepResult> {
     const endAt = Date.now() + seconds * 1000
     let nextServerControlCheckAt = 0
     while (Date.now() < endAt) {
-      if (!this.running) return 'stopped'
-      if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+      if (!this.running) return { status: 'stopped' }
+      if (this.isCampaignPauseRequested(campaign.id)) return { status: 'paused' }
       const boundaryCheck = await this.checkCampaignRunBoundary(campaign.id)
       if (boundaryCheck?.reached) {
         if (!account || await this.yieldCampaignAtRunBoundary(account, campaign, boundaryCheck)) {
-          return 'boundary'
+          return { status: 'boundary' }
         }
       }
       if (account && this.isServerZaloCampaign(account, campaign) && Date.now() >= nextServerControlCheckAt) {
@@ -1058,19 +1079,24 @@ export class CampaignScheduler {
           control.hardStopReason
         )) {
           this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
-          return 'paused'
+          return { status: 'paused' }
         }
-        if (control.hardStopReason) return 'completed'
+        if (control.hardStopReason) {
+          return {
+            status: 'hard-stop',
+            reason: this.getServerZaloHardStopMessage(control.hardStopReason)
+          }
+        }
       }
-      if (this.getZaloRuntimeStopReason(campaign.id)) return 'completed'
+      if (this.getZaloRuntimeStopReason(campaign.id)) return { status: 'completed' }
       await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
     }
-    if (!this.running) return 'stopped'
-    if (this.isCampaignPauseRequested(campaign.id)) return 'paused'
+    if (!this.running) return { status: 'stopped' }
+    if (this.isCampaignPauseRequested(campaign.id)) return { status: 'paused' }
     const boundaryCheck = await this.checkCampaignRunBoundary(campaign.id)
     if (boundaryCheck?.reached) {
       if (!account || await this.yieldCampaignAtRunBoundary(account, campaign, boundaryCheck)) {
-        return 'boundary'
+        return { status: 'boundary' }
       }
     }
     if (account && this.isServerZaloCampaign(account, campaign)) {
@@ -1081,10 +1107,16 @@ export class CampaignScheduler {
         control.hardStopReason
       )) {
         this.latchServerZaloPause(campaign.id, control.campaignStatus, control.accountStatus)
-        return 'paused'
+        return { status: 'paused' }
+      }
+      if (control.hardStopReason) {
+        return {
+          status: 'hard-stop',
+          reason: this.getServerZaloHardStopMessage(control.hardStopReason)
+        }
       }
     }
-    return 'completed'
+    return { status: 'completed' }
   }
 
   private getReadyRuntimeClock() {
@@ -2701,7 +2733,15 @@ export class CampaignScheduler {
     } catch (err) {
       if (!runtimeClaimed) throw err
       if (err instanceof CampaignRunUnitOwnershipLostError) return
-      const errMsg = err instanceof Error ? err.message : String(err)
+      const diagnosticError = err instanceof ZaloCampaignReadError
+        ? err.originalError
+        : err
+      const errMsg = diagnosticError instanceof Error
+        ? diagnosticError.message
+        : String(diagnosticError)
+      const safeUserMessage = err instanceof ZaloCampaignReadError
+        ? err.safeUserMessage
+        : undefined
       const runtimeStopReason = isZaloCampaign
         ? this.getZaloRuntimeStopReason(campaign.id)
         : null
@@ -2719,14 +2759,30 @@ export class CampaignScheduler {
         await this.releaseRunningAccount(account.id)
         return
       }
-      await this.recoverStuckCampaignInputData(campaign.id, errMsg)
+      await this.recoverStuckCampaignInputData(
+        campaign.id,
+        err instanceof ZaloCampaignReadError ? err.message : errMsg
+      )
       if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
       if (this.isNewsfeedDailyCampaign(campaign)) {
         await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
       } else {
-        const handled = await this.handleCampaignBadTarget(account, campaign, null, 'err_undefined', undefined, { message: errMsg })
+        const handled = await this.handleCampaignBadTarget(
+          account,
+          campaign,
+          null,
+          'err_undefined',
+          undefined,
+          {
+            message: errMsg,
+            safeUserMessage
+          }
+        )
         if (!handled.triggered) {
-          await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: handled.message })
+          await this.updateCampaignAndBroadcast(campaign.id, {
+            status: 'chờ xử lý',
+            note: handled.message
+          })
         }
       }
       await this.releaseRunningAccount(account.id)
@@ -2806,7 +2862,9 @@ export class CampaignScheduler {
     }
 
     if (this.shouldMaterializeZaloFriendInputData(campaign, details)) {
-      details = await this.materializeZaloFriendInputData(account, campaign)
+      const materializedDetails = await this.materializeZaloFriendInputData(account, campaign)
+      if (materializedDetails === null) return
+      details = materializedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
         await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
@@ -2828,7 +2886,9 @@ export class CampaignScheduler {
       birthdayBusinessNow &&
       this.shouldMaterializeZaloBirthdayInputData(campaign, details, birthdayBusinessNow)
     ) {
-      details = await this.materializeZaloBirthdayInputData(account, campaign, birthdayBusinessNow)
+      const materializedDetails = await this.materializeZaloBirthdayInputData(account, campaign, birthdayBusinessNow)
+      if (materializedDetails === null) return
+      details = materializedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
         await this.releaseRunningAccount(account.id)
         await this.completeCampaignPause(campaign)
@@ -2842,7 +2902,9 @@ export class CampaignScheduler {
     }
 
     if (this.shouldMaterializeZaloFriendRecommendationInputData(campaign, details)) {
-      details = await this.materializeZaloFriendRecommendationInputData(account, campaign)
+      const materializedDetails = await this.materializeZaloFriendRecommendationInputData(account, campaign)
+      if (materializedDetails === null) return
+      details = materializedDetails
       if (details.length === 0) {
         await this.releaseRunningAccount(account.id)
         return
@@ -2855,7 +2917,9 @@ export class CampaignScheduler {
     }
 
     if (this.shouldMaterializeZaloCancelSentFriendRequestInputData(campaign, details)) {
-      details = await this.materializeZaloCancelSentFriendRequestInputData(account, campaign, details)
+      const materializedDetails = await this.materializeZaloCancelSentFriendRequestInputData(account, campaign, details)
+      if (materializedDetails === null) return
+      details = materializedDetails
       if (details.length === 0) {
         await this.releaseRunningAccount(account.id)
         return
@@ -3733,14 +3797,19 @@ export class CampaignScheduler {
         if (sleepTime > 0) {
           await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime, account)
-          if (sleepResult === 'paused') {
+          if (sleepResult.status === 'paused') {
             await this.completePauseAtBoundary(account, campaign)
             return
           }
-          if (sleepResult === 'boundary') {
+          if (sleepResult.status === 'hard-stop') {
+            await this.stopCampaignForAccountCondition(account, campaign, sleepResult.reason)
+            await this.releaseRunningAccount(account.id)
             return
           }
-          if (sleepResult === 'stopped') return
+          if (sleepResult.status === 'boundary') {
+            return
+          }
+          if (sleepResult.status === 'stopped') return
         }
       }
     }
@@ -4788,14 +4857,19 @@ export class CampaignScheduler {
           const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
           if (sleepTime > 0) {
             const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime, account)
-            if (sleepResult === 'paused') {
+            if (sleepResult.status === 'paused') {
               await this.completePauseAtBoundary(account, campaign)
               return
             }
-            if (sleepResult === 'boundary') {
+            if (sleepResult.status === 'hard-stop') {
+              await this.stopCampaignForAccountCondition(account, campaign, sleepResult.reason)
+              await this.releaseRunningAccount(account.id)
               return
             }
-            if (sleepResult === 'stopped') return
+            if (sleepResult.status === 'boundary') {
+              return
+            }
+            if (sleepResult.status === 'stopped') return
           }
         }
       }
@@ -6178,7 +6252,149 @@ export class CampaignScheduler {
       .join(', ')
   }
 
-  private async materializeZaloFriendInputData(account: AutoAccount, campaign: Campaign): Promise<CampaignInputData[]> {
+  private getZaloCampaignReadDelayMs(): number {
+    return Math.floor(
+      Math.random() * (ZALO_CAMPAIGN_READ_MAX_DELAY_MS - ZALO_CAMPAIGN_READ_MIN_DELAY_MS + 1)
+    ) + ZALO_CAMPAIGN_READ_MIN_DELAY_MS
+  }
+
+  private isZalo429Error(value: unknown): boolean {
+    if (typeof value === 'string') {
+      return /\b429\b|too many requests/i.test(value)
+    }
+    if (!value || typeof value !== 'object') return false
+
+    const error = value as {
+      code?: unknown
+      message?: unknown
+      status?: unknown
+      statusCode?: unknown
+      response?: { status?: unknown; statusCode?: unknown }
+      cause?: unknown
+      originalError?: unknown
+    }
+    if (
+      Number(error.code) === 429 ||
+      Number(error.status) === 429 ||
+      Number(error.statusCode) === 429 ||
+      Number(error.response?.status) === 429 ||
+      Number(error.response?.statusCode) === 429
+    ) return true
+    if (typeof error.message === 'string' && this.isZalo429Error(error.message)) return true
+    if (error.cause !== value && this.isZalo429Error(error.cause)) return true
+    return error.originalError !== value && this.isZalo429Error(error.originalError)
+  }
+
+  private getSafeZaloCampaignReadMessage(error: unknown): string | undefined {
+    if (this.isZalo429Error(error)) {
+      return 'Zalo đang giới hạn tần suất request (HTTP 429). Vui lòng chờ một lúc rồi tiếp tục chiến dịch.'
+    }
+
+    const errorName = error instanceof Error
+      ? error.name
+      : String((error as { name?: unknown } | null)?.name || '').trim()
+    const isTrustedZaloReadError = error instanceof ZaloApiError || [
+      'ZcaApiError',
+      'ZaloApiError',
+      'ZaloChatApiRequestError',
+      'ZaloChatDataScanError'
+    ].includes(errorName)
+    if (!isTrustedZaloReadError) return undefined
+
+    const rawMessage = this.getZaloErrorMessage(error)
+    if (!rawMessage || rawMessage === '[object Object]') return undefined
+
+    const sanitized = rawMessage
+      .replace(/\s+/g, ' ')
+      .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [đã ẩn]')
+      .replace(/https?:\/\/[^\s]+/gi, '[URL đã ẩn]')
+      .replace(
+        /\b(cookie|authorization)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,}]+)/gi,
+        '$1=[đã ẩn]'
+      )
+      .replace(
+        /\b(token|zpsid|zpw_sek|imei|session(?:[_-]?key)?|proxy(?:[_-]?url)?)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+        '$1=[đã ẩn]'
+      )
+      .trim()
+      .slice(0, 500)
+    return sanitized || undefined
+  }
+
+  private wrapZaloCampaignReadError(error: unknown): ZaloCampaignReadError {
+    if (error instanceof ZaloCampaignReadError) return error
+    return new ZaloCampaignReadError(error, this.getSafeZaloCampaignReadMessage(error))
+  }
+
+  private async waitForZaloCampaignReadDelay(
+    account: AutoAccount,
+    campaign: Campaign,
+    delayMs: number
+  ): Promise<boolean> {
+    const result = await this.sleepBetweenTargets(campaign, delayMs / 1000, account)
+    if (result.status === 'paused') {
+      await this.completePauseAtBoundary(account, campaign)
+      return false
+    }
+    if (result.status === 'hard-stop') {
+      await this.stopCampaignForAccountCondition(account, campaign, result.reason)
+      await this.releaseRunningAccount(account.id)
+      return false
+    }
+    if (result.status !== 'completed') return false
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    return true
+  }
+
+  private async paceZaloCampaignRead(
+    account: AutoAccount,
+    campaign: Campaign,
+    operationLabel: string
+  ): Promise<boolean> {
+    const delayMs = this.getZaloCampaignReadDelayMs()
+    await this.logCampaignProgress(
+      campaign.id,
+      `⏳ Chờ ${(delayMs / 1000).toFixed(1)} giây trước khi ${operationLabel}...`
+    )
+    return await this.waitForZaloCampaignReadDelay(account, campaign, delayMs)
+  }
+
+  private async runZaloCampaignReadWith429Retry<T>(
+    account: AutoAccount,
+    campaign: Campaign,
+    operationLabel: string,
+    operation: () => Promise<T>
+  ): Promise<ZaloCampaignReadResult<T>> {
+    let retryIndex = 0
+    while (true) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      try {
+        const value = await operation()
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        return { status: 'completed', value }
+      } catch (error) {
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        if (
+          !this.isZalo429Error(error) ||
+          retryIndex >= ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS.length
+        ) {
+          throw this.wrapZaloCampaignReadError(error)
+        }
+      }
+
+      const retryDelayMs = ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS[retryIndex]
+      await this.logCampaignProgress(
+        campaign.id,
+        `⚠️ Zalo đang giới hạn request khi ${operationLabel}. Tự thử lại sau ${retryDelayMs / 1000} giây (${retryIndex + 1}/${ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS.length})...`
+      )
+      if (!await this.waitForZaloCampaignReadDelay(account, campaign, retryDelayMs)) {
+        return { status: 'interrupted' }
+      }
+      retryIndex += 1
+    }
+  }
+
+  private async materializeZaloFriendInputData(account: AutoAccount, campaign: Campaign): Promise<CampaignInputData[] | null> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     this.throwIfZaloRuntimeStopping(campaign.id)
     const mode = this.getZaloFriendTargetMode(campaign)
@@ -6191,11 +6407,21 @@ export class CampaignScheduler {
         return []
       }
       await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách hội thoại trong ${sourceTagIds.length} tag Zalo: ${this.getZaloFriendSourceTagLogLabel(campaign, sourceTagIds)}`)
+      if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách tag Zalo')) return null
+      const labelsResult = await this.runZaloCampaignReadWith429Retry(
+        account,
+        campaign,
+        'đọc danh sách tag Zalo',
+        () => this.zaloRuntime!.listLabels(account.id)
+      )
+      if (labelsResult.status === 'interrupted') return null
       const conversationUids: string[] = []
       for (const tagId of sourceTagIds) {
-        this.throwIfZaloRuntimeStopping(campaign.id)
-        conversationUids.push(...await this.zaloRuntime.getLabelConversationUids(account.id, tagId))
-        this.throwIfZaloRuntimeStopping(campaign.id)
+        const numericTagId = Number(tagId)
+        if (!Number.isFinite(numericTagId) || numericTagId <= 0) throw new Error('Tag Zalo không hợp lệ')
+        const label = labelsResult.value.find(item => Number(item.id) === numericTagId)
+        if (!label) throw new Error('Tag Zalo không tồn tại')
+        conversationUids.push(...(label.conversations || []))
       }
       allowedUidKeys = new Set(conversationUids.map(uid => this.normalizeUidForCompare(uid)).filter(Boolean))
       if (allowedUidKeys.size === 0) {
@@ -6214,13 +6440,21 @@ export class CampaignScheduler {
     await this.logCampaignProgress(campaign.id, mode === ZALO_FRIEND_TARGET_MODE_TAGGED
       ? '🔄 Đang quét danh sách bạn bè Zalo live để lọc theo tag'
       : '🔄 Đang quét toàn bộ danh sách bạn bè Zalo live')
+    if (!await this.paceZaloCampaignRead(account, campaign, 'đọc trang 1 danh sách bạn bè Zalo')) return null
 
     const profiles: ZaloFriendMaterializedProfile[] = []
     const seen = new Set<string>()
     let page = 1
     while (true) {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      const rows = await this.zaloRuntime.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      const rowsResult = await this.runZaloCampaignReadWith429Retry(
+        account,
+        campaign,
+        `đọc trang ${page} danh sách bạn bè Zalo`,
+        () => this.zaloRuntime!.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      )
+      if (rowsResult.status === 'interrupted') return null
+      const rows = rowsResult.value
       this.throwIfZaloRuntimeStopping(campaign.id)
       for (const row of rows) {
         const profile = this.normalizeZaloFriendProfile(row)
@@ -6233,6 +6467,9 @@ export class CampaignScheduler {
       }
       if (rows.length < ZALO_FRIEND_PAGE_SIZE) break
       page += 1
+      if (!await this.paceZaloCampaignRead(account, campaign, `đọc trang ${page} danh sách bạn bè Zalo`)) {
+        return null
+      }
     }
 
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -6276,20 +6513,28 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     businessNow: Date
-  ): Promise<CampaignInputData[]> {
+  ): Promise<CampaignInputData[] | null> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     this.throwIfZaloRuntimeStopping(campaign.id)
     const todayDateKey = this.getVietnamDateKey(businessNow)
     const todayDdMm = this.getVietnamBirthdayKey(businessNow)
 
     await this.logCampaignProgress(campaign.id, `🔄 Đang quét danh sách bạn bè Zalo live để lọc sinh nhật ${todayDdMm}`)
+    if (!await this.paceZaloCampaignRead(account, campaign, 'đọc trang 1 danh sách bạn bè Zalo')) return null
 
     const profiles: ZaloFriendMaterializedProfile[] = []
     const seen = new Set<string>()
     let page = 1
     while (true) {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      const rows = await this.zaloRuntime.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      const rowsResult = await this.runZaloCampaignReadWith429Retry(
+        account,
+        campaign,
+        `đọc trang ${page} danh sách bạn bè Zalo`,
+        () => this.zaloRuntime!.getAllFriendsPage(account.id, ZALO_FRIEND_PAGE_SIZE, page)
+      )
+      if (rowsResult.status === 'interrupted') return null
+      const rows = rowsResult.value
       this.throwIfZaloRuntimeStopping(campaign.id)
       for (const row of rows) {
         const profile = this.normalizeZaloFriendProfile(row)
@@ -6301,6 +6546,9 @@ export class CampaignScheduler {
       }
       if (rows.length < ZALO_FRIEND_PAGE_SIZE) break
       page += 1
+      if (!await this.paceZaloCampaignRead(account, campaign, `đọc trang ${page} danh sách bạn bè Zalo`)) {
+        return null
+      }
     }
 
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -6372,21 +6620,30 @@ export class CampaignScheduler {
   private async materializeZaloFriendRecommendationInputData(
     account: AutoAccount,
     campaign: Campaign
-  ): Promise<CampaignInputData[]> {
+  ): Promise<CampaignInputData[] | null> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     this.throwIfZaloRuntimeStopping(campaign.id)
     const requestedCount = this.normalizeZaloFriendRecommendationCount(
       campaign.extraSettings?.zaloFriendRecommendationCount
     )
     await this.logCampaignProgress(campaign.id, `🔄 Đang lấy ${requestedCount} đề xuất Zalo`)
+    if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách đề xuất Zalo')) return null
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getFriendRecommendations']>>
     try {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      snapshot = await this.zaloRuntime.getFriendRecommendations(account.id)
+      const snapshotResult = await this.runZaloCampaignReadWith429Retry(
+        account,
+        campaign,
+        'đọc danh sách đề xuất Zalo',
+        () => this.zaloRuntime!.getFriendRecommendations(account.id)
+      )
+      if (snapshotResult.status === 'interrupted') return null
+      snapshot = snapshotResult.value
       this.throwIfZaloRuntimeStopping(campaign.id)
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
+      if (this.isZalo429Error(err)) throw err
       await this.markZaloFriendRecommendationMaterialized(campaign, 0)
       const message = `Không lấy được đề xuất Zalo: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
       await this.completeZaloFriendRecommendationWithoutTargets(campaign, message)
@@ -6478,7 +6735,7 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     existingDetails: CampaignInputData[]
-  ): Promise<CampaignInputData[]> {
+  ): Promise<CampaignInputData[] | null> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     this.throwIfZaloRuntimeStopping(campaign.id)
     const limit = this.normalizeZaloCancelFriendRequestLimit(
@@ -6491,14 +6748,23 @@ export class CampaignScheduler {
     }
 
     await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách lời mời kết bạn đã gửi từ Zalo để huỷ ${limit} lời mời cũ nhất`)
+    if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách lời mời kết bạn đã gửi')) return null
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getSentFriendRequests']>>
     try {
       this.throwIfZaloRuntimeStopping(campaign.id)
-      snapshot = await this.zaloRuntime.getSentFriendRequests(account.id)
+      const snapshotResult = await this.runZaloCampaignReadWith429Retry(
+        account,
+        campaign,
+        'đọc danh sách lời mời kết bạn đã gửi',
+        () => this.zaloRuntime!.getSentFriendRequests(account.id)
+      )
+      if (snapshotResult.status === 'interrupted') return null
+      snapshot = snapshotResult.value
       this.throwIfZaloRuntimeStopping(campaign.id)
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
+      if (this.isZalo429Error(err)) throw err
       await this.markZaloCancelSentFriendRequestMaterialized(campaign, 0)
       const message = `Không lấy được danh sách lời mời kết bạn đã gửi từ Zalo: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
       await this.completeZaloCancelSentFriendRequestWithoutTargets(campaign, message)
@@ -7768,19 +8034,34 @@ export class CampaignScheduler {
       actionCode: replacements.actionCode || actionCode,
       action_code: replacements.action_code || actionCode
     }
-    const policy = await this.supabase.getErrorPolicy(errorCode) || await this.supabase.getErrorPolicy('err_undefined')
+    const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+    const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
+    const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+    const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
+    const userFacingReplacements = isUndefinedErrorPolicy
+      ? {
+          ...policyReplacements,
+          message: safeUserMessage,
+          x: safeUserMessage
+        }
+      : policyReplacements
     if (!policy) {
-      const message = policyReplacements.message || 'Có lỗi xảy ra'
+      const message = isUndefinedErrorPolicy
+        ? safeUserMessage || 'Có lỗi xảy ra'
+        : policyReplacements.message || 'Có lỗi xảy ra'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
       return { triggered: true, message }
     }
 
+    const configuredMessage = this.renderPolicyMessage(
+      policy.notiCampaign || policy.notiRunningProcess,
+      userFacingReplacements
+    )
     const message = this.addActionContextToMessage(
-      this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, policyReplacements)
-      || policyReplacements.message
+      (isUndefinedErrorPolicy ? safeUserMessage || configuredMessage : configuredMessage || policyReplacements.message)
       || policy.errorDesc
       || policy.errorName,
-      policyReplacements
+      userFacingReplacements
     )
     const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
 
@@ -7818,21 +8099,32 @@ export class CampaignScheduler {
     const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
     const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
     const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+    const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
+    const userFacingReplacements = isUndefinedErrorPolicy
+      ? {
+          ...policyReplacements,
+          message: safeUserMessage,
+          x: safeUserMessage
+        }
+      : policyReplacements
     const threshold = this.getPolicyThreshold(policy)
     if (!policy || !threshold) {
       return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
     }
 
+    const configuredNotice = this.renderPolicyMessage(policy.notiRunningProcess, userFacingReplacements)
     const notice = this.addActionContextToMessage(
-      this.renderPolicyMessage(policy.notiRunningProcess, policyReplacements) ||
-      policyReplacements.message ||
-      policy.errorName,
-      policyReplacements
+      (isUndefinedErrorPolicy ? safeUserMessage || configuredNotice : configuredNotice || policyReplacements.message)
+      || policy.errorName,
+      userFacingReplacements
     )
+    const failureMessage = isUndefinedErrorPolicy
+      ? safeUserMessage || notice
+      : policyReplacements.message || notice
     const state = await this.supabase.incrementCampaignBadTargetCount(
       campaign.id,
       inputDataId,
-      policyReplacements.message || notice
+      failureMessage
     )
     const count = state.countConsecutiveBadTargets
     // Page inbox messaging gets one scheduler restart before the policy is
@@ -7854,8 +8146,7 @@ export class CampaignScheduler {
 
     let thresholdReason = String(
       policyReplacements.thresholdReason ||
-      policyReplacements.message ||
-      notice ||
+      failureMessage ||
       'Lỗi không xác định'
     ).trim() || 'Lỗi không xác định'
     if (isUndefinedErrorPolicy) {
