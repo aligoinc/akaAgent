@@ -178,6 +178,9 @@ export class SupabaseService {
   updateClaimedZaloServerCampaign(id: number, updates: CampaignUpdate) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
   }
+  updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note'>) {
+    return campaignRepo.updateRunningDesktopCampaign(id, updates)
+  }
   reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {
     return campaignRepo.reopenCompletedCampaignAfterInputInsert(id, expectedActionId)
   }

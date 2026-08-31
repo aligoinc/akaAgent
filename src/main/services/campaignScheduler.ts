@@ -163,6 +163,18 @@ interface CampaignBadTargetResult extends RuntimeErrorResult {
 
 type ZaloFailurePolicyHandling = 'full' | 'target-only' | 'batch-followup'
 
+interface ZaloShareMessageBatchResult {
+  stopAfterBatch: boolean
+  pauseAfterBatch: boolean
+  stopNote: string | null
+}
+
+interface ZaloShareMessageBadTargetFailure {
+  inputDataId: number
+  actionCode: string
+  message: string
+}
+
 interface MilestoneSummary {
   hasSuccess: boolean
   hasFailure: boolean
@@ -969,8 +981,19 @@ export class CampaignScheduler {
       return campaign
     }
 
-    const campaign = await this.supabase.getCampaign(campaignId)
+    // Latch synchronously before the first desktop DB await. Otherwise a batch
+    // boundary can observe no pause, yield to this request's initial read, and
+    // publish "chờ xử lý" after the user already clicked pause.
+    this.pauseRequests.add(campaignId)
+    let campaign: Campaign | null
+    try {
+      campaign = await this.supabase.getCampaign(campaignId)
+    } catch (error) {
+      this.pauseRequests.delete(campaignId)
+      throw error
+    }
     if (!campaign) {
+      this.pauseRequests.delete(campaignId)
       throw new Error('Không tìm thấy chiến dịch.')
     }
 
@@ -994,16 +1017,23 @@ export class CampaignScheduler {
       if (transition.reason === 'runtime_busy' || transition.reason === 'unit_lease_busy') {
         const latest = await this.supabase.getCampaign(campaignId)
         if (latest?.status === 'đang chạy') {
-          this.pauseRequests.add(campaignId)
           return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
         }
-        if (latest?.status === 'tạm dừng') return latest
+        if (latest?.status === 'chờ xử lý') {
+          // The scheduler has settled the batch but has not released its runtime
+          // claim yet. Keep the latch so its final release completes the pause.
+          return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+        }
+        if (latest?.status === 'tạm dừng') {
+          this.pauseRequests.delete(campaignId)
+          return latest
+        }
       }
+      this.pauseRequests.delete(campaignId)
       throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng thử lại.')
     }
 
     if (campaign.status === 'đang chạy') {
-      this.pauseRequests.add(campaignId)
       const updated = await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
       if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
         const abort = this.activeV2Aborts.get(campaignId)
@@ -1012,6 +1042,7 @@ export class CampaignScheduler {
       return updated
     }
 
+    this.pauseRequests.delete(campaignId)
     throw new Error('Chỉ có thể tạm dừng chiến dịch khi trạng thái là "chờ xử lý" hoặc "đang chạy".')
   }
 
@@ -1054,6 +1085,51 @@ export class CampaignScheduler {
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: null })
     this.pauseRequests.delete(campaign.id)
     await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+  }
+
+  /**
+   * The campaign has already released its account and may now be claimable by
+   * another runtime. Finish a late desktop pause only through the guarded
+   * control RPC; never overwrite a newer running owner with a plain update.
+   */
+  private async completeReleasedDesktopCampaignPause(campaign: Campaign): Promise<void> {
+    const transition = await this.supabase.setDesktopCampaignStatusV2(
+      campaign.id,
+      campaign.accountId,
+      'tạm dừng'
+    )
+    const pauseCompleted = transition.ok || transition.reason === 'already_target'
+    if (pauseCompleted) this.pauseRequests.delete(campaign.id)
+
+    const current = await this.supabase.getCampaign(campaign.id)
+    if (!current) {
+      this.pauseRequests.delete(campaign.id)
+      throw new Error('Không tìm thấy chiến dịch sau khi hoàn tất yêu cầu tạm dừng.')
+    }
+
+    this.broadcastCampaignUpdate(current)
+    if (current.status === 'tạm dừng') {
+      this.pauseRequests.delete(campaign.id)
+      await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+      return
+    }
+
+    // The pause committed, then a newer resume/status transition won before
+    // this refresh. The completed request must not remain latched and re-pause
+    // that newer state.
+    if (pauseCompleted) return
+
+    if (current.status !== 'đang chạy' && current.status !== 'chờ xử lý') {
+      this.pauseRequests.delete(campaign.id)
+      return
+    }
+
+    // A new runtime/unit can win after account release. Preserve its state and
+    // keep the local pause latch so this scheduler pauses at its next boundary.
+    console.warn(
+      `Late desktop pause for campaign ${campaign.id} deferred (${transition.reason}); ` +
+      `current status remains ${current.status}.`
+    )
   }
 
   private async sleepBetweenTargets(
@@ -4614,7 +4690,7 @@ export class CampaignScheduler {
 
         const batchCandidates: CampaignInputData[] = []
         const batch: ZaloShareMessageTarget[] = []
-        let stopAfterInvalidTarget = false
+        const invalidBatchTargets: CampaignInputData[] = []
 
         while (index < details.length && batchCandidates.length < capacity.capacity) {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
@@ -4688,10 +4764,7 @@ export class CampaignScheduler {
 
           const target = this.createZaloShareMessageTarget(campaign, detail)
           if (!target) {
-            if (!await this.beginCampaignRunUnit(account, campaign, [detail.id])) return
-            stopAfterInvalidTarget = await this.handleInvalidZaloShareMessageTarget(account, campaign, detail, actionDescriptor)
-            if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
-            if (stopAfterInvalidTarget) break
+            invalidBatchTargets.push(detail)
             continue
           }
           if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
@@ -4722,20 +4795,20 @@ export class CampaignScheduler {
           break
         }
 
-        if (stopAfterInvalidTarget) {
-          stoppedBeforeCompletion = true
-          break
-        }
-        if (batch.length === 0) continue
+        if (batch.length === 0 && invalidBatchTargets.length === 0) continue
 
-        const rawBatchMessage = this.getRawCampaignContentForIndex(campaign, batchIndex)
-        const batchAttachments = usesAdvancedContent
-          ? await this.resolveCampaignMediaForIndex(campaign, batchIndex, false, mediaTempPaths)
-          : (simpleAttachments || [])
-        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        batchIndex += 1
-        const message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
-        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        let batchAttachments: string[] = []
+        let message = ''
+        if (batch.length > 0) {
+          const rawBatchMessage = this.getRawCampaignContentForIndex(campaign, batchIndex)
+          batchAttachments = usesAdvancedContent
+            ? await this.resolveCampaignMediaForIndex(campaign, batchIndex, false, mediaTempPaths)
+            : (simpleAttachments || [])
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+          batchIndex += 1
+          message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
+          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        }
         const contentStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (contentStopReason) {
           if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
@@ -4757,12 +4830,19 @@ export class CampaignScheduler {
         if (!await this.beginCampaignRunUnit(
           account,
           campaign,
-          batch.map(item => item.detail.id)
+          [
+            ...batch.map(item => item.detail.id),
+            ...invalidBatchTargets.map(detail => detail.id)
+          ]
         )) return
         const claimedBatchStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (claimedBatchStopReason) {
           if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
-          await this.settleZaloShareBatchRuntimeStop(batch, new Set(), claimedBatchStopReason)
+          await this.settleZaloShareBatchRuntimeStop(
+            [...batch.map(item => item.detail), ...invalidBatchTargets],
+            new Set(),
+            claimedBatchStopReason
+          )
           stoppedBeforeCompletion = true
         }
         if (stoppedBeforeCompletion) {
@@ -4800,12 +4880,17 @@ export class CampaignScheduler {
               .finally(() => { batchControlCheckInFlight = false })
           }, 5000)
         }
-        let stopAfterBatch = false
+        let batchResult: ZaloShareMessageBatchResult = {
+          stopAfterBatch: false,
+          pauseAfterBatch: false,
+          stopNote: null
+        }
         try {
-          stopAfterBatch = await this.processZaloShareMessageBatch(
+          batchResult = await this.processZaloShareMessageBatch(
             account,
             campaign,
             batch,
+            invalidBatchTargets,
             actionDescriptor,
             message,
             batchAttachments
@@ -4814,6 +4899,10 @@ export class CampaignScheduler {
           if (batchControlGuard) clearInterval(batchControlGuard)
         }
         if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
+        if (this.isCampaignPauseRequested(campaign.id)) {
+          await this.completePauseAtBoundary(account, campaign)
+          return
+        }
         const postBatchControl = await this.getServerZaloBoundaryReason(account, campaign)
         if (postBatchControl.paused) {
           await this.completePauseAtBoundary(account, campaign)
@@ -4829,14 +4918,36 @@ export class CampaignScheduler {
           break
         }
         const processedStopReason = this.getZaloRuntimeStopReason(campaign.id)
-        if (stopAfterBatch || processedStopReason) {
+        if (batchResult.stopAfterBatch || processedStopReason) {
           if (processedStopReason && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           stoppedBeforeCompletion = true
           if (processedStopReason) {
-            await this.updateCampaignAndBroadcast(campaign.id, {
+            if (this.isCampaignPauseRequested(campaign.id)) {
+              await this.completePauseAtBoundary(account, campaign)
+              return
+            }
+            await this.updateRunningCampaignAndBroadcast(campaign.id, {
               status: 'chờ xử lý',
               note: this.getZaloRuntimeCampaignStopNote(processedStopReason)
             })
+            if (this.isCampaignPauseRequested(campaign.id)) {
+              await this.completePauseAtBoundary(account, campaign)
+              return
+            }
+          } else {
+            if (this.isCampaignPauseRequested(campaign.id)) {
+              await this.completePauseAtBoundary(account, campaign)
+              return
+            }
+            const stopStatus = batchResult.pauseAfterBatch ? 'tạm dừng' : 'chờ xử lý'
+            await this.updateRunningCampaignAndBroadcast(campaign.id, {
+              status: stopStatus,
+              note: batchResult.stopNote || 'Chiến dịch đã dừng sau batch để chờ kiểm tra lại'
+            })
+            if (this.isCampaignPauseRequested(campaign.id)) {
+              await this.completePauseAtBoundary(account, campaign)
+              return
+            }
           }
           break
         }
@@ -4887,6 +4998,9 @@ export class CampaignScheduler {
         }
       }
       await this.releaseRunningAccount(account.id)
+      if (!this.isServerZaloCampaign(account, campaign) && this.isCampaignPauseRequested(campaign.id)) {
+        await this.completeReleasedDesktopCampaignPause(campaign)
+      }
     } catch (err) {
       if (this.isCampaignMediaResolveError(err)) {
         await this.pauseCampaignForMediaError(campaign, null, err)
@@ -5036,48 +5150,26 @@ export class CampaignScheduler {
     }
   }
 
-  private async handleInvalidZaloShareMessageTarget(
-    account: AutoAccount,
-    campaign: Campaign,
-    detail: CampaignInputData,
-    actionDescriptor: CampaignActionDescriptor
-  ): Promise<boolean> {
-    const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-    const rawMessage = isGroup ? 'ID group Zalo không hợp lệ' : 'UID bạn bè Zalo không hợp lệ'
-    const actionDetail = await this.createZaloPolicyDetailFromCode(
-      account,
-      campaign,
-      await this.supabase.getZaloErrorPolicyByCode('114'),
-      rawMessage,
-      actionDescriptor.code,
-      actionDescriptor.name,
-      '114',
-      { inputData: this.buildZaloShareInputData(detail) }
-    )
-    await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail)
-    await this.updateZaloShareInputStatus(detail, actionDetail)
-    if (actionDetail.stopAfterTarget) return true
-    return false
-  }
-
   private async processZaloShareMessageBatch(
     account: AutoAccount,
     campaign: Campaign,
     batch: ZaloShareMessageTarget[],
+    invalidTargets: CampaignInputData[],
     actionDescriptor: CampaignActionDescriptor,
     message: string,
     attachments: string[]
-  ): Promise<boolean> {
+  ): Promise<ZaloShareMessageBatchResult> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+    const claimedDetails = [...batch.map(item => item.detail), ...invalidTargets]
     const initialStopReason = this.getZaloRuntimeStopReason(campaign.id)
     if (initialStopReason) {
-      await this.settleZaloShareBatchRuntimeStop(batch, new Set(), initialStopReason)
-      return true
+      await this.settleZaloShareBatchRuntimeStop(claimedDetails, new Set(), initialStopReason)
+      return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
     }
 
     const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
     const trimmedMessage = String(message || '').trim()
-    const mediaFailures = new Map<number, ZaloActionDetailOutput>()
+    const mediaFailures = new Map<number, unknown>()
     const mediaResponses = new Map<number, unknown>()
     const startedInputDataIds = new Set<number>()
 
@@ -5086,8 +5178,8 @@ export class CampaignScheduler {
         for (const item of batch) {
           const beforeSendStopReason = this.getZaloRuntimeStopReason(campaign.id)
           if (beforeSendStopReason) {
-            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeSendStopReason)
-            return true
+            await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeSendStopReason)
+            return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
           }
 
           startedInputDataIds.add(item.detail.id)
@@ -5106,27 +5198,20 @@ export class CampaignScheduler {
           // start another API call from this obsolete runtime.
           const afterSendStopReason = this.getZaloRuntimeStopReason(campaign.id)
           if (afterSendStopReason) {
-            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterSendStopReason)
-            return true
+            await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterSendStopReason)
+            return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
           }
 
           if (sendError) {
-            mediaFailures.set(item.detail.id, await this.createZaloErrorDetail(
-              account,
-              campaign,
-              sendError,
-              actionDescriptor.code,
-              actionDescriptor.name,
-              { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' }
-            ))
+            mediaFailures.set(item.detail.id, sendError)
           } else {
             mediaResponses.set(item.detail.id, response)
           }
 
           const afterMediaDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
           if (afterMediaDetailStopReason) {
-            await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterMediaDetailStopReason)
-            return true
+            await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterMediaDetailStopReason)
+            return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
           }
         }
       }
@@ -5137,8 +5222,8 @@ export class CampaignScheduler {
       if (trimmedMessage && textBatch.length > 0) {
         const beforeForwardStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeForwardStopReason) {
-          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeForwardStopReason)
-          return true
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeForwardStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
         textBatch.forEach(item => startedInputDataIds.add(item.detail.id))
         try {
@@ -5151,45 +5236,120 @@ export class CampaignScheduler {
 
         const afterForwardStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterForwardStopReason) {
-          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterForwardStopReason)
-          return true
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterForwardStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
       }
 
       let stopAfterBatch = false
+      let stopNote: string | null = null
       let shareSuccessCount = 0
       let shareFailCount = 0
-      const forwardHasSuccessfulTarget = textBatch.some(item => (
-        forwardResult?.results.some(result => result.threadId === item.threadId && result.ok) === true
-      ))
-      const forwardBatchPolicyInputDataId = forwardError || !trimmedMessage
+      const badTargetFailures: ZaloShareMessageBadTargetFailure[] = []
+      const batchHasSuccessfulTarget = batch.some(item => {
+        if (mediaFailures.has(item.detail.id)) return false
+        if (mediaResponses.has(item.detail.id)) return true
+        if (!trimmedMessage) return true
+        return this.findZaloForwardTargetResult(forwardResult, item.threadId)?.ok === true
+      })
+      const batchPolicyInputDataId = batchHasSuccessfulTarget
         ? null
         : await this.selectZaloForwardBatchPolicyInputDataId(
           actionDescriptor.code,
-          textBatch.flatMap(item => {
-            const result = this.findZaloForwardTargetResult(forwardResult, item.threadId)
-            if (result?.ok || (result !== null && forwardHasSuccessfulTarget)) return []
-            return [{ inputDataId: item.detail.id, errorCode: result?.errorCode || null }]
-          })
+          [
+            ...invalidTargets.map(detail => ({ inputDataId: detail.id, errorCode: '114' })),
+            ...batch.flatMap(item => {
+              const mediaFailure = mediaFailures.get(item.detail.id)
+              if (mediaFailure) {
+                return [{ inputDataId: item.detail.id, errorCode: this.getZaloErrorCode(mediaFailure) }]
+              }
+              if (forwardError) {
+                return [{ inputDataId: item.detail.id, errorCode: this.getZaloErrorCode(forwardError) }]
+              }
+              if (!trimmedMessage) return []
+              const result = this.findZaloForwardTargetResult(forwardResult, item.threadId)
+              if (result?.ok) return []
+              return [{ inputDataId: item.detail.id, errorCode: result?.errorCode || null }]
+            })
+          ]
         )
-      let forwardErrorPolicyApplied = false
+
+      const invalidTargetPolicy = invalidTargets.length > 0
+        ? await this.supabase.getZaloErrorPolicyByCode('114', actionDescriptor.code)
+        : null
+      const invalidTargetMessage = isGroup ? 'ID group Zalo không hợp lệ' : 'UID bạn bè Zalo không hợp lệ'
+      for (const detail of invalidTargets) {
+        const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
+        if (beforeDetailStopReason) {
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeDetailStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
+        }
+        const policyHandling: ZaloFailurePolicyHandling = batchHasSuccessfulTarget
+          ? 'target-only'
+          : detail.id === batchPolicyInputDataId
+            ? 'full'
+            : 'batch-followup'
+        const actionDetail = await this.createZaloPolicyDetailFromCode(
+          account,
+          campaign,
+          invalidTargetPolicy,
+          invalidTargetMessage,
+          actionDescriptor.code,
+          actionDescriptor.name,
+          '114',
+          { inputData: this.buildZaloShareInputData(detail) },
+          { policyHandling }
+        )
+        const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail)
+        await this.updateZaloShareInputStatus(detail, actionDetail)
+        // Validation is now terminal for this claimed input even though no Zalo
+        // API call was needed. A later runtime stop must not requeue it.
+        startedInputDataIds.add(detail.id)
+        if (actionDetail.stopAfterTarget) {
+          stopAfterBatch = true
+          stopNote ??= actionDetail.pendingNote || actionDetail.log || null
+        }
+        shareFailCount += 1
+        const normalizedFailureStatus = this.normalizeZaloDetailStatus(created?.status || actionDetail.status)
+        if (
+          actionDetail.countsTowardBadTarget !== false &&
+          (normalizedFailureStatus === 'thất bại' || normalizedFailureStatus === 'lỗi')
+        ) {
+          badTargetFailures.push({
+            inputDataId: detail.id,
+            actionCode: actionDetail.actionCode || actionDescriptor.code,
+            message: actionDetail.log || invalidTargetMessage
+          })
+        }
+      }
+
       for (const item of batch) {
         const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeDetailStopReason) {
-          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, beforeDetailStopReason)
-          return true
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeDetailStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
 
         const mediaFailure = mediaFailures.get(item.detail.id)
         let actionDetail: ZaloActionDetailOutput
         let forwardTargetResult: ZaloForwardMessageTargetResult | null = null
+        const failurePolicyHandling = batchHasSuccessfulTarget
+          ? 'target-only'
+          : item.detail.id === batchPolicyInputDataId
+            ? 'full'
+            : 'batch-followup'
 
         if (mediaFailure) {
-          actionDetail = mediaFailure
+          actionDetail = await this.createZaloErrorDetail(
+            account,
+            campaign,
+            mediaFailure,
+            actionDescriptor.code,
+            actionDescriptor.name,
+            { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' },
+            { policyHandling: failurePolicyHandling }
+          )
         } else if (forwardError) {
-          const policyHandling: ZaloFailurePolicyHandling = forwardErrorPolicyApplied
-            ? 'batch-followup'
-            : 'full'
           actionDetail = await this.createZaloErrorDetail(
             account,
             campaign,
@@ -5197,20 +5357,13 @@ export class CampaignScheduler {
             actionDescriptor.code,
             actionDescriptor.name,
             { target: item.target, threadId: item.threadId, message: trimmedMessage, attachments, inputData: item.inputData, sendMode: 'share_text' },
-            { policyHandling }
+            { policyHandling: failurePolicyHandling }
           )
-          forwardErrorPolicyApplied = true
         } else if (trimmedMessage) {
           forwardTargetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
           if (forwardTargetResult?.ok) {
             actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response)
           } else {
-            const isIsolatedTargetFailure = forwardTargetResult !== null && forwardHasSuccessfulTarget
-            const policyHandling: ZaloFailurePolicyHandling = isIsolatedTargetFailure
-              ? 'target-only'
-              : item.detail.id === forwardBatchPolicyInputDataId
-                ? 'full'
-                : 'batch-followup'
             actionDetail = await this.createZaloForwardFailureDetail(
               account,
               campaign,
@@ -5220,7 +5373,7 @@ export class CampaignScheduler {
               trimmedMessage,
               attachments,
               forwardResult?.response,
-              policyHandling
+              failurePolicyHandling
             )
           }
         } else {
@@ -5263,19 +5416,20 @@ export class CampaignScheduler {
         const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
         const afterRecordStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterRecordStopReason) {
-          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterRecordStopReason)
-          return true
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterRecordStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
         await this.updateZaloShareInputStatus(item.detail, actionDetail)
 
         const afterInputUpdateStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterInputUpdateStopReason) {
-          await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, afterInputUpdateStopReason)
-          return true
+          await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterInputUpdateStopReason)
+          return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
 
         if (actionDetail.stopAfterTarget) {
           stopAfterBatch = true
+          stopNote ??= actionDetail.pendingNote || actionDetail.log || null
         }
 
         const createdStatus = created?.status || actionDetail.status
@@ -5284,36 +5438,79 @@ export class CampaignScheduler {
           await this.resetCampaignBadTargetCount(campaign)
         } else {
           shareFailCount += 1
+          const normalizedFailureStatus = this.normalizeZaloDetailStatus(createdStatus)
+          if (
+            actionDetail.countsTowardBadTarget !== false &&
+            (normalizedFailureStatus === 'thất bại' || normalizedFailureStatus === 'lỗi')
+          ) {
+            badTargetFailures.push({
+              inputDataId: item.detail.id,
+              actionCode: actionDetail.actionCode || actionDescriptor.code,
+              message: actionDetail.log || 'Lỗi target trong batch chia sẻ tin nhắn Zalo'
+            })
+          }
         }
+      }
+
+      // A mixed batch proves the account can still deliver. Its failed targets
+      // are terminal target-only outcomes and must never consume the campaign's
+      // consecutive bad-target threshold. Only a batch with zero successes may
+      // advance the shared err_undefined threshold, matching Chat API/App Server.
+      if (!batchHasSuccessfulTarget) {
+        for (const failure of badTargetFailures) {
+          const handled = await this.handleCampaignBadTarget(
+            account,
+            campaign,
+            failure.inputDataId,
+            'err_undefined',
+            failure.actionCode,
+            {
+              message: failure.message,
+              thresholdReason: failure.message
+            }
+          )
+          if (handled.triggered) {
+            stopAfterBatch = true
+            stopNote = handled.message
+            break
+          }
+        }
+      }
+
+      let pauseAfterBatch = false
+      if (!batchHasSuccessfulTarget && !stopAfterBatch) {
+        stopAfterBatch = true
+        pauseAfterBatch = true
+        stopNote = `Toàn bộ ${claimedDetails.length} target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra`
       }
 
       await this.logCampaignProgress(
         campaign.id,
-        `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batch.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
+        `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${claimedDetails.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
       )
 
-      return stopAfterBatch
+      return { stopAfterBatch, pauseAfterBatch, stopNote }
     } catch (err) {
       const runtimeStopReason = this.getZaloRuntimeStopReason(campaign.id)
       if (runtimeStopReason) {
-        await this.settleZaloShareBatchRuntimeStop(batch, startedInputDataIds, runtimeStopReason)
-        return true
+        await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, runtimeStopReason)
+        return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
       }
       throw err
     }
   }
 
   private async settleZaloShareBatchRuntimeStop(
-    batch: ZaloShareMessageTarget[],
+    details: CampaignInputData[],
     startedInputDataIds: Set<number>,
     reason: ZaloRuntimeStopReason
   ): Promise<void> {
     if (this.zaloRuntimeClaimsAbandoned) return
     const uncertainNote = this.getZaloRuntimeUncertainNote(reason)
-    for (const item of batch) {
+    for (const detail of details) {
       if (this.zaloRuntimeClaimsAbandoned) return
-      if (startedInputDataIds.has(item.detail.id)) {
-        await this.supabase.updateCampaignInputData(item.detail.id, {
+      if (startedInputDataIds.has(detail.id)) {
+        await this.supabase.updateCampaignInputData(detail.id, {
           status: 'hoàn thành',
           note: uncertainNote
         })
@@ -5321,7 +5518,7 @@ export class CampaignScheduler {
       } else {
         // This target was reserved for the batch but no Zalo API call started,
         // so it is safe for the next runtime to process it.
-        await this.supabase.updateCampaignInputData(item.detail.id, {
+        await this.supabase.updateCampaignInputData(detail.id, {
           status: 'chờ xử lý'
         })
         if (this.zaloRuntimeClaimsAbandoned) return
@@ -12353,7 +12550,8 @@ export class CampaignScheduler {
     actionCode: string,
     actionName: string,
     zaloCode: string | null,
-    data: Record<string, unknown> = {}
+    data: Record<string, unknown> = {},
+    options: { policyHandling?: ZaloFailurePolicyHandling } = {}
   ): Promise<ZaloActionDetailOutput> {
     this.throwIfZaloRuntimeStopping(campaign.id)
     const log = this.renderZaloPolicyLog(policy, rawMessage, {
@@ -12366,12 +12564,16 @@ export class CampaignScheduler {
       action: actionName,
       actionCode
     }, log)
-    const sideEffects = await this.applyZaloPolicySideEffects(account, campaign, policy, {
-      runningProcess: log,
-      campaign: pendingNote
-    })
+    const policyHandling = options.policyHandling ?? 'full'
+    const sideEffects = policyHandling !== 'full'
+      ? { stopAfterTarget: false }
+      : await this.applyZaloPolicySideEffects(account, campaign, policy, {
+        runningProcess: log,
+        campaign: pendingNote
+      })
     this.throwIfZaloRuntimeStopping(campaign.id)
     const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+      || (policyHandling === 'target-only' ? 'thất bại' : null)
     return {
       createDetail: Boolean(detailStatus),
       actionCode,
@@ -12380,7 +12582,9 @@ export class CampaignScheduler {
       errorCode: policy?.errorCode || null,
       log,
       countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
+      countsTowardBadTarget: policyHandling === 'target-only'
+        ? false
+        : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
       resetInputToPending: !detailStatus,
       pendingNote,
       stopAfterTarget: sideEffects.stopAfterTarget,
@@ -14687,6 +14891,17 @@ export class CampaignScheduler {
       updated,
       updates.extraSettings !== undefined ? { invalidateConfig: true } : undefined
     )
+    return updated
+  }
+
+  private async updateRunningCampaignAndBroadcast(
+    id: number,
+    updates: Pick<Campaign, 'status' | 'note'>
+  ): Promise<Campaign> {
+    const updated = this.claimedServerZaloCampaignIds.has(id)
+      ? await this.supabase.updateClaimedZaloServerCampaign(id, updates)
+      : await this.supabase.updateRunningDesktopCampaign(id, updates)
+    this.broadcastCampaignUpdate(updated)
     return updated
   }
 
