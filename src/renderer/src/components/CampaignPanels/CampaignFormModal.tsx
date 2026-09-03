@@ -2162,6 +2162,7 @@ export default function CampaignFormModal({
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
     zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || getDefaultZaloAliasTemplate(initialActionId),
     zaloMessageSendMode: (campaign?.extraSettings?.zaloMessageSendMode || 'normal') as ZaloMessageSendMode,
+    zaloOptOutLinkEnabled: campaign?.extraSettings?.zaloOptOutLinkEnabled ?? false,
     zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
     zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
     zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
@@ -2557,6 +2558,7 @@ export default function CampaignFormModal({
   const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isMobileManagedSmsCampaign
   const isPhoneOrUidInputCampaign = isZaloAddGroupMemberCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share' && !isFormattedContentEnabled
+  const supportsZaloOptOutLink = isZaloMessageCampaign && !isZaloMessageGroupCampaign && !isZaloShareMessageMode
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
@@ -6469,6 +6471,7 @@ export default function CampaignFormModal({
             zaloRealtimeGroupNames: selectedZaloRealtimeGroupNames,
             zaloRealtimeEndDate: isZaloMessageGroupRealtimeCampaign ? formData.zaloRealtimeEndDate : null,
             zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && !formattedContentForSave ? formData.zaloMessageSendMode : 'normal',
+            zaloOptOutLinkEnabled: supportsZaloOptOutLink ? formData.zaloOptOutLinkEnabled : false,
             enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.enableZaloTag : false,
             zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
             zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
@@ -10319,6 +10322,7 @@ export default function CampaignFormModal({
                 return {
                   ...compatibleState,
                   zaloMessageSendMode: checked ? 'share' : 'normal',
+                  zaloOptOutLinkEnabled: checked ? false : compatibleState.zaloOptOutLinkEnabled,
                   enableZaloTag: checked ? false : compatibleState.enableZaloTag,
                   zaloTagId: checked ? '' : compatibleState.zaloTagId,
                   zaloTagName: checked ? '' : compatibleState.zaloTagName,
@@ -13144,6 +13148,28 @@ export default function CampaignFormModal({
       <span>Viết nội dung cho mỗi lượt chạy</span>
     </label>
   )
+
+  const renderZaloOptOutLinkOption = () => {
+    if (!supportsZaloOptOutLink) return null
+    return (
+      <div className="stepper-form-group campaign-zalo-opt-out-option">
+        <label className="schedule-checkbox-label">
+          <input
+            type="checkbox"
+            checked={formData.zaloOptOutLinkEnabled}
+            onChange={e => setFormData(current => ({
+              ...current,
+              zaloOptOutLinkEnabled: e.target.checked
+            }))}
+          />
+          <span>Thêm link từ chối nhận tin nhắn</span>
+        </label>
+        <div className="schedule-hint" style={{ marginTop: 6 }}>
+          Hệ thống chỉ thêm link khi lấy được Zalo global ID của người nhận.
+        </div>
+      </div>
+    )
+  }
 
   const renderFormattedContentOption = () => {
     if (!canUseFormattedContent) return null
@@ -16394,6 +16420,7 @@ export default function CampaignFormModal({
                               {renderAdvancedContentEditor()}
                               {renderSmsContentMeta(false)}
                               {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                              {renderZaloOptOutLinkOption()}
                             </>
                           ) : (
                             <>
@@ -16411,6 +16438,7 @@ export default function CampaignFormModal({
                                   {renderSmsContentMeta()}
                                   {!isRichContentEditorEnabled && renderCampaignContentHint()}
                                   {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                                  {renderZaloOptOutLinkOption()}
                                 </div>
                               ) : (
                                 <div className="stepper-form-group">

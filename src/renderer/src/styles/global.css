@@ -17088,6 +17088,10 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   margin-top: 8px;
 }
 
+.campaign-zalo-opt-out-option {
+  margin-top: 8px;
+}
+
 .campaign-content-template-layout .stepper-form-group {
   margin-bottom: 0;
   min-width: 0;

@@ -528,6 +528,7 @@ export interface CampaignExtraSettings {
   postWithBackground?: boolean   // Đăng bài profile/page UI/group với phông nền Facebook
   rewriteContentEachRun?: boolean // Viết lại nội dung chính bằng AI trước mỗi lượt chạy; email chỉ áp dụng plain text
   formattedContentEnabled?: boolean // Nội dung chính là HTML rich-text cho facebook_group_post và các chiến dịch Zalo nhắn tin hỗ trợ
+  zaloOptOutLinkEnabled?: boolean // Thêm link từ chối nhận tin cho 7 chiến dịch Zalo nhắn tin cá nhân
   advancedContentEnabled?: boolean
   advancedContentItems?: CampaignAdvancedContentItem[]
   advancedContentSource?: 'manual' | 'group_snapshot'

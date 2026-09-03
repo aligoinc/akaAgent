@@ -117,6 +117,13 @@ interface DeliveryCooldownBatchResult {
   pausedNotesByInputDataId: Map<number, string>
 }
 
+interface ZaloMessageOptOutRuntimeContext {
+  blocked: boolean
+  target: ZaloResolvedTarget | null
+  warnings: string[]
+  linkId: string | null
+}
+
 type ZaloCampaignReadResult<T> =
   | { status: 'completed'; value: T }
   | { status: 'interrupted' }
@@ -190,6 +197,7 @@ interface MilestoneSummary {
   pendingNote?: string
   inputCompletionNote?: string
   stopAfterTarget?: boolean
+  optOutBlocked?: boolean
 }
 
 interface BlockScreenshotRunResult {
@@ -514,6 +522,17 @@ const ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID = 'zalo_message_group_realtime'
 const ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID = 'zalo_message_remarketing_customer'
 const ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID = 'zalo_message_friend_recommendation'
 const ZALO_MESSAGE_GROUP_ACTION_ID = 'zalo_message_group'
+const ZALO_MESSAGE_OPT_OUT_ACTION_IDS = new Set([
+  ZALO_MESSAGE_PHONE_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_ACTION_ID,
+  ZALO_MESSAGE_BIRTHDAY_ACTION_ID,
+  ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
+  ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
+  ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
+  ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
+])
+const ZALO_MESSAGE_OPT_OUT_NOTE = 'Bỏ qua vì người nhận đã từ chối nhận tin nhắn Zalo'
+const ZALO_MESSAGE_OPT_OUT_URL = 'https://agent.akabiz.net/zalo-message-opt-out'
 const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
@@ -692,6 +711,7 @@ export class CampaignScheduler {
   private runtimeOwnershipLossReported = false
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
   private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
+  private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
 
   constructor(
@@ -3168,6 +3188,7 @@ export class CampaignScheduler {
       // later pending target while the runtime is stopping.
       if (this.isServerZaloCampaign(account, campaign) && !this.running) return
       const detail = targets[i]
+      let zaloOptOutContext: ZaloMessageOptOutRuntimeContext | null = null
       // Completed/paused/error rows are only historical context. Skip them
       // before any per-target DB guards so large campaigns resume immediately
       // instead of issuing multiple queries for every previously handled row.
@@ -3244,6 +3265,11 @@ export class CampaignScheduler {
         continue
       }
 
+      if (detail && ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId)) {
+        zaloOptOutContext = await this.preflightZaloMessageOptOut(account, campaign, detail)
+        if (zaloOptOutContext.blocked) continue
+      }
+
       if (detail && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
         try {
           const cooldown = await this.applyRecentDeliveryCooldown(account, campaign, [detail.id])
@@ -3260,6 +3286,16 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
           return
         }
+      }
+
+      if (detail && zaloOptOutContext) {
+        zaloOptOutContext = await this.prepareZaloMessageOptOutLink(
+          account,
+          campaign,
+          detail,
+          zaloOptOutContext
+        )
+        if (zaloOptOutContext.blocked) continue
       }
 
       const groupPostApproval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
@@ -3458,6 +3494,12 @@ export class CampaignScheduler {
           runUnitInputDataIds,
           { requeueRemainingOnSettle: groupPostShareTargets.length > 0 }
         )) return
+        if (detail && zaloOptOutContext) {
+          this.zaloMessageOptOutContexts.set(
+            this.zaloMessageOptOutContextKey(campaign.id, detail.id),
+            zaloOptOutContext
+          )
+        }
         try {
           if (detail) {
             const inputDataName = this.getInputDataDisplayName(campaign, detail)
@@ -3597,7 +3639,10 @@ export class CampaignScheduler {
 
           if (accountStopReason && !runtimeModeStopRequested) {
             if (detail && !committedDeliveryMustNotRetry) {
-              await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: accountStopReason })
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'chờ xử lý',
+                note: this.withZaloMessageOptOutWarnings(accountStopReason, zaloOptOutContext)
+              })
             }
             await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
             shouldStopAfterTarget = true
@@ -3607,36 +3652,53 @@ export class CampaignScheduler {
             if (runtimeModeStopRequested) {
               await this.supabase.updateCampaignInputData(detail.id, {
                 status: 'hoàn thành',
-                note: this.getZaloRuntimeUncertainNote(runtimeStopReason)
+                note: this.withZaloMessageOptOutWarnings(
+                  this.getZaloRuntimeUncertainNote(runtimeStopReason), zaloOptOutContext
+                )
               })
               consumedGroupPostInputDataIds.add(detail.id)
             } else if (committedDeliveryMustNotRetry) {
               await this.supabase.updateCampaignInputData(detail.id, {
                 status: 'hoàn thành',
-                note: milestoneSummary.inputCompletionNote || (
+                note: this.withZaloMessageOptOutWarnings(milestoneSummary.inputCompletionNote || (
                   accountStopReason
                     ? `${accountStopReason}. Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.`
                     : 'Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.'
-                )
+                ), zaloOptOutContext)
               })
               consumedGroupPostInputDataIds.add(detail.id)
             } else if (result.status === 'completed') {
-              if (milestoneSummary.resetInputToPending) {
+              if (milestoneSummary.optOutBlocked) {
+                // Helper tìm SĐT đã chuyển chính input đang claim sang tạm dừng.
+                // Không ghi đè thành hoàn thành sau khi workflow kết thúc.
+                consumedGroupPostInputDataIds.add(detail.id)
+              } else if (milestoneSummary.resetInputToPending) {
                 await this.supabase.updateCampaignInputData(detail.id, {
                   status: 'chờ xử lý',
-                  note: milestoneSummary.pendingNote || ''
+                  note: this.withZaloMessageOptOutWarnings(
+                    milestoneSummary.pendingNote || '', zaloOptOutContext
+                  ) || ''
                 })
               } else {
-                await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành' })
+                await this.supabase.updateCampaignInputData(detail.id, {
+                  status: 'hoàn thành',
+                  note: this.withZaloMessageOptOutWarnings(null, zaloOptOutContext)
+                })
                 consumedGroupPostInputDataIds.add(detail.id)
                 await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
               }
             } else if (pauseCancelledRun) {
-              await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note: CAMPAIGN_PAUSE_PENDING_NOTE })
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'chờ xử lý',
+                note: this.withZaloMessageOptOutWarnings(CAMPAIGN_PAUSE_PENDING_NOTE, zaloOptOutContext)
+              })
             } else {
               // campaign_input_data enum không có 'lỗi' — set 'hoàn thành' + note (chi tiết lỗi đã ở campaign_details)
               const errMsg = result.error || 'Lỗi không xác định'
-              await this.supabase.updateCampaignInputData(detail.id, { status: 'hoàn thành', note: errMsg })
+              await this.supabase.updateCampaignInputData(detail.id, {
+                status: 'hoàn thành',
+                note: this.withZaloMessageOptOutWarnings(errMsg, zaloOptOutContext)
+              })
               consumedGroupPostInputDataIds.add(detail.id)
               await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
             }
@@ -3752,9 +3814,10 @@ export class CampaignScheduler {
                 : 'hoàn thành'
             await this.supabase.updateCampaignInputData(detail.id, {
               status: nextStatus,
-              note: runtimeModeAbortTriggered
+              note: this.withZaloMessageOptOutWarnings(runtimeModeAbortTriggered
                 ? this.getZaloRuntimeUncertainNote(runtimeStopReason)
-                : accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg)
+                : accountStopReason || (pauseAbortTriggered ? CAMPAIGN_PAUSE_PENDING_NOTE : errMsg),
+              zaloOptOutContext)
             })
             if (nextStatus === 'hoàn thành') consumedGroupPostInputDataIds.add(detail.id)
           }
@@ -3828,6 +3891,11 @@ export class CampaignScheduler {
         }
       } finally {
         this.cleanupCampaignMediaTempFiles(mediaTempPaths)
+        if (detail) {
+          this.zaloMessageOptOutContexts.delete(
+            this.zaloMessageOptOutContextKey(campaign.id, detail.id)
+          )
+        }
       }
 
       // Account-stop/pause handling above contains awaits. A mode change can
@@ -3841,7 +3909,9 @@ export class CampaignScheduler {
         if (detail) {
           await this.supabase.updateCampaignInputData(detail.id, {
             status: 'hoàn thành',
-            note: this.getZaloRuntimeUncertainNote(postTargetRuntimeStopReason)
+            note: this.withZaloMessageOptOutWarnings(
+              this.getZaloRuntimeUncertainNote(postTargetRuntimeStopReason), zaloOptOutContext
+            )
           })
           if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           consumedGroupPostInputDataIds.add(detail.id)
@@ -3868,6 +3938,8 @@ export class CampaignScheduler {
         stoppedBeforeCompletion = true
         break
       }
+
+      if (zaloOptOutContext?.blocked) continue
 
       // Sleep between details
       if (i < targets.length - 1) {
@@ -4738,13 +4810,21 @@ export class CampaignScheduler {
           batchCandidates.push(detail)
         }
 
-        let allowedBatchCandidateIds = new Set(batchCandidates.map(detail => detail.id))
-        if (batchCandidates.length > 0 && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+        const optOutContexts = new Map<number, ZaloMessageOptOutRuntimeContext>()
+        const optOutAllowedCandidates: CampaignInputData[] = []
+        for (const candidate of batchCandidates) {
+          const context = await this.preflightZaloMessageOptOut(account, campaign, candidate)
+          optOutContexts.set(candidate.id, context)
+          if (!context.blocked) optOutAllowedCandidates.push(candidate)
+        }
+
+        let allowedBatchCandidateIds = new Set(optOutAllowedCandidates.map(detail => detail.id))
+        if (optOutAllowedCandidates.length > 0 && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
           try {
             const cooldown = await this.applyRecentDeliveryCooldown(
               account,
               campaign,
-              batchCandidates.map(detail => detail.id)
+              optOutAllowedCandidates.map(detail => detail.id)
             )
             allowedBatchCandidateIds = cooldown.allowedInputDataIds
             for (const candidate of batchCandidates) {
@@ -4768,7 +4848,8 @@ export class CampaignScheduler {
             continue
           }
           if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID) {
-            const resolvedTarget = await this.resolveZaloFriendMessageTarget(account, target.target)
+            const resolvedTarget = optOutContexts.get(detail.id)?.target ||
+              await this.resolveZaloFriendMessageTarget(account, target.target)
             if (this.getZaloRuntimeStopReason(campaign.id)) {
               stoppedBeforeCompletion = true
               break
@@ -4893,7 +4974,8 @@ export class CampaignScheduler {
             invalidBatchTargets,
             actionDescriptor,
             message,
-            batchAttachments
+            batchAttachments,
+            optOutContexts
           )
         } finally {
           if (batchControlGuard) clearInterval(batchControlGuard)
@@ -5157,7 +5239,8 @@ export class CampaignScheduler {
     invalidTargets: CampaignInputData[],
     actionDescriptor: CampaignActionDescriptor,
     message: string,
-    attachments: string[]
+    attachments: string[],
+    optOutContexts: ReadonlyMap<number, ZaloMessageOptOutRuntimeContext>
   ): Promise<ZaloShareMessageBatchResult> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const claimedDetails = [...batch.map(item => item.detail), ...invalidTargets]
@@ -5301,7 +5384,7 @@ export class CampaignScheduler {
           { policyHandling }
         )
         const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail)
-        await this.updateZaloShareInputStatus(detail, actionDetail)
+        await this.updateZaloShareInputStatus(detail, actionDetail, optOutContexts.get(detail.id))
         // Validation is now terminal for this claimed input even though no Zalo
         // API call was needed. A later runtime stop must not requeue it.
         startedInputDataIds.add(detail.id)
@@ -5419,7 +5502,11 @@ export class CampaignScheduler {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterRecordStopReason)
           return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
-        await this.updateZaloShareInputStatus(item.detail, actionDetail)
+        await this.updateZaloShareInputStatus(
+          item.detail,
+          actionDetail,
+          optOutContexts.get(item.detail.id)
+        )
 
         const afterInputUpdateStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterInputUpdateStopReason) {
@@ -5655,19 +5742,26 @@ export class CampaignScheduler {
 
   private async updateZaloShareInputStatus(
     detail: CampaignInputData,
-    actionDetail: ZaloActionDetailOutput
+    actionDetail: ZaloActionDetailOutput,
+    optOutContext?: ZaloMessageOptOutRuntimeContext
   ): Promise<void> {
     if (actionDetail.resetInputToPending && !actionDetail.preventInputRetry) {
       await this.supabase.updateCampaignInputData(detail.id, {
         status: 'chờ xử lý',
-        note: actionDetail.pendingNote || actionDetail.log || ''
+        note: this.withZaloMessageOptOutWarnings(
+          actionDetail.pendingNote || actionDetail.log || '',
+          optOutContext
+        ) || ''
       })
       return
     }
 
     await this.supabase.updateCampaignInputData(detail.id, {
       status: 'hoàn thành',
-      note: actionDetail.status === 'thành công' ? '' : (actionDetail.log || '')
+      note: this.withZaloMessageOptOutWarnings(
+        actionDetail.status === 'thành công' ? '' : (actionDetail.log || ''),
+        optOutContext
+      ) || ''
     })
   }
 
@@ -5743,6 +5837,259 @@ export class CampaignScheduler {
     if (campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID || !detail || !blocklist || blocklist.invalidReason) return false
     const uid = this.normalizeUidForCompare(this.firstNonEmptyString(detail.uid))
     return Boolean(uid && blocklist.uidKeys.has(uid))
+  }
+
+  private zaloMessageOptOutContextKey(campaignId: number, inputDataId: number): string {
+    return `${campaignId}:${inputDataId}`
+  }
+
+  private async recordZaloMessageOptOutWarnings(
+    campaign: Campaign,
+    detail: CampaignInputData,
+    newWarnings: string[],
+    previousWarnings: string[] = [],
+    inputStatus: 'chờ xử lý' | 'đang chạy' = 'chờ xử lý'
+  ): Promise<void> {
+    if (newWarnings.length === 0) return
+    // Campaign theo SĐT ghi milestone lookup sau khi workflow trả kết quả.
+    // Hoãn progress warning cùng milestone đó để log không xuất hiện trước
+    // bước Tìm SĐT dù check opt-out thực tế chỉ chạy sau khi lookup thành công.
+    if (!(inputStatus === 'đang chạy' && campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID)) {
+      await this.logZaloMessageOptOutWarnings(campaign, detail, newWarnings)
+    }
+    const note = [String(detail.note || '').trim(), ...previousWarnings, ...newWarnings]
+      .filter((value, index, all) => value && all.indexOf(value) === index)
+      .join(' ')
+    await this.supabase.updateCampaignInputData(detail.id, {
+      status: inputStatus,
+      note
+    }).catch(() => {})
+  }
+
+  private async logZaloMessageOptOutWarnings(
+    campaign: Campaign,
+    detail: CampaignInputData,
+    warnings: string[]
+  ): Promise<void> {
+    for (const warning of warnings) {
+      await this.logCampaignProgress(
+        campaign.id,
+        `⚠️ "${this.getInputDataDisplayName(campaign, detail)}": ${warning}`
+      ).catch(() => {})
+    }
+  }
+
+  private async blockZaloMessageOptOutTarget(
+    campaign: Campaign,
+    detail: CampaignInputData,
+    inputClaimed = false
+  ): Promise<void> {
+    if (inputClaimed) {
+      await this.supabase.updateCampaignInputData(detail.id, {
+        status: 'tạm dừng',
+        note: ZALO_MESSAGE_OPT_OUT_NOTE
+      })
+    } else {
+      await this.supabase.pausePendingZaloMessageOptOutInput(
+        campaign.id,
+        detail.id,
+        ZALO_MESSAGE_OPT_OUT_NOTE
+      )
+    }
+    detail.status = 'tạm dừng'
+    detail.note = ZALO_MESSAGE_OPT_OUT_NOTE
+    // Campaign theo SĐT chỉ biết có opt-out sau khi bước Tìm SĐT đã hoàn tất.
+    // Detail/quota của bước lookup vẫn phải được ghi nhận; hoãn riêng progress
+    // log opt-out để milestone Tìm SĐT xuất hiện trước, đúng thứ tự thực thi.
+    if (!(inputClaimed && campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID)) {
+      await this.logZaloMessageOptOutBlocked(campaign, detail)
+    }
+  }
+
+  private async logZaloMessageOptOutBlocked(
+    campaign: Campaign,
+    detail: CampaignInputData
+  ): Promise<void> {
+    await this.logCampaignProgress(
+      campaign.id,
+      `🚫 Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${ZALO_MESSAGE_OPT_OUT_NOTE}`
+    ).catch(() => {})
+  }
+
+  private async preflightZaloMessageOptOut(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData
+  ): Promise<ZaloMessageOptOutRuntimeContext> {
+    const context: ZaloMessageOptOutRuntimeContext = {
+      blocked: false,
+      target: null,
+      warnings: [],
+      linkId: null
+    }
+    if (!ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId)) return context
+
+    // Tìm SĐT là bước nghiệp vụ chính của campaign này. Gate opt-out chỉ chạy
+    // trong helper tìm SĐT sau khi đã có target hợp lệ, để lỗi "không tồn tại"
+    // giữ nguyên cách xử lý cũ và không bị biến thành cảnh báo thiếu global ID.
+    if (campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID) return context
+
+    const check = async (
+      target: { phone?: string | null; globalId?: string | null },
+      label: string
+    ): Promise<boolean> => {
+      try {
+        const result = await this.supabase.checkZaloMessageOptOut(campaign.id, account.id, target)
+        return result.isOptedOut
+      } catch (err) {
+        context.warnings.push(
+          `Không thể kiểm tra từ chối nhận tin Zalo theo ${label}; vẫn tiếp tục gửi: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+        )
+        return false
+      }
+    }
+
+    if (String(detail.phone || '').trim() && await check({ phone: detail.phone }, 'SĐT')) {
+      await this.blockZaloMessageOptOutTarget(campaign, detail)
+      context.blocked = true
+      return context
+    }
+
+    try {
+      if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+      const uid = this.firstNonEmptyString(detail.uid)
+      if (uid) {
+        context.target = await this.resolveZaloFriendMessageTarget(
+          account,
+          this.normalizeZaloTargetFromInputData(uid, detail.name, detail as unknown as Record<string, unknown>)
+        )
+      }
+    } catch (err) {
+      context.warnings.push(
+        `Không lấy được Zalo global ID để kiểm tra từ chối nhận tin; vẫn tiếp tục xử lý target: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+      )
+    }
+
+    const profilePhone = String(context.target?.phone || '').trim()
+    if (profilePhone && profilePhone !== String(detail.phone || '').trim() &&
+      await check({ phone: profilePhone }, 'SĐT hồ sơ')) {
+      await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings)
+      await this.blockZaloMessageOptOutTarget(campaign, detail)
+      context.blocked = true
+      return context
+    }
+
+    const globalId = String(context.target?.globalId || '').trim()
+    if (!globalId) {
+      if (!context.warnings.some(warning => warning.includes('Không lấy được Zalo global ID'))) {
+        context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi và không thêm link từ chối nhận tin.')
+      }
+    } else if (await check({ globalId }, 'Zalo global ID')) {
+      await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings)
+      await this.blockZaloMessageOptOutTarget(campaign, detail)
+      context.blocked = true
+      return context
+    }
+
+    await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings)
+    return context
+  }
+
+  private async gateResolvedPhoneMessageTarget(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData,
+    target: ZaloResolvedTarget,
+    context: ZaloMessageOptOutRuntimeContext
+  ): Promise<ZaloMessageOptOutRuntimeContext> {
+    context.target = target
+    const check = async (
+      identity: { phone?: string | null; globalId?: string | null },
+      label: string
+    ): Promise<boolean> => {
+      try {
+        const result = await this.supabase.checkZaloMessageOptOut(campaign.id, account.id, identity)
+        return result.isOptedOut
+      } catch (err) {
+        context.warnings.push(
+          `Không thể kiểm tra từ chối nhận tin Zalo theo ${label}; vẫn tiếp tục gửi: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+        )
+        return false
+      }
+    }
+
+    const inputPhone = String(detail.phone || '').trim()
+    if (inputPhone && await check({ phone: inputPhone }, 'SĐT')) {
+      await this.blockZaloMessageOptOutTarget(campaign, detail, true)
+      context.blocked = true
+      return context
+    }
+
+    const profilePhone = String(target.phone || '').trim()
+    if (profilePhone && profilePhone !== inputPhone && await check({ phone: profilePhone }, 'SĐT hồ sơ')) {
+      await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings, [], 'đang chạy')
+      await this.blockZaloMessageOptOutTarget(campaign, detail, true)
+      context.blocked = true
+      return context
+    }
+
+    const globalId = String(target.globalId || '').trim()
+    if (!globalId) {
+      context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi và không thêm link từ chối nhận tin.')
+    } else if (await check({ globalId }, 'Zalo global ID')) {
+      await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings, [], 'đang chạy')
+      await this.blockZaloMessageOptOutTarget(campaign, detail, true)
+      context.blocked = true
+      return context
+    }
+
+    await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings, [], 'đang chạy')
+    const prepared = await this.prepareZaloMessageOptOutLink(account, campaign, detail, context, true)
+    Object.assign(context, prepared)
+    return context
+  }
+
+  private async prepareZaloMessageOptOutLink(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData,
+    context: ZaloMessageOptOutRuntimeContext,
+    inputClaimed = false
+  ): Promise<ZaloMessageOptOutRuntimeContext> {
+    if (context.blocked || campaign.extraSettings?.zaloOptOutLinkEnabled !== true ||
+      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE) return context
+    const globalId = String(context.target?.globalId || '').trim()
+    if (!globalId) return context
+    try {
+      const prepared = await this.supabase.prepareZaloMessageOptOut(campaign.id, account.id, {
+        globalId,
+        phone: context.target?.phone || detail.phone || null
+      })
+      if (prepared.isOptedOut) {
+        await this.blockZaloMessageOptOutTarget(campaign, detail, inputClaimed)
+        return { ...context, blocked: true, linkId: null }
+      }
+      return { ...context, linkId: prepared.id }
+    } catch (err) {
+      const warning = `Không thể tạo link từ chối nhận tin Zalo; vẫn tiếp tục gửi không có link: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+      await this.recordZaloMessageOptOutWarnings(
+        campaign,
+        detail,
+        [warning],
+        context.warnings,
+        inputClaimed ? 'đang chạy' : 'chờ xử lý'
+      )
+      return { ...context, warnings: [...context.warnings, warning], linkId: null }
+    }
+  }
+
+  private withZaloMessageOptOutWarnings(
+    note: string | null | undefined,
+    context: ZaloMessageOptOutRuntimeContext | null | undefined
+  ): string | undefined {
+    const parts = [String(note || '').trim(), ...(context?.warnings || [])]
+      .filter((value, index, all) => value && all.indexOf(value) === index)
+    return parts.length > 0 ? parts.join(' ') : undefined
   }
 
   private async applyRecentDeliveryCooldown(
@@ -9041,6 +9388,8 @@ export class CampaignScheduler {
       const actionDetail = this.getZaloActionDetailFromStep(step)
       if (!actionDetail) continue
 
+      if (actionDetail.optOutBlocked) summary.optOutBlocked = true
+
       if (actionDetail.deliveryCommitted) {
         summary.deliveryCommitted = true
         if (summary.resetInputToPending) {
@@ -9115,6 +9464,16 @@ export class CampaignScheduler {
           actionName: created.actionName || actionDetail.actionName,
           log: created.log
         }))
+      }
+
+      if (actionDetail.actionCode === ZALO_FIND_PHONE_ACTION_CODE && detail) {
+        const optOutContext = this.zaloMessageOptOutContexts.get(
+          this.zaloMessageOptOutContextKey(campaign.id, detail.id)
+        )
+        await this.logZaloMessageOptOutWarnings(campaign, detail, optOutContext?.warnings || [])
+        if (actionDetail.optOutBlocked) {
+          await this.logZaloMessageOptOutBlocked(campaign, detail)
+        }
       }
     }
 
@@ -12139,12 +12498,24 @@ export class CampaignScheduler {
     return {
       uid: user.uid,
       phone,
+      globalId: this.firstNonEmptyString(user.globalId, user.raw?.globalId, user.raw?.global_id) || undefined,
       displayName: user.displayName || user.originalName || '',
       originalName: user.originalName || user.displayName || '',
       gender: user.gender ?? null,
       isFriend,
       raw: user.raw
     }
+  }
+
+  private getCachedZaloMessageOptOutTarget(
+    campaign: Campaign,
+    inputData?: Record<string, unknown> | null
+  ): ZaloResolvedTarget | null {
+    const inputDataId = Number(inputData?.id)
+    if (!Number.isFinite(inputDataId) || inputDataId <= 0) return null
+    return this.zaloMessageOptOutContexts.get(
+      this.zaloMessageOptOutContextKey(campaign.id, inputDataId)
+    )?.target ?? null
   }
 
   private normalizeZaloTargetFromInputData(
@@ -12181,6 +12552,7 @@ export class CampaignScheduler {
     return {
       ...target,
       phone: this.firstNonEmptyString(profile.phone, profile.raw?.phoneNumber, profile.raw?.phone, target.phone),
+      globalId: this.firstNonEmptyString(profile.globalId, profile.raw?.globalId, profile.raw?.global_id, target.globalId) || undefined,
       displayName,
       originalName: originalName || undefined,
       gender: profile.gender ?? null,
@@ -12729,8 +13101,22 @@ export class CampaignScheduler {
     const formatted = this.isFormattedContentCampaign(campaign)
     const businessNow = await this.getTemplateBusinessNow(rawMessage)
     const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted, businessNow)
-    if (formatted) return convertHtmlToZaloMessage(rendered)
-    return this.rewriteZaloMessageForRun(account, campaign, rendered, metadata)
+    const message = formatted
+      ? convertHtmlToZaloMessage(rendered)
+      : await this.rewriteZaloMessageForRun(account, campaign, rendered, metadata)
+    const inputDataId = Number(metadata?.campaignInputDataId ?? inputData?.id)
+    if (!Number.isFinite(inputDataId) || inputDataId <= 0) return message
+    const linkId = this.zaloMessageOptOutContexts.get(
+      this.zaloMessageOptOutContextKey(campaign.id, inputDataId)
+    )?.linkId
+    if (!linkId) return message
+    const footer = `Để không nhận tin nhắn nữa, vui lòng click: ${ZALO_MESSAGE_OPT_OUT_URL}/${linkId}`
+    const body = this.getZaloOutgoingMessageText(message)
+    if (body.includes(footer)) return message
+    const nextBody = `${body}\n${footer}`
+    return typeof message === 'string'
+      ? nextBody
+      : { ...message, msg: nextBody }
   }
 
   private async logZaloAiRewriteRunEvent(
@@ -12908,13 +13294,16 @@ export class CampaignScheduler {
     }
 
     try {
-      const searchResult = await this.zaloRuntime.findUserByPhone(account.id, phone)
-      const user = searchResult.user
-      const searchAttemptData = searchResult.attempts.length > 0
-        ? { searchPhoneAttempts: searchResult.attempts }
+      const cachedTarget = this.getCachedZaloMessageOptOutTarget(campaign, options.inputData)
+      const searchResult = cachedTarget
+        ? null
+        : await this.zaloRuntime.findUserByPhone(account.id, phone)
+      const user = searchResult?.user || null
+      const searchAttemptData = (searchResult?.attempts.length || 0) > 0
+        ? { searchPhoneAttempts: searchResult!.attempts }
         : {}
       this.throwIfZaloRuntimeStopping(campaign.id)
-      if (!user) {
+      if (!user && !cachedTarget) {
         const policy = await this.getZaloNotFoundPolicy()
         const detail = await this.createZaloPolicyDetailFromCode(
           account,
@@ -12929,10 +13318,9 @@ export class CampaignScheduler {
         return { ok: true, zaloTarget: null, detail }
       }
 
-      const target = this.normalizeZaloTarget(phone, user)
-      await this.upsertZaloFoundUserContact(account, user, campaign.actionId)
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+      const target = cachedTarget || this.normalizeZaloTarget(phone, user!)
+      if (user) await this.upsertZaloFoundUserContact(account, user, campaign.actionId)
+      else await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
       this.throwIfZaloRuntimeStopping(campaign.id)
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
       // Data Group inputs are an immutable delivery snapshot. The resolved Zalo UID/name
@@ -12945,15 +13333,34 @@ export class CampaignScheduler {
         })
       }
       const log = `Đã tìm thấy SĐT ${phone}: ${this.getZaloTargetLabel(target)}`
+      const successDetail = this.createZaloSuccessDetail({
+        actionCode: 'zalo_find_phone_user',
+        actionName: 'Tìm SĐT',
+        log,
+        data: { phone, target, ...searchAttemptData }
+      })
+      if (campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID && Number.isFinite(inputDataId) && inputDataId > 0) {
+        const context = this.zaloMessageOptOutContexts.get(
+          this.zaloMessageOptOutContextKey(campaign.id, inputDataId)
+        )
+        if (context) {
+          await this.gateResolvedPhoneMessageTarget(account, campaign, options.inputData as unknown as CampaignInputData, target, context)
+          this.throwIfZaloRuntimeStopping(campaign.id)
+          if (context.blocked) {
+            return {
+              ok: true,
+              zaloTarget: null,
+              detail: { ...successDetail, optOutBlocked: true }
+            }
+          }
+        }
+      }
+      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+      this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
         zaloTarget: target,
-        detail: this.createZaloSuccessDetail({
-          actionCode: 'zalo_find_phone_user',
-          actionName: 'Tìm SĐT',
-          log,
-          data: { phone, target, ...searchAttemptData }
-        })
+        detail: successDetail
       }
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
@@ -12985,16 +13392,17 @@ export class CampaignScheduler {
       return { ok: false, detail }
     }
 
-    const target = await this.resolveZaloFriendMessageTarget(
-      account,
-      this.normalizeZaloTargetFromInputData(
-        uid,
-        options.targetName,
-        options.inputData,
-        { source: 'zalo_group_members' },
-        false
+    const target = this.getCachedZaloMessageOptOutTarget(campaign, options.inputData) ||
+      await this.resolveZaloFriendMessageTarget(
+        account,
+        this.normalizeZaloTargetFromInputData(
+          uid,
+          options.targetName,
+          options.inputData,
+          { source: 'zalo_group_members' },
+          false
+        )
       )
-    )
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -13078,16 +13486,17 @@ export class CampaignScheduler {
       return { ok: false, detail }
     }
 
-    const target = await this.resolveZaloFriendMessageTarget(
-      account,
-      this.normalizeZaloTargetFromInputData(
-        uid,
-        options.targetName,
-        options.inputData,
-        { source: 'zalo_remarketing_customers' },
-        false
+    const target = this.getCachedZaloMessageOptOutTarget(campaign, options.inputData) ||
+      await this.resolveZaloFriendMessageTarget(
+        account,
+        this.normalizeZaloTargetFromInputData(
+          uid,
+          options.targetName,
+          options.inputData,
+          { source: 'zalo_remarketing_customers' },
+          false
+        )
       )
-    )
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -13117,16 +13526,17 @@ export class CampaignScheduler {
       return { ok: false, detail }
     }
 
-    const target = await this.resolveZaloFriendMessageTarget(
-      account,
-      this.normalizeZaloTargetFromInputData(
-        uid,
-        options.targetName,
-        options.inputData,
-        { source: 'zalo_friend_recommendations' },
-        false
+    const target = this.getCachedZaloMessageOptOutTarget(campaign, options.inputData) ||
+      await this.resolveZaloFriendMessageTarget(
+        account,
+        this.normalizeZaloTargetFromInputData(
+          uid,
+          options.targetName,
+          options.inputData,
+          { source: 'zalo_friend_recommendations' },
+          false
+        )
       )
-    )
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -13323,10 +13733,11 @@ export class CampaignScheduler {
       return { ok: false, detail }
     }
 
-    const target = await this.resolveZaloFriendMessageTarget(
-      account,
-      this.normalizeZaloTargetFromInputData(uid, options.targetName, options.inputData)
-    )
+    const target = this.getCachedZaloMessageOptOutTarget(campaign, options.inputData) ||
+      await this.resolveZaloFriendMessageTarget(
+        account,
+        this.normalizeZaloTargetFromInputData(uid, options.targetName, options.inputData)
+      )
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
