@@ -18907,6 +18907,13 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   min-height: 22px;
 }
 
+.data-scan-checkbox-options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .data-scan-pagination {
   display: flex;
   align-items: center;
@@ -19031,6 +19038,15 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 
 .data-scan-selected-row {
   background: rgba(124, 92, 252, 0.12);
+}
+
+.data-scan-table tbody tr.data-scan-disabled-row {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.data-scan-table tbody tr.data-scan-disabled-row:hover {
+  background: transparent;
 }
 
 .data-scan-table td {

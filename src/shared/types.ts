@@ -1525,6 +1525,7 @@ export interface PageInboxContactListQuery {
 export interface AccountContactListQuery {
   contactType?: ContactType
   datasetId?: number
+  sortBy?: 'zalo_group_role'
   contactGroupId?: number
   statusFilter?: ContactStatusFilter
   search?: string

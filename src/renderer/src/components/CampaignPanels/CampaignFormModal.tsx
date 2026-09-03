@@ -17334,6 +17334,7 @@ export default function CampaignFormModal({
           allowedActions={dataScanPicker.allowedActions}
           lockAction
           lockAccount={!!dataScanPicker.lockAccount}
+          showExcludeZaloGroupLeadershipOption={isZaloMessageGroupMemberCampaign}
           onClose={() => {
             const shouldReloadFacebookGroupInviteGroups = dataScanPicker.mode === 'facebookGroupInviteTarget'
             setDataScanPicker(null)

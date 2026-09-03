@@ -1359,11 +1359,27 @@ function contactMatchesAkaBizTagFilter(contact: AutoAccountContact, tagIds: numb
   return tagIds.some(tagId => contactTagIds.has(tagId))
 }
 
+function getZaloGroupContactRoleRank(contact: AutoAccountContact): number {
+  const persistedRank = Number(contact.extraData?.zaloGroupRoleRank)
+  if (persistedRank === 1 || persistedRank === 2 || persistedRank === 3) return persistedRank
+  const role = String(contact.extraData?.zaloGroupRole || '').trim().toLowerCase()
+  if (role === 'owner' || contact.extraData?.isCreator === true) return 1
+  if (role === 'admin' || contact.extraData?.isAdmin === true) return 2
+  return 3
+}
+
+function compareZaloGroupContactsByRole(left: AutoAccountContact, right: AutoAccountContact): number {
+  return getZaloGroupContactRoleRank(left) - getZaloGroupContactRoleRank(right)
+    || String(left.name || '').localeCompare(String(right.name || ''), 'vi-VN', { sensitivity: 'base' })
+    || left.id - right.id
+}
+
 function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
   const ids = normalizeContactIdList(query.ids)
   const excludeIds = normalizeContactIdList(query.excludeIds)
   const statusFilter = query.statusFilter || 'all'
   if (query.datasetId !== null && query.datasetId !== undefined) return false
+  if (query.sortBy) return false
   if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
   if (ids.length > 0 || excludeIds.length > 0) return false
   if (normalizeSearchText(query.search)) return false
@@ -1381,6 +1397,7 @@ function canUseDbPagedContactList(query: AccountContactListQuery): boolean {
 
 function canUseDbPagedContactDatasetList(query: AccountContactListQuery): boolean {
   if (query.datasetId === null || query.datasetId === undefined) return false
+  if (query.sortBy) return false
   if (query.contactGroupId !== null && query.contactGroupId !== undefined) return false
   if (normalizeContactIdList(query.ids).length > 0 || normalizeContactIdList(query.excludeIds).length > 0) return false
   if (query.statusFilter && query.statusFilter !== 'all') return false
@@ -1598,7 +1615,9 @@ async function filterContactsForList(
     if (!contactMatchesAkaBizTagFilter(contact, akaBizTagIds, includeNoAkaBizTag)) return false
     return true
   })
-  if (datasetMembership) {
+  if (query.sortBy === 'zalo_group_role') {
+    filtered.sort(compareZaloGroupContactsByRole)
+  } else if (datasetMembership) {
     filtered.sort((a, b) => (
       (datasetMembership.orderByContactId.get(a.id) ?? Number.MAX_SAFE_INTEGER)
       - (datasetMembership.orderByContactId.get(b.id) ?? Number.MAX_SAFE_INTEGER)

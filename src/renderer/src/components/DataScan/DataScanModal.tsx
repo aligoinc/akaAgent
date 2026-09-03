@@ -116,6 +116,7 @@ interface DataScanModalProps {
   lockAction?: boolean
   lockAccount?: boolean
   lockPageInboxPage?: boolean
+  showExcludeZaloGroupLeadershipOption?: boolean
   targetDataGroup?: Pick<DataGroup, 'id' | 'name' | 'color'>
   onClose: () => void
   onSelect?: (contacts: AutoAccountContact[], context: DataScanSelectionContext) => void | Promise<void>
@@ -727,6 +728,14 @@ const getZaloGroupMemberRoleLabel = (contact: AutoAccountContact) => {
   return typeof label === 'string' && label.trim() ? label.trim() : 'Thành viên'
 }
 
+const isZaloGroupLeadershipContact = (contact: AutoAccountContact) => {
+  const role = String(contact.extraData?.zaloGroupRole || '').trim().toLowerCase()
+  return role === 'owner'
+    || role === 'admin'
+    || contact.extraData?.isCreator === true
+    || contact.extraData?.isAdmin === true
+}
+
 const getZaloGroupTotalMember = (contact: AutoAccountContact) => {
   const parsed = Number(contact.extraData?.totalMember)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
@@ -974,6 +983,7 @@ export default function DataScanModal({
   lockAction = false,
   lockAccount = false,
   lockPageInboxPage = false,
+  showExcludeZaloGroupLeadershipOption = false,
   targetDataGroup,
   onClose,
   onSelect
@@ -997,6 +1007,7 @@ export default function DataScanModal({
   const contactDatasetsLoadIdRef = useRef(0)
   const lastLoadedQueryKeyRef = useRef('')
   const lastAutoLoadBaseQueryKeyRef = useRef('')
+  const knownZaloGroupLeadershipIdsRef = useRef<Set<number>>(new Set())
   const lockedPageInboxPageUid = String(initialPageInboxPageUid || '').trim()
   const pageInboxOptionsAccountRef = useRef<number | ''>('')
   const pageInboxPageUidRef = useRef('')
@@ -1044,6 +1055,8 @@ export default function DataScanModal({
   const [pageInboxSelectAllMatching, setPageInboxSelectAllMatching] = useState(false)
   const [pageInboxSelectedRange, setPageInboxSelectedRange] = useState<PageInboxSelectedRange | null>(null)
   const [pageInboxExcludedIds, setPageInboxExcludedIds] = useState<Set<number>>(new Set())
+  const [automaticallyExcludedZaloLeadershipIds, setAutomaticallyExcludedZaloLeadershipIds] = useState<Set<number>>(new Set())
+  const [excludeZaloGroupLeadership, setExcludeZaloGroupLeadership] = useState(false)
   const [zaloGroupMemberMode, setZaloGroupMemberMode] = useState<ZaloGroupMemberScanMode>('joined_group')
   const [zaloGroupMemberGroupId, setZaloGroupMemberGroupId] = useState('')
   const [zaloGroupMemberLink, setZaloGroupMemberLink] = useState('')
@@ -1156,6 +1169,8 @@ export default function DataScanModal({
   const showLinkColumn = !isUploadDataAction && !isPageInboxAction && (actionDef.platform === 'facebook' || actionDef.id === 'zalo_groups')
   const showZaloGroupMemberCountColumn = actionDef.id === 'zalo_groups'
   const showGroupMemberRoleColumn = isZaloGroupMembersAction
+  const canExcludeZaloGroupLeadership = showExcludeZaloGroupLeadershipOption && isZaloGroupMembersAction
+  const shouldExcludeZaloGroupLeadership = canExcludeZaloGroupLeadership && excludeZaloGroupLeadership
   const showFriendStatusColumn = !isUploadDataAction && actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
   const showZaloPhoneColumn = !isUploadDataAction && actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
   const showZaloTagColumn = !isUploadDataAction && actionDef.platform === 'zalo'
@@ -1448,6 +1463,7 @@ export default function DataScanModal({
   const getAccountContactListQuery = useCallback((overrides: Partial<AccountContactListQuery> = {}): AccountContactListQuery => ({
     contactType: selectedDataset?.contactType || actionDef.contactType,
     datasetId: selectedDataset?.id,
+    sortBy: isZaloGroupMembersAction ? 'zalo_group_role' : undefined,
     contactGroupId: effectiveContactGroupFilterId,
     statusFilter: hasStatusFilter ? statusFilter : 'all',
     search,
@@ -1471,7 +1487,7 @@ export default function DataScanModal({
     sourceGroupUrl: !selectedDataset && isGroupMembersAction ? normalizedGroupMembersUrl : undefined,
     ...(hasZaloTagFilters ? { zaloTagIds: zaloTagFilterIds, zaloNoTag: zaloNoTagFilter, akaBizTagIds: akaBizTagFilterIds, akaBizNoTag: akaBizNoTagFilter } : {}),
     ...overrides
-  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, selectedDataset, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
+  }), [actionDef.contactType, akaBizNoTagFilter, akaBizTagFilterIds, effectiveContactGroupFilterId, hasStatusFilter, hasZaloTagFilters, isGroupMembersAction, isPostCommentersAction, isPostLikesAction, isProfileFriendsAction, isZaloGroupMembersAction, normalizedGroupMembersUrl, normalizedPostCommentersUrl, normalizedPostLikesUrl, normalizedProfileFriendsUrl, search, selectedDataset, statusFilter, zaloNoTagFilter, zaloTagFilterIds])
 
   const getZaloGroupMemberListQuery = useCallback((overrides: Partial<ZaloGroupMemberContactListQuery> = {}): ZaloGroupMemberContactListQuery => ({
     contactType: selectedDataset?.contactType || 'person',
@@ -1497,6 +1513,8 @@ export default function DataScanModal({
     setPageInboxSelectAllMatching(false)
     setPageInboxSelectedRange(null)
     setPageInboxExcludedIds(new Set())
+    setAutomaticallyExcludedZaloLeadershipIds(new Set())
+    knownZaloGroupLeadershipIdsRef.current.clear()
   }, [])
 
   const clearHiddenScanDatasetSelection = useCallback(() => {
@@ -2690,10 +2708,74 @@ export default function DataScanModal({
     return visibleContacts
   }, [visibleContacts])
 
+  const zaloGroupLeadershipContactsOnPage = useMemo(
+    () => isZaloGroupMembersAction
+      ? filteredContacts.filter(isZaloGroupLeadershipContact)
+      : [],
+    [filteredContacts, isZaloGroupMembersAction]
+  )
+
+  useEffect(() => {
+    if (!isZaloGroupMembersAction) {
+      knownZaloGroupLeadershipIdsRef.current.clear()
+      return
+    }
+    for (const contact of zaloGroupLeadershipContactsOnPage) {
+      knownZaloGroupLeadershipIdsRef.current.add(contact.id)
+    }
+  }, [isZaloGroupMembersAction, zaloGroupLeadershipContactsOnPage])
+
+  useEffect(() => {
+    if (!shouldExcludeZaloGroupLeadership) return
+
+    const knownLeadershipIds = knownZaloGroupLeadershipIdsRef.current
+    setSelectedIds(previous => {
+      const next = new Set(Array.from(previous).filter(id => !knownLeadershipIds.has(id)))
+      return next.size === previous.size ? previous : next
+    })
+
+    const idsToExclude = zaloGroupLeadershipContactsOnPage
+      .filter(contact => {
+        if (pageInboxSelectAllMatching) return true
+        if (!pageInboxSelectedRange) return false
+        const contactIndex = filteredContacts.findIndex(item => item.id === contact.id)
+        const rowNumber = (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + contactIndex + 1
+        return rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
+      })
+      .map(contact => contact.id)
+
+    if (pageInboxSelectAllMatching) {
+      idsToExclude.push(...Array.from(knownLeadershipIds))
+    }
+    if (idsToExclude.length === 0) return
+
+    if (pageInboxSelectAllMatching) {
+      setPageInboxExcludedIds(previous => {
+        const next = new Set(previous)
+        idsToExclude.forEach(id => next.add(id))
+        return next.size === previous.size ? previous : next
+      })
+    }
+    setAutomaticallyExcludedZaloLeadershipIds(previous => {
+      const next = new Set(previous)
+      idsToExclude.forEach(id => next.add(id))
+      return next.size === previous.size ? previous : next
+    })
+  }, [
+    pageInboxPage,
+    pageInboxSelectAllMatching,
+    pageInboxSelectedRange,
+    shouldExcludeZaloGroupLeadership,
+    filteredContacts,
+    zaloGroupLeadershipContactsOnPage
+  ])
+
   const getContactRowNumber = useCallback((index: number) => (
     (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE + index + 1
   ), [pageInboxPage])
-  const isContactSelected = useCallback((contactId: number, rowNumber?: number) => {
+  const isContactSelected = useCallback((contact: AutoAccountContact, rowNumber?: number) => {
+    if (shouldExcludeZaloGroupLeadership && isZaloGroupLeadershipContact(contact)) return false
+    const contactId = contact.id
     if (pageInboxSelectAllMatching) return !pageInboxExcludedIds.has(contactId)
     if (pageInboxSelectedRange && rowNumber !== undefined) {
       const inRange = rowNumber >= pageInboxSelectedRange.start && rowNumber <= pageInboxSelectedRange.end
@@ -2704,13 +2786,26 @@ export default function DataScanModal({
     pageInboxExcludedIds,
     pageInboxSelectAllMatching,
     pageInboxSelectedRange,
-    selectedIds
+    selectedIds,
+    shouldExcludeZaloGroupLeadership
   ])
-  const allMatchingSelected = pageInboxTotal > 0 && pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0
+  const allMatchingSelected = pageInboxTotal > 0
+    && pageInboxSelectAllMatching
+    && (pageInboxExcludedIds.size === 0 || (
+      shouldExcludeZaloGroupLeadership
+      && Array.from(pageInboxExcludedIds).every(id => automaticallyExcludedZaloLeadershipIds.has(id))
+    ))
   const pagedSelectedCount = pageInboxSelectAllMatching
     ? Math.max(0, pageInboxTotal - pageInboxExcludedIds.size)
     : pageInboxSelectedRange
-      ? Math.max(0, pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1 - pageInboxExcludedIds.size) + selectedIds.size
+      ? Math.max(
+        0,
+        pageInboxSelectedRange.end
+          - pageInboxSelectedRange.start
+          + 1
+          - pageInboxExcludedIds.size
+          - (shouldExcludeZaloGroupLeadership ? automaticallyExcludedZaloLeadershipIds.size : 0)
+      ) + selectedIds.size
       : selectedIds.size
   const currentTotalCount = pageInboxTotal
   const selectedGroupContacts = useMemo(() => {
@@ -2794,7 +2889,9 @@ export default function DataScanModal({
       : 'Không tìm thấy data phù hợp.'
   const canSaveGroupModal = modalSelectedGroupIds.size > 0 || (showNewGroupInput && newGroupName.trim().length > 0)
 
-  const toggleContact = (id: number, rowNumber?: number) => {
+  const toggleContact = (contact: AutoAccountContact, rowNumber?: number) => {
+    if (shouldExcludeZaloGroupLeadership && isZaloGroupLeadershipContact(contact)) return
+    const id = contact.id
     if (pageInboxSelectAllMatching) {
       setPageInboxExcludedIds(prev => {
         const next = new Set(prev)
@@ -2827,7 +2924,7 @@ export default function DataScanModal({
   }
 
   const toggleAllVisible = () => {
-    if (pageInboxSelectAllMatching && pageInboxExcludedIds.size === 0) {
+    if (allMatchingSelected) {
       handleClearPageInboxSelection()
     } else {
       handleSelectAllPageInboxMatching()
@@ -2854,6 +2951,7 @@ export default function DataScanModal({
 
     setPageInboxExcludedIds(new Set())
     setSelectedIds(new Set())
+    setAutomaticallyExcludedZaloLeadershipIds(new Set())
     if (start === 1 && end === pageInboxTotal) {
       setPageInboxSelectedRange(null)
       setPageInboxSelectAllMatching(true)
@@ -2877,7 +2975,11 @@ export default function DataScanModal({
 
   const handleSelectAllPageInboxMatching = () => {
     setSelectedIds(new Set())
-    setPageInboxExcludedIds(new Set())
+    const leadershipIds = shouldExcludeZaloGroupLeadership
+      ? new Set(knownZaloGroupLeadershipIdsRef.current)
+      : new Set<number>()
+    setPageInboxExcludedIds(leadershipIds)
+    setAutomaticallyExcludedZaloLeadershipIds(leadershipIds)
     setPageInboxSelectedRange(null)
     setPageInboxSelectAllMatching(true)
   }
@@ -2887,6 +2989,7 @@ export default function DataScanModal({
     setPageInboxExcludedIds(new Set())
     setPageInboxSelectedRange(null)
     setPageInboxSelectAllMatching(false)
+    setAutomaticallyExcludedZaloLeadershipIds(new Set())
   }
 
   const exportCurrentSelection = async (overrides: any = {}) => {
@@ -2947,7 +3050,10 @@ export default function DataScanModal({
   const loadOutputContacts = async () => {
     const selectedContacts = await loadSelectedContacts()
     const rawContacts = [...selectedContacts, ...selectedGroupContacts]
-    return dedupeOnOutput ? dedupeContacts(rawContacts) : rawContacts
+    const allowedContacts = shouldExcludeZaloGroupLeadership
+      ? rawContacts.filter(contact => !isZaloGroupLeadershipContact(contact))
+      : rawContacts
+    return dedupeOnOutput ? dedupeContacts(allowedContacts) : allowedContacts
   }
 
   const handleToggleGroupOutput = async (groupId: number) => {
@@ -4464,14 +4570,26 @@ export default function DataScanModal({
             )}
 
             <div className="data-scan-options">
-              <label className="schedule-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={dedupeOnOutput}
-                  onChange={event => setDedupeOnOutput(event.target.checked)}
-                />
-                <span>{isDataGroupTargetMode ? 'Lọc trùng dữ liệu khi thêm vào nhóm, xuất excel' : 'Lọc trùng dữ liệu khi chọn, xuất excel'}</span>
-              </label>
+              <div className="data-scan-checkbox-options">
+                <label className="schedule-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={dedupeOnOutput}
+                    onChange={event => setDedupeOnOutput(event.target.checked)}
+                  />
+                  <span>{isDataGroupTargetMode ? 'Lọc trùng dữ liệu khi thêm vào nhóm, xuất excel' : 'Lọc trùng dữ liệu khi chọn, xuất excel'}</span>
+                </label>
+                {canExcludeZaloGroupLeadership && (
+                  <label className="schedule-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={excludeZaloGroupLeadership}
+                      onChange={event => setExcludeZaloGroupLeadership(event.target.checked)}
+                    />
+                    <span>Không gửi cho trưởng/phó cộng đồng</span>
+                  </label>
+                )}
+              </div>
               <span>
                 {`${formatCount(pagedSelectedCount)} đã tích chọn`}
               </span>
@@ -4530,7 +4648,10 @@ export default function DataScanModal({
                       type="checkbox"
                       checked={allMatchingSelected}
                       onChange={toggleAllVisible}
-                      disabled={filteredContacts.length === 0}
+                      disabled={filteredContacts.length === 0 || (
+                        shouldExcludeZaloGroupLeadership
+                        && filteredContacts.every(isZaloGroupLeadershipContact)
+                      )}
                       title="Chọn hoặc bỏ chọn tất cả data phù hợp bộ lọc"
                       aria-label="Chọn hoặc bỏ chọn tất cả data phù hợp bộ lọc"
                     />
@@ -4604,19 +4725,23 @@ export default function DataScanModal({
                 ) : (
                   filteredContacts.map((contact, index) => {
                     const rowNumber = getContactRowNumber(index)
-                    const selected = isContactSelected(contact.id, rowNumber)
+                    const selectionDisabled = shouldExcludeZaloGroupLeadership && isZaloGroupLeadershipContact(contact)
+                    const selected = isContactSelected(contact, rowNumber)
                     return (
                     <tr
                       key={contact.id}
-                      className={selected ? 'data-scan-selected-row' : undefined}
-                      onClick={() => toggleContact(contact.id, rowNumber)}
+                      className={selectionDisabled ? 'data-scan-disabled-row' : selected ? 'data-scan-selected-row' : undefined}
+                      onClick={() => toggleContact(contact, rowNumber)}
+                      aria-disabled={selectionDisabled || undefined}
                     >
                       <td>
                         <input
                           type="checkbox"
                           checked={selected}
-                          onChange={() => toggleContact(contact.id, rowNumber)}
+                          onChange={() => toggleContact(contact, rowNumber)}
                           onClick={event => event.stopPropagation()}
+                          disabled={selectionDisabled}
+                          title={selectionDisabled ? 'Đã loại trưởng/phó cộng đồng khỏi danh sách gửi' : undefined}
                         />
                       </td>
                       <td>{rowNumber}</td>
