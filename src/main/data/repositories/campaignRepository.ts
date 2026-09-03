@@ -84,6 +84,16 @@ export interface CampaignDeliveryCooldownDecision {
   sourceCampaignId: number | null
   sourceCampaignName: string | null
 }
+
+export interface ZaloMessageOptOutCheckResult {
+  isOptedOut: boolean
+  matchedBy: 'phone' | 'zalo_global_id' | null
+}
+
+export interface ZaloMessageOptOutPrepareResult {
+  id: string
+  isOptedOut: boolean
+}
 const CAMPAIGN_PRIMARY_ACCOUNT_RELATION =
   'primary_account:auto_accounts!auto_campaigns_account_id_fkey(name, flatform_type, is_zalo_show_web, is_zalo_server)'
 const CAMPAIGN_RELATIONS =
@@ -6269,6 +6279,70 @@ export async function applyCampaignDeliveryCooldown(
     sourceCampaignId: row.source_campaign_id == null ? null : Number(row.source_campaign_id),
     sourceCampaignName: row.source_campaign_name == null ? null : String(row.source_campaign_name)
   }))
+}
+
+export async function checkZaloMessageOptOut(
+  campaignId: number,
+  accountId: number,
+  target: { phone?: string | null; globalId?: string | null }
+): Promise<ZaloMessageOptOutCheckResult> {
+  const user = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_check_zalo_message_opt_out', {
+    p_campaign_id: campaignId,
+    p_account_id: accountId,
+    p_staff_id: user.staffId,
+    p_phone: target.phone || null,
+    p_zalo_global_id: target.globalId || null
+  })
+  if (error) throw new Error(`Không thể kiểm tra từ chối nhận tin Zalo: ${error.message}`)
+  const row = ((data || []) as Record<string, unknown>[])[0]
+  if (!row) throw new Error('RPC kiểm tra từ chối nhận tin Zalo không trả kết quả.')
+  const matchedBy = String(row.matched_by || '')
+  return {
+    isOptedOut: row.is_opted_out === true,
+    matchedBy: matchedBy === 'phone' || matchedBy === 'zalo_global_id' ? matchedBy : null
+  }
+}
+
+export async function prepareZaloMessageOptOut(
+  campaignId: number,
+  accountId: number,
+  target: { phone?: string | null; globalId: string }
+): Promise<ZaloMessageOptOutPrepareResult> {
+  const user = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_prepare_zalo_message_opt_out', {
+    p_campaign_id: campaignId,
+    p_account_id: accountId,
+    p_staff_id: user.staffId,
+    p_phone: target.phone || null,
+    p_zalo_global_id: target.globalId
+  })
+  if (error) throw new Error(`Không thể tạo link từ chối nhận tin Zalo: ${error.message}`)
+  const row = ((data || []) as Record<string, unknown>[])[0]
+  const id = String(row?.id || '').trim()
+  if (!id) throw new Error('RPC tạo link từ chối nhận tin Zalo không trả kết quả.')
+  return { id, isOptedOut: row?.is_opted_out === true }
+}
+
+export async function pausePendingZaloMessageOptOutInput(
+  campaignId: number,
+  inputDataId: number,
+  note: string
+): Promise<boolean> {
+  const user = requireCurrentUser()
+  const campaign = await getCampaign(campaignId)
+  if (!campaign || campaign.staffId !== user.staffId) return false
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .update({ status: 'tạm dừng', note })
+    .eq('id', inputDataId)
+    .eq('campaign_id', campaignId)
+    .eq('status', 'chờ xử lý')
+    .eq('is_delete', false)
+    .select('id')
+    .maybeSingle()
+  if (error) throw new Error(`Không thể đánh dấu data từ chối nhận tin Zalo: ${error.message}`)
+  return Boolean(data)
 }
 
 export async function peekAccountActionDisabledStatus(

@@ -110,6 +110,7 @@ export interface BlockRuntimeHelpers {
 export interface ZaloResolvedTarget {
   uid: string
   phone: string
+  globalId?: string
   displayName?: string
   originalName?: string
   gender?: number | string | null
@@ -134,6 +135,8 @@ export interface ZaloActionDetailOutput {
   preventInputRetry?: boolean
   pendingNote?: string
   stopAfterTarget?: boolean
+  /** Target đã được tìm thấy nhưng bị gate từ chối nhận tin chặn. */
+  optOutBlocked?: boolean
 }
 
 export interface ZaloActionHelperResult {

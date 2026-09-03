@@ -282,6 +282,7 @@ function normalizeImageDimensions(width: number, height: number): ImageDimension
 export interface ZaloFoundUser {
   uid: string
   phone?: string
+  globalId?: string
   displayName?: string
   originalName?: string
   gender?: number | string | null
@@ -3249,6 +3250,7 @@ function normalizeFoundUser(user: UserBasic | ProfileInfo | ZaloProfile | null |
   return {
     uid,
     phone: firstString((user as any).phoneNumber, (user as any).phone) || undefined,
+    globalId: firstString((user as any).globalId, (user as any).global_id) || undefined,
     displayName: firstString((user as any).display_name, (user as any).displayName, (user as any).zalo_name, (user as any).zaloName) || undefined,
     originalName: firstString((user as any).zalo_name, (user as any).zaloName, (user as any).display_name, (user as any).displayName) || undefined,
     gender: (user as any).gender ?? null,

@@ -370,6 +370,23 @@ export class SupabaseService {
   applyCampaignDeliveryCooldown(campaignId: number, accountId: number, inputDataIds: number[]) {
     return campaignRepo.applyCampaignDeliveryCooldown(campaignId, accountId, inputDataIds)
   }
+  checkZaloMessageOptOut(
+    campaignId: number,
+    accountId: number,
+    target: { phone?: string | null; globalId?: string | null }
+  ) {
+    return campaignRepo.checkZaloMessageOptOut(campaignId, accountId, target)
+  }
+  prepareZaloMessageOptOut(
+    campaignId: number,
+    accountId: number,
+    target: { phone?: string | null; globalId: string }
+  ) {
+    return campaignRepo.prepareZaloMessageOptOut(campaignId, accountId, target)
+  }
+  pausePendingZaloMessageOptOutInput(campaignId: number, inputDataId: number, note: string) {
+    return campaignRepo.pausePendingZaloMessageOptOutInput(campaignId, inputDataId, note)
+  }
 
   // =========== CAMPAIGN DETAILS (per-milestone log) ===========
   listCampaignDetailsByInputData(inputDataId: number) { return campaignRepo.listCampaignDetailsByInputData(inputDataId) }
