@@ -1451,7 +1451,7 @@ async function finalizeZaloServerMaintenanceCampaign(
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
   if (!row) throw new Error('Zalo Server maintenance finalization returned no result')
   const reason = String(row.reason || 'not_found')
-  if (!['completed', 'pending_input_remaining', 'campaign_control_won'].includes(reason)) {
+  if (!['completed', 'pending_input_remaining', 'campaign_control_won', 'not_found'].includes(reason)) {
     throw new Error(`Zalo Server maintenance finalization rejected campaign ${normalizedCampaignId}: ${reason}`)
   }
   const pendingInputCount = Number(row.pending_input_count || 0)
@@ -3333,7 +3333,7 @@ export async function maintainCampaignSchedules(
   const u = requireCurrentUser()
   const todayStart = startOfVietnamDateKey(vietnamDateKey)
   const accountRelation =
-    'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_zalo_show_web, is_zalo_server, staff_id)'
+    'primary_account:auto_accounts!auto_campaigns_account_id_fkey!inner(name, flatform_type, is_delete, is_zalo_show_web, is_zalo_server, staff_id)'
   const staleCampaignRows: any[] = []
   let afterCampaignId = 0
   const pageSize = 500
@@ -3352,6 +3352,7 @@ export async function maintainCampaignSchedules(
       .not('schedule', 'is', null)
       .lt('schedule', todayStart.toISOString())
       .in('status', ['chờ xử lý', 'hoàn thành'])
+      .eq('primary_account.is_delete', false)
       .gt('id', afterCampaignId)
 
     if (platformScope === 'zalo') {
@@ -3393,20 +3394,24 @@ export async function maintainCampaignSchedules(
   const updatedCampaigns: Campaign[] = []
   const maintenanceErrors: Array<{ campaignId: number; message: string }> = []
   const campaigns = staleCampaignRows.map(row => mapCampaignFromDB(row))
-  const finalizeForMaintenance = async (campaign: Campaign, note: string): Promise<void> => {
+  const finalizeForMaintenance = async (campaign: Campaign, note: string): Promise<boolean> => {
     if (campaign.dataTargetSourceMode === 'data_group') {
       await finalizeDataGroupCampaign(campaign.id, note, runtimeContext)
-      return
+      return true
     }
     if (runtimeContext.runtimeTarget === 'server') {
-      await finalizeZaloServerMaintenanceCampaign(
+      const result = await finalizeZaloServerMaintenanceCampaign(
         campaign.id,
         note,
         runtimeContext.runtimeModeRevision
       )
-      return
+      // The account/campaign can be deleted or otherwise leave the candidate
+      // set after the page query but before the fail-closed RPC takes its locks.
+      // Stop processing this row so maintenance never advances stale state.
+      return result.reason !== 'not_found'
     }
-    await finalizeCampaign(campaign.id, note, 'chờ xử lý')
+    const result = await finalizeCampaign(campaign.id, note, 'chờ xử lý')
+    return result.reason !== 'not_found'
   }
 
   for (const campaign of campaigns) {
@@ -3437,7 +3442,11 @@ export async function maintainCampaignSchedules(
       }
 
       if (isPastScheduleEnd(campaign, nextSchedule)) {
-        await finalizeForMaintenance(campaign, 'Chiến dịch đã hết ngày kết thúc')
+        const candidateStillValid = await finalizeForMaintenance(
+          campaign,
+          'Chiến dịch đã hết ngày kết thúc'
+        )
+        if (!candidateStillValid) continue
         await updateCampaign(campaign.id, {
           schedule: nextSchedule.toISOString()
         })
@@ -3462,10 +3471,11 @@ export async function maintainCampaignSchedules(
 
       if (scheduleType === 'daily') {
         if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID) {
-          await finalizeForMaintenance(
+          const candidateStillValid = await finalizeForMaintenance(
             campaign,
             'Chiến dịch chúc mừng sinh nhật không chạy bù qua ngày'
           )
+          if (!candidateStillValid) continue
           let updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch sinh nhật sau khi kiểm tra data.')
           // A producer/finalizer race can legitimately leave fresh pending data.
@@ -3488,10 +3498,11 @@ export async function maintainCampaignSchedules(
         }
 
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-          await finalizeForMaintenance(
+          const candidateStillValid = await finalizeForMaintenance(
             campaign,
             'Chiến dịch lướt newsfeed không chạy tiếp qua ngày'
           )
+          if (!candidateStillValid) continue
           let updated = await getCampaign(campaign.id)
           if (!updated) throw new Error('Không tìm thấy chiến dịch newsfeed sau khi kiểm tra data.')
           if (
