@@ -1,4 +1,6 @@
 import type { AppNotification } from '../../../shared/types'
+import { requireCurrentUser } from '../currentUser'
+import { getSupabaseClient } from '../supabaseClient'
 import { listActiveSystemSettingsByKeys } from './systemSettingsRepository'
 
 const APP_NOTIFICATION_SETTING_KEY = 'app.notification'
@@ -59,21 +61,45 @@ function buildNotification(
   }
 }
 
-export async function getActiveAppNotification(): Promise<AppNotification | null> {
-  const settings = await listActiveSystemSettingsByKeys([APP_NOTIFICATION_SETTING_KEY])
-  const setting = settings.get(APP_NOTIFICATION_SETTING_KEY)
-  const value = String(setting?.value || '').trim()
-  if (!setting || !value) return null
+function parseNotification(
+  id: number,
+  updatedAt: string | undefined,
+  rawValue: string | null | undefined
+): AppNotification | null {
+  const value = String(rawValue || '').trim()
+  if (!value) return null
 
   try {
     const parsed = JSON.parse(value) as unknown
     if (typeof parsed === 'string') {
-      return buildNotification(setting.id, setting.updatedAt, { message: parsed })
+      return buildNotification(id, updatedAt, { message: parsed })
     }
     return isRecord(parsed)
-      ? buildNotification(setting.id, setting.updatedAt, parsed)
+      ? buildNotification(id, updatedAt, parsed)
       : null
   } catch {
-    return buildNotification(setting.id, setting.updatedAt, { message: value })
+    return buildNotification(id, updatedAt, { message: value })
   }
+}
+
+export async function getActiveAppNotification(): Promise<AppNotification | null> {
+  const user = requireCurrentUser()
+  const { data: staff, error } = await getSupabaseClient()
+    .from('org_staff')
+    .select('app_notification, updated_at')
+    .eq('id', user.staffId)
+    .eq('organization_id', user.organizationId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('Get staff app notification failed:', error.code)
+  } else {
+    const notification = parseNotification(user.staffId, staff?.updated_at, staff?.app_notification)
+    if (notification) return notification
+  }
+
+  const settings = await listActiveSystemSettingsByKeys([APP_NOTIFICATION_SETTING_KEY])
+  const setting = settings.get(APP_NOTIFICATION_SETTING_KEY)
+  return setting ? parseNotification(setting.id, setting.updatedAt, setting.value) : null
 }
