@@ -377,7 +377,7 @@ export default function App() {
         checkingUpdate={checkingUpdate}
         onCheckUpdate={handleUpdateButtonClick}
       />
-      <AppNotificationBar />
+      <AppNotificationBar key={`${user.organizationId}:${user.staffId}`} />
       <div className="app-content-shell">
         <TopBar
           activePage={activePage}
