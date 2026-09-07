@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { AuthUser, LoginPreferences, SavedLoginCredentials, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
+import { AuthUser, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
 
 interface PendingPolicyLogin {
   credentials: SavedLoginCredentials
@@ -12,6 +12,7 @@ interface AuthState {
   loggingIn: boolean
   acceptingPolicy: boolean
   recoveringCredentials: boolean
+  resettingDevice: boolean
   policyAcceptanceRequired: boolean
   pendingPolicyLogin: PendingPolicyLogin | null
   errorMessage: string | null
@@ -25,7 +26,8 @@ interface AuthState {
   cancelPolicyAcceptance: () => void
   recoverDeviceCredentials: () => Promise<void>
   logout: () => Promise<void>
-  resetDeviceLock: () => Promise<void>
+  resetDeviceLock: () => Promise<DeviceLockResetResult>
+  resetDeviceLockByUsername: (username: string) => Promise<DeviceLockResetResult>
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   updateUseTestWorkflow: (useTestWorkflow: boolean) => Promise<void>
   rehydrateFromStorage: () => Promise<void>
@@ -125,6 +127,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   loggingIn: false,
   acceptingPolicy: false,
   recoveringCredentials: false,
+  resettingDevice: false,
   policyAcceptanceRequired: false,
   pendingPolicyLogin: null,
   errorMessage: null,
@@ -286,17 +289,35 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   resetDeviceLock: async () => {
     if (!window.electronAPI) throw new Error('API not available')
-    await window.electronAPI.resetDeviceLock()
-    const currentOptions = useAuthStore.getState().loginOptions
-    set({
-      savedCredentials: null,
-      loginOptions: normalizeLoginOptions({
-        ...currentOptions,
-        rememberLogin: false,
-        autoLogin: false
-      }),
-      errorMessage: null
-    })
+    set({ resettingDevice: true })
+    try {
+      const result = await window.electronAPI.resetDeviceLock()
+      if (result.success) {
+        const currentOptions = useAuthStore.getState().loginOptions
+        set({
+          savedCredentials: null,
+          loginOptions: normalizeLoginOptions({ ...currentOptions, rememberLogin: false, autoLogin: false }),
+          errorMessage: null
+        })
+      }
+      return result
+    } catch (error) {
+      throw new Error(formatAuthErrorMessage(error, 'Đổi máy tính thất bại. Vui lòng thử lại sau.'))
+    } finally {
+      set({ resettingDevice: false })
+    }
+  },
+
+  resetDeviceLockByUsername: async (username) => {
+    if (!window.electronAPI) throw new Error('API not available')
+    set({ resettingDevice: true, errorMessage: null })
+    try {
+      return await window.electronAPI.resetDeviceLockByUsername(username)
+    } catch (error) {
+      throw new Error(formatAuthErrorMessage(error, 'Đổi máy tính thất bại. Vui lòng thử lại sau.'))
+    } finally {
+      set({ resettingDevice: false })
+    }
   },
 
   changePassword: async (oldPassword, newPassword) => {

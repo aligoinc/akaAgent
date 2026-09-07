@@ -55,7 +55,7 @@ function buildLabel(platform: DevicePlatform): string {
   return host ? `${platformLabel} - ${host}` : platformLabel
 }
 
-export async function getCurrentDeviceIdentity(): Promise<DeviceIdentity> {
+async function readCurrentDeviceIdentity(): Promise<DeviceIdentity> {
   const platform = getDevicePlatform()
   const rawId = platform === 'mac'
     ? await readMacMachineId()
@@ -74,4 +74,16 @@ export async function getCurrentDeviceIdentity(): Promise<DeviceIdentity> {
     label: buildLabel(platform),
     platform
   }
+}
+
+let cachedIdentity: Promise<DeviceIdentity> | null = null
+
+export function getCurrentDeviceIdentity(): Promise<DeviceIdentity> {
+  if (!cachedIdentity) {
+    cachedIdentity = readCurrentDeviceIdentity().catch(error => {
+      cachedIdentity = null
+      throw error
+    })
+  }
+  return cachedIdentity
 }

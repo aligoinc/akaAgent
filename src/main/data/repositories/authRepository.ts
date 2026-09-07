@@ -7,6 +7,8 @@ import {
   SavedLoginCredentials
 } from '../../../shared/types'
 import { getCurrentDeviceIdentity } from '../../services/deviceIdentity'
+import { getDeviceChangeRequests } from '../../services/deviceChangeService'
+import { requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
@@ -109,7 +111,7 @@ export function normalizeLoginPreferences(options?: Partial<LoginPreferences> | 
 }
 
 function deviceLockedMessage(): string {
-  return 'Tài khoản này đang được đăng nhập trên máy tính khác. Vui lòng dùng máy đang được cấp quyền để Đổi máy tính, hoặc liên hệ hỗ trợ.'
+  return 'Tài khoản này đang liên kết với máy tính khác. Vui lòng chọn Đổi máy tính trên trang đăng nhập hoặc liên hệ hỗ trợ.'
 }
 
 function normalizeDeviceHash(value: unknown): string | null {
@@ -614,48 +616,9 @@ export async function acceptPolicyAndLogin(username: string, password: string): 
 }
 
 export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetResult> {
-  const device = await getCurrentDeviceIdentity()
-  const latest = await loadStaffDevice(user.staffId)
-  if (!latest) throw new Error('Không tìm thấy tài khoản để đổi máy tính.')
-
-  const currentHash = normalizeDeviceHash(latest.device_fingerprint_hash)
-  if (currentHash && currentHash !== device.fingerprintHash) {
-    throw new Error('Chỉ máy tính đang được cấp quyền mới có thể đổi máy tính.')
-  }
-
-  const now = new Date().toISOString()
-  const { error } = await client()
-    .from('org_staff')
-    .update({
-      device_fingerprint_hash: null,
-      device_label: null,
-      device_platform: null,
-      device_bound_at: null,
-      device_last_seen_at: null,
-      updated_at: now
-    })
-    .eq('id', user.staffId)
-
-  if (error) {
-    throwAuthTechnicalError(
-      'reset device lock',
-      'Đổi máy tính thất bại. Vui lòng thử lại sau.',
-      error
-    )
-  }
-
-  const nowAfterReset = new Date().toISOString()
-  await client()
-    .from('auto_staff_device_login_settings')
-    .update({
-      remember_login: false,
-      auto_login: false,
-      updated_at: nowAfterReset
-    })
-    .eq('staff_id', user.staffId)
-    .eq('device_fingerprint_hash', device.fingerprintHash)
-
-  return { success: true }
+  const credentials = requireCurrentUserCredentials()
+  if (credentials.username !== user.username) throw new Error('Phiên đăng nhập không hợp lệ.')
+  return getDeviceChangeRequests().reset(credentials.username, 'account_menu', credentials.password)
 }
 
 export async function changePassword(user: AuthUser, oldPassword: string, newPassword: string): Promise<{ success: boolean }> {

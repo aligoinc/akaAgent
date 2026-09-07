@@ -2752,6 +2752,9 @@ export interface AuthBootstrapResult {
 
 export interface DeviceLockResetResult {
   success: boolean
+  changed: boolean
+  remainingChanges: number | null
+  code: 'changed' | 'already_unbound' | 'quota_exhausted' | 'device_online' | 'binding_conflict' | 'not_authorized' | 'not_found' | 'inactive'
 }
 
 export interface StartupSettingResult {
@@ -2923,6 +2926,7 @@ export const IPC_EVENTS = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_ME: 'auth:me',
   AUTH_RESET_DEVICE_LOCK: 'auth:reset-device-lock',
+  AUTH_RESET_DEVICE_LOCK_BY_USERNAME: 'auth:reset-device-lock-by-username',
   AUTH_CHANGE_PASSWORD: 'auth:change-password',
   AUTH_UPDATE_USE_TEST_WORKFLOW: 'auth:update-use-test-workflow',
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
