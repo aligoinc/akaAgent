@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import type { PageInboxScanOptions } from '../../../shared/types'
 import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
@@ -98,9 +99,14 @@ export function registerAccountContactHandlers(
     return contactLoader.loadGroupMembers(accountId, groupUrl, maxGroupMembers)
   })
 
-  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, async (_, accountId: number, pageUid: string, pageName?: string) => {
+  ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS, async (_, accountId: number, pageUid: string, pageName?: string, scanOptions?: PageInboxScanOptions) => {
+    return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName, scanOptions,
+      () => ensureContactAccess(supabase, accountId, 'page_inbox_customer'))
+  })
+
+  ipcMain.handle(IPC_EVENTS.CONTACTS_GET_PAGE_INBOX_SCAN_INFO, async (_, accountId: number, pageUid: string) => {
     await ensureContactAccess(supabase, accountId, 'page_inbox_customer')
-    return contactLoader.loadPageInboxCustomers(accountId, pageUid, pageName)
+    return contactLoader.getPageInboxScanInfo(accountId, pageUid)
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_ZALO_GROUP_MEMBERS, async (_, accountId: number, request: ZaloGroupMemberScanRequest) => {
@@ -117,6 +123,7 @@ export function registerAccountContactHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.CONTACTS_CANCEL_LOAD, async (_, accountId: number) => {
+    const cancelPageInbox = contactLoader.capturePageInboxCancellation(accountId)
     const account = await supabase.getAccountIgnoringCapability(accountId)
     if (!account) {
       throw new Error('Tài khoản không tồn tại hoặc không thuộc quyền quản lý của bạn')
@@ -129,7 +136,8 @@ export function registerAccountContactHandlers(
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
       return zaloServerClient.executeCommand('contacts.cancel', accountId)
     }
-    contactLoader.cancelLoad(accountId)
+    if (cancelPageInbox) cancelPageInbox()
+    else contactLoader.cancelLoad(accountId)
     return { success: true }
   })
 

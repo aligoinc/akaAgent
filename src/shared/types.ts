@@ -1509,6 +1509,19 @@ export interface SaveUploadDatasetResult {
 export type PageInboxPhoneFilter = 'all' | 'has_phone' | 'no_phone'
 export type PageInboxMessageFilterMode = 'all' | 'contain_all' | 'contain_any' | 'not_contain_all' | 'not_contain_any'
 
+export interface PageInboxScanOptions {
+  mode: 'since_latest_message' | 'last_days'
+  days?: number
+  maxCustomers: number
+}
+
+export interface PageInboxScanInfo {
+  latestMessageAt: string | null
+  estimatedSecondsPer20000: number
+}
+
+export type PageInboxScanStopReason = 'date_limit' | 'customer_limit' | 'exhausted' | 'cancelled' | 'error'
+
 export interface PageInboxContactListQuery {
   pageUid?: string
   search?: string
@@ -1572,6 +1585,7 @@ export interface ZaloRemarketingCustomerListQuery {
 export interface ContactLoadResult {
   success: boolean
   count: number
+  pageInboxStopReason?: PageInboxScanStopReason
   datasetId?: number
   error?: string
   stopped?: boolean
@@ -3100,6 +3114,7 @@ export const IPC_EVENTS = {
   CONTACTS_LOAD_PROFILE_FRIENDS: 'contacts:load-profile-friends',
   CONTACTS_LOAD_GROUP_MEMBERS: 'contacts:load-group-members',
   CONTACTS_LOAD_PAGE_INBOX_CUSTOMERS: 'contacts:load-page-inbox-customers',
+  CONTACTS_GET_PAGE_INBOX_SCAN_INFO: 'contacts:get-page-inbox-scan-info',
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
   CONTACTS_LIST_PAGED: 'contacts:list-paged',

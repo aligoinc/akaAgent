@@ -14,7 +14,8 @@ import { normalizeEntitlements } from '../../utils/entitlements'
 import { getAccountPlatformLabel } from '../../utils/accountLabels'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
 import type { AuthEntitlements } from '../../../../shared/types'
-import type { ContactLoadResult } from '../../../../shared/types'
+import type { ContactLoadResult, PageInboxScanInfo, PageInboxScanOptions } from '../../../../shared/types'
+import { DEFAULT_PAGE_INBOX_SCAN_DAYS, DEFAULT_PAGE_INBOX_MAX_CUSTOMERS, PAGE_INBOX_MAX_CUSTOMERS, estimatePageInboxScanMinutes, formatPageInboxScanDate, validatePageInboxScanOptions } from '../../../../shared/pageInboxScan'
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 
@@ -1042,7 +1043,18 @@ export default function DataScanModal({
   const [groupMembersUrl, setGroupMembersUrl] = useState('')
   const [groupMembersLimit, setGroupMembersLimit] = useState(DEFAULT_GROUP_MEMBER_LIMIT)
   const [pageInboxPages, setPageInboxPages] = useState<AutoAccountContact[]>([])
+  const [pageInboxOptionsAccountId, setPageInboxOptionsAccountId] = useState<number | ''>('')
   const [pageInboxPageUid, setPageInboxPageUid] = useState(lockedPageInboxPageUid)
+  const [pageInboxScanMode, setPageInboxScanMode] = useState<PageInboxScanOptions['mode']>('since_latest_message')
+  const [pageInboxScanDays, setPageInboxScanDays] = useState(String(DEFAULT_PAGE_INBOX_SCAN_DAYS))
+  const [pageInboxMaxCustomers, setPageInboxMaxCustomers] = useState(String(DEFAULT_PAGE_INBOX_MAX_CUSTOMERS))
+  const [pageInboxScanInfoRevision, setPageInboxScanInfoRevision] = useState(0)
+  const [pageInboxScanInfoState, setPageInboxScanInfoState] = useState<{
+    accountId: number
+    pageUid: string
+    data?: PageInboxScanInfo
+    error?: string
+  } | null>(null)
   const [pageInboxTimePreset, setPageInboxTimePreset] = useState<PageInboxTimePreset>(DEFAULT_PAGE_INBOX_TIME_PRESET)
   const [pageInboxPhoneFilter, setPageInboxPhoneFilter] = useState<PageInboxPhoneFilter>('all')
   const [pageInboxDateFrom, setPageInboxDateFrom] = useState(() => getPageInboxDateRange(DEFAULT_PAGE_INBOX_TIME_PRESET).fromDate)
@@ -1109,6 +1121,36 @@ export default function DataScanModal({
   const isProfileFriendsAction = action === PROFILE_FRIENDS_ACTION_ID
   const isGroupMembersAction = action === GROUP_MEMBERS_ACTION_ID
   const isPageInboxAction = action === PAGE_INBOX_CUSTOMERS_ACTION_ID
+  const pageInboxScanConfig = useMemo(() => {
+    try {
+      return { options: validatePageInboxScanOptions({
+        mode: pageInboxScanMode,
+        days: Number(pageInboxScanDays),
+        maxCustomers: Number(pageInboxMaxCustomers)
+      }), error: '' }
+    } catch (error) {
+      return { options: undefined, error: error instanceof Error ? error.message : 'Cấu hình quét không hợp lệ.' }
+    }
+  }, [pageInboxScanMode, pageInboxScanDays, pageInboxMaxCustomers])
+  const pageInboxScanInfo = pageInboxScanInfoState?.accountId === accountId
+    && pageInboxScanInfoState.pageUid === pageInboxPageUid ? pageInboxScanInfoState : null
+  const pageInboxEstimatedMinutes = Number.isInteger(Number(pageInboxMaxCustomers))
+    && Number(pageInboxMaxCustomers) >= 1 && Number(pageInboxMaxCustomers) <= PAGE_INBOX_MAX_CUSTOMERS
+    ? estimatePageInboxScanMinutes(Number(pageInboxMaxCustomers), pageInboxScanInfo?.data?.estimatedSecondsPer20000)
+    : null
+
+  useEffect(() => {
+    let cancelled = false
+    setPageInboxScanInfoState(null)
+    if (!isPageInboxAction || !accountId || !pageInboxPageUid) return
+    void window.electronAPI.getPageInboxScanInfo(accountId, pageInboxPageUid).then(data => {
+      if (!cancelled) setPageInboxScanInfoState({ accountId, pageUid: pageInboxPageUid, data })
+    }).catch(error => {
+      console.error('Failed to read Page inbox scan info:', error)
+      if (!cancelled) setPageInboxScanInfoState({ accountId, pageUid: pageInboxPageUid, error: 'Không đọc được ngày lấy gần nhất. Vui lòng thử lại.' })
+    })
+    return () => { cancelled = true }
+  }, [isPageInboxAction, accountId, pageInboxPageUid, pageInboxScanInfoRevision])
   const isZaloGroupMembersAction = action === ZALO_GROUP_MEMBERS_ACTION_ID
   const isZaloRemarketingCustomersAction = action === ZALO_REMARKETING_CUSTOMERS_ACTION_ID
   const isUploadDataAction = action === UPLOAD_DATA_ACTION_ID
@@ -1747,7 +1789,7 @@ export default function DataScanModal({
 
     if (isPageInboxAction) {
       const filters = pageInboxFiltersOverride || pageInboxAppliedFilters
-      if (pageInboxOptionsAccountRef.current !== accountId) return null
+      if (pageInboxOptionsAccountId !== accountId) return null
       if (!filters.pageUid) return null
       return JSON.stringify({
         ...base,
@@ -1819,6 +1861,7 @@ export default function DataScanModal({
     normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
     pageInboxAppliedFilters,
+    pageInboxOptionsAccountId,
     pageInboxPage,
     selectedDataset,
     selectedDatasetId,
@@ -2120,6 +2163,7 @@ export default function DataScanModal({
   }, [getPageInboxDraftFilters])
 
   const refreshPageInboxContactsAfterScan = useCallback(async () => {
+    setPageInboxScanInfoRevision(revision => revision + 1)
     const nextFilters = applyPageInboxDraftFilters()
     await loadCachedContacts(1, nextFilters, { force: true })
   }, [applyPageInboxDraftFilters, loadCachedContacts])
@@ -2282,6 +2326,7 @@ export default function DataScanModal({
         setPageInboxPageUid(prev => prev === '' ? prev : '')
         pageInboxPageUidRef.current = ''
         pageInboxOptionsAccountRef.current = ''
+        setPageInboxOptionsAccountId('')
         setPageInboxSelectAllMatching(false)
         setPageInboxSelectedRange(null)
         setPageInboxExcludedIds(new Set())
@@ -2293,6 +2338,9 @@ export default function DataScanModal({
         if (cancelled) return
         pageInboxOptionsAccountRef.current = accountId
         setPageInboxPages(pages)
+        // Readiness must trigger the SQLite query even when both accounts select
+        // the same Page and none of the applied filters change.
+        setPageInboxOptionsAccountId(accountId)
         const firstPageUid = pages[0]?.uid || ''
         const currentPageUid = pageInboxPageUidRef.current
         const nextPageUid = lockPageInboxPage && lockedPageInboxPageUid
@@ -2450,6 +2498,10 @@ export default function DataScanModal({
         if (!completedGroupUrl || completedGroupUrl !== normalizedGroupMembersUrl) return
       }
       completedScanIdsRef.current.add(scanId)
+      if (isPageInboxAction) {
+        scanStoppingRef.current = false
+        setScanStopping(false)
+      }
       if (operationId) {
         handledServerScanOperationIdsRef.current.add(operationId)
         if (trackedServerScanOperationIdRef.current === operationId) {
@@ -3326,6 +3378,7 @@ export default function DataScanModal({
   }
 
   const handleLoadData = async () => {
+    if (scanLoadingRef.current || scanStoppingRef.current) return
     if (!canUseDataScanAction(action, entitlements)) {
       showAlert('Tính năng này chưa được kích hoạt hoặc đã hết hạn.', 'error')
       return
@@ -3398,6 +3451,10 @@ export default function DataScanModal({
       showAlert('Vui lòng chọn page cần quét.', 'error')
       return
     }
+    if (isPageInboxAction && (!pageInboxScanConfig.options || !pageInboxScanInfo?.data)) {
+      showAlert(pageInboxScanConfig.error || pageInboxScanInfo?.error || 'Đang đọc ngày lấy gần nhất. Vui lòng đợi.', 'error')
+      return
+    }
     if (isZaloGroupMembersAction) {
       if (zaloGroupMemberMode === 'joined_group' && !zaloGroupMemberGroupId) {
         showAlert('Vui lòng chọn group Zalo đã tham gia.', 'error')
@@ -3434,7 +3491,7 @@ export default function DataScanModal({
         : isGroupMembersAction
           ? await window.electronAPI.loadGroupMembers(accountId, groupMembersUrl, groupMembersLimit)
         : isPageInboxAction
-          ? await window.electronAPI.loadPageInboxCustomers(accountId, pageInboxPageUid, selectedPageInboxPage?.name)
+          ? await window.electronAPI.loadPageInboxCustomers(accountId, pageInboxPageUid, selectedPageInboxPage?.name, pageInboxScanConfig.options)
           : isZaloGroupMembersAction
             ? await window.electronAPI.loadZaloGroupMembers(accountId, {
               mode: zaloGroupMemberMode,
@@ -3476,6 +3533,7 @@ export default function DataScanModal({
       }
 
       if (!result.success) {
+        if (isPageInboxAction) await refreshPageInboxContactsAfterScan()
         if (wasStopped) return
         showAlert(result.error || 'Tải data thất bại.', 'error')
         return
@@ -3501,11 +3559,16 @@ export default function DataScanModal({
       if (scanRunIdRef.current !== scanId || stoppedScanIdsRef.current.has(scanId)) return
       if (completedScanIdsRef.current.has(scanId)) return
       console.error('Failed to scan data:', err)
+      if (isPageInboxAction) void refreshPageInboxContactsAfterScan()
       showAlert(err?.message || 'Tải data thất bại.', 'error')
     } finally {
       const wasStopped = stoppedScanIdsRef.current.has(scanId)
       stoppedScanIdsRef.current.delete(scanId)
       if (mountedRef.current && scanRunIdRef.current === scanId && !wasStopped) {
+        if (isPageInboxAction) {
+          scanStoppingRef.current = false
+          setScanStopping(false)
+        }
         scanLoadingRef.current = false
         setScanLoading(false)
         setMinimized(false)
@@ -3543,6 +3606,23 @@ export default function DataScanModal({
     if (scanStoppingRef.current) return
     const scanId = scanRunIdRef.current
     const operationId = trackedServerScanOperationIdRef.current
+
+    // Page inbox keeps its controls locked until pending contacts have been saved.
+    if (isPageInboxAction) {
+      scanStoppingRef.current = true
+      setScanStopping(true)
+      try {
+        await cancelScan()
+        if (closeAfterStop) onClose()
+      } catch (error) {
+        scanStoppingRef.current = false
+        if (mountedRef.current) setScanStopping(false)
+        if (!completedScanIdsRef.current.has(scanId)) {
+          showAlert(error instanceof Error ? error.message : 'Không thể dừng quét data. Vui lòng thử lại.', 'error')
+        } else if (closeAfterStop) onClose()
+      }
+      return
+    }
 
     // Local scans keep the existing immediate-stop behavior. Only the remote
     // runtime needs an acknowledgement before its snapshot is ignored.
@@ -4037,6 +4117,75 @@ export default function DataScanModal({
                       )}
                     </select>
                   </div>
+                  <fieldset className="data-scan-page-inbox-scan-options" disabled={scanLoading || scanStopping}>
+                    <legend>Cài đặt quét</legend>
+                    <label className="data-scan-page-inbox-radio">
+                      <input
+                        type="radio"
+                        name="page-inbox-scan-mode"
+                        value="since_latest_message"
+                        checked={pageInboxScanMode === 'since_latest_message'}
+                        onChange={() => setPageInboxScanMode('since_latest_message')}
+                      />
+                      <span>Lấy dữ liệu từ hôm nay đến Ngày lấy gần nhất: <strong>{
+                        pageInboxScanInfo?.data
+                          ? pageInboxScanInfo.data.latestMessageAt
+                            ? formatPageInboxScanDate(pageInboxScanInfo.data.latestMessageAt)
+                            : 'Chưa có dữ liệu (lấy đủ theo số lượng tối đa)'
+                          : pageInboxScanInfo?.error ? 'Không đọc được dữ liệu' : pageInboxPageUid ? 'Đang tải...' : 'Chưa chọn Page'
+                      }</strong></span>
+                    </label>
+                    <div className="data-scan-page-inbox-days-row">
+                      <label className="data-scan-page-inbox-radio">
+                        <input
+                          type="radio"
+                          name="page-inbox-scan-mode"
+                          value="last_days"
+                          checked={pageInboxScanMode === 'last_days'}
+                          onChange={() => setPageInboxScanMode('last_days')}
+                        />
+                        <span>Lấy trong số ngày tính từ ngày hôm nay:</span>
+                      </label>
+                      <input
+                        type="number"
+                        aria-label="Số ngày lấy dữ liệu"
+                        className="stepper-input data-scan-page-inbox-number"
+                        min={1}
+                        step={1}
+                        value={pageInboxScanDays}
+                        disabled={pageInboxScanMode !== 'last_days'}
+                        onChange={event => setPageInboxScanDays(event.target.value)}
+                      />
+                      <span>ngày</span>
+                    </div>
+                    <div className="stepper-form-group">
+                      <label htmlFor="page-inbox-max-customers">Số khách hàng tối đa muốn lấy: (tối đa 20.000)</label>
+                      <input
+                        id="page-inbox-max-customers"
+                        type="number"
+                        className="stepper-input data-scan-page-inbox-number"
+                        min={1}
+                        max={PAGE_INBOX_MAX_CUSTOMERS}
+                        step={1}
+                        value={pageInboxMaxCustomers}
+                        onChange={event => setPageInboxMaxCustomers(event.target.value)}
+                      />
+                    </div>
+                    {pageInboxScanConfig.error && <div className="data-scan-page-inbox-scan-error" role="alert">{pageInboxScanConfig.error}</div>}
+                    {pageInboxScanInfo?.error && (
+                      <div className="data-scan-page-inbox-scan-error" role="alert">
+                        {pageInboxScanInfo.error}
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPageInboxScanInfoRevision(revision => revision + 1)}>Thử lại</button>
+                      </div>
+                    )}
+                    <div className="data-scan-page-inbox-estimate" aria-live="polite">
+                      Thời gian dự kiến lấy: <strong>{pageInboxEstimatedMinutes ?? '—'} phút</strong>
+                    </div>
+                    <div className="data-scan-page-inbox-note">
+                      <Info size={15} />
+                      <span>Facebook trả dữ liệu từ mới đến cũ. akaBiz dừng khi đến mốc ngày hoặc đủ số lượng khách hàng, tùy điều kiện nào đạt trước. Số dữ liệu thực tế phụ thuộc Facebook.</span>
+                    </div>
+                  </fieldset>
                 </div>
               )}
 
@@ -4165,7 +4314,7 @@ export default function DataScanModal({
                     || (isPostLikesAction && !postLikesUrl.trim())
                     || (isProfileFriendsAction && !profileFriendsUrl.trim())
                     || (isGroupMembersAction && !groupMembersUrl.trim())
-                    || (isPageInboxAction && !pageInboxPageUid)
+                    || (isPageInboxAction && (!pageInboxPageUid || !pageInboxScanInfo?.data || !pageInboxScanConfig.options))
                     || (isZaloGroupMembersAction && zaloGroupMemberMode === 'joined_group' && !zaloGroupMemberGroupId)
                     || (isZaloGroupMembersAction && zaloGroupMemberMode === 'group_link' && !normalizeZaloGroupLink(zaloGroupMemberLink))
                   }
@@ -4481,12 +4630,6 @@ export default function DataScanModal({
                   </div>
                 </div>
 
-                <div className="data-scan-page-inbox-note">
-                  <Info size={15} />
-                  <span>
-                    Facebook chỉ cho phép quét dữ liệu từ hôm nay trở về trước và không hỗ trợ bộ lọc khi quét. akaBiz sẽ quét tối đa là 100.000 data.
-                  </span>
-                </div>
               </>
             )}
 

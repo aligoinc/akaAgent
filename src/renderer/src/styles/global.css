@@ -18292,9 +18292,57 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 
 .data-scan-page-inbox-load-controls {
   display: grid;
-  grid-template-columns: minmax(220px, 420px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: end;
+}
+
+.data-scan-page-inbox-load-controls > .stepper-form-group {
+  max-width: 420px;
+}
+
+.data-scan-page-inbox-scan-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.data-scan-page-inbox-scan-options legend {
+  padding: 0 5px;
+  color: var(--text-secondary);
+}
+
+.data-scan-page-inbox-radio,
+.data-scan-page-inbox-days-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-scan-page-inbox-radio input {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.data-scan-page-inbox-days-row {
+  flex-wrap: wrap;
+}
+
+.data-scan-page-inbox-number {
+  width: 115px;
+}
+
+.data-scan-page-inbox-scan-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--danger-color, #dc2626);
 }
 
 .data-scan-zalo-member-mode {

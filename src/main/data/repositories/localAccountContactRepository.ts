@@ -344,6 +344,27 @@ function buildPageInboxWhere(accountId: number, staffId: number, query: PageInbo
   return { sql: `WHERE ${where.join(' AND ')}`, params }
 }
 
+export function getLatestPageInboxMessageAt(accountId: number, pageUid: string): string | null {
+  const u = requireCurrentUser()
+  const normalizedPageUid = normalizeText(pageUid)
+  if (!normalizedPageUid) throw new Error('Vui lòng chọn Page cần quét.')
+  const db = openDb()
+  try {
+    const row = db.prepare(`
+      SELECT strftime('%Y-%m-%dT%H:%M:%fZ', MAX(julianday(json_extract(extra_data, '$.lastMessageAt')))) AS latest_message_at
+      FROM auto_account_contacts
+      WHERE account_id = ? AND staff_id = ? AND organization_id = ?
+        AND contact_type = ? AND is_delete = 0
+        AND json_extract(extra_data, '$.pageUid') = ?
+        AND json_type(extra_data, '$.lastMessageAt') = 'text'
+        AND json_extract(extra_data, '$.lastMessageAt') GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'
+    `).get(accountId, u.staffId, u.organizationId, PAGE_INBOX_CONTACT_TYPE, normalizedPageUid) as { latest_message_at: string | null }
+    return row.latest_message_at
+  } finally {
+    db.close()
+  }
+}
+
 export function listPageInboxContacts(accountId: number, query: PageInboxContactListQuery = {}): ContactListResult {
   const u = requireCurrentUser()
   const db = openDb()
