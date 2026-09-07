@@ -18319,7 +18319,8 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 }
 
 .data-scan-page-inbox-radio,
-.data-scan-page-inbox-days-row {
+.data-scan-page-inbox-days-row,
+.data-scan-page-inbox-limit-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -18330,8 +18331,13 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   margin: 0;
 }
 
-.data-scan-page-inbox-days-row {
+.data-scan-page-inbox-days-row,
+.data-scan-page-inbox-limit-row {
   flex-wrap: wrap;
+}
+
+.stepper-form-group.data-scan-page-inbox-limit-row > label {
+  margin-bottom: 0;
 }
 
 .data-scan-page-inbox-number {

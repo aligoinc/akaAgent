@@ -4158,8 +4158,8 @@ export default function DataScanModal({
                       />
                       <span>ngày</span>
                     </div>
-                    <div className="stepper-form-group">
-                      <label htmlFor="page-inbox-max-customers">Số khách hàng tối đa muốn lấy: (tối đa 20.000)</label>
+                    <div className="stepper-form-group data-scan-page-inbox-limit-row">
+                      <label htmlFor="page-inbox-max-customers">Số khách hàng tối đa muốn lấy:</label>
                       <input
                         id="page-inbox-max-customers"
                         type="number"
@@ -4170,6 +4170,7 @@ export default function DataScanModal({
                         value={pageInboxMaxCustomers}
                         onChange={event => setPageInboxMaxCustomers(event.target.value)}
                       />
+                      <span>(tối đa 20.000)</span>
                     </div>
                     {pageInboxScanConfig.error && <div className="data-scan-page-inbox-scan-error" role="alert">{pageInboxScanConfig.error}</div>}
                     {pageInboxScanInfo?.error && (
