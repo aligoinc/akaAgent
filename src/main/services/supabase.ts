@@ -13,6 +13,7 @@ import * as mediaFileRepo from '../data/repositories/mediaFileRepository'
 import * as contactTagRepo from '../data/repositories/contactTagRepository'
 import * as emailNotificationRepo from '../data/repositories/emailNotificationRepository'
 import * as appNotificationRepo from '../data/repositories/appNotificationRepository'
+import * as loginScreenRepo from '../data/repositories/loginScreenRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
@@ -473,6 +474,7 @@ export class SupabaseService {
 
   // =========== APP NOTIFICATIONS ===========
   getActiveAppNotification() { return appNotificationRepo.getActiveAppNotification() }
+  getLoginScreenContent() { return loginScreenRepo.getLoginScreenContent() }
 
   // =========== REPORTS ===========
   getAccountActionReport(query: AccountActionReportQuery) { return reportRepo.getAccountActionReport(query) }

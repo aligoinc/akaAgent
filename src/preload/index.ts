@@ -1,3 +1,4 @@
+import type { LoginScreenContent } from '../shared/types'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PageInboxScanOptions, PageInboxScanInfo } from '../shared/types'
 import { existsSync } from 'fs'
@@ -400,6 +401,9 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
 
   // App Notifications
+  getLoginScreenContent: (): Promise<LoginScreenContent> =>
+    ipcRenderer.invoke(IPC_EVENTS.LOGIN_SCREEN_GET_CONTENT),
+
   getActiveAppNotification: (): Promise<AppNotification | null> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_NOTIFICATION_GET_ACTIVE),
 

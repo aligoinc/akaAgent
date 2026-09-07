@@ -2620,6 +2620,16 @@ export interface AppNotification {
   updatedAt?: string
 }
 
+export interface LoginScreenContent {
+  notification: AppNotification | null
+  links: {
+    website: string | null
+    userGuide: string | null
+    upgradePayment: string | null
+    contactUs: string | null
+  }
+}
+
 // ============================================
 // Auth Types
 // ============================================
@@ -3052,6 +3062,7 @@ export const IPC_EVENTS = {
 
   // App Notifications
   APP_NOTIFICATION_GET_ACTIVE: 'app-notification:get-active',
+  LOGIN_SCREEN_GET_CONTENT: 'login-screen:get-content',
 
   // Reports
   REPORT_ACCOUNT_ACTION_SUMMARY: 'report:account-action-summary',
