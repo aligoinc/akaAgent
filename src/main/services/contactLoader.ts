@@ -1,4 +1,6 @@
 import { BrowserWindow } from 'electron'
+import type { PageInboxScanInfo, PageInboxScanOptions, PageInboxScanStopReason } from '../../shared/types'
+import { DEFAULT_PAGE_INBOX_ESTIMATE_SECONDS, PAGE_INBOX_ESTIMATE_SETTING_KEY, formatPageInboxScanDate, getPageInboxScanCutoff, normalizePageInboxEstimateSeconds, parsePageInboxTimestamp, validatePageInboxScanOptions } from '../../shared/pageInboxScan'
 import { SupabaseService } from './supabase'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { IPC_EVENTS, ContactType, AutoAccount, AutoAccountContact, ContactDatasetFinalizeInput, ContactLoadProgress, ContactLoadResult, ZaloGroupMemberScanRequest, ZaloLabelOption } from '../../shared/types'
@@ -70,7 +72,6 @@ const GROUP_MEMBERS_WORKFLOW = '[Built-in] Facebook - Quét thành viên group'
 const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
-const PAGE_INBOX_MAX_CONTACTS = 100000
 const PAGE_INBOX_MAX_FETCH_FAILURES = 3
 const ZALO_FRIEND_PAGE_SIZE = 500
 const ZALO_FRIEND_API_MIN_DELAY_MS = 2000
@@ -116,6 +117,7 @@ interface PageInboxMessage {
 
 interface PageInboxConversation {
   id?: string
+  updated_time?: string
   participants?: {
     data?: PageInboxParticipant[]
   }
@@ -381,65 +383,94 @@ export class ContactLoader {
     })
   }
 
-  async loadPageInboxCustomers(accountId: number, pageUid: string, pageName?: string): Promise<ContactLoadResult> {
+  async getPageInboxScanInfo(accountId: number, pageUid: string): Promise<PageInboxScanInfo> {
+    const latestMessageAt = localContactRepo.getLatestPageInboxMessageAt(accountId, pageUid)
+    let estimatedSecondsPer20000 = DEFAULT_PAGE_INBOX_ESTIMATE_SECONDS
+    try {
+      estimatedSecondsPer20000 = normalizePageInboxEstimateSeconds(
+        await this.supabase.getSystemSettingValue(PAGE_INBOX_ESTIMATE_SETTING_KEY)
+      )
+    } catch {
+      console.warn('[ContactLoader] Cannot read Page inbox scan estimate; using 2400 seconds.')
+    }
+    return { latestMessageAt, estimatedSecondsPer20000 }
+  }
+
+  async loadPageInboxCustomers(
+    accountId: number,
+    pageUid: string,
+    pageName?: string,
+    options?: PageInboxScanOptions,
+    ensureAccess?: () => Promise<void>
+  ): Promise<ContactLoadResult> {
     const normalizedPageUid = String(pageUid || '').trim()
     const normalizedPageName = String(pageName || '').replace(/\s+/g, ' ').trim()
     const typeName = 'người từng nhắn tin với page'
+    let scanOptions: Required<PageInboxScanOptions>
+    try {
+      scanOptions = validatePageInboxScanOptions(options)
+    } catch (err: any) {
+      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        success: false, count: 0, pageInboxStopReason: 'error', error: err.message || String(err)
+      })
+    }
 
     if (!normalizedPageUid) {
       return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
         success: false,
         count: 0,
-        error: 'Vui lòng chọn page cần quét.'
+        error: 'Vui lòng chọn page cần quét.',
+        pageInboxStopReason: 'error'
       })
     }
 
-    let account: AutoAccount | null
-    try {
-      account = await this.supabase.getAccount(accountId)
-    } catch (err: any) {
-      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
-        success: false,
-        count: 0,
-        error: `Không thể kiểm tra trạng thái tài khoản: ${err.message || String(err)}`
-      })
-    }
-
-    const preflightError = this.getPreflightError(account)
-    if (preflightError) {
-      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
-        success: false,
-        count: 0,
-        error: preflightError
-      })
-    }
-
-    const latestAccount = await this.supabase.getAccount(accountId)
-    const latestPreflightError = this.getPreflightError(latestAccount)
-    if (latestPreflightError) {
-      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
-        success: false,
-        count: 0,
-        error: latestPreflightError
-      })
-    }
-
+    // Register before any async authorization/preflight so an early Stop belongs
+    // to this run. Authorization still precedes DB claims, local reads and Graph.
     const loadState = this.startLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {}, {
       runKeyLabel: `page-inbox-${normalizedPageUid}`,
       targetUrl: 'https://business.facebook.com/content_management'
     })
-    const runnableAccount = latestAccount!
-    let runtimeClaim: AccountRuntimeScanClaim = {
-      previousStatus: runnableAccount.status as AccountRuntimePreviousStatus,
-      claimToken: null,
-      staffId: null
-    }
+    let runnableAccount: AutoAccount | null = null
+    let runtimeClaim: AccountRuntimeScanClaim | null = null
     const variables = loadState.variables
-    let claimedAccount = false
+    let pendingContacts: localContactRepo.PageInboxContactInput[] = []
+    let savedCount = 0
+    let completionResult: ContactLoadResult | undefined
+    const finish = (result: ContactLoadResult): ContactLoadResult => {
+      completionResult = { ...result, runKey: loadState.runKey }
+      return completionResult
+    }
+    const isCancelled = () => this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
+    const read = <T>(operation: () => Promise<T>) => this.readPageInboxUntilCancelled(loadState, operation)
+    const flushContacts = () => {
+      if (pendingContacts.length === 0) return
+      savedCount += localContactRepo.upsertPageInboxContacts(pendingContacts)
+      pendingContacts = []
+    }
 
     try {
+      if (ensureAccess) await read(ensureAccess)
+      const account = await read(() => this.supabase.getAccount(accountId))
+      const preflightError = this.getPreflightError(account)
+      if (preflightError) throw new Error(preflightError)
+
+      const latestAccount = await read(() => this.supabase.getAccount(accountId))
+      const latestPreflightError = this.getPreflightError(latestAccount)
+      if (latestPreflightError) throw new Error(latestPreflightError)
+      runnableAccount = latestAccount!
+      if (isCancelled()) throw new Error('Đã dừng quét.')
+
+      // Do not race a mutating claim against cancellation: it may commit after
+      // Stop. Await its result and release the returned token in finally.
       runtimeClaim = await this.claimAccountForScan(runnableAccount)
-      claimedAccount = true
+      if (isCancelled()) throw new Error('Đã dừng quét.')
+
+      const clock = await read(() => this.supabase.getRuntimeClock())
+      const latestMessageAt = scanOptions.mode === 'since_latest_message'
+        ? localContactRepo.getLatestPageInboxMessageAt(accountId, normalizedPageUid)
+        : null
+      const cutoff = getPageInboxScanCutoff(scanOptions, clock.vietnamDateKey, latestMessageAt)
+      if (isCancelled()) throw new Error('Đã dừng quét.')
 
       this.sendProgress(`🔄 Đang lấy token để quét inbox page ${normalizedPageName || normalizedPageUid}...`, {
         accountId,
@@ -448,42 +479,46 @@ export class ContactLoader {
       })
 
       await this.proxyRuntime?.prepareAccountSession(runnableAccount)
+      if (isCancelled()) throw new Error('Đã dừng quét.')
       const page = this.backgroundPages.getOrCreate(accountId, runnableAccount.flatformType)
       this.selectAutomationBrowser(accountId)
       this.startBackgroundPreview(accountId, page, 'Đang quét người nhắn tin với page')
 
-      await page.navigate('https://business.facebook.com/content_management')
-      await this.sleep(5000)
+      await read(() => page.navigate('https://business.facebook.com/content_management'))
+      await this.sleep(5000, loadState.controller.signal)
+      if (isCancelled()) throw new Error('Đã dừng quét.')
 
-      const userAccessToken = await this.extractFacebookUserAccessToken(page)
+      const userAccessToken = await read(() => this.extractFacebookUserAccessToken(page, loadState.controller.signal))
       if (!userAccessToken) {
         throw new Error('Không lấy được token Facebook. Vui lòng mở lại tab Facebook/Business và thử lại.')
       }
 
-      const cookieHeader = await this.getFacebookCookieHeader(page)
-      const pageAccessToken = await this.getPageAccessToken(normalizedPageUid, userAccessToken, cookieHeader)
+      const cookieHeader = await read(() => this.getFacebookCookieHeader(page))
+      const pageAccessToken = await this.getPageAccessToken(normalizedPageUid, userAccessToken, cookieHeader, loadState.controller.signal)
       if (!pageAccessToken) {
         throw new Error('Không lấy được Page access token. Tài khoản cần có quyền nhắn tin trên page này.')
       }
+      if (isCancelled()) throw new Error('Đã dừng quét.')
 
       let nextUrl = this.buildPageInboxConversationsUrl(normalizedPageUid, pageAccessToken)
       const seenPsids = new Set<string>()
-      let pendingContacts: localContactRepo.PageInboxContactInput[] = []
-      let savedCount = 0
+      const fetchedUrls = new Set<string>()
       let scannedCount = 0
       let fetchFailureCount = 0
       let fetchFailureMessage = ''
       let reachedMaxContacts = false
+      let reachedDateLimit = false
 
       while (nextUrl) {
         if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
 
         let response: GraphApiResponse<PageInboxConversation[]>
         try {
-          response = await this.fetchGraphJson<PageInboxConversation[]>(nextUrl, cookieHeader)
+          response = await this.fetchGraphJson<PageInboxConversation[]>(nextUrl, cookieHeader, loadState.controller.signal)
           fetchFailureCount = 0
           fetchFailureMessage = ''
         } catch (err: any) {
+          if (isCancelled()) break
           fetchFailureCount += 1
           fetchFailureMessage = err?.message || String(err)
           if (fetchFailureCount >= PAGE_INBOX_MAX_FETCH_FAILURES) break
@@ -492,15 +527,23 @@ export class ContactLoader {
             contactType: PAGE_INBOX_CONTACT_TYPE,
             runKey: loadState.runKey
           })
-          await this.sleep(2000)
+          await this.sleep(2000, loadState.controller.signal)
           if (this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted) break
           continue
         }
 
         const conversations = Array.isArray(response.data) ? response.data : []
         scannedCount += conversations.length
+        fetchedUrls.add(nextUrl)
+        let allBeforeCutoff = cutoff !== null && conversations.length > 0
 
         for (const conversation of conversations) {
+          const timestamp = this.getPageInboxConversationTimestamp(conversation)
+          if (timestamp === null || cutoff === null || timestamp >= cutoff) {
+            allBeforeCutoff = false
+          } else {
+            continue
+          }
           const contact = this.mapPageInboxConversation(
             accountId,
             normalizedPageUid,
@@ -510,16 +553,16 @@ export class ContactLoader {
           if (!contact || seenPsids.has(contact.uid)) continue
           seenPsids.add(contact.uid)
           pendingContacts.push(contact)
-          if (seenPsids.size >= PAGE_INBOX_MAX_CONTACTS) {
+          if (seenPsids.size >= scanOptions.maxCustomers) {
             reachedMaxContacts = true
             break
           }
         }
+        reachedDateLimit = allBeforeCutoff
 
         const cancelledAfterPage = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
         if (pendingContacts.length >= PAGE_INBOX_BATCH_SIZE) {
-          savedCount += localContactRepo.upsertPageInboxContacts(pendingContacts)
-          pendingContacts = []
+          flushContacts()
           if (!cancelledAfterPage) this.sendProgress(`💾 Đã lưu ${savedCount} ${typeName}...`, {
             accountId,
             contactType: PAGE_INBOX_CONTACT_TYPE,
@@ -534,13 +577,12 @@ export class ContactLoader {
         }
 
         if (cancelledAfterPage) break
-        if (reachedMaxContacts) break
+        if (reachedMaxContacts || reachedDateLimit) break
         nextUrl = response.paging?.next || ''
+        if (nextUrl && fetchedUrls.has(nextUrl)) throw new Error('Facebook trả lại trang dữ liệu đã đọc. Đã dừng để tránh quét lặp.')
       }
 
-      if (pendingContacts.length > 0) {
-        savedCount += localContactRepo.upsertPageInboxContacts(pendingContacts)
-      }
+      flushContacts()
 
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       if (stopped) {
@@ -549,65 +591,70 @@ export class ContactLoader {
           contactType: PAGE_INBOX_CONTACT_TYPE,
           runKey: loadState.runKey
         })
-        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        return finish({
           success: true,
           count: savedCount,
-          stopped: true
-        }, loadState.runKey)
+          stopped: true,
+          pageInboxStopReason: 'cancelled'
+        })
       }
 
       if (fetchFailureCount >= PAGE_INBOX_MAX_FETCH_FAILURES) {
-        this.sendProgress(`Server tin nhắn của Facebook bị lỗi hoặc đang bảo trì. Đã lưu ${savedCount} data.`, {
+        throw new Error(`Server tin nhắn của Facebook bị lỗi hoặc đang bảo trì: ${fetchFailureMessage}`)
+      }
+
+      const stopReason: PageInboxScanStopReason = reachedMaxContacts ? 'customer_limit' : reachedDateLimit ? 'date_limit' : 'exhausted'
+      const stopMessage = reachedMaxContacts
+        ? `Đã đạt giới hạn ${scanOptions.maxCustomers.toLocaleString('vi-VN')} khách hàng.`
+        : reachedDateLimit && cutoff !== null
+          ? `Đã lấy hết dữ liệu đến ngày ${formatPageInboxScanDate(new Date(cutoff).toISOString())}.`
+          : 'Facebook đã trả hết dữ liệu.'
+      this.sendProgress(`✅ Đã quét và lưu ${savedCount} ${typeName}. ${stopMessage}`, {
+        accountId,
+        contactType: PAGE_INBOX_CONTACT_TYPE,
+        runKey: loadState.runKey
+      })
+      return finish({
+        success: true,
+        count: savedCount,
+        pageInboxStopReason: stopReason
+      })
+    } catch (err: any) {
+      let saveError = ''
+      try {
+        flushContacts()
+      } catch (error: any) {
+        saveError = `Không thể lưu phần dữ liệu còn lại: ${error.message || String(error)}`
+      }
+      const stopped = isCancelled() && !saveError
+      const errMsg = saveError || err?.message || String(err)
+      if (stopped) {
+        this.sendProgress(`Đã dừng quét ${typeName}. Đã lưu ${savedCount} data.`, {
           accountId,
           contactType: PAGE_INBOX_CONTACT_TYPE,
           runKey: loadState.runKey
         })
-        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+        return finish({
           success: true,
           count: savedCount,
-          error: fetchFailureMessage
-        }, loadState.runKey)
-      }
-
-      this.sendProgress(reachedMaxContacts
-        ? `✅ Đã quét và lưu ${savedCount} ${typeName}. Đã đạt giới hạn ${PAGE_INBOX_MAX_CONTACTS.toLocaleString('vi-VN')} data.`
-        : `✅ Đã quét và lưu ${savedCount} ${typeName}.`, {
-        accountId,
-        contactType: PAGE_INBOX_CONTACT_TYPE,
-        runKey: loadState.runKey
-      })
-      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
-        success: true,
-        count: savedCount
-      }, loadState.runKey)
-    } catch (err: any) {
-      const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
-      const errMsg = err?.message || String(err)
-      if (stopped) {
-        this.sendProgress(`Đã dừng quét ${typeName}.`, {
-          accountId,
-          contactType: PAGE_INBOX_CONTACT_TYPE,
-          runKey: loadState.runKey
+          stopped: true,
+          pageInboxStopReason: 'cancelled'
         })
-        return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
-          success: true,
-          count: 0,
-          stopped: true
-        }, loadState.runKey)
       }
 
-      this.sendProgress(`❌ Lỗi quét ${typeName}: ${errMsg}`, {
+      this.sendProgress(`❌ Lỗi quét ${typeName}: ${errMsg}. Đã lưu ${savedCount} data.`, {
         accountId,
         contactType: PAGE_INBOX_CONTACT_TYPE,
         runKey: loadState.runKey
       })
-      return this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, {
+      return finish({
         success: false,
-        count: 0,
-        error: errMsg
-      }, loadState.runKey)
+        count: savedCount,
+        error: `${errMsg}. Đã lưu ${savedCount} data.`,
+        pageInboxStopReason: 'error'
+      })
     } finally {
-      if (claimedAccount) {
+      if (runnableAccount && runtimeClaim) {
         await this.restoreAccountStatus(runnableAccount, runtimeClaim)
       }
       if (this.activeLoads.get(accountId) === loadState) {
@@ -616,7 +663,41 @@ export class ContactLoader {
         this.stopBackgroundPreview(accountId)
         this.backgroundPages.destroy(accountId)
       }
+      if (completionResult) this.completeLoad(accountId, PAGE_INBOX_CONTACT_TYPE, completionResult, loadState.runKey)
     }
+  }
+
+  /** Snapshot the run before the cancel IPC performs its async access check. */
+  capturePageInboxCancellation(accountId: number): (() => void) | undefined {
+    const active = this.activeLoads.get(accountId)
+    if (active?.contactType !== PAGE_INBOX_CONTACT_TYPE) return undefined
+    return () => {
+      if (this.activeLoads.get(accountId) === active) this.cancelLoad(accountId)
+    }
+  }
+
+  private readPageInboxUntilCancelled<T>(loadState: ActiveContactLoad, operation: () => Promise<T>): Promise<T> {
+    const signal = loadState.controller.signal
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        signal.removeEventListener('abort', onAbort)
+        reject(new Error('Đã dừng quét.'))
+      }
+      if (signal.aborted) return onAbort()
+      signal.addEventListener('abort', onAbort, { once: true })
+      // Only read-only/preflight work may outlive this wait. Rejection handlers
+      // stay attached so a late DB/browser failure cannot become unhandled.
+      Promise.resolve().then(() => {
+        signal.throwIfAborted()
+        return operation()
+      }).then(value => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(value)
+      }, error => {
+        signal.removeEventListener('abort', onAbort)
+        reject(error)
+      })
+    })
   }
 
   cancelLoad(accountId: number): void {
@@ -624,6 +705,7 @@ export class ContactLoader {
     const active = this.activeLoads.get(accountId)
     if (active) {
       active.variables.contactScanCancelled = true
+      if (active.contactType === PAGE_INBOX_CONTACT_TYPE) active.controller.abort()
       if (active.runtimePlatform === 'zalo') {
         void Promise.resolve(this.zaloRuntime?.cancelActiveQuery?.(accountId)).catch(error => {
           console.warn('[ContactLoader] Failed to cancel active Zalo scan query:', {
@@ -1924,11 +2006,27 @@ export class ContactLoader {
     return Number.isFinite(parsed) ? parsed : null
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new Error('Đã dừng quét.'))
+        return
+      }
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort)
+        resolve()
+      }, ms)
+      const onAbort = () => {
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
+        reject(new Error('Đã dừng quét.'))
+      }
+      signal?.addEventListener('abort', onAbort, { once: true })
+    })
   }
 
-  private async extractFacebookUserAccessToken(page: PageController): Promise<string> {
+  private async extractFacebookUserAccessToken(page: PageController, signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted()
     const token = await page.evaluate<string>(`
       var html = [
         document.documentElement ? document.documentElement.innerHTML : '',
@@ -1938,10 +2036,11 @@ export class ContactLoader {
       return match ? match[0] : '';
     `).catch(() => '')
 
+    signal?.throwIfAborted()
     if (token) return token
 
     await page.navigate('https://business.facebook.com/latest/content_management').catch(() => undefined)
-    await this.sleep(5000)
+    await this.sleep(5000, signal)
     return await page.evaluate<string>(`
       var html = [
         document.documentElement ? document.documentElement.innerHTML : '',
@@ -1975,9 +2074,10 @@ export class ContactLoader {
     return [code + subcode, message].filter(Boolean).join(' ')
   }
 
-  private async fetchGraphJson<T>(url: string, cookieHeader: string): Promise<GraphApiResponse<T>> {
+  private async fetchGraphJson<T>(url: string, cookieHeader: string, signal?: AbortSignal): Promise<GraphApiResponse<T>> {
     const response = await fetch(url, {
       method: 'GET',
+      signal,
       headers: this.buildGraphHeaders(cookieHeader)
     })
     const data = await response.json().catch(() => null) as GraphApiResponse<T> | null
@@ -1987,15 +2087,24 @@ export class ContactLoader {
     return data || {}
   }
 
-  private async getPageAccessToken(pageUid: string, userAccessToken: string, cookieHeader: string): Promise<string> {
+  private async getPageAccessToken(pageUid: string, userAccessToken: string, cookieHeader: string, signal?: AbortSignal): Promise<string> {
     const url = `${FACEBOOK_GRAPH_API_BASE}/${encodeURIComponent(pageUid)}?fields=access_token&access_token=${encodeURIComponent(userAccessToken)}`
-    const response = await this.fetchGraphJson<never>(url, cookieHeader)
+    const response = await this.fetchGraphJson<never>(url, cookieHeader, signal)
     return String(response.access_token || '').trim()
   }
 
   private buildPageInboxConversationsUrl(pageUid: string, pageAccessToken: string): string {
-    const fields = 'participants,messages.limit(25){id,message,created_time,from}'
+    const fields = 'updated_time,participants,messages.limit(25){id,message,created_time,from}'
     return `${FACEBOOK_GRAPH_API_BASE}/${encodeURIComponent(pageUid)}/conversations?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(pageAccessToken)}`
+  }
+
+  private getPageInboxConversationTimestamp(conversation: PageInboxConversation): number | null {
+    const updated = parsePageInboxTimestamp(conversation.updated_time)
+    if (updated !== null) return updated
+    const timestamps = (Array.isArray(conversation.messages?.data) ? conversation.messages.data : [])
+      .map(message => parsePageInboxTimestamp(message.created_time))
+      .filter((timestamp): timestamp is number => timestamp !== null)
+    return timestamps.length > 0 ? Math.max(...timestamps) : null
   }
 
   private mapPageInboxConversation(
@@ -2006,9 +2115,12 @@ export class ContactLoader {
   ): localContactRepo.PageInboxContactInput | null {
     const conversationId = String(conversation.id || '').trim()
     const participants = Array.isArray(conversation.participants?.data) ? conversation.participants!.data! : []
-    const customer = participants.find(participant => String(participant.id || '').trim() !== pageUid) || participants[0]
+    const customer = participants.find(participant => {
+      const psid = String(participant.id || '').trim()
+      return /^[1-9]\d*$/.test(psid) && psid !== pageUid
+    })
     const customerPsid = String(customer?.id || '').trim()
-    if (!conversationId || !customerPsid || customerPsid === pageUid) return null
+    if (!customerPsid) return null
 
     const customerName = String(customer?.name || customerPsid).replace(/\s+/g, ' ').trim()
     const messages = Array.isArray(conversation.messages?.data) ? conversation.messages!.data! : []
@@ -2021,6 +2133,7 @@ export class ContactLoader {
         fromName: String(message.from?.name || '').replace(/\s+/g, ' ').trim()
       }))
       .filter(message => message.text || message.createdTime || message.fromId)
+      .sort((a, b) => ((parsePageInboxTimestamp(b.createdTime) ?? -Infinity) - (parsePageInboxTimestamp(a.createdTime) ?? -Infinity)) || 0)
 
     const customerMessages = normalizedMessages.filter(message => message.fromId === customerPsid)
     const phone = this.extractPhoneFromMessages(customerMessages.length > 0 ? customerMessages : normalizedMessages)
