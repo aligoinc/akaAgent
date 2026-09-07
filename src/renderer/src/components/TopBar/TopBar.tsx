@@ -27,6 +27,7 @@ import {
 import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
+import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/deviceChange'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
@@ -81,7 +82,7 @@ export default function TopBar({
   onCheckUpdate
 }: TopBarProps) {
   const { theme, toggleTheme } = useThemeStore()
-  const { user, logout, resetDeviceLock } = useAuthStore()
+  const { user, logout, resetDeviceLock, resettingDevice } = useAuthStore()
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const accountMenuRef = useRef<HTMLDivElement>(null)
@@ -215,18 +216,19 @@ export default function TopBar({
   }
 
   const handleResetDeviceLock = () => {
+    if (resettingDevice) return
     closeAccountMenu()
     useUiStore.getState().showConfirm(
-      'Bạn có muốn đổi máy tính không?',
+      DEVICE_CHANGE_WARNING,
       async () => {
         try {
-          await resetDeviceLock()
-          useUiStore.getState().showAlert('Đã reset máy tính. Bạn có thể đăng nhập tài khoản này trên máy mới.', 'success')
+          const result = await resetDeviceLock()
+          useUiStore.getState().showAlert(deviceChangeMessage(result), result.success ? 'success' : 'error')
         } catch (err: any) {
           useUiStore.getState().showAlert(err?.message || 'Đổi máy tính thất bại', 'error')
         }
       },
-      { title: 'Đổi máy tính', confirmText: 'Đổi máy tính', variant: 'primary' }
+      { title: 'Đổi máy tính', confirmText: 'Xác nhận đổi máy', cancelText: 'Hủy', variant: 'primary' }
     )
   }
 
@@ -345,7 +347,7 @@ export default function TopBar({
                 <KeyRound size={16} />
                 <span>Đổi mật khẩu</span>
               </button>
-              <button type="button" className="app-sidebar-flyout-item" onClick={handleResetDeviceLock} role="menuitem">
+              <button type="button" className="app-sidebar-flyout-item" onClick={handleResetDeviceLock} disabled={resettingDevice} role="menuitem">
                 <Monitor size={16} />
                 <span>Đổi máy tính</span>
               </button>

@@ -236,6 +236,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 [src/main/data/repositories/](src/main/data/repositories/) — mỗi entity 1 file. Pattern:
 - `client = () => getSupabaseClient()` ([supabaseClient.ts](src/main/data/supabaseClient.ts))
 - `requireCurrentUser()` ([currentUser.ts](src/main/data/currentUser.ts)) ném lỗi nếu chưa login → block IPC handler
+- Đổi máy tính tại login mở modal username và chặn mọi phiên Online dưới 120 giây; menu xác thực staff/máy nhưng không check Online, dừng tác vụ hoặc logout. Hai luồng dùng chung `org_staff.device_changes_remaining` mặc định 5 qua RPC v262; chỉ RPC app mới trừ lượt, không thêm constraint/trigger quota ảnh hưởng akaBiz/legacy. Lịch sử đổi thành công và contract retry nằm ở [DEVICE_CHANGE_PRESENCE.md](docs/DEVICE_CHANGE_PRESENCE.md:1).
+- `auto_staff_device_presence` lưu mỗi lần login bằng một instance, heartbeat thụ động 30 giây/timeout 5 giây trong main process ([passiveDevicePresence.ts](src/main/services/passiveDevicePresence.ts:1)); mọi lỗi presence không được gây logout/pause/recovery. Giữ heartbeat xuyên cleanup khi quit, kết thúc best effort sau cleanup; login mới đang chờ request cũ phải gửi heartbeat đầu ngay khi hết bận.
 - [automationRepository.ts](src/main/data/repositories/automationRepository.ts) chỉ dùng RPC cho bảng tenant automation; các RPC `SECURITY DEFINER` phải gọi `auto_assert_automation_identity` bằng credential process-only từ [currentUser.ts](src/main/data/currentUser.ts), không đưa username/password vào `AuthUser`, preload hoặc renderer.
 - `mapXxxFromDB(row)` trong [mappers.ts](src/main/data/mappers.ts) chuyển snake_case → camelCase
 - Built-in records live in Supabase DB (`auto_blocks`, `auto_workflows`, `auto_elements`) and DB is the source of truth. There is no `seedV2` runtime/source fallback; update built-ins via admin UI/IPC or explicit SQL migration.
@@ -335,6 +337,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Device-change retry**: giữ `requestId` và binding snapshot trong journal main process khi kết quả chưa rõ; không prepare lại binding trước khi retry vì có thể gỡ binding mới hoặc trừ thêm lượt ([deviceChangeRequest.ts](src/main/services/deviceChangeRequest.ts:1)). Presence không phải khóa phiên và không được thêm gate vào login thường/runtime.
 - **Migration RPC overwrite**: trước khi dùng `CREATE OR REPLACE FUNCTION`, phải lấy nội dung của đúng function signature đang chạy trong DB (ví dụ bằng `pg_get_functiondef`) và kiểm tra các patch trước đó; không copy body từ một migration cũ vì có thể làm mất những thay đổi được áp dụng sau migration đó.
 - **Error action-disable policy**: không hard-code thời gian nghỉ theo từng `error_code` trong scheduler. Thêm lỗi tương tự bằng row `auto_error` với `disable_action_codes` + `disable_action_mode`; bỏ mode sẽ fallback `fixed_minutes`, và `fixed_minutes` thiếu số phút sẽ khóa action vô thời hạn.
 - **Account restriction summary**: danh sách tài khoản phải lấy một batch `auto_account_action_status` trong `listAccounts()` để dựng `hasDisabledActions`, không gọi `ACCOUNT_ACTION_OVERVIEW` N+1 theo từng card; row `date_enable` đã hết hạn không được tô tím. Sau khi scheduler khóa action phải broadcast `ACCOUNT_STATUS_UPDATED` để renderer refresh cờ này.

@@ -134,6 +134,14 @@ body:not(.theme-light) .login-notice-error { --notice-accent: #ff9cac; }
   .login-resource { padding: 12px 10px; gap: 8px; }
 }
 
+@media (max-height: 700px) and (min-width: 861px) {
+  .login-form-panel { padding-top: 20px; padding-bottom: 20px; }
+  .login-brand { margin-bottom: 16px; }
+  .login-heading { margin-bottom: 14px; }
+  .login-form { gap: 12px; }
+  .login-field { gap: 6px; }
+}
+
 @media (max-width: 860px) {
   .login-page { padding: 20px 20px 24px; }
   .login-shell { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; max-width: 540px; flex-shrink: 0; }
@@ -151,4 +159,12 @@ body:not(.theme-light) .login-notice-error { --notice-accent: #ff9cac; }
 
 @media (prefers-reduced-motion: reduce) {
   .login-page *, .login-page *::before, .login-page *::after { transition: none !important; }
+}
+
+.modal.login-device-change-modal {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.login-device-change-modal .stepper-form-group {
+  margin-bottom: 0;
 }

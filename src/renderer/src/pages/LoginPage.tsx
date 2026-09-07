@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { ArrowRight, ExternalLink, Eye, EyeOff, FileCheck2, Loader2, LockKeyhole, UserRound, X } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { useUiStore } from '../stores/uiStore'
+import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../shared/deviceChange'
 import LoginInformationPanel from '../components/Login/LoginInformationPanel'
 import './LoginPage.css'
 
@@ -124,6 +126,78 @@ function PolicyConsentModal({ busy, errorMessage, onAccept, onCancel }: PolicyCo
   )
 }
 
+function DeviceChangeUsernameModal({ initialUsername, onContinue, onCancel }: {
+  initialUsername: string
+  onContinue: (username: string) => void
+  onCancel: () => void
+}) {
+  const [username, setUsername] = useState(initialUsername)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <form
+        ref={formRef}
+        className="modal login-device-change-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="device-change-title"
+        onClick={event => event.stopPropagation()}
+        onSubmit={event => {
+          event.preventDefault()
+          if (username.trim()) onContinue(username.trim())
+        }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onCancel()
+          }
+          if (event.key !== 'Tab') return
+          const controls = formRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')
+          if (!controls?.length) return
+          const first = controls[0]
+          const last = controls[controls.length - 1]
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first.focus()
+          }
+        }}
+      >
+        <div className="modal-header">
+          <div className="modal-title" id="device-change-title">Đổi máy tính</div>
+          <button type="button" className="btn-icon" onClick={onCancel} aria-label="Đóng">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="stepper-form-group">
+            <label htmlFor="device-change-username">Tên đăng nhập</label>
+            <input
+              id="device-change-username"
+              className="stepper-input"
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoFocus
+              value={username}
+              onChange={event => setUsername(event.target.value)}
+              placeholder="Nhập tên đăng nhập cần đổi máy tính"
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-ghost" onClick={onCancel}>Hủy</button>
+          <button type="submit" className="btn btn-primary" disabled={!username.trim()}>Tiếp tục</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function LoginPage() {
   const {
     login,
@@ -133,6 +207,8 @@ export default function LoginPage() {
     acceptPolicyAndLogin,
     cancelPolicyAcceptance,
     recoveringCredentials,
+    resettingDevice,
+    resetDeviceLockByUsername,
     errorMessage,
     clearError,
     loginOptions,
@@ -143,6 +219,8 @@ export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [deviceChangeModalOpen, setDeviceChangeModalOpen] = useState(false)
+  const deviceChangeButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!savedCredentials) return
@@ -152,7 +230,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!username.trim() || !password) return
+    if (!username.trim() || !password || resettingDevice) return
     try {
       await login(username.trim(), password, loginOptions)
     } catch {
@@ -160,7 +238,33 @@ export default function LoginPage() {
     }
   }
 
-  const recoverDisabled = loggingIn || recoveringCredentials
+  const closeDeviceChangeModal = () => {
+    setDeviceChangeModalOpen(false)
+    deviceChangeButtonRef.current?.focus()
+  }
+
+  const handleResetDevice = (targetUsername: string) => {
+    if (!targetUsername || resettingDevice || loggingIn) return
+    closeDeviceChangeModal()
+    clearError()
+    useUiStore.getState().showConfirm(DEVICE_CHANGE_WARNING, async () => {
+      try {
+        const result = await resetDeviceLockByUsername(targetUsername)
+        const message = deviceChangeMessage(result)
+        if (result.success) {
+          setUsername(targetUsername)
+          if (targetUsername !== username.trim()) setPassword('')
+        }
+        useUiStore.getState().showAlert(result.success
+          ? `${message}\nVui lòng đăng nhập bằng tên đăng nhập và mật khẩu để sử dụng trên máy này.`
+          : message, result.success ? 'success' : 'error')
+      } catch (error) {
+        useUiStore.getState().showAlert(error instanceof Error ? error.message : 'Đổi máy tính thất bại.', 'error')
+      }
+    }, { title: 'Đổi máy tính', confirmText: 'Xác nhận đổi máy', cancelText: 'Hủy', variant: 'primary' })
+  }
+
+  const recoverDisabled = loggingIn || recoveringCredentials || resettingDevice
 
   return (
     <main className="login-page">
@@ -176,7 +280,6 @@ export default function LoginPage() {
 
           <header className="login-heading">
             <h1 id="login-title">Đăng nhập</h1>
-            <p>Chào mừng bạn trở lại.<br />Hãy tiếp tục công việc của mình.</p>
           </header>
 
           <form className="login-form" onSubmit={handleSubmit} aria-busy={loggingIn}>
@@ -195,7 +298,7 @@ export default function LoginPage() {
                   value={username}
                   onChange={event => { setUsername(event.target.value); if (errorMessage) clearError() }}
                   placeholder="Nhập tên đăng nhập"
-                  disabled={loggingIn}
+                  disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
                 />
               </div>
@@ -213,7 +316,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={event => { setPassword(event.target.value); if (errorMessage) clearError() }}
                   placeholder="Nhập mật khẩu"
-                  disabled={loggingIn}
+                  disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
                 />
                 <button
@@ -223,7 +326,7 @@ export default function LoginPage() {
                   aria-pressed={showPassword}
                   aria-controls="login-password"
                   onClick={() => setShowPassword(value => !value)}
-                  disabled={loggingIn}
+                  disabled={loggingIn || resettingDevice}
                 >
                   {showPassword ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
                 </button>
@@ -236,9 +339,18 @@ export default function LoginPage() {
               >
                 {recoveringCredentials ? 'Đang lấy tên đăng nhập…' : 'Lấy lại tên đăng nhập'}
               </button>
+              <button
+                ref={deviceChangeButtonRef}
+                type="button"
+                className="login-recover"
+                onClick={() => setDeviceChangeModalOpen(true)}
+                disabled={recoverDisabled}
+              >
+                {resettingDevice ? 'Đang đổi máy tính…' : 'Đổi máy tính'}
+              </button>
             </div>
 
-            <fieldset className="login-options" disabled={loggingIn}>
+            <fieldset className="login-options" disabled={loggingIn || resettingDevice}>
               <legend className="login-sr-only">Tùy chọn đăng nhập</legend>
               <label className="login-option">
                 <input type="checkbox" checked={loginOptions.rememberLogin} onChange={event => { void setLoginOptions({ rememberLogin: event.target.checked }) }} />
@@ -256,7 +368,7 @@ export default function LoginPage() {
 
             {errorMessage && <p className="login-error" id="login-error" role="alert">{errorMessage}</p>}
 
-            <button type="submit" className="login-submit" disabled={loggingIn || !username.trim() || !password}>
+            <button type="submit" className="login-submit" disabled={loggingIn || resettingDevice || !username.trim() || !password}>
               {loggingIn ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}
               {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
               {!loggingIn && <ArrowRight size={17} aria-hidden="true" />}
@@ -266,6 +378,13 @@ export default function LoginPage() {
 
         <LoginInformationPanel />
       </div>
+      {deviceChangeModalOpen && (
+        <DeviceChangeUsernameModal
+          initialUsername={username.trim()}
+          onContinue={handleResetDevice}
+          onCancel={closeDeviceChangeModal}
+        />
+      )}
       {policyAcceptanceRequired && (
         <PolicyConsentModal
           busy={acceptingPolicy}

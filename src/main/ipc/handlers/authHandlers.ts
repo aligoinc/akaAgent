@@ -1,3 +1,5 @@
+import { getDeviceChangeRequests } from '../../services/deviceChangeService'
+import { devicePresence } from '../../services/devicePresenceService'
 import { app, ipcMain } from 'electron'
 import { AuthUser, IPC_EVENTS, LoginPreferences } from '../../../shared/types'
 import {
@@ -62,6 +64,10 @@ async function finalizeAuthenticatedLogin(
     throw err
   }
 
+  // Presence is observational and must never make a successful login fail.
+  try { devicePresence.start({ username, password }) } catch {
+    console.warn('[DevicePresence] Không khởi động được trạng thái phiên.')
+  }
   return savedOptions
 }
 
@@ -155,6 +161,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         console.error('Pre-logout hook failed:', err)
       }
     }
+    devicePresence.stop()
     setCurrentUserCredentials(null)
     setCurrentUser(null)
     return { success: true }
@@ -170,6 +177,10 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     return resetDeviceLock(user)
   })
 
+  ipcMain.handle(IPC_EVENTS.AUTH_RESET_DEVICE_LOCK_BY_USERNAME, async (_, username: string) => {
+    return getDeviceChangeRequests().reset(username, 'login')
+  })
+
   ipcMain.handle(IPC_EVENTS.AUTH_CHANGE_PASSWORD, async (_, oldPassword: string, newPassword: string) => {
     const user = getCurrentUser()
     if (!user) throw new Error('Chưa đăng nhập. Vui lòng đăng nhập trước khi đổi mật khẩu.')
@@ -179,6 +190,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
       username: credentials?.username || user.username,
       password: newPassword
     })
+    devicePresence.updateCredentials({ username: credentials?.username || user.username, password: newPassword })
     await hooks.afterPasswordChange?.({ oldPassword, newPassword })
     return result
   })

@@ -1,3 +1,4 @@
+import { devicePresence } from '../services/devicePresenceService'
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
 import { AuthEntitlements, AuthUser, IPC_EVENTS, ZaloLoginQrEvent } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
@@ -746,6 +747,7 @@ export function registerIpcHandlers(
     } finally {
       runtimeCredentials = null
       clearZaloLocalStartupHandoffBlock()
+      devicePresence.stop()
       setCurrentUserCredentials(null)
       setCurrentUser(null)
       notifyRendererSessionExpired()
@@ -1106,6 +1108,7 @@ export function registerIpcHandlers(
 
     const user = getCurrentUser()
     if (!user) {
+      devicePresence.stop()
       clearSessionExpiryTimer()
       quitCleanupCompleted = true
       return
@@ -1135,6 +1138,9 @@ export function registerIpcHandlers(
       } finally {
         runtimeCredentials = null
         clearZaloLocalStartupHandoffBlock()
+        // Keep reporting activity through cleanup/recovery. Ending presence
+        // is best effort and must not add any wait before the actual quit.
+        devicePresence.stop()
         quitCleanupCompleted = true
         app.quit()
       }
