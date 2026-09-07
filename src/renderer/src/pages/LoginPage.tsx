@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { ExternalLink, FileCheck2, LogIn, Loader2, X } from 'lucide-react'
+import { ArrowRight, ExternalLink, Eye, EyeOff, FileCheck2, Loader2, LockKeyhole, UserRound, X } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import LoginInformationPanel from '../components/Login/LoginInformationPanel'
+import './LoginPage.css'
 
 const appIconUrl = new URL('../assets/app-icon.png', import.meta.url).href
 const POLICY_URL = 'https://akabiz.net/UpdateAutoSqlite/akaAgent/chinh-sach-akabiz.pdf'
@@ -140,6 +142,7 @@ export default function LoginPage() {
   } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     if (!savedCredentials) return
@@ -157,178 +160,112 @@ export default function LoginPage() {
     }
   }
 
-  const optionStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 12,
-    color: 'var(--text-secondary, #aaa)',
-    cursor: loggingIn ? 'default' : 'pointer',
-    userSelect: 'none' as const
-  }
-
-  const checkboxStyle = {
-    width: 14,
-    height: 14,
-    accentColor: 'var(--accent-primary, #7c3aed)'
-  }
-
   const recoverDisabled = loggingIn || recoveringCredentials
 
   return (
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24,
-      background: 'var(--bg-primary, #0a0a0f)'
-    }}>
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          width: '100%',
-          maxWidth: 380,
-          padding: 28,
-          background: 'var(--bg-secondary, #14141c)',
-          border: '1px solid var(--border-default, #27272f)',
-          borderRadius: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8,
-            background: 'transparent',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden'
-          }}>
-            <img src={appIconUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+    <main className="login-page">
+      <div className="login-shell">
+        <section className="login-form-panel" aria-labelledby="login-title">
+          <div className="login-brand">
+            <img src={appIconUrl} alt="" width={42} height={42} />
+            <div>
+              <span className="login-brand-name">akaAgent</span>
+              <span className="login-brand-caption">Giải pháp tự động hóa từ akaBiz</span>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary, #fff)' }}>akaBiz</div>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary, #888)' }}>Đăng nhập để tiếp tục</div>
-          </div>
-        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 12, color: 'var(--text-secondary, #aaa)' }}>Tên đăng nhập</label>
-          <input
-            type="text"
-            autoFocus
-            value={username}
-            onChange={(e) => { setUsername(e.target.value); if (errorMessage) clearError() }}
-            placeholder="Nhập tên đăng nhập"
-            disabled={loggingIn}
-            style={{
-              padding: '9px 12px',
-              fontSize: 13,
-              background: 'var(--bg-primary, #0a0a0f)',
-              border: '1px solid var(--border-default, #27272f)',
-              borderRadius: 6,
-              color: 'var(--text-primary, #fff)',
-              outline: 'none'
-            }}
-          />
-        </div>
+          <header className="login-heading">
+            <h1 id="login-title">Đăng nhập</h1>
+            <p>Chào mừng bạn trở lại.<br />Hãy tiếp tục công việc của mình.</p>
+          </header>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ fontSize: 12, color: 'var(--text-secondary, #aaa)' }}>Mật khẩu</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => { setPassword(e.target.value); if (errorMessage) clearError() }}
-            placeholder="Nhập mật khẩu"
-            disabled={loggingIn}
-            style={{
-              padding: '9px 12px',
-              fontSize: 13,
-              background: 'var(--bg-primary, #0a0a0f)',
-              border: '1px solid var(--border-default, #27272f)',
-              borderRadius: 6,
-              color: 'var(--text-primary, #fff)',
-              outline: 'none'
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => { void recoverDeviceCredentials() }}
-            disabled={recoverDisabled}
-            style={{
-              alignSelf: 'flex-end',
-              border: 'none',
-              background: 'transparent',
-              color: recoverDisabled ? 'var(--text-tertiary, #888)' : 'var(--accent-primary, #7c3aed)',
-              cursor: recoverDisabled ? 'default' : 'pointer',
-              fontSize: 12,
-              padding: 0,
-              marginTop: 2,
-              textDecoration: recoverDisabled ? 'none' : 'underline'
-            }}
-          >
-            {recoveringCredentials ? 'Đang lấy tên đăng nhập...' : 'Lấy lại tên đăng nhập'}
-          </button>
-        </div>
+          <form className="login-form" onSubmit={handleSubmit} aria-busy={loggingIn}>
+            <div className="login-field">
+              <label htmlFor="login-username">Tên đăng nhập</label>
+              <div className="login-input-wrap">
+                <UserRound className="login-input-icon" size={17} strokeWidth={1.7} aria-hidden="true" />
+                <input
+                  id="login-username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus
+                  value={username}
+                  onChange={event => { setUsername(event.target.value); if (errorMessage) clearError() }}
+                  placeholder="Nhập tên đăng nhập"
+                  disabled={loggingIn}
+                  aria-describedby={errorMessage ? 'login-error' : undefined}
+                />
+              </div>
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: -4 }}>
-          <label style={optionStyle}>
-            <input
-              type="checkbox"
-              checked={loginOptions.rememberLogin}
-              onChange={(e) => { void setLoginOptions({ rememberLogin: e.target.checked }) }}
-              disabled={loggingIn}
-              style={checkboxStyle}
-            />
-            <span>Ghi nhớ đăng nhập</span>
-          </label>
-          <label style={optionStyle}>
-            <input
-              type="checkbox"
-              checked={loginOptions.autoLogin}
-              onChange={(e) => { void setLoginOptions({ autoLogin: e.target.checked }) }}
-              disabled={loggingIn}
-              style={checkboxStyle}
-            />
-            <span>Tự động đăng nhập</span>
-          </label>
-          <label style={optionStyle}>
-            <input
-              type="checkbox"
-              checked={loginOptions.startupEnabled}
-              onChange={(e) => { void setLoginOptions({ startupEnabled: e.target.checked }) }}
-              disabled={loggingIn}
-              style={checkboxStyle}
-            />
-            <span>Khởi động cùng máy tính</span>
-          </label>
-        </div>
+            <div className="login-field">
+              <label htmlFor="login-password">Mật khẩu</label>
+              <div className="login-input-wrap login-password-input">
+                <LockKeyhole className="login-input-icon" size={17} strokeWidth={1.7} aria-hidden="true" />
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={event => { setPassword(event.target.value); if (errorMessage) clearError() }}
+                  placeholder="Nhập mật khẩu"
+                  disabled={loggingIn}
+                  aria-describedby={errorMessage ? 'login-error' : undefined}
+                />
+                <button
+                  type="button"
+                  className="login-password-toggle"
+                  aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  aria-pressed={showPassword}
+                  aria-controls="login-password"
+                  onClick={() => setShowPassword(value => !value)}
+                  disabled={loggingIn}
+                >
+                  {showPassword ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+                </button>
+              </div>
+              <button
+                type="button"
+                className="login-recover"
+                onClick={() => { void recoverDeviceCredentials() }}
+                disabled={recoverDisabled}
+              >
+                {recoveringCredentials ? 'Đang lấy tên đăng nhập…' : 'Lấy lại tên đăng nhập'}
+              </button>
+            </div>
 
-        {errorMessage && (
-          <div style={{
-            fontSize: 12,
-            color: 'var(--accent-error, #ef4444)',
-            background: 'rgba(239,68,68,0.08)',
-            border: '1px solid rgba(239,68,68,0.25)',
-            borderRadius: 6,
-            padding: '8px 10px'
-          }}>
-            {errorMessage}
-          </div>
-        )}
+            <fieldset className="login-options" disabled={loggingIn}>
+              <legend className="login-sr-only">Tùy chọn đăng nhập</legend>
+              <label className="login-option">
+                <input type="checkbox" checked={loginOptions.rememberLogin} onChange={event => { void setLoginOptions({ rememberLogin: event.target.checked }) }} />
+                <span>Ghi nhớ đăng nhập</span>
+              </label>
+              <label className="login-option">
+                <input type="checkbox" checked={loginOptions.autoLogin} onChange={event => { void setLoginOptions({ autoLogin: event.target.checked }) }} />
+                <span>Tự động đăng nhập</span>
+              </label>
+              <label className="login-option">
+                <input type="checkbox" checked={loginOptions.startupEnabled} onChange={event => { void setLoginOptions({ startupEnabled: event.target.checked }) }} />
+                <span>Khởi động cùng máy tính</span>
+              </label>
+            </fieldset>
 
-        <button
-          type="submit"
-          disabled={loggingIn || !username.trim() || !password}
-          className="btn btn-primary"
-          style={{ justifyContent: 'center', padding: '10px 14px', fontSize: 13 }}
-        >
-          {loggingIn ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
-          {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
-        </button>
-      </form>
+            {errorMessage && <p className="login-error" id="login-error" role="alert">{errorMessage}</p>}
+
+            <button type="submit" className="login-submit" disabled={loggingIn || !username.trim() || !password}>
+              {loggingIn ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}
+              {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
+              {!loggingIn && <ArrowRight size={17} aria-hidden="true" />}
+            </button>
+          </form>
+        </section>
+
+        <LoginInformationPanel />
+      </div>
       {policyAcceptanceRequired && (
         <PolicyConsentModal
           busy={acceptingPolicy}
@@ -337,6 +274,6 @@ export default function LoginPage() {
           onCancel={cancelPolicyAcceptance}
         />
       )}
-    </div>
+    </main>
   )
 }
