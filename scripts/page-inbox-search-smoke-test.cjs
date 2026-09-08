@@ -31,6 +31,10 @@ const code = baseCode.replace(oldHeader, newHeader)
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const compile = source => new AsyncFunction('page', 'helpers', 'vars', 'input', 'signal', source)
 const block = compile(code)
+const openMigration = readFileSync(resolve(__dirname, '../migrations/migration_v265_facebook_page_inbox_campaign_run_start.sql'), 'utf8')
+const openCode = openMigration.match(/\$block_code\$([\s\S]*?)\$block_code\$/)?.[1]
+assert.ok(openCode, 'open migration must contain the block to exercise')
+const openBlock = compile(openCode)
 const names = ['SearchButton', 'SearchInput', 'SearchResult', 'ConversationResult', 'SearchClearButton', 'CloseButton', 'HeaderName', 'MessageInput', 'MessengerReplyInput', 'SendButtonDisabled', 'SendButton', 'SendFailIcon']
 const selectors = Object.fromEntries(names.map(name => [`FbPageInbox${name}`, `//*[@data-test='${name}']`]))
 
@@ -102,12 +106,14 @@ async function context(options = {}) {
   const win = new BrowserWindow({ show: false, width: 1200, height: 900, webPreferences: { offscreen: true, backgroundThrottling: false, partition: `inbox-smoke-${Math.random()}` } })
   win.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('data:') }))
   const stats = { navigations: [], delays: [], logs: [], headerReadDelays: [] }
+  let currentUrl = options.currentUrl || 'https://business.facebook.com/latest/inbox/all?asset_id=999'
   const load = async config => {
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent('<!doctype html><html><body></body></html>'))
     await win.webContents.executeJavaScript(`(${fixture.toString()})(${JSON.stringify(config)})`)
   }
   await load(options)
   const page = {
+    getURL: () => currentUrl,
     evaluate: async (source, ...args) => {
       if (args[0]?.action === 'readText' && args[0]?.payload?.selector === selectors.FbPageInboxHeaderName) {
         const index = stats.headerReadDelays.length
@@ -133,7 +139,9 @@ async function context(options = {}) {
     },
     navigate: async url => {
       stats.navigations.push(url)
+      if (options.navigationFails) throw new Error('Navigation failed')
       await load(options.persistentStale ? options : { ...options, stale: false, missingClear: false, staleClearFails: false })
+      currentUrl = url
     }
   }
   const helpers = {
@@ -147,6 +155,7 @@ async function context(options = {}) {
   }
   return {
     stats,
+    open: (vars = {}) => openBlock(page, helpers, { pageInboxPageUid: '999', facebookStepMs: 1000, ...vars }, {}, new AbortController().signal),
     run: (name = 'Cu Thóc', fn = block, signal = new AbortController().signal) => fn(page, helpers, { inputDataName: name, inputDataUid: '123', pageInboxPageUid: '999', campaignContent: 'Chào #{FULL_NAME}', facebookStepMs: 1000 }, {}, signal),
     state: () => win.webContents.executeJavaScript('JSON.parse(JSON.stringify(state))'),
     setOptions: patch => win.webContents.executeJavaScript(`Object.assign(options, ${JSON.stringify(patch)}); true`),
@@ -162,6 +171,50 @@ async function test(name, options, check) {
 async function main() {
   await app.whenReady()
   app.on('window-all-closed', () => {})
+  await test('campaign start reopens a matching Page URL with retained PN PN', { stale: true }, async ctx => {
+    const opened = await ctx.open({ pageInboxForceNavigate: true })
+    assert.equal(opened.ok, true)
+    assert.deepEqual(ctx.stats.navigations, ['https://business.facebook.com/latest/inbox/all?asset_id=999'])
+    assert.deepEqual(ctx.stats.delays, [6000])
+    const state = await ctx.state()
+    assert.equal(state.search, '')
+    assert.equal(state.sends.length, 0)
+    assert.equal((await ctx.run()).ok, true)
+    assert.equal(ctx.stats.navigations.length, 1, 'normal send needs no recovery reload after reopening')
+    assert.deepEqual((await ctx.state()).sends, [{ name: 'Cu Thóc', content: 'Chào Cu Thóc' }])
+  })
+  await test('later customers reuse Inbox while a new campaign execution reopens it', {}, async ctx => {
+    await ctx.open({ pageInboxForceNavigate: true })
+    await ctx.open({ pageInboxForceNavigate: false })
+    await ctx.open({ pageInboxForceNavigate: false })
+    assert.equal(ctx.stats.navigations.length, 1)
+    await ctx.open({ pageInboxForceNavigate: true })
+    assert.deepEqual(ctx.stats.navigations, [
+      'https://business.facebook.com/latest/inbox/all?asset_id=999',
+      'https://business.facebook.com/latest/inbox/all?asset_id=999'
+    ])
+    assert.deepEqual(ctx.stats.delays, [6000, 6000])
+    assert.equal((await ctx.state()).sends.length, 0)
+  })
+  await test('opening another Page preserves the target URL and configured delay', { currentUrl: 'https://business.facebook.com/latest/inbox/all?asset_id=888' }, async ctx => {
+    const opened = await ctx.open({ pageInboxPageUid: '777', pageInboxPageName: 'Test Page', facebookStepMs: 1500 })
+    assert.deepEqual(opened, { ok: true, pageUid: '777', pageName: 'Test Page', url: 'https://business.facebook.com/latest/inbox/all?asset_id=777' })
+    assert.deepEqual(ctx.stats.navigations, [opened.url])
+    assert.deepEqual(ctx.stats.delays, [6500])
+  })
+  await test('failed Inbox navigation propagates without sending or retrying navigation', { stale: true, navigationFails: true }, async ctx => {
+    await assert.rejects(ctx.open({ pageInboxForceNavigate: true }), /Navigation failed/)
+    assert.equal(ctx.stats.navigations.length, 1)
+    assert.equal((await ctx.state()).sends.length, 0)
+  })
+  await test('missing Page ID fails before navigation', {}, async ctx => {
+    await assert.rejects(ctx.open({ pageInboxPageUid: '' }), /Thiếu Page ID/)
+    assert.equal(ctx.stats.navigations.length, 0)
+  })
+  await test('legacy clients without a campaign-start flag keep matching Inbox open', {}, async ctx => {
+    assert.equal((await ctx.open()).ok, true)
+    assert.equal(ctx.stats.navigations.length, 0)
+  })
   const baselineIndex = process.argv.indexOf('--baseline')
   if (baselineIndex >= 0) {
     const baseline = compile(readFileSync(process.argv[baselineIndex + 1], 'utf8'))

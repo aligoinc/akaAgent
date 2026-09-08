@@ -3181,6 +3181,9 @@ export class CampaignScheduler {
     let zaloFriendBlocklistSkippedCount = 0
     const consumedGroupPostInputDataIds = new Set<number>()
     const loggedSkippedLimitActionCodes = new Set<string>()
+    // A new campaign execution must reopen Inbox once, including resume after
+    // waiting/pausing. Later customer workflows reuse the freshly opened page.
+    let pageInboxOpenedForRun = false
 
     for (let i = 0; i < targets.length; i++) {
       // A graceful Server capability drain owns only the target/batch that
@@ -3460,6 +3463,9 @@ export class CampaignScheduler {
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const variables = {
           ...baseVariables,
+          ...(campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
+            ? { pageInboxForceNavigate: !pageInboxOpenedForRun }
+            : {}),
           enableGroupPostShareToJoinedGroups: campaign.extraSettings?.enableGroupPostShareToJoinedGroups === true && groupPostShareMaxCount > 0 && groupPostShareTargets.length > 0,
           groupPostShareTargets,
           groupPostShareMaxCount,
@@ -3587,6 +3593,12 @@ export class CampaignScheduler {
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
             }
           })
+
+          if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step =>
+            step.blockName === 'fb_page_inbox_open' && step.status === 'success'
+          )) {
+            pageInboxOpenedForRun = true
+          }
 
           // An abort cannot cancel a Zalo HTTP request that is already in
           // flight. Recheck the lifecycle immediately when the workflow
