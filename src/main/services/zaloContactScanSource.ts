@@ -18,13 +18,15 @@ export interface ZaloContactScanSource {
   getAllFriendsPage(
     accountId: number,
     count?: number,
-    page?: number
+    page?: number,
+    onProgress?: (message: string) => void
   ): Promise<Record<string, unknown>[]>
   listLabels(accountId: number): Promise<ZaloLabelOption[]>
-  getAllGroups(accountId: number): Promise<Record<string, string>>
+  getAllGroups(accountId: number, onProgress?: (message: string) => void): Promise<Record<string, string>>
   getGroupInfoBatch(
     accountId: number,
-    groupIds: string[]
+    groupIds: string[],
+    onProgress?: (message: string) => void
   ): Promise<ZaloGroupInfoBatch>
   getJoinedGroupMembers(
     accountId: number,

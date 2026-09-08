@@ -114,6 +114,7 @@ interface DataScanOperationSnapshot {
   autoAccountId: string
   queryType: DataScanQueryType
   status: DataScanOperationStatus
+  progress?: { message: string }
   result?: unknown
   errorCode?: string
   errorMessage?: string
@@ -479,12 +480,14 @@ export class ZaloChatApiClient {
   public async getAllFriendsPage(
     accountId: number,
     count = 500,
-    page = 1
+    page = 1,
+    onProgress?: (message: string) => void
   ): Promise<Record<string, unknown>[]> {
     const result = await this.executeDataScanQuery<unknown>(
       accountId,
       'get_all_friends_page',
-      { count, page }
+      { count, page },
+      onProgress
     )
     return Array.isArray(result)
       ? result.filter(isRecord)
@@ -524,8 +527,8 @@ export class ZaloChatApiClient {
     })
   }
 
-  public async getAllGroups(accountId: number): Promise<Record<string, string>> {
-    const result = await this.executeDataScanQuery<unknown>(accountId, 'get_all_groups', {})
+  public async getAllGroups(accountId: number, onProgress?: (message: string) => void): Promise<Record<string, string>> {
+    const result = await this.executeDataScanQuery<unknown>(accountId, 'get_all_groups', {}, onProgress)
     if (!isRecord(result)) return {}
     return Object.fromEntries(
       Object.entries(result)
@@ -536,12 +539,14 @@ export class ZaloChatApiClient {
 
   public async getGroupInfoBatch(
     accountId: number,
-    groupIds: string[]
+    groupIds: string[],
+    onProgress?: (message: string) => void
   ): Promise<ZaloGroupInfoBatch> {
     const result = await this.executeDataScanQuery<unknown>(
       accountId,
       'get_group_info_batch',
-      { groupIds }
+      { groupIds },
+      onProgress
     )
     if (!isRecord(result)) {
       return { gridInfoMap: {}, removedsGroup: [], unchangedsGroup: [] }
@@ -630,7 +635,8 @@ export class ZaloChatApiClient {
   private async executeDataScanQuery<T>(
     accountId: number,
     queryType: DataScanQueryType,
-    payload: unknown
+    payload: unknown,
+    onProgress?: (message: string) => void
   ): Promise<T> {
     this.requireEnabled()
     if (this.activeDataScanByAccount.has(accountId)) {
@@ -644,6 +650,14 @@ export class ZaloChatApiClient {
     const deadline = Date.now() + DATA_SCAN_OPERATION_TIMEOUT_MS
     let consecutiveFailures = 0
     let terminalObserved = false
+    let lastProgressMessage: string | undefined
+    const reportProgress = (value: DataScanOperationSnapshot | null) => {
+      const message = value?.progress?.message
+      if (typeof message === 'string' && message && message !== lastProgressMessage) {
+        lastProgressMessage = message
+        onProgress?.(message)
+      }
+    }
     try {
       let snapshot: DataScanOperationSnapshot | null = null
       while (!snapshot && consecutiveFailures < DATA_SCAN_MAX_REQUEST_FAILURES) {
@@ -673,6 +687,8 @@ export class ZaloChatApiClient {
           this.activeDataScanByAccount.get(accountId) !== active
         ) throw new Error('Yêu cầu quét Zalo đã bị dừng.')
 
+        reportProgress(snapshot)
+
         if (!snapshot || !isDataScanTerminal(snapshot.status)) {
           await wait(DATA_SCAN_POLL_INTERVAL_MS)
           try {
@@ -691,6 +707,10 @@ export class ZaloChatApiClient {
           }
         }
 
+        if (active.generation !== this.generation || this.activeDataScanByAccount.get(accountId) !== active) {
+          throw new Error('Yêu cầu quét Zalo đã bị dừng.')
+        }
+        reportProgress(snapshot)
         if (snapshot.status === 'succeeded') {
           terminalObserved = true
           return snapshot.result as T

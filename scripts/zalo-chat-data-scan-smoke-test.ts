@@ -33,6 +33,8 @@ async function testIdempotentQueryAndDedicatedScope(): Promise<void> {
   const requestIds: string[] = []
   const authorizations: string[] = []
   let polls = 0
+  const progressMessages: string[] = []
+  const progress = { message: 'Zalo đang giới hạn yêu cầu. Chờ 15 giây rồi thử lại (1/3)...' }
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input))
     const authorization = new Headers(init?.headers).get('authorization')
@@ -54,7 +56,8 @@ async function testIdempotentQueryAndDedicatedScope(): Promise<void> {
         requestId: body.requestId,
         autoAccountId: '71',
         queryType: body.queryType,
-        status: 'accepted'
+        status: 'accepted',
+        progress
       }, 202)
     }
     if (/\/api\/chat\/zalo\/data-scan-queries\/[0-9a-f-]+$/.test(url.pathname)) {
@@ -66,18 +69,20 @@ async function testIdempotentQueryAndDedicatedScope(): Promise<void> {
         autoAccountId: '71',
         queryType: 'get_all_friends_page',
         status: polls === 1 ? 'running' : 'succeeded',
-        ...(polls === 1 ? {} : { result: [{ userId: 'friend-1' }] })
+        ...(polls === 1 ? { progress } : { result: [{ userId: 'friend-1' }] })
       })
     }
     throw new Error(`Unexpected request ${url.pathname}`)
   }
 
   try {
-    const result = await enabledClient().getAllFriendsPage(71, 500, 2)
+    const source = new ZaloChatContactScanSource(enabledClient(), { getSystemSettingValue: async () => null })
+    const result = await source.getAllFriendsPage(71, 500, 2, message => progressMessages.push(message))
     assert.deepEqual(result, [{ userId: 'friend-1' }])
     assert.ok(requestIds.length >= 3)
     assert.equal(new Set(requestIds).size, 1)
     assert.ok(authorizations.every(value => value === 'Bearer scan-token'))
+    assert.deepEqual(progressMessages, [progress.message])
   } finally {
     globalThis.fetch = originalFetch
   }

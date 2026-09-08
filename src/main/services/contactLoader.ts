@@ -839,7 +839,8 @@ export class ContactLoader {
           accountId,
           loadState,
           `đọc trang ${page} danh sách ${typeName}`,
-          () => this.zaloRuntime!.getAllFriendsPage(accountId, ZALO_FRIEND_PAGE_SIZE, page)
+          () => this.zaloRuntime!.getAllFriendsPage(accountId, ZALO_FRIEND_PAGE_SIZE, page,
+            message => this.sendProgress(message, { accountId, contactType, runKey: loadState.runKey }))
         )
         for (const row of rows) {
           const contact = this.mapZaloUserContact(accountId, row)
@@ -967,6 +968,8 @@ export class ContactLoader {
       response?: { status?: unknown }
       cause?: unknown
     }
+    // Chat Sync already exhausted the shared server retry budget.
+    if (error.code === 'data_scan_rate_limit_exhausted') return false
     if (
       Number(error.code) === 429 ||
       Number(error.response?.status) === 429 ||
@@ -1141,7 +1144,10 @@ export class ContactLoader {
         contactType,
         runKey: loadState.runKey
       })
-      const groupVersions = await this.zaloRuntime.getAllGroups(accountId)
+      const reportScanProgress = (message: string): void => this.sendProgress(message, {
+        accountId, contactType, runKey: loadState.runKey
+      })
+      const groupVersions = await this.zaloRuntime.getAllGroups(accountId, reportScanProgress)
       const groupIds = Object.keys(groupVersions)
       const groups: ZaloGroupContactInput[] = []
 
@@ -1153,7 +1159,7 @@ export class ContactLoader {
           contactType,
           runKey: loadState.runKey
         })
-        const batch = await this.zaloRuntime.getGroupInfoBatch(accountId, chunk)
+        const batch = await this.zaloRuntime.getGroupInfoBatch(accountId, chunk, reportScanProgress)
         for (const groupId of chunk) {
           const raw = batch.gridInfoMap[groupId] || { groupId, version: groupVersions[groupId] }
           const group = this.mapZaloGroupContact(accountId, raw, groupVersions[groupId])

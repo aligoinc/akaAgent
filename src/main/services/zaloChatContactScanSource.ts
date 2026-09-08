@@ -43,24 +43,26 @@ export class ZaloChatContactScanSource implements ZaloContactScanSource {
   public getAllFriendsPage(
     accountId: number,
     count = 500,
-    page = 1
+    page = 1,
+    onProgress?: (message: string) => void
   ): Promise<Record<string, unknown>[]> {
-    return this.chatApi.getAllFriendsPage(accountId, count, page)
+    return this.chatApi.getAllFriendsPage(accountId, count, page, onProgress)
   }
 
   public listLabels(accountId: number): Promise<ZaloLabelOption[]> {
     return this.chatApi.listLabels(accountId)
   }
 
-  public getAllGroups(accountId: number): Promise<Record<string, string>> {
-    return this.chatApi.getAllGroups(accountId)
+  public getAllGroups(accountId: number, onProgress?: (message: string) => void): Promise<Record<string, string>> {
+    return this.chatApi.getAllGroups(accountId, onProgress)
   }
 
   public getGroupInfoBatch(
     accountId: number,
-    groupIds: string[]
+    groupIds: string[],
+    onProgress?: (message: string) => void
   ): Promise<ZaloGroupInfoBatch> {
-    return this.chatApi.getGroupInfoBatch(accountId, groupIds)
+    return this.chatApi.getGroupInfoBatch(accountId, groupIds, onProgress)
   }
 
   public getJoinedGroupMembers(
