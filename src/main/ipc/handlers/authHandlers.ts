@@ -1,6 +1,7 @@
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
 import { devicePresence } from '../../services/devicePresenceService'
 import { app, ipcMain } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { AuthUser, IPC_EVENTS, LoginPreferences } from '../../../shared/types'
 import {
   acceptPolicyAndLogin as acceptPolicyAndLoginQuery,
@@ -53,11 +54,19 @@ async function finalizeAuthenticatedLogin(
 ): Promise<LoginPreferences> {
   const savedOptions = await saveDeviceLoginSettings(user, loginOptions)
   syncStartupSetting(savedOptions.startupEnabled)
+  user.chatWebEnabledAtLogin = false
+  user.chatWebSessionId = undefined
   setCurrentUser(user)
   setCurrentUserCredentials({ username, password })
 
   try {
     await hooks.afterLogin?.({ user, username, password, automatic })
+    const authenticatedUser = getCurrentUser()
+    if (!authenticatedUser) throw new Error('Phiên đăng nhập không còn hợp lệ.')
+    user.chatWebEnabledAtLogin = authenticatedUser.isChatSync === true
+    user.chatWebSessionId = user.chatWebEnabledAtLogin ? randomUUID() : undefined
+    authenticatedUser.chatWebEnabledAtLogin = user.chatWebEnabledAtLogin
+    authenticatedUser.chatWebSessionId = user.chatWebSessionId
   } catch (err) {
     setCurrentUserCredentials(null)
     setCurrentUser(null)

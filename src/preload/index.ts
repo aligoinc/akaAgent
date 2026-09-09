@@ -1,4 +1,4 @@
-import type { LoginScreenContent } from '../shared/types'
+import type { ChatWebState, LoginScreenContent } from '../shared/types'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PageInboxScanOptions, PageInboxScanInfo } from '../shared/types'
 import { existsSync } from 'fs'
@@ -10,6 +10,14 @@ export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
   platform: process.platform,
+
+  prepareChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_PREPARE),
+  reloadChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_RELOAD),
+  onChatWebState: (callback: (state: ChatWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: ChatWebState) => callback(state)
+    ipcRenderer.on(IPC_EVENTS.CHAT_WEB_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.CHAT_WEB_STATE, handler)
+  },
 
   // Auth
   bootstrapAuth: (): Promise<AuthBootstrapResult> =>

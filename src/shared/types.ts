@@ -2719,6 +2719,10 @@ export interface AuthUser {
   accountProducts: AuthAccountProduct[]
   /** Quyền đồng bộ Chat hiệu lực, gộp từ Product Zalo 16/18 còn hạn của tổ chức. */
   isChatSync?: boolean
+  /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
+  chatWebEnabledAtLogin?: boolean
+  /** Opaque desktop login generation; never a Chat authentication token. */
+  chatWebSessionId?: string
   /** Danh sách sản phẩm dùng cho màn hình Cài đặt Đồng bộ Chat chỉ xem. */
   chatSyncProducts?: AuthChatSyncProduct[]
   deviceLabel?: string | null
@@ -2730,6 +2734,15 @@ export interface AuthUser {
 export type AuthLoginResult =
   | { status: 'authenticated'; user: AuthUser }
   | { status: 'policy_required' }
+
+export interface ChatWebState {
+  sessionId: string
+  revision: number
+  status: 'connecting' | 'ready' | 'error' | 'signed-out' | 'closed'
+  partition: string
+  url: string
+  message?: string
+}
 
 export interface LoginPreferences {
   rememberLogin: boolean
@@ -2932,6 +2945,10 @@ export const IPC_EVENTS = {
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
   AUTH_USER_UPDATED: 'auth:user-updated',
   AUTH_ZALO_RUNTIME_RESTART_REQUIRED: 'auth:zalo-runtime-restart-required',
+
+  CHAT_WEB_PREPARE: 'chat-web:prepare',
+  CHAT_WEB_RELOAD: 'chat-web:reload',
+  CHAT_WEB_STATE: 'chat-web:state',
 
   // Desktop renderer view of live operations owned by akaAgent Zalo Server
   ZALO_SERVER_OPERATION_STATE_GET: 'zalo-server:operation-state:get',

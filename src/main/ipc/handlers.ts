@@ -27,6 +27,7 @@ import { registerCampaignHandlers } from './handlers/campaignHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
+import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
@@ -142,6 +143,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   options: IpcHandlerRuntimeOptions = {}
 ): void {
+  const chatWeb = registerChatWebHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -727,6 +729,8 @@ export function registerIpcHandlers(
     const user = getCurrentUser()
     if (!user) return
 
+    await chatWeb.reset()
+
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
     cancelDesktopHandoffAckRetry()
@@ -1120,6 +1124,7 @@ export function registerIpcHandlers(
     quitCleanupStarted = true
     void (async () => {
       try {
+        await chatWeb.reset()
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1187,6 +1192,7 @@ export function registerIpcHandlers(
   // Register domain handlers
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
+      await chatWeb.reset()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
       const handoffAckGeneration = desktopHandoffAckGeneration
@@ -1266,6 +1272,7 @@ export function registerIpcHandlers(
       }
     },
     beforeLogout: async () => {
+      await chatWeb.reset()
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1284,6 +1291,7 @@ export function registerIpcHandlers(
       clearZaloLocalStartupHandoffBlock()
     },
     afterPasswordChange: async ({ newPassword }) => {
+      chatWeb.credentialsChanged()
       if (!runtimeCredentials) return
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
       const user = getCurrentUser()
