@@ -5,6 +5,7 @@ import {
   Badge,
   ChevronLeft,
   ChevronRight,
+  ContactRound,
   Database,
   FileText,
   FolderOpen,
@@ -32,7 +33,7 @@ import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/d
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm'
 
 interface TopBarProps {
   activePage: AppPage
@@ -90,6 +91,7 @@ export default function TopBar({
   const isAdminAkabiz = !!user?.isAdminAkabiz
   const canOpenWorkflowEditor = isAdminAkabiz
   const canOpenChat = user?.chatWebEnabledAtLogin === true
+  const canOpenCrm = user?.organizationId === 1
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -180,9 +182,16 @@ export default function TopBar({
     ]
 
     if (canOpenChat) {
-      items.splice(1, 0, {
-        key: 'chat', label: 'Chat', icon: <MessageSquare size={18} />,
+      items.splice(2, 0, {
+        key: 'chat', label: 'akaChat', icon: <MessageSquare size={18} />,
         active: activePage === 'chat', onClick: () => onPageChange('chat')
+      })
+    }
+
+    if (canOpenCrm) {
+      items.splice(canOpenChat ? 3 : 2, 0, {
+        key: 'crm', label: 'CRM', icon: <ContactRound size={18} />,
+        active: activePage === 'crm', onClick: () => onPageChange('crm')
       })
     }
 
@@ -201,6 +210,7 @@ export default function TopBar({
     activePage,
     canOpenWorkflowEditor,
     canOpenChat,
+    canOpenCrm,
     onOpenDataGroups,
     onOpenDataScan,
     onOpenMediaLibrary,

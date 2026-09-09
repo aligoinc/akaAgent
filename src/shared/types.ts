@@ -2738,10 +2738,17 @@ export type AuthLoginResult =
 export interface ChatWebState {
   sessionId: string
   revision: number
+  /** Changes only when a crashed guest must be replaced after authentication. */
+  webviewGeneration: number
   status: 'connecting' | 'ready' | 'error' | 'signed-out' | 'closed'
   partition: string
   url: string
   message?: string
+}
+
+export interface CrmWebDescriptor {
+  partition: string
+  url: string
 }
 
 export interface LoginPreferences {
@@ -2949,6 +2956,7 @@ export const IPC_EVENTS = {
   CHAT_WEB_PREPARE: 'chat-web:prepare',
   CHAT_WEB_RELOAD: 'chat-web:reload',
   CHAT_WEB_STATE: 'chat-web:state',
+  CRM_WEB_PREPARE: 'crm-web:prepare',
 
   // Desktop renderer view of live operations owned by akaAgent Zalo Server
   ZALO_SERVER_OPERATION_STATE_GET: 'zalo-server:operation-state:get',

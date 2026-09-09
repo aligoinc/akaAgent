@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app, BrowserWindow, powerMonitor, session, type WebContents } from 'electron'
 import { getCurrentUser, setCurrentUser, setCurrentUserCredentials } from '../src/main/data/currentUser'
-import type { AuthUser, ChatWebState } from '../src/shared/types'
+import type { AuthUser, ChatWebState, CrmWebDescriptor } from '../src/shared/types'
 
 const directory = process.env.AKA_AGENT_CHAT_SMOKE_DIRECTORY!
 app.setPath('userData', join(directory, 'profile'))
@@ -19,6 +19,16 @@ let expectedStaffId = '101'
 const realNow = Date.now
 const cookieHeaders: string[] = []
 const slowExpiredResponses: ServerResponse[] = []
+
+const loginFixtureHtml = `<!doctype html><html><body><h1>LoginPanel fixture</h1>
+  <form id="crm-login"><input name="username" aria-label="Tên đăng nhập"><input name="password" type="password" aria-label="Mật khẩu"><button>Đăng nhập</button></form>
+  <script>document.querySelector('form').onsubmit = async event => {
+    event.preventDefault();
+    const body = Object.fromEntries(new FormData(event.target));
+    await fetch('/api/auth/login', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    location.reload();
+  };</script>
+</body></html>`
 
 const chatFixtureHtml = `<!doctype html><html><body style="background:#fff;color:#222">
   <h1>Chat fixture</h1><textarea id="draft"></textarea>
@@ -78,7 +88,7 @@ const server = createServer({ key: readFileSync(join(directory, 'key.pem')), cer
     response.writeHead(200, { 'content-type': 'text/html' })
     response.end(request.headers.cookie?.includes('aka_chat_staff=')
       ? chatFixtureHtml
-      : '<!doctype html><html><body><h1>LoginPanel fixture</h1></body></html>')
+      : loginFixtureHtml)
   }
 })
 
@@ -105,6 +115,7 @@ async function run(): Promise<void> {
   process.env.AKA_AGENT_CHAT_SMOKE_URL = url
   // Dynamic import lets the isolated test URL be set before the service module initializes.
   const { registerChatWebHandlers } = await import('../src/main/ipc/handlers/chatWebHandlers')
+  const { registerCrmWebHandlers } = await import('../src/main/ipc/handlers/crmWebHandlers')
   await app.whenReady()
   app.on('session-created', browserSession => {
     browserSession.setCertificateVerifyProc((request, callback) => callback(request.hostname === 'localhost' ? 0 : -3))
@@ -113,20 +124,71 @@ async function run(): Promise<void> {
     preload: join(directory, 'preload.cjs'), webviewTag: true, nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false
   } })
   const controller = registerChatWebHandlers(host)
+  const crmController = registerCrmWebHandlers(host)
   const htmlPath = join(directory, 'host.html')
   writeFileSync(htmlPath, '<!doctype html><html><head><link rel="stylesheet" href="renderer.css"></head><body><div id="root"></div><script type="module" src="renderer.js"></script></body></html>')
   await host.loadFile(htmlPath)
   await until(async () => await host.webContents.executeJavaScript('typeof window.setFixtureUser === "function"'), 'React fixture mounts')
   const invoke = (method: 'prepare' | 'reload'): Promise<ChatWebState> => host.webContents.executeJavaScript(`window.smoke.${method}()`)
   const readState = (): Promise<ChatWebState> => host.webContents.executeJavaScript('window.smoke.state()')
+  const prepareCrm = (): Promise<CrmWebDescriptor> => host.webContents.executeJavaScript('window.smoke.prepareCrm()')
+  const recoverCrashedGuest = async (
+    current: WebContents,
+    label: 'akaChat' | 'CRM',
+    retry: () => Promise<unknown>
+  ): Promise<WebContents> => {
+    const previousId = current.id
+    const previousSession = current.session
+    let replacement: WebContents | null = null
+    let replacements = 0
+    let loaded = false
+    const onAttach = (_event: Electron.Event, contents: WebContents): void => {
+      if (contents.session !== previousSession) return
+      replacements++
+      replacement = contents
+      contents.once('did-finish-load', () => { loaded = true })
+    }
+    host.webContents.on('did-attach-webview', onAttach)
+    try {
+      // Kill only the isolated fixture guest, never the main process or a real app.
+      const pid = current.getOSProcessId()
+      assert(pid > 0 && pid !== process.pid)
+      process.kill(pid, 'SIGKILL')
+      const section = `section[aria-label="${label}"]`
+      await until(async () => await host.webContents.executeJavaScript(
+        `document.querySelector('${section} [role="alert"]')?.textContent.includes('đã dừng')`
+      ), `${label} crash is visible`)
+      await until(() => current.isDestroyed(), `${label} retires its crashed guest`)
+      assert.equal(replacement, null, 'wait for retry/authentication before creating another guest')
+      await retry()
+      // Never execute JavaScript in a dead or not-yet-loaded guest.
+      await until(() => !!replacement && loaded && !replacement.isLoading(), `${label} replacement document loads`)
+      const recovered = replacement!
+      assert.notEqual(recovered.id, previousId)
+      assert.equal(recovered.session, previousSession)
+      assert.equal(recovered.getLastWebPreferences()!.sandbox, true)
+      assert.equal(await recovered.executeJavaScript('typeof require + ":" + typeof window.electronAPI'), 'undefined:undefined')
+      assert((await recovered.executeJavaScript('document.body.textContent')).includes('Chat fixture'))
+      await until(async () => await host.webContents.executeJavaScript(
+        `!document.querySelector('${section} [role="alert"], ${section} [role="status"]')`
+      ), `${label} recovery clears the overlay`)
+      assert.equal(replacements, 1, 'each recovery attaches exactly one new guest')
+      return recovered
+    } finally {
+      host.webContents.removeListener('did-attach-webview', onAttach)
+    }
+  }
   const baselineListeners = powerMonitor.listenerCount('resume')
   let createdSessions = 0
   app.on('session-created', () => { createdSessions++ })
 
   setCurrentUser(user('disabled', false))
+  crmController.startSession()
   await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(getCurrentUser())})`)
   await assert.rejects(invoke('prepare'))
-  assert.equal(await host.webContents.executeJavaScript('document.querySelector(\'button[title="Chat"]\') === null && document.querySelector("webview") === null'), true)
+  await assert.rejects(prepareCrm())
+  assert.equal(await host.webContents.executeJavaScript('document.querySelector(\'button[title="CRM"]\') === null'), true)
+  assert.equal(await host.webContents.executeJavaScript('document.querySelector(\'button[title="akaChat"]\') === null && document.querySelector("webview") === null'), true)
   assert.equal(createdSessions, 0)
   assert.equal(loginRequests, 0)
   assert.equal(powerMonitor.listenerCount('resume'), baselineListeners)
@@ -135,7 +197,7 @@ async function run(): Promise<void> {
   setCurrentUser(user('first'))
   setCurrentUserCredentials({ username: 'fixture', password: 'fixture-only' })
   await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(getCurrentUser())})`)
-  await until(async () => await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="Chat"]\')'), 'eligible menu appears')
+  await until(async () => await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="akaChat"]\')'), 'eligible menu appears')
   assert.equal(await host.webContents.executeJavaScript('document.querySelector("webview") === null'), true)
   assert.equal(loginRequests, 0)
   const states = await Promise.all([invoke('prepare'), invoke('prepare'), invoke('prepare')])
@@ -151,9 +213,9 @@ async function run(): Promise<void> {
     assert.equal(preferences.backgroundThrottling, false)
   })
   host.webContents.once('did-attach-webview', (_event, contents) => { guest = contents })
-  await host.webContents.executeJavaScript('document.querySelector(\'button[title="Chat"]\').click()')
+  await host.webContents.executeJavaScript('document.querySelector(\'button[title="akaChat"]\').click()')
   await until(() => !!guest && !guest.isLoading(), 'guest attaches')
-  const chat = guest!
+  let chat = guest!
   await until(async () => (await chat.executeJavaScript('document.body?.textContent || ""')).includes('Chat fixture'), 'Chat renders')
   assert(cookieHeaders.some(header => header.includes('aka_chat_staff=fixture-1')))
   const preferences = chat.getLastWebPreferences()!
@@ -162,7 +224,7 @@ async function run(): Promise<void> {
   assert.equal(preferences.contextIsolation, true)
   assert.equal(chat.getBackgroundThrottling(), false)
   assert.equal(await chat.executeJavaScript('typeof require + ":" + typeof window.electronAPI'), 'undefined:undefined')
-  await until(async () => await host.webContents.executeJavaScript('!document.querySelector(\'section[aria-label="Chat"] [role="status"]\')'), 'React loading overlay clears')
+  await until(async () => await host.webContents.executeJavaScript('!document.querySelector(\'section[aria-label="akaChat"] [role="status"]\')'), 'React loading overlay clears')
   const wide = await host.webContents.executeJavaScript('document.querySelector("webview").getBoundingClientRect().width')
   await host.webContents.executeJavaScript('document.querySelector(\'button[title="Mở rộng menu"]\').click()')
   await until(async () => await host.webContents.executeJavaScript('document.querySelector("webview").getBoundingClientRect().width') < wide, 'sidebar changes guest bounds')
@@ -185,7 +247,7 @@ async function run(): Promise<void> {
         if (node instanceof Element && (node.matches('[role="status"], [role="alert"]') || node.querySelector('[role="status"], [role="alert"]'))) window.chatOverlayCount++;
       }
     });
-    window.chatNavigationObserver.observe(document.querySelector('section[aria-label="Chat"]'), { childList: true, subtree: true });
+    window.chatNavigationObserver.observe(document.querySelector('section[aria-label="akaChat"]'), { childList: true, subtree: true });
     void 0;
   `)
   const settleHostPaint = (): Promise<void> => host.webContents.executeJavaScript('new Promise(resolve => { requestAnimationFrame(() => { requestAnimationFrame(() => resolve()); }); })')
@@ -213,11 +275,11 @@ async function run(): Promise<void> {
 
   // A real document navigation must still show loading until the page arrives.
   await chat.executeJavaScript('location.assign("/?holdPage=1"); void 0')
-  await until(async () => pendingPage !== null && await host.webContents.executeJavaScript('!!document.querySelector(\'section[aria-label="Chat"] [role="status"]\')'), 'full page navigation displays loading')
+  await until(async () => pendingPage !== null && await host.webContents.executeJavaScript('!!document.querySelector(\'section[aria-label="akaChat"] [role="status"]\')'), 'full page navigation displays loading')
   pendingPage!.writeHead(200, { 'content-type': 'text/html' })
   pendingPage!.end(chatFixtureHtml)
   pendingPage = null
-  await until(async () => !chat.isLoading() && await host.webContents.executeJavaScript('!document.querySelector(\'section[aria-label="Chat"] [role="status"]\')'), 'full page loading clears')
+  await until(async () => !chat.isLoading() && await host.webContents.executeJavaScript('!document.querySelector(\'section[aria-label="akaChat"] [role="status"]\')'), 'full page loading clears')
   await chat.executeJavaScript('history.replaceState(history.state, "", "/"); void 0')
   await settleHostPaint()
   console.log('PASS: conversation/history navigation keeps Chat visible and drafts intact; real document loads still show loading')
@@ -250,7 +312,7 @@ async function run(): Promise<void> {
   await until(async () => await host.webContents.executeJavaScript('document.querySelector("webview").getBoundingClientRect().width === 0'), 'hide Chat')
   assert.equal((await invoke('prepare')).status, 'ready')
   assert.equal(loginRequests, 2)
-  await host.webContents.executeJavaScript('document.querySelector(\'button[title="Chat"]\').click()')
+  await host.webContents.executeJavaScript('document.querySelector(\'button[title="akaChat"]\').click()')
   console.log('PASS: resume renews before expiry without reloading or losing drafts; hidden Chat stays mounted')
 
   const refreshedUser = { ...user('ignored'), isChatSync: false, chatWebEnabledAtLogin: undefined, chatWebSessionId: undefined }
@@ -258,7 +320,7 @@ async function run(): Promise<void> {
   assert.equal(refreshedUser.chatWebEnabledAtLogin, true)
   assert.equal(getCurrentUser()?.chatWebSessionId, 'first')
   await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(getCurrentUser())})`)
-  assert.equal(await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="Chat"]\')'), true)
+  assert.equal(await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="akaChat"]\')'), true)
   assert.equal((await invoke('prepare')).status, 'ready')
   console.log('PASS: live Chat Sync updates preserve the login snapshot')
 
@@ -346,6 +408,26 @@ async function run(): Promise<void> {
   assert.equal((await invoke('reload')).status, 'ready')
   console.log('PASS: wrong staff and rejected authentication fail closed; manual retry recovers')
 
+  await until(() => !chat.isLoading(), 'Chat is ready before crash')
+  const loginsBeforeCrash = loginRequests
+  chat = await recoverCrashedGuest(chat, 'akaChat', () => host.webContents.executeJavaScript(
+    'document.querySelector(\'section[aria-label="akaChat"] [role="alert"] button\').click()'
+  ))
+  assert.equal(loginRequests, loginsBeforeCrash + 1)
+
+  // Authentication can finish while React is handling a crash. It must never
+  // navigate the old guest, and must still attach exactly one replacement.
+  mode = 'pending'
+  const reloadDuringCrash = invoke('reload')
+  await until(() => pending !== null, 'authentication is pending before Chat crash')
+  chat = await recoverCrashedGuest(chat, 'akaChat', async () => {
+    mode = 'ok'
+    loginResponse(pending!)
+    pending = null
+    assert.equal((await reloadDuringCrash).status, 'ready')
+  })
+  console.log('PASS: akaChat replaces crashed guests on retry and during inflight authentication without terminating Electron')
+
   mode = 'pending'
   const pendingReload = invoke('reload').catch(() => null)
   await until(() => pending !== null, 'delayed login')
@@ -369,8 +451,91 @@ async function run(): Promise<void> {
   assert.equal(next.sessionId, 'second')
   await controller.reset()
   setCurrentUser(null)
-  host.destroy()
   console.log('PASS: logout aborts inflight login, blocks reopen during cleanup and isolates the next staff session')
+
+  await host.webContents.executeJavaScript('window.setFixtureUser(null)')
+  const crmUser = { ...user('crm-no-chat', false), organizationId: 1, isAdminAkabiz: false }
+  setCurrentUser(crmUser)
+  // CRM must not require or reuse akaAgent's process credentials.
+  setCurrentUserCredentials(null)
+  crmController.startSession()
+  const sessionsBeforeCrm = createdSessions
+  const requestsBeforeCrm = pageRequests
+  const loginsBeforeCrm = loginRequests
+  await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(crmUser)})`)
+  await until(async () => await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="CRM"]\')'), 'CRM menu for organization 1')
+  assert.equal(await host.webContents.executeJavaScript('document.querySelector("webview") === null'), true)
+  assert.equal(createdSessions, sessionsBeforeCrm)
+  assert.equal(pageRequests, requestsBeforeCrm)
+  assert.deepEqual(await host.webContents.executeJavaScript('Array.from(document.querySelectorAll(".app-sidebar-nav-item")).slice(0, 3).map(button => button.title)'), ['Chiến dịch', 'Trình duyệt', 'CRM'])
+  const bothMenus = { ...crmUser, chatWebEnabledAtLogin: true, chatWebSessionId: 'menu-order-only' }
+  await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(bothMenus)})`)
+  await until(async () => await host.webContents.executeJavaScript('!!document.querySelector(\'button[title="akaChat"]\')'), 'akaChat menu label')
+  assert.deepEqual(await host.webContents.executeJavaScript('Array.from(document.querySelectorAll(".app-sidebar-nav-item")).slice(0, 4).map(button => button.title)'), ['Chiến dịch', 'Trình duyệt', 'akaChat', 'CRM'])
+  await host.webContents.executeJavaScript(`window.setFixtureUser(${JSON.stringify(crmUser)})`)
+
+  let crmGuest: WebContents | null = null
+  host.webContents.once('did-attach-webview', (_event, contents) => { crmGuest = contents })
+  await host.webContents.executeJavaScript('document.querySelector(\'button[title="CRM"]\').click()')
+  await until(async () => !!crmGuest && !crmGuest.isLoading() && (await crmGuest.executeJavaScript('document.body.textContent')).includes('LoginPanel fixture'), 'CRM opens its login page')
+  let crm = crmGuest!
+  assert.equal(createdSessions, sessionsBeforeCrm + 1)
+  assert.equal(loginRequests, loginsBeforeCrm)
+  assert.equal(await crm.executeJavaScript('document.querySelector("input[name=username]").value + document.querySelector("input[name=password]").value'), '')
+  assert.equal(crm.getLastWebPreferences()!.sandbox, true)
+  assert.equal(crm.getLastWebPreferences()!.nodeIntegration, false)
+  assert.equal(await crm.executeJavaScript('typeof require + ":" + typeof window.electronAPI'), 'undefined:undefined')
+  const crmDescriptor = await prepareCrm()
+  assert.notEqual(crmDescriptor.partition, next.partition)
+  await crm.executeJavaScript('document.querySelector("input[name=username]").value = "manual-crm"; document.querySelector("input[name=password]").value = "fixture-only"; document.querySelector("form").requestSubmit(); void 0')
+  await until(async () => loginRequests === loginsBeforeCrm + 1 && !crm.isLoading() && (await crm.executeJavaScript('document.body.textContent')).includes('Chat fixture'), 'manual CRM login succeeds')
+  const crmSession = session.fromPartition(crmDescriptor.partition)
+  assert.equal((await crmSession.cookies.get({ url, name: 'aka_chat_staff' })).length, 1)
+  await crm.executeJavaScript('document.querySelector("#draft").value = "CRM draft"; history.pushState(null, "", "/customers"); void 0')
+  await settleHostPaint()
+  assert.equal(await host.webContents.executeJavaScript('!!document.querySelector(\'section[aria-label="CRM"] [role="status"]\')'), false)
+  await host.webContents.executeJavaScript('document.querySelector(\'button[title="Chiến dịch"]\').click()')
+  await until(async () => await host.webContents.executeJavaScript('document.querySelector("webview").getBoundingClientRect().width === 0'), 'hide CRM')
+  await host.webContents.executeJavaScript('document.querySelector(\'button[title="CRM"]\').click()')
+  assert.equal(await crm.executeJavaScript('document.querySelector("#draft").value'), 'CRM draft')
+  assert.equal(loginRequests, loginsBeforeCrm + 1)
+  const crmCookieBeforeCrash = (await crmSession.cookies.get({ url, name: 'aka_chat_staff' }))[0].value
+  for (const selector of ['button[title="Tải lại CRM"]', 'section[aria-label="CRM"] [role="alert"] button']) {
+    crm = await recoverCrashedGuest(crm, 'CRM', () => host.webContents.executeJavaScript(
+      `document.querySelector(${JSON.stringify(selector)}).click()`
+    ))
+    assert.equal(loginRequests, loginsBeforeCrm + 1, 'CRM recovery must not log in automatically')
+    assert.equal((await crmSession.cookies.get({ url, name: 'aka_chat_staff' }))[0].value, crmCookieBeforeCrash)
+  }
+  console.log('PASS: both CRM retry buttons replace crashed guests and preserve the manual login')
+  let crmPopup: BrowserWindow | null = null
+  crm.once('did-create-window', window => { crmPopup = window })
+  await crm.executeJavaScript('window.open("/file"); void 0')
+  await until(() => !!crmPopup && !crmPopup.webContents.isLoading(), 'CRM file popup')
+  assert.equal(crmPopup!.webContents.session, crmSession)
+  assert.equal(crmPopup!.webContents.getLastWebPreferences()!.sandbox, true)
+  assert.equal(await crmPopup!.webContents.executeJavaScript('typeof require + ":" + typeof window.electronAPI'), 'undefined:undefined')
+  const crmCleanup = crmController.reset()
+  await assert.rejects(prepareCrm())
+  await crmCleanup
+  assert.equal(crm.isDestroyed(), true)
+  assert.equal(crmPopup!.isDestroyed(), true)
+  assert.equal((await crmSession.cookies.get({ url, name: 'aka_chat_staff' })).length, 1)
+  setCurrentUser(null)
+  setCurrentUser({ ...crmUser, staffId: 404 })
+  crmController.startSession()
+  const otherCrm = await prepareCrm()
+  assert.notEqual(otherCrm.partition, crmDescriptor.partition)
+  assert.equal((await session.fromPartition(otherCrm.partition).cookies.get({ url, name: 'aka_chat_staff' })).length, 0)
+  await crmController.reset()
+  setCurrentUser(crmUser)
+  crmController.startSession()
+  assert.equal((await prepareCrm()).partition, crmDescriptor.partition)
+  assert.equal((await crmSession.cookies.get({ url, name: 'aka_chat_staff' })).length, 1)
+  await crmController.reset()
+  setCurrentUser(null)
+  host.destroy()
+  console.log('PASS: organization-1 CRM is lazy, uses manual login, preserves its own staff profile, stays mounted and closes on logout')
 }
 
 run().then(() => {

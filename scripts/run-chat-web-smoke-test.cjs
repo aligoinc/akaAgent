@@ -19,9 +19,11 @@ async function main() {
       contextBridge.exposeInMainWorld('smoke', {
         prepare: () => ipcRenderer.invoke('chat-web:prepare'),
         reload: () => ipcRenderer.invoke('chat-web:reload'),
+        prepareCrm: () => ipcRenderer.invoke('crm-web:prepare'),
         state: () => latest
       });
       contextBridge.exposeInMainWorld('electronAPI', {
+        prepareCrmWeb: () => ipcRenderer.invoke('crm-web:prepare'),
         prepareChatWeb: () => ipcRenderer.invoke('chat-web:prepare'),
         reloadChatWeb: () => ipcRenderer.invoke('chat-web:reload'),
         onChatWebState: callback => {
@@ -54,11 +56,12 @@ async function main() {
       plugins: [{
         name: 'local-chat-fixture-only',
         setup(builder) {
-          builder.onLoad({ filter: /chatWebService\.ts$/ }, ({ path }) => {
+          builder.onLoad({ filter: /(chatWebService|crmWebService)\.ts$/ }, ({ path }) => {
             const source = readFileSync(path, 'utf8')
-            const constant = "const CHAT_URL = 'https://chat.akabiz.biz/'"
+            const isCrm = path.endsWith('crmWebService.ts')
+            const constant = isCrm ? "const CRM_URL = 'https://aka10000.fly.dev/'" : "const CHAT_URL = 'https://chat.akabiz.biz/'"
             if (!source.includes(constant)) throw new Error('Chat URL fixture replacement needs updating.')
-            return { contents: source.replace(constant, 'const CHAT_URL = process.env.AKA_AGENT_CHAT_SMOKE_URL!'), loader: 'ts', resolveDir: resolve(path, '..') }
+            return { contents: source.replace(constant, `const ${isCrm ? 'CRM_URL' : 'CHAT_URL'} = process.env.AKA_AGENT_CHAT_SMOKE_URL!`), loader: 'ts', resolveDir: resolve(path, '..') }
           })
         }
       }]

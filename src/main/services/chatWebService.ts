@@ -54,7 +54,7 @@ export class ChatWebService {
     this.organizationId = user.organizationId
     const partition = `persist:akaagent_chat_${user.organizationId}_${user.staffId}`
     this.browserSession = session.fromPartition(partition)
-    this.state = { sessionId: this.sessionId, revision: 0, status: 'connecting', partition, url: CHAT_URL }
+    this.state = { sessionId: this.sessionId, revision: 0, webviewGeneration: 0, status: 'connecting', partition, url: CHAT_URL }
     mainWindow.webContents.on('will-attach-webview', this.beforeAttach)
     mainWindow.webContents.on('did-attach-webview', this.afterAttach)
     powerMonitor.on('resume', this.onResume)
@@ -329,6 +329,12 @@ export class ChatWebService {
     })
     contents.on('render-process-gone', () => {
       if (contents === this.guest && this.isCurrent()) {
+        // Never loadURL/reload a crashed guest: Electron can abort the main
+        // process. Authentication may finish before renderer handles the crash,
+        // so retire the guest here and tell React to mount a new one when ready.
+        this.guest = null
+        this.state = { ...this.state, webviewGeneration: this.state.webviewGeneration + 1 }
+        contents.close({ waitForBeforeUnload: false })
         this.reloadAfterAuthentication = true
         this.publish('error', 'Trang Chat đã dừng. Vui lòng tải lại.')
       }
