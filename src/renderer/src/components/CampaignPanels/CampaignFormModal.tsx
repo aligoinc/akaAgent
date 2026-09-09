@@ -1,3 +1,5 @@
+import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
+import { useCampaignDraftField } from './useCampaignDraftField'
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
@@ -464,6 +466,8 @@ interface InternalCampaignDraft {
 }
 
 interface CampaignFormModalProps {
+  savedDraft?: CampaignDraft
+
   campaign: CampaignConfig | null
   cloneFromId?: number
   onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
@@ -1839,8 +1843,9 @@ const GROUP_POST_BUMP_STEP: StepDef = {
 }
 
 export default function CampaignFormModal({
-  campaign,
-  cloneFromId,
+  campaign: providedCampaign,
+  savedDraft,
+  cloneFromId: providedCloneFromId,
   onOpenGeneralSettings,
   onOpenContentTemplates,
   draftMode = false,
@@ -1857,6 +1862,14 @@ export default function CampaignFormModal({
   submitLabel,
   onClose
 }: CampaignFormModalProps) {
+  const [persistentDraft, setPersistentDraft] = useState(savedDraft)
+  const draftPayload = savedDraft?.payload
+  const cloneFromId = providedCloneFromId ?? draftPayload?.cloneSourceCampaignId
+  const draftValuesRef = useRef<Record<string, unknown>>({})
+  const draftIdRef = useRef(savedDraft?.id || crypto.randomUUID())
+  const campaign = providedCampaign ?? (draftPayload?.baseCampaign as CampaignConfig | undefined)
+  const restoredDraftAction = (draftPayload?.values.formData as { actionId?: string } | undefined)?.actionId
+
   const {
     accounts, accountGroups, campaignActions, campaigns, loadAccountGroups, loadCampaigns,
     createCampaign, updateCampaign,
@@ -1937,7 +1950,7 @@ export default function CampaignFormModal({
       ? rawSavedCommentImageOption
       : 'none'
   const savedDailyStopTime = normalizeTimeInput(campaign?.dailyStopTime)
-  const rawInitialActionId = lockedActionId || campaign?.actionId || ''
+  const rawInitialActionId = restoredDraftAction || lockedActionId || campaign?.actionId || ''
   const initialActionId = rawInitialActionId && !canUseCampaignAction({ id: rawInitialActionId, flatformType: '' }, entitlements)
     ? ''
     : rawInitialActionId
@@ -2011,7 +2024,7 @@ export default function CampaignFormModal({
           ? 'manual'
           : 'group')
     : 'group'
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useCampaignDraftField(draftPayload, draftValuesRef, 'formData', {
     name: campaign?.name || '',
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
@@ -2228,10 +2241,10 @@ export default function CampaignFormModal({
       ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
     } as FindDataTargetDataGroups
   })
-  const [advancedContentSourceMode, setAdvancedContentSourceMode] = useState<AdvancedContentSourceMode>(
+  const [advancedContentSourceMode, setAdvancedContentSourceMode] = useCampaignDraftField<AdvancedContentSourceMode>(draftPayload, draftValuesRef, 'advancedContentSourceMode',
     initialAdvancedContentSourceMode
   )
-  const [contentSettingsTab, setContentSettingsTab] = useState<ContentSettingsTab>(
+  const [contentSettingsTab, setContentSettingsTab] = useCampaignDraftField<ContentSettingsTab>(draftPayload, draftValuesRef, 'contentSettingsTab',
     campaign?.extraSettings?.copyContentFromSource === true ||
     campaign?.extraSettings?.sharePost === true
       ? 'source'
@@ -2250,17 +2263,15 @@ export default function CampaignFormModal({
   const manualAdvancedContentModalRef = useRef<HTMLDivElement>(null)
   const manualAdvancedTemplatePickerRef = useRef<HTMLDivElement>(null)
   const manualAdvancedTemplatePickerReturnFocusRef = useRef<HTMLElement | null>(null)
-  const [candidateContentTemplateGroupId, setCandidateContentTemplateGroupId] = useState<number | null>(
+  const [candidateContentTemplateGroupId, setCandidateContentTemplateGroupId] = useCampaignDraftField<number | null>(draftPayload, draftValuesRef, 'candidateContentTemplateGroupId',
     savedAdvancedGroupSnapshot?.groupId ?? null
   )
-  const [pendingContentTemplateGroupId, setPendingContentTemplateGroupId] = useState<number | null>(null)
+  const [pendingContentTemplateGroupId, setPendingContentTemplateGroupId] = useCampaignDraftField<number | null>(draftPayload, draftValuesRef, 'pendingContentTemplateGroupId', null)
   const manualAdvancedContentItemsRef = useRef<CampaignAdvancedContentItem[]>(
-    initialAdvancedContentItems
+    restoreCampaignDraftValue(initialAdvancedContentItems, draftPayload?.values.manualAdvancedContentItems)
   )
   const savedGroupAdvancedContentItemsRef = useRef<CampaignAdvancedContentItem[]>(
-    hasSavedAdvancedGroupSnapshot
-      ? initialActiveAdvancedContentItems
-      : []
+    restoreCampaignDraftValue(hasSavedAdvancedGroupSnapshot ? initialActiveAdvancedContentItems : [], draftPayload?.values.savedGroupAdvancedContentItems)
   )
   useEffect(() => {
     if (advancedContentSourceMode === 'manual') {
@@ -2372,67 +2383,67 @@ export default function CampaignFormModal({
     }
   }, [manualAdvancedTemplatePickerOpen, uiAlert.isOpen, uiConfirm.isOpen])
   const campaignNameValueRef = useRef(formData.name)
-  const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()))
+  const campaignNameUserEditedRef = useRef(Boolean((campaign?.name || '').trim()) || !!draftPayload)
   const lastAiCampaignNameRef = useRef('')
   const campaignNameAiRequestSeqRef = useRef(0)
   const campaignNameAiCacheRef = useRef<Map<string, string>>(new Map())
   const dataGroupBundleRequestIdRef = useRef<string | null>(null)
   const dataGroupBundleFingerprintRef = useRef<string | null>(null)
   const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
-  const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
+  const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useCampaignDraftField<Record<string, boolean>>(draftPayload, draftValuesRef, 'editedRateLimitMinuteActions', {})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<MainMediaPickerTarget | null>(null)
   const localMediaPickerTargetRef = useRef<MainMediaPickerTarget | null>(null)
   const localImageInputRef = useRef<HTMLInputElement>(null)
   const localVideoInputRef = useRef<HTMLInputElement>(null)
   const localImageVideoInputRef = useRef<HTMLInputElement>(null)
   const localFileInputRef = useRef<HTMLInputElement>(null)
-  const [handleFoundUidData, setHandleFoundUidData] = useState(() =>
+  const [handleFoundUidData, setHandleFoundUidData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundUidData', () =>
     draftRequiredTargetField === 'findUidTargetCampaignIds' || (campaign?.extraSettings?.findUidTargetCampaignIds || []).length > 0
   )
-  const [handleFoundPostLinkData, setHandleFoundPostLinkData] = useState(() =>
+  const [handleFoundPostLinkData, setHandleFoundPostLinkData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundPostLinkData', () =>
     draftRequiredTargetField === 'findPostLinkTargetCampaignIds' || (campaign?.extraSettings?.findPostLinkTargetCampaignIds || []).length > 0
   )
-  const [handleFoundPhoneSmsData, setHandleFoundPhoneSmsData] = useState(() =>
+  const [handleFoundPhoneSmsData, setHandleFoundPhoneSmsData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundPhoneSmsData', () =>
     (campaign?.extraSettings?.findPhoneSmsTargetCampaignIds || []).length > 0
   )
-  const [handleFoundPhoneZaloWebData, setHandleFoundPhoneZaloWebData] = useState(() =>
+  const [handleFoundPhoneZaloWebData, setHandleFoundPhoneZaloWebData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundPhoneZaloWebData', () =>
     (campaign?.extraSettings?.findPhoneZaloWebTargetCampaignIds || []).length > 0
   )
-  const [handleFoundPhoneZaloMessagePhoneData, setHandleFoundPhoneZaloMessagePhoneData] = useState(() =>
+  const [handleFoundPhoneZaloMessagePhoneData, setHandleFoundPhoneZaloMessagePhoneData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundPhoneZaloMessagePhoneData', () =>
     (campaign?.extraSettings?.findPhoneZaloMessagePhoneTargetCampaignIds || []).length > 0
   )
-  const [handleFoundZaloGroupLinkWebData, setHandleFoundZaloGroupLinkWebData] = useState(() =>
+  const [handleFoundZaloGroupLinkWebData, setHandleFoundZaloGroupLinkWebData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundZaloGroupLinkWebData', () =>
     (campaign?.extraSettings?.findZaloGroupLinkWebTargetCampaignIds || []).length > 0
   )
-  const [handleFoundZaloGroupLinkJoinData, setHandleFoundZaloGroupLinkJoinData] = useState(() =>
+  const [handleFoundZaloGroupLinkJoinData, setHandleFoundZaloGroupLinkJoinData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundZaloGroupLinkJoinData', () =>
     (campaign?.extraSettings?.findZaloGroupLinkJoinTargetCampaignIds || []).length > 0
   )
-  const [handleFoundPhoneAkaBizDesktopData, setHandleFoundPhoneAkaBizDesktopData] = useState(() =>
+  const [handleFoundPhoneAkaBizDesktopData, setHandleFoundPhoneAkaBizDesktopData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundPhoneAkaBizDesktopData', () =>
     (campaign?.extraSettings?.findPhoneAkaBizDesktopTargetCampaignIds || []).length > 0
   )
-  const [handleFoundZaloGroupLinkAkaBizDesktopData, setHandleFoundZaloGroupLinkAkaBizDesktopData] = useState(() =>
+  const [handleFoundZaloGroupLinkAkaBizDesktopData, setHandleFoundZaloGroupLinkAkaBizDesktopData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundZaloGroupLinkAkaBizDesktopData', () =>
     (campaign?.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || []).length > 0
   )
-  const [handleFoundFacebookGroupPostData, setHandleFoundFacebookGroupPostData] = useState(() =>
+  const [handleFoundFacebookGroupPostData, setHandleFoundFacebookGroupPostData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundFacebookGroupPostData', () =>
     draftRequiredTargetField === 'findFacebookGroupPostTargetCampaignIds' ||
     (campaign?.extraSettings?.findFacebookGroupPostTargetCampaignIds || []).length > 0
   )
-  const [handleFoundFacebookGroupCommentData, setHandleFoundFacebookGroupCommentData] = useState(() =>
+  const [handleFoundFacebookGroupCommentData, setHandleFoundFacebookGroupCommentData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundFacebookGroupCommentData', () =>
     draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
     (campaign?.extraSettings?.findFacebookGroupCommentTargetCampaignIds || []).length > 0
   )
-  const [handleFoundFacebookGroupJoinData, setHandleFoundFacebookGroupJoinData] = useState(() =>
+  const [handleFoundFacebookGroupJoinData, setHandleFoundFacebookGroupJoinData] = useCampaignDraftField(draftPayload, draftValuesRef, 'handleFoundFacebookGroupJoinData', () =>
     draftRequiredTargetField === 'findFacebookGroupJoinTargetCampaignIds' ||
     (campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || []).length > 0
   )
-  const [selectedFindDataSourceCampaignIds, setSelectedFindDataSourceCampaignIds] = useState<number[]>([])
+  const [selectedFindDataSourceCampaignIds, setSelectedFindDataSourceCampaignIds] = useCampaignDraftField<number[]>(draftPayload, draftValuesRef, 'selectedFindDataSourceCampaignIds', [])
   const findDataSourceSelectionTouchedRef = useRef(false)
   const findDataSourceSelectionScopeRef = useRef('')
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
   const [dataGroupPickerOpen, setDataGroupPickerOpen] = useState(false)
   const [dataGroupPickerMode, setDataGroupPickerMode] = useState<'source' | 'append'>('source')
   const [findDataGroupPickerKind, setFindDataGroupPickerKind] = useState<FindDataOutputKind | null>(null)
-  const [findDataTargetDataGroupEnabled, setFindDataTargetDataGroupEnabled] = useState<FindDataTargetDataGroupEnabledState>(() => ({
+  const [findDataTargetDataGroupEnabled, setFindDataTargetDataGroupEnabled] = useCampaignDraftField<FindDataTargetDataGroupEnabledState>(draftPayload, draftValuesRef, 'findDataTargetDataGroupEnabled', () => ({
     phone: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.phone),
     zalo_group_link: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.zalo_group_link),
     facebook_uid: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_uid),
@@ -2443,7 +2454,7 @@ export default function CampaignFormModal({
   const [resolvedFindDataTargetDataGroupIdsKey, setResolvedFindDataTargetDataGroupIdsKey] = useState('')
   const [failedFindDataTargetDataGroupIdsKey, setFailedFindDataTargetDataGroupIdsKey] = useState('')
   const [findDataTargetDataGroupHydrationRetry, setFindDataTargetDataGroupHydrationRetry] = useState(0)
-  const [directDataGroupSnapshots, setDirectDataGroupSnapshots] = useState<DirectDataGroupSnapshotIntent[]>(() => {
+  const [directDataGroupSnapshots, setDirectDataGroupSnapshots] = useCampaignDraftField<DirectDataGroupSnapshotIntent[]>(draftPayload, draftValuesRef, 'directDataGroupSnapshots', () => {
     const snapshotsByGroupId = new Map<number, DirectDataGroupSnapshotIntent>()
     for (const snapshot of initialDataGroupSnapshots || []) {
       const groupId = Number(snapshot.groupId)
@@ -2456,7 +2467,7 @@ export default function CampaignFormModal({
     }
     return Array.from(snapshotsByGroupId.values())
   })
-  const [selectedDataGroupName, setSelectedDataGroupName] = useState(initialDataGroup?.name || '')
+  const [selectedDataGroupName, setSelectedDataGroupName] = useCampaignDraftField(draftPayload, draftValuesRef, 'selectedDataGroupName', initialDataGroup?.name || '')
   const [selectedDataGroup, setSelectedDataGroup] = useState<DataGroup | null>(initialDataGroup || null)
   const [dataGroupTargetPreview, setDataGroupTargetPreview] = useState<DataGroupCampaignTargetPreview[]>([])
   const [dataGroupTargetPreviewStatus, setDataGroupTargetPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
@@ -2485,7 +2496,7 @@ export default function CampaignFormModal({
   const [zaloRealtimeGroupsLoading, setZaloRealtimeGroupsLoading] = useState(false)
   const [facebookGroupInviteGroups, setFacebookGroupInviteGroups] = useState<AutoAccountContact[]>([])
   const [facebookGroupInviteGroupsLoading, setFacebookGroupInviteGroupsLoading] = useState(false)
-  const [internalCampaignDrafts, setInternalCampaignDrafts] = useState<InternalCampaignDraft[]>([])
+  const [internalCampaignDrafts, setInternalCampaignDrafts] = useCampaignDraftField<InternalCampaignDraft[]>(draftPayload, draftValuesRef, 'internalCampaignDrafts', [])
   const [draftFormConfig, setDraftFormConfig] = useState<{
     tempId: number
     sourceType: InternalCampaignPickerSourceType
@@ -2501,7 +2512,7 @@ export default function CampaignFormModal({
   const [viewingSourceCampaign, setViewingSourceCampaign] = useState<CampaignConfig | null>(null)
   const [editingSourceCampaign, setEditingSourceCampaign] = useState<CampaignConfig | null>(null)
   const [selectedActionPlatformFilter, setSelectedActionPlatformFilter] = useState('')
-  const nextDraftCampaignTempIdRef = useRef(-1)
+  const nextDraftCampaignTempIdRef = useRef(Math.min(0, ...internalCampaignDrafts.map(item => item.tempId)) - 1)
   const previousZaloAliasActionIdRef = useRef(initialActionId)
 
   // Determine if this is a "simple" campaign (no details/extra sections)
@@ -3882,7 +3893,7 @@ export default function CampaignFormModal({
     note: '',
     status: 'chờ xử lý'
   }))
-  const [details, setDetails] = useState<Partial<CampaignInputData>[]>(() => normalizeInitialDetails(initialDetails))
+  const [details, setDetails] = useCampaignDraftField<Partial<CampaignInputData>[]>(draftPayload, draftValuesRef, 'details', () => normalizeInitialDetails(initialDetails))
   const [detailsPage, setDetailsPage] = useState(1)
   const detailsPageCount = Math.max(1, Math.ceil(details.length / CAMPAIGN_DETAILS_PAGE_SIZE))
   const visibleDetailsPage = Math.min(detailsPage, detailsPageCount)
@@ -3892,7 +3903,7 @@ export default function CampaignFormModal({
     () => details.slice(detailsPageStartIndex, detailsPageEndIndex),
     [details, detailsPageEndIndex, detailsPageStartIndex]
   )
-  const [findDataSearchKeywordsText, setFindDataSearchKeywordsText] = useState(() =>
+  const [findDataSearchKeywordsText, setFindDataSearchKeywordsText] = useCampaignDraftField(draftPayload, draftValuesRef, 'findDataSearchKeywordsText', () =>
     initialIsFindDataSearchCampaign ? formatFindDataSearchKeywordsText(normalizeInitialDetails(initialDetails)) : ''
   )
   const findDataSearchKeywordRows = useMemo(
@@ -3905,6 +3916,7 @@ export default function CampaignFormModal({
   const directDataSourceSelectionCount = detailEntryCount + directDataGroupSnapshots.length
   const [deletedIds, setDeletedIds] = useState<number[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
+  const [draftSourceLoadError, setDraftSourceLoadError] = useState('')
 
   useEffect(() => {
     setDetailsPage(current => Math.min(current, detailsPageCount))
@@ -4187,7 +4199,7 @@ export default function CampaignFormModal({
   useEffect(() => {
     if (findDataSourceSelectionScopeRef.current !== sourceSelectionScopeKey) {
       findDataSourceSelectionScopeRef.current = sourceSelectionScopeKey
-      findDataSourceSelectionTouchedRef.current = false
+      findDataSourceSelectionTouchedRef.current = !!draftPayload
     }
   }, [sourceSelectionScopeKey])
 
@@ -4373,6 +4385,8 @@ export default function CampaignFormModal({
   ])
 
   useEffect(() => {
+    // Hidden source controls or an incomplete catalog must not erase a saved selection.
+    if (draftPayload && formData.actionId === restoredDraftAction) return
     if (!showFindDataSourceSection) {
       setSelectedFindDataSourceCampaignIds(prev => prev.length === 0 ? prev : [])
       return
@@ -4826,6 +4840,7 @@ export default function CampaignFormModal({
 
   useEffect(() => {
     async function fetchDetails() {
+      if (draftPayload) return
       const loadId = cloneFromId || (campaign && campaign.id ? campaign.id : null)
       if (!loadId) {
         const normalizedDetails = normalizeInitialDetails(initialDetails)
@@ -4838,6 +4853,7 @@ export default function CampaignFormModal({
       }
       if (loadId && window.electronAPI) {
         setLoadingDetails(true)
+        setDraftSourceLoadError('')
         try {
           const existingDetails = await window.electronAPI.listCampaignInputData(loadId)
           if (cloneFromId) {
@@ -4855,6 +4871,7 @@ export default function CampaignFormModal({
             setDeletedIds([])
           }
         } catch (err) {
+          if (cloneFromId) setDraftSourceLoadError('Chưa tải được data của chiến dịch nguồn. Vui lòng mở lại form nhân bản trước khi lưu nháp.')
           console.error(err)
         } finally {
           setLoadingDetails(false)
@@ -6138,6 +6155,7 @@ export default function CampaignFormModal({
             ? getDefaultActionLimitForCode(code, defaultLimit)
             : (formData.actionLimitsByCode[code] || getDefaultActionLimitForCode(code, defaultLimit))
           const clampedLimit = clampActionLimitDailyLimit(code, limit)
+          // Saving a new form as a draft does not turn inherited account defaults into explicit overrides.
           const useFormRateLimitMinutes = Boolean(campaign?.id || cloneFromId) || editedRateLimitMinuteActions[code]
           return [
             code,
@@ -6614,6 +6632,48 @@ export default function CampaignFormModal({
           : directDataGroupSnapshots.map(snapshot => ({ ...snapshot }))
       }
     })
+  }
+
+  const collectPersistentDraftPayload = (): CampaignDraftPayload => {
+    const payload: CampaignDraftPayload = {
+      version: CAMPAIGN_DRAFT_VERSION,
+      values: {
+        ...draftValuesRef.current,
+        manualAdvancedContentItems: manualAdvancedContentItemsRef.current,
+        savedGroupAdvancedContentItems: savedGroupAdvancedContentItemsRef.current
+      },
+      ...(campaign ? { baseCampaign: { ...campaign, id: undefined } } : {}),
+      ...(cloneFromId ? { cloneSourceCampaignId: cloneFromId } : {})
+    }
+    // Detached JSON snapshot; no DOM nodes, callbacks, refs, File objects or credentials.
+    return JSON.parse(JSON.stringify(payload)) as CampaignDraftPayload
+  }
+
+  const persistCurrentDraft = async (): Promise<CampaignDraft> => {
+    if (draftSourceLoadError) throw new Error(draftSourceLoadError)
+    const payload = collectPersistentDraftPayload()
+    validateCampaignDraftPayload(payload)
+    const saved = await window.electronAPI.saveCampaignDraft({
+      id: draftIdRef.current, revision: persistentDraft?.revision || 0, payload
+    })
+    setPersistentDraft(saved)
+    return saved
+  }
+
+  const handleSavePersistentDraft = async (): Promise<void> => {
+    if (saveBusy || loadingDetails || isEditingSavedCampaign || draftMode) return
+    setSavingCampaign(true)
+    setSaveProgress({ percent: 15, label: 'Đang lưu bản nháp...' })
+    try {
+      await persistCurrentDraft()
+      showAlert('Đã lưu nháp chiến dịch.', 'success')
+      onClose()
+    } catch (error) {
+      showAlert(formatIpcErrorMessage(error, 'Không thể lưu bản nháp.'), 'error')
+    } finally {
+      setSavingCampaign(false)
+      setSaveProgress(null)
+    }
   }
 
   const handleSave = async () => {
@@ -7325,6 +7385,7 @@ export default function CampaignFormModal({
       }
       await assertCampaignSaveItemsWithinInputLimit(newCampaignItemsToValidate)
       updateSaveProgress(5, 'Đã kiểm tra giới hạn data.')
+      const savedDraftForCreation = persistentDraft ? await persistCurrentDraft() : null
       const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
       const detailIdsToDelete = shouldDiscardDetailsForSave
         ? Array.from(new Set([
@@ -7879,6 +7940,21 @@ export default function CampaignFormModal({
       dataGroupBundleFingerprintRef.current = null
       clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
       updateSaveProgress(100, 'Lưu chiến dịch hoàn tất.')
+
+      if (savedDraftForCreation) {
+        try {
+          await window.electronAPI.completeCampaignDraft({
+            id: savedDraftForCreation.id,
+            revision: savedDraftForCreation.revision,
+            campaignIds: [...savedCampaignIds, ...Array.from(createdDraftIdsByTempId.values()).flat()]
+          })
+        } catch (error) {
+          console.error('Failed to mark campaign draft converted:', error)
+          showAlert('Chiến dịch đã tạo thành công, nhưng chưa cập nhật được bản nháp. Bạn có thể xóa nháp còn lại trong danh sách.', 'info')
+          onClose()
+          return
+        }
+      }
 
       const emptySnapshotCampaignNames = emptySnapshotCampaigns
         .slice(0, 3)
@@ -15527,7 +15603,7 @@ export default function CampaignFormModal({
         {/* Header */}
         <div className="modal-header">
           <span className="modal-title">
-            {draftMode ? 'Thêm chiến dịch' : campaign && campaign.id ? 'Sửa chiến dịch' : campaign ? 'Nhân bản chiến dịch' : 'Thêm chiến dịch'}
+            {persistentDraft ? 'Nháp chiến dịch' : draftMode ? 'Thêm chiến dịch' : campaign && campaign.id ? 'Sửa chiến dịch' : campaign ? 'Nhân bản chiến dịch' : 'Thêm chiến dịch'}
           </span>
           <button className="btn-icon" onClick={onClose} disabled={saveBusy} aria-label="Đóng">
             <X size={18} />
@@ -17358,11 +17434,15 @@ export default function CampaignFormModal({
 
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">
+          {!draftMode && !isEditingSavedCampaign && <button type="button" className="btn btn-secondary"
+            disabled={saveBusy || loadingDetails} onClick={() => { void handleSavePersistentDraft() }}>
+            Lưu nháp
+          </button>}
           <CampaignSaveControls
             starting={saveStarting}
             saving={savingCampaign}
             progress={saveProgress}
-            idleLabel={submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
+            idleLabel={persistentDraft ? 'Tạo chiến dịch' : submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
             onSave={handleSave}
             onCancel={onClose}
             onStartingChange={setSaveStarting}

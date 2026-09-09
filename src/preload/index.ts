@@ -1,4 +1,6 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
+  type CompleteCampaignDraftRequest } from '../shared/campaignDrafts'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PageInboxScanOptions, PageInboxScanInfo } from '../shared/types'
 import { existsSync } from 'fs'
@@ -9,6 +11,11 @@ import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProto
 export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
+  listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),
+  getCampaignDraft: (id: string): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.get, id),
+  saveCampaignDraft: (request: SaveCampaignDraftRequest): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.save, request),
+  deleteCampaignDraft: (id: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.delete, id),
+  completeCampaignDraft: (request: CompleteCampaignDraftRequest): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.complete, request),
   platform: process.platform,
 
   prepareCrmWeb: (): Promise<CrmWebDescriptor> => ipcRenderer.invoke(IPC_EVENTS.CRM_WEB_PREPARE),
