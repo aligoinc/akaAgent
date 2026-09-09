@@ -16,6 +16,12 @@ export interface ProcessAuthCredentials {
 let _currentUserCredentials: ProcessAuthCredentials | null = null
 
 export function setCurrentUser(user: AuthUser | null): void {
+  if (user && _currentUser && user.staffId === _currentUser.staffId &&
+    user.organizationId === _currentUser.organizationId && user.chatWebEnabledAtLogin === undefined) {
+    // Repository refreshes may return a new AuthUser without desktop-only fields.
+    user.chatWebEnabledAtLogin = _currentUser.chatWebEnabledAtLogin
+    user.chatWebSessionId = _currentUser.chatWebSessionId
+  }
   if (
     !user ||
     (_currentUser && (

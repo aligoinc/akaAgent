@@ -55,6 +55,14 @@ Windows installer từ v6.7.0 là NSIS assisted per-machine, cài mới mặc đ
 
 ### Webview controller
 
+Menu **Chat** nhúng `https://chat.akabiz.biz/` qua `ChatPage` và `ChatWebService`. Quyền menu dùng riêng `AuthUser.chatWebEnabledAtLogin` + `chatWebSessionId`, chụp sau bootstrap/login và giữ nguyên qua các lần refresh `isChatSync`; thay đổi quyền trong lúc app mở không mount/unmount Chat. Tài khoản không có snapshot quyền không render menu, không tải module ChatPage, không tạo session/service hoặc network/timer/listener riêng cho Chat. Có quyền vẫn chỉ khởi tạo sau lần mở menu đầu tiên; sau đó giữ webview chạy nền khi chuyển menu/ẩn cửa sổ. Chat không đăng ký vào WebviewRegistry/PageControllerRegistry của tài khoản automation.
+
+Loading phủ trang của [ChatPage.tsx](src/renderer/src/pages/ChatPage.tsx) chỉ bật khi `did-start-navigation` có `isMainFrame && !isInPlace`; không dùng `did-start-loading` vì đổi hội thoại bằng `history.pushState`, hash và back/forward trong cùng document cũng phát sự kiện này, gây nhấp nháy.
+
+Phiên Chat do main quản lý trong partition `persist:akaagent_chat_<organizationId>_<staffId>`: bỏ cookie xác thực cũ ở lần mở đầu của mỗi phiên akaAgent, gọi `/api/auth/login` bằng credentials main, kiểm tra đúng staff/organization rồi mới cho attach webview. Cookie HttpOnly hiện hạn 7 ngày; dùng một timer gia hạn trước 24 giờ, kiểm tra khi resume/mở lại menu, không reload webview khi gia hạn thành công. Logout/expire/đổi tài khoản/quit phải hủy request, đóng guest/popup, xóa cookie và chặn IPC mở lại trong cleanup; phản hồi cũ không được khôi phục phiên. Logout chủ động trong Chat chờ CTA Kết nối lại. Không đưa credential, cookie hoặc management secret vào renderer/URL/log. Guest/popup cùng origin phải sandbox, không có preload/Node; link ngoài chỉ HTTP(S). Kiểm chứng bằng `node scripts/run-chat-web-smoke-test.cjs` (Electron + HTTPS local, cần openssl; không dùng DB/Chat production), hai typecheck và build.
+
+Chat 401/logout phải được nhận ở `onHeadersReceived`: web có thể chuyển trang ngay sau headers và hủy body trước `onCompleted`. Main chặn redirect `/?reason=session-expired` để tự khôi phục phiên; chốt `/api/auth/login` trong guest/popup phải bao phủ query string và dấu `/` cuối, kiểm tra theo pathname ([chatWebService.ts](src/main/services/chatWebService.ts)).
+
 Đồng bộ tag Zalo trong form chiến dịch của tenant Chat phải gọi `ZaloChatApiClient.listLabels()` (`queryType='list_labels'`) rồi persist `zalo_tag`/membership tại Desktop; không được rơi về `ZaloServerClient` chỉ vì socket App Server đang offline.
 
 [src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. Visible webviews vẫn dùng cho login, status checks và test thủ công trong editor.

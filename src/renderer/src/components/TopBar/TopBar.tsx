@@ -15,6 +15,7 @@ import {
   Layers,
   LogOut,
   Monitor,
+  MessageSquare,
   Moon,
   RefreshCw,
   ServerCog,
@@ -31,7 +32,7 @@ import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/d
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat'
 
 interface TopBarProps {
   activePage: AppPage
@@ -88,6 +89,7 @@ export default function TopBar({
   const accountMenuRef = useRef<HTMLDivElement>(null)
   const isAdminAkabiz = !!user?.isAdminAkabiz
   const canOpenWorkflowEditor = isAdminAkabiz
+  const canOpenChat = user?.chatWebEnabledAtLogin === true
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -177,6 +179,13 @@ export default function TopBar({
       }
     ]
 
+    if (canOpenChat) {
+      items.splice(1, 0, {
+        key: 'chat', label: 'Chat', icon: <MessageSquare size={18} />,
+        active: activePage === 'chat', onClick: () => onPageChange('chat')
+      })
+    }
+
     if (canOpenWorkflowEditor) {
       items.push({
         key: 'workflow-editor',
@@ -191,6 +200,7 @@ export default function TopBar({
   }, [
     activePage,
     canOpenWorkflowEditor,
+    canOpenChat,
     onOpenDataGroups,
     onOpenDataScan,
     onOpenMediaLibrary,

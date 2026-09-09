@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import TopBar from './components/TopBar/TopBar'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import TopBar, { type AppPage } from './components/TopBar/TopBar'
 import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
@@ -27,6 +27,8 @@ import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeed
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
+
+const ChatPage = lazy(() => import('./pages/ChatPage'))
 
 interface UpdateInfo {
   localVersion: string
@@ -68,7 +70,21 @@ export default function App() {
   } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
-  const [activePage, setActivePage] = useState<'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports'>('campaigns')
+  const [activePage, setActivePage] = useState<AppPage>('campaigns')
+  const [chatOpenedSessionId, setChatOpenedSessionId] = useState<string | null>(null)
+  const chatSessionId = user?.chatWebEnabledAtLogin ? user.chatWebSessionId : undefined
+  const handlePageChange = useCallback((page: AppPage) => {
+    if (page === 'chat') {
+      if (!chatSessionId) return
+      setChatOpenedSessionId(chatSessionId)
+    }
+    setActivePage(page)
+  }, [chatSessionId])
+
+  useEffect(() => {
+    setChatOpenedSessionId(null)
+    setActivePage(previous => previous === 'chat' ? 'campaigns' : previous)
+  }, [chatSessionId])
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
@@ -381,7 +397,7 @@ export default function App() {
       <div className="app-content-shell">
         <TopBar
           activePage={activePage}
-          onPageChange={setActivePage}
+          onPageChange={handlePageChange}
           onOpenDataScan={() => setShowDataScan(true)}
           onOpenMediaLibrary={() => setShowMediaLibrary(true)}
           onOpenProxyManager={openProxyManager}
@@ -396,6 +412,13 @@ export default function App() {
         />
 
         <div className="app-main">
+          {chatSessionId && chatOpenedSessionId === chatSessionId && (
+            <div style={{ display: activePage === 'chat' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <Suspense fallback={<div className="empty-state" role="status">Đang mở Chat…</div>}>
+                <ChatPage key={chatSessionId} sessionId={chatSessionId} isActive={activePage === 'chat'} />
+              </Suspense>
+            </div>
+          )}
           <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <CampaignPage
               isActive={activePage === 'campaigns'}
