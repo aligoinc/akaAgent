@@ -1714,6 +1714,21 @@ const ALL_STEPS: StepDef[] = [
     ]
   },
   {
+    id: 'details',
+    title: 'Danh sách data',
+    fields: [
+      { key: 'details', label: 'Data' }
+    ]
+  },
+  {
+    id: 'content',
+    title: 'Nội dung',
+    fields: [
+      { key: 'content', label: 'Nội dung chiến dịch' },
+      { key: 'images', label: 'Media' }
+    ]
+  },
+  {
     id: 'schedule',
     title: 'Lịch chạy',
     fields: [
@@ -1740,26 +1755,11 @@ const ALL_STEPS: StepDef[] = [
     ]
   },
   {
-    id: 'content',
-    title: 'Nội dung',
-    fields: [
-      { key: 'content', label: 'Nội dung chiến dịch' },
-      { key: 'images', label: 'Media' }
-    ]
-  },
-  {
     id: 'extra',
     title: 'Cài đặt thêm',
     fields: [
       { key: 'enableComment', label: 'Kiêm comment' },
       { key: 'enablePostBump', label: 'Kiêm up tin' }
-    ]
-  },
-  {
-    id: 'details',
-    title: 'Danh sách data',
-    fields: [
-      { key: 'details', label: 'Data' }
     ]
   }
 ]
@@ -3592,7 +3592,7 @@ export default function CampaignFormModal({
           return s
         })
       const withPostSearch = isCommentSeedingFeedCampaign
-        ? steps.flatMap(s => s.id === 'limits' ? [s, COMMENT_POST_SEARCH_STEP] : [s])
+        ? steps.flatMap(s => s.id === 'details' ? [s, COMMENT_POST_SEARCH_STEP] : [s])
         : steps
       return showFindDataSourceSection
         ? withPostSearch.flatMap(s => s.id === 'details' ? [findDataSourceStep, s] : [s])
@@ -3625,11 +3625,11 @@ export default function CampaignFormModal({
       return [
         generalStep,
         contentStep,
-        ...(showFoundDataHandlingSection ? [FOUND_DATA_HANDLING_STEP] : []),
+        detailsStep,
         ...(showFindDataConditionsSection ? [FIND_DATA_CONDITIONS_STEP] : []),
+        ...(showFoundDataHandlingSection ? [FOUND_DATA_HANDLING_STEP] : []),
         scheduleStep,
-        limitStep,
-        detailsStep
+        limitStep
       ]
     }
     if (isZaloJoinGroupLinkCampaign) {
@@ -3641,7 +3641,7 @@ export default function CampaignFormModal({
         title: 'Danh sách link group Zalo',
         fields: [{ key: 'details', label: 'Link group Zalo' }]
       }
-      return [generalStep, scheduleStep, limitStep, detailsStep]
+      return [generalStep, detailsStep, scheduleStep, limitStep]
     }
     if (isFacebookJoinGroupCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
@@ -3652,7 +3652,7 @@ export default function CampaignFormModal({
         title: 'Danh sách group Facebook',
         fields: [{ key: 'details', label: 'Group URL/UID' }]
       }
-      return [generalStep, scheduleStep, limitStep, detailsStep]
+      return [generalStep, detailsStep, scheduleStep, limitStep]
     }
     if (isMessageCampaign) {
       const steps = ALL_STEPS
@@ -3771,9 +3771,16 @@ export default function CampaignFormModal({
     return ALL_STEPS.filter(s => s.id !== 'extra' || showExtraSection)
   })())
   const STEPS = canUseDataGroupSource && !isSimpleCampaign
-    ? baseSteps.flatMap(step => step.id === 'details'
-      ? [DATA_TARGET_SOURCE_STEP, isDataGroupSource ? DATA_GROUP_TARGET_STEP : step]
-      : [step])
+    ? baseSteps.flatMap(step => {
+      if (step.id === 'findDataSources') return [DATA_TARGET_SOURCE_STEP, step]
+      if (step.id === 'details') {
+        return [
+          ...(showFindDataSourceSection ? [] : [DATA_TARGET_SOURCE_STEP]),
+          isDataGroupSource ? DATA_GROUP_TARGET_STEP : step
+        ]
+      }
+      return [step]
+    })
     : baseSteps
   const getSectionNumber = (stepId: string) => Math.max(1, STEPS.findIndex(s => s.id === stepId) + 1)
   const stepIdsKey = STEPS.map(s => s.id).join('|')
@@ -15570,7 +15577,7 @@ export default function CampaignFormModal({
 
           {/* Right Content */}
           <div className="stepper-content" ref={contentRef}>
-            {/* Section 1: Cài đặt chung */}
+            {/* Cài đặt chung */}
             <div
               className="stepper-section"
               ref={el => { sectionRefs.current['general'] = el }}
@@ -15901,54 +15908,6 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {showFoundDataHandlingSection && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['foundDataHandling'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('foundDataHandling')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('foundDataHandling')}</span>
-                    <span className="stepper-section-title">Xử lý data tìm được</span>
-                  </div>
-                  {collapsedSections['foundDataHandling'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['foundDataHandling'] && (
-                  <div className="stepper-section-body">
-                    {renderFoundDataHandling()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showFindDataConditionsSection && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['findDataConditions'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('findDataConditions')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('findDataConditions')}</span>
-                    <span className="stepper-section-title">Điều kiện chạy</span>
-                  </div>
-                  {collapsedSections['findDataConditions'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['findDataConditions'] && (
-                  <div className="stepper-section-body">
-                    {renderFindDataConditions()}
-                  </div>
-                )}
-              </div>
-            )}
-
             {isNewsfeedInteractionCampaign && (
               <div
                 className="stepper-section"
@@ -15968,668 +15927,6 @@ export default function CampaignFormModal({
                 {!collapsedSections['newsfeedSettings'] && (
                   <div className="stepper-section-body">
                     {renderNewsfeedInteractionSettings()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 2: Lịch chạy */}
-            <div
-              className="stepper-section"
-              ref={el => { sectionRefs.current['schedule'] = el }}
-            >
-              <div
-                className="stepper-section-header"
-                onClick={() => toggleSection('schedule')}
-              >
-                <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">{getSectionNumber('schedule')}</span>
-                  <span className="stepper-section-title">Lịch chạy</span>
-                </div>
-                {collapsedSections['schedule'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-              </div>
-
-              {!collapsedSections['schedule'] && (
-                <div className="stepper-section-body">
-                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group">
-                    <label>Lịch</label>
-                    <div className="schedule-radio-group">
-                      {([['daily', 'Hàng ngày'], ['weekly', 'Theo tuần'], ['monthly', 'Theo tháng']] as const).map(([value, label]) => (
-                        <label key={value} className="schedule-radio-label">
-                          <input
-                            type="radio"
-                            name="scheduleType"
-                            value={value}
-                            checked={formData.scheduleType === value}
-                            disabled={isZaloMessageGroupRealtimeCampaign && value !== 'daily'}
-                            onChange={() => setFormData(p => ({ ...p, scheduleType: value }))}
-                          />
-                          <span>{label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>}
-
-                  {/* Start date / End date */}
-                  <div className="stepper-form-row schedule-run-row">
-                    <div className="stepper-form-group schedule-time-field">
-                      <label>Giờ chạy</label>
-                      <input
-                        type="time"
-                        value={getDateTimeLocalTime(formData.schedule)}
-                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalTime(p.schedule, e.target.value) }))}
-                        className="stepper-input"
-                      />
-                    </div>
-                    <div className="stepper-form-group schedule-date-field">
-                      <label>Ngày chạy</label>
-                      <input
-                        type="date"
-                        value={getDateTimeLocalDate(formData.schedule)}
-                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalDate(p.schedule, e.target.value) }))}
-                        className="stepper-input"
-                      />
-                    </div>
-                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign && (
-                      <div className="stepper-form-group schedule-end-date-field">
-                        <label>Ngày kết thúc</label>
-                        <input
-                          type="date"
-                          value={formData.scheduleEndDate}
-                          onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
-                          className="stepper-input"
-                        />
-                      </div>
-                    )}
-                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && (
-                      <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
-                    )}
-                  </div>
-
-                  {/* Monthly days */}
-                  {formData.scheduleType === 'monthly' && !isMobileManagedSmsCampaign && (
-                    <div className="stepper-form-group">
-                      <label>Lịch tháng</label>
-                      <input
-                        type="text"
-                        value={formData.scheduleDays}
-                        onChange={e => setFormData(p => ({ ...p, scheduleDays: e.target.value }))}
-                        className="stepper-input"
-                        placeholder="Ví dụ: 5,10,19,25"
-                      />
-                      <span className="schedule-hint">Danh sách ngày chạy, các ngày cách nhau bởi dấu phẩy.</span>
-                    </div>
-                  )}
-
-                  {/* Weekly days */}
-                  {formData.scheduleType === 'weekly' && !isMobileManagedSmsCampaign && (
-                    <div className="stepper-form-group">
-                      <label>Lịch tuần</label>
-                      <div className="schedule-weekday-group">
-                        {WEEKDAYS.map(day => {
-                          const selectedDays = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',') : []
-                          return (
-                            <label key={day.value} className="schedule-checkbox-label">
-                              <input
-                                type="checkbox"
-                                checked={selectedDays.includes(day.value)}
-                                onChange={() => toggleWeekDay(day.value)}
-                              />
-                              <span>{day.label}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Conditional checkbox based on schedule type */}
-                  {formData.scheduleType === 'daily' && !isMobileManagedSmsCampaign && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
-                    <div className="stepper-form-group">
-                      <label className="schedule-checkbox-label schedule-option-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.continueNextDay}
-                          onChange={e => setFormData(p => ({ ...p, continueNextDay: e.target.checked }))}
-                        />
-                        <span>Nếu chưa chạy hết data, hôm sau chiến dịch sẽ tiếp tục chạy theo thời gian hẹn giờ.</span>
-                      </label>
-                    </div>
-                  )}
-
-                  {!isDataGroupSource && (formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isMobileManagedSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
-                    <div className="stepper-form-group">
-                      <label className="schedule-checkbox-label schedule-option-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.refreshData}
-                          onChange={e => setFormData(p => ({ ...p, refreshData: e.target.checked }))}
-                        />
-                        <span>Dữ liệu sẽ được làm mới lại khi chạy hết data <span className="schedule-hint-inline">(Mặc định là chạy hết sẽ hoàn thành chiến dịch)</span></span>
-                      </label>
-                    </div>
-                  )}
-
-                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group" style={{ maxWidth: 320 }}>
-                    <label className="schedule-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={formData.useDailyStopTime}
-                        onChange={e => setFormData(p => ({
-                          ...p,
-                          useDailyStopTime: e.target.checked,
-                          dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
-                        }))}
-                      />
-                      <span>
-                        Giờ dừng chạy trong ngày{' '}
-                        <span className="schedule-hint-inline">(Không bật: dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới)</span>
-                      </span>
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.dailyStopTime}
-                      onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
-                      className="stepper-input"
-                      disabled={!formData.useDailyStopTime}
-                      title="Không bật thì chiến dịch vẫn dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới"
-                    />
-                  </div>}
-
-                  {!isDataGroupSource && canUseRerunAfterCompletion && (
-                    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
-                      <label className="schedule-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.findDataRerunEnabled}
-                          onChange={e => setFormData(p => ({
-                            ...p,
-                            findDataRerunEnabled: e.target.checked,
-                            findDataRerunAfterHours: normalizeHourValue(p.findDataRerunAfterHours)
-                          }))}
-                        />
-                        <span>Chạy lại sau mỗi (giờ)</span>
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={formData.findDataRerunAfterHours}
-                        onChange={e => setFormData(p => ({
-                          ...p,
-                          findDataRerunAfterHours: normalizeHourValue(e.target.value)
-                        }))}
-                        className="stepper-input"
-                        disabled={!formData.findDataRerunEnabled}
-                      />
-                      <span className="schedule-hint">
-                        {isNewsfeedInteractionCampaign
-                          ? 'Khi lướt xong, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'
-                          : 'Khi chạy hết danh sách, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'}
-                      </span>
-                    </div>
-                  )}
-
-                  {!isMobileManagedSmsCampaign && renderMultiDailyTimeSlotsSection()}
-                </div>
-              )}
-            </div>
-
-            {/* Section 3: Giới hạn hành động */}
-            {showLimitsSection && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['limits'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('limits')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('limits')}</span>
-                    <span className="stepper-section-title">Giới hạn hành động</span>
-                  </div>
-                  {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['limits'] && (
-                  <div className="stepper-section-body">
-                    {canUseSleepBetweenActions && (
-                      <div className="stepper-form-row">
-                        <div className="stepper-form-group" style={{ maxWidth: 340 }}>
-                          <label>Thời gian nghỉ giữa 2 lần gửi</label>
-                          <div className="stepper-input-unit-wrap">
-                            <input
-                              type="number"
-                              value={formData.sleepBetweenActions}
-                              onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
-                              className="stepper-input stepper-input-with-unit"
-                            />
-                            <span className="stepper-input-unit">giây</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {selectedAccountGroupNames.length > 0 && (
-                      <div className="account-group-campaign-note">
-                        Các tài khoản thuộc nhóm: {selectedAccountGroupNames.join(', ')}. Khi chạy, hệ thống ưu tiên {canUseSleepBetweenActions ? 'thời gian nghỉ và giới hạn' : 'giới hạn'} đã cài trong nhóm.
-                      </div>
-                    )}
-                    {generalLimitActionCodes.length > 0 && (
-                      <div className="action-limit-card-list">
-                        {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
-                      </div>
-                    )}
-                    <label className="schedule-checkbox-label action-limit-continue-option">
-                      <input
-                        type="checkbox"
-                        checked={formData.continueWhenActionLimitReached}
-                        onChange={e => setFormData(p => ({ ...p, continueWhenActionLimitReached: e.target.checked }))}
-                      />
-                      <span>Chiến dịch sẽ tiếp tục chạy khi 1 trong các hành động đạt giới hạn</span>
-                    </label>
-                    <div className="schedule-hint action-limit-continue-note">
-                      Mặc định là chỉ cần 1 trong các hành động đạt giới hạn là chiến dịch sẽ không chạy và tự động lại khi giới hạn được mở.
-                    </div>
-                    {isCommentSeedingFeedCampaign && (
-                      <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
-                        <label>Số bài cần comment trên mỗi group/page/profile</label>
-                        <div className="stepper-input-unit-wrap">
-                          <input
-                            type="number"
-                            min={1}
-                            value={formData.postsPerTarget}
-                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
-                            className="stepper-input stepper-input-with-unit"
-                          />
-                          <span className="stepper-input-unit">bài</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {canUseRecentDeliveryCooldown && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['deliveryCooldown'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('deliveryCooldown')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('deliveryCooldown')}</span>
-                    <span className="stepper-section-title">Kiểm tra trùng lặp</span>
-                  </div>
-                  {collapsedSections['deliveryCooldown'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['deliveryCooldown'] && (
-                  <div className="stepper-section-body">
-                    <div className="stepper-form-group" style={{ maxWidth: 620 }}>
-                      <label className="schedule-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.recentDeliveryCooldownEnabled}
-                          onChange={e => setFormData(p => ({
-                            ...p,
-                            recentDeliveryCooldownEnabled: e.target.checked,
-                            recentDeliveryCooldownDays: e.target.checked && !Number.isInteger(p.recentDeliveryCooldownDays)
-                              ? DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS
-                              : p.recentDeliveryCooldownDays
-                          }))}
-                        />
-                        <span>{recentDeliveryCooldownPrompt}</span>
-                      </label>
-                      <div className="stepper-input-unit-wrap" style={{ maxWidth: 220, marginTop: 10 }}>
-                        <input
-                          type="number"
-                          min={MIN_RECENT_DELIVERY_COOLDOWN_DAYS}
-                          max={MAX_RECENT_DELIVERY_COOLDOWN_DAYS}
-                          step={1}
-                          value={formData.recentDeliveryCooldownDays}
-                          onChange={e => setFormData(p => ({
-                            ...p,
-                            recentDeliveryCooldownDays: Number(e.target.value)
-                          }))}
-                          className="stepper-input stepper-input-with-unit"
-                          disabled={!formData.recentDeliveryCooldownEnabled}
-                        />
-                        <span className="stepper-input-unit">ngày</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isCommentSeedingFeedCampaign && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['commentPostSearch'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('commentPostSearch')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('commentPostSearch')}</span>
-                    <span className="stepper-section-title">Điều kiện tìm kiếm bài post</span>
-                  </div>
-                  {collapsedSections['commentPostSearch'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['commentPostSearch'] && (
-                  <div className="stepper-section-body">
-                    {renderFindDataPostContentConditions()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isPagePostCampaign && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['pagePostMethod'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('pagePostMethod')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('pagePostMethod')}</span>
-                    <span className="stepper-section-title">Phương thức đăng</span>
-                  </div>
-                  {collapsedSections['pagePostMethod'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['pagePostMethod'] && (
-                  <div className="stepper-section-body">
-                    {renderPagePostMethodSettings()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 4: Nội dung */}
-            {showContentSection && <div
-              className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
-              ref={el => { sectionRefs.current['content'] = el }}
-            >
-              <div
-                className="stepper-section-header"
-                onClick={() => toggleSection('content')}
-              >
-                <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">{getSectionNumber('content')}</span>
-                  <span className="stepper-section-title">
-                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
-                  </span>
-                </div>
-                {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-              </div>
-
-              {!collapsedSections['content'] && (
-                <div className="stepper-section-body">
-                  {renderContentModeSegmented()}
-                  {isSourceContentMode ? (
-                    renderSourceContentSettings()
-                  ) : (
-                    <>
-                      {renderPostBackgroundOption()}
-                      {renderPostAsReelsOption()}
-                      {isEmailCampaign && (
-                        <>
-                          {!isAdvancedContentMode && (
-                            <div className="stepper-form-group">
-                              <label>Tiêu đề email <span className="required">*</span></label>
-                              <input
-                                type="text"
-                                className="stepper-input"
-                                placeholder="Nhập tiêu đề email..."
-                                value={formData.emailSubject}
-                                onChange={e => setFormData(p => ({ ...p, emailSubject: e.target.value }))}
-                              />
-                            </div>
-                          )}
-                          {!isManualAdvancedSource && renderEmailBodyHtmlOption()}
-                          <div className="stepper-form-group">
-                            <label className="schedule-checkbox-label">
-                              <input
-                                type="checkbox"
-                                checked={formData.emailCheckLinkClicks}
-                                onChange={e => setFormData(p => ({ ...p, emailCheckLinkClicks: e.target.checked }))}
-                              />
-                              <span>Kiểm tra click vào link</span>
-                            </label>
-                          </div>
-                        </>
-                      )}
-                      {isCommentSeedingCampaign ? (
-                        isAdvancedContentMode
-                          ? renderAdvancedContentEditor()
-                          : renderCommentSeedingSettings()
-                      ) : (
-                        <>
-                          {!isManualAdvancedSource && renderFormattedContentOption()}
-                          {isAdvancedContentMode ? (
-                            <>
-                              {renderAdvancedContentEditor()}
-                              {renderSmsContentMeta(false)}
-                              {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
-                              {renderZaloOptOutLinkOption()}
-                            </>
-                          ) : (
-                            <>
-                              {isMessageCampaign ? (
-                                <div className="campaign-message-content-layout">
-                                  <div className="stepper-form-group campaign-message-content-tools">
-                                    <label>{getCampaignContentLabel()}</label>
-                                    {renderContentToolsRow('content')}
-                                  </div>
-                                  <div className="campaign-content-template-layout">
-                                    <div className="stepper-form-group">
-                                      {renderCampaignContentTextarea(false)}
-                                    </div>
-                                  </div>
-                                  {renderSmsContentMeta()}
-                                  {!isRichContentEditorEnabled && renderCampaignContentHint()}
-                                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
-                                  {renderZaloOptOutLinkOption()}
-                                </div>
-                              ) : (
-                                <div className="stepper-form-group">
-                                  <label>{getCampaignContentLabel()}</label>
-                                  {renderContentToolsRow('content')}
-                                  {renderCampaignContentTextarea()}
-                                </div>
-                              )}
-
-                              {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>}
-
-            {isFacebookGroupPostCampaign && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['groupComment'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('groupComment')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('groupComment')}</span>
-                    <span className="stepper-section-title">Kiêm comment</span>
-                  </div>
-                  {collapsedSections['groupComment'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['groupComment'] && (
-                  <div className="stepper-section-body">
-                    {renderGroupPostCommentSettings()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isFacebookGroupPostCampaign && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['postBump'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('postBump')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('postBump')}</span>
-                    <span className="stepper-section-title">Kiêm up tin</span>
-                  </div>
-                  {collapsedSections['postBump'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['postBump'] && (
-                  <div className="stepper-section-body">
-                    {renderGroupPostBumpSettings()}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {showExtraSection && <div
-              className="stepper-section"
-              ref={el => { sectionRefs.current['extra'] = el }}
-            >
-              <div
-                className="stepper-section-header"
-                onClick={() => toggleSection('extra')}
-              >
-                <div className="stepper-section-header-left">
-                  <span className="stepper-section-num">{getSectionNumber('extra')}</span>
-                  <span className="stepper-section-title">Cài đặt thêm</span>
-                </div>
-                {collapsedSections['extra'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-              </div>
-
-              {!collapsedSections['extra'] && (
-                <div className="stepper-section-body">
-                  {isCommentSeedingCampaign && (
-                    <div className="stepper-form-group">
-                      <label className="schedule-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={formData.enablePostLike}
-                          onChange={e => setFormData(p => ({ ...p, enablePostLike: e.target.checked }))}
-                        />
-                        <span>Like bài trước khi comment</span>
-                      </label>
-                    </div>
-                  )}
-
-                  {isFacebookGroupPostCampaign && (
-                    <>
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.enableGroupPostShareToJoinedGroups}
-                            onChange={e => setFormData(p => ({ ...p, enableGroupPostShareToJoinedGroups: e.target.checked }))}
-                          />
-                          <span>Đăng bài dạng chia sẻ <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
-                        </label>
-                      </div>
-
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.skipPostIfGroupRequiresApproval}
-                            onChange={e => setFormData(p => ({ ...p, skipPostIfGroupRequiresApproval: e.target.checked }))}
-                          />
-                          <span>Không đăng bài vào group bị duyệt bài</span>
-                        </label>
-                      </div>
-
-                      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
-
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.leaveGroupOnPendingApproval}
-                            onChange={e => setFormData(p => ({ ...p, leaveGroupOnPendingApproval: e.target.checked }))}
-                          />
-                          <span>RỜI GROUP chờ duyệt bài đăng <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu đã tham gia)</em></span>
-                        </label>
-                      </div>
-
-                      {/* Auto join group after post */}
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.autoJoinGroupAfterPost}
-                            onChange={e => setFormData(p => ({ ...p, autoJoinGroupAfterPost: e.target.checked }))}
-                          />
-                          <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
-                        </label>
-                      </div>
-
-                      {/* Shuffle group list */}
-                      <div className="stepper-form-group">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.shuffleGroupList}
-                            onChange={e => setFormData(p => ({ ...p, shuffleGroupList: e.target.checked }))}
-                          />
-                          <span>XÁO TRỘN DANH SÁCH GROUP trước khi chạy chiến dịch <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Thay đổi thứ tự sắp xếp của danh sách group)</em></span>
-                        </label>
-                        <div className="schedule-hint" style={{ marginTop: 4, marginLeft: 24 }}>
-                          Thay vì đăng tuần tự hoặc cố định vào 1 danh sách nhóm, hệ thống sẽ tự động trộn danh sách nhóm và chọn ngẫu nhiên để đăng. Cách này giúp nội dung phân tán tự nhiên hơn, tránh việc bị Facebook đánh giá là spam vì đăng quá dầy đặc vào cùng thời điểm và nhóm giống nhau.
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                </div>
-              )}
-            </div>}
-
-
-            {showFindDataSourceSection && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['findDataSources'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('findDataSources')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('findDataSources')}</span>
-                    <span className="stepper-section-title">{findDataSourceSectionLabel}</span>
-                    {selectedFindDataSourceCampaignIds.length > 0 && (
-                      <span className="stepper-section-badge">{selectedFindDataSourceCampaignIds.length}</span>
-                    )}
-                  </div>
-                  {collapsedSections['findDataSources'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['findDataSources'] && (
-                  <div className="stepper-section-body">
-                    {renderFindDataSourceCampaignPicker()}
                   </div>
                 )}
               </div>
@@ -16703,6 +16000,33 @@ export default function CampaignFormModal({
               </div>
             )}
 
+            {showFindDataSourceSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['findDataSources'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('findDataSources')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('findDataSources')}</span>
+                    <span className="stepper-section-title">{findDataSourceSectionLabel}</span>
+                    {selectedFindDataSourceCampaignIds.length > 0 && (
+                      <span className="stepper-section-badge">{selectedFindDataSourceCampaignIds.length}</span>
+                    )}
+                  </div>
+                  {collapsedSections['findDataSources'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['findDataSources'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataSourceCampaignPicker()}
+                  </div>
+                )}
+              </div>
+            )}
+
             {canUseDataGroupSource && !isSimpleCampaign && isDataGroupSource && (
               <div
                 className="stepper-section campaign-data-group-section"
@@ -16769,7 +16093,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {/* Section 6: Danh sách data (hidden for simple campaigns) */}
+            {/* Danh sách data (hidden for simple campaigns) */}
             {!isSimpleCampaign && !hideDetailsSection && !isDataGroupSource && <div
               className="stepper-section"
               ref={el => { sectionRefs.current['details'] = el }}
@@ -17311,6 +16635,689 @@ export default function CampaignFormModal({
                 </div>
               )}
             </div>}
+
+            {showFindDataConditionsSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['findDataConditions'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('findDataConditions')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('findDataConditions')}</span>
+                    <span className="stepper-section-title">Điều kiện chạy</span>
+                  </div>
+                  {collapsedSections['findDataConditions'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['findDataConditions'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataConditions()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showFoundDataHandlingSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['foundDataHandling'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('foundDataHandling')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('foundDataHandling')}</span>
+                    <span className="stepper-section-title">Xử lý data tìm được</span>
+                  </div>
+                  {collapsedSections['foundDataHandling'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['foundDataHandling'] && (
+                  <div className="stepper-section-body">
+                    {renderFoundDataHandling()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isCommentSeedingFeedCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['commentPostSearch'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('commentPostSearch')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('commentPostSearch')}</span>
+                    <span className="stepper-section-title">Điều kiện tìm kiếm bài post</span>
+                  </div>
+                  {collapsedSections['commentPostSearch'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['commentPostSearch'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataPostContentConditions()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isPagePostCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['pagePostMethod'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('pagePostMethod')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('pagePostMethod')}</span>
+                    <span className="stepper-section-title">Phương thức đăng</span>
+                  </div>
+                  {collapsedSections['pagePostMethod'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['pagePostMethod'] && (
+                  <div className="stepper-section-body">
+                    {renderPagePostMethodSettings()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Nội dung */}
+            {showContentSection && <div
+              className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
+              ref={el => { sectionRefs.current['content'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('content')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">{getSectionNumber('content')}</span>
+                  <span className="stepper-section-title">
+                    {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
+                  </span>
+                </div>
+                {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['content'] && (
+                <div className="stepper-section-body">
+                  {renderContentModeSegmented()}
+                  {isSourceContentMode ? (
+                    renderSourceContentSettings()
+                  ) : (
+                    <>
+                      {renderPostBackgroundOption()}
+                      {renderPostAsReelsOption()}
+                      {isEmailCampaign && (
+                        <>
+                          {!isAdvancedContentMode && (
+                            <div className="stepper-form-group">
+                              <label>Tiêu đề email <span className="required">*</span></label>
+                              <input
+                                type="text"
+                                className="stepper-input"
+                                placeholder="Nhập tiêu đề email..."
+                                value={formData.emailSubject}
+                                onChange={e => setFormData(p => ({ ...p, emailSubject: e.target.value }))}
+                              />
+                            </div>
+                          )}
+                          {!isManualAdvancedSource && renderEmailBodyHtmlOption()}
+                          <div className="stepper-form-group">
+                            <label className="schedule-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={formData.emailCheckLinkClicks}
+                                onChange={e => setFormData(p => ({ ...p, emailCheckLinkClicks: e.target.checked }))}
+                              />
+                              <span>Kiểm tra click vào link</span>
+                            </label>
+                          </div>
+                        </>
+                      )}
+                      {isCommentSeedingCampaign ? (
+                        isAdvancedContentMode
+                          ? renderAdvancedContentEditor()
+                          : renderCommentSeedingSettings()
+                      ) : (
+                        <>
+                          {!isManualAdvancedSource && renderFormattedContentOption()}
+                          {isAdvancedContentMode ? (
+                            <>
+                              {renderAdvancedContentEditor()}
+                              {renderSmsContentMeta(false)}
+                              {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                              {renderZaloOptOutLinkOption()}
+                            </>
+                          ) : (
+                            <>
+                              {isMessageCampaign ? (
+                                <div className="campaign-message-content-layout">
+                                  <div className="stepper-form-group campaign-message-content-tools">
+                                    <label>{getCampaignContentLabel()}</label>
+                                    {renderContentToolsRow('content')}
+                                  </div>
+                                  <div className="campaign-content-template-layout">
+                                    <div className="stepper-form-group">
+                                      {renderCampaignContentTextarea(false)}
+                                    </div>
+                                  </div>
+                                  {renderSmsContentMeta()}
+                                  {!isRichContentEditorEnabled && renderCampaignContentHint()}
+                                  {!isMobileManagedSmsCampaign && !isRichContentEditorEnabled && renderRewriteContentEachRunOption()}
+                                  {renderZaloOptOutLinkOption()}
+                                </div>
+                              ) : (
+                                <div className="stepper-form-group">
+                                  <label>{getCampaignContentLabel()}</label>
+                                  {renderContentToolsRow('content')}
+                                  {renderCampaignContentTextarea()}
+                                </div>
+                              )}
+
+                              {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>}
+
+            {isFacebookGroupPostCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['groupComment'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('groupComment')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('groupComment')}</span>
+                    <span className="stepper-section-title">Kiêm comment</span>
+                  </div>
+                  {collapsedSections['groupComment'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['groupComment'] && (
+                  <div className="stepper-section-body">
+                    {renderGroupPostCommentSettings()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isFacebookGroupPostCampaign && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['postBump'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('postBump')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('postBump')}</span>
+                    <span className="stepper-section-title">Kiêm up tin</span>
+                  </div>
+                  {collapsedSections['postBump'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['postBump'] && (
+                  <div className="stepper-section-body">
+                    {renderGroupPostBumpSettings()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Lịch chạy */}
+            <div
+              className="stepper-section"
+              ref={el => { sectionRefs.current['schedule'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('schedule')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">{getSectionNumber('schedule')}</span>
+                  <span className="stepper-section-title">Lịch chạy</span>
+                </div>
+                {collapsedSections['schedule'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['schedule'] && (
+                <div className="stepper-section-body">
+                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group">
+                    <label>Lịch</label>
+                    <div className="schedule-radio-group">
+                      {([['daily', 'Hàng ngày'], ['weekly', 'Theo tuần'], ['monthly', 'Theo tháng']] as const).map(([value, label]) => (
+                        <label key={value} className="schedule-radio-label">
+                          <input
+                            type="radio"
+                            name="scheduleType"
+                            value={value}
+                            checked={formData.scheduleType === value}
+                            disabled={isZaloMessageGroupRealtimeCampaign && value !== 'daily'}
+                            onChange={() => setFormData(p => ({ ...p, scheduleType: value }))}
+                          />
+                          <span>{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>}
+
+                  {/* Start date / End date */}
+                  <div className="stepper-form-row schedule-run-row">
+                    <div className="stepper-form-group schedule-time-field">
+                      <label>Giờ chạy</label>
+                      <input
+                        type="time"
+                        value={getDateTimeLocalTime(formData.schedule)}
+                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalTime(p.schedule, e.target.value) }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                    <div className="stepper-form-group schedule-date-field">
+                      <label>Ngày chạy</label>
+                      <input
+                        type="date"
+                        value={getDateTimeLocalDate(formData.schedule)}
+                        onChange={e => setFormData(p => ({ ...p, schedule: setDateTimeLocalDate(p.schedule, e.target.value) }))}
+                        className="stepper-input"
+                      />
+                    </div>
+                    {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign && (
+                      <div className="stepper-form-group schedule-end-date-field">
+                        <label>Ngày kết thúc</label>
+                        <input
+                          type="date"
+                          value={formData.scheduleEndDate}
+                          onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
+                          className="stepper-input"
+                        />
+                      </div>
+                    )}
+                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && (
+                      <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
+                    )}
+                  </div>
+
+                  {/* Monthly days */}
+                  {formData.scheduleType === 'monthly' && !isMobileManagedSmsCampaign && (
+                    <div className="stepper-form-group">
+                      <label>Lịch tháng</label>
+                      <input
+                        type="text"
+                        value={formData.scheduleDays}
+                        onChange={e => setFormData(p => ({ ...p, scheduleDays: e.target.value }))}
+                        className="stepper-input"
+                        placeholder="Ví dụ: 5,10,19,25"
+                      />
+                      <span className="schedule-hint">Danh sách ngày chạy, các ngày cách nhau bởi dấu phẩy.</span>
+                    </div>
+                  )}
+
+                  {/* Weekly days */}
+                  {formData.scheduleType === 'weekly' && !isMobileManagedSmsCampaign && (
+                    <div className="stepper-form-group">
+                      <label>Lịch tuần</label>
+                      <div className="schedule-weekday-group">
+                        {WEEKDAYS.map(day => {
+                          const selectedDays = formData.scheduleWeekDays ? formData.scheduleWeekDays.split(',') : []
+                          return (
+                            <label key={day.value} className="schedule-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={selectedDays.includes(day.value)}
+                                onChange={() => toggleWeekDay(day.value)}
+                              />
+                              <span>{day.label}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Conditional checkbox based on schedule type */}
+                  {formData.scheduleType === 'daily' && !isMobileManagedSmsCampaign && !isNewsfeedInteractionCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.continueNextDay}
+                          onChange={e => setFormData(p => ({ ...p, continueNextDay: e.target.checked }))}
+                        />
+                        <span>Nếu chưa chạy hết data, hôm sau chiến dịch sẽ tiếp tục chạy theo thời gian hẹn giờ.</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {!isDataGroupSource && (formData.scheduleType === 'weekly' || formData.scheduleType === 'monthly') && !isMobileManagedSmsCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloCancelSentFriendRequestCampaign && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.refreshData}
+                          onChange={e => setFormData(p => ({ ...p, refreshData: e.target.checked }))}
+                        />
+                        <span>Dữ liệu sẽ được làm mới lại khi chạy hết data <span className="schedule-hint-inline">(Mặc định là chạy hết sẽ hoàn thành chiến dịch)</span></span>
+                      </label>
+                    </div>
+                  )}
+
+                  {!isMobileManagedSmsCampaign && <div className="stepper-form-group" style={{ maxWidth: 320 }}>
+                    <label className="schedule-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.useDailyStopTime}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          useDailyStopTime: e.target.checked,
+                          dailyStopTime: p.dailyStopTime || DEFAULT_DAILY_STOP_TIME
+                        }))}
+                      />
+                      <span>
+                        Giờ dừng chạy trong ngày{' '}
+                        <span className="schedule-hint-inline">(Không bật: dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới)</span>
+                      </span>
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.dailyStopTime}
+                      onChange={e => setFormData(p => ({ ...p, dailyStopTime: e.target.value }))}
+                      className="stepper-input"
+                      disabled={!formData.useDailyStopTime}
+                      title="Không bật thì chiến dịch vẫn dừng nhận lượt mới lúc 23:59 để cập nhật lịch ngày mới"
+                    />
+                  </div>}
+
+                  {!isDataGroupSource && canUseRerunAfterCompletion && (
+                    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.findDataRerunEnabled}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            findDataRerunEnabled: e.target.checked,
+                            findDataRerunAfterHours: normalizeHourValue(p.findDataRerunAfterHours)
+                          }))}
+                        />
+                        <span>Chạy lại sau mỗi (giờ)</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={formData.findDataRerunAfterHours}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          findDataRerunAfterHours: normalizeHourValue(e.target.value)
+                        }))}
+                        className="stepper-input"
+                        disabled={!formData.findDataRerunEnabled}
+                      />
+                      <span className="schedule-hint">
+                        {isNewsfeedInteractionCampaign
+                          ? 'Khi lướt xong, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'
+                          : 'Khi chạy hết danh sách, chiến dịch sẽ hẹn chạy lại sau số giờ đã nhập nếu vẫn còn trong hôm nay.'}
+                      </span>
+                    </div>
+                  )}
+
+                  {!isMobileManagedSmsCampaign && renderMultiDailyTimeSlotsSection()}
+                </div>
+              )}
+            </div>
+
+            {/* Giới hạn hành động */}
+            {showLimitsSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['limits'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('limits')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('limits')}</span>
+                    <span className="stepper-section-title">Giới hạn hành động</span>
+                  </div>
+                  {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['limits'] && (
+                  <div className="stepper-section-body">
+                    {canUseSleepBetweenActions && (
+                      <div className="stepper-form-row">
+                        <div className="stepper-form-group" style={{ maxWidth: 340 }}>
+                          <label>Thời gian nghỉ giữa 2 lần gửi</label>
+                          <div className="stepper-input-unit-wrap">
+                            <input
+                              type="number"
+                              value={formData.sleepBetweenActions}
+                              onChange={e => setFormData(p => ({ ...p, sleepBetweenActions: parseInt(e.target.value) || 0 }))}
+                              className="stepper-input stepper-input-with-unit"
+                            />
+                            <span className="stepper-input-unit">giây</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {selectedAccountGroupNames.length > 0 && (
+                      <div className="account-group-campaign-note">
+                        Các tài khoản thuộc nhóm: {selectedAccountGroupNames.join(', ')}. Khi chạy, hệ thống ưu tiên {canUseSleepBetweenActions ? 'thời gian nghỉ và giới hạn' : 'giới hạn'} đã cài trong nhóm.
+                      </div>
+                    )}
+                    {generalLimitActionCodes.length > 0 && (
+                      <div className="action-limit-card-list">
+                        {generalLimitActionCodes.map(actionCode => renderActionLimitCard(actionCode))}
+                      </div>
+                    )}
+                    <label className="schedule-checkbox-label action-limit-continue-option">
+                      <input
+                        type="checkbox"
+                        checked={formData.continueWhenActionLimitReached}
+                        onChange={e => setFormData(p => ({ ...p, continueWhenActionLimitReached: e.target.checked }))}
+                      />
+                      <span>Chiến dịch sẽ tiếp tục chạy khi 1 trong các hành động đạt giới hạn</span>
+                    </label>
+                    <div className="schedule-hint action-limit-continue-note">
+                      Mặc định là chỉ cần 1 trong các hành động đạt giới hạn là chiến dịch sẽ không chạy và tự động lại khi giới hạn được mở.
+                    </div>
+                    {isCommentSeedingFeedCampaign && (
+                      <div className="stepper-form-group" style={{ maxWidth: 420, marginTop: 16 }}>
+                        <label>Số bài cần comment trên mỗi group/page/profile</label>
+                        <div className="stepper-input-unit-wrap">
+                          <input
+                            type="number"
+                            min={1}
+                            value={formData.postsPerTarget}
+                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+                            className="stepper-input stepper-input-with-unit"
+                          />
+                          <span className="stepper-input-unit">bài</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canUseRecentDeliveryCooldown && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['deliveryCooldown'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('deliveryCooldown')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('deliveryCooldown')}</span>
+                    <span className="stepper-section-title">Kiểm tra trùng lặp</span>
+                  </div>
+                  {collapsedSections['deliveryCooldown'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['deliveryCooldown'] && (
+                  <div className="stepper-section-body">
+                    <div className="stepper-form-group" style={{ maxWidth: 620 }}>
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.recentDeliveryCooldownEnabled}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            recentDeliveryCooldownEnabled: e.target.checked,
+                            recentDeliveryCooldownDays: e.target.checked && !Number.isInteger(p.recentDeliveryCooldownDays)
+                              ? DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS
+                              : p.recentDeliveryCooldownDays
+                          }))}
+                        />
+                        <span>{recentDeliveryCooldownPrompt}</span>
+                      </label>
+                      <div className="stepper-input-unit-wrap" style={{ maxWidth: 220, marginTop: 10 }}>
+                        <input
+                          type="number"
+                          min={MIN_RECENT_DELIVERY_COOLDOWN_DAYS}
+                          max={MAX_RECENT_DELIVERY_COOLDOWN_DAYS}
+                          step={1}
+                          value={formData.recentDeliveryCooldownDays}
+                          onChange={e => setFormData(p => ({
+                            ...p,
+                            recentDeliveryCooldownDays: Number(e.target.value)
+                          }))}
+                          className="stepper-input stepper-input-with-unit"
+                          disabled={!formData.recentDeliveryCooldownEnabled}
+                        />
+                        <span className="stepper-input-unit">ngày</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showExtraSection && <div
+              className="stepper-section"
+              ref={el => { sectionRefs.current['extra'] = el }}
+            >
+              <div
+                className="stepper-section-header"
+                onClick={() => toggleSection('extra')}
+              >
+                <div className="stepper-section-header-left">
+                  <span className="stepper-section-num">{getSectionNumber('extra')}</span>
+                  <span className="stepper-section-title">Cài đặt thêm</span>
+                </div>
+                {collapsedSections['extra'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+              </div>
+
+              {!collapsedSections['extra'] && (
+                <div className="stepper-section-body">
+                  {isCommentSeedingCampaign && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.enablePostLike}
+                          onChange={e => setFormData(p => ({ ...p, enablePostLike: e.target.checked }))}
+                        />
+                        <span>Like bài trước khi comment</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {isFacebookGroupPostCampaign && (
+                    <>
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.enableGroupPostShareToJoinedGroups}
+                            onChange={e => setFormData(p => ({ ...p, enableGroupPostShareToJoinedGroups: e.target.checked }))}
+                          />
+                          <span>Đăng bài dạng chia sẻ <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
+                        </label>
+                      </div>
+
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.skipPostIfGroupRequiresApproval}
+                            onChange={e => setFormData(p => ({ ...p, skipPostIfGroupRequiresApproval: e.target.checked }))}
+                          />
+                          <span>Không đăng bài vào group bị duyệt bài</span>
+                        </label>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
+
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.leaveGroupOnPendingApproval}
+                            onChange={e => setFormData(p => ({ ...p, leaveGroupOnPendingApproval: e.target.checked }))}
+                          />
+                          <span>RỜI GROUP chờ duyệt bài đăng <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu đã tham gia)</em></span>
+                        </label>
+                      </div>
+
+                      {/* Auto join group after post */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.autoJoinGroupAfterPost}
+                            onChange={e => setFormData(p => ({ ...p, autoJoinGroupAfterPost: e.target.checked }))}
+                          />
+                          <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
+                        </label>
+                      </div>
+
+                      {/* Shuffle group list */}
+                      <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.shuffleGroupList}
+                            onChange={e => setFormData(p => ({ ...p, shuffleGroupList: e.target.checked }))}
+                          />
+                          <span>XÁO TRỘN DANH SÁCH GROUP trước khi chạy chiến dịch <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Thay đổi thứ tự sắp xếp của danh sách group)</em></span>
+                        </label>
+                        <div className="schedule-hint" style={{ marginTop: 4, marginLeft: 24 }}>
+                          Thay vì đăng tuần tự hoặc cố định vào 1 danh sách nhóm, hệ thống sẽ tự động trộn danh sách nhóm và chọn ngẫu nhiên để đăng. Cách này giúp nội dung phân tán tự nhiên hơn, tránh việc bị Facebook đánh giá là spam vì đăng quá dầy đặc vào cùng thời điểm và nhóm giống nhau.
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                </div>
+              )}
+            </div>}
+
 
             {supportsExternalSmsPush && (
               <div
