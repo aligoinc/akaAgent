@@ -2835,13 +2835,13 @@ export default function CampaignFormModal({
       ? formData.commentImageOption !== 'none' && formData.commentImages.length > 0
     : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
-  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
+  const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 4 : 5)
       : isMobileManagedSmsCampaign
         ? (isEditingSavedCampaign ? 9 : 10)
-        : (isEditingSavedCampaign ? 5 : 6)
+        : (isEditingSavedCampaign ? 5 : 6)) + (isZaloMessagePhoneCampaign ? 5 : 0)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -16512,6 +16512,9 @@ export default function CampaignFormModal({
                                   <th>Email</th>
                                 </>
                               )}
+                              {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                <th key={field}>Info{index + 1}</th>
+                              ))}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           )}
@@ -16590,6 +16593,11 @@ export default function CampaignFormModal({
                                     )}
                                   </>
                                 )}
+                                {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                  <td key={field}>
+                                    <input type="text" value={d[field] || ''} onChange={e => updateDetailRow(i, field, e.target.value)} placeholder={`Info${index + 1}...`} aria-label={`Info${index + 1} dòng ${i + 1}`} disabled={isEditingSavedCampaign} />
+                                  </td>
+                                ))}
                                 {!isEditingSavedCampaign && (
                                   <td>
                                     <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>

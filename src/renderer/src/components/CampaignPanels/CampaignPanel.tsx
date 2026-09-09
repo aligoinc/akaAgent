@@ -3964,6 +3964,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const isSelectedSmsCampaign = selectedCampaignSummary?.actionId === SMS_SEND_ACTION_ID
   const isSelectedVoiceCallCampaign = selectedCampaignSummary?.actionId === VOICE_CALL_ACTION_ID
   const isSelectedMobileManagedSmsCampaign = isSelectedSmsCampaign || isSelectedVoiceCallCampaign
+  const isSelectedZaloMessagePhoneCampaign = selectedCampaignSummary?.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
   const isSelectedEmailClickTrackingCampaign = isSelectedEmailCampaign && selectedCampaignSummary?.relationSettings.emailCheckLinkClicks === true
   const isSelectedCommentSeedingFeedCampaign = selectedCampaignSummary?.actionId === COMMENT_SEEDING_FEED_ACTION_ID
   const relatedAutomationById = useMemo(
@@ -6681,6 +6682,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 	                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Email</th>
 	                            </>
 	                          )}
+                          {isSelectedZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                            <th key={field} style={{ minWidth: 64, whiteSpace: 'nowrap' }}>Info{index + 1}</th>
+                          ))}
 		                          <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>
 		                          <th style={{ minWidth: 180, whiteSpace: 'nowrap' }}>Nguồn thêm data</th>
 		                          <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Được thêm từ tự động hóa</th>
@@ -6717,6 +6721,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 	                                <td title={d.email || '-'} style={{ minWidth: 160 }}>{d.email || '-'}</td>
 	                              </>
 	                            )}
+                            {isSelectedZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map(field => (
+                              <td key={field} title={d[field] || '-'} style={{ minWidth: 64 }}>{d[field] || '-'}</td>
+                            ))}
 	                            <td title={d.status} style={{ minWidth: 96, whiteSpace: 'nowrap' }}>
 	                              <span style={{ color: getStatusColor(d.status) }}>{d.status}</span>
 	                            </td>
