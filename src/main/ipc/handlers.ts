@@ -675,6 +675,7 @@ export function registerIpcHandlers(
         if (!recoveredUnitLeases.ok) {
           throw new Error(`Không thể phục hồi unit lease Desktop (${recoveredUnitLeases.reason}).`)
         }
+        campaignScheduler.clearRecoveredCampaignCleanups(user.staffId, excludeZalo ? 'non_zalo' : 'all')
         try {
           await supabase.enableDueAccountActions()
         } catch (error) {
@@ -1001,6 +1002,7 @@ export function registerIpcHandlers(
         if (!recoveredUnitLeases.ok) {
           throw new Error(`Không thể phục hồi unit lease Zalo Desktop (${recoveredUnitLeases.reason}).`)
         }
+        campaignScheduler.clearRecoveredCampaignCleanups(user.staffId, 'zalo')
       } else if (
         response.ownership !== 'none' ||
         response.requiresDesktopRecovery ||

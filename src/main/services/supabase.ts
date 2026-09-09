@@ -179,8 +179,8 @@ export class SupabaseService {
   updateClaimedZaloServerCampaign(id: number, updates: CampaignUpdate) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
   }
-  updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note'>) {
-    return campaignRepo.updateRunningDesktopCampaign(id, updates)
+  updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note'>, expectedRuntimeClaimToken?: string) {
+    return campaignRepo.updateRunningDesktopCampaign(id, updates, expectedRuntimeClaimToken)
   }
   reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {
     return campaignRepo.reopenCompletedCampaignAfterInputInsert(id, expectedActionId)
@@ -262,6 +262,9 @@ export class SupabaseService {
       runtimeUnitToken,
       requeueUnstarted
     )
+  }
+  cleanupFailedCampaignRuntime(payload: import('./campaignFailureCleanup').CampaignFailureCleanupPayload, signal: AbortSignal) {
+    return campaignRepo.cleanupFailedCampaignRuntime(payload, signal)
   }
   recoverCampaignRuntimeUnitLeasesV2(
     runtimeTarget: campaignRepo.CampaignRuntimeTarget,

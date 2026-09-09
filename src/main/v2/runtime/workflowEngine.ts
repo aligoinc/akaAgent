@@ -77,6 +77,18 @@ const RUNTIME_NODE_CONFIG_KEYS = new Set([
 const SCREENSHOT_CAPTURE_TIMINGS = new Set<ScreenshotCaptureTiming>(['before', 'after', 'both'])
 const SCREENSHOT_CAPTURE_ON = new Set<ScreenshotCaptureOn>(['off', 'success', 'failure', 'always'])
 
+async function drainWorkflowCohort(tasks: Promise<void>[]): Promise<void> {
+  try {
+    await Promise.all(tasks)
+  } catch (error) {
+    // A sibling may still be sending when another node/callback throws. The
+    // scheduler must not receive the failure and release its unit until every
+    // already-started node has stopped, including nodes inside loop bodies.
+    await Promise.allSettled(tasks)
+    throw error
+  }
+}
+
 /**
  * WorkflowEngineV2 — DAG executor với parallel + AND/OR join.
  *
@@ -158,7 +170,7 @@ export class WorkflowEngineV2 {
       if (ready.length === 0) break
 
       // Run cohort song song
-      await Promise.all(ready.map(node => this.executeNode({
+      await drainWorkflowCohort(ready.map(node => this.executeNode({
         node, blockMap, workflow, graph, nodeStates, variables,
         page, signal, runId, ctx, allSteps
       })))
@@ -528,7 +540,7 @@ export class WorkflowEngineV2 {
         if (signal.aborted) return false
         const ready = this.computeReadyInSubgraph(workflow, graph, nodeStates, bodyNodeIds, bodyStartIds, node.id)
         if (ready.length === 0) break
-        await Promise.all(ready.map(n => this.executeNode({
+        await drainWorkflowCohort(ready.map(n => this.executeNode({
           node: n, blockMap, workflow, graph, nodeStates,
           variables: iterVars, page, signal, runId, ctx, allSteps
         })))

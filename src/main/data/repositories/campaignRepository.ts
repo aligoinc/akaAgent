@@ -2429,7 +2429,8 @@ export async function updateClaimedZaloServerCampaign(
  */
 export async function updateRunningDesktopCampaign(
   id: number,
-  updates: Pick<CampaignUpdate, 'status' | 'note'>
+  updates: Pick<CampaignUpdate, 'status' | 'note'>,
+  expectedRuntimeClaimToken?: string
 ): Promise<Campaign> {
   if (updates.status !== 'chờ xử lý' && updates.status !== 'tạm dừng') {
     throw new Error('Desktop running campaign transition requires a pending or paused status')
@@ -2442,15 +2443,15 @@ export async function updateRunningDesktopCampaign(
   }
   if (updates.note !== undefined) payload.note = updates.note
 
-  const { data, error } = await client()
+  let query = client()
     .from('auto_campaigns')
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('status', 'đang chạy')
     .eq('is_delete', false)
-    .select(CAMPAIGN_SELECT)
-    .maybeSingle()
+  if (expectedRuntimeClaimToken) query = query.eq('runtime_claim_token', expectedRuntimeClaimToken)
+  const { data, error } = await query.select(CAMPAIGN_SELECT).maybeSingle()
 
   if (error) throw new Error(`Failed to transition running Desktop campaign: ${error.message}`)
   if (data) return mapCampaignFromDB(data)
@@ -3031,6 +3032,32 @@ export async function settleCampaignRunUnitV2(
     dbNow: String(row.db_now || ''),
     vietnamDateKey: String(row.vietnam_date_key || '')
   }
+}
+
+export async function cleanupFailedCampaignRuntime(
+  payload: import('../../services/campaignFailureCleanup').CampaignFailureCleanupPayload,
+  signal: AbortSignal
+): Promise<import('../../services/campaignFailureCleanup').CampaignFailureCleanupResult> {
+  if (requireCurrentUser().staffId !== payload.staffId) throw new Error('Cleanup staff session changed')
+  const { data, error, status } = await client().rpc('aka_agent_cleanup_failed_campaign_runtime', {
+    p_campaign_id: payload.campaignId,
+    p_account_id: payload.accountId,
+    p_staff_id: payload.staffId,
+    p_runtime_target: payload.runtimeTarget,
+    p_runtime_claim_token: payload.runtimeClaimToken,
+    p_runtime_unit_token: payload.runtimeUnitToken,
+    p_unstarted_input_data_ids: payload.unstartedInputDataIds,
+    p_note: payload.note,
+    p_pause_unknown_outcome: payload.pauseUnknownOutcome,
+    p_campaign_status: payload.campaignStatus,
+    p_account_status: payload.accountStatus
+  }).abortSignal(signal)
+  if (error) throw Object.assign(new Error(error.message), { code: error.code, status })
+  const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+  if (!row || typeof row.ok !== 'boolean' || typeof row.reason !== 'string') {
+    throw new Error('Invalid campaign failure cleanup response; recovery required')
+  }
+  return { ok: row.ok, reason: row.reason }
 }
 
 export async function recoverCampaignRuntimeUnitLeasesV2(
