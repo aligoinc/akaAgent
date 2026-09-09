@@ -67,11 +67,13 @@ function fixture(options = {}) {
   ]) scheduler[name] = () => false
   for (const name of [
     'logCampaignProgress', 'logSkippedLimitActionsOnce', 'releaseRunningAccount',
-    'handleCampaignCompletion', 'resetCampaignBadTargetCount', 'completeCampaignPause',
-    'cleanupCampaignMediaTempFiles', 'startBackgroundPreview', 'stopBackgroundPreview'
+    'handleCampaignCompletion', 'resetCampaignBadTargetCount', 'completePauseAtBoundary',
+    'cleanupCampaignMediaTempFiles', 'startBackgroundPreview', 'stopBackgroundPreview',
+    'markCampaignRunUnitStarted'
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
     activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(),
+    attemptedRunErrorPolicies: new Set(),
     zaloMessageOptOutContexts: new Map(), pauseRequests: new Set(),
     supabase: {
       listCampaignInputData: async () => details,

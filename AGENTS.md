@@ -8,6 +8,8 @@ Mọi task tạo, sửa, review hoặc apply SQL có `CREATE OR REPLACE FUNCTION
 
 Migration mới theo quy ước repo: `migrations/migration_v<N>_<mo_ta>.sql`; kiểm tra số phiên bản mới nhất trước khi chọn N và không để lại bản timestamp trùng nội dung trong `supabase/migrations`.
 
+**Chỉ reload schema khi thực sự cần thiết**: chỉ yêu cầu PostgREST reload khi metadata mà API sử dụng đã thay đổi (bảng/cột, quan hệ, signature/kiểu trả về hoặc thuộc tính RPC liên quan đến API), hoặc đã xác nhận schema cache bị cũ. Thay đổi chỉ dữ liệu, code/config trong `auto_blocks`/`auto_workflows` hoặc seed row không cần reload; không thêm `NOTIFY pgrst, 'reload schema'` theo thói quen. Trước khi chọn công cụ apply, kiểm tra cả DDL phụ: bước chuẩn bị `supabase_migrations` bằng `CREATE/ALTER ... IF NOT EXISTS` cũng có thể kích hoạt trigger reload dù không đổi cấu trúc API. Với bản chỉ đổi dữ liệu, ưu tiên đường thực thi không phát sinh DDL phụ không cần thiết, vẫn giữ transaction, checksum/preflight và lịch sử migration theo quy ước. Không tự tắt trigger reload chung để né vấn đề; khi metadata API thực sự đổi, vẫn phải bảo đảm cache được cập nhật và kiểm tra API sau apply. Sự cố 08–09/09/2026 đã ghi nhận reload sau migration bị timeout và gây `PGRST002`/HTTP 503; chưa xác nhận nội dung SQL của migration làm DB quá tải.
+
 ## Commands
 
 ```bash
@@ -336,6 +338,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Scheduler error-path cleanup**: Desktop/Server giữ ownership/unit khi policy/log lỗi tiếp; catch lồng nhau phải chuyển lỗi đã latch tới cleanup atomic và chỉ release sau khi producer dừng. [campaignFailureCleanup.ts](src/main/services/campaignFailureCleanup.ts:1) retry mỗi 2 giây với cùng token/payload, giữ nguyên claim/settle cũ; shutdown hủy retry và bàn giao recovery, không xóa hold chưa xác nhận ([hợp đồng và kiểm thử](docs/CAMPAIGN_FAILURE_CLEANUP.md)).
 
 - **Device-change retry**: giữ `requestId` và binding snapshot trong journal main process khi kết quả chưa rõ; không prepare lại binding trước khi retry vì có thể gỡ binding mới hoặc trừ thêm lượt ([deviceChangeRequest.ts](src/main/services/deviceChangeRequest.ts:1)). Presence không phải khóa phiên và không được thêm gate vào login thường/runtime.
 - **Migration RPC overwrite**: trước khi dùng `CREATE OR REPLACE FUNCTION`, phải lấy nội dung của đúng function signature đang chạy trong DB (ví dụ bằng `pg_get_functiondef`) và kiểm tra các patch trước đó; không copy body từ một migration cũ vì có thể làm mất những thay đổi được áp dụng sau migration đó.

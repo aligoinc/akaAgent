@@ -4,6 +4,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs'
 import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
+import { CampaignFailureCleanup, CampaignFailureCleanupPayload } from './campaignFailureCleanup'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
@@ -244,6 +245,17 @@ interface CampaignRunUnitLease {
   runtimeUnitToken: string
   inputDataIds: number[]
   requeueRemainingOnSettle: boolean
+  unstartedInputDataIds: Set<number>
+  aggregateOutcomeUnknown: boolean
+}
+
+interface FailedCampaignRun {
+  accountId: number
+  platform: string
+  campaignId: number
+  campaignName: string
+  payload: CampaignFailureCleanupPayload
+  cleanup: CampaignFailureCleanup
 }
 
 class CampaignMediaResolveError extends Error {
@@ -711,6 +723,9 @@ export class CampaignScheduler {
   private runtimeOwnershipLossReported = false
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
   private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
+  private failedCampaignRuns = new Map<number, FailedCampaignRun>()
+  private attemptedRunErrorPolicies = new Set<number>()
+  private failedRunErrorPolicies = new Map<number, unknown>()
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
 
@@ -803,6 +818,7 @@ export class CampaignScheduler {
 
   stop(): void {
     this.requestZaloRuntimeStop('shutdown')
+    this.cancelFailureCleanups()
     this.running = false
     this.wakeRequested = false
     this.maintenanceCoordinator?.cancelPending()
@@ -833,6 +849,7 @@ export class CampaignScheduler {
    * current target settle and prevents the next target from starting.
    */
   stopAcceptingNewZaloWork(): void {
+    this.cancelFailureCleanups()
     this.running = false
     this.wakeRequested = false
     this.maintenanceCoordinator?.cancelPending()
@@ -890,6 +907,7 @@ export class CampaignScheduler {
   }
 
   private requestZaloRuntimeStop(reason: ZaloRuntimeStopReason): void {
+    this.cancelFailureCleanups(true)
     this.zaloRuntimeStopRequested = true
     this.zaloRuntimeLifecycleGeneration += 1
     for (const campaignId of this.activeZaloCampaignRuns) {
@@ -952,11 +970,106 @@ export class CampaignScheduler {
   }
 
   abandonZaloRuntimeClaims(): void {
+    this.cancelFailureCleanups(true)
     this.zaloRuntimeClaimsAbandoned = true
   }
 
   resetZaloRuntimeClaims(): void {
     this.zaloRuntimeClaimsAbandoned = false
+  }
+
+  private hasFailedAccountRun(accountId: number): boolean {
+    return [...this.failedCampaignRuns.values()].some(run => run.accountId === accountId)
+  }
+
+  private cancelFailureCleanups(zaloOnly = false): void {
+    for (const run of this.failedCampaignRuns.values()) {
+      if (!zaloOnly || run.platform === 'zalo') run.cleanup.controller.abort()
+    }
+  }
+
+  /** Called only after the existing scoped DB recovery and producer drain succeed. */
+  clearRecoveredCampaignCleanups(staffId: number, scope: 'all' | 'zalo' | 'non_zalo' = 'all'): void {
+    for (const [id, run] of this.failedCampaignRuns) {
+      const isZalo = run.platform === 'zalo'
+      if (run.payload.staffId !== staffId || this.activeAccountRuns.has(run.accountId)) continue
+      if ((scope === 'zalo' && !isZalo) || (scope === 'non_zalo' && isZalo)) continue
+      run.cleanup.controller.abort()
+      this.failedCampaignRuns.delete(id)
+      this.activeCampaignRunUnits.delete(id)
+      this.campaignRunBoundaries.delete(id)
+      this.attemptedRunErrorPolicies.delete(id)
+      this.failedRunErrorPolicies.delete(id)
+    }
+  }
+
+  private markCampaignRunUnitStarted(campaignId: number, ids?: number[]): void {
+    const unit = this.activeCampaignRunUnits.get(campaignId)
+    if (!unit) return
+    if (!ids && unit.inputDataIds.length !== 1) unit.aggregateOutcomeUnknown = true
+    for (const id of ids ?? unit.inputDataIds) unit.unstartedInputDataIds.delete(id)
+  }
+
+  private rememberFailedCampaignRun(
+    account: AutoAccount,
+    campaign: Campaign,
+    error: unknown,
+    fallbackToken: string | null = null
+  ): FailedCampaignRun {
+    const existing = this.failedCampaignRuns.get(campaign.id)
+    if (existing) return existing
+    const unit = this.activeCampaignRunUnits.get(campaign.id)
+    const failed: FailedCampaignRun = {
+      accountId: account.id,
+      platform: account.flatformType,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      cleanup: new CampaignFailureCleanup(),
+      payload: {
+        campaignId: campaign.id,
+        accountId: account.id,
+        staffId: Number(campaign.staffId ?? account.staffId ?? getCurrentUser()?.staffId),
+        runtimeTarget: this.runtimeTarget,
+        runtimeClaimToken: this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken || fallbackToken || '',
+        runtimeUnitToken: unit?.runtimeUnitToken ?? null,
+        unstartedInputDataIds: Object.freeze([...(unit?.unstartedInputDataIds ?? [])]),
+        note: `Lượt chạy gặp lỗi: ${getErrorMessage(error) || 'Lỗi không xác định'}`.slice(0, 2_000),
+        pauseUnknownOutcome: unit?.aggregateOutcomeUnknown === true,
+        campaignStatus: null,
+        accountStatus: null
+      }
+    }
+    this.failedCampaignRuns.set(campaign.id, failed)
+    if (!this.running || (account.flatformType === 'zalo' && this.zaloRuntimeStopRequested) || this.isZaloRuntimeWriteBarrierActive(campaign.id)) failed.cleanup.controller.abort()
+    return failed
+  }
+
+  private async cleanupFailedCampaignRun(run: FailedCampaignRun): Promise<void> {
+    // Policy may have contributed status/note before this point. Every retry
+    // now sends exactly the same payload, including after a lost response.
+    Object.freeze(run.payload)
+    const outcome = await run.cleanup.run(
+      () => this.supabase.cleanupFailedCampaignRuntime(run.payload, run.cleanup.controller.signal),
+      (event, error) => {
+        if (error) console.warn(`Campaign ${run.campaignId} cleanup ${event}:`, error)
+        const message = event === 'waiting'
+          ? `⚠️ Chiến dịch "${run.campaignName}" đang chờ DB để dọn lượt lỗi; thử lại sau mỗi 2 giây.`
+          : event === 'recovered'
+            ? `✅ Đã dọn lượt lỗi của chiến dịch "${run.campaignName}".`
+            : `⚠️ Không thể dọn an toàn chiến dịch "${run.campaignName}"; cần recovery khi khởi động lại.`
+        this.sendLog(message)
+      }
+    )
+    if (outcome !== 'cleaned' && outcome !== 'not_owner') return
+    this.failedCampaignRuns.delete(run.campaignId)
+    this.activeCampaignRunUnits.delete(run.campaignId)
+    if (outcome === 'not_owner') this.boundaryStoppedAccountQueues.add(run.accountId)
+    // Refresh/log failures cannot re-enter the already completed cleanup.
+    try {
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, { id: run.campaignId })
+      this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+    } catch {}
+    await this.broadcastClaimedRuntimeState(run.campaignId).catch(() => {})
   }
 
   async waitForZaloIdle(timeoutMs = 30_000): Promise<boolean> {
@@ -969,7 +1082,7 @@ export class CampaignScheduler {
   }
 
   tryReserveExternalAccount(accountId: number): boolean {
-    if (this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId)) return false
+    if (this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)) return false
     this.externalAccountRuns.add(accountId)
     return true
   }
@@ -1015,6 +1128,21 @@ export class CampaignScheduler {
     if (!campaign) {
       this.pauseRequests.delete(campaignId)
       throw new Error('Không tìm thấy chiến dịch.')
+    }
+
+    const failed = this.failedCampaignRuns.get(campaignId)
+    if (failed && campaign.status === 'đang chạy') {
+      // Persist the user's pause by its exact token, without editing the
+      // immutable cleanup payload or releasing this run's account/unit.
+      const paused = await this.supabase.updateRunningDesktopCampaign(
+        campaignId, { status: 'tạm dừng', note: CAMPAIGN_PAUSE_PENDING_NOTE }, failed.payload.runtimeClaimToken
+      )
+      if (paused.status === 'tạm dừng') {
+        this.pauseRequests.delete(campaignId)
+        this.broadcastCampaignUpdate(paused)
+        return paused
+      }
+      campaign = paused
     }
 
     if (campaign.status === 'chờ xử lý') {
@@ -1328,7 +1456,7 @@ export class CampaignScheduler {
   }
 
   private startAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): void {
-    if (this.activeAccountRuns.has(account.id)) return
+    if (this.activeAccountRuns.has(account.id) || this.hasFailedAccountRun(account.id)) return
     this.activeAccountRuns.add(account.id)
     const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloAccount) this.activeZaloAccountRuns.add(account.id)
@@ -1368,7 +1496,7 @@ export class CampaignScheduler {
       }
       if (!this.running) break
       await this.executeCampaign(account, currentCampaign)
-      if (this.boundaryStoppedAccountQueues.delete(account.id)) break
+      if (this.boundaryStoppedAccountQueues.delete(account.id) || this.hasFailedAccountRun(account.id)) break
     }
   }
 
@@ -2242,6 +2370,8 @@ export class CampaignScheduler {
         clockUnavailable: false
       })
     } catch (error) {
+      // A failed yield already handed ownership to atomic cleanup; do not yield again.
+      if (this.failedCampaignRuns.has(campaign.id)) throw error
       console.error(`Failed DB daily-boundary guard for campaign ${campaign.id}:`, error)
       return await this.yieldCampaignAtRunBoundary(account, campaign, {
         reached: true,
@@ -2620,6 +2750,8 @@ export class CampaignScheduler {
     campaign: Campaign
   ): Promise<void> {
     let runtimeClaimed = false
+    let ownedClaimToken: string | null = null
+    let failedRun: FailedCampaignRun | undefined
     const isZaloCampaign = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloCampaign) {
       this.activeZaloCampaignRuns.add(campaign.id)
@@ -2713,6 +2845,9 @@ export class CampaignScheduler {
         return
       }
       runtimeClaimed = true
+      ownedClaimToken = runtimeClaimToken
+      this.attemptedRunErrorPolicies.delete(campaign.id)
+      this.failedRunErrorPolicies.delete(campaign.id)
       if (this.runtimeTarget === 'server' && isZaloCampaign) {
         this.claimedServerZaloCampaignIds.add(campaign.id)
         this.claimedServerZaloAccountIds.add(account.id)
@@ -2744,7 +2879,7 @@ export class CampaignScheduler {
       if (claimedRuntimeStopReason) {
         if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
         await this.releaseClaimedCampaignPreflight(
-          account.id,
+          account,
           campaign,
           this.getZaloRuntimeCampaignStopNote(claimedRuntimeStopReason)
         )
@@ -2762,13 +2897,13 @@ export class CampaignScheduler {
         ? initialServerControl.hardStopReason
         : await this.getAccountRunBlockReason(account.id, 'đang chạy')
       if (startBlockReason) {
-        await this.releaseClaimedCampaignPreflight(account.id, campaign, startBlockReason)
+        await this.releaseClaimedCampaignPreflight(account, campaign, startBlockReason)
         return
       }
 
       const findDataWaitNote = await this.getFindDataSourceWaitNote(campaign)
       if (findDataWaitNote) {
-        await this.releaseClaimedCampaignPreflight(account.id, campaign, findDataWaitNote)
+        await this.releaseClaimedCampaignPreflight(account, campaign, findDataWaitNote)
         return
       }
 
@@ -2776,7 +2911,7 @@ export class CampaignScheduler {
         await ensureCurrentUserCanUseCampaignAction(campaign.actionId)
       } catch (err) {
         await this.releaseClaimedCampaignPreflight(
-          account.id,
+          account,
           campaign,
           err instanceof Error ? err.message : String(err)
         )
@@ -2785,13 +2920,13 @@ export class CampaignScheduler {
 
       const action = preclaimAction || await this.supabase.getCampaignAction(campaign.actionId)
       if (!action) {
-        await this.releaseClaimedCampaignPreflight(account.id, campaign, 'Không tìm thấy loại chiến dịch')
+        await this.releaseClaimedCampaignPreflight(account, campaign, 'Không tìm thấy loại chiến dịch')
         return
       }
 
       const workflowSelection = this.resolveCampaignWorkflow(action)
       if (!workflowSelection.workflowId) {
-        await this.releaseClaimedCampaignPreflight(account.id, campaign, workflowSelection.missingNote)
+        await this.releaseClaimedCampaignPreflight(account, campaign, workflowSelection.missingNote)
         return
       }
 
@@ -2814,7 +2949,7 @@ export class CampaignScheduler {
       if (preRuntimeStopReason) {
         if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
         await this.releaseClaimedCampaignPreflight(
-          account.id,
+          account,
           campaign,
           this.getZaloRuntimeCampaignStopNote(preRuntimeStopReason)
         )
@@ -2831,68 +2966,38 @@ export class CampaignScheduler {
     } catch (err) {
       if (!runtimeClaimed) throw err
       if (err instanceof CampaignRunUnitOwnershipLostError) return
-      const diagnosticError = err instanceof ZaloCampaignReadError
-        ? err.originalError
-        : err
-      const errMsg = diagnosticError instanceof Error
-        ? diagnosticError.message
-        : String(diagnosticError)
-      const safeUserMessage = err instanceof ZaloCampaignReadError
-        ? err.safeUserMessage
-        : undefined
-      const runtimeStopReason = isZaloCampaign
-        ? this.getZaloRuntimeStopReason(campaign.id)
-        : null
-      if (runtimeStopReason) {
-        if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
-        await this.recoverStuckCampaignInputData(
-          campaign.id,
-          this.getZaloRuntimeUncertainNote(runtimeStopReason)
-        )
-        if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
-        await this.updateCampaignAndBroadcast(campaign.id, {
-          status: 'chờ xử lý',
-          note: this.getZaloRuntimeCampaignStopNote(runtimeStopReason)
-        }).catch(() => {})
-        await this.releaseRunningAccount(account.id)
-        return
-      }
-      await this.recoverStuckCampaignInputData(
-        campaign.id,
-        err instanceof ZaloCampaignReadError ? err.message : errMsg
-      )
-      if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
-      if (this.isNewsfeedDailyCampaign(campaign)) {
-        await this.completeNewsfeedDailyWithoutNextDay(campaign, errMsg)
-      } else {
-        const handled = await this.handleCampaignBadTarget(
-          account,
-          campaign,
-          null,
-          'err_undefined',
-          undefined,
-          {
-            message: errMsg,
-            safeUserMessage
+      failedRun = this.rememberFailedCampaignRun(account, campaign, err, ownedClaimToken)
+      // All nested producers/resources have unwound. Policy is attempted once;
+      // its status writes are deferred into the same token-checked transaction.
+      try {
+        if (!failedRun.cleanup.controller.signal.aborted && !this.attemptedRunErrorPolicies.has(campaign.id)) {
+          if (this.isNewsfeedDailyCampaign(campaign)) {
+            this.attemptedRunErrorPolicies.add(campaign.id)
+            // Unknown aggregate progress is paused by cleanup, never replayed.
+          } else {
+            await this.handleCampaignBadTarget(account, campaign, null, 'err_undefined', undefined, {
+              message: failedRun.payload.note,
+              safeUserMessage: err instanceof ZaloCampaignReadError ? err.safeUserMessage : undefined
+            })
           }
-        )
-        if (!handled.triggered) {
-          await this.updateCampaignAndBroadcast(campaign.id, {
-            status: 'chờ xử lý',
-            note: handled.message
-          })
         }
+      } catch (policyError) {
+        try { console.warn(`Error policy failed for campaign ${campaign.id}; continuing atomic cleanup:`, policyError) } catch {}
       }
-      await this.releaseRunningAccount(account.id)
-      await this.logCampaignProgress(campaign.id, `❌ Lỗi chiến dịch "${campaign.name}": ${errMsg}`)
+      // A failed Desktop pause write still represents an outstanding user
+      // request. Carry it into token-checked cleanup after policy has finished.
+      if (this.runtimeTarget === 'desktop' && this.isCampaignPauseRequested(campaign.id)) {
+        failedRun.payload.campaignStatus = 'tạm dừng'
+      }
+      await this.cleanupFailedCampaignRun(failedRun)
     } finally {
-      const unitSettled = runtimeClaimed
+      const unitSettled = failedRun ? !this.failedCampaignRuns.has(campaign.id) : runtimeClaimed
         ? await this.settleActiveCampaignRunUnit(account, campaign).catch(error => {
           console.error(`Failed final unit settlement for campaign ${campaign.id}:`, error)
           return false
         })
         : true
-      if (runtimeClaimed && unitSettled && this.running) {
+      if (!failedRun && runtimeClaimed && unitSettled && this.running) {
         await this.reconcileMaintenanceAfterSettledRun(account, campaign).catch(error => {
           console.error(`Failed final maintenance reconciliation for campaign ${campaign.id}:`, error)
         })
@@ -2906,7 +3011,11 @@ export class CampaignScheduler {
         this.claimedServerZaloAccountIds.delete(account.id)
       }
       if (unitSettled) this.activeCampaignRunUnits.delete(campaign.id)
-      this.campaignRunBoundaries.delete(campaign.id)
+      if (!this.failedCampaignRuns.has(campaign.id)) {
+        this.campaignRunBoundaries.delete(campaign.id)
+        this.attemptedRunErrorPolicies.delete(campaign.id)
+        this.failedRunErrorPolicies.delete(campaign.id)
+      }
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
     }
   }
@@ -2945,8 +3054,7 @@ export class CampaignScheduler {
     }
 
     if (this.isCampaignPauseRequested(campaign.id)) {
-      await this.releaseRunningAccount(account.id)
-      await this.completeCampaignPause(campaign)
+      await this.completePauseAtBoundary(account, campaign)
       return
     }
 
@@ -2964,8 +3072,7 @@ export class CampaignScheduler {
       if (materializedDetails === null) return
       details = materializedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
       if (details.length === 0) {
@@ -2988,8 +3095,7 @@ export class CampaignScheduler {
       if (materializedDetails === null) return
       details = materializedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
       if (details.length === 0) {
@@ -3008,8 +3114,7 @@ export class CampaignScheduler {
         return
       }
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
     }
@@ -3023,8 +3128,7 @@ export class CampaignScheduler {
         return
       }
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
     }
@@ -3073,8 +3177,7 @@ export class CampaignScheduler {
       if (suggestedDetails === null) return
       details = suggestedDetails
       if (this.isCampaignPauseRequested(campaign.id)) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
       if (details.length === 0) {
@@ -3285,7 +3388,7 @@ export class CampaignScheduler {
           }
         } catch (err) {
           const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
-          await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+          await this.releaseClaimedCampaignPreflight(account, campaign, message)
           await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
           return
         }
@@ -3373,7 +3476,7 @@ export class CampaignScheduler {
       } catch (err) {
         console.error('Rate limit check error:', err)
         const message = `Không thể kiểm tra giới hạn hành động từ DB; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
-        await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+        await this.releaseClaimedCampaignPreflight(account, campaign, message)
         await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
         return
       }
@@ -3444,7 +3547,7 @@ export class CampaignScheduler {
             )
           } catch (err) {
             const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
-            await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+            await this.releaseClaimedCampaignPreflight(account, campaign, message)
             await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
             return
           }
@@ -3516,9 +3619,7 @@ export class CampaignScheduler {
             }
           }
         } catch (error) {
-          // No side effect has started yet. Requeue the exact reservation before
-          // propagating a progress-log failure into the normal campaign policy.
-          if (!await this.settleActiveCampaignRunUnit(account, campaign, true)) return
+          this.rememberFailedCampaignRun(account, campaign, error)
           throw error
         }
         if (this.isRunUnitStartCancelled(account, campaign)) {
@@ -3570,6 +3671,7 @@ export class CampaignScheduler {
         const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
         try {
           const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
+          this.markCampaignRunUnitStarted(campaign.id)
           const result = await this.engineV2.run(workflowId, variables, page, {
             organizationId: campaign.organizationId ?? account.organizationId ?? null,
             accountId: account.id,
@@ -3796,6 +3898,7 @@ export class CampaignScheduler {
             }
           }
         } catch (err: any) {
+          if (this.attemptedRunErrorPolicies.has(campaign.id)) throw err
           const errMsg = err?.message || String(err)
           if (this.isServerZaloCampaign(account, campaign)) {
             const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id).catch(() => null)
@@ -4045,8 +4148,7 @@ export class CampaignScheduler {
 
       const cur = await this.supabase.getCampaign(campaign.id)
       if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
 
@@ -4133,8 +4235,7 @@ export class CampaignScheduler {
       )
 
       if (outcome.paused) {
-        await this.releaseRunningAccount(account.id)
-        await this.completeCampaignPause(campaign)
+        await this.completePauseAtBoundary(account, campaign)
         return
       }
       if (outcome.stop) {
@@ -4278,106 +4379,114 @@ export class CampaignScheduler {
 
     const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
     try {
-      const variables = {
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        accountId: account.id,
-        facebookGroupInviteTargetGroupUrl: options.groupUrl,
-        facebookGroupInviteTargetGroupName: options.groupName,
-        facebookGroupInviteTargetGroupUid: options.groupUid,
-        facebookGroupInviteQuotaCapacity: options.quotaCapacity,
-        facebookGroupInviteTargets: batch.map(item => ({
-          inputDataId: item.inputDataId,
-          name: item.name,
-          uid: item.uid,
-          url: item.url,
-          inputData: item.inputData
-        }))
-      }
-      if (!await this.beginCampaignRunUnit(
-        account,
-        campaign,
-        batch.map(item => item.inputDataId),
-        { requeueRemainingOnSettle: true }
-      )) {
-        return { stop: true }
-      }
-      const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, null, page)
-      const result = await this.engineV2.run(workflowId, variables, page, {
-        organizationId: campaign.organizationId ?? account.organizationId ?? null,
-        accountId: account.id,
-        campaignId: campaign.id,
-        signal: abort.signal,
-        persist: true,
-        runtimeHelpers,
-        onBlockScreenshot: async (request, screenshotPage) => {
-          const progressLog = await this.recordBlockScreenshotEvent(account, campaign, null, request, screenshotPage)
-          if (progressLog) screenshotProgressLogs.push(progressLog)
-        },
-        onStepProgress: (step: RunStepV2) => {
-          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
-        },
-        onLog: (entry) => {
-          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+      try {
+        const variables = {
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          accountId: account.id,
+          facebookGroupInviteTargetGroupUrl: options.groupUrl,
+          facebookGroupInviteTargetGroupName: options.groupName,
+          facebookGroupInviteTargetGroupUid: options.groupUid,
+          facebookGroupInviteQuotaCapacity: options.quotaCapacity,
+          facebookGroupInviteTargets: batch.map(item => ({
+            inputDataId: item.inputDataId,
+            name: item.name,
+            uid: item.uid,
+            url: item.url,
+            inputData: item.inputData
+          }))
         }
-      })
+        if (!await this.beginCampaignRunUnit(
+          account,
+          campaign,
+          batch.map(item => item.inputDataId),
+          { requeueRemainingOnSettle: true }
+        )) {
+          return { stop: true }
+        }
+        const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, null, page)
+        this.markCampaignRunUnitStarted(campaign.id)
+        const result = await this.engineV2.run(workflowId, variables, page, {
+          organizationId: campaign.organizationId ?? account.organizationId ?? null,
+          accountId: account.id,
+          campaignId: campaign.id,
+          signal: abort.signal,
+          persist: true,
+          runtimeHelpers,
+          onBlockScreenshot: async (request, screenshotPage) => {
+            const progressLog = await this.recordBlockScreenshotEvent(account, campaign, null, request, screenshotPage)
+            if (progressLog) screenshotProgressLogs.push(progressLog)
+          },
+          onStepProgress: (step: RunStepV2) => {
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+          },
+          onLog: (entry) => {
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+          }
+        })
 
-      const pauseCancelledRun = this.isCampaignPauseRequested(campaign.id) && !accountStopReason && result.status === 'cancelled'
-      if (pauseCancelledRun) return { stop: true, paused: true }
-      if (accountStopReason) {
-        await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
-        return { stop: true }
-      }
+        const pauseCancelledRun = this.isCampaignPauseRequested(campaign.id) && !accountStopReason && result.status === 'cancelled'
+        if (pauseCancelledRun) return { stop: true, paused: true }
+        if (accountStopReason) {
+          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+          return { stop: true }
+        }
 
-      const output = this.getFacebookGroupInviteOutput(result)
-      if (result.status !== 'completed' || !output) {
-        const errMsg = result.error || output?.error || 'Lỗi mời bạn bè vào group'
+        const output = this.getFacebookGroupInviteOutput(result)
+        if (result.status !== 'completed' || !output) {
+          const errMsg = result.error || output?.error || 'Lỗi mời bạn bè vào group'
+          return await this.handleFacebookGroupInviteBatchRuntimeError(
+            account,
+            campaign,
+            actionDescriptor,
+            errMsg,
+            result.runId ? String(result.runId) : undefined,
+            options
+          )
+        }
+
+        return await this.processFacebookGroupInviteOutput(
+          account,
+          campaign,
+          batch,
+          actionDescriptor,
+          output,
+          result.runId ? String(result.runId) : undefined,
+          options
+        )
+      } catch (err: any) {
+        // Preserve a nested pause/claim failure for the outer atomic cleanup.
+        if (this.failedCampaignRuns.has(campaign.id) || this.attemptedRunErrorPolicies.has(campaign.id)) throw err
+        if (this.isCampaignPauseRequested(campaign.id) && abort.signal.aborted && !accountStopReason) {
+          return { stop: true, paused: true }
+        }
+        if (accountStopReason) {
+          await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+          return { stop: true }
+        }
+        const errMsg = err?.message || String(err)
         return await this.handleFacebookGroupInviteBatchRuntimeError(
           account,
           campaign,
           actionDescriptor,
           errMsg,
-          result.runId ? String(result.runId) : undefined,
+          undefined,
           options
         )
       }
-
-      return await this.processFacebookGroupInviteOutput(
-        account,
-        campaign,
-        batch,
-        actionDescriptor,
-        output,
-        result.runId ? String(result.runId) : undefined,
-        options
-      )
-    } catch (err: any) {
-      if (this.isCampaignPauseRequested(campaign.id) && abort.signal.aborted && !accountStopReason) {
-        return { stop: true, paused: true }
-      }
-      if (accountStopReason) {
-        await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
-        return { stop: true }
-      }
-      const errMsg = err?.message || String(err)
-      return await this.handleFacebookGroupInviteBatchRuntimeError(
-        account,
-        campaign,
-        actionDescriptor,
-        errMsg,
-        undefined,
-        options
-      )
+    } catch (error) {
+      this.rememberFailedCampaignRun(account, campaign, error)
+      throw error
     } finally {
       clearInterval(accountGuard)
       if (automationPage.source === 'background') {
         this.stopBackgroundPreview(account.id, campaign.id)
       }
       this.activeV2Aborts.delete(campaign.id)
-      if (!await this.settleActiveCampaignRunUnit(account, campaign)) {
+      if (!this.failedCampaignRuns.has(campaign.id) && !await this.settleActiveCampaignRunUnit(account, campaign)) {
         throw new CampaignRunUnitOwnershipLostError(campaign.id)
       }
-      while (screenshotProgressLogs.length > 0) {
+      while (!this.failedCampaignRuns.has(campaign.id) && screenshotProgressLogs.length > 0) {
         const progressLog = screenshotProgressLogs.shift()
         if (!progressLog) continue
         await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
@@ -4414,28 +4523,30 @@ export class CampaignScheduler {
       batchIndex: number
     }
   ): Promise<FacebookGroupInviteBatchRunOutcome> {
-    const runtimeError = this.normalizeRuntimeError(campaign, [], message)
-    await this.supabase.createCampaignDetail({
-      campaignId: campaign.id,
-      accountId: account.id,
-      actionCode: actionDescriptor.code,
-      actionName: actionDescriptor.name,
-      status: 'lỗi',
-      errorCode: runtimeError.errorCode,
-      log: message,
-      data: {
-        groupUrl: options.groupUrl,
-        groupName: options.groupName,
-        groupUid: options.groupUid,
-        batchIndex: options.batchIndex,
-        runId
-      },
-      shouldCountAction: false
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      const runtimeError = this.normalizeRuntimeError(campaign, [], message)
+      await this.supabase.createCampaignDetail({
+        campaignId: campaign.id,
+        accountId: account.id,
+        actionCode: actionDescriptor.code,
+        actionName: actionDescriptor.name,
+        status: 'lỗi',
+        errorCode: runtimeError.errorCode,
+        log: message,
+        data: {
+          groupUrl: options.groupUrl,
+          groupName: options.groupName,
+          groupUid: options.groupUid,
+          batchIndex: options.batchIndex,
+          runId
+        },
+        shouldCountAction: false
+      })
+      const note = message || 'Lỗi mở form mời vào group'
+      await this.updateErrorPolicyCampaign(campaign, { status: 'tạm dừng', note })
+      await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi mời vào group: ${note}`)
+      return { stop: true }
     })
-    const note = message || 'Lỗi mở form mời vào group'
-    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note })
-    await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi mời vào group: ${note}`)
-    return { stop: true }
   }
 
   private async processFacebookGroupInviteOutput(
@@ -4845,7 +4956,7 @@ export class CampaignScheduler {
             await this.logRecentDeliveryCooldownPauses(campaign, batchCandidates, cooldown)
           } catch (err) {
             const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
-            await this.releaseClaimedCampaignPreflight(account.id, campaign, message)
+            await this.releaseClaimedCampaignPreflight(account, campaign, message)
             await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
             return
           }
@@ -5277,6 +5388,7 @@ export class CampaignScheduler {
             return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
           }
 
+          this.markCampaignRunUnitStarted(campaign.id, [item.detail.id])
           startedInputDataIds.add(item.detail.id)
           let response: unknown = null
           let sendError: unknown = null
@@ -5320,6 +5432,7 @@ export class CampaignScheduler {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeForwardStopReason)
           return { stopAfterBatch: true, pauseAfterBatch: false, stopNote: null }
         }
+        this.markCampaignRunUnitStarted(campaign.id, textBatch.map(item => item.detail.id))
         textBatch.forEach(item => startedInputDataIds.add(item.detail.id))
         try {
           forwardResult = isGroup
@@ -5350,6 +5463,7 @@ export class CampaignScheduler {
       const batchPolicyInputDataId = batchHasSuccessfulTarget
         ? null
         : await this.selectZaloForwardBatchPolicyInputDataId(
+          campaign.id,
           actionDescriptor.code,
           [
             ...invalidTargets.map(detail => ({ inputDataId: detail.id, errorCode: '114' })),
@@ -5399,6 +5513,7 @@ export class CampaignScheduler {
         await this.updateZaloShareInputStatus(detail, actionDetail, optOutContexts.get(detail.id))
         // Validation is now terminal for this claimed input even though no Zalo
         // API call was needed. A later runtime stop must not requeue it.
+        this.markCampaignRunUnitStarted(campaign.id, [detail.id])
         startedInputDataIds.add(detail.id)
         if (actionDetail.stopAfterTarget) {
           stopAfterBatch = true
@@ -5641,27 +5756,30 @@ export class CampaignScheduler {
   }
 
   private async selectZaloForwardBatchPolicyInputDataId(
+    campaignId: number,
     actionCode: string,
     candidates: Array<{ inputDataId: number; errorCode: string | null }>
   ): Promise<number | null> {
-    let selectedInputDataId: number | null = null
-    let selectedPriority = -1
-    const priorityByErrorCode = new Map<string, number>()
-    for (const candidate of candidates) {
-      const cacheKey = candidate.errorCode || '__fallback__'
-      let priority = priorityByErrorCode.get(cacheKey)
-      if (priority === undefined) {
-        priority = this.getZaloPolicySideEffectPriority(
-          await this.getZaloPolicyByErrorCode(candidate.errorCode, actionCode)
-        )
-        priorityByErrorCode.set(cacheKey, priority)
+    return this.runCampaignErrorPolicy(campaignId, async () => {
+      let selectedInputDataId: number | null = null
+      let selectedPriority = -1
+      const priorityByErrorCode = new Map<string, number>()
+      for (const candidate of candidates) {
+        const cacheKey = candidate.errorCode || '__fallback__'
+        let priority = priorityByErrorCode.get(cacheKey)
+        if (priority === undefined) {
+          priority = this.getZaloPolicySideEffectPriority(
+            await this.getZaloPolicyByErrorCode(candidate.errorCode, actionCode)
+          )
+          priorityByErrorCode.set(cacheKey, priority)
+        }
+        if (priority > selectedPriority) {
+          selectedPriority = priority
+          selectedInputDataId = candidate.inputDataId
+        }
       }
-      if (priority > selectedPriority) {
-        selectedPriority = priority
-        selectedInputDataId = candidate.inputDataId
-      }
-    }
-    return selectedInputDataId
+      return selectedInputDataId
+    })
   }
 
   private createZaloShareSuccessDetail(
@@ -6465,6 +6583,7 @@ export class CampaignScheduler {
       // runs before ordinary input rows exist, so reserve an empty-ID unit at
       // the final point immediately before its external side effects.
       if (!await this.beginCampaignRunUnit(account, campaign, [])) return null
+      this.markCampaignRunUnitStarted(campaign.id)
       const result = await this.engineV2.run(workflowId, {
         accountId: account.id,
         campaignId: campaign.id,
@@ -6505,12 +6624,15 @@ export class CampaignScheduler {
 
       await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
       return await this.supabase.listCampaignInputData(campaign.id)
+    } catch (error) {
+      this.rememberFailedCampaignRun(account, campaign, error)
+      throw error
     } finally {
       if (automationPage.source === 'background') {
         this.stopBackgroundPreview(account.id, campaign.id)
       }
       this.activeV2Aborts.delete(campaign.id)
-      if (!await this.settleActiveCampaignRunUnit(account, campaign)) {
+      if (!this.failedCampaignRuns.has(campaign.id) && !await this.settleActiveCampaignRunUnit(account, campaign)) {
         throw new CampaignRunUnitOwnershipLostError(campaign.id)
       }
     }
@@ -8060,8 +8182,13 @@ export class CampaignScheduler {
       this.activeCampaignRunUnits.set(campaign.id, {
         runtimeUnitToken,
         inputDataIds: [...inputDataIds],
-        requeueRemainingOnSettle: options.requeueRemainingOnSettle === true
+        requeueRemainingOnSettle: options.requeueRemainingOnSettle === true,
+        unstartedInputDataIds: new Set(inputDataIds),
+        aggregateOutcomeUnknown: false
       })
+
+      this.attemptedRunErrorPolicies.delete(campaign.id)
+      this.failedRunErrorPolicies.delete(campaign.id)
 
       const parentStillOwned =
         claim.runtimeClaimToken === context.runtimeClaimToken &&
@@ -8251,18 +8378,18 @@ export class CampaignScheduler {
 
   private async completePauseAtBoundary(account: AutoAccount, campaign: Campaign): Promise<void> {
     if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
-    if (!this.isServerZaloCampaign(account, campaign)) {
-      await this.releaseRunningAccount(account.id)
-      await this.completeCampaignPause(campaign)
-      return
-    }
-
-    let boundary = this.serverZaloPauseBoundaries.get(campaign.id) || null
-    const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id).catch(() => null)
-    if (control?.campaignStatus && control.campaignStatus !== 'đang chạy') boundary = 'campaign'
-    else if (!boundary && control?.accountStatus && control.accountStatus !== 'đang chạy') boundary = 'account'
-
     try {
+      if (!this.isServerZaloCampaign(account, campaign)) {
+        await this.completeCampaignPause(campaign)
+        await this.releaseRunningAccount(account.id)
+        return
+      }
+
+      let boundary = this.serverZaloPauseBoundaries.get(campaign.id) || null
+      const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id).catch(() => null)
+      if (control?.campaignStatus && control.campaignStatus !== 'đang chạy') boundary = 'campaign'
+      else if (!boundary && control?.accountStatus && control.accountStatus !== 'đang chạy') boundary = 'account'
+
       if (boundary === 'account') {
         const updated = await this.updateCampaignAndBroadcast(campaign.id, {
           status: 'chờ xử lý',
@@ -8274,14 +8401,18 @@ export class CampaignScheduler {
         const current = await this.supabase.getCampaign(campaign.id)
         if (current) this.broadcastCampaignUpdate(current)
       }
-    } finally {
-      this.serverZaloPauseBoundaries.delete(campaign.id)
-      await this.releaseRunningAccount(account.id)
-      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
-    }
 
-    const label = boundary === 'account' ? 'tài khoản' : 'chiến dịch'
-    await this.logCampaignProgress(campaign.id, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
+      const label = boundary === 'account' ? 'tài khoản' : 'chiến dịch'
+      await this.logCampaignProgress(campaign.id, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
+      await this.releaseRunningAccount(account.id)
+      this.serverZaloPauseBoundaries.delete(campaign.id)
+      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+    } catch (error) {
+      // Keep the account token for atomic cleanup; a finally release could
+      // let another campaign acquire it before the outer error handler runs.
+      this.rememberFailedCampaignRun(account, campaign, error)
+      throw error
+    }
   }
 
   private async getAccountRunBlockReason(
@@ -8398,7 +8529,7 @@ export class CampaignScheduler {
   }
 
   private async releaseClaimedCampaignPreflight(
-    accountId: number,
+    account: AutoAccount,
     campaign: Campaign,
     note: string
   ): Promise<void> {
@@ -8407,8 +8538,12 @@ export class CampaignScheduler {
         status: 'chờ xử lý',
         note: note || 'Không đủ điều kiện chạy'
       })
-    } finally {
-      await this.releaseRunningAccount(accountId)
+      await this.releaseRunningAccount(account.id)
+    } catch (error) {
+      // Latch ownership before caller finally blocks can settle this unit.
+      // Only atomic cleanup may release the account after a preflight error.
+      this.rememberFailedCampaignRun(account, campaign, error)
+      throw error
     }
   }
 
@@ -8658,6 +8793,36 @@ export class CampaignScheduler {
     }
   }
 
+  private async updateErrorPolicyCampaign(campaign: Campaign, updates: Partial<Campaign>): Promise<void> {
+    const failed = this.failedCampaignRuns.get(campaign.id)
+    if (failed) {
+      if (updates.status) failed.payload.campaignStatus = updates.status
+      if (updates.note) failed.payload.note = updates.note
+      return
+    }
+    await this.updateCampaignAndBroadcast(campaign.id, updates)
+  }
+
+  private async updateErrorPolicyAccount(account: AutoAccount, campaign: Campaign, updates: Partial<AutoAccount>): Promise<void> {
+    const failed = this.failedCampaignRuns.get(campaign.id)
+    if (failed && updates.status) {
+      failed.payload.accountStatus = updates.status
+      return
+    }
+    await this.updateAccountAndBroadcast(account.id, updates)
+  }
+
+  private async runCampaignErrorPolicy<T>(campaignId: number, operation: () => Promise<T>): Promise<T> {
+    if (this.failedRunErrorPolicies.has(campaignId)) throw this.failedRunErrorPolicies.get(campaignId)
+    this.attemptedRunErrorPolicies.add(campaignId)
+    try {
+      return await operation()
+    } catch (error) {
+      this.failedRunErrorPolicies.set(campaignId, error)
+      throw error
+    }
+  }
+
   private async applyRuntimeErrorPolicy(
     account: AutoAccount,
     campaign: Campaign,
@@ -8665,58 +8830,60 @@ export class CampaignScheduler {
     actionCode: string | undefined,
     replacements: Record<string, string | undefined> = {}
   ): Promise<RuntimeErrorResult> {
-    const policyReplacements: Record<string, string | undefined> = {
-      ...replacements,
-      actionCode: replacements.actionCode || actionCode,
-      action_code: replacements.action_code || actionCode
-    }
-    const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
-    const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
-    const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
-    const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
-    const userFacingReplacements = isUndefinedErrorPolicy
-      ? {
-          ...policyReplacements,
-          message: safeUserMessage,
-          x: safeUserMessage
-        }
-      : policyReplacements
-    if (!policy) {
-      const message = isUndefinedErrorPolicy
-        ? safeUserMessage || 'Có lỗi xảy ra'
-        : policyReplacements.message || 'Có lỗi xảy ra'
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-      return { triggered: true, message }
-    }
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      const policyReplacements: Record<string, string | undefined> = {
+        ...replacements,
+        actionCode: replacements.actionCode || actionCode,
+        action_code: replacements.action_code || actionCode
+      }
+      const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+      const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
+      const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+      const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
+      const userFacingReplacements = isUndefinedErrorPolicy
+        ? {
+            ...policyReplacements,
+            message: safeUserMessage,
+            x: safeUserMessage
+          }
+        : policyReplacements
+      if (!policy) {
+        const message = isUndefinedErrorPolicy
+          ? safeUserMessage || 'Có lỗi xảy ra'
+          : policyReplacements.message || 'Có lỗi xảy ra'
+        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })
+        return { triggered: true, message }
+      }
 
-    const configuredMessage = this.renderPolicyMessage(
-      policy.notiCampaign || policy.notiRunningProcess,
-      userFacingReplacements
-    )
-    const message = this.addActionContextToMessage(
-      (isUndefinedErrorPolicy ? safeUserMessage || configuredMessage : configuredMessage || policyReplacements.message)
-      || policy.errorDesc
-      || policy.errorName,
-      userFacingReplacements
-    )
-    const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
+      const configuredMessage = this.renderPolicyMessage(
+        policy.notiCampaign || policy.notiRunningProcess,
+        userFacingReplacements
+      )
+      const message = this.addActionContextToMessage(
+        (isUndefinedErrorPolicy ? safeUserMessage || configuredMessage : configuredMessage || policyReplacements.message)
+        || policy.errorDesc
+        || policy.errorName,
+        userFacingReplacements
+      )
+      const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
 
-    if (policy.updateStatusAccount) {
-      await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
-    }
-    if (policy.disableActionCodes.length > 0) {
-      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
-        errorCode: policy.errorCode,
-        reason: message,
-        dateEnable: await this.resolvePolicyActionDateEnable(policy)
-      })
-      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
-    }
+      if (policy.updateStatusAccount) {
+        await this.updateErrorPolicyAccount(account, campaign, { status: policy.updateStatusAccount })
+      }
+      if (policy.disableActionCodes.length > 0) {
+        await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
+          errorCode: policy.errorCode,
+          reason: message,
+          dateEnable: await this.resolvePolicyActionDateEnable(policy)
+        })
+        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+      }
 
-    await this.updateCampaignAndBroadcast(campaign.id, { status: campaignStatus, note: message })
-    await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
+      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note: message })
+      await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
-    return { triggered: true, message, policy }
+      return { triggered: true, message, policy }
+    })
   }
 
   private async handleCampaignBadTarget(
@@ -8727,93 +8894,95 @@ export class CampaignScheduler {
     actionCode: string | undefined,
     replacements: Record<string, string | undefined> = {}
   ): Promise<CampaignBadTargetResult> {
-    const policyReplacements: Record<string, string | undefined> = {
-      ...replacements,
-      actionCode: replacements.actionCode || actionCode,
-      action_code: replacements.action_code || actionCode
-    }
-    const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
-    const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
-    const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
-    const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
-    const userFacingReplacements = isUndefinedErrorPolicy
-      ? {
-          ...policyReplacements,
-          message: safeUserMessage,
-          x: safeUserMessage
-        }
-      : policyReplacements
-    const threshold = this.getPolicyThreshold(policy)
-    if (!policy || !threshold) {
-      return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
-    }
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      const policyReplacements: Record<string, string | undefined> = {
+        ...replacements,
+        actionCode: replacements.actionCode || actionCode,
+        action_code: replacements.action_code || actionCode
+      }
+      const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+      const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
+      const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+      const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
+      const userFacingReplacements = isUndefinedErrorPolicy
+        ? {
+            ...policyReplacements,
+            message: safeUserMessage,
+            x: safeUserMessage
+          }
+        : policyReplacements
+      const threshold = this.getPolicyThreshold(policy)
+      if (!policy || !threshold) {
+        return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+      }
 
-    const configuredNotice = this.renderPolicyMessage(policy.notiRunningProcess, userFacingReplacements)
-    const notice = this.addActionContextToMessage(
-      (isUndefinedErrorPolicy ? safeUserMessage || configuredNotice : configuredNotice || policyReplacements.message)
-      || policy.errorName,
-      userFacingReplacements
-    )
-    const failureMessage = isUndefinedErrorPolicy
-      ? safeUserMessage || notice
-      : policyReplacements.message || notice
-    const state = await this.supabase.incrementCampaignBadTargetCount(
-      campaign.id,
-      inputDataId,
-      failureMessage
-    )
-    const count = state.countConsecutiveBadTargets
-    // Page inbox messaging gets one scheduler restart before the policy is
-    // applied. Keep the counter so the restarted run must add a full second
-    // threshold of consecutive bad targets; any success resets it as usual.
-    const shouldRetryPageInboxOnce = campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
-    const finalThreshold = shouldRetryPageInboxOnce ? threshold * 2 : threshold
-
-    if (count < threshold) {
-      const message = `${notice} (${count}/${threshold})`
-      return { triggered: false, message, policy, count, threshold }
-    }
-
-    if (shouldRetryPageInboxOnce && count > threshold && count < finalThreshold) {
-      const retryCount = count - threshold
-      const message = `${notice} (${retryCount}/${threshold} trong lượt tự chạy lại)`
-      return { triggered: false, message, policy, count, threshold }
-    }
-
-    let thresholdReason = String(
-      policyReplacements.thresholdReason ||
-      failureMessage ||
-      'Lỗi không xác định'
-    ).trim() || 'Lỗi không xác định'
-    if (isUndefinedErrorPolicy) {
-      thresholdReason = await this.diagnoseUndefinedErrorWithScreenshot(
-        account,
-        campaign,
+      const configuredNotice = this.renderPolicyMessage(policy.notiRunningProcess, userFacingReplacements)
+      const notice = this.addActionContextToMessage(
+        (isUndefinedErrorPolicy ? safeUserMessage || configuredNotice : configuredNotice || policyReplacements.message)
+        || policy.errorName,
+        userFacingReplacements
+      )
+      const failureMessage = isUndefinedErrorPolicy
+        ? safeUserMessage || notice
+        : policyReplacements.message || notice
+      const state = await this.supabase.incrementCampaignBadTargetCount(
+        campaign.id,
         inputDataId,
-        policyReplacements,
-        thresholdReason
-      ) || thresholdReason
-    }
+        failureMessage
+      )
+      const count = state.countConsecutiveBadTargets
+      // Page inbox messaging gets one scheduler restart before the policy is
+      // applied. Keep the counter so the restarted run must add a full second
+      // threshold of consecutive bad targets; any success resets it as usual.
+      const shouldRetryPageInboxOnce = campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
+      const finalThreshold = shouldRetryPageInboxOnce ? threshold * 2 : threshold
 
-    if (shouldRetryPageInboxOnce && count === threshold) {
-      const message = `Tự chạy lại thêm 1 lần sau ${threshold} lỗi/thất bại liên tiếp: ${thresholdReason}`
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
+      if (count < threshold) {
+        const message = `${notice} (${count}/${threshold})`
+        return { triggered: false, message, policy, count, threshold }
+      }
+
+      if (shouldRetryPageInboxOnce && count > threshold && count < finalThreshold) {
+        const retryCount = count - threshold
+        const message = `${notice} (${retryCount}/${threshold} trong lượt tự chạy lại)`
+        return { triggered: false, message, policy, count, threshold }
+      }
+
+      let thresholdReason = String(
+        policyReplacements.thresholdReason ||
+        failureMessage ||
+        'Lỗi không xác định'
+      ).trim() || 'Lỗi không xác định'
+      if (isUndefinedErrorPolicy) {
+        thresholdReason = await this.diagnoseUndefinedErrorWithScreenshot(
+          account,
+          campaign,
+          inputDataId,
+          policyReplacements,
+          thresholdReason
+        ) || thresholdReason
+      }
+
+      if (shouldRetryPageInboxOnce && count === threshold) {
+        const message = `Tự chạy lại thêm 1 lần sau ${threshold} lỗi/thất bại liên tiếp: ${thresholdReason}`
+        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })
+        await this.logCampaignProgress(
+          campaign.id,
+          `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần; chuyển về chờ xử lý để tự chạy lại thêm 1 lần: ${thresholdReason}`
+        )
+        return { triggered: true, message, policy, count, threshold }
+      }
+
       await this.logCampaignProgress(
         campaign.id,
-        `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần; chuyển về chờ xử lý để tự chạy lại thêm 1 lần: ${thresholdReason}`
+        shouldRetryPageInboxOnce
+          ? `⚠️ Lượt tự chạy lại tiếp tục lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
+          : `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
       )
-      return { triggered: true, message, policy, count, threshold }
-    }
 
-    await this.logCampaignProgress(
-      campaign.id,
-      shouldRetryPageInboxOnce
-        ? `⚠️ Lượt tự chạy lại tiếp tục lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
-        : `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
-    )
-
-    const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
-    return { ...handled, count, threshold }
+      const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+      return { ...handled, count, threshold }
+    })
   }
 
   private async resetCampaignBadTargetCount(campaign: Campaign): Promise<void> {
@@ -12636,8 +12805,8 @@ export class CampaignScheduler {
     return this.supabase.getErrorPolicy(ZALO_API_BUSINESS_FAILED_ERROR_CODE)
   }
 
-  private async getZaloNotFoundPolicy(): Promise<AutoErrorPolicy | null> {
-    return this.supabase.getErrorPolicy(ZALO_USER_NOT_FOUND_ERROR_CODE)
+  private async getZaloNotFoundPolicy(campaignId: number): Promise<AutoErrorPolicy | null> {
+    return this.runCampaignErrorPolicy(campaignId, () => this.supabase.getErrorPolicy(ZALO_USER_NOT_FOUND_ERROR_CODE))
   }
 
   private renderZaloPolicyLog(
@@ -12685,41 +12854,43 @@ export class CampaignScheduler {
     policy: AutoErrorPolicy | null,
     messages: { runningProcess: string; campaign: string }
   ): Promise<{ stopAfterTarget: boolean }> {
-    let stopAfterTarget = false
-    if (!policy) return { stopAfterTarget }
-    this.throwIfZaloRuntimeStopping(campaign.id)
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      let stopAfterTarget = false
+      if (!policy) return { stopAfterTarget }
+      this.throwIfZaloRuntimeStopping(campaign.id)
 
-    if (policy.updateLoginStatus) {
-      await this.updateAccountAndBroadcast(account.id, { loginStatus: policy.updateLoginStatus })
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      this.zaloRuntime?.invalidateAccount(account.id)
-      stopAfterTarget = true
-    }
-    if (policy.updateStatusAccount) {
-      await this.updateAccountAndBroadcast(account.id, { status: policy.updateStatusAccount })
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      stopAfterTarget = true
-    }
-    if (policy.disableActionCodes.length > 0) {
-      await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
-        errorCode: policy.errorCode,
-        reason: messages.runningProcess,
-        dateEnable: await this.resolvePolicyActionDateEnable(policy)
-      })
-      try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      stopAfterTarget = true
-    }
-    if (policy.updateStatusCampaign) {
-      await this.updateCampaignAndBroadcast(campaign.id, {
-        status: policy.updateStatusCampaign,
-        note: messages.campaign
-      })
-      this.throwIfZaloRuntimeStopping(campaign.id)
-      stopAfterTarget = true
-    }
+      if (policy.updateLoginStatus) {
+        await this.updateErrorPolicyAccount(account, campaign, { loginStatus: policy.updateLoginStatus })
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        this.zaloRuntime?.invalidateAccount(account.id)
+        stopAfterTarget = true
+      }
+      if (policy.updateStatusAccount) {
+        await this.updateErrorPolicyAccount(account, campaign, { status: policy.updateStatusAccount })
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        stopAfterTarget = true
+      }
+      if (policy.disableActionCodes.length > 0) {
+        await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
+          errorCode: policy.errorCode,
+          reason: messages.runningProcess,
+          dateEnable: await this.resolvePolicyActionDateEnable(policy)
+        })
+        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        stopAfterTarget = true
+      }
+      if (policy.updateStatusCampaign) {
+        await this.updateErrorPolicyCampaign(campaign, {
+          status: policy.updateStatusCampaign,
+          note: messages.campaign
+        })
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        stopAfterTarget = true
+      }
 
-    return { stopAfterTarget }
+      return { stopAfterTarget }
+    })
   }
 
   private getZaloApiName(actionCode: string): string {
@@ -12831,21 +13002,23 @@ export class CampaignScheduler {
     data?: Record<string, unknown>
     detailStatus?: string | null
   }): Promise<void> {
-    const rawMessage = this.getZaloErrorMessage(input.err)
-    const zaloCode = this.getZaloErrorCode(input.err)
-    const policy = await this.getZaloPolicyByErrorCode(zaloCode, input.actionCode)
-    await this.logZaloApiError({
-      account: input.account,
-      campaign: input.campaign,
-      err: input.err,
-      actionCode: input.actionCode,
-      actionName: input.actionName,
-      apiName: input.apiName,
-      data: input.data || {},
-      zaloCode,
-      rawMessage,
-      policy,
-      detailStatus: input.detailStatus ?? this.normalizeZaloDetailStatus(policy?.detailStatus)
+    return this.runCampaignErrorPolicy(input.campaign.id, async () => {
+      const rawMessage = this.getZaloErrorMessage(input.err)
+      const zaloCode = this.getZaloErrorCode(input.err)
+      const policy = await this.getZaloPolicyByErrorCode(zaloCode, input.actionCode)
+      await this.logZaloApiError({
+        account: input.account,
+        campaign: input.campaign,
+        err: input.err,
+        actionCode: input.actionCode,
+        actionName: input.actionName,
+        apiName: input.apiName,
+        data: input.data || {},
+        zaloCode,
+        rawMessage,
+        policy,
+        detailStatus: input.detailStatus ?? this.normalizeZaloDetailStatus(policy?.detailStatus)
+      })
     })
   }
 
@@ -12858,72 +13031,74 @@ export class CampaignScheduler {
     data: Record<string, unknown> = {},
     options: { policyHandling?: ZaloFailurePolicyHandling } = {}
   ): Promise<ZaloActionDetailOutput> {
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const rawMessage = this.getZaloErrorMessage(err)
-    const zaloCode = this.getZaloErrorCode(err)
-    const policy = await this.getZaloPolicyByErrorCode(zaloCode, actionCode)
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const log = this.renderZaloPolicyLog(policy, rawMessage, {
-      actionName,
-      action: actionName,
-      actionCode
-    }, zaloCode)
-    const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
-      actionName,
-      action: actionName,
-      actionCode
-    }, log)
-    const policyHandling = options.policyHandling ?? 'full'
-    // A mixed forward batch can contain one target failure among successful
-    // targets. Keep its normalized detail/log, but only the first batch-level
-    // failure may mutate account/campaign state.
-    const sideEffects = policyHandling !== 'full'
-      ? { stopAfterTarget: false }
-      : await this.applyZaloPolicySideEffects(account, campaign, policy, {
-        runningProcess: log,
-        campaign: pendingNote
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const rawMessage = this.getZaloErrorMessage(err)
+      const zaloCode = this.getZaloErrorCode(err)
+      const policy = await this.getZaloPolicyByErrorCode(zaloCode, actionCode)
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const log = this.renderZaloPolicyLog(policy, rawMessage, {
+        actionName,
+        action: actionName,
+        actionCode
+      }, zaloCode)
+      const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
+        actionName,
+        action: actionName,
+        actionCode
+      }, log)
+      const policyHandling = options.policyHandling ?? 'full'
+      // A mixed forward batch can contain one target failure among successful
+      // targets. Keep its normalized detail/log, but only the first batch-level
+      // failure may mutate account/campaign state.
+      const sideEffects = policyHandling !== 'full'
+        ? { stopAfterTarget: false }
+        : await this.applyZaloPolicySideEffects(account, campaign, policy, {
+          runningProcess: log,
+          campaign: pendingNote
+        })
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+        || (policyHandling === 'target-only' ? 'thất bại' : null)
+      await this.logZaloApiError({
+        account,
+        campaign,
+        err,
+        actionCode,
+        actionName,
+        data,
+        zaloCode,
+        rawMessage,
+        policy,
+        detailStatus
       })
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
-      || (policyHandling === 'target-only' ? 'thất bại' : null)
-    await this.logZaloApiError({
-      account,
-      campaign,
-      err,
-      actionCode,
-      actionName,
-      data,
-      zaloCode,
-      rawMessage,
-      policy,
-      detailStatus
-    })
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const detail: ZaloActionDetailOutput = {
-      createDetail: Boolean(detailStatus),
-      actionCode,
-      actionName,
-      status: detailStatus || undefined,
-      errorCode: policy?.errorCode || null,
-      log,
-      countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: policyHandling === 'target-only'
-        ? false
-        : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
-      resetInputToPending: !detailStatus,
-      pendingNote,
-      stopAfterTarget: sideEffects.stopAfterTarget,
-      data: {
-        ...data,
-        error: rawMessage || undefined,
-        zalo: {
-          code: zaloCode,
-          message: rawMessage,
-          policyErrorCode: policy?.errorCode || null
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const detail: ZaloActionDetailOutput = {
+        createDetail: Boolean(detailStatus),
+        actionCode,
+        actionName,
+        status: detailStatus || undefined,
+        errorCode: policy?.errorCode || null,
+        log,
+        countsTowardLimit: policy?.countsTowardLimit ?? true,
+        countsTowardBadTarget: policyHandling === 'target-only'
+          ? false
+          : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
+        resetInputToPending: !detailStatus,
+        pendingNote,
+        stopAfterTarget: sideEffects.stopAfterTarget,
+        data: {
+          ...data,
+          error: rawMessage || undefined,
+          zalo: {
+            code: zaloCode,
+            message: rawMessage,
+            policyErrorCode: policy?.errorCode || null
+          }
         }
       }
-    }
-    return detail
+      return detail
+    })
   }
 
   private async createZaloPolicyDetailFromCode(
@@ -12937,51 +13112,53 @@ export class CampaignScheduler {
     data: Record<string, unknown> = {},
     options: { policyHandling?: ZaloFailurePolicyHandling } = {}
   ): Promise<ZaloActionDetailOutput> {
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const log = this.renderZaloPolicyLog(policy, rawMessage, {
-      actionName,
-      action: actionName,
-      actionCode
-    }, zaloCode)
-    const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
-      actionName,
-      action: actionName,
-      actionCode
-    }, log)
-    const policyHandling = options.policyHandling ?? 'full'
-    const sideEffects = policyHandling !== 'full'
-      ? { stopAfterTarget: false }
-      : await this.applyZaloPolicySideEffects(account, campaign, policy, {
-        runningProcess: log,
-        campaign: pendingNote
-      })
-    this.throwIfZaloRuntimeStopping(campaign.id)
-    const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
-      || (policyHandling === 'target-only' ? 'thất bại' : null)
-    return {
-      createDetail: Boolean(detailStatus),
-      actionCode,
-      actionName,
-      status: detailStatus || undefined,
-      errorCode: policy?.errorCode || null,
-      log,
-      countsTowardLimit: policy?.countsTowardLimit ?? true,
-      countsTowardBadTarget: policyHandling === 'target-only'
-        ? false
-        : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
-      resetInputToPending: !detailStatus,
-      pendingNote,
-      stopAfterTarget: sideEffects.stopAfterTarget,
-      data: {
-        ...data,
-        error: rawMessage || undefined,
-        zalo: {
-          code: zaloCode,
-          message: rawMessage,
-          policyErrorCode: policy?.errorCode || null
+    return this.runCampaignErrorPolicy(campaign.id, async () => {
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const log = this.renderZaloPolicyLog(policy, rawMessage, {
+        actionName,
+        action: actionName,
+        actionCode
+      }, zaloCode)
+      const pendingNote = this.renderZaloPolicyCampaignNote(policy, rawMessage, {
+        actionName,
+        action: actionName,
+        actionCode
+      }, log)
+      const policyHandling = options.policyHandling ?? 'full'
+      const sideEffects = policyHandling !== 'full'
+        ? { stopAfterTarget: false }
+        : await this.applyZaloPolicySideEffects(account, campaign, policy, {
+          runningProcess: log,
+          campaign: pendingNote
+        })
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      const detailStatus = this.normalizeZaloDetailStatus(policy?.detailStatus)
+        || (policyHandling === 'target-only' ? 'thất bại' : null)
+      return {
+        createDetail: Boolean(detailStatus),
+        actionCode,
+        actionName,
+        status: detailStatus || undefined,
+        errorCode: policy?.errorCode || null,
+        log,
+        countsTowardLimit: policy?.countsTowardLimit ?? true,
+        countsTowardBadTarget: policyHandling === 'target-only'
+          ? false
+          : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
+        resetInputToPending: !detailStatus,
+        pendingNote,
+        stopAfterTarget: sideEffects.stopAfterTarget,
+        data: {
+          ...data,
+          error: rawMessage || undefined,
+          zalo: {
+            code: zaloCode,
+            message: rawMessage,
+            policyErrorCode: policy?.errorCode || null
+          }
         }
       }
-    }
+    })
   }
 
   private createZaloSuccessDetail(input: {
@@ -13316,7 +13493,7 @@ export class CampaignScheduler {
         : {}
       this.throwIfZaloRuntimeStopping(campaign.id)
       if (!user && !cachedTarget) {
-        const policy = await this.getZaloNotFoundPolicy()
+        const policy = await this.getZaloNotFoundPolicy(campaign.id)
         const detail = await this.createZaloPolicyDetailFromCode(
           account,
           campaign,
