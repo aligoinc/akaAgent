@@ -3322,6 +3322,16 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     setShowForm(true)
   }
 
+  const handleCopyCampaignId = async (campaignId: number) => {
+    closeCampaignActionMenu()
+    try {
+      await navigator.clipboard.writeText(String(campaignId))
+      showAlert(`Đã sao chép ID chiến dịch ${campaignId}.`, 'success')
+    } catch {
+      showAlert(`Không thể sao chép ID chiến dịch ${campaignId}. Vui lòng thử lại.`, 'error')
+    }
+  }
+
   const handleOpenLimitUpdate = async (campaign: CampaignListItem) => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
@@ -6112,6 +6122,15 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                             >
                               <Copy size={14} />
                               <span>Nhân bản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => void handleCopyCampaignId(campaign.id)}
+                              role="menuitem"
+                            >
+                              <Copy size={14} />
+                              <span>Lấy ID chiến dịch</span>
                             </button>
                             <button
                               type="button"
