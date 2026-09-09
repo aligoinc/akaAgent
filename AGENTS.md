@@ -247,6 +247,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 
 ### Data layer
 
+WebApp input **Tiếp tục / chạy lại** dùng RPC atomic v269, nhận input tạm dừng/hoàn thành mà không tự bật campaign/account; giữ tenant, runtime ownership và serialization barrier. Xem [CONTROL_CAMPAIGN_INPUT_RERUN.md](docs/CONTROL_CAMPAIGN_INPUT_RERUN.md) và smoke rollback v269; không khôi phục guard `campaign_completed` cũ của v219 cho thao tác chạy lại input do người dùng chọn.
+
 [src/main/data/repositories/](src/main/data/repositories/) — mỗi entity 1 file. Pattern:
 - `client = () => getSupabaseClient()` ([supabaseClient.ts](src/main/data/supabaseClient.ts))
 - `requireCurrentUser()` ([currentUser.ts](src/main/data/currentUser.ts)) ném lỗi nếu chưa login → block IPC handler
