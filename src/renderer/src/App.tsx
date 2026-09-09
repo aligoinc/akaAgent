@@ -29,6 +29,7 @@ import AppNotificationBar from './components/AppNotificationBar/AppNotificationB
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 
 const ChatPage = lazy(() => import('./pages/ChatPage'))
+const CrmPage = lazy(() => import('./pages/CrmPage'))
 
 interface UpdateInfo {
   localVersion: string
@@ -72,19 +73,29 @@ export default function App() {
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<AppPage>('campaigns')
   const [chatOpenedSessionId, setChatOpenedSessionId] = useState<string | null>(null)
+  const [crmOpenedStaffKey, setCrmOpenedStaffKey] = useState<string | null>(null)
   const chatSessionId = user?.chatWebEnabledAtLogin ? user.chatWebSessionId : undefined
+  const crmStaffKey = user?.organizationId === 1 ? `${user.organizationId}:${user.staffId}` : undefined
   const handlePageChange = useCallback((page: AppPage) => {
     if (page === 'chat') {
       if (!chatSessionId) return
       setChatOpenedSessionId(chatSessionId)
     }
+    if (page === 'crm') {
+      if (!crmStaffKey) return
+      setCrmOpenedStaffKey(crmStaffKey)
+    }
     setActivePage(page)
-  }, [chatSessionId])
+  }, [chatSessionId, crmStaffKey])
 
   useEffect(() => {
     setChatOpenedSessionId(null)
     setActivePage(previous => previous === 'chat' ? 'campaigns' : previous)
   }, [chatSessionId])
+  useEffect(() => {
+    setCrmOpenedStaffKey(null)
+    setActivePage(previous => previous === 'crm' ? 'campaigns' : previous)
+  }, [crmStaffKey])
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null)
   const browserOpenRequestSeq = useRef(0)
   const [showDataScan, setShowDataScan] = useState(false)
@@ -412,6 +423,13 @@ export default function App() {
         />
 
         <div className="app-main">
+          {crmStaffKey && crmOpenedStaffKey === crmStaffKey && (
+            <div style={{ display: activePage === 'crm' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <Suspense fallback={<div className="empty-state" role="status">Đang mở CRM…</div>}>
+                <CrmPage key={crmStaffKey} isActive={activePage === 'crm'} />
+              </Suspense>
+            </div>
+          )}
           {chatSessionId && chatOpenedSessionId === chatSessionId && (
             <div style={{ display: activePage === 'chat' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <Suspense fallback={<div className="empty-state" role="status">Đang mở Chat…</div>}>

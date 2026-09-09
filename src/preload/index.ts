@@ -1,4 +1,4 @@
-import type { ChatWebState, LoginScreenContent } from '../shared/types'
+import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PageInboxScanOptions, PageInboxScanInfo } from '../shared/types'
 import { existsSync } from 'fs'
@@ -10,6 +10,8 @@ export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
   platform: process.platform,
+
+  prepareCrmWeb: (): Promise<CrmWebDescriptor> => ipcRenderer.invoke(IPC_EVENTS.CRM_WEB_PREPARE),
 
   prepareChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_PREPARE),
   reloadChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_RELOAD),

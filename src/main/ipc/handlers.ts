@@ -28,6 +28,7 @@ import { registerAccountHandlers, type AccountZaloOperationController } from './
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
+import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
@@ -144,6 +145,7 @@ export function registerIpcHandlers(
   options: IpcHandlerRuntimeOptions = {}
 ): void {
   const chatWeb = registerChatWebHandlers(mainWindow)
+  const crmWeb = registerCrmWebHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -729,7 +731,7 @@ export function registerIpcHandlers(
     const user = getCurrentUser()
     if (!user) return
 
-    await chatWeb.reset()
+    await Promise.all([chatWeb.reset(), crmWeb.reset()])
 
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
@@ -1124,7 +1126,7 @@ export function registerIpcHandlers(
     quitCleanupStarted = true
     void (async () => {
       try {
-        await chatWeb.reset()
+        await Promise.all([chatWeb.reset(), crmWeb.reset()])
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1192,7 +1194,7 @@ export function registerIpcHandlers(
   // Register domain handlers
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
-      await chatWeb.reset()
+      await Promise.all([chatWeb.reset(), crmWeb.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
       const handoffAckGeneration = desktopHandoffAckGeneration
@@ -1241,6 +1243,7 @@ export function registerIpcHandlers(
         syncZaloBackgroundForCurrentUser('login')
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
+        crmWeb.startSession()
       } catch (error) {
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1272,7 +1275,7 @@ export function registerIpcHandlers(
       }
     },
     beforeLogout: async () => {
-      await chatWeb.reset()
+      await Promise.all([chatWeb.reset(), crmWeb.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()

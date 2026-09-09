@@ -9,7 +9,7 @@ interface ChatPageProps {
 
 export default function ChatPage({ sessionId, isActive }: ChatPageProps) {
   const [state, setState] = useState<ChatWebState | null>(null)
-  const [descriptor, setDescriptor] = useState<Pick<ChatWebState, 'partition' | 'url'> | null>(null)
+  const [descriptor, setDescriptor] = useState<Pick<ChatWebState, 'partition' | 'url' | 'webviewGeneration'> | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
@@ -25,7 +25,9 @@ export default function ChatPage({ sessionId, isActive }: ChatPageProps) {
     lastRevision.current = next.revision
     setState(previous => previous && previous.revision > next.revision ? previous : next)
     if (next.status === 'ready') {
-      setDescriptor(previous => previous ?? { partition: next.partition, url: next.url })
+      setDescriptor(previous => previous?.webviewGeneration === next.webviewGeneration ? previous : {
+        partition: next.partition, url: next.url, webviewGeneration: next.webviewGeneration
+      })
       setRequestError(null)
     }
   }, [sessionId])
@@ -84,12 +86,12 @@ export default function ChatPage({ sessionId, isActive }: ChatPageProps) {
   const canRetry = !!requestError || state?.status === 'error' || state?.status === 'signed-out'
 
   return (
-    <section aria-label="Chat" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
+    <section aria-label="akaChat" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border-default)' }}>
         <MessageSquare size={17} />
-        <span style={{ fontWeight: 600 }}>Chat</span>
+        <span style={{ fontWeight: 600 }}>akaChat</span>
         <span style={{ flex: 1, color: 'var(--text-secondary)', fontSize: 12 }}>chat.akabiz.biz</span>
-        <button type="button" className="btn-icon" title="Tải lại Chat" aria-label="Tải lại Chat"
+        <button type="button" className="btn-icon" title="Tải lại akaChat" aria-label="Tải lại akaChat"
           disabled={busy || state?.status === 'connecting' || state?.status === 'closed'} onClick={() => void request(true)}>
           <RefreshCw size={15} />
         </button>
@@ -97,6 +99,7 @@ export default function ChatPage({ sessionId, isActive }: ChatPageProps) {
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         {descriptor && (
           <webview
+            key={descriptor.webviewGeneration}
             ref={attachWebview}
             src={descriptor.url}
             partition={descriptor.partition}
