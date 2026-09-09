@@ -9109,6 +9109,30 @@ td.report-account-col span {
   padding-left: 9px;
 }
 
+.campaign-table-row.is-draft {
+  --campaign-row-accent: var(--text-secondary);
+  --campaign-row-status-bg: var(--bg-hover);
+  border-left-color: var(--campaign-row-accent);
+  cursor: pointer;
+}
+
+.campaign-draft-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.campaign-draft-name:hover {
+  text-decoration: underline;
+}
+
+.campaign-draft-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .campaign-col {
   overflow: hidden;
   text-overflow: ellipsis;

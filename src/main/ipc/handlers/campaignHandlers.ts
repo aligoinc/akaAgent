@@ -1,4 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaignDraftRequest } from '../../../shared/campaignDrafts'
+import * as campaignDraftRepo from '../../data/repositories/campaignDraftRepository'
 import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 
@@ -88,6 +90,11 @@ export function registerCampaignHandlers(
   campaignStatusController: CampaignStatusController,
   realtimeRefreshController?: CampaignRealtimeRefreshController
 ): void {
+  ipcMain.handle(CAMPAIGN_DRAFT_IPC.list, (_, page?: number) => campaignDraftRepo.listCampaignDrafts(page))
+  ipcMain.handle(CAMPAIGN_DRAFT_IPC.get, (_, id: string) => campaignDraftRepo.getCampaignDraft(id))
+  ipcMain.handle(CAMPAIGN_DRAFT_IPC.save, (_, request: SaveCampaignDraftRequest) => campaignDraftRepo.saveCampaignDraft(request))
+  ipcMain.handle(CAMPAIGN_DRAFT_IPC.delete, (_, id: string) => campaignDraftRepo.deleteCampaignDraft(id))
+  ipcMain.handle(CAMPAIGN_DRAFT_IPC.complete, (_, request: CompleteCampaignDraftRequest) => campaignDraftRepo.completeCampaignDraft(request))
   // Campaign Actions
   ipcMain.handle(IPC_EVENTS.DB_LIST_CAMPAIGN_ACTIONS, async () => {
     return supabase.listCampaignActions()

@@ -38,9 +38,12 @@ import {
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
 import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
+import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
+import CampaignDraftRow from './CampaignDraftRow'
+import { useCampaignDrafts } from './useCampaignDrafts'
 import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './CampaignQuickEditModals'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
@@ -75,6 +78,12 @@ type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'acti
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
+type CampaignTableRow =
+  | { kind: 'campaign'; item: CampaignListItem }
+  | { kind: 'draft'; item: CampaignDraftSummary }
+type CampaignListSortItem = Pick<CampaignListItem, 'status' | 'schedule' | 'lastRunAt'> & {
+  id: number | string
+}
 type FindDataLogScope = 'visible' | 'all'
 
 interface CampaignFilterOption {
@@ -573,10 +582,10 @@ const FIND_DATA_TARGET_FIELDS = [
   'findFacebookGroupJoinTargetCampaignIds'
 ] as const
 
-const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
-  value: status,
-  label: status
-}))
+const CAMPAIGN_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
+  ...CAMPAIGN_STATUSES.map(status => ({ value: status, label: status })),
+  { value: 'draft', label: 'Nháp' }
+]
 
 const INPUT_DATA_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = CAMPAIGN_STATUSES.map(status => ({
   value: status,
@@ -636,6 +645,7 @@ const CAMPAIGN_DETAIL_STATUS_FILTER_OPTIONS: CampaignFilterOption[] = [
 const CAMPAIGN_STATUS_SORT_ORDER = new Map<string, number>([
   ['đang chạy', 0],
   ['chờ xử lý', 1],
+  ['draft', 1], // UI only: drafts share the scheduled campaign ordering.
   ['tạm dừng', 2],
   ['hoàn thành', 3]
 ])
@@ -1457,7 +1467,7 @@ const shouldSortCampaignByLastRun = (status: string) => (
   status === 'tạm dừng' || status === 'hoàn thành'
 )
 
-const getCampaignListSortTime = (campaign: CampaignListItem) => {
+const getCampaignListSortTime = (campaign: CampaignListSortItem) => {
   if (shouldSortCampaignByLastRun(campaign.status)) {
     const lastRunTime = getCampaignTimeSortValue(campaign.lastRunAt)
     if (Number.isFinite(lastRunTime)) return lastRunTime
@@ -1466,7 +1476,7 @@ const getCampaignListSortTime = (campaign: CampaignListItem) => {
   return getCampaignTimeSortValue(campaign.schedule)
 }
 
-const compareCampaignListOrder = (a: CampaignListItem, b: CampaignListItem) => {
+const compareCampaignListOrder = (a: CampaignListSortItem, b: CampaignListSortItem) => {
   const statusA = CAMPAIGN_STATUS_SORT_ORDER.get(a.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
   const statusB = CAMPAIGN_STATUS_SORT_ORDER.get(b.status) ?? CAMPAIGN_STATUS_SORT_ORDER.size
   if (statusA !== statusB) return statusA - statusB
@@ -1479,8 +1489,14 @@ const compareCampaignListOrder = (a: CampaignListItem, b: CampaignListItem) => {
     return timeB - timeA
   }
 
-  return b.id - a.id
+  if (typeof a.id === 'number' && typeof b.id === 'number') return b.id - a.id
+  if (typeof a.id !== typeof b.id) return typeof a.id === 'number' ? -1 : 1
+  return String(a.id).localeCompare(String(b.id))
 }
+
+const getCampaignTableSortItem = (row: CampaignTableRow): CampaignListSortItem => row.kind === 'draft'
+  ? { id: row.item.id, status: 'draft', schedule: row.item.schedule }
+  : row.item
 
 const formatExportTimestamp = (date = new Date()) => {
   const pad = (value: number) => String(value).padStart(2, '0')
@@ -2502,6 +2518,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
   const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<CampaignConfig | null>(null)
   const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<CampaignConfig | null>(null)
+  const campaignDrafts = useCampaignDrafts(isActive)
   const [editingCampaign, setEditingCampaign] = useState<CampaignConfig | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
@@ -2610,8 +2627,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         }
       }
     })
+    campaignDrafts.items.forEach(draft => draft.accountIds.forEach(id => {
+      if (!optionMap.has(String(id))) optionMap.set(String(id), { value: String(id), label: `ID: ${id}`, platform: '' })
+    }))
     return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
-  }, [accounts, campaigns])
+  }, [accounts, campaigns, campaignDrafts.items])
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
   const findDataLogTableWrapRef = useRef<HTMLDivElement>(null)
@@ -5175,8 +5195,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         })
       }
     })
+    campaignDrafts.items.forEach(draft => {
+      if (!optionMap.has(draft.actionId)) optionMap.set(draft.actionId, {
+        value: draft.actionId, label: draft.actionId,
+        platform: inferCampaignPlatformFromActionId(draft.actionId)
+      })
+    })
     return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
-  }, [campaignActions, campaigns, actionById, accountById])
+  }, [campaignActions, campaigns, campaignDrafts.items, actionById, accountById])
 
   // Filter campaigns by account and the local list filters.
   const filteredCampaigns = useMemo(() => {
@@ -5241,6 +5267,33 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     [filteredCampaigns, selectedIds]
   )
 
+  const filteredCampaignDrafts = useMemo(() => {
+    if (statusFilters.length > 0 && !statusFilters.includes('draft')) return []
+    const dateStart = parseDateInputBoundary(dateFrom, 'start')
+    const dateEnd = parseCampaignListDateToBoundary(dateTo)
+    const hasDateFilter = timePreset !== 'all' && (!!dateStart || !!dateEnd)
+    const searchQuery = normalizeFilterText(campaignNameSearch)
+    return campaignDrafts.items.filter(draft => {
+      if (filterAccountId && !draft.accountIds.includes(filterAccountId)) return false
+      if (searchQuery && !normalizeFilterText(draft.name).includes(searchQuery)) return false
+      if (hasDateFilter) {
+        const scheduleDate = new Date(draft.schedule)
+        if (Number.isNaN(scheduleDate.getTime())) return false
+        if (dateStart && scheduleDate < dateStart) return false
+        if (dateEnd && scheduleDate > dateEnd) return false
+      }
+      if (accountFilters.length > 0 && !draft.accountIds.some(id => accountFilters.includes(String(id)))) return false
+      if (platformFilters.length > 0) {
+        const platform = normalizeCampaignPlatform(actionById.get(draft.actionId)?.flatformType)
+          || normalizeCampaignPlatform(accountById.get(draft.accountIds[0])?.flatformType)
+          || inferCampaignPlatformFromActionId(draft.actionId)
+        if (!platformFilters.includes(platform)) return false
+      }
+      return actionFilters.length === 0 || actionFilters.includes(draft.actionId)
+    })
+  }, [campaignDrafts.items, filterAccountId, campaignNameSearch, timePreset, dateFrom, dateTo,
+    statusFilters, accountFilters, platformFilters, actionFilters, actionById, accountById])
+
   const filterAccountCampaign = filterAccountId
     ? campaigns.find(campaign => (
       campaign.accountId === filterAccountId || campaign.secondaryAccountId === filterAccountId
@@ -5254,14 +5307,22 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       || `ID: ${filterAccountId}`
     : null
 
-  const emptyCampaignText = campaigns.length === 0
+  const emptyCampaignText = campaigns.length === 0 && campaignDrafts.items.length === 0
     ? 'Chưa có chiến dịch'
     : 'Không có chiến dịch phù hợp bộ lọc'
 
   const showCampaignTableLoading = showInitialCampaignLoading || showManualCampaignLoading
+  const campaignTableRows = useMemo(() => {
+    const rows: CampaignTableRow[] = [
+      ...(showCampaignTableLoading ? [] : filteredCampaigns).map(item => ({ kind: 'campaign' as const, item })),
+      ...filteredCampaignDrafts.map(item => ({ kind: 'draft' as const, item }))
+    ]
+    return rows.sort((a, b) => compareCampaignListOrder(getCampaignTableSortItem(a), getCampaignTableSortItem(b)))
+  }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading])
   const campaignRangeLabel = getCampaignRangeLabel(timePreset, dateFrom, dateTo)
 
   const handleReloadCampaigns = () => {
+    campaignDrafts.refresh()
     setShowManualCampaignLoading(true)
     loadCampaigns().finally(() => setShowManualCampaignLoading(false))
   }
@@ -5817,6 +5878,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           </div>
         )}
 
+        {campaignDrafts.draft && <CampaignFormModal key={campaignDrafts.draft.id} campaign={null}
+          savedDraft={campaignDrafts.draft} onOpenGeneralSettings={onOpenGeneralSettings}
+          onOpenContentTemplates={onOpenContentTemplates} onClose={() => {
+            campaignDrafts.closeDraft()
+            void loadCampaigns({ silent: true })
+          }} />}
         {showForm && (
           <CampaignFormModal
             campaign={editingCampaign}
@@ -5830,6 +5897,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             onClose={() => {
               const openedFromDataGroup = campaignFormModalZIndex !== undefined
               setShowForm(false)
+              campaignDrafts.refresh()
               setEditingCampaign(null)
               setCloneFromId(undefined)
               setCampaignFormInitialActionId(undefined)
@@ -5912,7 +5980,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       <div className="campaign-work-area" ref={workAreaRef}>
         {/* Campaign Table */}
         <div className="campaign-panel-content campaign-table-scroll" style={{ flex: 1, minHeight: 0 }}>
-          {!showCampaignTableLoading && filteredCampaigns.length === 0 ? (
+          {!showCampaignTableLoading && !campaignDrafts.loading && !campaignDrafts.error
+            && filteredCampaigns.length === 0 && filteredCampaignDrafts.length === 0 ? (
             <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
           ) : (
             <div className="campaign-table">
@@ -5923,7 +5992,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     aria-label="Chọn tất cả chiến dịch"
                     type="checkbox"
                     checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
-                    disabled={showCampaignTableLoading}
+                    disabled={showCampaignTableLoading || filteredCampaigns.length === 0}
                     ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
                     onChange={toggleSelectAll}
                   />
@@ -5938,12 +6007,23 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 <div className="campaign-col col-send-date">Ngày gửi</div>
                 <div className="campaign-col col-update-date">Ngày update</div>
               </div>
-              {showCampaignTableLoading ? (
+              {showCampaignTableLoading && (
                 <div className="campaign-table-loading-row">
                   <RefreshCw size={15} className="spin" />
                   <span>Đang tải danh sách chiến dịch...</span>
                 </div>
-              ) : filteredCampaigns.map(campaign => {
+              )}
+              {campaignTableRows.map(row => {
+                if (row.kind === 'draft') {
+                  const draft = row.item
+                  return <CampaignDraftRow key={`draft:${draft.id}`} draft={draft}
+                    actionLabel={actionById.get(draft.actionId)?.name || draft.actionId}
+                    accountLabel={draft.accountIds.map(id => accountById.get(id)?.name || `#${id}`).join(', ')}
+                    scheduleLabel={formatCompactDateTime(draft.schedule)} updatedLabel={formatCompactDateTime(draft.updatedAt)}
+                    opening={campaignDrafts.opening} onOpen={() => { void campaignDrafts.openDraft(draft.id) }}
+                    onDelete={() => campaignDrafts.deleteDraft(draft)} />
+                }
+                const campaign = row.item
                 const actionLabel = campaign.actionName || actionById.get(campaign.actionId)?.name || campaign.actionId
 	                const account = accountById.get(campaign.accountId)
 	                const accountLabel = campaign.accountName || account?.name || '-'
@@ -6355,6 +6435,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                   </div>
                 )
               })}
+              {campaignDrafts.loading && <div className="campaign-table-loading-row" role="status">
+                <RefreshCw size={15} className="spin" /><span>Đang tải bản nháp...</span>
+              </div>}
+              {campaignDrafts.error && <div className="campaign-table-loading-row" role="alert">
+                <span>Không tải được bản nháp: {campaignDrafts.error}</span>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={campaignDrafts.refresh}>Thử lại</button>
+              </div>}
             </div>
           )}
         </div>
