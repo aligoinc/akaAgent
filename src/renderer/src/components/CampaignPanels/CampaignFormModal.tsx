@@ -2513,7 +2513,6 @@ export default function CampaignFormModal({
   const isSmsCampaign = formData.actionId === SMS_SEND_ACTION_ID
   const isVoiceCallCampaign = formData.actionId === VOICE_CALL_ACTION_ID
   const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
-  const isZaloInputCampaign = formData.actionId.startsWith('zalo_')
   const canUseFormattedContent = supportsFormattedContent(formData.actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -2842,7 +2841,7 @@ export default function CampaignFormModal({
       ? (isEditingSavedCampaign ? 4 : 5)
       : isMobileManagedSmsCampaign
         ? (isEditingSavedCampaign ? 9 : 10)
-        : (isEditingSavedCampaign ? 5 : 6)) + (isZaloInputCampaign ? 5 : 0)
+        : (isEditingSavedCampaign ? 5 : 6)) + (isZaloMessagePhoneCampaign ? 5 : 0)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -16483,9 +16482,6 @@ export default function CampaignFormModal({
                             <tr>
                               <th className="campaign-grid-index-col">STT</th>
                               <th>{isFindDataSearchCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
-                              {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
-                                <th key={field}>Info{index + 1}</th>
-                              ))}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
@@ -16516,7 +16512,7 @@ export default function CampaignFormModal({
                                   <th>Email</th>
                                 </>
                               )}
-                              {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                              {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
                                 <th key={field}>Info{index + 1}</th>
                               ))}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
@@ -16597,7 +16593,7 @@ export default function CampaignFormModal({
                                     )}
                                   </>
                                 )}
-                                {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
                                   <td key={field}>
                                     <input type="text" value={d[field] || ''} onChange={e => updateDetailRow(i, field, e.target.value)} placeholder={`Info${index + 1}...`} aria-label={`Info${index + 1} dòng ${i + 1}`} disabled={isEditingSavedCampaign} />
                                   </td>
