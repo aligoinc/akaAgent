@@ -2513,6 +2513,7 @@ export default function CampaignFormModal({
   const isSmsCampaign = formData.actionId === SMS_SEND_ACTION_ID
   const isVoiceCallCampaign = formData.actionId === VOICE_CALL_ACTION_ID
   const isMobileManagedSmsCampaign = isSmsCampaign || isVoiceCallCampaign
+  const isZaloInputCampaign = formData.actionId.startsWith('zalo_')
   const canUseFormattedContent = supportsFormattedContent(formData.actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
@@ -2835,13 +2836,13 @@ export default function CampaignFormModal({
       ? formData.commentImageOption !== 'none' && formData.commentImages.length > 0
     : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
-  const detailsColumnCount = isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
+  const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 4 : 5)
       : isMobileManagedSmsCampaign
         ? (isEditingSavedCampaign ? 9 : 10)
-        : (isEditingSavedCampaign ? 5 : 6)
+        : (isEditingSavedCampaign ? 5 : 6)) + (isZaloInputCampaign ? 5 : 0)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -16482,6 +16483,9 @@ export default function CampaignFormModal({
                             <tr>
                               <th className="campaign-grid-index-col">STT</th>
                               <th>{isFindDataSearchCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
+                              {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                <th key={field}>Info{index + 1}</th>
+                              ))}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
@@ -16512,6 +16516,9 @@ export default function CampaignFormModal({
                                   <th>Email</th>
                                 </>
                               )}
+                              {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                <th key={field}>Info{index + 1}</th>
+                              ))}
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           )}
@@ -16590,6 +16597,11 @@ export default function CampaignFormModal({
                                     )}
                                   </>
                                 )}
+                                {isZaloInputCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+                                  <td key={field}>
+                                    <input type="text" value={d[field] || ''} onChange={e => updateDetailRow(i, field, e.target.value)} placeholder={`Info${index + 1}...`} aria-label={`Info${index + 1} dòng ${i + 1}`} disabled={isEditingSavedCampaign} />
+                                  </td>
+                                ))}
                                 {!isEditingSavedCampaign && (
                                   <td>
                                     <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
