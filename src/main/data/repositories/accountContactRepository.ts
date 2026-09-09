@@ -1513,7 +1513,8 @@ async function fetchContactRowsForList(
   accountId: number,
   staffId: number,
   contactType?: ContactType,
-  ids: number[] = []
+  ids: number[] = [],
+  statusFilter?: AccountContactListQuery['statusFilter']
 ): Promise<AutoAccountContact[]> {
   const rows: Record<string, unknown>[] = []
   if (ids.length > 0) {
@@ -1530,6 +1531,7 @@ async function fetchContactRowsForList(
         .order('name', { ascending: true })
 
       if (contactType) query = query.eq('contact_type', contactType)
+      query = applyDbContactStatusFilter(query, contactType, statusFilter)
 
       const { data, error } = await query
       if (error) throw new Error(`Failed to list selected contacts: ${error.message}`)
@@ -1548,6 +1550,7 @@ async function fetchContactRowsForList(
         .range(from, from + CONTACT_LIST_FETCH_CHUNK - 1)
 
       if (contactType) query = query.eq('contact_type', contactType)
+      query = applyDbContactStatusFilter(query, contactType, statusFilter)
 
       const { data, error } = await query
       if (error) throw new Error(`Failed to list paged contacts: ${error.message}`)
@@ -1601,7 +1604,8 @@ async function filterContactsForList(
   const akaBizTagIds = normalizeContactIdList(query.akaBizTagIds)
   const includeNoZaloTag = query.zaloNoTag === true
   const includeNoAkaBizTag = query.akaBizNoTag === true
-  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, effectiveIds)
+  // Keep the DB status restriction even when search/tag matching needs JS.
+  const contacts = await fetchContactRowsForList(accountId, staffId, query.contactType, effectiveIds, query.statusFilter)
   const filtered = contacts.filter(contact => {
     if (datasetContactIds && !datasetContactIds.has(contact.id)) return false
     if (groupContactIds && !groupContactIds.has(contact.id)) return false
