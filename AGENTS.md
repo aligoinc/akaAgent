@@ -248,6 +248,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 
 ### Data layer
 
+Input canonical của cả `direct` và `data_group` được bổ sung thông tin nhưng phải giữ trường xác định đối tượng theo action, key/alias/origins và các tham chiếu hệ thống; xoá canonical vẫn bị chặn. [v274](migrations/migration_v274_campaign_input_information_updates.sql) thay cơ chế cho đổi đối tượng của v273, bỏ trigger dọn alias, giữ fast path không lookup campaign khi chỉ cập nhật thông tin/trạng thái. V274 đã apply trên akachat ngày 11/09/2026, version `20260911054007`; smoke: `node scripts/zalo-phone-input-identity-smoke-test.cjs` và SQL tests v274.
+
 WebApp input **Tiếp tục / chạy lại** dùng RPC atomic v269, nhận input tạm dừng/hoàn thành mà không tự bật campaign/account; giữ tenant, runtime ownership và serialization barrier. Xem [CONTROL_CAMPAIGN_INPUT_RERUN.md](docs/CONTROL_CAMPAIGN_INPUT_RERUN.md) và smoke rollback v269; không khôi phục guard `campaign_completed` cũ của v219 cho thao tác chạy lại input do người dùng chọn.
 
 [src/main/data/repositories/](src/main/data/repositories/) — mỗi entity 1 file. Pattern:

@@ -915,7 +915,7 @@ export interface CampaignInputData {
   dateAction?: string
   isDelete: boolean
   createdAt?: string
-  /** Per-campaign immutable delivery identity. Legacy rows intentionally keep NULL. */
+  /** Per-campaign immutable delivery identity. Information can be enriched without changing the target. */
   canonicalTargetKey?: string | null
   /** Immutable semantic type snapshot. Legacy rows may intentionally remain NULL. */
   dataTypeCategoryItemId?: number | null

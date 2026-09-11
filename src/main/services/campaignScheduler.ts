@@ -13512,9 +13512,9 @@ export class CampaignScheduler {
       else await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
       this.throwIfZaloRuntimeStopping(campaign.id)
       const inputDataId = Number((options.inputData as Record<string, unknown> | undefined)?.id)
-      // Data Group inputs are an immutable delivery snapshot. The resolved Zalo UID/name
-      // belongs to the execution result/contact catalog, not back in the canonical ledger.
-      if (campaign.dataTargetSourceMode !== 'data_group' && Number.isFinite(inputDataId) && inputDataId > 0) {
+      // Both direct and Data Group inputs retain the resolved information;
+      // the repository and DB keep the original phone target/key intact.
+      if (Number.isFinite(inputDataId) && inputDataId > 0) {
         const nextName = target.displayName || target.originalName || ''
         await this.supabase.updateCampaignInputData(inputDataId, {
           name: nextName || undefined,
