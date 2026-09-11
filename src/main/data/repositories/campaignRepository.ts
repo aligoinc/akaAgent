@@ -5193,16 +5193,17 @@ export async function createSmsCampaignInputDataSnapshot(action: Partial<Campaig
 }
 
 export async function updateCampaignInputData(id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> {
-  const immutablePayloadFields: Array<keyof CampaignInputData> = [
-    'inputId', 'name', 'phone', 'phoneCarrier', 'uid', 'email',
+  const payloadFields: Array<keyof CampaignInputData> = [
+    'campaignId', 'inputId', 'name', 'phone', 'phoneCarrier', 'uid', 'email',
     'info1', 'info2', 'info3', 'info4', 'info5', 'content', 'schedule',
     'isDelete', 'canonicalTargetKey'
   ]
-  if (immutablePayloadFields.some(field => updates[field] !== undefined)) {
+  const payloadFieldsToUpdate = payloadFields.filter(field => updates[field] !== undefined)
+  if (payloadFieldsToUpdate.length > 0) {
     const u = requireCurrentUser()
     const { data: inputRow, error: inputError } = await client()
       .from('auto_campaign_input_data')
-      .select('campaign_id, canonical_target_key')
+      .select('campaign_id, input_id, canonical_target_key, phone, uid, email, is_delete')
       .eq('id', id)
       .eq('is_delete', false)
       .maybeSingle()
@@ -5211,7 +5212,39 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
     const campaign = await getCampaign(Number(inputRow.campaign_id))
     if (!campaign || campaign.staffId !== u.staffId) throw new Error('Không tìm thấy chiến dịch của input.')
     if (campaign.dataTargetSourceMode === 'data_group' || inputRow.canonical_target_key) {
-      throw new Error('Payload canonical là snapshot bất biến; chỉ được cập nhật trạng thái, ghi chú và kết quả chạy.')
+      // Both import modes may enrich information while retaining the original
+      // delivery target and system references. The DB checks this atomically.
+      const references = {
+        campaignId: inputRow.campaign_id, inputId: inputRow.input_id,
+        canonicalTargetKey: inputRow.canonical_target_key, isDelete: inputRow.is_delete
+      }
+      for (const field of Object.keys(references) as Array<keyof typeof references>) {
+        if (updates[field] !== undefined && (updates[field] ?? null) !== (references[field] ?? null)) {
+          throw new Error('Không được đổi liên kết hoặc xoá input canonical; chỉ được cập nhật thông tin của cùng đối tượng.')
+        }
+      }
+      const requirement = getCampaignInputDataRequirement(campaign.actionId)
+      const hasPhoneTarget = normalizeVietnamMobilePhone(inputRow.phone).length > 0
+      let targetFields: Array<'phone' | 'uid' | 'email'>
+      if (requirement?.field === 'phone_or_uid') {
+        targetFields = hasPhoneTarget ? ['phone'] : ['uid']
+        // Add-member runtime prefers an existing UID. A phone lookup may fill
+        // an empty UID, but replacing a populated UID would change the target.
+        if (hasPhoneTarget && String(inputRow.uid ?? '').trim()) targetFields.push('uid')
+        if (!hasPhoneTarget && updates.phone !== undefined && normalizeVietnamMobilePhone(updates.phone)) {
+          throw new Error('Không được đổi đối tượng chạy của input canonical.')
+        }
+      } else if (requirement?.field === 'phone') {
+        targetFields = hasPhoneTarget ? ['phone'] : ['phone', 'uid']
+      } else if (requirement?.field === 'uid' || requirement?.field === 'email') {
+        targetFields = [requirement.field]
+      } else {
+        targetFields = ['phone', 'uid', 'email']
+      }
+      if (targetFields.some(field => updates[field] !== undefined
+        && (updates[field] ?? null) !== (inputRow[field] ?? null))) {
+        throw new Error('Không được đổi đối tượng chạy của input canonical.')
+      }
     }
   }
   const payload: any = {}
@@ -5222,9 +5255,9 @@ export async function updateCampaignInputData(id: number, updates: Partial<Campa
   if (updates.name !== undefined) payload.name = updates.name
   if (updates.phone !== undefined) {
     payload.phone = updates.phone
-    payload.phone_carrier = isSmsInputData ? normalizeCampaignInputPhoneCarrier(updates.phone, updates.phoneCarrier) : null
+    payload.phone_carrier = isSmsInputData ? normalizeCampaignInputPhoneCarrier(updates.phone, updates.phoneCarrier) : (updates.phoneCarrier ?? null)
   } else if (updates.phoneCarrier !== undefined) {
-    payload.phone_carrier = isSmsInputData ? normalizeCampaignInputPhoneCarrier(null, updates.phoneCarrier) : null
+    payload.phone_carrier = isSmsInputData ? normalizeCampaignInputPhoneCarrier(null, updates.phoneCarrier) : (updates.phoneCarrier ?? null)
   }
   if (updates.uid !== undefined) payload.uid = updates.uid
   if (updates.email !== undefined) payload.email = updates.email
