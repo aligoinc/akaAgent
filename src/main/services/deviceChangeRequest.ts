@@ -6,7 +6,7 @@ import type { DeviceIdentity } from './deviceIdentity'
 
 type Source = 'login' | 'account_menu'
 type Rpc = (name: string, args: Record<string, unknown>) => Promise<unknown>
-interface Binding { staffId: string; hash: string | null; boundAt: string | null }
+interface Binding { staffId: string; hash: string | null; boundAt?: string | null; revision?: string; version?: 2 }
 interface PendingChange {
   version: 1
   username: string
@@ -20,7 +20,8 @@ function validBinding(value: unknown): value is Binding {
   const binding = value as Binding
   return typeof binding.staffId === 'string' && /^\d+$/.test(binding.staffId)
     && (binding.hash === null || typeof binding.hash === 'string')
-    && (binding.boundAt === null || (typeof binding.boundAt === 'string' && Number.isFinite(Date.parse(binding.boundAt))))
+    && (binding.version === 2 ? typeof binding.revision === 'string' && /^\d+$/.test(binding.revision)
+      : binding.boundAt === null || (typeof binding.boundAt === 'string' && Number.isFinite(Date.parse(binding.boundAt))))
 }
 
 function parseResult(value: unknown): DeviceLockResetResult {
@@ -43,6 +44,7 @@ export class DeviceChangeRequestClient {
     directory: string
     rpc: Rpc
     getDevice: () => Promise<DeviceIdentity & { appVersion: string }>
+    bindingVersion?: 2
   }) {}
 
   reset(usernameInput: string, source: Source, password: string | null = null): Promise<DeviceLockResetResult> {
@@ -63,6 +65,7 @@ export class DeviceChangeRequestClient {
     try {
       pending = JSON.parse(await readFile(file, 'utf8')) as PendingChange
       if (pending.version !== 1 || pending.username !== username || pending.source !== source
+        || pending.binding?.version !== this.options.bindingVersion
         || !/^[0-9a-f-]{36}$/i.test(pending.requestId) || !validBinding(pending.binding)) {
         throw new Error('Invalid pending device change')
       }
@@ -72,11 +75,11 @@ export class DeviceChangeRequestClient {
       }
     }
     if (!pending) {
-      const prepared = await this.options.rpc('aka_agent_prepare_device_change', { p_username: username }) as { code?: string; binding?: unknown } | null
+      const prepared = await this.options.rpc(this.options.bindingVersion === 2 ? 'aka_agent_prepare_device_change_v2' : 'aka_agent_prepare_device_change', { p_username: username }) as { code?: string; binding?: unknown } | null
       if (prepared?.code === 'not_found' || prepared?.code === 'inactive') {
         return { success: false, changed: false, code: prepared.code, remainingChanges: null }
       }
-      if (prepared?.code !== 'prepared' || !validBinding(prepared.binding)) throw new Error('Không thể kiểm tra liên kết máy tính. Vui lòng thử lại.')
+      if (prepared?.code !== 'prepared' || !validBinding(prepared.binding) || prepared.binding.version !== this.options.bindingVersion) throw new Error('Không thể kiểm tra liên kết máy tính. Vui lòng thử lại.')
       pending = { version: 1, username, source, requestId: randomUUID(), binding: prepared.binding }
       await mkdir(this.options.directory, { recursive: true, mode: 0o700 })
       const temporary = `${file}.${randomUUID()}.tmp`
@@ -90,7 +93,7 @@ export class DeviceChangeRequestClient {
       // Persist before sending any mutation. A restart can safely resend it.
       await rename(temporary, file)
     }
-    const result = parseResult(await this.options.rpc('aka_agent_reset_device_binding', {
+    const result = parseResult(await this.options.rpc(this.options.bindingVersion === 2 ? 'aka_agent_reset_device_binding_v2' : 'aka_agent_reset_device_binding', {
       p_username: username, p_password: password, p_source: source,
       p_request_id: pending.requestId, p_expected_binding: pending.binding, p_device: device
     }))

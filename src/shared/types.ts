@@ -2732,7 +2732,7 @@ export interface AuthUser {
 }
 
 export type AuthLoginResult =
-  | { status: 'authenticated'; user: AuthUser }
+  | { status: 'authenticated'; user: AuthUser; loginState?: AuthLocalState }
   | { status: 'policy_required' }
 
 export interface ChatWebState {
@@ -2762,10 +2762,14 @@ export interface SavedLoginCredentials {
   password: string
 }
 
-export interface AuthBootstrapResult {
-  user: AuthUser | null
+export interface AuthLocalState {
   loginOptions: LoginPreferences
-  savedCredentials: SavedLoginCredentials | null
+  rememberedLogin: { username: string; hasCredential: boolean } | null
+  warningMessage?: string | null
+}
+
+export interface AuthBootstrapResult extends AuthLocalState {
+  user: AuthUser | null
   policyAcceptanceRequired?: boolean
   errorMessage?: string | null
 }
@@ -2938,6 +2942,8 @@ export const IPC_EVENTS = {
 
   // Auth
   AUTH_LOGIN: 'auth:login',
+  AUTH_LOGIN_REMEMBERED: 'auth:login-remembered',
+  AUTH_CANCEL_PENDING_LOGIN: 'auth:cancel-pending-login',
   AUTH_ACCEPT_POLICY_AND_LOGIN: 'auth:accept-policy-and-login',
   AUTH_BOOTSTRAP: 'auth:bootstrap',
   AUTH_REVOKE_REMEMBERED_LOGIN: 'auth:revoke-remembered-login',

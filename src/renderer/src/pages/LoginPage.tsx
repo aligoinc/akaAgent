@@ -214,8 +214,9 @@ export default function LoginPage() {
     loginOptions,
     setLoginOptions,
     recoverDeviceCredentials,
-    savedCredentials
+    rememberedLogin
   } = useAuthStore()
+  const usernameEdited = useRef(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -223,16 +224,18 @@ export default function LoginPage() {
   const deviceChangeButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    if (!savedCredentials) return
-    setUsername(savedCredentials.username)
-    setPassword(savedCredentials.password)
-  }, [savedCredentials])
+    if (!rememberedLogin || usernameEdited.current) return
+    setUsername(rememberedLogin.username)
+  }, [rememberedLogin])
+
+  const canUseRemembered = !!rememberedLogin?.hasCredential && rememberedLogin.username === username.trim()
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!username.trim() || !password || resettingDevice) return
+    if (!username.trim() || (!password && !canUseRemembered) || resettingDevice || loggingIn) return
     try {
       await login(username.trim(), password, loginOptions)
+      setPassword('')
     } catch {
       /* error đã được set vào store, render bên dưới */
     }
@@ -296,7 +299,7 @@ export default function LoginPage() {
                   spellCheck={false}
                   autoFocus
                   value={username}
-                  onChange={event => { setUsername(event.target.value); if (errorMessage) clearError() }}
+                  onChange={event => { usernameEdited.current = true; setUsername(event.target.value); void window.electronAPI.cancelPendingLogin(); if (errorMessage) clearError() }}
                   placeholder="Nhập tên đăng nhập"
                   disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
@@ -315,7 +318,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={event => { setPassword(event.target.value); if (errorMessage) clearError() }}
-                  placeholder="Nhập mật khẩu"
+                  placeholder={canUseRemembered ? 'Đã có mật khẩu ghi nhớ trên máy' : 'Nhập mật khẩu'}
                   disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
                 />
@@ -334,7 +337,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="login-recover"
-                onClick={() => { void recoverDeviceCredentials() }}
+                onClick={() => { usernameEdited.current = false; void recoverDeviceCredentials() }}
                 disabled={recoverDisabled}
               >
                 {recoveringCredentials ? 'Đang lấy tên đăng nhập…' : 'Lấy lại tên đăng nhập'}
@@ -368,7 +371,7 @@ export default function LoginPage() {
 
             {errorMessage && <p className="login-error" id="login-error" role="alert">{errorMessage}</p>}
 
-            <button type="submit" className="login-submit" disabled={loggingIn || resettingDevice || !username.trim() || !password}>
+            <button type="submit" className="login-submit" disabled={loggingIn || resettingDevice || !username.trim() || (!password && !canUseRemembered)}>
               {loggingIn ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}
               {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
               {!loggingIn && <ArrowRight size={17} aria-hidden="true" />}

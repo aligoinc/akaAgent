@@ -9,7 +9,8 @@ let requests: DeviceChangeRequestClient | null = null
 export function getDeviceChangeRequests(): DeviceChangeRequestClient {
   if (!requests) {
     requests = new DeviceChangeRequestClient({
-      directory: join(app.getPath('userData'), 'device-change-requests'),
+      directory: join(app.getPath('userData'), 'device-change-requests-v2'),
+      bindingVersion: 2,
       getDevice: async () => ({ ...await getCurrentDeviceIdentity(), appVersion: app.getVersion() }),
       rpc: async (name, args) => {
         const { data, error } = await getSupabaseClient().rpc(name, args).abortSignal(AbortSignal.timeout(15_000))

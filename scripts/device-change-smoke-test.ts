@@ -226,6 +226,7 @@ async function presenceQuitSmoke(): Promise<void> {
       quitCleanupStarted: false, quitCleanupCompleted: false,
       runtimeCredentials: credentials, restartRequiredActivation: null,
       devicePresence: service,
+      chatWeb: { reset: async () => {} }, crmWeb: { reset: async () => {} },
       app: { on: (_event: string, handler: typeof beforeQuit) => { beforeQuit = handler }, quit: () => { order.push('quit') } },
       getCurrentUser: () => ({ staffId: 42 }),
       clearSessionExpiryTimer: noop, cancelLocalHandoffRetry: noop, cancelDesktopHandoffAckRetry: noop,

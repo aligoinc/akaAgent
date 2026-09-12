@@ -46,10 +46,7 @@ import {
   setCurrentUser,
   setCurrentUserCredentials
 } from '../data/currentUser'
-import {
-  loadLoginSettingsForCurrentDevice,
-  updateStartupSettingForCurrentDevice
-} from '../data/repositories/authRepository'
+import { getLocalLoginStore } from '../services/localLoginService'
 import {
   blockZaloLocalStartupHandoff,
   clearZaloLocalStartupHandoffBlock,
@@ -1168,15 +1165,16 @@ export function registerIpcHandlers(
 
   // App settings
   ipcMain.handle(IPC_EVENTS.APP_GET_STARTUP_SETTING, async () => {
-    const snapshot = await loadLoginSettingsForCurrentDevice()
-    app.setLoginItemSettings({ openAtLogin: snapshot.loginOptions.startupEnabled })
     return { enabled: app.getLoginItemSettings().openAtLogin }
   })
 
   ipcMain.handle(IPC_EVENTS.APP_SET_STARTUP_SETTING, async (_, enabled: boolean) => {
-    const loginOptions = await updateStartupSettingForCurrentDevice(!!enabled, getCurrentUser())
-    app.setLoginItemSettings({ openAtLogin: loginOptions.startupEnabled })
-    return { enabled: app.getLoginItemSettings().openAtLogin }
+    const state = await getLocalLoginStore().updateOptions({ startupEnabled: !!enabled })
+    app.setLoginItemSettings({ openAtLogin: !!enabled })
+    if (state.warningMessage) throw new Error(state.warningMessage)
+    const applied = app.getLoginItemSettings().openAtLogin
+    if (applied !== !!enabled) throw new Error('Chưa cập nhật được thiết lập khởi động cùng máy tính.')
+    return { enabled: applied }
   })
 
   ipcMain.handle(IPC_EVENTS.APP_READ_BLOCK_SCREENSHOT, async (_, filePath: string) => {
