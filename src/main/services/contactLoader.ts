@@ -56,6 +56,8 @@ interface ContactDatasetScanContext {
 }
 
 export interface ContactLoaderOptions {
+  /** Only App Server uses claim auth; Desktop Chat still has login credentials. */
+  contactDatasetAuth?: 'desktop' | 'server_claim'
   zaloRuntimeTarget?: 'desktop' | 'server'
 }
 
@@ -145,6 +147,7 @@ export class ContactLoader {
   private dataTypeCategoryIdByCode: Map<string, number> | null = null
   private proxyRuntime?: ProxyRuntimeService
   private readonly zaloRuntimeTarget: 'desktop' | 'server'
+  private readonly contactDatasetAuth: 'desktop' | 'server_claim'
   private zaloRuntimeBlockedForRestart = false
   private zaloRuntimeClaimsAbandoned = false
 
@@ -160,6 +163,10 @@ export class ContactLoader {
     this.mainWindow = mainWindow
     this.proxyRuntime = proxyRuntime
     this.zaloRuntimeTarget = options.zaloRuntimeTarget || 'desktop'
+    this.contactDatasetAuth = options.contactDatasetAuth || 'desktop'
+    if (this.contactDatasetAuth === 'server_claim' && this.zaloRuntimeTarget !== 'server') {
+      throw new Error('Server dataset authentication requires the Server runtime target')
+    }
   }
 
   destroyBackgroundPage(accountId: number): void {
@@ -1417,6 +1424,7 @@ export class ContactLoader {
         let datasetId: number | undefined
         try {
           datasetId = await this.finalizeScanDataset({
+            runtimeClaim,
             accountId,
             contactType,
             context: datasetContext,
@@ -1457,6 +1465,7 @@ export class ContactLoader {
 
       const stopped = this.isLoadCancelled(accountId, variables) || loadState.controller.signal.aborted
       const datasetId = await this.finalizeScanDataset({
+        runtimeClaim,
         accountId,
         contactType,
         context: datasetContext,
@@ -1501,6 +1510,7 @@ export class ContactLoader {
       if (datasetContext) {
         try {
           datasetId = await this.finalizeScanDataset({
+            runtimeClaim,
             accountId,
             contactType,
             context: datasetContext,
@@ -2240,6 +2250,7 @@ export class ContactLoader {
     stopped: boolean
     runKey: string
     status?: ContactDatasetFinalizeInput['status']
+    runtimeClaim?: AccountRuntimeScanClaim
   }): Promise<number | undefined> {
     const sourceKey = String(input.context.sourceKey || '').trim()
     if (!sourceKey) throw new Error('Không xác định được nguồn của danh sách data vừa quét.')
@@ -2288,7 +2299,16 @@ export class ContactLoader {
       }
     }
 
-    const dataset = await this.supabase.finalizeContactDataset(finalizeInput)
+    let dataset
+    if (this.contactDatasetAuth === 'server_claim') {
+      const claimToken = input.runtimeClaim?.claimToken
+      if (!claimToken || this.zaloRuntimeClaimsAbandoned) {
+        throw new Error('Lượt quét trên Server không còn quyền lưu bộ dữ liệu. Vui lòng quét lại.')
+      }
+      dataset = await this.supabase.finalizeZaloServerContactDataset(finalizeInput, claimToken)
+    } else {
+      dataset = await this.supabase.finalizeContactDataset(finalizeInput)
+    }
     return dataset?.id
   }
 
@@ -2720,6 +2740,20 @@ export class ContactLoader {
 
   private async claimAccountForScan(account: AutoAccount): Promise<AccountRuntimeScanClaim> {
     if (String(account.flatformType || '').trim().toLowerCase() === 'zalo') {
+      if (this.contactDatasetAuth === 'server_claim') {
+        const previousStatus = account.status
+        if (previousStatus !== 'chờ xử lý' && previousStatus !== 'tạm dừng') {
+          throw new Error('Tài khoản đang chạy chiến dịch hoặc tác vụ khác.')
+        }
+        const claim = await this.supabase.claimZaloServerContactScan(account.id, previousStatus)
+        if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
+          throw new Error(claim.reason === 'runtime_not_owner'
+            ? 'Chế độ chạy Zalo vừa thay đổi. Vui lòng chờ runtime mới sẵn sàng rồi thử lại.'
+            : 'Tài khoản đang chạy chiến dịch hoặc tác vụ khác.')
+        }
+        this.broadcastAccountStatusUpdated()
+        return { previousStatus: claim.previousStatus, claimToken: claim.claimToken, staffId: claim.staffId }
+      }
       return this.claimZaloAccountForScan(account.id)
     }
 
@@ -2770,8 +2804,8 @@ export class ContactLoader {
   ): Promise<void> {
     const isZalo = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZalo && this.zaloRuntimeClaimsAbandoned) return
-    if (!isZalo && !claim.claimToken) {
-      console.error('Failed to restore account after contact scan: missing non-Zalo claim token')
+    if ((!isZalo || this.contactDatasetAuth === 'server_claim') && !claim.claimToken) {
+      console.error('Failed to restore account after contact scan: missing runtime claim token')
       return
     }
     if (!claim.staffId) {
@@ -2779,7 +2813,7 @@ export class ContactLoader {
       return
     }
 
-    const retryDelays = isZalo ? [] : ACCOUNT_RELEASE_RETRY_DELAYS_MS
+    const retryDelays = claim.claimToken ? ACCOUNT_RELEASE_RETRY_DELAYS_MS : []
     for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
       try {
         const released = isZalo
@@ -2787,7 +2821,8 @@ export class ContactLoader {
             account.id,
             this.zaloRuntimeTarget,
             claim.previousStatus,
-            claim.staffId
+            claim.staffId,
+            claim.claimToken || undefined
           )
           : await this.supabase.releaseNonZaloAccountRuntimeOperation(
             account.id,

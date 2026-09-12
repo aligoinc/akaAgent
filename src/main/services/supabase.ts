@@ -137,9 +137,13 @@ export class SupabaseService {
     id: number,
     runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
     previousStatus: 'chờ xử lý' | 'tạm dừng',
-    staffId?: number
+    staffId?: number,
+    claimToken?: string
   ) {
-    return accountRepo.releaseZaloAccountRuntimeOperation(id, runtimeTarget, previousStatus, staffId)
+    return accountRepo.releaseZaloAccountRuntimeOperation(id, runtimeTarget, previousStatus, staffId, claimToken)
+  }
+  claimZaloServerContactScan(id: number, previousStatus: accountRepo.AccountRuntimePreviousStatus) {
+    return accountRepo.claimZaloServerContactScan(id, previousStatus)
   }
   inspectStaffZaloRunningState(staffId: number) { return accountRepo.inspectStaffZaloRunningState(staffId) }
   getAccountEmailSession(id: number) { return accountRepo.getAccountEmailSession(id) }
@@ -520,6 +524,9 @@ export class SupabaseService {
   }
   finalizeContactDataset(input: ContactDatasetFinalizeInput) {
     return accountContactRepo.finalizeContactDataset(input)
+  }
+  finalizeZaloServerContactDataset(input: ContactDatasetFinalizeInput, claimToken: string) {
+    return accountContactRepo.finalizeZaloServerContactDataset(input, claimToken)
   }
   saveUploadDataset(request: SaveUploadDatasetRequest) {
     return accountContactRepo.saveUploadDataset(request)

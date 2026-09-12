@@ -843,8 +843,30 @@ export async function listContactDatasets(
 export async function finalizeContactDataset(
   input: ContactDatasetFinalizeInput
 ): Promise<AutoAccountContactDataset | null> {
-  const u = requireCurrentUser()
   const credentials = requireCurrentUserCredentials()
+  return finalizeContactDatasetWithAuth(input, {
+    p_auth_username: credentials.username,
+    p_auth_password: credentials.password
+  })
+}
+
+/** The SQL wrapper validates the live Server claim and the complete tenant scope. */
+export async function finalizeZaloServerContactDataset(
+  input: ContactDatasetFinalizeInput,
+  claimToken: string
+): Promise<AutoAccountContactDataset | null> {
+  if (input.scanType !== 'zalo_group_members' || input.contactType !== 'person'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claimToken)) {
+    throw new Error('Thông tin xác thực lượt quét thành viên group trên Server không hợp lệ.')
+  }
+  return finalizeContactDatasetWithAuth(input, { p_claim_token: claimToken })
+}
+
+async function finalizeContactDatasetWithAuth(
+  input: ContactDatasetFinalizeInput,
+  auth: { p_auth_username: string; p_auth_password: string } | { p_claim_token: string }
+): Promise<AutoAccountContactDataset | null> {
+  const u = requireCurrentUser()
   const accountId = Number(input.accountId)
   const sourceKey = String(input.sourceKey || '').trim()
   const name = normalizeDatasetName(input.name)
@@ -857,7 +879,10 @@ export async function finalizeContactDataset(
       .map(value => normalizeAccountContactUid(String(value || ''), input.contactType))
       .filter(Boolean)
   ))
-  const { data, error } = await client().rpc('aka_agent_finalize_contact_dataset', {
+  const rpc = 'p_claim_token' in auth
+    ? 'aka_agent_finalize_zalo_server_contact_dataset'
+    : 'aka_agent_finalize_contact_dataset'
+  const { data, error } = await client().rpc(rpc, {
     p_staff_id: u.staffId,
     p_organization_id: u.organizationId,
     p_account_id: accountId,
@@ -871,8 +896,7 @@ export async function finalizeContactDataset(
     p_contact_uids: contactUids,
     p_extra_data: toRecord(input.extraData),
     p_data_type_category_item_id: input.dataTypeCategoryItemId ?? null,
-    p_auth_username: credentials.username,
-    p_auth_password: credentials.password
+    ...auth
   })
 
   if (error) throw new Error(`Failed to finalize contact dataset: ${error.message}`)
