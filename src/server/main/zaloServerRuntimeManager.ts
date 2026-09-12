@@ -926,7 +926,7 @@ export class ZaloServerRuntimeManager {
           eventWindow,
           proxyRuntime,
           zaloRuntime,
-          { zaloRuntimeTarget: 'server' }
+          { zaloRuntimeTarget: 'server', contactDatasetAuth: 'server_claim' }
         )
         realtimeManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, eventWindow, 'server')
 
