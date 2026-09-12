@@ -153,10 +153,66 @@ async function migrationGate(): Promise<void> {
     checks++
   }
 }
+async function recoveryGate(): Promise<void> {
+  const source = await readFile('src/main/data/repositories/authRepository.ts', 'utf8')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const scenario of ['single', 'none', 'legacy-only', 'multiple', 'inactive-duplicate', 'inactive', 'expired', 'rebound', 'late-duplicate', 'late-rebound', 'other-staff', 'read-error', 'confirm-error']) {
+    const queries: { selection: string; filters: Record<string, unknown> }[] = []
+    let entitlementChecks = 0
+    const rows: any[] = scenario === 'none' ? [] : [{ id: 1, ...credentials, organization_id: 1,
+      is_active: scenario !== 'inactive', device_fingerprint_hash: 'legacy',
+      aka_agent_device_fingerprint_hash: scenario === 'legacy-only' ? null : 'new' }]
+    if (scenario === 'multiple' || scenario === 'inactive-duplicate') rows.push({ id: 2, is_active: false, aka_agent_device_fingerprint_hash: 'new' })
+    const client = { from: (table: string) => {
+      assert.equal(table, 'org_staff', 'explicit recovery never reads legacy remember preferences')
+      const query = { selection: '', filters: {} as Record<string, unknown> }; queries.push(query)
+      let single = false; let max = Infinity
+      const builder = {
+        select: (selection: string) => { query.selection = selection; return builder },
+        eq: (key: string, value: unknown) => { query.filters[key] = value; return builder },
+        limit: (n: number) => { assert.equal(n, 2); max = n; return builder },
+        maybeSingle: () => { single = true; return builder },
+        then: (resolve: (value: unknown) => void) => {
+          if (scenario === 'rebound' && single) rows[0].aka_agent_device_fingerprint_hash = 'other'
+          const data = rows.filter(row => Object.entries(query.filters).every(([key, value]) => row[key] === value)).slice(0, max)
+          const error = scenario === 'read-error' || (scenario === 'confirm-error' && entitlementChecks) ? { message: 'query failed' } : null
+          return Promise.resolve({ data: single ? data[0] ?? null : data, error }).then(resolve)
+        }
+      }; return builder
+    } }
+    const exports: any = {}
+    runInNewContext(code, { exports, console: { error: () => {} }, require: (name: string) => {
+      if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => client }
+      if (name.endsWith('deviceIdentity')) return {
+        getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new' }),
+        getLegacyDeviceIdentity: async () => { throw new Error('Explicit recovery must not fall back to legacy fingerprint') }
+      }
+      if (name.endsWith('entitlementRepository')) return { ensureAkaAgentSubscriptionActive: async () => {
+        entitlementChecks++
+        if (scenario === 'expired') throw new Error('Tài khoản đã hết hạn')
+        if (scenario === 'late-duplicate') rows.push({ id: 2, aka_agent_device_fingerprint_hash: 'new' })
+        if (scenario === 'late-rebound') rows[0].aka_agent_device_fingerprint_hash = 'other'
+        if (scenario === 'other-staff') { rows[0].aka_agent_device_fingerprint_hash = 'other'; rows.push({ id: 2, aka_agent_device_fingerprint_hash: 'new' }) }
+      } }
+      return {}
+    } })
+    const attempt = exports.recoverDeviceCredentials()
+    if (scenario === 'single') assert.deepEqual(JSON.parse(JSON.stringify(await attempt)), credentials)
+    else await assert.rejects(attempt)
+    assert.equal(queries[0].selection, 'id')
+    assert.deepEqual(queries[0].filters, { aka_agent_device_fingerprint_hash: 'new' })
+    if (['none', 'legacy-only', 'multiple', 'inactive-duplicate', 'read-error'].includes(scenario)) {
+      assert(!queries.some(query => query.selection.includes('password')), 'ambiguous/missing binding never fetches credentials')
+      assert.equal(entitlementChecks, 0, 'count all staff before entitlement filtering')
+    }
+    checks++
+  }
+}
 async function handlers(root: string): Promise<void> {
   const source = await readFile('src/main/ipc/handlers/authHandlers.ts', 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const scenario of ['disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate']) {
+  for (const scenario of ['disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate',
+    'recover-remember-off', 'recover-remember-on', 'recover-enable-remember', 'recover-ambiguous', 'recover-late-options', 'recover-late-username', 'recover-logout', 'recover-mismatch', 'recover-policy-cancel', 'recover-policy-accept', 'recover-forget', 'recover-corrupt-file']) {
     let unblockSave!: () => void
     let startedSave!: () => void
     const saveStarted = new Promise<void>(resolve => { startedSave = resolve })
@@ -169,6 +225,9 @@ async function handlers(root: string): Promise<void> {
       } } : {}) })
     let resolveLegacy!: (v: unknown) => void
     const legacy = new Promise(resolve => { resolveLegacy = resolve })
+    let finishRecovery!: () => void
+    const recovery = new Promise<void>(resolve => { finishRecovery = resolve })
+    let recoveryCalls = 0
     const routes = new Map<string, (...args: any[]) => any>()
     let current: any = null; let processCredentials: any = null; let logins = 0; let presence = 0; let cleanup = 0
     const user = { staffId: 1, organizationId: 1, username: credentials.username, isChatSync: false }
@@ -180,10 +239,16 @@ async function handlers(root: string): Promise<void> {
       if (name.endsWith('localLoginService')) return { getLocalLoginStore: () => store }
       if (name.endsWith('authRepository')) return {
         loadLegacyLoginCandidate: () => legacy,
+        recoverDeviceCredentials: async () => {
+          recoveryCalls++
+          if (scenario.startsWith('recover-late-')) await recovery
+          if (scenario === 'recover-ambiguous') throw new Error('Có nhiều tài khoản cùng liên kết với máy tính này.')
+          return { ...credentials }
+        },
         login: async (_u: string, password: string, check: () => void) => {
           logins++; check()
           if (password !== credentials.password) throw new Error('Mật khẩu không đúng.')
-          return scenario === 'policy' ? { status: 'policy_required' } : { status: 'authenticated', user: { ...user } }
+          return scenario === 'policy' || scenario.startsWith('recover-policy-') ? { status: 'policy_required' } : { status: 'authenticated', user: { ...user } }
         },
         acceptPolicyAndLogin: async (_u: string, password: string) => { assert.equal(password, credentials.password); return { ...user } }
       }
@@ -196,7 +261,73 @@ async function handlers(root: string): Promise<void> {
     } })
     exports.registerAuthHandlers({ beforeLogout: () => { cleanup++ } })
     const call = (key: string, ...args: any[]) => routes.get(key)!(null, ...args)
-    if (scenario.startsWith('preferences-only-')) {
+    if (scenario.startsWith('recover-')) {
+      const remember = scenario === 'recover-remember-on'
+      await store.updateOptions({ rememberLogin: remember, autoLogin: false, startupEnabled: false })
+      if (remember) await store.saveAuthenticated({ username: 'previous-user', password: 'previous-password' })
+      if (scenario === 'recover-corrupt-file') {
+        await writeFile(join(root, scenario+'.json'), '{broken')
+        store = new LocalLoginStore({ file: join(root, scenario+'.json'), encrypt, decrypt })
+        exports.registerAuthHandlers()
+      }
+      await store.initialize()
+      const before = await readFile(join(root, scenario+'.json'), 'utf8')
+      const pending = call(IPC_EVENTS.AUTH_RECOVER_DEVICE_CREDENTIALS)
+      if (scenario.startsWith('recover-late-')) {
+        const rejected = assert.rejects(pending, /Đã hủy/)
+        await new Promise(resolve => setImmediate(resolve))
+        if (scenario === 'recover-late-options') await call(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, { startupEnabled: true })
+        else await call(IPC_EVENTS.AUTH_CANCEL_PENDING_LOGIN)
+        finishRecovery(); await rejected
+        await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username)); assert.equal(logins, 0); checks++
+        continue
+      }
+      if (scenario === 'recover-ambiguous') {
+        await assert.rejects(pending, /nhiều tài khoản/)
+        await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username))
+        assert.equal(await readFile(join(root, scenario+'.json'), 'utf8'), before); checks++
+        continue
+      }
+      const state = await pending
+      assert.equal(state.rememberedLogin.username, credentials.username)
+      assert.equal(state.rememberedLogin.source, 'recovery')
+      assert.deepEqual(state.loginOptions, store.snapshot().loginOptions, 'recovery preserves local choices')
+      assert(!JSON.stringify(state).includes(credentials.password), 'recovered password stays in main')
+      assert.equal(await readFile(join(root, scenario+'.json'), 'utf8'), before, 'recovery never writes local credentials or repairs files implicitly')
+      assert.equal(logins, 0); assert.equal(presence, 0); assert.equal(current, null)
+      assert.equal(recoveryCalls, 1); checks++
+      if (scenario === 'recover-logout' || scenario === 'recover-forget') {
+        if (scenario === 'recover-logout') await call(IPC_EVENTS.AUTH_LOGOUT)
+        else await call(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, { rememberLogin: false })
+        await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username)); assert.equal(logins, 0); checks++
+        continue
+      }
+      if (scenario === 'recover-mismatch') {
+        await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, 'different-user')); assert.equal(logins, 0); checks++
+      }
+      if (scenario === 'recover-enable-remember') {
+        const changed = await call(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, { rememberLogin: true })
+        assert.equal(changed.rememberedLogin.source, 'recovery')
+        assert.equal(JSON.parse(await readFile(join(root, scenario+'.json'), 'utf8')).encryptedCredential, null, 'checking remember does not save an unverified recovery'); checks++
+      }
+      const result = await call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username, store.snapshot().loginOptions)
+      if (scenario.startsWith('recover-policy-')) {
+        assert.equal(result.status, 'policy_required'); assert.equal(current, null)
+        if (scenario === 'recover-policy-cancel') {
+          await call(IPC_EVENTS.AUTH_CANCEL_PENDING_LOGIN)
+          await assert.rejects(call(IPC_EVENTS.AUTH_ACCEPT_POLICY_AND_LOGIN))
+          await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username))
+          assert.equal(presence, 0); checks++
+          continue
+        }
+        const accepted = await call(IPC_EVENTS.AUTH_ACCEPT_POLICY_AND_LOGIN)
+        assert.equal(accepted.status, 'authenticated'); assert(!JSON.stringify(accepted).includes(credentials.password)); checks++
+      } else assert.equal(result.status, 'authenticated')
+      const file = JSON.parse(await readFile(join(root, scenario+'.json'), 'utf8'))
+      assert.equal(!!file.encryptedCredential, store.snapshot().loginOptions.rememberLogin)
+      if (file.encryptedCredential) assert.deepEqual(JSON.parse(decrypt(Buffer.from(file.encryptedCredential, 'base64'))), credentials)
+      assert.equal(presence, 1); checks++
+    } else if (scenario.startsWith('preferences-only-')) {
       // Re-register against a fresh store to simulate a real application restart.
       await store.updateOptions({ rememberLogin: true, autoLogin: false, startupEnabled: true })
       store = new LocalLoginStore({ file: join(root, scenario+'.json'), encrypt, decrypt })
@@ -322,7 +453,7 @@ async function v2ResetJournal(root: string): Promise<void> {
 }
 async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'aka-auth-v2-'))
-  try { await storage(root); await preferencesOnlyRestart(root); await identity(root); await migrationGate(); await bindingConfirmation(); await v2ResetJournal(root); await handlers(root); console.log('Auth v2 smoke passed:', checks, 'checks') }
+  try { await storage(root); await preferencesOnlyRestart(root); await identity(root); await migrationGate(); await recoveryGate(); await bindingConfirmation(); await v2ResetJournal(root); await handlers(root); console.log('Auth v2 smoke passed:', checks, 'checks') }
   finally { await rm(root, { recursive: true, force: true }) }
 }
 void main().catch(error => { console.error(error); process.exitCode = 1 })

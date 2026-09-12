@@ -356,7 +356,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
-- **Auth v2 migration gate**: không dùng riêng việc tồn tại file local để kết luận đã chuyển đổi; file chỉ có tùy chọn vẫn phải qua gate fingerprint mới rồi legacy duy nhất. Binding đã khớp trên snapshot login phải được xác nhận lại từ DB trước khi hoàn tất ([AUTH_FINGERPRINT_V2.md](docs/AUTH_FINGERPRINT_V2.md:1)).
+- **Auth v2 migration gate**: không dùng riêng việc tồn tại file local để kết luận đã chuyển đổi; file chỉ có tùy chọn vẫn phải qua gate fingerprint mới rồi legacy duy nhất. Binding đã khớp trên snapshot login phải được xác nhận lại từ DB trước khi hoàn tất ([AUTH_FINGERPRINT_V2.md](docs/AUTH_FINGERPRINT_V2.md:1)). Nút lấy lại tên đăng nhập tra riêng fingerprint v2, đếm staff trước active/quyền gói và từ chối nhiều staff; credential chỉ giữ tạm trong main, không bật checkbox/lưu file/tự login. Đổi máy menu dùng bootstrap để đọc lại trạng thái local, không gọi lại IPC khôi phục DB.
 - **Embedded webview crash recovery**: không `reload()`/`loadURL()` guest akaChat/CRM đã crash; bỏ guest và tạo webview mới trong cùng partition (xem `Webview controller` ở trên). Smoke test phải dùng crash thật để bắt lỗi native làm main process thoát.
 - **Scheduler error-path cleanup**: Desktop/Server giữ ownership/unit khi policy/log lỗi tiếp; catch lồng nhau phải chuyển lỗi đã latch tới cleanup atomic và chỉ release sau khi producer dừng. [campaignFailureCleanup.ts](src/main/services/campaignFailureCleanup.ts:1) retry mỗi 2 giây với cùng token/payload, giữ nguyên claim/settle cũ; shutdown hủy retry và bàn giao recovery, không xóa hold chưa xác nhận ([hợp đồng và kiểm thử](docs/CAMPAIGN_FAILURE_CLEANUP.md)).
 
