@@ -2764,7 +2764,7 @@ export interface SavedLoginCredentials {
 
 export interface AuthLocalState {
   loginOptions: LoginPreferences
-  rememberedLogin: { username: string; hasCredential: boolean } | null
+  rememberedLogin: { username: string; hasCredential: boolean; source?: 'recovery' } | null
   warningMessage?: string | null
 }
 

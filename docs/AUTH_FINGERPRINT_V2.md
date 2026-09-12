@@ -51,6 +51,28 @@ Giữ nguyên package name `aka-biz-auto`, appId `com.akabiz.auto` và userData 
   cần nhập lại hoặc còn thiết lập trước đó nếu không ghi được xuống đĩa.
 - Main giữ credential chờ policy; cancel/đổi username/logout vô hiệu hoá request cũ.
 
+## Lấy lại tên đăng nhập chủ động
+
+Nút `Lấy lại tên đăng nhập` tra DB theo fingerprint mới trong
+`org_staff.aka_agent_device_fingerprint_hash`, kể cả khi đang tắt Ghi nhớ hoặc file
+ghi nhớ local bị mất/hỏng. Nút không dùng fingerprint legacy; máy chưa liên kết v2
+vẫn cần đăng nhập theo luồng chuyển đổi hoặc nhập thông tin thủ công.
+
+- Tra tối đa hai staff trước khi lọc active/quyền gói. Không có staff thì báo không
+  tìm thấy; nhiều staff thì yêu cầu tự nhập username/password, không chọn dòng mới nhất.
+- Đúng một staff mới đọc credential, kiểm tra active/quyền gói và xác nhận lại máy
+  vẫn chỉ liên kết đúng staff đó sau các bước đọc. Chưa xác nhận được thì từ chối.
+- Username được điền vào form; mật khẩu chỉ giữ tạm trong main, không trả ra renderer,
+  không ghi file và không tự đăng nhập. Các checkbox giữ nguyên lựa chọn của khách.
+- Chỉ khi khách bấm Đăng nhập mới xác thực đầy đủ, gồm mật khẩu/chính sách/binding.
+  Thành công chỉ lưu credential nếu đang bật Ghi nhớ; tắt Ghi nhớ vẫn đăng nhập được.
+- Đổi username/hủy/logout xóa credential khôi phục tạm. Phản hồi về muộn sau thay đổi
+  username, tùy chọn hoặc phiên không được khôi phục trạng thái cũ.
+
+Đây là nhánh khôi phục do khách chủ động bấm, độc lập với bootstrap tự động và không
+thay điều kiện chuyển đổi legacy ở trên. Đổi máy từ menu chỉ đọc lại trạng thái local,
+không gọi nút khôi phục để lấy credential sau khi đã gỡ binding.
+
 ## Đổi máy v2
 
 `aka_agent_prepare_device_change_v2(text)` trả snapshot `{staffId,hash,revision,version:2}`.

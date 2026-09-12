@@ -206,6 +206,7 @@ export default function LoginPage() {
     policyAcceptanceRequired,
     acceptPolicyAndLogin,
     cancelPolicyAcceptance,
+    cancelPendingLogin,
     recoveringCredentials,
     resettingDevice,
     resetDeviceLockByUsername,
@@ -299,7 +300,7 @@ export default function LoginPage() {
                   spellCheck={false}
                   autoFocus
                   value={username}
-                  onChange={event => { usernameEdited.current = true; setUsername(event.target.value); void window.electronAPI.cancelPendingLogin(); if (errorMessage) clearError() }}
+                  onChange={event => { usernameEdited.current = true; setUsername(event.target.value); cancelPendingLogin(); if (errorMessage) clearError() }}
                   placeholder="Nhập tên đăng nhập"
                   disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
@@ -318,7 +319,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={event => { setPassword(event.target.value); if (errorMessage) clearError() }}
-                  placeholder={canUseRemembered ? 'Đã có mật khẩu ghi nhớ trên máy' : 'Nhập mật khẩu'}
+                  placeholder={canUseRemembered ? rememberedLogin?.source === 'recovery' ? 'Đã lấy được thông tin đăng nhập' : 'Đã có mật khẩu ghi nhớ trên máy' : 'Nhập mật khẩu'}
                   disabled={loggingIn || resettingDevice}
                   aria-describedby={errorMessage ? 'login-error' : undefined}
                 />
@@ -337,7 +338,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="login-recover"
-                onClick={() => { usernameEdited.current = false; void recoverDeviceCredentials() }}
+                onClick={() => { usernameEdited.current = false; setPassword(''); void recoverDeviceCredentials() }}
                 disabled={recoverDisabled}
               >
                 {recoveringCredentials ? 'Đang lấy tên đăng nhập…' : 'Lấy lại tên đăng nhập'}

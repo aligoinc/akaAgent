@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { AuthUser, AuthLoginResult, AuthBootstrapResult, IPC_EVENTS, LoginPreferences, SavedLoginCredentials } from '../../../shared/types'
-import { acceptPolicyAndLogin, changePassword, loadLegacyLoginCandidate, login, resetDeviceLock, updateUseTestWorkflow } from '../../data/repositories/authRepository'
+import { AuthUser, AuthLoginResult, AuthBootstrapResult, AuthLocalState, IPC_EVENTS, LoginPreferences, SavedLoginCredentials } from '../../../shared/types'
+import { acceptPolicyAndLogin, changePassword, loadLegacyLoginCandidate, login, recoverDeviceCredentials, resetDeviceLock, updateUseTestWorkflow } from '../../data/repositories/authRepository'
 import { getCurrentUser, getCurrentUserCredentials, setCurrentUser, setCurrentUserCredentials } from '../../data/currentUser'
 import { getLocalLoginStore } from '../../services/localLoginService'
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
@@ -18,10 +18,14 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
   const store = getLocalLoginStore()
   let generation = 0
   let pendingPolicy: SavedLoginCredentials | null = null
+  let recoveredCredentials: SavedLoginCredentials | null = null
   let bootstrap: Promise<AuthBootstrapResult> | null = null
   let bootstrapCompleted = false
   let loginRunning = false
-  const snapshot = (): AuthBootstrapResult => ({ user: null, ...store.snapshot() })
+  const withRecovery = (state: AuthLocalState): AuthLocalState => recoveredCredentials
+    ? { ...state, rememberedLogin: { username: recoveredCredentials.username, hasCredential: true, source: 'recovery' } }
+    : state
+  const snapshot = (): AuthBootstrapResult => ({ user: null, ...withRecovery(store.snapshot()) })
   function syncStartup(): string | null {
     try {
       const enabled = store.snapshot().loginOptions.startupEnabled
@@ -104,15 +108,16 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     })().finally(() => { bootstrapCompleted = true })
   })
   ipcMain.handle(IPC_EVENTS.AUTH_LOGIN, async (_, username: string, password: string, options?: Partial<LoginPreferences>) => {
-    generation++; pendingPolicy = null
+    generation++; pendingPolicy = null; recoveredCredentials = null
     await store.updateOptions(options ?? {})
     return runLogin({ username: (username || '').trim(), password: password || '' }, false)
   })
   ipcMain.handle(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, async (_, username: string, options?: Partial<LoginPreferences>) => {
     generation++; pendingPolicy = null
     await store.initialize()
-    const credentials = store.getCredentials()
+    const credentials = recoveredCredentials ?? store.getCredentials()
     if (!credentials || credentials.username !== username?.trim()) throw new Error('Vui lòng nhập mật khẩu cho tài khoản này.')
+    recoveredCredentials = null
     await store.updateOptions(options ?? {})
     return runLogin(credentials, false)
   })
@@ -120,17 +125,30 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     if (!pendingPolicy) throw new Error('Không còn yêu cầu xác nhận chính sách. Vui lòng đăng nhập lại.')
     return runLogin({ ...pendingPolicy }, false, true)
   })
-  ipcMain.handle(IPC_EVENTS.AUTH_CANCEL_PENDING_LOGIN, () => { generation++; pendingPolicy = null })
+  ipcMain.handle(IPC_EVENTS.AUTH_CANCEL_PENDING_LOGIN, () => { generation++; pendingPolicy = null; recoveredCredentials = null })
   const updateOptions = async (updates: Partial<LoginPreferences>): Promise<AuthBootstrapResult> => {
+    if (updates.rememberLogin === false) recoveredCredentials = null
     const state = await store.updateOptions(updates, getCurrentUserCredentials())
     if (Object.prototype.hasOwnProperty.call(updates, 'startupEnabled')) state.warningMessage = [state.warningMessage, syncStartup()].filter(Boolean).join('\n') || null
-    return { user: null, ...state }
+    return { user: null, ...withRecovery(state) }
   }
   ipcMain.handle(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, (_, updates: Partial<LoginPreferences>) => updateOptions(updates))
   ipcMain.handle(IPC_EVENTS.AUTH_REVOKE_REMEMBERED_LOGIN, () => updateOptions({ rememberLogin: false, autoLogin: false }))
-  ipcMain.handle(IPC_EVENTS.AUTH_RECOVER_DEVICE_CREDENTIALS, async () => { await store.initialize(); return store.snapshot() })
+  ipcMain.handle(IPC_EVENTS.AUTH_RECOVER_DEVICE_CREDENTIALS, async () => {
+    if (loginRunning || getCurrentUser()) throw new Error('Chỉ lấy lại thông tin trên màn hình đăng nhập.')
+    const expected = ++generation
+    pendingPolicy = null; recoveredCredentials = null
+    const revision = store.getRevision()
+    await store.initialize()
+    const credentials = await recoverDeviceCredentials()
+    if (generation !== expected || store.getRevision() !== revision || loginRunning || getCurrentUser()) {
+      throw new Error('Đã hủy lấy thông tin đăng nhập theo thao tác mới.')
+    }
+    recoveredCredentials = { ...credentials }
+    return withRecovery(store.snapshot())
+  })
   ipcMain.handle(IPC_EVENTS.AUTH_LOGOUT, async () => {
-    generation++; pendingPolicy = null
+    generation++; pendingPolicy = null; recoveredCredentials = null
     try { await hooks.beforeLogout?.() } catch { console.warn('[Auth] Không hoàn tất cleanup đăng xuất.') }
     devicePresence.stop(); setCurrentUserCredentials(null); setCurrentUser(null)
     return { success: true }

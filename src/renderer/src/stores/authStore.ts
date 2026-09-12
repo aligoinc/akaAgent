@@ -19,6 +19,7 @@ interface AuthState {
   login: (username: string, password: string, options?: LoginPreferences) => Promise<void>
   acceptPolicyAndLogin: () => Promise<void>
   cancelPolicyAcceptance: () => void
+  cancelPendingLogin: () => void
   recoverDeviceCredentials: () => Promise<void>
   logout: () => Promise<void>
   resetDeviceLock: () => Promise<DeviceLockResetResult>
@@ -155,7 +156,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (result.loginState) warnStorage(result.loginState)
     } catch (error) {
       if (auth !== authRevision) return
-      set({ user: null, errorMessage: formatAuthErrorMessage(error, 'Đăng nhập thất bại.') })
+      set({ user: null, errorMessage: formatAuthErrorMessage(error, 'Đăng nhập thất bại.'),
+        ...(get().rememberedLogin?.source === 'recovery' ? { rememberedLogin: null } : {}) })
       throw error
     } finally { set({ loggingIn: false }) }
   },
@@ -177,30 +179,41 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     finally { set({ acceptingPolicy: false }) }
   },
   cancelPolicyAcceptance: () => {
-    authRevision++
-    void window.electronAPI.cancelPendingLogin()
+    get().cancelPendingLogin()
     set({ acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null })
   },
+  cancelPendingLogin: () => {
+    authRevision++
+    void window.electronAPI?.cancelPendingLogin()
+    if (get().rememberedLogin?.source === 'recovery') set({ rememberedLogin: null })
+  },
   recoverDeviceCredentials: async () => {
-    set({ recoveringCredentials: true, errorMessage: null })
+    if (get().recoveringCredentials || get().loggingIn) return
+    const auth = ++authRevision
+    const revision = optionsRevision
+    set({ recoveringCredentials: true, errorMessage: null, rememberedLogin: null })
     try {
       const state = await window.electronAPI.recoverDeviceCredentials()
+      if (auth !== authRevision || revision !== optionsRevision) return
       set(localState(state)); warnStorage(state)
-      if (!state.rememberedLogin) set({ errorMessage: 'Máy này chưa lưu tên đăng nhập. Vui lòng nhập thông tin tài khoản.' })
-    } catch (error) { set({ errorMessage: formatAuthErrorMessage(error, 'Không đọc được thông tin ghi nhớ.') }) }
+      if (!state.rememberedLogin) set({ errorMessage: 'Không tìm thấy thông tin đăng nhập cho máy này. Vui lòng nhập thông tin tài khoản.' })
+    } catch (error) {
+      if (auth === authRevision && revision === optionsRevision) set({ errorMessage: formatAuthErrorMessage(error, 'Không lấy được thông tin đăng nhập.') })
+    }
     finally { set({ recoveringCredentials: false }) }
   },
   logout: async () => {
     authRevision++
     try { await window.electronAPI.logout() } catch { /* cleanup is best effort */ }
-    set({ user: null, acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null })
+    set({ user: null, acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null,
+      ...(get().rememberedLogin?.source === 'recovery' ? { rememberedLogin: null } : {}) })
   },
   resetDeviceLock: async () => {
     set({ resettingDevice: true })
     try {
       const result = await window.electronAPI.resetDeviceLock()
       if (result.success) {
-        const state = await window.electronAPI.recoverDeviceCredentials()
+        const state = await window.electronAPI.bootstrapAuth()
         set(localState(state)); warnStorage(state)
       }
       return result
@@ -241,8 +254,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   handleSessionExpired: (message) => {
-    authRevision++
-    void window.electronAPI?.cancelPendingLogin()
+    get().cancelPendingLogin()
     set({ user: null, loggingIn: false, acceptingPolicy: false, policyAcceptanceRequired: false, initializing: false,
       errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn') })
   },

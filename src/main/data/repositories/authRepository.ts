@@ -223,6 +223,30 @@ function mapLoginPreferencesFromRow(row: DeviceLoginSettingsRow | null | undefin
   })
 }
 
+/** Explicit recovery uses only the current akaAgent binding, independently of remember preferences. */
+export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials> {
+  const { fingerprintHash } = await getCurrentDeviceIdentity()
+  const uniqueStaffId = async (): Promise<number> => {
+    // Count before filtering active staff or entitlements; an inactive duplicate is still ambiguous.
+    const { data, error } = await client().from('org_staff').select('id')
+      .eq('aka_agent_device_fingerprint_hash', fingerprintHash).limit(2)
+    if (error) throwAuthTechnicalError('recover device staff', 'Không thể lấy thông tin đăng nhập. Vui lòng thử lại.', error)
+    if (!data?.length) throw new Error('Không tìm thấy tài khoản đang liên kết với máy tính này. Vui lòng nhập thông tin đăng nhập.')
+    if (data.length !== 1) throw new Error('Có nhiều tài khoản cùng liên kết với máy tính này. Vui lòng tự nhập tên đăng nhập và mật khẩu.')
+    return Number(data[0].id)
+  }
+  const staffId = await uniqueStaffId()
+  const staff = await loadStaffById(staffId)
+  if (!staff || normalizeDeviceHash(staff.aka_agent_device_fingerprint_hash) !== fingerprintHash) {
+    throw new Error('Liên kết máy tính đã thay đổi. Vui lòng nhập thông tin đăng nhập hoặc thử lại.')
+  }
+  if (!staff.is_active) throw new Error('Tài khoản đã bị khoá.')
+  if (!staff.username?.trim() || !staff.password) throw new Error('Tài khoản chưa có đủ thông tin đăng nhập. Vui lòng liên hệ hỗ trợ.')
+  await ensureStaffSubscriptionActive(staff)
+  if (await uniqueStaffId() !== staffId) throw new Error('Liên kết máy tính đã thay đổi. Vui lòng thử lại.')
+  return { username: staff.username, password: staff.password }
+}
+
 /** Only for first migration. Password is loaded after both fingerprint gates pass. */
 export async function loadLegacyLoginCandidate(): Promise<{ loginOptions: LoginPreferences; credentials: SavedLoginCredentials | null } | null> {
   const device = await getCurrentDeviceIdentity()
