@@ -1,10 +1,6 @@
 import { create } from 'zustand'
-import { AuthUser, DeviceLockResetResult, LoginPreferences, SavedLoginCredentials, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
-
-interface PendingPolicyLogin {
-  credentials: SavedLoginCredentials
-  options: LoginPreferences
-}
+import { useUiStore } from './uiStore'
+import { AuthUser, DeviceLockResetResult, LoginPreferences, AuthLocalState, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
 
 interface AuthState {
   user: AuthUser | null
@@ -14,10 +10,9 @@ interface AuthState {
   recoveringCredentials: boolean
   resettingDevice: boolean
   policyAcceptanceRequired: boolean
-  pendingPolicyLogin: PendingPolicyLogin | null
   errorMessage: string | null
   loginOptions: LoginPreferences
-  savedCredentials: SavedLoginCredentials | null
+  rememberedLogin: AuthLocalState['rememberedLogin']
   zaloRuntimeRestartRequired: ZaloRuntimeRestartRequiredPayload | null
 
   setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
@@ -61,8 +56,8 @@ function normalizeLoginOptions(options?: Partial<LoginPreferences> | null): Logi
     startupEnabled: !!merged.startupEnabled
   }
 
+  if (options?.rememberLogin === false) next.autoLogin = false
   if (next.autoLogin) next.rememberLogin = true
-  if (!next.rememberLogin) next.autoLogin = false
   return next
 }
 
@@ -121,217 +116,105 @@ function formatAuthErrorMessage(err: unknown, fallback: string): string {
   return message
 }
 
-export const useAuthStore = create<AuthState>()((set) => ({
-  user: null,
-  initializing: true,
-  loggingIn: false,
-  acceptingPolicy: false,
-  recoveringCredentials: false,
-  resettingDevice: false,
-  policyAcceptanceRequired: false,
-  pendingPolicyLogin: null,
-  errorMessage: null,
-  loginOptions: DEFAULT_LOGIN_OPTIONS,
-  savedCredentials: null,
-  zaloRuntimeRestartRequired: null,
+let optionsRevision = 0
+let authRevision = 0
+const localState = (state: AuthLocalState) => ({ loginOptions: state.loginOptions, rememberedLogin: state.rememberedLogin })
+function warnStorage(state: AuthLocalState): void {
+  if (state.warningMessage) useUiStore.getState().showAlert(state.warningMessage, 'info')
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null, initializing: true, loggingIn: false, acceptingPolicy: false,
+  recoveringCredentials: false, resettingDevice: false, policyAcceptanceRequired: false,
+  errorMessage: null, loginOptions: DEFAULT_LOGIN_OPTIONS, rememberedLogin: null, zaloRuntimeRestartRequired: null,
 
   setLoginOptions: async (updates) => {
-    const current = useAuthStore.getState()
-    const nextOptions = normalizeLoginOptions({ ...current.loginOptions, ...updates })
-    const shouldPersistDisabledOption = !!current.savedCredentials && (
-      updates.rememberLogin === false ||
-      updates.autoLogin === false ||
-      updates.startupEnabled === false
-    )
-
-    set({
-      loginOptions: nextOptions,
-      savedCredentials: nextOptions.rememberLogin ? current.savedCredentials : null,
-      errorMessage: null
-    })
-
-    if (!shouldPersistDisabledOption || !window.electronAPI?.updateLoginPreferences) return
-
+    const revision = ++optionsRevision
+    const next = { ...get().loginOptions, ...updates }
+    if (updates.autoLogin === true && updates.rememberLogin !== false) next.rememberLogin = true
+    const options = normalizeLoginOptions(next)
+    set({ loginOptions: options, ...(!options.rememberLogin ? { rememberedLogin: null } : {}) })
     try {
-      const snapshot = await window.electronAPI.updateLoginPreferences(nextOptions)
-      set({
-        loginOptions: snapshot.loginOptions,
-        savedCredentials: snapshot.savedCredentials,
-        errorMessage: null
-      })
-    } catch (err: any) {
-      set({
-        loginOptions: current.loginOptions,
-        savedCredentials: current.savedCredentials,
-        errorMessage: formatAuthErrorMessage(err, 'Không thể tắt ghi nhớ đăng nhập. Vui lòng thử lại sau.')
-      })
-    }
+      const state = await window.electronAPI.updateLoginPreferences(updates)
+      if (revision === optionsRevision) { set(localState(state)); warnStorage(state) }
+    } catch (error) { set({ errorMessage: formatAuthErrorMessage(error, 'Chưa lưu được tuỳ chọn đăng nhập.') }) }
   },
 
   login: async (username, password, options) => {
-    if (!window.electronAPI) throw new Error('API not available')
-    const loginOptions = normalizeLoginOptions(options || useAuthStore.getState().loginOptions)
-    set({
-      loggingIn: true,
-      policyAcceptanceRequired: false,
-      pendingPolicyLogin: null,
-      errorMessage: null
-    })
+    if (get().loggingIn) return
+    const auth = ++authRevision
+    const revision = optionsRevision
+    set({ loggingIn: true, policyAcceptanceRequired: false, errorMessage: null })
     try {
-      const result = await window.electronAPI.login(username, password, loginOptions)
-      if (result.status === 'policy_required') {
-        set({
-          user: null,
-          loggingIn: false,
-          policyAcceptanceRequired: true,
-          pendingPolicyLogin: {
-            credentials: { username, password },
-            options: loginOptions
-          },
-          errorMessage: null,
-          loginOptions
-        })
-        return
-      }
-
-      const savedCredentials = loginOptions.rememberLogin ? { username, password } : null
-      set({
-        user: result.user,
-        loggingIn: false,
-        policyAcceptanceRequired: false,
-        pendingPolicyLogin: null,
-        errorMessage: null,
-        loginOptions,
-        savedCredentials
-      })
-    } catch (err: any) {
-      set({
-        user: null,
-        loggingIn: false,
-        policyAcceptanceRequired: false,
-        pendingPolicyLogin: null,
-        errorMessage: formatAuthErrorMessage(err, 'Đăng nhập thất bại. Vui lòng thử lại sau.'),
-        loginOptions
-      })
-      throw err
-    }
+      const result = password
+        ? await window.electronAPI.login(username, password, options || get().loginOptions)
+        : await window.electronAPI.loginRemembered(username, options || get().loginOptions)
+      if (auth !== authRevision) return
+      if (result.status === 'policy_required') { set({ policyAcceptanceRequired: true }); return }
+      set({ user: result.user, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
+      if (result.loginState) warnStorage(result.loginState)
+    } catch (error) {
+      if (auth !== authRevision) return
+      set({ user: null, errorMessage: formatAuthErrorMessage(error, 'Đăng nhập thất bại.') })
+      throw error
+    } finally { set({ loggingIn: false }) }
   },
 
   acceptPolicyAndLogin: async () => {
-    if (!window.electronAPI?.acceptPolicyAndLogin) throw new Error('API not available')
-    const pending = useAuthStore.getState().pendingPolicyLogin
-    if (!pending) throw new Error('Không tìm thấy phiên đăng nhập đang chờ đồng ý chính sách.')
-
+    if (get().acceptingPolicy) return
+    const auth = ++authRevision
+    const revision = optionsRevision
     set({ acceptingPolicy: true, errorMessage: null })
     try {
-      const user = await window.electronAPI.acceptPolicyAndLogin(
-        pending.credentials.username,
-        pending.credentials.password,
-        pending.options
-      )
-      set({
-        user,
-        acceptingPolicy: false,
-        policyAcceptanceRequired: false,
-        pendingPolicyLogin: null,
-        errorMessage: null,
-        loginOptions: pending.options,
-        savedCredentials: pending.options.rememberLogin ? pending.credentials : null
-      })
-    } catch (err: any) {
-      set({
-        user: null,
-        acceptingPolicy: false,
-        policyAcceptanceRequired: true,
-        errorMessage: formatAuthErrorMessage(err, 'Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.')
-      })
-      throw err
+      const result = await window.electronAPI.acceptPolicyAndLogin()
+      if (auth !== authRevision) return
+      if (result.status !== 'authenticated') return
+      set({ user: result.user, policyAcceptanceRequired: false, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
+      if (result.loginState) warnStorage(result.loginState)
+    } catch (error) {
+      if (auth === authRevision) set({ errorMessage: formatAuthErrorMessage(error, 'Không thể xác nhận chính sách.') })
     }
+    finally { set({ acceptingPolicy: false }) }
   },
-
-  cancelPolicyAcceptance: () => set({
-    acceptingPolicy: false,
-    policyAcceptanceRequired: false,
-    pendingPolicyLogin: null,
-    errorMessage: null
-  }),
-
+  cancelPolicyAcceptance: () => {
+    authRevision++
+    void window.electronAPI.cancelPendingLogin()
+    set({ acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null })
+  },
   recoverDeviceCredentials: async () => {
-    if (!window.electronAPI?.recoverDeviceCredentials) throw new Error('API not available')
     set({ recoveringCredentials: true, errorMessage: null })
     try {
-      const savedCredentials = await window.electronAPI.recoverDeviceCredentials()
-      set({
-        savedCredentials,
-        recoveringCredentials: false,
-        errorMessage: null
-      })
-    } catch (err: any) {
-      set({
-        recoveringCredentials: false,
-        errorMessage: formatAuthErrorMessage(err, 'Không thể lấy lại tên đăng nhập. Vui lòng thử lại sau.')
-      })
-    }
+      const state = await window.electronAPI.recoverDeviceCredentials()
+      set(localState(state)); warnStorage(state)
+      if (!state.rememberedLogin) set({ errorMessage: 'Máy này chưa lưu tên đăng nhập. Vui lòng nhập thông tin tài khoản.' })
+    } catch (error) { set({ errorMessage: formatAuthErrorMessage(error, 'Không đọc được thông tin ghi nhớ.') }) }
+    finally { set({ recoveringCredentials: false }) }
   },
-
   logout: async () => {
-    if (window.electronAPI) {
-      try { await window.electronAPI.logout() } catch { /* ignore */ }
-    }
-    set({
-      user: null,
-      acceptingPolicy: false,
-      policyAcceptanceRequired: false,
-      pendingPolicyLogin: null,
-      errorMessage: null
-    })
+    authRevision++
+    try { await window.electronAPI.logout() } catch { /* cleanup is best effort */ }
+    set({ user: null, acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null })
   },
-
   resetDeviceLock: async () => {
-    if (!window.electronAPI) throw new Error('API not available')
     set({ resettingDevice: true })
     try {
       const result = await window.electronAPI.resetDeviceLock()
       if (result.success) {
-        const currentOptions = useAuthStore.getState().loginOptions
-        set({
-          savedCredentials: null,
-          loginOptions: normalizeLoginOptions({ ...currentOptions, rememberLogin: false, autoLogin: false }),
-          errorMessage: null
-        })
+        const state = await window.electronAPI.recoverDeviceCredentials()
+        set(localState(state)); warnStorage(state)
       }
       return result
-    } catch (error) {
-      throw new Error(formatAuthErrorMessage(error, 'Đổi máy tính thất bại. Vui lòng thử lại sau.'))
-    } finally {
-      set({ resettingDevice: false })
-    }
+    } finally { set({ resettingDevice: false }) }
   },
-
   resetDeviceLockByUsername: async (username) => {
-    if (!window.electronAPI) throw new Error('API not available')
     set({ resettingDevice: true, errorMessage: null })
-    try {
-      return await window.electronAPI.resetDeviceLockByUsername(username)
-    } catch (error) {
-      throw new Error(formatAuthErrorMessage(error, 'Đổi máy tính thất bại. Vui lòng thử lại sau.'))
-    } finally {
-      set({ resettingDevice: false })
-    }
+    try { return await window.electronAPI.resetDeviceLockByUsername(username) }
+    catch (error) { throw new Error(formatAuthErrorMessage(error, 'Đổi máy tính thất bại.')) }
+    finally { set({ resettingDevice: false }) }
   },
-
   changePassword: async (oldPassword, newPassword) => {
-    if (!window.electronAPI) throw new Error('API not available')
-    await window.electronAPI.changePassword(oldPassword, newPassword)
-    const { savedCredentials, user } = useAuthStore.getState()
-    if (!savedCredentials || !user || savedCredentials.username !== user.username) return
-
-    set({
-      savedCredentials: {
-        ...savedCredentials,
-        password: newPassword
-      }
-    })
+    const result = await window.electronAPI.changePassword(oldPassword, newPassword)
+    if (result.loginState) { set(localState(result.loginState)); warnStorage(result.loginState) }
   },
 
   updateUseTestWorkflow: async (useTestWorkflow) => {
@@ -342,54 +225,27 @@ export const useAuthStore = create<AuthState>()((set) => ({
 
   rehydrateFromStorage: async () => {
     clearLegacyAuthStorage()
-
-    if (!window.electronAPI?.bootstrapAuth) {
-      set({ initializing: false })
-      return
-    }
-
+    const revision = optionsRevision
+    const auth = authRevision
     try {
-      const snapshot = await window.electronAPI.bootstrapAuth()
-      const bootstrapErrorMessage = snapshot.errorMessage
-        ? formatAuthErrorMessage(snapshot.errorMessage, 'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.')
-        : null
-
-      set({
-        user: snapshot.user,
-        initializing: false,
-        policyAcceptanceRequired: !!snapshot.policyAcceptanceRequired,
-        pendingPolicyLogin: snapshot.policyAcceptanceRequired && snapshot.savedCredentials
-          ? {
-              credentials: snapshot.savedCredentials,
-              options: snapshot.loginOptions
-            }
-          : null,
-        errorMessage: bootstrapErrorMessage,
-        loginOptions: snapshot.loginOptions,
-        savedCredentials: snapshot.savedCredentials
-      })
-    } catch (err: any) {
-      set({
-        user: null,
-        initializing: false,
-        policyAcceptanceRequired: false,
-        pendingPolicyLogin: null,
-        errorMessage: formatAuthErrorMessage(err, 'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.'),
-        loginOptions: DEFAULT_LOGIN_OPTIONS,
-        savedCredentials: null
-      })
+      const state = await window.electronAPI.bootstrapAuth()
+      if (auth !== authRevision) { set({ initializing: false }); return }
+      const local = revision === optionsRevision ? localState(state) : {}
+      set({ ...local, user: state.user, initializing: false, policyAcceptanceRequired: !!state.policyAcceptanceRequired,
+        errorMessage: state.errorMessage ? formatAuthErrorMessage(state.errorMessage, 'Không thể đăng nhập tự động.') : null })
+      warnStorage(state)
+    } catch (error) {
+      if (auth !== authRevision) { set({ initializing: false }); return }
+      set({ user: null, initializing: false, errorMessage: formatAuthErrorMessage(error, 'Không thể tải thông tin đăng nhập. Vui lòng đăng nhập thủ công.') })
     }
   },
 
-  handleSessionExpired: (message) => set({
-    user: null,
-    loggingIn: false,
-    acceptingPolicy: false,
-    policyAcceptanceRequired: false,
-    pendingPolicyLogin: null,
-    initializing: false,
-    errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn')
-  }),
+  handleSessionExpired: (message) => {
+    authRevision++
+    void window.electronAPI?.cancelPendingLogin()
+    set({ user: null, loggingIn: false, acceptingPolicy: false, policyAcceptanceRequired: false, initializing: false,
+      errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn') })
+  },
 
   handleUserUpdated: (user) => set((state) => ({
     // Server/Web runtime ownership is a startup invariant. Main preserves a

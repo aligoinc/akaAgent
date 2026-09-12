@@ -1,12 +1,11 @@
 import {
-  AuthBootstrapResult,
   AuthLoginResult,
   AuthUser,
   DeviceLockResetResult,
   LoginPreferences,
   SavedLoginCredentials
 } from '../../../shared/types'
-import { getCurrentDeviceIdentity } from '../../services/deviceIdentity'
+import { getCurrentDeviceIdentity, getLegacyDeviceIdentity } from '../../services/deviceIdentity'
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
 import { requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
@@ -28,6 +27,7 @@ export const DEFAULT_LOGIN_PREFERENCES: LoginPreferences = {
 }
 
 interface StaffDeviceColumns {
+  aka_agent_device_fingerprint_hash?: string | null
   device_fingerprint_hash?: string | null
   device_label?: string | null
   device_platform?: string | null
@@ -78,14 +78,7 @@ const STAFF_SELECT = [
   'use_test_workflow',
   'is_policy_accepted',
   'policy_accepted_at',
-  'device_fingerprint_hash',
-  'device_label',
-  'device_platform',
-  'device_bound_at',
-  'device_last_seen_at'
-].join(', ')
-
-const DEVICE_SELECT = [
+  'aka_agent_device_fingerprint_hash',
   'device_fingerprint_hash',
   'device_label',
   'device_platform',
@@ -105,8 +98,8 @@ export function normalizeLoginPreferences(options?: Partial<LoginPreferences> | 
     startupEnabled: !!merged.startupEnabled
   }
 
+  if (options?.rememberLogin === false) next.autoLogin = false
   if (next.autoLogin) next.rememberLogin = true
-  if (!next.rememberLogin) next.autoLogin = false
   return next
 }
 
@@ -125,23 +118,6 @@ function throwAuthTechnicalError(context: string, userMessage: string, error: un
 
 async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'organization_id'>): Promise<void> {
   await ensureAkaAgentSubscriptionActive(staff.organization_id)
-}
-
-async function loadStaffDevice(staffId: number): Promise<StaffDeviceColumns | null> {
-  const { data, error } = await client()
-    .from('org_staff')
-    .select(DEVICE_SELECT)
-    .eq('id', staffId)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'load staff device',
-      'Không thể kiểm tra thiết bị đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  return data as StaffDeviceColumns | null
 }
 
 async function loadStaffById(staffId: number): Promise<StaffRow | null> {
@@ -210,73 +186,32 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
 
 async function ensureStaffDeviceLock(staff: StaffRow): Promise<StaffDeviceColumns> {
   const device = await getCurrentDeviceIdentity()
-  const now = new Date().toISOString()
-  const currentHash = normalizeDeviceHash(staff.device_fingerprint_hash)
-
+  const currentHash = normalizeDeviceHash(staff.aka_agent_device_fingerprint_hash)
+  if (currentHash && currentHash !== device.fingerprintHash) throw new Error(deviceLockedMessage())
   if (!currentHash) {
-    const { data: updated, error } = await client()
-      .from('org_staff')
-      .update({
-        device_fingerprint_hash: device.fingerprintHash,
-        device_label: device.label,
-        device_platform: device.platform,
-        device_bound_at: now,
-        device_last_seen_at: now,
-        updated_at: now
-      })
-      .eq('id', staff.id)
-      .is('device_fingerprint_hash', null)
-      .select(DEVICE_SELECT)
-      .maybeSingle()
-
-    if (error) {
-      throwAuthTechnicalError(
-        'bind staff device',
-        'Không thể xác thực thiết bị đăng nhập. Vui lòng thử lại sau.',
-        error
-      )
+    const { data, error } = await client().from('org_staff')
+      .update({ aka_agent_device_fingerprint_hash: device.fingerprintHash })
+      .eq('id', staff.id).is('aka_agent_device_fingerprint_hash', null)
+      .select('aka_agent_device_fingerprint_hash').maybeSingle()
+    if (normalizeDeviceHash(data?.aka_agent_device_fingerprint_hash) !== device.fingerprintHash) {
+      // A lost response does not imply rollback. Confirm the winning binding.
+      const { data: latest, error: readError } = await client().from('org_staff')
+        .select('aka_agent_device_fingerprint_hash').eq('id', staff.id).maybeSingle()
+      if (readError) throwAuthTechnicalError('confirm v2 binding', 'Không thể xác nhận liên kết máy. Vui lòng thử lại.', readError)
+      if (normalizeDeviceHash(latest?.aka_agent_device_fingerprint_hash) !== device.fingerprintHash) {
+        if (error && !latest?.aka_agent_device_fingerprint_hash) throwAuthTechnicalError('bind v2 device', 'Không thể liên kết máy. Vui lòng thử lại.', error)
+        throw new Error(deviceLockedMessage())
+      }
     }
-    const updatedDevice = updated as unknown as StaffDeviceColumns | null
-    if (normalizeDeviceHash(updatedDevice?.device_fingerprint_hash) === device.fingerprintHash) {
-      return updatedDevice as StaffDeviceColumns
-    }
-
-    const latest = await loadStaffDevice(staff.id)
-    if (normalizeDeviceHash(latest?.device_fingerprint_hash) === device.fingerprintHash) {
-      return latest as StaffDeviceColumns
-    }
-    throw new Error(deviceLockedMessage())
+  } else {
+    // The login snapshot can predate a reset/rebind while entitlement checks run.
+    // Confirm the live binding even when that snapshot matched this machine.
+    const { data: latest, error } = await client().from('org_staff')
+      .select('aka_agent_device_fingerprint_hash').eq('id', staff.id).maybeSingle()
+    if (error) throwAuthTechnicalError('confirm v2 binding', 'Không thể xác nhận liên kết máy. Vui lòng thử lại.', error)
+    if (normalizeDeviceHash(latest?.aka_agent_device_fingerprint_hash) !== device.fingerprintHash) throw new Error(deviceLockedMessage())
   }
-
-  if (currentHash !== device.fingerprintHash) {
-    throw new Error(deviceLockedMessage())
-  }
-
-  const { data: updated, error } = await client()
-    .from('org_staff')
-    .update({
-      device_label: device.label,
-      device_platform: device.platform,
-      device_last_seen_at: now,
-      updated_at: now
-    })
-    .eq('id', staff.id)
-    .eq('device_fingerprint_hash', device.fingerprintHash)
-    .select(DEVICE_SELECT)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'refresh staff device',
-      'Không thể xác thực thiết bị đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  const updatedDevice = updated as unknown as StaffDeviceColumns | null
-  if (normalizeDeviceHash(updatedDevice?.device_fingerprint_hash) !== device.fingerprintHash) {
-    throw new Error(deviceLockedMessage())
-  }
-  return updatedDevice as StaffDeviceColumns
+  return { aka_agent_device_fingerprint_hash: device.fingerprintHash, device_label: device.label, device_platform: device.platform }
 }
 
 function mapLoginPreferencesFromRow(row: DeviceLoginSettingsRow | null | undefined): LoginPreferences {
@@ -288,249 +223,33 @@ function mapLoginPreferencesFromRow(row: DeviceLoginSettingsRow | null | undefin
   })
 }
 
-async function loadLatestDeviceLoginSettingsRow(
-  deviceFingerprintHash: string
-): Promise<DeviceLoginSettingsRow | null> {
-  const { data, error } = await client()
-    .from('auto_staff_device_login_settings')
-    .select('*')
-    .eq('device_fingerprint_hash', deviceFingerprintHash)
-    .eq('is_delete', false)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'load device login settings',
-      'Không thể tải tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  return data as unknown as DeviceLoginSettingsRow | null
-}
-
-function buildAuthBootstrapResult(
-  loginOptions: LoginPreferences,
-  savedCredentials: SavedLoginCredentials | null,
-  errorMessage: string | null = null
-): AuthBootstrapResult {
-  return {
-    user: null,
-    loginOptions,
-    savedCredentials,
-    errorMessage
-  }
-}
-
-export async function loadLoginSettingsForCurrentDevice(): Promise<AuthBootstrapResult> {
+/** Only for first migration. Password is loaded after both fingerprint gates pass. */
+export async function loadLegacyLoginCandidate(): Promise<{ loginOptions: LoginPreferences; credentials: SavedLoginCredentials | null } | null> {
   const device = await getCurrentDeviceIdentity()
-  const row = await loadLatestDeviceLoginSettingsRow(device.fingerprintHash)
-  if (!row) {
-    return buildAuthBootstrapResult(DEFAULT_LOGIN_PREFERENCES, null)
-  }
-
-  const loginOptions = mapLoginPreferencesFromRow(row)
-  if (!loginOptions.rememberLogin) {
-    return buildAuthBootstrapResult(loginOptions, null)
-  }
-
-  const staff = await loadStaffById(Number(row.staff_id))
-  const staffDeviceHash = normalizeDeviceHash(staff?.device_fingerprint_hash)
-  if (!staff || !staff.is_active || staffDeviceHash !== device.fingerprintHash) {
-    return buildAuthBootstrapResult(loginOptions, null)
-  }
-
-  try {
-    await ensureStaffSubscriptionActive(staff)
-  } catch (err: any) {
-    return buildAuthBootstrapResult(loginOptions, null, err?.message || ACCOUNT_EXPIRED_MESSAGE)
-  }
-
-  return buildAuthBootstrapResult(loginOptions, {
-    username: staff.username,
-    password: staff.password
-  })
-}
-
-export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials> {
-  const device = await getCurrentDeviceIdentity()
-  const { data, error } = await client()
-    .from('org_staff')
-    .select(STAFF_SELECT)
-    .eq('device_fingerprint_hash', device.fingerprintHash)
-    .eq('is_active', true)
-    .order('device_last_seen_at', { ascending: false, nullsFirst: false })
-    .order('id', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'recover device credentials',
-      'Không thể lấy lại tên đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  const staff = data as unknown as StaffRow | null
-  if (!staff) {
-    throw new Error('Không tìm thấy tài khoản đang được cấp quyền trên máy tính này.')
-  }
-
+  const { data: existing, error: existenceError } = await client().from('org_staff').select('id')
+    .eq('aka_agent_device_fingerprint_hash', device.fingerprintHash).limit(1)
+  if (existenceError) throwAuthTechnicalError('check v2 fingerprint', 'Không thể kiểm tra máy. Vui lòng đăng nhập thủ công hoặc thử lại.', existenceError)
+  if (existing?.length) return null
+  const legacy = await getLegacyDeviceIdentity()
+  // Deliberately count before active/entitlement/remember filters. Two is enough to reject ambiguity.
+  const { data: matches, error } = await client().from('org_staff')
+    .select('id, aka_agent_device_fingerprint_hash').eq('device_fingerprint_hash', legacy.fingerprintHash).limit(2)
+  if (error) throwAuthTechnicalError('check legacy fingerprint', 'Không thể lấy thông tin ghi nhớ cũ. Vui lòng đăng nhập thủ công.', error)
+  if (matches?.length !== 1) return null
+  const match = matches[0]
+  if (normalizeDeviceHash(match.aka_agent_device_fingerprint_hash)) return null
+  const { data: settings, error: settingsError } = await client().from('auto_staff_device_login_settings')
+    .select('remember_login, auto_login, startup_enabled').eq('staff_id', match.id)
+    .eq('device_fingerprint_hash', legacy.fingerprintHash).eq('is_delete', false).maybeSingle()
+  if (settingsError) throwAuthTechnicalError('load legacy options', 'Không thể đọc tuỳ chọn cũ. Vui lòng đăng nhập thủ công.', settingsError)
+  if (!settings) return null
+  const loginOptions = mapLoginPreferencesFromRow(settings as DeviceLoginSettingsRow)
+  if (!loginOptions.rememberLogin) return { loginOptions, credentials: null }
+  const staff = await loadStaffById(Number(match.id))
+  if (!staff || !staff.is_active || normalizeDeviceHash(staff.aka_agent_device_fingerprint_hash)
+    || normalizeDeviceHash(staff.device_fingerprint_hash) !== legacy.fingerprintHash) return null
   await ensureStaffSubscriptionActive(staff)
-
-  return {
-    username: staff.username,
-    password: staff.password
-  }
-}
-
-export async function saveDeviceLoginSettings(
-  user: AuthUser,
-  options?: Partial<LoginPreferences> | null
-): Promise<LoginPreferences> {
-  const device = await getCurrentDeviceIdentity()
-  const loginOptions = normalizeLoginPreferences(options)
-  const now = new Date().toISOString()
-  const { data, error } = await client()
-    .from('auto_staff_device_login_settings')
-    .upsert({
-      staff_id: user.staffId,
-      organization_id: user.organizationId,
-      device_fingerprint_hash: device.fingerprintHash,
-      device_label: device.label,
-      device_platform: device.platform,
-      remember_login: loginOptions.rememberLogin,
-      auto_login: loginOptions.autoLogin,
-      startup_enabled: loginOptions.startupEnabled,
-      last_login_at: now,
-      last_used_at: now,
-      is_delete: false,
-      updated_at: now
-    }, { onConflict: 'staff_id,device_fingerprint_hash' })
-    .select()
-    .single()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'save device login settings',
-      'Không thể lưu tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  return mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow)
-}
-
-export async function revokeRememberedLoginForCurrentDevice(): Promise<AuthBootstrapResult> {
-  const device = await getCurrentDeviceIdentity()
-  const row = await loadLatestDeviceLoginSettingsRow(device.fingerprintHash)
-  if (!row) {
-    return buildAuthBootstrapResult(
-      normalizeLoginPreferences({ rememberLogin: false, autoLogin: false }),
-      null
-    )
-  }
-
-  const now = new Date().toISOString()
-  const { data, error } = await client()
-    .from('auto_staff_device_login_settings')
-    .update({
-      remember_login: false,
-      auto_login: false,
-      last_used_at: now,
-      updated_at: now
-    })
-    .eq('id', row.id)
-    .select()
-    .single()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'revoke remembered login',
-      'Không thể tắt ghi nhớ đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  return buildAuthBootstrapResult(mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow), null)
-}
-
-export async function updateLoginPreferencesForCurrentDevice(
-  updates: Partial<LoginPreferences>
-): Promise<AuthBootstrapResult> {
-  const device = await getCurrentDeviceIdentity()
-  const row = await loadLatestDeviceLoginSettingsRow(device.fingerprintHash)
-  const nextOptions = normalizeLoginPreferences({
-    ...(row ? mapLoginPreferencesFromRow(row) : DEFAULT_LOGIN_PREFERENCES),
-    ...updates
-  })
-
-  if (!row) {
-    return buildAuthBootstrapResult(nextOptions, null)
-  }
-
-  const now = new Date().toISOString()
-  const { error } = await client()
-    .from('auto_staff_device_login_settings')
-    .update({
-      remember_login: nextOptions.rememberLogin,
-      auto_login: nextOptions.autoLogin,
-      startup_enabled: nextOptions.startupEnabled,
-      last_used_at: now,
-      updated_at: now
-    })
-    .eq('id', row.id)
-
-  if (error) {
-    throwAuthTechnicalError(
-      'update login preferences',
-      'Không thể lưu tuỳ chọn đăng nhập. Vui lòng thử lại sau.',
-      error
-    )
-  }
-  return loadLoginSettingsForCurrentDevice()
-}
-
-export async function updateStartupSettingForCurrentDevice(
-  enabled: boolean,
-  user?: AuthUser | null
-): Promise<LoginPreferences> {
-  const device = await getCurrentDeviceIdentity()
-  const row = await loadLatestDeviceLoginSettingsRow(device.fingerprintHash)
-  const now = new Date().toISOString()
-
-  if (row) {
-    const { data, error } = await client()
-      .from('auto_staff_device_login_settings')
-      .update({
-        startup_enabled: !!enabled,
-        last_used_at: now,
-        updated_at: now
-      })
-      .eq('id', row.id)
-      .select()
-      .single()
-
-    if (error) {
-      throwAuthTechnicalError(
-        'update startup setting',
-        'Không thể lưu tuỳ chọn khởi động. Vui lòng thử lại sau.',
-        error
-      )
-    }
-    return mapLoginPreferencesFromRow(data as unknown as DeviceLoginSettingsRow)
-  }
-
-  if (user) {
-    return saveDeviceLoginSettings(user, {
-      ...DEFAULT_LOGIN_PREFERENCES,
-      startupEnabled: !!enabled
-    })
-  }
-
-  return normalizeLoginPreferences({
-    ...DEFAULT_LOGIN_PREFERENCES,
-    startupEnabled: !!enabled
-  })
+  return { loginOptions, credentials: { username: staff.username, password: staff.password } }
 }
 
 function hasAcceptedPolicy(staff: StaffRow): boolean {
@@ -564,12 +283,13 @@ async function verifyStaffLogin(username: string, password: string): Promise<Sta
   return staffRow
 }
 
-async function completeStaffLogin(staffRow: StaffRow): Promise<AuthUser> {
+async function completeStaffLogin(staffRow: StaffRow, assertCurrent?: () => void): Promise<AuthUser> {
+  assertCurrent?.()
   const deviceRecord = await ensureStaffDeviceLock(staffRow)
   return buildAuthUser(staffRow, deviceRecord)
 }
 
-export async function login(username: string, password: string): Promise<AuthLoginResult> {
+export async function login(username: string, password: string, assertCurrent?: () => void): Promise<AuthLoginResult> {
   const staffRow = await verifyStaffLogin(username, password)
   if (!hasAcceptedPolicy(staffRow)) {
     return { status: 'policy_required' }
@@ -577,11 +297,11 @@ export async function login(username: string, password: string): Promise<AuthLog
 
   return {
     status: 'authenticated',
-    user: await completeStaffLogin(staffRow)
+    user: await completeStaffLogin(staffRow, assertCurrent)
   }
 }
 
-export async function acceptPolicyAndLogin(username: string, password: string): Promise<AuthUser> {
+export async function acceptPolicyAndLogin(username: string, password: string, assertCurrent?: () => void): Promise<AuthUser> {
   const staffRow = await verifyStaffLogin(username, password)
 
   if (!hasAcceptedPolicy(staffRow)) {
@@ -612,7 +332,7 @@ export async function acceptPolicyAndLogin(username: string, password: string): 
     throw new Error('Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.')
   }
 
-  return completeStaffLogin(acceptedStaff)
+  return completeStaffLogin(acceptedStaff, assertCurrent)
 }
 
 export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetResult> {
