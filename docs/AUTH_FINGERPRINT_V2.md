@@ -19,7 +19,8 @@ nguyên định danh vẫn có thể trùng; đây không phải cơ chế chố
 1. Ưu tiên tài khoản ghi nhớ local hợp lệ.
 2. Chưa có credential local hợp lệ, kiểm tra fingerprint mới có trên hệ thống chưa.
    File chỉ có checkbox và vẫn bật Ghi nhớ tiếp tục được xét chuyển đổi, giữ nguyên
-   lựa chọn local. Đã bỏ Ghi nhớ hoặc file hỏng/lỗi giải mã thì không lấy credential cũ.
+   lựa chọn local. Đã bỏ Ghi nhớ, file hỏng hoặc file v2 có credential mã hóa thì không
+   tự lấy credential cũ.
    Fingerprint mới đã có thì yêu cầu nhập thông tin; không đọc credential theo fingerprint cũ.
 3. Chưa có mới xét fingerprint cũ. Nhiều staff: nhập tay. Đúng một staff chưa có
    binding v2: đọc tuỳ chọn đúng staff/hash, chỉ lấy credential nếu bật ghi nhớ.
@@ -33,21 +34,36 @@ nguyên định danh vẫn có thể trùng; đây không phải cơ chế chố
 Không có cột đã-migrate. Xoá binding v2 có thể mở lại nhánh chuyển đổi khi đủ điều kiện.
 Không xác định được duy nhất tài khoản cũ thì mặc định remember/auto tắt, startup giữ
 trạng thái hệ điều hành; người dùng chủ động bật lại. Không tự bật lại cho nhóm 462/748.
-Mất local nhưng binding mới đã tồn tại phải nhập lại. File hỏng/lỗi giải mã không
+Mất local nhưng binding mới đã tồn tại phải nhập lại. File hỏng hoặc credential local mã hóa cũ không
 được coi là một lần chuyển mới. Cập nhật bỏ qua phiên bản vẫn dùng cùng quy tắc.
 
 ## Ghi nhớ local
 
-`userData/login-v2.json` chứa schema version, tùy chọn và credential được safeStorage
-mã hoá. Ghi file tạm, fsync, rename và đọc lại kiểm tra. Không fallback plaintext.
+`userData/login-v2.json` giữ nguyên đường dẫn, nội dung mới dùng schema `version: 3`,
+gồm `options`, `credentials: { username, password } | null` và `requiresManualLogin`.
+Credential lưu trực tiếp theo yêu cầu sản phẩm; không gọi `safeStorage` hoặc Keychain
+để đọc/ghi thông tin đăng nhập. Mật khẩu vẫn chỉ được sử dụng trong main process,
+không trả qua bootstrap/recovery IPC hoặc ghi log. Người/phần mềm đọc được file có
+thể đọc mật khẩu; quyền file vẫn giới hạn chủ sở hữu trên hệ điều hành hỗ trợ.
+Ghi file tạm, fsync, rename và đọc lại kiểm tra vẫn được giữ nguyên.
 Giữ nguyên package name `aka-biz-auto`, appId `com.akabiz.auto` và userData qua update.
 
+- File v2 có `encryptedCredential`: chỉ đọc tùy chọn, bỏ qua credential mà không giải
+  mã; yêu cầu đăng nhập lại một lần, dù đang bật auto. Checkbox remember/auto/startup
+  vẫn giữ nguyên. Lần ghi tiếp theo thay file bằng schema 3 và bỏ ciphertext cũ.
+- `requiresManualLogin` chỉ nằm trong file local, giữ yêu cầu đăng nhập lại qua các
+  lần lưu checkbox/restart hoặc login thất bại; không thêm cột/RPC DB. Trạng thái này
+  cũng ngăn file hỏng tự mở lại nhánh lấy credential legacy sau khi lưu tùy chọn.
+  Đăng nhập thành công xóa trạng thái này và lưu credential nếu bật Ghi nhớ.
+- File v2 chỉ chứa tùy chọn (`encryptedCredential: null`) và máy chưa có file local
+  vẫn giữ luồng chuyển đổi DB có kiểm tra fingerprint như trước. File schema 3 hợp lệ
+  được sử dụng lại sau restart/update, kể cả cập nhật bỏ qua phiên bản.
 - Checkbox lưu lựa chọn ngay; mật khẩu chỉ lưu sau login thành công.
 - Bỏ ghi nhớ xoá credential ngay và tắt auto. Bỏ auto vẫn giữ ghi nhớ.
 - Bật auto bật cả remember; không tự đăng nhập ngay chỉ vì vừa tích checkbox.
 - Logout hoặc lỗi mạng không xoá credential đã được chọn ghi nhớ.
 - Thất bại login không ghi đè mật khẩu đã nhớ bằng mật khẩu vừa nhập sai.
-- Lỗi lưu/xoá/Keychain/startup báo riêng, không chặn login hợp lệ; lần mở sau có thể
+- Lỗi đọc/lưu/xoá/startup báo riêng, không chặn login hợp lệ; lần mở sau có thể
   cần nhập lại hoặc còn thiết lập trước đó nếu không ghi được xuống đĩa.
 - Main giữ credential chờ policy; cancel/đổi username/logout vô hiệu hoá request cũ.
 
@@ -106,16 +122,18 @@ và hướng dẫn; không tự cài VPS/máy khách hoặc publish bản cập 
 
 ### Các bước cài candidate Windows
 
-1. Đóng akaAgent, chạy `dist/akaAgent-Setup-7.2.0.exe`, chọn lại thư mục cài hiện có.
-   Đây là bản build thử giữ version 7.2.0 của workspace, chưa phải bản phát hành tự
-   động; không chép lên kênh auto-update với cùng version đang phát hành.
+1. Build bằng `npm run build:win`, đóng akaAgent rồi chạy
+   `dist/akaAgent-Setup-<version>.exe` theo version của lần đóng gói, chọn lại thư mục
+   cài hiện có. Không chép bản thử lên kênh auto-update với cùng version đang phát hành.
 2. Giữ nguyên thư mục dữ liệu ứng dụng. Có thể sao lưu nguyên thư mục khi app đã đóng;
-   không sao chép credential sang tài khoản Windows khác vì mã hoá gắn với OS user.
+   file ghi nhớ mới chứa mật khẩu trực tiếp, cần bảo quản bản sao như dữ liệu đăng nhập.
 3. Mở app. Một staff cũ duy nhất và đủ điều kiện ghi nhớ: app chuyển theo checkbox cũ.
    Fingerprint cũ có nhiều staff hoặc máy đã có binding v2: nhập lại username/password.
+   Nếu đang dùng file ghi nhớ v2 đã mã hóa, nhập lại tài khoản một lần; các checkbox
+   giữ nguyên và app không gọi Keychain để giải mã file cũ.
    Tích Ghi nhớ nếu muốn lưu; tích Tự động đăng nhập nếu muốn tự vào ở lần mở kế tiếp.
 4. Đóng/mở lại để kiểm tra. Nếu có cảnh báo lưu, phiên hiện tại vẫn dùng được nhưng
-   cần xử lý quyền ghi/mã hoá trước khi xác nhận tính năng nhớ đã hoạt động.
+   cần xử lý quyền đọc/ghi trước khi xác nhận tính năng nhớ đã hoạt động.
 5. Nếu báo liên kết máy khác, dùng Đổi máy tính theo luồng hiện tại, không xoá file
    định danh để lách binding. Máy cũ cần Offline theo quy tắc đổi máy.
 
@@ -124,6 +142,6 @@ Không cần cập nhật/cài credential trên Zalo Server cho thay đổi auth
 cũng nằm trong bản build, không phải phần sửa fingerprint.
 
 Kiểm thử Node mô phỏng không chứng nhận phần cứng Windows/VMware/VPS. Electron smoke
-đã kiểm tra mã hoá OS, IOPlatformUUID thật và mở lại ở tiến trình khác trên máy Mac
-hiện tại; không thay thế test
-installer Windows, Keychain trên các máy Mac khác, hoặc clone VM thực tế.
+kiểm tra bỏ qua file mã hóa cũ, lưu/đọc credential qua các tiến trình, giữ tùy chọn và
+IOPlatformUUID thật trên Mac; test phải thất bại nếu có lệnh gọi mã hóa OS. Việc này
+không thay thế test installer Windows, máy Mac khác hoặc clone VM thực tế.
