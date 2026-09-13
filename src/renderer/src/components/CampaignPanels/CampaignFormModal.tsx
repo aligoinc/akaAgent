@@ -1,5 +1,7 @@
+import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useCampaignDraftField } from './useCampaignDraftField'
+import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
@@ -104,6 +106,7 @@ import {
 } from '../../../../shared/advancedContent'
 import {
   formattedContentToPlainCampaignContent,
+  appendFormattedPreviewFooter,
   formattedContentToPlainText,
   isFormattedContentEmpty,
   plainTextToFormattedContent,
@@ -249,119 +252,9 @@ interface CampaignSaveBundleItem {
   dataGroupSnapshots: DirectDataGroupSnapshotIntent[]
 }
 
-interface CampaignSaveProgressState {
-  percent: number
-  label: string
-  processedRows?: number
-  totalRows?: number
-}
-
 interface CampaignSaveProgressRange {
   itemIndex: number
   itemCount: number
-}
-
-const waitForNextBrowserPaint = (): Promise<void> => (
-  new Promise(resolve => {
-    window.requestAnimationFrame(() => {
-      window.setTimeout(resolve, 0)
-    })
-  })
-)
-
-interface CampaignSaveControlsProps {
-  starting: boolean
-  saving: boolean
-  progress: CampaignSaveProgressState | null
-  idleLabel: string
-  onSave: () => Promise<void>
-  onCancel: () => void
-  onStartingChange: (starting: boolean) => void
-}
-
-function CampaignSaveControls({
-  starting,
-  saving,
-  progress,
-  idleLabel,
-  onSave,
-  onCancel,
-  onStartingChange
-}: CampaignSaveControlsProps) {
-  const saveInFlightRef = useRef(false)
-  const busy = starting || saving
-  const visibleProgress = saving
-    ? (progress || { percent: 1, label: 'Đang chuẩn bị dữ liệu chiến dịch...' })
-    : starting
-      ? { percent: 1, label: 'Đang chuẩn bị dữ liệu chiến dịch...' }
-      : null
-
-  const startSave = async (): Promise<void> => {
-    if (saveInFlightRef.current || saving) return
-
-    saveInFlightRef.current = true
-    onStartingChange(true)
-    try {
-      // Paint the lightweight button state before campaign validation normalizes
-      // thousands of rows on the renderer thread.
-      await waitForNextBrowserPaint()
-      await onSave()
-    } finally {
-      saveInFlightRef.current = false
-      onStartingChange(false)
-    }
-  }
-
-  return (
-    <>
-      {visibleProgress && (
-        <div
-          className="campaign-save-progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={visibleProgress.percent}
-          aria-label="Tiến trình lưu chiến dịch"
-          aria-valuetext={`${visibleProgress.percent}%. ${visibleProgress.label}`}
-        >
-          <div className="campaign-save-progress-header">
-            <span className="campaign-save-progress-label" aria-live="polite">
-              {visibleProgress.label}
-            </span>
-            <strong className="campaign-save-progress-percent">{visibleProgress.percent}%</strong>
-          </div>
-          <div className="campaign-progress-track">
-            <span
-              className="campaign-progress-fill campaign-save-progress-fill"
-              style={{ width: `${visibleProgress.percent}%` }}
-            />
-          </div>
-          {visibleProgress.processedRows !== undefined && visibleProgress.totalRows !== undefined && (
-            <span className="campaign-save-progress-count">
-              {visibleProgress.processedRows.toLocaleString('vi-VN')}
-              {' / '}
-              {visibleProgress.totalRows.toLocaleString('vi-VN')} data của bước hiện tại
-            </span>
-          )}
-        </div>
-      )}
-      <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>Huỷ</button>
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => { void startSave() }}
-        disabled={busy}
-        aria-busy={busy}
-      >
-        {busy ? (
-          <>
-            <Loader2 size={14} className="animate-spin" />
-            {saving ? `Đang lưu ${visibleProgress?.percent ?? 0}%` : 'Đang chuẩn bị...'}
-          </>
-        ) : idleLabel}
-      </button>
-    </>
-  )
 }
 
 const createCampaignSaveProgressRequestId = (): string => (
@@ -1899,7 +1792,10 @@ export default function CampaignFormModal({
   const [saveStarting, setSaveStarting] = useState(false)
   const [savingCampaign, setSavingCampaign] = useState(false)
   const saveBusy = saveStarting || savingCampaign
-  const [saveProgress, setSaveProgress] = useState<CampaignSaveProgressState | null>(null)
+  const saveControlsRef = useRef<CampaignSaveControlsHandle>(null)
+  const setSaveProgress: CampaignSaveControlsHandle['setProgress'] = progress => {
+    saveControlsRef.current?.setProgress(progress)
+  }
   const updateSaveProgress = (
     percent: number,
     label: string,
@@ -5228,6 +5124,7 @@ export default function CampaignFormModal({
       zaloMessageSendMode: target === 'content' && isZaloMessageCampaign
         ? formData.zaloMessageSendMode
         : undefined,
+      zaloOptOutLinkEnabled: target === 'content' && supportsZaloOptOutLink && formData.zaloOptOutLinkEnabled,
       notes: getContentPreviewNotes(target)
     })
   }
@@ -5266,6 +5163,7 @@ export default function CampaignFormModal({
       mediaMode,
       randomCount: isCommentSeedingCampaign ? 1 : (item.randomMediaCount || 3),
       zaloMessageSendMode: isZaloMessageCampaign ? formData.zaloMessageSendMode : undefined,
+      zaloOptOutLinkEnabled: supportsZaloOptOutLink && formData.zaloOptOutLinkEnabled,
       notes: getContentPreviewNotes('content')
     })
   }
@@ -7286,6 +7184,18 @@ export default function CampaignFormModal({
       return
     }
 
+    const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+    for (const { campaignPayload } of saveBundleItems) {
+      const extra = campaignPayload.extraSettings || {}
+      const error = validateStopMessagesSettings(campaignPayload.content, extra, campaignPayload.actionId || formData.actionId, formattedContentToPlainText)
+      if (error) {
+        showAlert(error, 'error')
+        setSavingCampaign(false)
+        setSaveProgress(null)
+        return
+      }
+    }
+
     if (draftMode) {
       if (!onSaveDraft || !draftPickerSourceType) {
         showAlert('Không thể tạo chiến dịch tạm trong ngữ cảnh hiện tại.', 'error')
@@ -7293,7 +7203,7 @@ export default function CampaignFormModal({
         setSaveProgress(null)
         return
       }
-      const draftItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+      const draftItems = saveBundleItems
       try {
         updateSaveProgress(3, 'Đang kiểm tra giới hạn data...')
         await assertCampaignSaveItemsWithinInputLimit(draftItems)
@@ -7325,7 +7235,6 @@ export default function CampaignFormModal({
         updateCampaign,
         updateCampaignInputData
       } = useCampaignStore.getState()
-      const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
       const linkedDraftTempIds: number[] = []
       const linkedDraftTempIdSet = new Set<number>()
       const collectLinkedDraftTempIds = (ids: number[], enabled: boolean): void => {
@@ -8933,6 +8842,13 @@ export default function CampaignFormModal({
                   >
                     {'#{SEX{anh-chị-anh/chị}}'}
                   </button>
+                  {target === 'content' && supportsZaloOptOutLink && <>
+                    <label>Từ chối nhận tin</label>
+                    <button type="button" className="message-template-token" onClick={() => {
+                      setFormData(current => ({ ...current, zaloOptOutLinkEnabled: true }))
+                      insertCampaignContentToken(STOP_MESSAGES_INSERT_TEXT, target, advancedItemId)
+                    }}>{STOP_MESSAGES_LINK_TOKEN}</button>
+                  </>}
                 </>
               )}
             </div>
@@ -13247,9 +13163,6 @@ export default function CampaignFormModal({
           />
           <span>Thêm link từ chối nhận tin nhắn</span>
         </label>
-        <div className="schedule-hint" style={{ marginTop: 6 }}>
-          Hệ thống chỉ thêm link khi lấy được Zalo global ID của người nhận.
-        </div>
       </div>
     )
   }
@@ -14352,6 +14265,7 @@ export default function CampaignFormModal({
     const spunPlainText = renderContentSpin(itemPlainText, {
       rng: createCampaignPreviewRng(`${previewSeed}:plain`)
     })
+    const previewOptOut = manualAdvancedPreviewUsesSampleData && supportsZaloOptOutLink && formData.zaloOptOutLinkEnabled
     const sampledPlainText = manualAdvancedPreviewUsesSampleData
       ? renderPreviewSampleTokens(spunPlainText)
       : spunPlainText
@@ -14360,7 +14274,7 @@ export default function CampaignFormModal({
           useUnicode: formData.smsUseUnicode,
           keepNewLines: formData.smsKeepNewLines
         })
-      : sampledPlainText
+      : appendStopMessagesFooter(sampledPlainText, STOP_MESSAGES_PREVIEW_ID, previewOptOut, spunPlainText.includes(STOP_MESSAGES_LINK_TOKEN)) as string
     const spunSubject = renderContentSpin(resolveLegacyManualEmailSubject(item), {
       rng: createCampaignPreviewRng(`${previewSeed}:subject`)
     })
@@ -14368,15 +14282,18 @@ export default function CampaignFormModal({
       ? renderPreviewSampleTokens(spunSubject)
       : spunSubject
     const richContentRng = createCampaignPreviewRng(`${previewSeed}:rich`)
-    const renderedRichContent = isRichContentEditorEnabled
+    let richHasToken = false
+    let renderedRichContent = isRichContentEditorEnabled
       ? transformFormattedContentTextNodes(
           sanitizeFormattedContent(item.content),
           text => {
             const spun = renderContentSpin(text, { rng: richContentRng })
+            richHasToken ||= spun.includes(STOP_MESSAGES_LINK_TOKEN)
             return manualAdvancedPreviewUsesSampleData ? renderPreviewSampleTokens(spun) : spun
           }
         )
       : ''
+    if (isRichContentEditorEnabled) renderedRichContent = appendFormattedPreviewFooter(renderedRichContent, appendStopMessagesFooter('', STOP_MESSAGES_PREVIEW_ID, previewOptOut, richHasToken) as string)
     const selectedMediaItems = item.mediaItems || []
     const mediaItems = item.mediaOption === 'none' || isPostBackgroundActive
       ? []
@@ -15610,14 +15527,8 @@ export default function CampaignFormModal({
           </button>
         </div>
 
-        {/* Stepper Layout */}
-        {saveBusy ? (
-          <div className="campaign-save-loading-body" aria-hidden="true">
-            <Loader2 size={28} className="animate-spin" />
-            <span>{saveProgress?.label || 'Đang chuẩn bị dữ liệu chiến dịch...'}</span>
-          </div>
-        ) : (
-          <div className="stepper-layout">
+        {/* Keep editors mounted while saving so validation alerts preserve their UI state. */}
+          <div className="stepper-layout" inert={saveBusy || undefined} aria-busy={saveBusy}>
           {/* Left Sidebar - Stepper Navigation */}
           <div className="stepper-sidebar">
             {STEPS.map((step, stepIndex) => {
@@ -17430,7 +17341,6 @@ export default function CampaignFormModal({
             )}
           </div>
           </div>
-        )}
 
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">
@@ -17441,7 +17351,7 @@ export default function CampaignFormModal({
           <CampaignSaveControls
             starting={saveStarting}
             saving={savingCampaign}
-            progress={saveProgress}
+            ref={saveControlsRef}
             idleLabel={persistentDraft ? 'Tạo chiến dịch' : submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
             onSave={handleSave}
             onCancel={onClose}

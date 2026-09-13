@@ -481,3 +481,28 @@ export const formattedContentToZaloPreviewHtml = (html: unknown): string => (
 export const isFormattedContentEmpty = (html: unknown): boolean => (
   formattedContentToPlainText(html).trim().length === 0
 )
+
+/** Trim only the visible trailing whitespace before a plain preview footer. */
+export const appendFormattedPreviewFooter = (html: string, footer: string): string => {
+  if (!footer) return html
+  const nodes = parseFragment(html)
+  const trim = (children: HtmlNodeLike[]): void => {
+    while (children.length) {
+      const node = children[children.length - 1]!
+      if (node.type === 'text') {
+        node.data = (node.data || '').trimEnd()
+        if (node.data) return
+      } else if (node.name !== 'br') {
+        const nested = getChildren(node)
+        trim(nested)
+        if (nested.length || (node.name === 'a' && getSafeHref(node.attribs?.href))) return
+      }
+      children.pop()
+    }
+  }
+  trim(nodes)
+  const body = nodes.map(node => serializeNode(node, text => text)).join('')
+  return body
+    ? body + '<p><br></p><p>' + escapeFormattedContentText(footer) + '</p>'
+    : '<p>' + escapeFormattedContentText(footer) + '</p>'
+}

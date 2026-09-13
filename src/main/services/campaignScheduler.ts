@@ -1,3 +1,4 @@
+import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
 import { BrowserWindow } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { existsSync, unlinkSync, writeFileSync } from 'fs'
@@ -544,7 +545,6 @@ const ZALO_MESSAGE_OPT_OUT_ACTION_IDS = new Set([
   ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
 ])
 const ZALO_MESSAGE_OPT_OUT_NOTE = 'Bỏ qua vì người nhận đã từ chối nhận tin nhắn Zalo'
-const ZALO_MESSAGE_OPT_OUT_URL = 'https://agent.akabiz.net/zalo-message-opt-out'
 const ZALO_ADD_GROUP_MEMBER_ACTION_ID = 'zalo_add_group_member'
 const ZALO_JOIN_GROUP_LINK_ACTION_ID = 'zalo_join_group_link'
 const ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID = 'zalo_cancel_sent_friend_request'
@@ -6112,7 +6112,7 @@ export class CampaignScheduler {
     const globalId = String(context.target?.globalId || '').trim()
     if (!globalId) {
       if (!context.warnings.some(warning => warning.includes('Không lấy được Zalo global ID'))) {
-        context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi và không thêm link từ chối nhận tin.')
+        context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi, cá nhân hoá từ chối nhận tin (nếu có) dùng trang thông báo lỗi.')
       }
     } else if (await check({ globalId }, 'Zalo global ID')) {
       await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings)
@@ -6165,7 +6165,7 @@ export class CampaignScheduler {
 
     const globalId = String(target.globalId || '').trim()
     if (!globalId) {
-      context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi và không thêm link từ chối nhận tin.')
+      context.warnings.push('Không lấy được Zalo global ID; vẫn tiếp tục gửi, cá nhân hoá từ chối nhận tin (nếu có) dùng trang thông báo lỗi.')
     } else if (await check({ globalId }, 'Zalo global ID')) {
       await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings, [], 'đang chạy')
       await this.blockZaloMessageOptOutTarget(campaign, detail, true)
@@ -6201,7 +6201,7 @@ export class CampaignScheduler {
       }
       return { ...context, linkId: prepared.id }
     } catch (err) {
-      const warning = `Không thể tạo link từ chối nhận tin Zalo; vẫn tiếp tục gửi không có link: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
+      const warning = `Không thể tạo link từ chối nhận tin Zalo; vẫn tiếp tục gửi, cá nhân hoá từ chối nhận tin (nếu có) dùng trang thông báo lỗi: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`
       await this.recordZaloMessageOptOutWarnings(
         campaign,
         detail,
@@ -13209,22 +13209,24 @@ export class CampaignScheduler {
     inputData: Record<string, unknown> | undefined,
     target?: ZaloResolvedTarget | null,
     formatted = false,
-    businessNow?: Date
+    businessNow?: Date,
+    optOut?: { linkId: string | null; enabled: boolean; state: StopMessagesRenderState }
   ): string {
     if (formatted) {
       return transformFormattedContentText(
         template,
-        text => this.renderZaloTemplateText(text, inputData, target, businessNow)
+        text => this.renderZaloTemplateText(text, inputData, target, businessNow, optOut)
       )
     }
-    return this.renderZaloTemplateText(template, inputData, target, businessNow)
+    return this.renderZaloTemplateText(template, inputData, target, businessNow, optOut)
   }
 
   private renderZaloTemplateText(
     template: string | undefined | null,
     inputData: Record<string, unknown> | undefined,
     target?: ZaloResolvedTarget | null,
-    businessNow?: Date
+    businessNow?: Date,
+    optOut?: { linkId: string | null; enabled: boolean; state: StopMessagesRenderState }
   ): string {
     const raw = this.renderSpinContent(template)
     if (!raw) return ''
@@ -13259,7 +13261,7 @@ export class CampaignScheduler {
       return unknown || male || female
     }
 
-    return raw
+    const rendered = (optOut ? replaceStopMessagesLink(raw, optOut.linkId, optOut.enabled, optOut.state) : raw)
       .replace(/#\{(TODAY|TOMORROW|YESTERDAY)\(([^}]*)\)\}/g, (_, token, fmt) => {
         const offsetDays = token === 'TOMORROW' ? 1 : token === 'YESTERDAY' ? -1 : 0
         return formatDate(String(fmt || 'DD/MM/YYYY'), offsetDays)
@@ -13277,6 +13279,7 @@ export class CampaignScheduler {
       .replace(/#\{INFO3\}/g, getInput('info3'))
       .replace(/#\{INFO4\}/g, getInput('info4'))
       .replace(/#\{INFO5\}/g, getInput('info5'))
+    return rendered
   }
 
   private async buildZaloOutgoingMessage(
@@ -13289,23 +13292,21 @@ export class CampaignScheduler {
   ): Promise<ZaloOutgoingText> {
     const formatted = this.isFormattedContentCampaign(campaign)
     const businessNow = await this.getTemplateBusinessNow(rawMessage)
-    const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted, businessNow)
-    const message = formatted
-      ? convertHtmlToZaloMessage(rendered)
-      : await this.rewriteZaloMessageForRun(account, campaign, rendered, metadata)
     const inputDataId = Number(metadata?.campaignInputDataId ?? inputData?.id)
-    if (!Number.isFinite(inputDataId) || inputDataId <= 0) return message
     const linkId = this.zaloMessageOptOutContexts.get(
       this.zaloMessageOptOutContextKey(campaign.id, inputDataId)
-    )?.linkId
-    if (!linkId) return message
-    const footer = `Để không nhận tin nhắn nữa, vui lòng click: ${ZALO_MESSAGE_OPT_OUT_URL}/${linkId}`
-    const body = this.getZaloOutgoingMessageText(message)
-    if (body.includes(footer)) return message
-    const nextBody = `${body}\n${footer}`
+    )?.linkId ?? null
+    const enabled = ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId) &&
+      campaign.extraSettings?.zaloOptOutLinkEnabled === true &&
+      campaign.extraSettings?.zaloMessageSendMode !== ZALO_MESSAGE_SEND_MODE_SHARE
+    const state: StopMessagesRenderState = { hasToken: false }
+    const rendered = this.renderZaloTemplate(rawMessage, inputData, target, formatted, businessNow, { linkId, enabled, state })
+    const message = appendStopMessagesFooter(
+      formatted ? convertHtmlToZaloMessage(rendered) : rendered, linkId, enabled, state.hasToken
+    )
     return typeof message === 'string'
-      ? nextBody
-      : { ...message, msg: nextBody }
+      ? this.rewriteZaloMessageForRun(account, campaign, message, metadata)
+      : message
   }
 
   private async logZaloAiRewriteRunEvent(
@@ -15301,7 +15302,9 @@ export class CampaignScheduler {
       return this.cycleVariant(splitFormattedContentVariants(campaign.content), index)
     }
 
-    const variants = this.splitContentVariants(campaign.content)
+    const variants = campaign.extraSettings?.zaloOptOutLinkEnabled && ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId)
+      ? splitSharedContentVariants(campaign.content, { trim: false }).filter(part => part.trim())
+      : this.splitContentVariants(campaign.content)
     return this.cycleVariant(variants, index)
   }
 

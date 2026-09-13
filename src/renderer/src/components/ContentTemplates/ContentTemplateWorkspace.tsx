@@ -1,3 +1,4 @@
+import { STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN } from '../../../../shared/zaloMessageOptOut'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
@@ -117,6 +118,7 @@ const contentTemplateGroupMatchesManagerFilters = (
 interface PersonalizationToken {
   label: string
   token: string
+  insertText?: string
 }
 
 const PERSONALIZATION_DATE_OPTIONS: Array<{
@@ -144,6 +146,7 @@ const getCustomerPersonalizationTokens = (
   if (channelName === 'zalo_message') {
     tokens.push({ label: 'Tên gốc Zalo', token: '#{ORIGINAL_NAME}' })
     tokens.push({ label: 'Xưng hô', token: '#{SEX{anh-chị-anh/chị}}' })
+    tokens.push({ label: 'Từ chối nhận tin', token: STOP_MESSAGES_LINK_TOKEN, insertText: STOP_MESSAGES_INSERT_TEXT })
   }
   return tokens
 }
@@ -552,7 +555,7 @@ function PersonalizationPanel({
           type="button"
           className="ctw-personalization-token"
           title={`Chèn ${item.token}`}
-          onClick={() => onInsert(item.token)}
+          onClick={() => onInsert(item.insertText || item.token)}
           disabled={disabled}
           key={item.token}
         >
