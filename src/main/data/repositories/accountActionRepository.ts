@@ -1,4 +1,5 @@
-import { AccountActionOverview, AccountGroupSettings, AutoAccountAction, AutoAccountActionStatus } from '../../../shared/types'
+import { AccountActionOverview, AccountGroupSettings, AutoAccountAction, AutoAccountActionStatus, CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES, CampaignActionUsage } from '../../../shared/types'
+import { getAccount } from './accountRepository'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAutoAccountActionFromDB, mapAutoAccountActionStatusFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
@@ -65,11 +66,12 @@ async function withTransientRetry<T>(operation: () => Promise<T>): Promise<T> {
 
 async function runOverviewQuery<T>(
   label: string,
-  query: () => PromiseLike<T>
+  query: () => PromiseLike<T>,
+  retryTransient = true
 ): Promise<T> {
   let result = await query()
   let error = (result as { error?: unknown }).error
-  if (error && isTransientFetchFailure(error)) {
+  if (retryTransient && error && isTransientFetchFailure(error)) {
     await sleep(TRANSIENT_RETRY_DELAY_MS)
     result = await query()
     error = (result as { error?: unknown }).error
@@ -296,7 +298,8 @@ async function loadOverviewActionStatuses(
 async function loadWindowActionCounts(
   accountId: number,
   actionWindowMinutes: Map<string, number>,
-  dbNowMs: number
+  dbNowMs: number,
+  retryTransient = true
 ): Promise<Map<string, number>> {
   if (actionWindowMinutes.size === 0) return new Map()
 
@@ -323,17 +326,62 @@ async function loadWindowActionCounts(
           .eq('account_id', accountId)
           .eq('action_code', actionCode)
           .eq('counts_toward_limit', true)
-          .gte('created_at', timeFrameStart)
+          .gte('created_at', timeFrameStart),
+        retryTransient
       ),
       runOverviewQuery(
         'Failed to count legacy account action window',
-        buildLegacyWindowCountQuery
+        buildLegacyWindowCountQuery,
+        retryTransient
       )
     ])
     counts.set(actionCode, (explicitResult.count || 0) + (legacyResult.count || 0))
   }
 
   return counts
+}
+
+/** Read-only, bounded form snapshot. Never creates/resets quota rows or retries counts. */
+export async function getCampaignActionUsage(
+  accountId: number,
+  actionCodes: string[]
+): Promise<CampaignActionUsage[]> {
+  requireCurrentUser()
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || !Array.isArray(actionCodes) ||
+      actionCodes.length > 32 || actionCodes.some(code => typeof code !== 'string' || !/^[a-z0-9_]{1,100}$/.test(code))) {
+    throw new Error('Tài khoản hoặc mã hành động không hợp lệ')
+  }
+  const codes = [...new Set(actionCodes)]
+  if (codes.length === 0) return []
+  // Own-account and current capability checks precede every count query.
+  if (!await getAccount(accountId)) throw new Error('Không tìm thấy tài khoản phù hợp với gói hiện tại')
+  const clock = await getDatabaseRuntimeClock()
+  const { data, error } = await client()
+    .from('auto_account_action_status')
+    .select('action_code, count_action_in_day, count_date')
+    .eq('account_id', accountId)
+    .in('action_code', codes)
+  if (error) throw new Error(`Failed to read campaign action usage: ${error.message}`)
+  const dailyCounts = new Map<string, number>()
+  for (const row of data || []) {
+    if (String(row.count_date || '') > clock.vietnamDateKey) {
+      throw new Error('Ngày thống kê hành động vượt quá ngày hiện tại của DB')
+    }
+    dailyCounts.set(String(row.action_code), row.count_date === clock.vietnamDateKey
+      ? Number(row.count_action_in_day || 0)
+      : 0)
+  }
+  const windowCounts = await loadWindowActionCounts(
+    accountId,
+    new Map(codes.map(code => [code, CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES])),
+    new Date(clock.dbNow).getTime(),
+    false
+  )
+  return codes.map(actionCode => ({
+    actionCode,
+    dailyActionCount: dailyCounts.get(actionCode) ?? 0,
+    windowActionCount: windowCounts.get(actionCode) ?? 0
+  }))
 }
 
 function getOverviewWindowMinutes(

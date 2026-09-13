@@ -12004,6 +12004,24 @@ button.btn-icon.campaign-control-button.assistant {
   flex: 1;
 }
 
+.action-limit-usage {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.action-limit-usage strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.action-limit-usage-source {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
 .action-limit-hour-label-row {
   display: flex;
   align-items: baseline;

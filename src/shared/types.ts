@@ -488,6 +488,14 @@ export interface AccountActionOverview {
   windowMinutes: number
 }
 
+export const CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES = 65
+
+export interface CampaignActionUsage {
+  actionCode: string
+  dailyActionCount: number
+  windowActionCount: number
+}
+
 export interface ActionLimitConfig {
   dailyLimit?: number
   rateLimitCount?: number
@@ -3137,6 +3145,7 @@ export const IPC_EVENTS = {
   ACCOUNT_RELOAD_PAGE: 'account:reload-page',
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
+  ACCOUNT_CAMPAIGN_ACTION_USAGE: 'account:campaign-action-usage',
   ACCOUNT_ACTION_ENABLE_NOW: 'account:action-enable-now',
   ACCOUNT_SMS_RESET_MOBILE_DEVICE: 'account:sms-reset-mobile-device',
   ZALO_LOGIN_QR_START: 'zalo:login-qr-start',
