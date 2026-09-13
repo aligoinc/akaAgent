@@ -8435,7 +8435,12 @@ export default function CampaignFormModal({
 
     const mode = getMediaSelectionMode(target)
     const maxSelect = usesSingleCommentMediaSelection(target) ? 1 : undefined
-    const { snapshots, failures } = selectLocalCampaignMedia(rawFiles, { mode, maxSelect })
+    const { snapshots, failures } = selectLocalCampaignMedia(rawFiles, {
+      mode,
+      maxSelect,
+      actionId: formData.actionId,
+      target: target === 'comment' ? 'comment' : 'post'
+    })
     if (failures.length > 0) {
       showAlert(
         summarizeLocalCampaignMediaFailures(failures),

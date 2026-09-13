@@ -24,7 +24,15 @@ const ZALO_TOGGLEABLE_MESSAGE_ACTION_IDS = new Set([
 interface LocalCampaignMediaOptions {
   mode: MediaSelectionMode
   maxSelect?: number
+  actionId?: string
+  target?: 'post' | 'comment'
 }
+
+const FACEBOOK_POST_ACTION_IDS = new Set([
+  'facebook_timeline_post',
+  'facebook_group_post',
+  'facebook_page_post'
+])
 
 export interface LocalCampaignMediaSelection {
   snapshots: CampaignMediaSnapshot[]
@@ -175,7 +183,10 @@ export const selectLocalCampaignMedia = (
 
     const imageFile = isImageFile(file)
     const sizeLimit = imageFile ? MEDIA_IMAGE_MAX_SIZE_BYTES : MEDIA_FILE_MAX_SIZE_BYTES
-    if (file.size > sizeLimit) {
+    const unlimitedPostVideo = !imageFile && options.target === 'post' &&
+      FACEBOOK_POST_ACTION_IDS.has(options.actionId || '') &&
+      isVideoMediaSource(file.type, localPath, file.name)
+    if (!unlimitedPostVideo && file.size > sizeLimit) {
       failures.push(`${file.name || 'File'}: Vượt quá dung lượng tối đa ${formatBytes(sizeLimit)}.`)
       continue
     }

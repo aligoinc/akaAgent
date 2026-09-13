@@ -10233,7 +10233,7 @@ export class CampaignScheduler {
           ? (isPending ? true : (pendingCheckConclusive ? false : undefined))
           : undefined
         const rawPostLink = String(linkOut.rawPostLink || '').trim()
-        const failureMessage = String(s.error || out.error || out.message || 'Form đăng bài chưa đóng sau 60 giây')
+        const failureMessage = String(s.error || out.error || out.message || 'Không xác nhận được form đăng bài đã đóng')
         const status: 'thành công' | 'thất bại' | 'lỗi' =
           posted ? 'thành công'
           : s.status === 'error' ? 'lỗi'
@@ -10334,10 +10334,14 @@ export class CampaignScheduler {
       } catch (err) { console.error('Failed log group post:', err) }
     }
 
-    // Đăng bài timeline hoặc fallback khi workflow group post chưa có block verify submit.
+    // Timeline/Reels only report success after the publishing block confirms closure.
+    // Group retains its separate verification step and legacy fallback.
     const postSteps = groupPostVerifySteps.length > 0
       ? []
-      : steps.filter(s => s.blockName === 'fb_click_post_button' && s.status === 'success')
+      : steps.filter(s => (
+          s.blockName === 'fb_click_post_button' ||
+          (campaign.actionId === 'facebook_timeline_post' && s.blockName === 'fb_post_reels')
+        ) && s.status === 'success' && (s.output?.posted === true || s.output?.ok === true))
     for (const s of postSteps) {
       try {
         const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
@@ -14819,7 +14823,7 @@ export class CampaignScheduler {
 
     const status: BlockScreenshotRunResult['status'] = request.stepStatus === 'error' ? 'error' : 'failure'
     const fallbackMessage = request.blockName === 'fb_verify_group_post_form_closed'
-      ? 'Form đăng bài chưa đóng sau 60 giây'
+      ? 'Không xác nhận được form đăng bài đã đóng'
       : (status === 'error' ? 'Lỗi không xác định' : 'Thao tác thất bại')
     const rawMessage = this.getScreenshotOutputMessage(request, fallbackMessage)
     let errorCode: string | undefined
