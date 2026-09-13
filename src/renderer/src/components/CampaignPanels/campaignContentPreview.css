@@ -1,0 +1,27 @@
+.campaign-content-preview { min-height: 100%; color: var(--text-primary); }
+.campaign-content-preview-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 16px 20px; border-bottom: 1px solid var(--border-default); background: var(--bg-tertiary); }
+.campaign-content-preview-toolbar p { flex: 1 1 260px; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+.campaign-content-preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; font-size: 12px; }
+.campaign-content-preview-controls label { color: var(--text-secondary); font-weight: 600; }
+.campaign-content-preview-controls select { width: 190px; max-width: 100%; padding: 9px 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; }
+.campaign-content-preview-controls select:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.campaign-content-preview-badge { padding: 9px 12px; border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-secondary); background: var(--bg-secondary); font-size: 11px; }
+.campaign-content-preview-badge.personalized { color: var(--success, #3ba77a); border-color: color-mix(in srgb, #3ba77a 25%, transparent); background: color-mix(in srgb, #3ba77a 8%, var(--bg-primary)); }
+.campaign-content-preview-notes { display: flex; flex-direction: column; gap: 5px; padding: 12px 20px 0; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.campaign-content-preview-grid { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 20px; padding: 20px; overflow-x: auto; }
+.campaign-content-preview-card { flex: 0 1 350px; min-width: 280px; }
+.campaign-content-preview-card-heading { display: flex; align-items: center; gap: 8px; min-height: 36px; margin-bottom: 8px; }
+.campaign-content-preview-card-heading strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.campaign-content-preview-number { display: grid; place-items: center; flex: 0 0 26px; height: 26px; border-radius: 8px; color: var(--accent-primary); background: var(--bg-accent-subtle); font-size: 12px; font-weight: 700; }
+.campaign-content-preview-channel { padding: 3px 7px; border-radius: 20px; background: var(--bg-accent-subtle); color: var(--accent-primary); font-size: 10px; white-space: nowrap; }
+.campaign-content-preview .ctw-preview-stage { align-items: flex-start; min-height: 0; padding: 0; border: 0; background: transparent; }
+.campaign-content-preview .ctw-preview-panel { min-height: 0; }
+.campaign-content-preview .ctw-preview-phone { width: 100%; min-height: 450px; }
+.campaign-content-preview .ctw-preview-message-bubble { font-size: 12px; }
+.campaign-content-preview .ctw-preview-phone-bar strong { overflow-wrap: anywhere; }
+.campaign-content-preview .ctw-preview-email-card { min-width: 0; }
+.campaign-content-preview .ctw-preview-footer { margin-top: 12px; }
+.campaign-content-preview-hint { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.campaign-content-preview-hint svg { flex-shrink: 0; }
+.campaign-content-preview-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 45px 20px; color: var(--text-secondary); text-align: center; font-size: 12px; }
+.campaign-content-preview-empty strong { color: var(--text-primary); }

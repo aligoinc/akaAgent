@@ -49,6 +49,9 @@ import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import CampaignInfoView from './CampaignInfoView'
+import CampaignContentPreviewTab from './CampaignContentPreviewTab'
+import { buildCampaignContentPreview } from './campaignContentPreview'
+import { getContentTemplateChannelForAction } from './contentTemplateCampaignUtils'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import AutomationFormModal from '../Automation/AutomationFormModal'
 import { formatAutomationTriggerLabel } from '../Automation/automationDisplay'
@@ -71,7 +74,7 @@ interface CampaignPanelProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
@@ -2644,6 +2647,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const handledNavigationRequestRef = useRef<number | null>(null)
   const selectedCampaignSummary = campaigns.find(campaign => campaign.id === selectedCampaignId)
   const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
+  const selectedContentPreview = useMemo(
+    () => selectedCampaignConfig ? buildCampaignContentPreview(selectedCampaignConfig) : null,
+    [selectedCampaignConfig]
+  )
+  const supportsContentPreview = !!getContentTemplateChannelForAction(selectedCampaignSummary?.actionId)
   const selectedCampaignLog = selectedCampaignId ? campaignLogs[selectedCampaignId] : undefined
 
   useEffect(() => {
@@ -2836,12 +2844,16 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }, [zaloLoginAccount?.id, loadAccounts, loadCampaigns, showAlert])
 
   useEffect(() => {
-    if (!selectedCampaignId || detailTab !== 'info') return
+    if (!selectedCampaignId || (detailTab !== 'info' && detailTab !== 'contentPreview')) return
     if (selectedCampaignConfig) return
     void loadCampaignConfig(selectedCampaignId).catch(err => {
       console.error('Failed to load selected campaign config:', err)
     })
   }, [detailTab, loadCampaignConfig, selectedCampaignConfig, selectedCampaignId])
+
+  useEffect(() => {
+    if (detailTab === 'contentPreview' && !supportsContentPreview) setDetailTab('info')
+  }, [detailTab, supportsContentPreview])
 
   useEffect(() => {
     if (!selectedCampaignId || detailTab !== 'runLog') return
@@ -6515,6 +6527,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 >
                   Kết quả chạy ({campaignDetailPageTotal})
                 </button>
+                {supportsContentPreview && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'contentPreview' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('contentPreview')}
+                  >
+                    Preview nội dung{selectedContentPreview ? ` (${selectedContentPreview.items.length})` : ''}
+                  </button>
+                )}
                 <button
                   className={`detail-dock-tab ${detailTab === 'automation' ? 'active' : ''}`}
                   onClick={() => {
@@ -6613,6 +6633,27 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     {selectedCampaignId && loadingCampaignConfigIds[selectedCampaignId]
                       ? 'Đang tải cấu hình chiến dịch...'
                       : 'Không thể tải cấu hình chiến dịch.'}
+                  </div>
+                )
+              )}
+
+              {detailTab === 'contentPreview' && (
+                selectedCampaignConfig && selectedContentPreview ? (
+                  <CampaignContentPreviewTab
+                    key={selectedCampaignConfig.id}
+                    campaign={selectedCampaignConfig}
+                    account={selectedCampaignAccount}
+                    preview={selectedContentPreview}
+                  />
+                ) : (
+                  <div className="campaign-content-preview-empty" role="status">
+                    {selectedCampaignId && loadingCampaignConfigIds[selectedCampaignId]
+                      ? 'Đang tải nội dung chiến dịch...'
+                      : <>Không thể tải nội dung chiến dịch.
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => {
+                          if (selectedCampaignId) void loadCampaignConfig(selectedCampaignId, { force: true }).catch(console.error)
+                        }}>Thử lại</button>
+                      </>}
                   </div>
                 )
               )}
