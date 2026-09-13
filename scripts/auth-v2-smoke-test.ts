@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
@@ -11,19 +11,18 @@ import { DeviceChangeRequestClient } from '../src/main/services/deviceChangeRequ
 
 const credentials = { username: 'dummy-user', password: 'dummy-password' }
 const options = { rememberLogin: true, autoLogin: true, startupEnabled: false }
-const encrypt = (value: string) => Buffer.from([...Buffer.from(value)].map(v => v ^ 93))
-const decrypt = (value: Buffer) => Buffer.from([...value].map(v => v ^ 93)).toString()
 let checks = 0
 async function storage(root: string): Promise<void> {
   const file = join(root, 'login.json')
-  const config = { file, encrypt, decrypt }
+  const config = { file }
   let store = new LocalLoginStore(config)
   await store.initialize(); assert(store.mayImportLegacy()); checks++
   store.importLegacy(credentials, options, 0)
   await store.updateOptions({ autoLogin: false })
-  assert.equal(JSON.parse(await readFile(file, 'utf8')).encryptedCredential, null, 'imported password not persisted by checkbox'); checks++
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).credentials, null, 'imported password not persisted by checkbox'); checks++
   await store.saveAuthenticated(credentials)
-  assert(!(await readFile(file, 'utf8')).includes(credentials.password)); checks++
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).credentials, credentials, 'remembered credentials are saved directly'); checks++
+  if (process.platform !== 'win32') { assert.equal((await stat(file)).mode & 0o777, 0o600, 'login file remains owner-only'); checks++ }
   assert(!JSON.stringify(store.snapshot()).includes(credentials.password)); checks++
   store = new LocalLoginStore(config); await store.initialize()
   assert.deepEqual(store.getCredentials(), credentials, 'independent store reopens saved credential'); checks++
@@ -32,7 +31,7 @@ async function storage(root: string): Promise<void> {
   assert.deepEqual(store.getCredentials(), credentials, 'option save preserves authenticated remembered credential'); checks++
   await store.updateOptions({ rememberLogin: false })
   assert.equal(store.getCredentials(), null); assert.equal(store.snapshot().loginOptions.autoLogin, false)
-  assert.equal(JSON.parse(await readFile(file, 'utf8')).encryptedCredential, null); checks++
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).credentials, null); checks++
   await store.updateOptions({ autoLogin: true })
   assert.equal(store.snapshot().loginOptions.rememberLogin, true, 'checking auto enables remember')
   assert.equal(store.snapshot().loginOptions.autoLogin, true); checks++
@@ -42,27 +41,85 @@ async function storage(root: string): Promise<void> {
   const failing = new LocalLoginStore({ ...config, write: async () => { throw new Error('disk full') } })
   await failing.initialize(); await failing.saveAuthenticated(credentials)
   assert(failing.snapshot().warningMessage); checks++
-  const unavailable = new LocalLoginStore({ ...config, encrypt: () => { throw new Error('OS encryption unavailable') } })
-  await unavailable.initialize(); await unavailable.saveAuthenticated(credentials)
-  assert(unavailable.snapshot().warningMessage); checks++
   await writeFile(file, '{broken')
   const corrupt = new LocalLoginStore(config); await corrupt.initialize()
   assert(!corrupt.mayImportLegacy()); assert(corrupt.snapshot().warningMessage); checks++
+  await corrupt.updateOptions({ rememberLogin: true })
+  const corruptRestart = new LocalLoginStore(config); await corruptRestart.initialize()
+  assert(!corruptRestart.mayImportLegacy(), 'saving options cannot reopen legacy import after an unreadable file'); checks++
   const slow = new LocalLoginStore({ ...config, file: join(root, 'new.json') }); await slow.initialize()
   const rev = slow.getRevision(); const save = slow.updateOptions({ autoLogin: false })
   assert(!slow.importLegacy(credentials, options, rev), 'late DB result cannot override checkbox'); await save; checks++
-  const decryptedFailure = new LocalLoginStore({ ...config, file: join(root, 'valid.json') })
-  await decryptedFailure.initialize(); await decryptedFailure.saveAuthenticated(credentials)
-  const cannotRead = new LocalLoginStore({ ...config, file: join(root, 'valid.json'), decrypt: () => { throw new Error('keychain locked') } })
-  await cannotRead.initialize(); assert(!cannotRead.mayImportLegacy()); checks++
+  const malformedFile = join(root, 'malformed-credential.json')
+  await writeFile(malformedFile, JSON.stringify({ version: 3, options, credentials: { username: credentials.username }, requiresManualLogin: false }))
+  const malformed = new LocalLoginStore({ file: malformedFile }); await malformed.initialize()
+  assert(!malformed.mayImportLegacy()); assert.equal(malformed.getCredentials(), null); assert(malformed.snapshot().warningMessage); checks++
+}
+async function encryptedLocalUpgrade(root: string): Promise<void> {
+  const source = await readFile('src/main/services/localLoginService.ts', 'utf8')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  for (const rememberLogin of [false, true]) for (const autoLogin of [false, true]) {
+    if (autoLogin && !rememberLogin) continue
+    const directory = join(root, `encrypted-upgrade-${rememberLogin}-${autoLogin}`)
+    const file = join(directory, 'login-v2.json')
+    await mkdir(directory)
+    const legacyOptions = { rememberLogin, autoLogin, startupEnabled: true }
+    const ciphertext = 'legacy-ciphertext-that-must-not-be-decrypted'
+    await writeFile(file, JSON.stringify({ version: 2, options: legacyOptions, encryptedCredential: ciphertext }))
+    const exports: any = {}
+    const electron = { app: { getPath: (name: string) => { assert.equal(name, 'userData'); return directory } },
+      get safeStorage(): never { throw new Error('Login persistence must never access OS encryption') } }
+    runInNewContext(code, { exports, require: (name: string) => {
+      if (name === 'electron') return electron
+      if (name === 'node:path') return { join }
+      if (name === './localLoginStore') return { LocalLoginStore }
+      throw new Error(`Unexpected import: ${name}`)
+    } })
+    const store = exports.getLocalLoginStore() as LocalLoginStore
+    await store.initialize()
+    assert.deepEqual(store.snapshot().loginOptions, legacyOptions)
+    assert.equal(store.getCredentials(), null)
+    assert.equal(store.snapshot().rememberedLogin, null)
+    assert(store.snapshot().warningMessage)
+    assert(!store.mayImportLegacy())
+    assert(!store.importLegacy(credentials, options, 0), 'encrypted local history cannot load a DB candidate'); checks++
+    await store.updateOptions({ autoLogin: false })
+    await store.updateOptions({ rememberLogin: false })
+    await store.updateOptions({ autoLogin: true })
+    const fileAfterOptions = JSON.parse(await readFile(file, 'utf8'))
+    assert.equal(fileAfterOptions.version, 3)
+    assert.equal(fileAfterOptions.credentials, null)
+    assert.equal(fileAfterOptions.requiresManualLogin, true)
+    assert(!JSON.stringify(fileAfterOptions).includes(ciphertext), 'next write discards old ciphertext'); checks++
+    const restarted = new LocalLoginStore({ file }); await restarted.initialize()
+    assert(!restarted.mayImportLegacy(), 'checkbox changes and restart must not bypass the one-time login')
+    assert.equal(restarted.snapshot().loginOptions.autoLogin, true, 'preserve auto choice without attempting login')
+    assert(restarted.snapshot().warningMessage)
+    await restarted.saveAuthenticated(credentials)
+    const afterLogin = JSON.parse(await readFile(file, 'utf8'))
+    assert.deepEqual(afterLogin.credentials, credentials)
+    assert.equal(afterLogin.requiresManualLogin, false)
+    assert.equal(restarted.snapshot().warningMessage, null); checks++
+    const nextUpdate = new LocalLoginStore({ file }); await nextUpdate.initialize()
+    assert.deepEqual(nextUpdate.getCredentials(), credentials)
+    assert.deepEqual(nextUpdate.snapshot().loginOptions, { ...legacyOptions, rememberLogin: true, autoLogin: true })
+    assert(!nextUpdate.mayImportLegacy()); checks++
+  }
+  const file = join(root, 'old-preferences-only.json')
+  const legacyOptions = { ...options, autoLogin: false, startupEnabled: true }
+  await writeFile(file, JSON.stringify({ version: 2, options: legacyOptions, encryptedCredential: null }))
+  const store = new LocalLoginStore({ file }); await store.initialize()
+  assert(store.mayImportLegacy(), 'old preferences-only files keep the original guarded DB migration')
+  assert(store.importLegacy(credentials, options, 0))
+  assert.deepEqual(store.snapshot().loginOptions, legacyOptions); checks++
 }
 async function preferencesOnlyRestart(root: string): Promise<void> {
-  const config = { file: join(root, 'preferences-only.json'), encrypt, decrypt }
+  const config = { file: join(root, 'preferences-only.json') }
   const first = new LocalLoginStore(config)
   await first.initialize()
   first.importLegacy(credentials, { ...options, autoLogin: false }, 0)
   await first.updateOptions({ startupEnabled: true })
-  assert.equal(JSON.parse(await readFile(config.file, 'utf8')).encryptedCredential, null)
+  assert.equal(JSON.parse(await readFile(config.file, 'utf8')).credentials, null)
 
   const restarted = new LocalLoginStore(config)
   await restarted.initialize()
@@ -211,19 +268,20 @@ async function recoveryGate(): Promise<void> {
 async function handlers(root: string): Promise<void> {
   const source = await readFile('src/main/ipc/handlers/authHandlers.ts', 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const scenario of ['disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate',
+  for (const scenario of ['disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate', 'encrypted-local-restart',
     'recover-remember-off', 'recover-remember-on', 'recover-enable-remember', 'recover-ambiguous', 'recover-late-options', 'recover-late-username', 'recover-logout', 'recover-mismatch', 'recover-policy-cancel', 'recover-policy-accept', 'recover-forget', 'recover-corrupt-file']) {
     let unblockSave!: () => void
     let startedSave!: () => void
     const saveStarted = new Promise<void>(resolve => { startedSave = resolve })
     const saveBlocked = new Promise<void>(resolve => { unblockSave = resolve })
     let writes = 0
-    let store = new LocalLoginStore({ file: join(root, scenario+'.json'), encrypt, decrypt,
+    let store = new LocalLoginStore({ file: join(root, scenario+'.json'),
       ...(scenario === 'disk-failure' ? { write: async () => { throw new Error('disk full') } } : {}),
       ...(scenario === 'cancel-during-save' ? { write: async () => {
         if (++writes === 2) { startedSave(); await saveBlocked }
       } } : {}) })
     let resolveLegacy!: (v: unknown) => void
+    let legacyCalls = 0
     const legacy = new Promise(resolve => { resolveLegacy = resolve })
     let finishRecovery!: () => void
     const recovery = new Promise<void>(resolve => { finishRecovery = resolve })
@@ -238,7 +296,11 @@ async function handlers(root: string): Promise<void> {
       if (name.endsWith('/types')) return { IPC_EVENTS }
       if (name.endsWith('localLoginService')) return { getLocalLoginStore: () => store }
       if (name.endsWith('authRepository')) return {
-        loadLegacyLoginCandidate: () => legacy,
+        loadLegacyLoginCandidate: () => {
+          legacyCalls++
+          assert.notEqual(scenario, 'encrypted-local-restart', 'old encrypted local file cannot trigger DB credential lookup')
+          return legacy
+        },
         recoverDeviceCredentials: async () => {
           recoveryCalls++
           if (scenario.startsWith('recover-late-')) await recovery
@@ -261,13 +323,38 @@ async function handlers(root: string): Promise<void> {
     } })
     exports.registerAuthHandlers({ beforeLogout: () => { cleanup++ } })
     const call = (key: string, ...args: any[]) => routes.get(key)!(null, ...args)
-    if (scenario.startsWith('recover-')) {
+    if (scenario === 'encrypted-local-restart') {
+      const file = join(root, scenario+'.json')
+      await writeFile(file, JSON.stringify({ version: 2, options, encryptedCredential: 'unreadable-old-ciphertext' }))
+      const boot = await call(IPC_EVENTS.AUTH_BOOTSTRAP)
+      assert.equal(boot.user, null); assert.equal(boot.rememberedLogin, null)
+      assert.deepEqual(boot.loginOptions, options); assert(boot.warningMessage)
+      assert.equal(legacyCalls, 0); assert.equal(logins, 0); checks++
+      await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username))
+      await assert.rejects(call(IPC_EVENTS.AUTH_LOGIN, credentials.username, 'bad-password', options))
+      assert.equal(current, null)
+      assert.equal(JSON.parse(await readFile(file, 'utf8')).requiresManualLogin, true)
+      assert.equal(JSON.parse(await readFile(file, 'utf8')).credentials, null); checks++
+      store = new LocalLoginStore({ file }); exports.registerAuthHandlers()
+      const again = await call(IPC_EVENTS.AUTH_BOOTSTRAP)
+      assert.equal(again.user, null); assert(again.warningMessage)
+      assert.equal(legacyCalls, 0); assert.equal(logins, 1, 'restart cannot reuse a failed login or fetch legacy credentials'); checks++
+      const manual = await call(IPC_EVENTS.AUTH_LOGIN, credentials.username, credentials.password, options)
+      assert.equal(manual.status, 'authenticated'); assert.equal(manual.loginState.warningMessage, null)
+      assert(!JSON.stringify(manual).includes(credentials.password), 'plaintext storage does not expose a password over IPC')
+      assert.deepEqual(JSON.parse(await readFile(file, 'utf8')).credentials, credentials)
+      await call(IPC_EVENTS.AUTH_LOGOUT)
+      store = new LocalLoginStore({ file }); exports.registerAuthHandlers()
+      const automatic = await call(IPC_EVENTS.AUTH_BOOTSTRAP)
+      assert(automatic.user); assert.equal(logins, 3, 'next app update/restart authenticates the saved local credentials')
+      assert.equal(legacyCalls, 0); checks++
+    } else if (scenario.startsWith('recover-')) {
       const remember = scenario === 'recover-remember-on'
       await store.updateOptions({ rememberLogin: remember, autoLogin: false, startupEnabled: false })
       if (remember) await store.saveAuthenticated({ username: 'previous-user', password: 'previous-password' })
       if (scenario === 'recover-corrupt-file') {
         await writeFile(join(root, scenario+'.json'), '{broken')
-        store = new LocalLoginStore({ file: join(root, scenario+'.json'), encrypt, decrypt })
+        store = new LocalLoginStore({ file: join(root, scenario+'.json') })
         exports.registerAuthHandlers()
       }
       await store.initialize()
@@ -308,7 +395,7 @@ async function handlers(root: string): Promise<void> {
       if (scenario === 'recover-enable-remember') {
         const changed = await call(IPC_EVENTS.AUTH_UPDATE_LOGIN_PREFERENCES, { rememberLogin: true })
         assert.equal(changed.rememberedLogin.source, 'recovery')
-        assert.equal(JSON.parse(await readFile(join(root, scenario+'.json'), 'utf8')).encryptedCredential, null, 'checking remember does not save an unverified recovery'); checks++
+        assert.equal(JSON.parse(await readFile(join(root, scenario+'.json'), 'utf8')).credentials, null, 'checking remember does not save an unverified recovery'); checks++
       }
       const result = await call(IPC_EVENTS.AUTH_LOGIN_REMEMBERED, credentials.username, store.snapshot().loginOptions)
       if (scenario.startsWith('recover-policy-')) {
@@ -324,13 +411,13 @@ async function handlers(root: string): Promise<void> {
         assert.equal(accepted.status, 'authenticated'); assert(!JSON.stringify(accepted).includes(credentials.password)); checks++
       } else assert.equal(result.status, 'authenticated')
       const file = JSON.parse(await readFile(join(root, scenario+'.json'), 'utf8'))
-      assert.equal(!!file.encryptedCredential, store.snapshot().loginOptions.rememberLogin)
-      if (file.encryptedCredential) assert.deepEqual(JSON.parse(decrypt(Buffer.from(file.encryptedCredential, 'base64'))), credentials)
+      assert.equal(!!file.credentials, store.snapshot().loginOptions.rememberLogin)
+      if (file.credentials) assert.deepEqual(file.credentials, credentials)
       assert.equal(presence, 1); checks++
     } else if (scenario.startsWith('preferences-only-')) {
       // Re-register against a fresh store to simulate a real application restart.
       await store.updateOptions({ rememberLogin: true, autoLogin: false, startupEnabled: true })
-      store = new LocalLoginStore({ file: join(root, scenario+'.json'), encrypt, decrypt })
+      store = new LocalLoginStore({ file: join(root, scenario+'.json') })
       exports.registerAuthHandlers()
       const candidate = scenario === 'preferences-only-restart' ? { credentials, loginOptions: options } : null
       resolveLegacy(candidate)
@@ -453,7 +540,7 @@ async function v2ResetJournal(root: string): Promise<void> {
 }
 async function main(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'aka-auth-v2-'))
-  try { await storage(root); await preferencesOnlyRestart(root); await identity(root); await migrationGate(); await recoveryGate(); await bindingConfirmation(); await v2ResetJournal(root); await handlers(root); console.log('Auth v2 smoke passed:', checks, 'checks') }
+  try { await storage(root); await encryptedLocalUpgrade(root); await preferencesOnlyRestart(root); await identity(root); await migrationGate(); await recoveryGate(); await bindingConfirmation(); await v2ResetJournal(root); await handlers(root); console.log('Auth v2 smoke passed:', checks, 'checks') }
   finally { await rm(root, { recursive: true, force: true }) }
 }
 void main().catch(error => { console.error(error); process.exitCode = 1 })

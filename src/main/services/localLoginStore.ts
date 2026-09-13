@@ -9,11 +9,16 @@ export function normalizeLocalLoginOptions(options: Partial<LoginPreferences>): 
   if (next.autoLogin) next.rememberLogin = true
   return next
 }
-interface LoginFile { version: 2; options: LoginPreferences; encryptedCredential: string | null }
+interface LegacyLoginFile { version: 2; options: LoginPreferences; encryptedCredential: string | null }
+interface LoginFile {
+  version: 3
+  options: LoginPreferences
+  credentials: SavedLoginCredentials | null
+  requiresManualLogin: boolean
+}
+const MANUAL_LOGIN_WARNING = 'Vui lòng nhập lại tên đăng nhập và mật khẩu một lần. Các tùy chọn ghi nhớ và khởi động cùng máy tính vẫn được giữ nguyên.'
 interface Options {
   file: string
-  encrypt: (value: string) => Buffer
-  decrypt: (value: Buffer) => string
   write?: (file: string, value: string) => Promise<void>
 }
 
@@ -27,6 +32,7 @@ export class LocalLoginStore {
   private warning: string | null = null
   private missing = false
   private preferencesOnly = false
+  private requiresManualLogin = false
   private revision = 0
   constructor(private readonly config: Options) {}
 
@@ -36,27 +42,39 @@ export class LocalLoginStore {
   }
   private async load(): Promise<void> {
     try {
-      const raw = JSON.parse(await readFile(this.config.file, 'utf8')) as LoginFile
-      if (raw.version !== 2 || !raw.options || ['rememberLogin', 'autoLogin', 'startupEnabled'].some(k => typeof raw.options[k as keyof LoginPreferences] !== 'boolean')
-        || !(raw.encryptedCredential === null || typeof raw.encryptedCredential === 'string')) throw new Error('Invalid login storage')
+      const raw = JSON.parse(await readFile(this.config.file, 'utf8')) as LoginFile | LegacyLoginFile
+      if (!raw || (raw.version !== 2 && raw.version !== 3) || !raw.options
+        || ['rememberLogin', 'autoLogin', 'startupEnabled'].some(k => typeof raw.options[k as keyof LoginPreferences] !== 'boolean')) throw new Error('Invalid login storage')
       this.options = normalizeLocalLoginOptions(raw.options)
-      if (raw.encryptedCredential && this.options.rememberLogin) {
-        const value = JSON.parse(this.config.decrypt(Buffer.from(raw.encryptedCredential, 'base64'))) as SavedLoginCredentials
-        if (!value || typeof value.username !== 'string' || !value.username.trim() || typeof value.password !== 'string' || !value.password) throw new Error('Invalid credential')
-        this.credentials = value
+      if (raw.version === 2) {
+        if (!(raw.encryptedCredential === null || typeof raw.encryptedCredential === 'string')) throw new Error('Invalid legacy login storage')
+        // Never decrypt old credentials: doing so could open a macOS Keychain prompt.
+        this.requiresManualLogin = raw.encryptedCredential !== null
+        this.preferencesOnly = raw.encryptedCredential === null
+        return
+      }
+      if (typeof raw.requiresManualLogin !== 'boolean') throw new Error('Invalid login storage')
+      this.requiresManualLogin = raw.requiresManualLogin
+      if (raw.credentials !== null) {
+        const value = raw.credentials
+        if (!value || typeof value.username !== 'string' || !value.username.trim() || typeof value.password !== 'string' || !value.password
+          || this.requiresManualLogin) throw new Error('Invalid credential')
+        if (this.options.rememberLogin) this.credentials = { username: value.username, password: value.password }
         this.credentialVerified = true
       }
-      this.preferencesOnly = raw.encryptedCredential === null
+      this.preferencesOnly = raw.credentials === null
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') this.missing = true
       else {
         this.credentials = null
+        this.requiresManualLogin = true
         this.warning = 'Không đọc được thông tin ghi nhớ trên máy. Vui lòng nhập lại thông tin đăng nhập.'
       }
     }
   }
   snapshot(): AuthLocalState {
-    return { loginOptions: { ...this.options }, rememberedLogin: this.credentials ? { username: this.credentials.username, hasCredential: true } : null, warningMessage: this.warning }
+    return { loginOptions: { ...this.options }, rememberedLogin: this.credentials ? { username: this.credentials.username, hasCredential: true } : null,
+      warningMessage: this.warning ?? (this.requiresManualLogin ? MANUAL_LOGIN_WARNING : null) }
   }
   getCredentials(): SavedLoginCredentials | null { return this.credentials ? { ...this.credentials } : null }
   getRevision(): number { return this.revision }
@@ -66,7 +84,7 @@ export class LocalLoginStore {
     if (this.missing && this.revision === 0) this.options = { rememberLogin: false, autoLogin: false, startupEnabled }
   }
   mayImportLegacy(): boolean {
-    return !this.credentials && this.revision === 0
+    return !this.credentials && !this.requiresManualLogin && this.revision === 0
       && (this.missing || (this.preferencesOnly && this.options.rememberLogin))
   }
 
@@ -94,7 +112,7 @@ export class LocalLoginStore {
       if (updates.autoLogin === true && updates.rememberLogin !== false) next.rememberLogin = true
       this.options = normalizeLocalLoginOptions(next)
       if (!this.options.rememberLogin) { this.credentials = null; this.credentialVerified = false }
-      else if (authenticated) { this.credentials = { ...authenticated }; this.credentialVerified = true }
+      else if (authenticated) { this.credentials = { ...authenticated }; this.credentialVerified = true; this.requiresManualLogin = false }
       // An imported credential has not been authenticated yet; options-only saves
       // must not turn it into a durable password.
       await this.persist(this.credentialVerified ? this.credentials : null)
@@ -106,6 +124,7 @@ export class LocalLoginStore {
       await this.initialize()
       this.credentials = this.options.rememberLogin ? { ...credentials } : null
       this.credentialVerified = true
+      this.requiresManualLogin = false
       await this.persist(credentials)
       return this.snapshot()
     })
@@ -114,9 +133,8 @@ export class LocalLoginStore {
     this.missing = false
     try {
       const candidate = this.options.rememberLogin ? authenticated : null
-      const encrypted = candidate ? this.config.encrypt(JSON.stringify(candidate)) : null
-      if (encrypted && JSON.stringify(JSON.parse(this.config.decrypt(encrypted))) !== JSON.stringify(candidate)) throw new Error('Credential verification failed')
-      const file: LoginFile = { version: 2, options: this.options, encryptedCredential: encrypted?.toString('base64') ?? null }
+      const file: LoginFile = { version: 3, options: this.options, credentials: candidate,
+        requiresManualLogin: this.requiresManualLogin }
       await (this.config.write ?? writeAtomicLocalFile)(this.config.file, JSON.stringify(file))
       this.warning = null
     } catch {
