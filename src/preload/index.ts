@@ -1,4 +1,5 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import type { CampaignActionUsage } from '../shared/types'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
   type CompleteCampaignDraftRequest } from '../shared/campaignDrafts'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -544,6 +545,9 @@ const electronAPI = {
 
   getAccountActionOverview: (accountId: number): Promise<AccountActionOverview[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId),
+
+  getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),
 
   enableAccountActionNow: (accountId: number, actionCode: string) =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, accountId, actionCode),

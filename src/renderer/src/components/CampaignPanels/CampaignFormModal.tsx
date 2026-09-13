@@ -1,6 +1,8 @@
 import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useCampaignDraftField } from './useCampaignDraftField'
+import { useCampaignActionUsage } from './useCampaignActionUsage'
+import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '../../../../shared/accountActionLimits'
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
 import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -8,6 +10,7 @@ import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Che
 import { useCampaignStore } from '../../stores/campaignStore'
 import {
   ActionLimitConfig,
+  CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES,
   AkaBizCampaignListItem,
   AkaBizCampaignListKind,
   AkaBizContactTag,
@@ -3052,6 +3055,13 @@ export default function CampaignFormModal({
   }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
+  const actionUsage = useCampaignActionUsage(
+    selectedPrimaryAccount?.id ?? null,
+    selectedCampaignAction?.id || '',
+    // Include optional actions up front so enabling a card does not query again.
+    limitActionCodes.filter(code => !isHiddenActionLimitConfig(code)),
+    authUser ? `${authUser.organizationId}:${authUser.staffId}` : ''
+  )
   const findDataTargetDataGroupIdsKey = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
     .map(kind => {
       const groupId = Number(formData.findDataTargetDataGroups[kind]?.groupId)
@@ -12829,6 +12839,29 @@ export default function CampaignFormModal({
       : rateLimitMinutesLabel
     const isRateLimitMinuteEditorOpen = expandedRateLimitMinuteActions[actionCode] === true
     const actionLimitUnit = getActionLimitUnit(actionCode)
+    const groupLimit = selectedPrimaryAccount?.accountGroupSettings?.byActionCode?.[actionCode]
+    const effectiveLimit = resolveAccountActionLimitConfig(limit, groupLimit, dailyLimitCap)
+    const usage = actionUsage.rows.find(row => row.actionCode === actionCode)
+    const renderUsage = (kind: 'daily' | 'window') => {
+      if (actionUsage.status === 'idle') return null
+      const field = kind === 'daily' ? 'dailyLimit' : 'rateLimitCount'
+      const configuredLimit = effectiveLimit?.[field]
+      // Same positive-value fallback as campaignRepository.resolveAccountRateLimitStatus.
+      const threshold = configuredLimit && configuredLimit > 0 ? configuredLimit : kind === 'daily' ? 30 : 9
+      const count = kind === 'daily' ? usage?.dailyActionCount : usage?.windowActionCount
+      const fromGroup = normalizePositiveActionLimit(groupLimit?.[field]) !== undefined
+      return (
+        <div className="action-limit-usage" aria-live="polite">
+          <span>{kind === 'daily' ? 'Đã chạy trong ngày' : `Đã chạy trong giờ (${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút)`}: </span>
+          {actionUsage.status === 'loading' ? <span>Đang tải…</span> : (
+            <span><strong>{count ?? '—'}/{threshold}</strong> {actionLimitUnit}</span>
+          )}
+          {fromGroup && (
+            <span className="action-limit-usage-source">Theo nhóm {selectedPrimaryAccount?.accountGroupName || 'tài khoản'}</span>
+          )}
+        </div>
+      )
+    }
 
     return (
       <div className="action-limit-card" key={actionCode}>
@@ -12848,6 +12881,7 @@ export default function CampaignFormModal({
               />
               <span className="stepper-input-unit">{actionLimitUnit}</span>
             </div>
+            {renderUsage('daily')}
           </div>
           <div className="stepper-form-group third action-limit-hour-group">
             <div className="action-limit-hour-label-row">
@@ -12872,6 +12906,7 @@ export default function CampaignFormModal({
               />
               <span className="stepper-input-unit">{actionLimitUnit}</span>
             </div>
+            {renderUsage('window')}
           </div>
           <div className={`stepper-form-group third action-limit-minute-field${isRateLimitMinuteEditorOpen ? '' : ' is-hidden'}`}>
             <label>Trong số phút:</label>

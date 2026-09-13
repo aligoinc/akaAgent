@@ -466,6 +466,10 @@ export function registerAccountHandlers(
     return supabase.listAccountActionOverview(accountId)
   })
 
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, async (_, accountId: number, actionCodes: string[]) => {
+    return supabase.getCampaignActionUsage(accountId, actionCodes)
+  })
+
   ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, async (_, accountId: number, actionCode: string) => {
     if (!await supabase.getAccount(accountId)) throw new Error('Không tìm thấy tài khoản phù hợp với gói hiện tại')
     const status = await supabase.enableAccountActionNow(accountId, actionCode)

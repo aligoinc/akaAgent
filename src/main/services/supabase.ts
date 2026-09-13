@@ -492,6 +492,7 @@ export class SupabaseService {
     return accountActionRepo.listAccountActions(flatformType, includeRestricted)
   }
   listAccountActionOverview(accountId: number) { return accountActionRepo.listAccountActionOverview(accountId) }
+  getCampaignActionUsage(accountId: number, actionCodes: string[]) { return accountActionRepo.getCampaignActionUsage(accountId, actionCodes) }
   getAccountActionStatus(accountId: number, actionCode: string) { return accountActionRepo.getAccountActionStatus(accountId, actionCode) }
   disableAccountActions(accountId: number, actionCodes: string[], minutes?: number | null, context?: accountActionRepo.DisableAccountActionContext) {
     return accountActionRepo.disableAccountActions(accountId, actionCodes, minutes, context)

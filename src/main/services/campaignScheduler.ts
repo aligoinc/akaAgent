@@ -1,4 +1,5 @@
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
+import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
 import { BrowserWindow } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { existsSync, unlinkSync, writeFileSync } from 'fs'
@@ -7969,11 +7970,6 @@ export class CampaignScheduler {
     }
   }
 
-  private normalizePositiveLimitValue(value: unknown): number | undefined {
-    const parsed = Math.floor(Number(value))
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-  }
-
   private normalizeNonNegativeLimitValue(value: unknown): number | undefined {
     if (value === null || value === undefined || value === '') return undefined
     const parsed = Math.floor(Number(value))
@@ -8009,31 +8005,8 @@ export class CampaignScheduler {
   ): ActionLimitConfig | undefined {
     const campaignLimit = this.getCampaignActionLimitConfig(actionCode, limitConfig)
     const groupLimit = account?.accountGroupSettings?.byActionCode?.[actionCode]
-    if (!groupLimit) return this.applyDailySendLimitToActionConfig(actionCode, campaignLimit, entitlements)
-
-    const mergedLimit = {
-      dailyLimit: this.normalizePositiveLimitValue(groupLimit.dailyLimit) ?? campaignLimit?.dailyLimit,
-      rateLimitCount: this.normalizePositiveLimitValue(groupLimit.rateLimitCount) ?? campaignLimit?.rateLimitCount,
-      rateLimitMinutes: this.normalizePositiveLimitValue(groupLimit.rateLimitMinutes) ?? campaignLimit?.rateLimitMinutes
-    }
-
-    return this.applyDailySendLimitToActionConfig(actionCode, mergedLimit, entitlements)
-  }
-
-  private applyDailySendLimitToActionConfig(
-    actionCode: string,
-    config?: ActionLimitConfig,
-    entitlements?: Parameters<typeof getAccountActionDailySendLimit>[2]
-  ): ActionLimitConfig | undefined {
     const cap = getAccountActionDailySendLimit(actionCode, null, entitlements)
-    const normalizedCap = this.normalizePositiveLimitValue(cap)
-    if (!normalizedCap) return config
-
-    const dailyLimit = Math.min(this.normalizePositiveLimitValue(config?.dailyLimit) ?? 30, normalizedCap)
-    return {
-      ...(config || {}),
-      dailyLimit
-    }
+    return resolveAccountActionLimitConfig(campaignLimit, groupLimit, cap)
   }
 
   private getEffectiveSleepBetweenActions(
