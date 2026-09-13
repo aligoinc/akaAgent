@@ -120,6 +120,7 @@ import {
   buildContentTemplateGroupCandidate,
   contentTemplateImagesToSnapshots,
   getContentTemplateChannelLabel,
+  getContentTemplateChannelForAction,
   getContentTemplateSearchText,
   isRichContentTemplateChannel,
   resolveContentTemplate
@@ -451,42 +452,6 @@ const CONTENT_TEMPLATE_TARGET_LABELS: Record<AiContentTarget, string> = {
   content: 'nội dung chiến dịch',
   commentContent: 'nội dung comment',
   postBumpContent: 'nội dung up tin'
-}
-
-const FACEBOOK_POST_TEMPLATE_ACTIONS = new Set([
-  'facebook_timeline_post',
-  'facebook_page_post',
-  'facebook_group_post'
-])
-const FACEBOOK_MESSAGE_TEMPLATE_ACTIONS = new Set([
-  'facebook_message_friend',
-  'facebook_message_uid',
-  'facebook_page_to_message'
-])
-const FACEBOOK_COMMENT_TEMPLATE_ACTIONS = new Set([
-  'facebook_comment_seeding',
-  'facebook_comment_seeding_post'
-])
-const ZALO_MESSAGE_TEMPLATE_ACTIONS = new Set([
-  'zalo_message_phone',
-  'zalo_message_friend',
-  'zalo_message_birthday',
-  'zalo_message_group_member',
-  'zalo_message_group_realtime',
-  'zalo_message_remarketing_customer',
-  'zalo_message_friend_recommendation',
-  'zalo_message_group'
-])
-
-const getContentTemplateChannelForAction = (actionId?: string | null): ContentTemplateChannelName | null => {
-  const normalized = String(actionId || '').trim()
-  if (normalized === 'sms_send') return 'sms'
-  if (normalized === 'email_send') return 'email'
-  if (ZALO_MESSAGE_TEMPLATE_ACTIONS.has(normalized)) return 'zalo_message'
-  if (FACEBOOK_POST_TEMPLATE_ACTIONS.has(normalized)) return 'facebook_post'
-  if (FACEBOOK_MESSAGE_TEMPLATE_ACTIONS.has(normalized)) return 'facebook_message'
-  if (FACEBOOK_COMMENT_TEMPLATE_ACTIONS.has(normalized)) return 'facebook_comment'
-  return null
 }
 
 const getAdvancedContentCampaignLabel = (channelName: ContentTemplateChannelName): string => {
