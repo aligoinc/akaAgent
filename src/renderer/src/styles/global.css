@@ -10956,23 +10956,6 @@ button.btn-icon.campaign-control-button.assistant {
   align-items: center;
 }
 
-.campaign-save-loading-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 10px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.campaign-save-loading-body .animate-spin {
-  color: var(--accent-primary);
-}
-
 .campaign-save-progress {
   flex: 1 1 360px;
   min-width: 220px;
@@ -17201,7 +17184,7 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   gap: 12px 14px;
   align-items: start;
   width: min(700px, calc(100vw - 56px));
-  max-height: min(330px, 72vh);
+  max-height: 72vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--border-default);

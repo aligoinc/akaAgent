@@ -1,7 +1,9 @@
+import { appendStopMessagesFooter, buildStopMessagesLink, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_LINK_TOKEN } from '../../../../shared/zaloMessageOptOut'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { FileText, Image, Mail, MessageCircle, Paperclip, Send, Share2, ThumbsUp, Video, X } from 'lucide-react'
 import { renderContentSpin, renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 import {
+  appendFormattedPreviewFooter,
   formattedContentToZaloPreviewHtml,
   isFormattedContentEmpty,
   sanitizeFormattedContent,
@@ -34,6 +36,7 @@ export interface ContentPreviewModalData {
   media?: ContentPreviewMediaItem[]
   mediaMode?: 'none' | 'all' | 'random'
   randomCount?: number
+  zaloOptOutLinkEnabled?: boolean
   zaloMessageSendMode?: 'normal' | 'share'
   notes?: string[]
 }
@@ -54,6 +57,7 @@ interface PreviewMediaState {
 }
 
 const SAMPLE_TOKEN_VALUES: Record<string, string> = {
+  STOP_MESSAGES_LINK: buildStopMessagesLink(STOP_MESSAGES_PREVIEW_ID)!,
   FULL_NAME: 'Nguyễn Minh Anh',
   ORIGINAL_NAME: 'Minh Anh',
   INPUT_FULLNAME: 'Trần Quốc Bảo',
@@ -103,7 +107,7 @@ export const renderPreviewSampleTokens = (raw: string): string => (
       const parts = String(body || '').split('-')
       return parts[1] || parts[0] || parts[2] || ''
     })
-    .replace(/#\{(FULL_NAME|ORIGINAL_NAME|INPUT_FULLNAME|PHONE|MOBILE|EMAIL|INFO1|INFO2|INFO3|INFO4|INFO5|UID)\}/g, (_, key) => SAMPLE_TOKEN_VALUES[key] || '')
+    .replace(/#\{(STOP_MESSAGES_LINK|FULL_NAME|ORIGINAL_NAME|INPUT_FULLNAME|PHONE|MOBILE|EMAIL|INFO1|INFO2|INFO3|INFO4|INFO5|UID)\}/g, (_, key) => SAMPLE_TOKEN_VALUES[key] || '')
 )
 
 const splitPreviewVariants = (content: string): string[] => {
@@ -141,8 +145,8 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
     if (Array.isArray(data.variants) && data.variants.length > 0) return data.variants
     if (isRichText) return splitFormattedContentVariants(data.content)
     if (data.isHtml) return [data.content]
-    return splitPreviewVariants(data.content)
-  }, [data.content, data.isHtml, data.variants, isRichText])
+    return data.zaloOptOutLinkEnabled ? splitContentVariants(data.content, { trim: false, fallbackToRaw: true }).filter(part => part.trim()) : splitPreviewVariants(data.content)
+  }, [data.content, data.isHtml, data.variants, data.zaloOptOutLinkEnabled, isRichText])
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0)
   const [mediaItems, setMediaItems] = useState<PreviewMediaState[]>([])
 
@@ -160,15 +164,22 @@ export default function ContentPreviewModal({ data, onClose }: ContentPreviewMod
     [data.kind, selectedVariant]
   )
   const subjectSpinSample = useMemo(() => renderContentSpin(data.subject || ''), [data.subject])
-  const renderedContent = renderPreviewSampleTokens(selectedSpinSample)
+  const previewOptOut = isZalo && data.kind === 'message' && data.zaloOptOutLinkEnabled === true && data.zaloMessageSendMode !== 'share'
+  const renderedContent = appendStopMessagesFooter(renderPreviewSampleTokens(selectedSpinSample), STOP_MESSAGES_PREVIEW_ID, previewOptOut, selectedSpinSample.includes(STOP_MESSAGES_LINK_TOKEN)) as string
   const renderedRichContent = useMemo(() => {
     if (!isRichText) return ''
-    const transformedHtml = transformFormattedContentTextNodes(
+    let hasToken = false
+    let transformedHtml = transformFormattedContentTextNodes(
       sanitizeFormattedContent(selectedVariant),
-      text => renderPreviewSampleTokens(data.kind === 'friendRequest' ? renderContentSpinMax(text) : renderContentSpin(text))
+      text => {
+        const spun = data.kind === 'friendRequest' ? renderContentSpinMax(text) : renderContentSpin(text)
+        hasToken ||= spun.includes(STOP_MESSAGES_LINK_TOKEN)
+        return renderPreviewSampleTokens(spun)
+      }
     )
+    transformedHtml = appendFormattedPreviewFooter(transformedHtml, appendStopMessagesFooter('', STOP_MESSAGES_PREVIEW_ID, previewOptOut, hasToken) as string)
     return isZalo ? formattedContentToZaloPreviewHtml(transformedHtml) : transformedHtml
-  }, [data.kind, isRichText, isZalo, selectedVariant])
+  }, [data.kind, isRichText, isZalo, selectedVariant, previewOptOut])
   const renderedSubject = renderPreviewSampleTokens(subjectSpinSample)
   const isFriendRequest = data.kind === 'friendRequest'
   const displayName = isFriendRequest ? 'Trần Quốc Bảo' : 'Nguyễn Minh Anh'

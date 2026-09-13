@@ -1,3 +1,4 @@
+import { supportsStopMessagesLink, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, FileText, FolderOpen, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
@@ -75,6 +76,7 @@ interface CampaignLimitFormState {
 }
 
 interface CampaignContentFormState {
+  zaloOptOutLinkEnabled: boolean
   content: string
   formattedContentEnabled: boolean
   advancedContentEnabled: boolean
@@ -481,6 +483,7 @@ const getInitialContentFormState = (campaign: CampaignConfig): CampaignContentFo
     rewriteContentEachRun: extra.rewriteContentEachRun ?? false,
     postWithBackground: extra.postWithBackground ?? false,
     zaloMessageSendMode: extra.zaloMessageSendMode || 'normal',
+    zaloOptOutLinkEnabled: extra.zaloOptOutLinkEnabled === true,
     imageOption: (extra.imageOption || 'none') as ImageOption,
     randomImageCount: extra.randomImageCount || 3,
     images: (campaign.images || []) as CampaignMediaInput[],
@@ -864,7 +867,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
     actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   ) && extra.enableAddFriend === true
-  const hasAnyEditableField = (!isLegacyManualAdvancedSource && showMainContentSection) || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
+  const canEditStopMessagesLink = showMainContentSection && supportsStopMessagesLink(actionId, formData.zaloMessageSendMode)
+  const hasAnyEditableField = canEditStopMessagesLink || (!isLegacyManualAdvancedSource && showMainContentSection) || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
   const canUseAdvancedContentMode = showMainContentSection && !isVoiceCallCampaign && contentTemplateChannel !== undefined
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
@@ -1985,6 +1989,9 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       if (isZaloMessageCampaign && !isLegacyManualAdvancedSource) {
         nextExtraSettings.zaloMessageSendMode = isFormattedContentEnabled ? 'normal' : formData.zaloMessageSendMode
       }
+      if (supportsStopMessagesLink(campaign.actionId, nextExtraSettings.zaloMessageSendMode)) {
+        nextExtraSettings.zaloOptOutLinkEnabled = formData.zaloOptOutLinkEnabled
+      }
       if (showCommentContent || (isCommentSeedingCampaign && !isLegacyManualAdvancedSource)) {
         nextExtraSettings.commentContent = formData.commentContent
         nextExtraSettings.rewriteCommentContentEachRun = formData.rewriteCommentContentEachRun
@@ -2003,6 +2010,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         nextExtraSettings.newsfeedCommentContent = formData.newsfeedCommentContent
       }
 
+      const finalContent = showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource
+        ? (isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content)
+        : campaign.content || ''
+      const optOutError = validateStopMessagesSettings(finalContent, nextExtraSettings, campaign.actionId, formattedContentToPlainText)
+      if (optOutError) throw new Error(optOutError)
       await updateCampaign(campaign.id, {
         ...(showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
@@ -2043,6 +2055,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
 
         {showMainContentSection && (
           <div className="stepper-section">
+            {canEditStopMessagesLink && <label className="schedule-checkbox-label">
+              <input type="checkbox" checked={formData.zaloOptOutLinkEnabled} onChange={event => setFormData(current => ({ ...current, zaloOptOutLinkEnabled: event.target.checked }))} />
+              <span>Thêm link từ chối nhận tin nhắn</span>
+            </label>}
             <div className="stepper-section-header static">
               <div className="stepper-section-header-left">
                 <span className="stepper-section-title">
