@@ -96,9 +96,10 @@ không gọi nút khôi phục để lấy credential sau khi đã gỡ binding.
 legacy nhưng chỉ gỡ cột mới. Revision dùng xmin của row, không thêm cột; cập nhật staff
 đồng thời có thể gây conflict, người dùng thử lại để lấy snapshot mới.
 
-Login reset giữ username + quota + Online guard dưới 120 giây; menu giữ xác thực
-password/máy, không ép dừng phiên. Quota dùng chung `device_changes_remaining` (NULL
-hiểu là 5). History chứa bindingVersion/revision, không credential. Journal nằm riêng
+Login reset giữ username + quota + Online guard dưới 120 giây; từ v281, menu giữ xác thực
+password/máy, không ép dừng phiên, không giới hạn hoặc trừ lượt. Menu giữ nguyên giá trị
+`device_changes_remaining`, kể cả 0/số âm/NULL; login vẫn hiểu NULL là 5 và trừ lượt khi đổi.
+History menu ghi số lượt trước/sau bằng nhau. History chứa bindingVersion/revision, không credential. Journal nằm riêng
 `userData/device-change-requests-v2`; replay sau mất response không trừ thêm lượt.
 Không chạy lại journal legacy bằng RPC v2. Presence vẫn chỉ quan sát.
 

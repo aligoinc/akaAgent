@@ -7,11 +7,13 @@ import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 import { DeviceChangeRequestClient } from '../src/main/services/deviceChangeRequest'
 import { PassiveDevicePresence } from '../src/main/services/passiveDevicePresence'
+import { deviceChangeMessage } from '../src/shared/deviceChange'
+import type { DeviceLockResetResult } from '../src/shared/types'
 
 const device = { fingerprintHash: 'a'.repeat(64), label: 'Smoke', platform: 'mac' as const, appVersion: 'test' }
 const credentials = { username: 'smoke', password: 'must-not-be-persisted' }
 const binding = { staffId: '42', hash: device.fingerprintHash, boundAt: '2026-09-07T00:00:00Z' }
-const changed = { success: true, changed: true, code: 'changed', remainingChanges: 4 }
+const changed = { success: true, changed: true, code: 'changed', remainingChanges: 5 }
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve() }
 
 function deferred() {
@@ -68,6 +70,34 @@ async function requestsSmoke(): Promise<void> {
     invalid = false
     assert.equal((await broken.reset('smoke', 'login')).code, 'binding_conflict')
     assert.deepEqual(await readdir(directory), [])
+  } finally { await rm(directory, { recursive: true, force: true }) }
+}
+
+async function unlimitedMenuSmoke(): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'aka-device-menu-'))
+  try {
+    for (const bindingVersion of [undefined, 2] as const) {
+      const client = new DeviceChangeRequestClient({
+        directory, bindingVersion, getDevice: async () => device,
+        rpc: async (name, args) => {
+          if (name.includes('prepare')) return { code: 'prepared', binding: bindingVersion === 2
+            ? { staffId: binding.staffId, hash: binding.hash, version: 2, revision: '7' } : binding }
+          assert.equal(args.p_source, 'account_menu')
+          assert.equal(args.p_password, credentials.password)
+          return { ...changed, remainingChanges: 0 }
+        }
+      })
+      for (let i = 0; i < 7; i++) {
+        const result = await client.reset(credentials.username, 'account_menu', credentials.password)
+        assert.equal(result.remainingChanges, 0, 'menu accepts success at zero quota repeatedly')
+        assert.equal(deviceChangeMessage(result, 'account_menu'), 'Đổi máy tính thành công.')
+      }
+    }
+    const unbound: DeviceLockResetResult = { success: true, changed: false, code: 'already_unbound', remainingChanges: 0 }
+    assert.equal(deviceChangeMessage(unbound, 'account_menu'), 'Tài khoản chưa liên kết máy tính, không cần đổi máy.')
+    assert.match(deviceChangeMessage(unbound), /Bạn còn 0 lần đổi máy/)
+    assert.match(deviceChangeMessage({ ...unbound, changed: true, code: 'changed', remainingChanges: 4 }), /Bạn còn 4 lần đổi máy/)
+    assert.match(deviceChangeMessage({ ...unbound, success: false, code: 'quota_exhausted' }), /hết số lần đổi máy/)
   } finally { await rm(directory, { recursive: true, force: true }) }
 }
 
@@ -264,9 +294,10 @@ async function presenceQuitSmoke(): Promise<void> {
 
 async function main(): Promise<void> {
   await requestsSmoke()
+  await unlimitedMenuSmoke()
   await presenceSmoke()
   await presenceReloginSmoke()
   await presenceQuitSmoke()
-  console.log('Device change smoke passed: persisted retry, outage/reconnect, single flight, immediate relogin heartbeat, superseded sessions, presence through quit cleanup and nonblocking quit.')
+  console.log('Device change smoke passed: unlimited menu at zero quota, source-specific messages, persisted retry, outage/reconnect, single flight, immediate relogin heartbeat, superseded sessions, presence through quit cleanup and nonblocking quit.')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

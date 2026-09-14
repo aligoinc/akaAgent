@@ -42,8 +42,8 @@ BEGIN
   ASSERT public.aka_agent_reset_device_binding(username,password,'account_menu',request,binding,new_device)->>'code'='not_authorized', 'menu device';
 
   result := public.aka_agent_reset_device_binding(username,password,'account_menu',request,binding,device);
-  ASSERT result->>'code'='changed' AND (result->>'remainingChanges')::int=4, 'menu ignores Online';
-  ASSERT (SELECT device_fingerprint_hash IS NULL AND device_changes_remaining=4 FROM public.org_staff WHERE id=staff), 'binding and quota';
+  ASSERT result->>'code'='changed' AND (result->>'remainingChanges')::int=5, 'menu ignores Online without debit';
+  ASSERT (SELECT device_fingerprint_hash IS NULL AND device_changes_remaining=5 FROM public.org_staff WHERE id=staff), 'binding and quota';
   ASSERT (SELECT NOT remember_login AND NOT auto_login FROM public.auto_staff_device_login_settings WHERE staff_id=staff AND device_fingerprint_hash=repeat('a',64)), 'remember disabled';
   ASSERT (SELECT ended_at IS NULL FROM public.auto_staff_device_presence WHERE instance_id=instance), 'menu does not end presence';
   ASSERT public.aka_agent_device_presence(username,password,instance,device,false), 'heartbeat after unbind';
@@ -52,7 +52,7 @@ BEGIN
   -- Replay must survive a later binding, return the original result and leave it intact.
   UPDATE public.org_staff SET device_fingerprint_hash=repeat('b',64),device_bound_at=clock_timestamp() WHERE id=staff;
   ASSERT public.aka_agent_reset_device_binding(username,password,'account_menu',request,binding,device)=result, 'committed replay';
-  ASSERT (SELECT device_fingerprint_hash=repeat('b',64) AND device_changes_remaining=4 FROM public.org_staff WHERE id=staff), 'replay preserves newer binding';
+  ASSERT (SELECT device_fingerprint_hash=repeat('b',64) AND device_changes_remaining=5 FROM public.org_staff WHERE id=staff), 'replay preserves newer binding';
   ASSERT (SELECT count(*)=1 FROM public.auto_staff_device_change_history WHERE staff_id=staff), 'one history';
   ASSERT public.aka_agent_reset_device_binding(username,NULL,'login',gen_random_uuid(),binding,new_device)->>'code'='binding_conflict', 'stale snapshot';
 

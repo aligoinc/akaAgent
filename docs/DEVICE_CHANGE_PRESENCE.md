@@ -1,16 +1,22 @@
-# Đổi máy tính và presence — v262
+# Đổi máy tính và presence — v262/v281
 
 Đã áp `migrations/migration_v262_staff_device_change_presence.sql` lên linked production
 `cgjbsmqtfhqvttudyjzq` ngày 2026-09-07. Không sửa RPC hiện hữu, trigger quota hoặc
 đường cập nhật trực tiếp của akaBiz/legacy. Chưa đóng gói/phát hành installer mới.
 
+Ngày 2026-09-14 đã áp [migration v281](../migrations/migration_v281_account_menu_device_change_unlimited.sql)
+lên cùng production để menu không giới hạn/trừ lượt ở cả RPC legacy và v2.
+Thông báo thành công/chưa liên kết máy trong menu không còn hiển thị số lượt;
+màn hình đăng nhập vẫn dùng giới hạn cũ. Bản UI cần app được build từ source mới.
+
 ## Hành vi
 
 - Login: bấm Đổi máy tính → modal nhập username → cảnh báo → gỡ binding nếu còn lượt và không có phiên Online.
   Đăng nhập đúng mật khẩu sau đó mới liên kết máy mới.
-- Menu: xác thực staff/máy, dùng cùng quota; không kiểm tra Online, dừng tác vụ hoặc logout.
+- Menu: xác thực staff/máy, không giới hạn số lần và không trừ quota; không kiểm tra Online, dừng tác vụ hoặc logout.
 - `org_staff.device_changes_remaining` nullable, default 5; không CHECK/NOT NULL/trigger quota.
-  Chỉ RPC app mới trừ lượt; `NULL` được RPC hiểu là 5. Không tự gia hạn.
+  Chỉ nhánh login của RPC trừ lượt; `NULL` được hiểu là 5 khi tính kết quả.
+  Nhánh menu giữ nguyên giá trị DB, kể cả 0, số âm hoặc NULL. Không tự gia hạn.
 - Presence: mỗi lần đăng nhập thành công có UUID mới; heartbeat mỗi 30 giây,
   timeout 5 giây, single flight. Lỗi chỉ tạo diagnostic tối đa mỗi 5 phút.
   Không có callback điều khiển auth/runtime; mất mạng không gây logout/pause/recovery.
@@ -64,7 +70,9 @@ fsync rồi rename. Khi mất phản hồi hoặc app restart, dùng lại UUID/
 Lỗi đọc journal chặn riêng thao tác đổi máy, không tự tạo request mới có thể trừ thêm lượt.
 
 RPC khóa staff trước khi kiểm tra history/binding/quota/presence. Gỡ binding,
-tắt remember/auto-login của binding cũ, trừ lượt và ghi history cùng transaction.
+tắt remember/auto-login của binding cũ, chỉ trừ lượt cho login và ghi history cùng transaction.
+Menu ghi `remaining_before = remaining_after`; `remainingChanges` vẫn là số để tương thích client cũ,
+nhưng không phải giới hạn của menu. V2 chỉ gỡ binding mới và tắt tùy chọn local qua IPC.
 History replay trả kết quả trước đó kể cả khi đã có binding mới. Snapshot cũ không
 được gỡ một binding mới. Kết quả đã xác định mới xóa journal.
 
@@ -72,6 +80,37 @@ IPC mới: `auth:reset-device-lock-by-username`; preload:
 `resetDeviceLockByUsername(username): Promise<DeviceLockResetResult>`.
 Menu dùng IPC cũ với RPC mới. Result có `success`, `changed`, `remainingChanges`, `code`.
 Credentials xác thực menu/presence chỉ nằm trong main process, không thêm vào AuthUser.
+
+## Audit migration v281
+
+Apply target: `cgjbsmqtfhqvttudyjzq` (`akachat`), ngày 2026-09-14.
+Hai body nguồn đọc trực tiếp bằng `pg_get_functiondef()` trùng migration v262/v276,
+không có patch chỉ tồn tại trên DB. Preflight nhận đúng checksum nguồn/đích,
+chặn signature thiếu hoặc checksum/owner/ACL/security/config khác dự kiến.
+
+| Exact signature trong schema `public` | MD5 nguồn | MD5 đích đã xác minh |
+|---|---|---|
+| `aka_agent_reset_device_binding(text,text,text,uuid,jsonb,jsonb)` | `84bf195ed63d67eb35b718b19a6fed4c` | `20528bcb292a243fd4f0166dec3cb05e` |
+| `aka_agent_reset_device_binding_v2(text,text,text,uuid,jsonb,jsonb)` | `e678f336deea7a51285afc1686a5fd7d` | `dfc6d177499fbf9fc51526d7b9fba6f4` |
+
+Giữ nguyên owner `postgres`, `SECURITY DEFINER`, volatility `v`,
+`search_path=pg_catalog, public`, `lock_timeout=3s`, ACL EXECUTE của
+`postgres/anon/authenticated/service_role` và không cấp quyền cho `PUBLIC`.
+Giữ row lock, CAS hash/boundAt hoặc revision, replay request ID, whitelist metadata,
+password/máy, Online guard của login, presence và cách gỡ binding riêng từng phiên bản.
+Advisor vẫn ghi nhận quyền EXECUTE definer của anon/authenticated theo contract RPC hẹp đã có;
+không thay đổi quyền truy cập bảng hoặc hàm.
+
+Kiểm chứng trước/sau apply: ba SQL smoke v262/v276/v281 trong transaction rollback,
+hai typecheck, production build, device-change smoke, auth v2 (112 checks), auth renderer smoke.
+V281 thử 7 lần đổi cho từng quota 5/1/0/-1/NULL trên mỗi phiên bản (70 lần),
+không trừ lượt, no-op, replay sau rebind, CAS cũ, password/máy, role anon,
+login Online và lượt cuối 1→0. Reapply đúng target qua; patch checksum khác bị chặn và rollback.
+API prepare/reset legacy/v2 trả HTTP 200 trước/sau apply, từ chối staff không tồn tại.
+Không để lại fixture; chưa đóng gói/phát hành installer.
+
+Không thêm `NOTIFY`: metadata API không đổi. Trigger DDL `pgrst_ddl_watch` hiện hữu
+vẫn bật và tự phát reload khi `CREATE OR REPLACE FUNCTION`; API đã được kiểm tra sau apply.
 
 ## Kiểm thử đã chạy
 
