@@ -10385,14 +10385,11 @@ export default function CampaignFormModal({
               showAlert('Vui lòng chọn tài khoản trước.')
               return
             }
-            const fallback = checked
-              ? (selectedZaloFriendBlocklist || zaloFriendBlocklists[0] || null)
-              : null
             setFormData(p => ({
               ...p,
               zaloFriendBlocklistEnabled: checked,
-              zaloFriendBlocklistId: checked ? (fallback?.id ?? p.zaloFriendBlocklistId ?? null) : null,
-              zaloFriendBlocklistName: checked ? (fallback?.name || p.zaloFriendBlocklistName || '') : ''
+              zaloFriendBlocklistId: null,
+              zaloFriendBlocklistName: ''
             }))
           }}
         />

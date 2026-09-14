@@ -66,6 +66,16 @@ async function main() {
       await exclusion.setChecked(true)
       await page.waitForFunction(() => document.querySelector('.zalo-friend-blocklist-select option[value="31"]'))
       assert(await exclusion.isChecked())
+      assert.equal(await picker.inputValue(), '', 'enabling exclusion requires an explicit list choice')
+      if (mode === 'draft') {
+        await form.getByRole('button', { name: 'Tạo chiến dịch', exact: true }).click()
+        await page.waitForFunction(() => window.settingsSmoke.state.alerts.some(alert => alert.message === 'Vui lòng chọn danh sách không gửi tin Zalo.'))
+        assert.equal(await page.evaluate(() => window.settingsSmoke.state.calls.filter(call => call.method === 'createCampaign').length), 0)
+      }
+      await picker.selectOption('31')
+      await exclusion.setChecked(false)
+      await exclusion.setChecked(true)
+      assert.equal(await picker.inputValue(), '', 're-enabling exclusion also requires an explicit choice')
       await picker.selectOption('31')
       await form.getByTitle('Quản lý danh sách không gửi tin', { exact: true }).press('Enter')
       await dialog.waitFor()
@@ -73,13 +83,18 @@ async function main() {
       await closeManager()
       assert(await exclusion.isChecked())
       assert.equal(await picker.inputValue(), '31')
-      console.log(`PASS ${mode}: no-account click shows an alert; account selection allows exclusion`)
+      console.log(`PASS ${mode}: account and explicit list choice are required; toggling never auto-selects`)
     }
     for (const mode of ['new', 'edit', 'clone', 'draft']) {
       await page.evaluate(mode => window.settingsSmoke.open(mode), mode)
       const name = form.getByPlaceholder('Nhập tên chiến dịch...')
       await name.fill('Nội dung giữ nguyên')
       await form.getByLabel('Không gửi tin cho những người trong danh sách', { exact: true }).setChecked(true)
+      await page.waitForFunction(() => document.querySelector('.zalo-friend-blocklist-select option[value="31"]'))
+      if (mode === 'new') {
+        assert.equal(await picker.inputValue(), '')
+        await picker.selectOption('31')
+      }
       await page.waitForFunction(() => document.querySelector('.zalo-friend-blocklist-select')?.value === '31')
       await page.evaluate(() => { window.settingsSmoke.state.nameNode = document.querySelector('input[placeholder="Nhập tên chiến dịch..."]') })
       await openManager()
