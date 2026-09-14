@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Plus, RefreshCw, Search, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
-import { AutoAccount, AutoAccountContact, AutoAccountContactGroup } from '../../../../shared/types'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
+import { AutoAccount, ZaloFriendBlocklistContact, AutoAccountContactGroup, ZaloFriendBlocklistMutationResult } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
 import { getAccountPlatformLabel } from '../../utils/accountLabels'
+import { BLOCKLIST_PAGE_SIZE, useZaloFriendBlocklistPage } from './useZaloFriendBlocklistPage'
 
 function formatIpcError(err: unknown, fallback: string): string {
   let message = err instanceof Error
@@ -19,7 +20,7 @@ function formatIpcError(err: unknown, fallback: string): string {
   return message || fallback
 }
 
-const contactLabel = (contact: AutoAccountContact): string => (
+const contactLabel = (contact: ZaloFriendBlocklistContact): string => (
   contact.name || contact.uid || `#${contact.id}`
 )
 
@@ -29,8 +30,6 @@ export default function ZaloFriendBlocklistSettings() {
   const [accounts, setAccounts] = useState<AutoAccount[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number>(0)
   const [blocklists, setBlocklists] = useState<AutoAccountContactGroup[]>([])
-  const [friends, setFriends] = useState<AutoAccountContact[]>([])
-  const [members, setMembers] = useState<AutoAccountContact[]>([])
   const [activeBlocklistId, setActiveBlocklistId] = useState<number | null>(null)
   const [selectedFriendIds, setSelectedFriendIds] = useState<Set<number>>(new Set())
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<number>>(new Set())
@@ -41,25 +40,24 @@ export default function ZaloFriendBlocklistSettings() {
   const [memberSearch, setMemberSearch] = useState('')
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
-  const [loadingMembers, setLoadingMembers] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [revision, setRevision] = useState(0)
+  const listRequest = useRef(0)
+  const selectedAccountRef = useRef(selectedAccountId)
+  selectedAccountRef.current = selectedAccountId
 
   const activeBlocklist = useMemo(
     () => blocklists.find(item => item.id === activeBlocklistId) || null,
     [blocklists, activeBlocklistId]
   )
-  const memberIds = useMemo(() => new Set(members.map(member => member.id)), [members])
-  const normalizedFriendSearch = friendSearch.trim().toLocaleLowerCase('vi-VN')
-  const normalizedMemberSearch = memberSearch.trim().toLocaleLowerCase('vi-VN')
-  const availableFriends = useMemo(() => {
-    const rows = friends.filter(friend => !memberIds.has(friend.id))
-    if (!normalizedFriendSearch) return rows
-    return rows.filter(friend => `${friend.name || ''}\n${friend.uid || ''}`.toLocaleLowerCase('vi-VN').includes(normalizedFriendSearch))
-  }, [friends, memberIds, normalizedFriendSearch])
-  const filteredMembers = useMemo(() => {
-    if (!normalizedMemberSearch) return members
-    return members.filter(member => `${member.name || ''}\n${member.uid || ''}`.toLocaleLowerCase('vi-VN').includes(normalizedMemberSearch))
-  }, [members, normalizedMemberSearch])
+  const friendPage = useZaloFriendBlocklistPage(selectedAccountId, activeBlocklistId, 'available', friendSearch, revision)
+  const memberPage = useZaloFriendBlocklistPage(selectedAccountId, activeBlocklistId, 'members', memberSearch, revision)
+  const loadingFriends = loadingData || friendPage.loading
+  const loadingMembers = loadingData || memberPage.loading
+
+  // Keep selections across pages of the same search, including rows not loaded now.
+  useEffect(() => { setSelectedFriendIds(new Set()) }, [selectedAccountId, activeBlocklistId, friendSearch.trim()])
+  useEffect(() => { setSelectedMemberIds(new Set()) }, [selectedAccountId, activeBlocklistId, memberSearch.trim()])
 
   const loadAccounts = async () => {
     if (!window.electronAPI?.listAccounts) return
@@ -80,83 +78,46 @@ export default function ZaloFriendBlocklistSettings() {
     }
   }
 
-  const loadBlocklistsAndFriends = async (accountId: number) => {
-    if (!accountId || !window.electronAPI?.listZaloFriendBlocklists || !window.electronAPI?.listContacts) {
-      setBlocklists([])
-      setFriends([])
-      setMembers([])
-      setActiveBlocklistId(null)
-      return
-    }
-
+  const loadBlocklists = async (accountId: number, preserveOnError = false): Promise<string | undefined> => {
+    const request = ++listRequest.current
     setLoadingData(true)
     try {
-      const [nextBlocklists, contacts] = await Promise.all([
-        window.electronAPI.listZaloFriendBlocklists(accountId),
-        window.electronAPI.listContacts(accountId, 'person')
-      ])
-      const nextFriends = contacts.filter(contact => contact.isFriend)
-      setBlocklists(nextBlocklists)
-      setFriends(nextFriends)
-      setActiveBlocklistId(prev => (
-        prev && nextBlocklists.some(group => group.id === prev)
-          ? prev
-          : nextBlocklists[0]?.id || null
-      ))
-      setSelectedFriendIds(new Set())
+      const rows = accountId ? await window.electronAPI.listZaloFriendBlocklists(accountId) : []
+      if (request !== listRequest.current || selectedAccountRef.current !== accountId) return
+      setBlocklists(rows)
+      setActiveBlocklistId(prev => rows.some(group => group.id === prev) ? prev : rows[0]?.id || null)
     } catch (err) {
-      showAlert(formatIpcError(err, 'Không thể tải danh sách không gửi tin.'), 'error')
-      setBlocklists([])
-      setFriends([])
-      setMembers([])
-      setActiveBlocklistId(null)
+      if (request !== listRequest.current || selectedAccountRef.current !== accountId) return
+      const message = formatIpcError(err, 'Không thể tải danh sách không gửi tin.')
+      if (!preserveOnError) {
+        showAlert(message, 'error')
+        setBlocklists([])
+        setActiveBlocklistId(null)
+      }
+      return message
     } finally {
-      setLoadingData(false)
-    }
-  }
-
-  const loadMembers = async (groupId: number | null) => {
-    if (!groupId || !window.electronAPI?.listZaloFriendBlocklistFriends) {
-      setMembers([])
-      setSelectedMemberIds(new Set())
-      return
-    }
-
-    setLoadingMembers(true)
-    try {
-      const rows = await window.electronAPI.listZaloFriendBlocklistFriends(groupId)
-      setMembers(rows)
-      setSelectedMemberIds(new Set())
-    } catch (err) {
-      showAlert(formatIpcError(err, 'Không thể tải bạn bè trong danh sách không gửi tin.'), 'error')
-      setMembers([])
-      setSelectedMemberIds(new Set())
-    } finally {
-      setLoadingMembers(false)
+      if (request === listRequest.current && selectedAccountRef.current === accountId) setLoadingData(false)
     }
   }
 
   useEffect(() => {
     void loadAccounts()
+    return () => { listRequest.current += 1 }
   }, [])
 
   useEffect(() => {
-    void loadBlocklistsAndFriends(selectedAccountId)
+    void loadBlocklists(selectedAccountId)
   }, [selectedAccountId])
 
-  useEffect(() => {
-    void loadMembers(activeBlocklistId)
-  }, [activeBlocklistId])
-
   const refreshAll = async () => {
+    setSelectedFriendIds(new Set())
+    setSelectedMemberIds(new Set())
     if (!selectedAccountId) {
       await loadAccounts()
       return
     }
-    await Promise.all([
-      loadBlocklistsAndFriends(selectedAccountId),
-      loadMembers(activeBlocklistId)
-    ])
+    setRevision(value => value + 1)
+    await loadBlocklists(selectedAccountId)
   }
 
   const toggleFriend = (contactId: number) => {
@@ -196,7 +157,7 @@ export default function ZaloFriendBlocklistSettings() {
     try {
       const created = await window.electronAPI.createZaloFriendBlocklist(selectedAccountId, name)
       setNewBlocklistName('')
-      await loadBlocklistsAndFriends(selectedAccountId)
+      await loadBlocklists(selectedAccountId)
       setActiveBlocklistId(created.id)
       showAlert('Đã tạo danh sách không gửi tin.', 'success')
     } catch (err) {
@@ -237,11 +198,7 @@ export default function ZaloFriendBlocklistSettings() {
         setBusy(true)
         try {
           await window.electronAPI.deleteZaloFriendBlocklist(group.id)
-          await loadBlocklistsAndFriends(selectedAccountId)
-          if (activeBlocklistId === group.id) {
-            setMembers([])
-            setActiveBlocklistId(null)
-          }
+          await loadBlocklists(selectedAccountId)
           showAlert('Đã xoá danh sách không gửi tin.', 'success')
         } catch (err) {
           showAlert(formatIpcError(err, 'Không thể xoá danh sách không gửi tin.'), 'error')
@@ -253,41 +210,44 @@ export default function ZaloFriendBlocklistSettings() {
     )
   }
 
-  const handleAddFriends = async () => {
-    if (!activeBlocklistId || selectedFriendIds.size === 0 || !window.electronAPI?.addFriendsToZaloFriendBlocklist) return
+  const handleMutateFriends = async (mode: 'add' | 'remove') => {
+    const ids = Array.from(mode === 'add' ? selectedFriendIds : selectedMemberIds)
+    const mutate = mode === 'add' ? window.electronAPI?.addFriendsToZaloFriendBlocklist : window.electronAPI?.removeFriendsFromZaloFriendBlocklist
+    if (busy || !activeBlocklistId || ids.length === 0 || !mutate) return
     setBusy(true)
     try {
-      const result = await window.electronAPI.addFriendsToZaloFriendBlocklist(activeBlocklistId, Array.from(selectedFriendIds))
-      setSelectedFriendIds(new Set())
-      await Promise.all([
-        loadBlocklistsAndFriends(selectedAccountId),
-        loadMembers(activeBlocklistId)
-      ])
-      showAlert(result.count > 0 ? `Đã thêm ${result.count} bạn bè vào danh sách không gửi tin.` : 'Bạn bè đã có trong danh sách không gửi tin.', 'success')
-    } catch (err) {
-      showAlert(formatIpcError(err, 'Không thể thêm bạn bè vào danh sách không gửi tin.'), 'error')
+      let result: ZaloFriendBlocklistMutationResult
+      try {
+        result = await mutate(activeBlocklistId, ids)
+      } catch (err) {
+        // IPC errors can leave the write outcome unknown; retain IDs for an idempotent retry.
+        result = { success: false, count: 0, remainingIds: ids, error: formatIpcError(err, 'Không thể xác nhận kết quả xử lý.') }
+      }
+      const remainingIds = result.success ? [] : result.remainingIds
+      setSelectedFriendIds(new Set(mode === 'add' ? remainingIds : []))
+      setSelectedMemberIds(new Set(mode === 'remove' ? remainingIds : []))
+      // Refresh both pages even after a partial/uncertain write, without clearing pending IDs.
+      setRevision(value => value + 1)
+      const refreshError = await loadBlocklists(selectedAccountId, true)
+      const action = mode === 'add' ? 'thêm' : 'xoá'
+      const target = mode === 'add' ? 'vào' : 'khỏi'
+      let message = result.count > 0
+        ? `Đã ${action} ${result.count} bạn bè ${target} danh sách không gửi tin.`
+        : result.success
+          ? (mode === 'add' ? 'Bạn bè đã có trong danh sách không gửi tin.' : 'Không có bạn bè nào được xoá.')
+          : `Chưa xác nhận ${action} được bạn bè nào.`
+      if (!result.success) {
+        message += `\n${remainingIds.length} bạn bè chưa xác nhận xử lý, vẫn được giữ chọn để thử lại.\n${formatIpcError(result.error, 'Không thể hoàn tất thao tác.')}`
+      }
+      if (refreshError) message += `\nChưa tải lại được số lượng danh sách: ${refreshError}`
+      showAlert(message, result.success && !refreshError ? 'success' : 'error')
     } finally {
       setBusy(false)
     }
   }
 
-  const handleRemoveMembers = async () => {
-    if (!activeBlocklistId || selectedMemberIds.size === 0 || !window.electronAPI?.removeFriendsFromZaloFriendBlocklist) return
-    setBusy(true)
-    try {
-      const result = await window.electronAPI.removeFriendsFromZaloFriendBlocklist(activeBlocklistId, Array.from(selectedMemberIds))
-      setSelectedMemberIds(new Set())
-      await Promise.all([
-        loadBlocklistsAndFriends(selectedAccountId),
-        loadMembers(activeBlocklistId)
-      ])
-      showAlert(result.count > 0 ? `Đã xoá ${result.count} bạn bè khỏi danh sách không gửi tin.` : 'Không có bạn bè nào được xoá.', 'success')
-    } catch (err) {
-      showAlert(formatIpcError(err, 'Không thể xoá bạn bè khỏi danh sách không gửi tin.'), 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const handleAddFriends = () => handleMutateFriends('add')
+  const handleRemoveMembers = () => handleMutateFriends('remove')
 
   return (
     <div className="zalo-blocklist-settings">
@@ -307,7 +267,15 @@ export default function ZaloFriendBlocklistSettings() {
               <select
                 className="stepper-select zalo-account-select"
                 value={selectedAccountId || ''}
-                onChange={event => setSelectedAccountId(Number(event.target.value) || 0)}
+                onChange={event => {
+                  setSelectedAccountId(Number(event.target.value) || 0)
+                  setActiveBlocklistId(null)
+                  setBlocklists([])
+                  setSelectedFriendIds(new Set())
+                  setSelectedMemberIds(new Set())
+                  setFriendSearch('')
+                  setMemberSearch('')
+                }}
                 disabled={busy || loadingAccounts}
               >
                 {accounts.length === 0 ? (
@@ -351,7 +319,13 @@ export default function ZaloFriendBlocklistSettings() {
               <div
                 key={group.id}
                 className={`zalo-blocklist-row ${activeBlocklistId === group.id ? 'is-active' : ''}`}
-                onClick={() => setActiveBlocklistId(group.id)}
+                onClick={() => {
+                  if (busy || group.id === activeBlocklistId) return
+                  setActiveBlocklistId(group.id)
+                  setSelectedFriendIds(new Set())
+                  setSelectedMemberIds(new Set())
+                  setMemberSearch('')
+                }}
               >
                 <div className="zalo-blocklist-row-main">
                   {editingId === group.id ? (
@@ -417,11 +391,11 @@ export default function ZaloFriendBlocklistSettings() {
           <div className="zalo-blocklist-panel-head">
             <div>
               <div className="zalo-blocklist-panel-title">{activeBlocklist?.name || 'Bạn bè không gửi tin'}</div>
-              <div className="zalo-blocklist-panel-meta">{members.length} bạn bè</div>
+              <div className="zalo-blocklist-panel-meta">{memberPage.total} bạn bè</div>
             </div>
             <div className="zalo-blocklist-search">
               <Search size={15} />
-              <input value={memberSearch} onChange={event => setMemberSearch(event.target.value)} placeholder="Tìm trong danh sách" />
+              <input disabled={busy} value={memberSearch} onChange={event => setMemberSearch(event.target.value)} placeholder="Tìm trong danh sách" />
             </div>
           </div>
           <div className="zalo-blocklist-table-wrap">
@@ -438,9 +412,11 @@ export default function ZaloFriendBlocklistSettings() {
                   <tr><td colSpan={3} className="text-center text-secondary">Chưa chọn danh sách.</td></tr>
                 ) : loadingMembers ? (
                   <tr><td colSpan={3} className="text-center text-secondary">Đang tải...</td></tr>
-                ) : filteredMembers.length === 0 ? (
-                  <tr><td colSpan={3} className="text-center text-secondary">Chưa có bạn bè trong danh sách.</td></tr>
-                ) : filteredMembers.map(member => (
+                ) : memberPage.error ? (
+                  <tr><td colSpan={3} role="alert">{formatIpcError(memberPage.error, 'Không thể tải danh sách.')}</td></tr>
+                ) : memberPage.contacts.length === 0 ? (
+                  <tr><td colSpan={3} className="text-center text-secondary">{memberSearch.trim() ? 'Không tìm thấy bạn bè phù hợp.' : 'Chưa có bạn bè trong danh sách.'}</td></tr>
+                ) : memberPage.contacts.map(member => (
                   <tr key={member.id}>
                     <td className="zalo-blocklist-check-col">
                       <input
@@ -457,10 +433,16 @@ export default function ZaloFriendBlocklistSettings() {
               </tbody>
             </table>
           </div>
+          <div className="zalo-blocklist-pagination" aria-label="Phân trang Bạn bè không gửi tin">
+            <span>{memberPage.total === 0 ? '0' : `${memberPage.page * BLOCKLIST_PAGE_SIZE + 1}–${Math.min((memberPage.page + 1) * BLOCKLIST_PAGE_SIZE, memberPage.total)}`} / {memberPage.total}</span>
+            <button type="button" className="btn-icon" aria-label="Trang trước Bạn bè không gửi tin" disabled={busy || loadingMembers || memberPage.page === 0} onClick={() => memberPage.setPage(memberPage.page - 1)}><ChevronLeft size={16} /></button>
+            <span>Trang {memberPage.page + 1} / {Math.max(1, Math.ceil(memberPage.total / BLOCKLIST_PAGE_SIZE))}</span>
+            <button type="button" className="btn-icon" aria-label="Trang sau Bạn bè không gửi tin" disabled={busy || loadingMembers || (memberPage.page + 1) * BLOCKLIST_PAGE_SIZE >= memberPage.total} onClick={() => memberPage.setPage(memberPage.page + 1)}><ChevronRight size={16} /></button>
+          </div>
           <div className="zalo-blocklist-panel-actions">
-            <button type="button" className="btn btn-secondary" onClick={handleRemoveMembers} disabled={busy || selectedMemberIds.size === 0}>
+            <button type="button" className="btn btn-secondary" onClick={handleRemoveMembers} disabled={busy || loadingMembers || selectedMemberIds.size === 0}>
               <UserMinus size={15} />
-              <span>Xoá khỏi danh sách</span>
+              <span>Xoá khỏi danh sách{selectedMemberIds.size > 0 ? ` (${selectedMemberIds.size})` : ''}</span>
             </button>
           </div>
         </div>
@@ -469,11 +451,11 @@ export default function ZaloFriendBlocklistSettings() {
           <div className="zalo-blocklist-panel-head">
             <div>
               <div className="zalo-blocklist-panel-title">Bạn bè Zalo</div>
-              <div className="zalo-blocklist-panel-meta">{availableFriends.length} có thể thêm</div>
+              <div className="zalo-blocklist-panel-meta">{friendPage.total} có thể thêm</div>
             </div>
             <div className="zalo-blocklist-search">
               <Search size={15} />
-              <input value={friendSearch} onChange={event => setFriendSearch(event.target.value)} placeholder="Tìm bạn bè" />
+              <input disabled={busy} value={friendSearch} onChange={event => setFriendSearch(event.target.value)} placeholder="Tìm bạn bè" />
             </div>
           </div>
           <div className="zalo-blocklist-table-wrap">
@@ -488,11 +470,13 @@ export default function ZaloFriendBlocklistSettings() {
               <tbody>
                 {!selectedAccountId ? (
                   <tr><td colSpan={3} className="text-center text-secondary">Chưa chọn tài khoản Zalo.</td></tr>
-                ) : loadingData ? (
+                ) : loadingFriends ? (
                   <tr><td colSpan={3} className="text-center text-secondary">Đang tải...</td></tr>
-                ) : availableFriends.length === 0 ? (
-                  <tr><td colSpan={3} className="text-center text-secondary">Chưa có bạn bè để thêm.</td></tr>
-                ) : availableFriends.map(friend => (
+                ) : friendPage.error ? (
+                  <tr><td colSpan={3} role="alert">{formatIpcError(friendPage.error, 'Không thể tải danh sách.')}</td></tr>
+                ) : friendPage.contacts.length === 0 ? (
+                  <tr><td colSpan={3} className="text-center text-secondary">{friendSearch.trim() ? 'Không tìm thấy bạn bè phù hợp.' : 'Chưa có bạn bè để thêm.'}</td></tr>
+                ) : friendPage.contacts.map(friend => (
                   <tr key={friend.id}>
                     <td className="zalo-blocklist-check-col">
                       <input
@@ -509,10 +493,16 @@ export default function ZaloFriendBlocklistSettings() {
               </tbody>
             </table>
           </div>
+          <div className="zalo-blocklist-pagination" aria-label="Phân trang Bạn bè Zalo">
+            <span>{friendPage.total === 0 ? '0' : `${friendPage.page * BLOCKLIST_PAGE_SIZE + 1}–${Math.min((friendPage.page + 1) * BLOCKLIST_PAGE_SIZE, friendPage.total)}`} / {friendPage.total}</span>
+            <button type="button" className="btn-icon" aria-label="Trang trước Bạn bè Zalo" disabled={busy || loadingFriends || friendPage.page === 0} onClick={() => friendPage.setPage(friendPage.page - 1)}><ChevronLeft size={16} /></button>
+            <span>Trang {friendPage.page + 1} / {Math.max(1, Math.ceil(friendPage.total / BLOCKLIST_PAGE_SIZE))}</span>
+            <button type="button" className="btn-icon" aria-label="Trang sau Bạn bè Zalo" disabled={busy || loadingFriends || (friendPage.page + 1) * BLOCKLIST_PAGE_SIZE >= friendPage.total} onClick={() => friendPage.setPage(friendPage.page + 1)}><ChevronRight size={16} /></button>
+          </div>
           <div className="zalo-blocklist-panel-actions">
-            <button type="button" className="btn btn-primary" onClick={handleAddFriends} disabled={busy || !activeBlocklistId || selectedFriendIds.size === 0}>
+            <button type="button" className="btn btn-primary" onClick={handleAddFriends} disabled={busy || loadingFriends || !activeBlocklistId || selectedFriendIds.size === 0}>
               <UserPlus size={15} />
-              <span>Thêm vào danh sách</span>
+              <span>Thêm vào danh sách{selectedFriendIds.size > 0 ? ` (${selectedFriendIds.size})` : ''}</span>
             </button>
           </div>
         </div>

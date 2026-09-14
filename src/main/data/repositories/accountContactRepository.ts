@@ -15,6 +15,9 @@ import {
   isValidEmailInputDataValue,
   normalizeEmailInputDataValue,
   ZaloGroupMemberContactListQuery,
+  ZaloFriendBlocklistPageQuery,
+  ZaloFriendBlocklistPage,
+  ZaloFriendBlocklistMutationResult,
   ZaloLabelOption
 } from '../../../shared/types'
 import { normalizeVietnamMobilePhone } from '../../../shared/phone'
@@ -994,6 +997,7 @@ const CONTACT_LIST_DEFAULT_LIMIT = 100
 const CONTACT_LIST_MAX_LIMIT = 20000
 const CONTACT_LIST_FETCH_CHUNK = 1000
 const CONTACT_LIST_MUTATION_CHUNK = 500
+const ZALO_FRIEND_BLOCKLIST_MUTATION_CHUNK = 100
 
 function chunkArray<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -3637,7 +3641,115 @@ export interface ZaloFriendBlocklistUidSnapshot {
 }
 
 export async function listZaloFriendBlocklists(accountId: number): Promise<AutoAccountContactGroup[]> {
-  return listContactGroups(accountId, 'person', CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+  const u = requireCurrentUser()
+  const groups: AutoAccountContactGroup[] = []
+  let offset = 0
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_account_contact_groups')
+      .select('*')
+      .eq('account_id', accountId)
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('contact_type', 'person')
+      .eq('purpose', CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+      .eq('is_delete', false)
+      .order('name', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + 99)
+    if (error) throw new Error(`Failed to list Zalo friend blocklists: ${error.message}`)
+    for (const row of data || []) {
+      const group = mapAccountContactGroupFromDB(row)
+      // Count in the DB instead of downloading all membership/contact rows.
+      const { count, error: countError } = await buildZaloFriendBlocklistContactQuery(accountId, group.id, 'members', true)
+      if (countError) throw new Error(`Failed to count Zalo friend blocklist: ${countError.message}`)
+      groups.push({ ...group, contactCount: count ?? 0 })
+    }
+    if (!data || data.length < 100) break
+    offset += data.length
+  }
+  return groups
+}
+
+function buildZaloFriendBlocklistContactQuery(
+  accountId: number,
+  groupId: number | null,
+  mode: ZaloFriendBlocklistPageQuery['mode'],
+  head = false
+) {
+  const u = requireCurrentUser()
+  const columns = head ? 'id' : 'id,name,uid'
+  let query = client()
+    .from('auto_account_contacts')
+    .select(groupId === null ? columns : `${columns},blocklist_members:auto_account_contact_group_members!auto_account_contact_group_members_contact_id_fkey()`, { count: 'exact', head })
+    .eq('account_id', accountId)
+    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
+    .eq('contact_type', 'person')
+    .eq('is_delete', false)
+
+  if (mode === 'available') query = query.eq('is_friend', true)
+  if (groupId !== null) {
+    query = query.eq('blocklist_members.group_id', groupId).eq('blocklist_members.is_delete', false)
+    query = mode === 'available'
+      ? query.is('blocklist_members', null)
+      : query.not('blocklist_members', 'is', null)
+  }
+  return query
+}
+
+export async function listZaloFriendBlocklistPage(
+  accountId: number,
+  input: ZaloFriendBlocklistPageQuery
+): Promise<ZaloFriendBlocklistPage> {
+  if (!Number.isSafeInteger(accountId) || accountId <= 0) throw new Error('Tài khoản Zalo không hợp lệ.')
+  if (!input || !['available', 'members'].includes(input.mode)) throw new Error('Loại danh sách không hợp lệ.')
+  const groupId = normalizeContactGroupId(input.groupId)
+  if (groupId !== null) {
+    const group = await getContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+    if (group.accountId !== accountId || group.contactType !== 'person') {
+      throw new Error('Danh sách không gửi tin không thuộc tài khoản Zalo đã chọn.')
+    }
+  } else if (input.mode === 'members') {
+    return { contacts: [], total: 0 }
+  }
+
+  const search = String(input.search || '').trim()
+  const buildQuery = (head = false) => {
+    let query = buildZaloFriendBlocklistContactQuery(accountId, groupId, input.mode, head)
+    if (search) {
+      // Escape regex syntax and quote PostgREST values; %, _, * and commas stay literal.
+      const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const value = JSON.stringify(pattern)
+      query = query.or(`name.imatch.${value},uid.imatch.${value}`)
+    }
+    return query
+  }
+  const offset = clampContactListOffset(input.offset)
+  const limit = Math.min(100, clampContactListLimit(input.limit))
+  // Retry the page at most once if concurrent changes restore it after a 416.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { data, error, count } = await buildQuery()
+      .order('name', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + limit - 1)
+      .returns<ZaloFriendBlocklistPage['contacts']>()
+    if (error?.code === 'PGRST103' && offset > 0) {
+      // A 416 has no count. Recount without a range to locate the last valid page.
+      const { count: currentTotal, error: countError } = await buildQuery(true)
+      if (countError) throw new Error(`Failed to count Zalo friend blocklist page: ${countError.message}`)
+      const total = currentTotal ?? 0
+      if (total <= offset) return { contacts: [], total }
+      // The requested page exists again; an empty success would hide its contacts.
+      continue
+    }
+    if (error) throw new Error(`Failed to list Zalo friend blocklist page: ${error.message}`)
+    return {
+      contacts: (data || []).map(row => ({ id: row.id, name: row.name || '', uid: row.uid || undefined })),
+      total: count ?? 0
+    }
+  }
+  throw new Error('Dữ liệu danh sách vừa thay đổi. Vui lòng tải lại.')
 }
 
 export async function createZaloFriendBlocklist(
@@ -3662,64 +3774,100 @@ export async function listZaloFriendBlocklistFriends(groupId: number): Promise<A
   return listContactGroupContacts(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
 }
 
+async function mutateZaloFriendBlocklistChunks(
+  contactIds: number[],
+  mutateChunk: (ids: number[]) => Promise<number>
+): Promise<ZaloFriendBlocklistMutationResult> {
+  const ids = uniqueIds(contactIds)
+  let count = 0
+  let processed = 0
+  for (const chunk of chunkArray(ids, ZALO_FRIEND_BLOCKLIST_MUTATION_CHUNK)) {
+    try {
+      count += await mutateChunk(chunk)
+      processed += chunk.length
+    } catch (error) {
+      // Return plain data: Electron IPC does not preserve custom Error fields.
+      return {
+        success: false,
+        count,
+        remainingIds: ids.slice(processed),
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+  return { success: true, count }
+}
+
 export async function addFriendsToZaloFriendBlocklist(
   groupId: number,
   contactIds: number[]
-): Promise<ContactGroupMutationResult> {
+): Promise<ZaloFriendBlocklistMutationResult> {
   const u = requireCurrentUser()
   const group = await getContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
   if (group.contactType !== 'person') throw new Error('Danh sách không gửi tin không đúng loại bạn bè Zalo.')
 
-  const ids = uniqueIds(contactIds)
-  if (ids.length === 0) return { success: true, count: 0 }
+  return mutateZaloFriendBlocklistChunks(contactIds, async chunk => {
+    const { data: contacts, error: contactError } = await client()
+      .from('auto_account_contacts')
+      .select('id')
+      .in('id', chunk)
+      .eq('account_id', group.accountId)
+      .eq('contact_type', 'person')
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('is_friend', true)
+      .eq('is_delete', false)
 
-  const { data: contacts, error: contactError } = await client()
-    .from('auto_account_contacts')
-    .select('id')
-    .in('id', ids)
-    .eq('account_id', group.accountId)
-    .eq('contact_type', 'person')
-    .eq('staff_id', u.staffId)
-    .eq('is_friend', true)
-    .eq('is_delete', false)
+    if (contactError) throw new Error(`Failed to validate Zalo friend blocklist contacts: ${contactError.message}`)
 
-  if (contactError) throw new Error(`Failed to validate Zalo friend blocklist contacts: ${contactError.message}`)
+    const validIds = uniqueIds((contacts || []).map(row => row.id as number))
+    if (validIds.length === 0) return 0
 
-  const validIds = uniqueIds((contacts || []).map(row => row.id as number))
-  if (validIds.length === 0) return { success: true, count: 0 }
+    const { data: existing, error: existingError } = await client()
+      .from('auto_account_contact_group_members')
+      .select('contact_id, is_delete')
+      .eq('group_id', groupId)
+      .in('contact_id', validIds)
 
-  const { data: existing, error: existingError } = await client()
-    .from('auto_account_contact_group_members')
-    .select('contact_id, is_delete')
-    .eq('group_id', groupId)
-    .in('contact_id', validIds)
+    if (existingError) throw new Error(`Failed to list existing Zalo friend blocklist members: ${existingError.message}`)
 
-  if (existingError) throw new Error(`Failed to list existing Zalo friend blocklist members: ${existingError.message}`)
+    const activeIds = new Set((existing || [])
+      .filter(row => row.is_delete !== true)
+      .map(row => row.contact_id as number))
+    const idsToActivate = validIds.filter(id => !activeIds.has(id))
+    if (idsToActivate.length === 0) return 0
 
-  const activeIds = new Set((existing || [])
-    .filter(row => row.is_delete !== true)
-    .map(row => row.contact_id as number))
-  const idsToActivate = validIds.filter(id => !activeIds.has(id))
-  if (idsToActivate.length === 0) return { success: true, count: 0 }
+    const { error } = await client()
+      .from('auto_account_contact_group_members')
+      .upsert(idsToActivate.map(contactId => ({
+        group_id: groupId,
+        contact_id: contactId,
+        is_delete: false,
+        updated_at: new Date().toISOString()
+      })), { onConflict: 'group_id,contact_id' })
 
-  const { error } = await client()
-    .from('auto_account_contact_group_members')
-    .upsert(idsToActivate.map(contactId => ({
-      group_id: groupId,
-      contact_id: contactId,
-      is_delete: false,
-      updated_at: new Date().toISOString()
-    })), { onConflict: 'group_id,contact_id' })
-
-  if (error) throw new Error(`Failed to add friends to Zalo friend blocklist: ${error.message}`)
-  return { success: true, count: idsToActivate.length }
+    if (error) throw new Error(`Failed to add friends to Zalo friend blocklist: ${error.message}`)
+    return idsToActivate.length
+  })
 }
 
 export async function removeFriendsFromZaloFriendBlocklist(
   groupId: number,
   contactIds: number[]
-): Promise<ContactGroupMutationResult> {
-  return removeContactsFromGroup(groupId, contactIds, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+): Promise<ZaloFriendBlocklistMutationResult> {
+  await getContactGroup(groupId, CONTACT_GROUP_PURPOSE_ZALO_FRIEND_BLOCKLIST)
+  return mutateZaloFriendBlocklistChunks(contactIds, async chunk => {
+    const { data, error } = await client()
+      .from('auto_account_contact_group_members')
+      .update({ is_delete: true, updated_at: new Date().toISOString() })
+      .eq('group_id', groupId)
+      .eq('is_delete', false)
+      .in('contact_id', chunk)
+      .select('id')
+
+    if (error) throw new Error(`Failed to remove friends from Zalo friend blocklist: ${error.message}`)
+    return data?.length || 0
+  })
 }
 
 export async function getZaloFriendBlocklistUidSnapshot(

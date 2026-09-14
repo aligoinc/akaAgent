@@ -252,6 +252,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 
 ### Data layer
 
+Danh sách không gửi tin Zalo dùng `listZaloFriendBlocklistPage()` trong [accountContactRepository.ts](src/main/data/repositories/accountContactRepository.ts) để phân trang DB tối đa 100 người/lần, lọc tên/UID và membership trước phân trang; số lượng danh sách dùng count-only. Giữ lựa chọn qua trang, reset khi đổi tìm kiếm/tài khoản/danh sách hoặc tải lại thủ công; thêm/xóa chạy tuần tự theo chunk 100 và trả `ZaloFriendBlocklistMutationResult` khi lỗi để UI tự refresh nhưng giữ `remainingIds` (kể cả chunk chưa rõ kết quả) cho retry, không tăng Max rows chung hoặc tải toàn bộ contacts/members; smoke: `node scripts/run-zalo-friend-blocklist-smoke-test.cjs`.
+
 Input canonical của cả `direct` và `data_group` được bổ sung thông tin nhưng phải giữ trường xác định đối tượng theo action, key/alias/origins và các tham chiếu hệ thống; xoá canonical vẫn bị chặn. [v274](migrations/migration_v274_campaign_input_information_updates.sql) thay cơ chế cho đổi đối tượng của v273, bỏ trigger dọn alias, giữ fast path không lookup campaign khi chỉ cập nhật thông tin/trạng thái. V274 đã apply trên akachat ngày 11/09/2026, version `20260911054007`; smoke: `node scripts/zalo-phone-input-identity-smoke-test.cjs` và SQL tests v274.
 
 WebApp input **Tiếp tục / chạy lại** dùng RPC atomic v269, nhận input tạm dừng/hoàn thành mà không tự bật campaign/account; giữ tenant, runtime ownership và serialization barrier. Xem [CONTROL_CAMPAIGN_INPUT_RERUN.md](docs/CONTROL_CAMPAIGN_INPUT_RERUN.md) và smoke rollback v269; không khôi phục guard `campaign_completed` cũ của v219 cho thao tác chạy lại input do người dùng chọn.
@@ -360,6 +362,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Blocklist pagination/retry**: PostgREST `PGRST103` (HTTP 416) không trả `count`; dùng HEAD cùng bộ lọc để tìm trang cuối, chỉ retry GET tối đa một lần nếu trang tồn tại trở lại. Kết quả mutation từng phần phải qua IPC bằng object thường, không gắn field vào `Error`; xem [accountContactRepository.ts](src/main/data/repositories/accountContactRepository.ts:3700) và [smoke test](scripts/run-zalo-friend-blocklist-smoke-test.cjs:1).
 
 - Lưu campaign: không đưa state tiến trình về component form hoặc unmount form khi busy; cả hai gây render dư hoặc mất UI/vị trí cuộn khi báo lỗi và thử lại.
 

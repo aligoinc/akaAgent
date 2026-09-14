@@ -5330,6 +5330,22 @@ body:not(.theme-light) .media-library-footer-actions > i {
   margin-top: 12px;
 }
 
+.zalo-blocklist-pagination {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.zalo-blocklist-pagination > span:first-child {
+  margin-right: auto;
+}
+
 @media (max-width: 1180px) {
   .general-settings-content.zalo-blocklist-content {
     overflow-y: auto;
