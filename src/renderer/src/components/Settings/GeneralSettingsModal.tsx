@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Ban, CheckCircle2, Edit3, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Tags, Trash2, X } from 'lucide-react'
 import {
@@ -14,9 +14,16 @@ import { useAuthStore } from '../../stores/authStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 
 export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync'
+export interface GeneralSettingsOpenOptions {
+  initialAccountId?: number
+  onClose?: () => void
+}
+export type OpenGeneralSettings = (menu?: GeneralSettingsMenu, options?: GeneralSettingsOpenOptions) => void
 
 interface GeneralSettingsModalProps {
   initialMenu?: GeneralSettingsMenu
+  initialAccountId?: number
+  returnFocusTo?: HTMLElement | null
   onClose: () => void
 }
 
@@ -96,7 +103,7 @@ function parseRecipientEmails(value: string): string[] {
   return emails
 }
 
-export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }: GeneralSettingsModalProps) {
+export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAccountId, returnFocusTo, onClose }: GeneralSettingsModalProps) {
   const user = useAuthStore(state => state.user)
   const showAlert = useUiStore(s => s.showAlert)
   const showConfirm = useUiStore(s => s.showConfirm)
@@ -115,6 +122,18 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   const [emailRecipientsText, setEmailRecipientsText] = useState('')
   const [emailSettingsLoading, setEmailSettingsLoading] = useState(true)
   const [emailSettingsBusy, setEmailSettingsBusy] = useState(false)
+  const [blocklistBusy, setBlocklistBusy] = useState(false)
+  const mutationPending = blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const previousFocus = returnFocusTo || document.activeElement
+    closeButtonRef.current?.focus({ preventScroll: true })
+    return () => {
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true })
+    }
+  }, [])
+  const closeSettings = () => { if (!mutationPending) onClose() }
   const [editingIntegrations, setEditingIntegrations] = useState<Record<AkaBizIntegrationKind, boolean>>({
     sms: false,
     zaloWeb: false,
@@ -576,20 +595,30 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
   )
 
   return createPortal(
-    <div className="modal-overlay general-settings-modal-overlay" onClick={onClose}>
-      <div className="general-settings-modal" onClick={event => event.stopPropagation()}>
+    <div className="modal-overlay general-settings-modal-overlay" onClick={closeSettings}>
+      <div className="general-settings-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
+        onKeyDown={event => {
+          if (event.key !== 'Tab' || useUiStore.getState().alert.isOpen || useUiStore.getState().confirm.isOpen) return
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex="0"]'))
+            .filter(node => !node.matches(':disabled') && !node.closest('[inert]') && node.getClientRects().length > 0)
+          const next = event.shiftKey ? controls.at(-1) : controls[0]
+          if (next && (event.shiftKey ? document.activeElement === controls[0] : document.activeElement === controls.at(-1))) {
+            event.preventDefault()
+            next.focus()
+          }
+        }}>
         <div className="general-settings-header">
           <div>
-            <h2>Cài đặt chung</h2>
+            <h2 id={titleId}>Cài đặt chung</h2>
             <div className="general-settings-subtitle">Thiết lập tích hợp dùng chung cho tài khoản đang đăng nhập</div>
           </div>
-          <button className="btn-icon" onClick={onClose} title="Đóng">
+          <button ref={closeButtonRef} type="button" className="btn-icon" onClick={closeSettings} title="Đóng" disabled={mutationPending}>
             <X size={18} />
           </button>
         </div>
 
         <div className="general-settings-body">
-          <aside className="general-settings-sidebar">
+          <aside className="general-settings-sidebar" inert={mutationPending || undefined}>
             <button
               className={`general-settings-nav-item ${activeMenu === 'chatSync' ? 'active' : ''}`}
               onClick={() => setActiveMenu('chatSync')}
@@ -735,7 +764,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', onClose }
                   )
                 })}
               </div>
-            )) : activeMenu === 'akabizTags' ? renderAkaBizTagsContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings />}
+            )) : activeMenu === 'akabizTags' ? renderAkaBizTagsContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings initialAccountId={initialAccountId} onBusyChange={setBlocklistBusy} />}
           </section>
         </div>
       </div>

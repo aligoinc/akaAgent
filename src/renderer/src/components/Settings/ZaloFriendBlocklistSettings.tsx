@@ -24,7 +24,10 @@ const contactLabel = (contact: ZaloFriendBlocklistContact): string => (
   contact.name || contact.uid || `#${contact.id}`
 )
 
-export default function ZaloFriendBlocklistSettings() {
+export default function ZaloFriendBlocklistSettings({ initialAccountId, onBusyChange }: {
+  initialAccountId?: number
+  onBusyChange?: (busy: boolean) => void
+} = {}) {
   const showAlert = useUiStore(s => s.showAlert)
   const showConfirm = useUiStore(s => s.showConfirm)
   const [accounts, setAccounts] = useState<AutoAccount[]>([])
@@ -41,6 +44,7 @@ export default function ZaloFriendBlocklistSettings() {
   const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [busy, setBusy] = useState(false)
+  useEffect(() => { onBusyChange?.(busy) }, [busy, onBusyChange])
   const [revision, setRevision] = useState(0)
   const listRequest = useRef(0)
   const selectedAccountRef = useRef(selectedAccountId)
@@ -69,7 +73,7 @@ export default function ZaloFriendBlocklistSettings() {
       setSelectedAccountId(prev => (
         prev && zaloAccounts.some(account => account.id === prev)
           ? prev
-          : zaloAccounts[0]?.id || 0
+          : zaloAccounts.find(account => account.id === initialAccountId)?.id || zaloAccounts[0]?.id || 0
       ))
     } catch (err) {
       showAlert(formatIpcError(err, 'Không thể tải tài khoản Zalo.'), 'error')

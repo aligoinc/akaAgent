@@ -56,7 +56,7 @@ import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
-import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
+import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
@@ -367,7 +367,7 @@ interface CampaignFormModalProps {
 
   campaign: CampaignConfig | null
   cloneFromId?: number
-  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   draftMode?: boolean
   draftTempId?: number
@@ -2354,8 +2354,30 @@ export default function CampaignFormModal({
   const [zaloLabelsError, setZaloLabelsError] = useState('')
   const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
   const [akaBizContactTagsLoading, setAkaBizContactTagsLoading] = useState(false)
+  const [akaBizContactTagsError, setAkaBizContactTagsError] = useState('')
+  const akaBizContactTagsRequestRef = useRef(0)
   const [zaloFriendBlocklists, setZaloFriendBlocklists] = useState<AutoAccountContactGroup[]>([])
   const [zaloFriendBlocklistsLoading, setZaloFriendBlocklistsLoading] = useState(false)
+  const [zaloFriendBlocklistsError, setZaloFriendBlocklistsError] = useState('')
+  const [zaloFriendBlocklistsRevision, setZaloFriendBlocklistsRevision] = useState(0)
+  const [generalSettingsOpen, setGeneralSettingsOpen] = useState(false)
+  const generalSettingsRequestRef = useRef(0)
+  useEffect(() => () => { generalSettingsRequestRef.current += 1 }, [])
+
+  const handleOpenGeneralSettings = (menu?: GeneralSettingsMenu) => {
+    if (!onOpenGeneralSettings || generalSettingsOpen || saveBusy) return
+    const request = ++generalSettingsRequestRef.current
+    setGeneralSettingsOpen(true)
+    onOpenGeneralSettings(menu, {
+      initialAccountId: formData.accountIds[0],
+      onClose: () => {
+        if (request !== generalSettingsRequestRef.current) return
+        setGeneralSettingsOpen(false)
+        if (isZaloMessageFriendCampaign && formData.accountIds.length > 0) setZaloFriendBlocklistsLoading(true)
+        void loadAkaBizContactTags()
+      }
+    })
+  }
   const [zaloRealtimeGroups, setZaloRealtimeGroups] = useState<AutoAccountContact[]>([])
   const [zaloRealtimeGroupsLoading, setZaloRealtimeGroupsLoading] = useState(false)
   const [facebookGroupInviteGroups, setFacebookGroupInviteGroups] = useState<AutoAccountContact[]>([])
@@ -4204,25 +4226,30 @@ export default function CampaignFormModal({
   ])
 
   useEffect(() => {
+    if (generalSettingsOpen) return
     if (!isZaloMessageFriendCampaign || formData.accountIds.length === 0) {
       setZaloFriendBlocklists([])
       setZaloFriendBlocklistsLoading(false)
-      setFormData(prev => (
-        prev.zaloFriendBlocklistEnabled || prev.zaloFriendBlocklistId || prev.zaloFriendBlocklistName
+      setZaloFriendBlocklistsError('')
+      setFormData(prev => {
+        // An account is needed to choose a list, not to preserve the exclusion toggle.
+        const enabled = isZaloMessageFriendCampaign && prev.zaloFriendBlocklistEnabled
+        return prev.zaloFriendBlocklistEnabled !== enabled || prev.zaloFriendBlocklistId || prev.zaloFriendBlocklistName
           ? {
             ...prev,
-            zaloFriendBlocklistEnabled: false,
+            zaloFriendBlocklistEnabled: enabled,
             zaloFriendBlocklistId: null,
             zaloFriendBlocklistName: ''
           }
           : prev
-      ))
+      })
       return
     }
 
     let cancelled = false
     const accountId = formData.accountIds[0]
     setZaloFriendBlocklistsLoading(true)
+    setZaloFriendBlocklistsError('')
     window.electronAPI.listZaloFriendBlocklists(accountId)
       .then(groups => {
         if (cancelled) return
@@ -4234,7 +4261,7 @@ export default function CampaignFormModal({
             ? { ...prev, zaloFriendBlocklistName: selected.name }
             : {
               ...prev,
-              zaloFriendBlocklistEnabled: false,
+              // A deleted exclusion list requires a replacement, not silently enabling delivery.
               zaloFriendBlocklistId: null,
               zaloFriendBlocklistName: ''
             }
@@ -4242,8 +4269,7 @@ export default function CampaignFormModal({
       })
       .catch(err => {
         if (cancelled) return
-        setZaloFriendBlocklists([])
-        showAlert(formatIpcErrorMessage(err, 'Không tải được danh sách không gửi tin Zalo.'), 'error')
+        setZaloFriendBlocklistsError(formatIpcErrorMessage(err, 'Không tải được danh sách không gửi tin Zalo.'))
       })
       .finally(() => {
         if (!cancelled) setZaloFriendBlocklistsLoading(false)
@@ -4252,7 +4278,9 @@ export default function CampaignFormModal({
     return () => { cancelled = true }
   }, [
     isZaloMessageFriendCampaign,
-    formData.accountIds.join(',')
+    formData.accountIds.join(','),
+    generalSettingsOpen,
+    zaloFriendBlocklistsRevision
   ])
 
   useEffect(() => {
@@ -4540,27 +4568,29 @@ export default function CampaignFormModal({
 
   const loadAkaBizContactTags = async () => {
     if (!window.electronAPI?.listAkaBizContactTags) return
+    const request = ++akaBizContactTagsRequestRef.current
     setAkaBizContactTagsLoading(true)
+    setAkaBizContactTagsError('')
     try {
       const rows = await window.electronAPI.listAkaBizContactTags()
+      if (request !== akaBizContactTagsRequestRef.current) return
       setAkaBizContactTags(rows)
       const activeIds = new Set(rows.map(tag => tag.id))
       setFormData(prev => {
         const currentIds = getCampaignIdList(prev.akaBizTagIds)
         const nextIds = currentIds.filter(id => activeIds.has(id))
-        if (sameNumberList(currentIds, nextIds)) return prev
         const nextNames = nextIds.map(id => rows.find(tag => tag.id === id)?.name || '')
+        if (sameNumberList(currentIds, nextIds) && nextNames.length === prev.akaBizTagNames.length && nextNames.every((name, index) => name === prev.akaBizTagNames[index])) return prev
         return {
           ...prev,
           akaBizTagIds: nextIds,
-          akaBizTagNames: nextNames,
-          enableAkaBizTag: nextIds.length > 0 ? prev.enableAkaBizTag : false
+          akaBizTagNames: nextNames
         }
       })
     } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể tải tag akaBiz.'), 'error')
+      if (request === akaBizContactTagsRequestRef.current) setAkaBizContactTagsError(formatIpcErrorMessage(err, 'Không thể tải tag akaBiz.'))
     } finally {
-      setAkaBizContactTagsLoading(false)
+      if (request === akaBizContactTagsRequestRef.current) setAkaBizContactTagsLoading(false)
     }
   }
 
@@ -4633,7 +4663,10 @@ export default function CampaignFormModal({
     void loadAkaBizContactTags()
     const handleAkaBizContactTagsUpdated = () => void loadAkaBizContactTags()
     window.addEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
-    return () => window.removeEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
+    return () => {
+      akaBizContactTagsRequestRef.current += 1
+      window.removeEventListener('akabiz-contact-tags-updated', handleAkaBizContactTagsUpdated)
+    }
   }, [])
 
   useEffect(() => {
@@ -6534,7 +6567,7 @@ export default function CampaignFormModal({
   }
 
   const handleSavePersistentDraft = async (): Promise<void> => {
-    if (saveBusy || loadingDetails || isEditingSavedCampaign || draftMode) return
+    if (saveBusy || generalSettingsOpen || loadingDetails || isEditingSavedCampaign || draftMode) return
     setSavingCampaign(true)
     setSaveProgress({ percent: 15, label: 'Đang lưu bản nháp...' })
     try {
@@ -6550,7 +6583,12 @@ export default function CampaignFormModal({
   }
 
   const handleSave = async () => {
+    if (generalSettingsOpen) return
     if (savingCampaign) return
+    if (supportsAkaBizContactTags && formData.enableAkaBizTag && (akaBizContactTagsLoading || akaBizContactTagsError)) {
+      showAlert(akaBizContactTagsLoading ? 'Tag akaBiz đang tải. Vui lòng chờ tải xong.' : 'Vui lòng tải lại tag akaBiz trước khi lưu chiến dịch.', 'error')
+      return
+    }
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
@@ -6729,7 +6767,11 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn tag nguồn Zalo để lấy danh sách bạn bè.', 'error')
         return
       }
-      if (formData.zaloFriendBlocklistEnabled && !formData.zaloFriendBlocklistId) {
+      if (formData.zaloFriendBlocklistEnabled && (zaloFriendBlocklistsLoading || zaloFriendBlocklistsError)) {
+        showAlert(zaloFriendBlocklistsLoading ? 'Danh sách không gửi tin đang tải. Vui lòng chờ tải xong.' : 'Vui lòng tải lại danh sách không gửi tin trước khi lưu chiến dịch.', 'error')
+        return
+      }
+      if (formData.zaloFriendBlocklistEnabled && !selectedZaloFriendBlocklist) {
         showAlert('Vui lòng chọn danh sách không gửi tin Zalo.', 'error')
         return
       }
@@ -9337,7 +9379,7 @@ export default function CampaignFormModal({
                 type="button"
                 className="btn btn-secondary"
                 style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-                onClick={() => onOpenGeneralSettings?.('akabizTags')}
+                onClick={() => handleOpenGeneralSettings('akabizTags')}
                 disabled={!onOpenGeneralSettings}
                 title={onOpenGeneralSettings ? 'Quản lý tag akaBiz' : 'Không thể mở quản lý tag akaBiz trong form này'}
               >
@@ -9348,6 +9390,8 @@ export default function CampaignFormModal({
 
             {akaBizContactTagsLoading ? (
               <div className="schedule-hint">Đang tải tag akaBiz...</div>
+            ) : akaBizContactTagsError ? (
+              <div className="schedule-hint" role="alert">{akaBizContactTagsError} <button type="button" className="btn btn-secondary" onClick={() => void loadAkaBizContactTags()}>Tải lại tag</button></div>
             ) : akaBizContactTags.length === 0 ? (
               <div className="schedule-hint">Chưa có tag akaBiz.</div>
             ) : (
@@ -9518,7 +9562,7 @@ export default function CampaignFormModal({
             <button
               type="button"
               className="btn btn-secondary btn-sm"
-              onClick={() => onOpenGeneralSettings?.('akabiz')}
+              onClick={() => handleOpenGeneralSettings('akabiz')}
               disabled={!onOpenGeneralSettings}
             >
               <Settings2 size={14} />
@@ -10337,14 +10381,15 @@ export default function CampaignFormModal({
           checked={formData.zaloFriendBlocklistEnabled}
           onChange={e => {
             const checked = e.target.checked
-            const fallback = checked
-              ? (selectedZaloFriendBlocklist || zaloFriendBlocklists[0] || null)
-              : null
+            if (checked && formData.accountIds.length === 0) {
+              showAlert('Vui lòng chọn tài khoản trước.')
+              return
+            }
             setFormData(p => ({
               ...p,
               zaloFriendBlocklistEnabled: checked,
-              zaloFriendBlocklistId: checked ? (fallback?.id ?? p.zaloFriendBlocklistId ?? null) : null,
-              zaloFriendBlocklistName: checked ? (fallback?.name || p.zaloFriendBlocklistName || '') : ''
+              zaloFriendBlocklistId: null,
+              zaloFriendBlocklistName: ''
             }))
           }}
         />
@@ -10366,7 +10411,7 @@ export default function CampaignFormModal({
                   zaloFriendBlocklistName: selected?.name || ''
                 }))
               }}
-              disabled={zaloFriendBlocklistsLoading || zaloFriendBlocklists.length === 0}
+              disabled={zaloFriendBlocklistsLoading || !!zaloFriendBlocklistsError || zaloFriendBlocklists.length === 0}
             >
               <option value="">{zaloFriendBlocklistsLoading ? 'Đang tải danh sách không gửi tin...' : '-- Chọn danh sách không gửi tin --'}</option>
               {zaloFriendBlocklists.map(group => (
@@ -10377,7 +10422,7 @@ export default function CampaignFormModal({
           <button
             type="button"
             className="btn btn-secondary zalo-friend-blocklist-manage-btn"
-            onClick={() => onOpenGeneralSettings?.('zaloBlocklists')}
+            onClick={() => handleOpenGeneralSettings('zaloBlocklists')}
             disabled={!onOpenGeneralSettings}
             title={onOpenGeneralSettings ? 'Quản lý danh sách không gửi tin' : 'Không thể mở quản lý danh sách không gửi tin trong form này'}
           >
@@ -10428,6 +10473,7 @@ export default function CampaignFormModal({
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
       {renderZaloFriendBlocklistOption()}
+      {formData.zaloFriendBlocklistEnabled && zaloFriendBlocklistsError && <div className="schedule-hint" role="alert">{zaloFriendBlocklistsError} <button type="button" className="btn btn-secondary" onClick={() => setZaloFriendBlocklistsRevision(value => value + 1)}>Tải lại danh sách</button></div>}
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
@@ -11686,7 +11732,7 @@ export default function CampaignFormModal({
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={() => onOpenGeneralSettings?.()}
+            onClick={() => handleOpenGeneralSettings()}
             disabled={!onOpenGeneralSettings}
           >
             Mở Cài đặt chung
@@ -15521,7 +15567,7 @@ export default function CampaignFormModal({
 
   return createPortal(
     <div className="modal-overlay campaign-form-modal-overlay" style={modalZIndex ? { zIndex: modalZIndex } : undefined}>
-      <div className="campaign-full-modal stepper-modal">
+      <div className="campaign-full-modal stepper-modal" inert={generalSettingsOpen || undefined}>
         {/* Header */}
         <div className="modal-header">
           <span className="modal-title">
