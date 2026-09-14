@@ -2,13 +2,13 @@ import { useState, useCallback, useRef } from 'react'
 import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
-import type { GeneralSettingsMenu } from '../components/Settings/GeneralSettingsModal'
+import type { OpenGeneralSettings } from '../components/Settings/GeneralSettingsModal'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../../shared/types'
 
 interface CampaignPageProps {
   isActive: boolean
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
-  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
   onDataGroupCampaignRequestHandled?: (requestId: number) => void

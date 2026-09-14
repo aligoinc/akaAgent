@@ -17,7 +17,7 @@ import ConfirmModal from './components/CampaignPanels/ConfirmModal'
 import UpdateModal from './components/UpdateModal/UpdateModal'
 import DataScanModal from './components/DataScan/DataScanModal'
 import DataGroupManagerModal from './components/DataScan/DataGroupManagerModal'
-import GeneralSettingsModal, { type GeneralSettingsMenu } from './components/Settings/GeneralSettingsModal'
+import GeneralSettingsModal, { type GeneralSettingsMenu, type GeneralSettingsOpenOptions, type OpenGeneralSettings } from './components/Settings/GeneralSettingsModal'
 import ContentTemplateManagerModal from './components/Settings/ContentTemplateManagerModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
@@ -106,8 +106,7 @@ export default function App() {
   const [showDataGroups, setShowDataGroups] = useState(false)
   const [dataGroupCampaignRequest, setDataGroupCampaignRequest] = useState<DataGroupCampaignNavigationRequest | null>(null)
   const dataGroupCampaignRequestSeq = useRef(0)
-  const [showGeneralSettings, setShowGeneralSettings] = useState(false)
-  const [generalSettingsInitialMenu, setGeneralSettingsInitialMenu] = useState<GeneralSettingsMenu>('akabiz')
+  const [generalSettingsRequest, setGeneralSettingsRequest] = useState<(GeneralSettingsOpenOptions & { menu: GeneralSettingsMenu; returnFocusTo: HTMLElement | null }) | null>(null)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
@@ -266,9 +265,13 @@ export default function App() {
     void handleCheckForUpdate('manual')
   }, [availableUpdate, handleCheckForUpdate])
 
-  const openGeneralSettings = (menu: GeneralSettingsMenu = 'akabiz') => {
-    setGeneralSettingsInitialMenu(menu)
-    setShowGeneralSettings(true)
+  const openGeneralSettings: OpenGeneralSettings = (menu = 'akabiz', options = {}) => {
+    setGeneralSettingsRequest({ ...options, menu, returnFocusTo: document.activeElement instanceof HTMLElement ? document.activeElement : null })
+  }
+
+  const closeGeneralSettings = () => {
+    setGeneralSettingsRequest(null)
+    generalSettingsRequest?.onClose?.()
   }
 
   const openProxyManager = () => {
@@ -535,10 +538,12 @@ export default function App() {
           }}
         />
       )}
-      {showGeneralSettings && (
+      {generalSettingsRequest && (
         <GeneralSettingsModal
-          initialMenu={generalSettingsInitialMenu}
-          onClose={() => setShowGeneralSettings(false)}
+          initialMenu={generalSettingsRequest.menu}
+          initialAccountId={generalSettingsRequest.initialAccountId}
+          returnFocusTo={generalSettingsRequest.returnFocusTo}
+          onClose={closeGeneralSettings}
         />
       )}
       {showChangePassword && (

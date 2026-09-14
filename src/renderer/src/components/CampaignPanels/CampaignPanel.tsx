@@ -55,7 +55,7 @@ import { getContentTemplateChannelForAction } from './contentTemplateCampaignUti
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import AutomationFormModal from '../Automation/AutomationFormModal'
 import { formatAutomationTriggerLabel } from '../Automation/automationDisplay'
-import type { GeneralSettingsMenu } from '../Settings/GeneralSettingsModal'
+import type { OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import { canUsePlatform } from '../../utils/entitlements'
 import { isZaloWebAccount } from '../../utils/accountLabels'
 import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
@@ -67,7 +67,7 @@ interface CampaignPanelProps {
   accountInfoOpenRequest?: { accountId: number; requestId: number } | null
   onClearFilter?: () => void
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
-  onOpenGeneralSettings?: (menu?: GeneralSettingsMenu) => void
+  onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   onAskAssistant?: (campaignId: number) => void
   dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
