@@ -1570,6 +1570,32 @@ export interface ContactListResult {
   total: number
 }
 
+export interface ZaloFriendBlocklistPageQuery {
+  groupId?: number | null
+  mode: 'available' | 'members'
+  search?: string
+  offset?: number
+  limit?: number
+}
+
+export type ZaloFriendBlocklistContact = Pick<AutoAccountContact, 'id' | 'name' | 'uid'>
+
+export interface ZaloFriendBlocklistPage {
+  contacts: ZaloFriendBlocklistContact[]
+  total: number
+}
+
+export type ZaloFriendBlocklistMutationResult =
+  | { success: true; count: number }
+  | {
+    success: false
+    /** Changes confirmed before the failed request. */
+    count: number
+    /** Failed/uncertain chunk plus chunks not yet attempted; safe to retry. */
+    remainingIds: number[]
+    error: string
+  }
+
 export interface ZaloGroupMemberContactListQuery extends AccountContactListQuery {
   zaloGroupId?: string
 }
@@ -3226,6 +3252,7 @@ export const IPC_EVENTS = {
   ZALO_FRIEND_BLOCKLISTS_UPDATE: 'contacts:zalo-friend-blocklists:update',
   ZALO_FRIEND_BLOCKLISTS_DELETE: 'contacts:zalo-friend-blocklists:delete',
   ZALO_FRIEND_BLOCKLISTS_LIST_FRIENDS: 'contacts:zalo-friend-blocklists:list-friends',
+  ZALO_FRIEND_BLOCKLISTS_LIST_PAGE: 'contacts:zalo-friend-blocklists:list-page',
   ZALO_FRIEND_BLOCKLISTS_ADD_FRIENDS: 'contacts:zalo-friend-blocklists:add-friends',
   ZALO_FRIEND_BLOCKLISTS_REMOVE_FRIENDS: 'contacts:zalo-friend-blocklists:remove-friends',
   CONTACTS_PROGRESS: 'contacts:progress',

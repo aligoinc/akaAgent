@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import type { PageInboxScanOptions } from '../../../shared/types'
-import { AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -407,6 +407,13 @@ export function registerAccountContactHandlers(
 
   ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_DELETE, async (_, groupId: number) => {
     return supabase.deleteZaloFriendBlocklist(groupId)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST_PAGE, async (_, accountId: number, query: ZaloFriendBlocklistPageQuery) => {
+    const account = await supabase.getAccount(accountId)
+    if (account?.flatformType !== 'zalo') throw new Error('Tài khoản Zalo không hợp lệ.')
+    await ensureCurrentUserFeatureActive('zalo')
+    return supabase.listZaloFriendBlocklistPage(accountId, query)
   })
 
   ipcMain.handle(IPC_EVENTS.ZALO_FRIEND_BLOCKLISTS_LIST_FRIENDS, async (_, groupId: number) => {
