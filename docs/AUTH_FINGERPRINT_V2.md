@@ -19,8 +19,8 @@ nguyên định danh vẫn có thể trùng; đây không phải cơ chế chố
 1. Ưu tiên tài khoản ghi nhớ local hợp lệ.
 2. Chưa có credential local hợp lệ, kiểm tra fingerprint mới có trên hệ thống chưa.
    File chỉ có checkbox và vẫn bật Ghi nhớ tiếp tục được xét chuyển đổi, giữ nguyên
-   lựa chọn local. Đã bỏ Ghi nhớ, file hỏng hoặc file v2 có credential mã hóa thì không
-   tự lấy credential cũ.
+   lựa chọn local. Đã bỏ Ghi nhớ hoặc file không đọc được/không đúng định dạng thì
+   không tự lấy credential cũ.
    Fingerprint mới đã có thì yêu cầu nhập thông tin; không đọc credential theo fingerprint cũ.
 3. Chưa có mới xét fingerprint cũ. Nhiều staff: nhập tay. Đúng một staff chưa có
    binding v2: đọc tuỳ chọn đúng staff/hash, chỉ lấy credential nếu bật ghi nhớ.
@@ -34,12 +34,12 @@ nguyên định danh vẫn có thể trùng; đây không phải cơ chế chố
 Không có cột đã-migrate. Xoá binding v2 có thể mở lại nhánh chuyển đổi khi đủ điều kiện.
 Không xác định được duy nhất tài khoản cũ thì mặc định remember/auto tắt, startup giữ
 trạng thái hệ điều hành; người dùng chủ động bật lại. Không tự bật lại cho nhóm 462/748.
-Mất local nhưng binding mới đã tồn tại phải nhập lại. File hỏng hoặc credential local mã hóa cũ không
-được coi là một lần chuyển mới. Cập nhật bỏ qua phiên bản vẫn dùng cùng quy tắc.
+Mất local nhưng binding mới đã tồn tại phải nhập lại. File hỏng/không đúng định dạng
+không được coi là một lần chuyển mới. Cập nhật bỏ qua phiên bản vẫn dùng cùng quy tắc.
 
 ## Ghi nhớ local
 
-`userData/login-v2.json` giữ nguyên đường dẫn, nội dung mới dùng schema `version: 3`,
+`userData/login-v2.json` giữ nguyên đường dẫn và chỉ đọc/ghi schema `version: 3`,
 gồm `options`, `credentials: { username, password } | null` và `requiresManualLogin`.
 Credential lưu trực tiếp theo yêu cầu sản phẩm; không gọi `safeStorage` hoặc Keychain
 để đọc/ghi thông tin đăng nhập. Mật khẩu vẫn chỉ được sử dụng trong main process,
@@ -48,15 +48,15 @@ thể đọc mật khẩu; quyền file vẫn giới hạn chủ sở hữu trê
 Ghi file tạm, fsync, rename và đọc lại kiểm tra vẫn được giữ nguyên.
 Giữ nguyên package name `aka-biz-auto`, appId `com.akabiz.auto` và userData qua update.
 
-- File v2 có `encryptedCredential`: chỉ đọc tùy chọn, bỏ qua credential mà không giải
-  mã; yêu cầu đăng nhập lại một lần, dù đang bật auto. Checkbox remember/auto/startup
-  vẫn giữ nguyên. Lần ghi tiếp theo thay file bằng schema 3 và bỏ ciphertext cũ.
-- `requiresManualLogin` chỉ nằm trong file local, giữ yêu cầu đăng nhập lại qua các
-  lần lưu checkbox/restart hoặc login thất bại; không thêm cột/RPC DB. Trạng thái này
-  cũng ngăn file hỏng tự mở lại nhánh lấy credential legacy sau khi lưu tùy chọn.
+- File schema 3 đang có của khách giữ nguyên credential, checkbox và trạng thái;
+  cập nhật không tự yêu cầu đăng nhập lại hoặc chuyển đổi định dạng file này.
+- `requiresManualLogin` chỉ nằm trong file local, giữ trạng thái cần đăng nhập lại
+  khi file không đọc được qua các lần lưu checkbox/restart hoặc login thất bại;
+  không thêm cột/RPC DB. Trạng thái này ngăn file hỏng tự mở lại nhánh lấy credential
+  legacy sau khi lưu tùy chọn.
   Đăng nhập thành công xóa trạng thái này và lưu credential nếu bật Ghi nhớ.
-- File v2 chỉ chứa tùy chọn (`encryptedCredential: null`) và máy chưa có file local
-  vẫn giữ luồng chuyển đổi DB có kiểm tra fingerprint như trước. File schema 3 hợp lệ
+- File schema 3 chỉ chứa tùy chọn và máy chưa có file local vẫn giữ luồng chuyển đổi
+  DB có kiểm tra fingerprint như trước. File schema 3 hợp lệ
   được sử dụng lại sau restart/update, kể cả cập nhật bỏ qua phiên bản.
 - Checkbox lưu lựa chọn ngay; mật khẩu chỉ lưu sau login thành công.
 - Bỏ ghi nhớ xoá credential ngay và tắt auto. Bỏ auto vẫn giữ ghi nhớ.
@@ -129,8 +129,6 @@ và hướng dẫn; không tự cài VPS/máy khách hoặc publish bản cập 
    file ghi nhớ mới chứa mật khẩu trực tiếp, cần bảo quản bản sao như dữ liệu đăng nhập.
 3. Mở app. Một staff cũ duy nhất và đủ điều kiện ghi nhớ: app chuyển theo checkbox cũ.
    Fingerprint cũ có nhiều staff hoặc máy đã có binding v2: nhập lại username/password.
-   Nếu đang dùng file ghi nhớ v2 đã mã hóa, nhập lại tài khoản một lần; các checkbox
-   giữ nguyên và app không gọi Keychain để giải mã file cũ.
    Tích Ghi nhớ nếu muốn lưu; tích Tự động đăng nhập nếu muốn tự vào ở lần mở kế tiếp.
 4. Đóng/mở lại để kiểm tra. Nếu có cảnh báo lưu, phiên hiện tại vẫn dùng được nhưng
    cần xử lý quyền đọc/ghi trước khi xác nhận tính năng nhớ đã hoạt động.
@@ -142,6 +140,6 @@ Không cần cập nhật/cài credential trên Zalo Server cho thay đổi auth
 cũng nằm trong bản build, không phải phần sửa fingerprint.
 
 Kiểm thử Node mô phỏng không chứng nhận phần cứng Windows/VMware/VPS. Electron smoke
-kiểm tra bỏ qua file mã hóa cũ, lưu/đọc credential qua các tiến trình, giữ tùy chọn và
+kiểm tra lưu/đọc credential qua các tiến trình, giữ tùy chọn và
 IOPlatformUUID thật trên Mac; test phải thất bại nếu có lệnh gọi mã hóa OS. Việc này
 không thay thế test installer Windows, máy Mac khác hoặc clone VM thực tế.

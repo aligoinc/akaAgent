@@ -9,7 +9,6 @@ export function normalizeLocalLoginOptions(options: Partial<LoginPreferences>): 
   if (next.autoLogin) next.rememberLogin = true
   return next
 }
-interface LegacyLoginFile { version: 2; options: LoginPreferences; encryptedCredential: string | null }
 interface LoginFile {
   version: 3
   options: LoginPreferences
@@ -42,17 +41,10 @@ export class LocalLoginStore {
   }
   private async load(): Promise<void> {
     try {
-      const raw = JSON.parse(await readFile(this.config.file, 'utf8')) as LoginFile | LegacyLoginFile
-      if (!raw || (raw.version !== 2 && raw.version !== 3) || !raw.options
+      const raw = JSON.parse(await readFile(this.config.file, 'utf8')) as LoginFile
+      if (!raw || raw.version !== 3 || !raw.options
         || ['rememberLogin', 'autoLogin', 'startupEnabled'].some(k => typeof raw.options[k as keyof LoginPreferences] !== 'boolean')) throw new Error('Invalid login storage')
       this.options = normalizeLocalLoginOptions(raw.options)
-      if (raw.version === 2) {
-        if (!(raw.encryptedCredential === null || typeof raw.encryptedCredential === 'string')) throw new Error('Invalid legacy login storage')
-        // Never decrypt old credentials: doing so could open a macOS Keychain prompt.
-        this.requiresManualLogin = raw.encryptedCredential !== null
-        this.preferencesOnly = raw.encryptedCredential === null
-        return
-      }
       if (typeof raw.requiresManualLogin !== 'boolean') throw new Error('Invalid login storage')
       this.requiresManualLogin = raw.requiresManualLogin
       if (raw.credentials !== null) {

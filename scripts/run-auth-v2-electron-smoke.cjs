@@ -28,25 +28,15 @@ try {
       const identityFile = join(app.getPath('userData'), 'previous-hash');
       const loginFile = join(app.getPath('userData'), 'login-v2.json');
       const options = { rememberLogin: true, autoLogin: true, startupEnabled: true };
-      if (process.env.AKA_AUTH_SMOKE_PHASE === 'legacy') {
-        writeFileSync(loginFile, JSON.stringify({ version: 2, options, encryptedCredential: 'old-ciphertext-not-a-real-keychain-secret' }));
-      }
       const store = getLocalLoginStore();
       await store.initialize();
       const credential = { username:'dummy-smoke-user',password:'dummy-smoke-password' };
-      if (process.env.AKA_AUTH_SMOKE_PHASE === 'legacy') {
+      if (process.env.AKA_AUTH_SMOKE_PHASE === 'write') {
         assert.equal(store.getCredentials(), null);
-        assert.deepEqual(store.snapshot().loginOptions, options);
-        assert(store.snapshot().warningMessage);
-        assert.equal(store.mayImportLegacy(), false);
-        await store.updateOptions({ autoLogin: false });
-        assert.equal(JSON.parse(readFileSync(loginFile, 'utf8')).requiresManualLogin, true);
-      } else if (process.env.AKA_AUTH_SMOKE_PHASE === 'write') {
-        assert.equal(store.getCredentials(), null);
-        assert.equal(store.mayImportLegacy(), false, 'restart preserves the one-time manual login requirement');
-        assert.deepEqual(store.snapshot().loginOptions, { ...options, autoLogin: false });
+        assert.equal(store.snapshot().warningMessage, null);
+        assert.equal(store.mayImportLegacy(), true, 'a missing local file allows guarded DB migration');
         writeFileSync(identityFile, identity.fingerprintHash);
-        await store.updateOptions({ autoLogin: true });
+        await store.updateOptions(options);
         await store.saveAuthenticated(credential);
         assert.equal(store.snapshot().warningMessage, null);
         assert.deepEqual(JSON.parse(readFileSync(loginFile, 'utf8')).credentials, credential);
@@ -60,12 +50,12 @@ try {
         assert.equal(store.snapshot().warningMessage,null);
         assert.equal(JSON.parse(readFileSync(loginFile, 'utf8')).credentials, null);
       }
-      assert.equal(encryptionCalls, 0, 'no encryption or Keychain calls, including migration');
+      assert.equal(encryptionCalls, 0, 'no encryption or Keychain calls');
       console.log('Electron local login without Keychain and '+identity.platform+' hardware identity '+process.env.AKA_AUTH_SMOKE_PHASE+' passed');
       app.exit(0);
     }).catch(error => { console.error(error); app.exit(1); });
   `)
-  for (const phase of ['legacy', 'write', 'read']) {
+  for (const phase of ['write', 'read']) {
     const env = { ...process.env, AKA_AUTH_SMOKE_DIRECTORY: directory, AKA_AUTH_SMOKE_PHASE: phase }
     delete env.ELECTRON_RUN_AS_NODE
     const result = spawnSync(require('electron'), [join(directory, 'test.cjs')], { cwd: root, env, stdio: 'inherit', timeout: 60000 })
