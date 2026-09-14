@@ -243,7 +243,7 @@ export default function TopBar({
       async () => {
         try {
           const result = await resetDeviceLock()
-          useUiStore.getState().showAlert(deviceChangeMessage(result), result.success ? 'success' : 'error')
+          useUiStore.getState().showAlert(deviceChangeMessage(result, 'account_menu'), result.success ? 'success' : 'error')
         } catch (err: any) {
           useUiStore.getState().showAlert(err?.message || 'Đổi máy tính thất bại', 'error')
         }

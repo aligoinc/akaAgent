@@ -34,14 +34,14 @@ BEGIN
   ASSERT aka_agent_reset_device_binding_v2(username,'wrong','account_menu',request,binding,device)->>'code'='not_authorized', 'password guard';
   ASSERT aka_agent_reset_device_binding_v2(username,password,'account_menu',request,binding,other_device)->>'code'='not_authorized', 'menu device guard';
   result := aka_agent_reset_device_binding_v2(username,password,'account_menu',request,binding,device);
-  ASSERT result->>'code'='changed' AND (result->>'remainingChanges')::int=4, 'quota debit';
+  ASSERT result->>'code'='changed' AND (result->>'remainingChanges')::int=5, 'menu preserves quota';
   ASSERT (SELECT aka_agent_device_fingerprint_hash IS NULL FROM org_staff WHERE id=staff), 'v2 unbound';
   ASSERT (SELECT jsonb_build_array(device_fingerprint_hash,device_label,device_platform,device_bound_at,device_last_seen_at)=legacy FROM org_staff WHERE id=staff), 'legacy columns preserved';
   ASSERT (SELECT remember_login AND auto_login FROM auto_staff_device_login_settings WHERE staff_id=staff AND device_fingerprint_hash=repeat('a',64)), 'legacy preferences preserved';
   ASSERT (SELECT ended_at IS NULL FROM auto_staff_device_presence WHERE instance_id=instance), 'presence observational';
   UPDATE org_staff SET aka_agent_device_fingerprint_hash=repeat('c',64) WHERE id=staff;
   ASSERT aka_agent_reset_device_binding_v2(username,password,'account_menu',request,binding,device)=result, 'replay survives rebind';
-  ASSERT (SELECT aka_agent_device_fingerprint_hash=repeat('c',64) AND device_changes_remaining=4 FROM org_staff WHERE id=staff), 'replay preserves new binding and quota';
+  ASSERT (SELECT aka_agent_device_fingerprint_hash=repeat('c',64) AND device_changes_remaining=5 FROM org_staff WHERE id=staff), 'replay preserves new binding and quota';
   ASSERT aka_agent_reset_device_binding_v2(username,NULL,'login',gen_random_uuid(),binding,other_device)->>'code'='binding_conflict', 'stale snapshot';
   ASSERT (SELECT count(*)=1 FROM auto_staff_device_change_history WHERE staff_id=staff), 'one history';
   binding := aka_agent_prepare_device_change_v2(username)->'binding';
@@ -58,7 +58,7 @@ BEGIN
   ASSERT aka_agent_reset_device_binding_v2(username,NULL,'login',gen_random_uuid(),aka_agent_prepare_device_change_v2(username)->'binding',device)->>'code'='already_unbound', 'anon v2 reset contract';
   EXECUTE 'RESET ROLE';
   ASSERT md5(pg_get_functiondef('public.aka_agent_prepare_device_change(text)'::regprocedure))='4752e10a9ab45fee879d9f55d4c2817b', 'legacy prepare unchanged';
-  ASSERT md5(pg_get_functiondef('public.aka_agent_reset_device_binding(text,text,text,uuid,jsonb,jsonb)'::regprocedure))='84bf195ed63d67eb35b718b19a6fed4c', 'legacy reset unchanged';
+  ASSERT md5(pg_get_functiondef('public.aka_agent_reset_device_binding(text,text,text,uuid,jsonb,jsonb)'::regprocedure))='20528bcb292a243fd4f0166dec3cb05e', 'legacy reset includes v281 menu quota exemption';
   ASSERT md5(pg_get_functiondef('public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)'::regprocedure))='b504f4928a9dd271dec783796a7a0374', 'presence unchanged';
 END;
 $smoke$;
