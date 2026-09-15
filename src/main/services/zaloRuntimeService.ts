@@ -761,9 +761,10 @@ export class ZaloRuntimeService {
       const claim = await this.supabase.claimZaloAccountRuntimeOperation(
         entry.account.id,
         runtimeTarget,
-        false
+        false,
+        'zalo.session.warm'
       )
-      if (!claim.claimed || !claim.previousStatus) continue
+      if (!claim.claimed || !claim.previousStatus || !claim.claimToken) continue
       let verificationSucceeded = false
       try {
         if (this.warmSessionClaimsAbandoned) return
@@ -801,7 +802,9 @@ export class ZaloRuntimeService {
           await this.supabase.releaseZaloAccountRuntimeOperation(
             entry.account.id,
             runtimeTarget,
-            claim.previousStatus
+            claim.previousStatus,
+            claim.staffId,
+            claim.claimToken
           ).catch(error => {
             console.error('[ZaloRuntime] Failed to release warm-session account claim:', {
               accountId: entry.account.id,

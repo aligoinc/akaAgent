@@ -411,8 +411,8 @@ export class ZaloLocalChatSyncService {
   private readonly lastSentStatusFingerprintByAccount = new Map<number, string>()
   private readonly activeQrOperations = new Map<number, string>()
   private readonly qrLoginAccounts = new Set<number>()
-  private readonly qrClaimPreviousStatus = new Map<number, PreviousZaloAccountStatus>()
-  private readonly qrClaimReleases = new Map<number, Promise<void>>()
+  private readonly qrClaimPreviousStatus = new Map<number, { previousStatus: PreviousZaloAccountStatus; claimToken: string; staffId: number }>()
+  private readonly qrClaimReleases = new Map<string, Promise<void>>()
   private readonly commandQueues = new Map<number, Promise<void>>()
   private readonly knownGroupIdsByAccount = new Map<number, Set<string>>()
   private readonly bindingConflicts = new Map<number, BindingConflict>()
@@ -466,8 +466,9 @@ export class ZaloLocalChatSyncService {
     this.unsubscribeQr?.()
     this.unsubscribeQr = null
     for (const accountId of this.activeQrOperations.keys()) {
+      const claim = this.qrClaimPreviousStatus.get(accountId)
       void this.zaloRuntime.cancelLoginQrAndWait(accountId)
-        .finally(() => this.releaseQrClaim(accountId))
+        .then(settled => { if (settled && claim) return this.releaseQrClaim(accountId, claim) })
         .catch(error => this.logError(`stop QR ${accountId}`, error))
     }
     this.activeQrOperations.clear()
@@ -1843,9 +1844,10 @@ export class ZaloLocalChatSyncService {
     this.qrLoginAccounts.add(accountId)
     this.refreshSoon()
     this.activeQrOperations.set(accountId, command.operationId)
+    let ownedClaim: { previousStatus: PreviousZaloAccountStatus; claimToken: string; staffId: number } | undefined
     try {
-      const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, 'desktop', false)
-      if (!claim.claimed || !claim.previousStatus) {
+      const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, 'desktop', false, 'zalo.local-chat.loginQr')
+      if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
         const message = claim.reason === 'runtime_not_owner'
           ? 'Tài khoản không còn chạy bằng akaAgent local.'
           : 'Tài khoản Zalo đang thực hiện một tác vụ khác.'
@@ -1854,18 +1856,20 @@ export class ZaloLocalChatSyncService {
         this.qrLoginAccounts.delete(accountId)
         return
       }
-      this.qrClaimPreviousStatus.set(accountId, claim.previousStatus)
+      ownedClaim = { previousStatus: claim.previousStatus, claimToken: claim.claimToken, staffId: claim.staffId }
+      const completedClaim = ownedClaim
+      this.qrClaimPreviousStatus.set(accountId, ownedClaim)
       const result = await this.zaloRuntime.startLoginQr(accountId)
       if (!result.success) {
         this.sendLocalQrEvent(accountId, 'failed', { message: result.reason || 'Không thể tạo QR.' })
         this.activeQrOperations.delete(accountId)
         this.qrLoginAccounts.delete(accountId)
-        await this.releaseQrClaim(accountId)
+        if (ownedClaim) await this.releaseQrClaim(accountId, ownedClaim)
         return
       }
       this.markAccountQrLoginInProgress(accountId)
       void this.zaloRuntime.waitForLoginQrIdle(accountId)
-        .then(() => this.releaseQrClaim(accountId))
+        .then(() => this.releaseQrClaim(accountId, completedClaim))
         .then(() => {
           // Terminal QR events remove the operation before the zca-js login
           // promise settles. Reconcile only after both conditions are true.
@@ -1878,28 +1882,27 @@ export class ZaloLocalChatSyncService {
       })
       this.activeQrOperations.delete(accountId)
       this.qrLoginAccounts.delete(accountId)
-      await this.releaseQrClaim(accountId)
+      if (ownedClaim) await this.releaseQrClaim(accountId, ownedClaim)
     }
   }
 
-  private releaseQrClaim(accountId: number): Promise<void> {
-    const inFlight = this.qrClaimReleases.get(accountId)
+  private releaseQrClaim(accountId: number, expectedClaim = this.qrClaimPreviousStatus.get(accountId)): Promise<void> {
+    if (!expectedClaim || this.qrClaimPreviousStatus.get(accountId) !== expectedClaim) return Promise.resolve()
+    const inFlight = this.qrClaimReleases.get(expectedClaim.claimToken)
     if (inFlight) return inFlight
-    const previousStatus = this.qrClaimPreviousStatus.get(accountId)
-    if (!previousStatus) return Promise.resolve()
     const release = this.supabase
-      .releaseZaloAccountRuntimeOperation(accountId, 'desktop', previousStatus)
-      .then(() => {
-        if (this.qrClaimPreviousStatus.get(accountId) === previousStatus) {
+      .releaseZaloAccountRuntimeOperation(accountId, 'desktop', expectedClaim.previousStatus, expectedClaim.staffId, expectedClaim.claimToken)
+      .then(released => {
+        if (released && this.qrClaimPreviousStatus.get(accountId) === expectedClaim) {
           this.qrClaimPreviousStatus.delete(accountId)
         }
       })
       .finally(() => {
-        if (this.qrClaimReleases.get(accountId) === release) {
-          this.qrClaimReleases.delete(accountId)
+        if (this.qrClaimReleases.get(expectedClaim.claimToken) === release) {
+          this.qrClaimReleases.delete(expectedClaim.claimToken)
         }
       })
-    this.qrClaimReleases.set(accountId, release)
+    this.qrClaimReleases.set(expectedClaim.claimToken, release)
     return release
   }
 

@@ -114,9 +114,10 @@ export class SupabaseService {
   claimZaloAccountRuntimeOperation(
     id: number,
     runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
-    requiresLogin = true
+    requiresLogin = true,
+    operationName = 'zalo.operation'
   ) {
-    return accountRepo.claimZaloAccountRuntimeOperation(id, runtimeTarget, requiresLogin)
+    return accountRepo.claimZaloAccountRuntimeOperation(id, runtimeTarget, requiresLogin, operationName)
   }
   claimZaloAccountTypeChange(
     id: number,
@@ -129,9 +130,10 @@ export class SupabaseService {
     id: number,
     runtimeTarget: accountRepo.ZaloAccountRuntimeTarget,
     previousStatus: accountRepo.AccountRuntimePreviousStatus,
-    claimToken: string
+    claimToken: string,
+    staffId?: number
   ) {
-    return accountRepo.releaseZaloAccountTypeChange(id, runtimeTarget, previousStatus, claimToken)
+    return accountRepo.releaseZaloAccountTypeChange(id, runtimeTarget, previousStatus, claimToken, staffId)
   }
   releaseZaloAccountRuntimeOperation(
     id: number,

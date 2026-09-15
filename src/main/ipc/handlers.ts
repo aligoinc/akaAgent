@@ -1,3 +1,4 @@
+import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
 import { AuthEntitlements, AuthUser, IPC_EVENTS, ZaloLoginQrEvent } from '../../shared/types'
@@ -642,16 +643,18 @@ export function registerIpcHandlers(
       if (!user) return false
 
       try {
-        const [schedulerIdle, contactLoaderIdle, chatContactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle] = await Promise.all([
+        accountOperationRegistry.stop(user.staffId)
+        const [schedulerIdle, contactLoaderIdle, chatContactLoaderIdle, realtimeIdle, directOperationsIdle, accountPollerIdle, warmSessionsIdle, accountOperationsIdle] = await Promise.all([
           campaignScheduler.waitForIdle(30_000),
           contactLoader.waitForIdle(30_000),
           chatContactLoader?.waitForIdle(30_000) ?? Promise.resolve(true),
           zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
-          zaloRuntime.waitForWarmSessionsIdle(30_000)
+          zaloRuntime.waitForWarmSessionsIdle(30_000),
+          accountOperationRegistry.waitForProducers(user.staffId, 30_000)
         ])
-        if (!schedulerIdle || !contactLoaderIdle || !chatContactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle) {
+        if (!schedulerIdle || !contactLoaderIdle || !chatContactLoaderIdle || !realtimeIdle || !directOperationsIdle || !accountPollerIdle || !warmSessionsIdle || !accountOperationsIdle) {
           throw new Error('Các tiến trình automation chưa dừng hoàn toàn; recovery đã được hoãn để tránh chạy trùng.')
         }
 
@@ -676,6 +679,8 @@ export function registerIpcHandlers(
         if (!recoveredUnitLeases.ok) {
           throw new Error(`Không thể phục hồi unit lease Desktop (${recoveredUnitLeases.reason}).`)
         }
+        await accountOperationRegistry.recover(user.staffId)
+        if (reason === 'login') accountOperationRegistry.resume(user.staffId)
         campaignScheduler.clearRecoveredCampaignCleanups(user.staffId, excludeZalo ? 'non_zalo' : 'all')
         try {
           await supabase.enableDueAccountActions()
@@ -728,6 +733,7 @@ export function registerIpcHandlers(
     const user = getCurrentUser()
     if (!user) return
 
+    accountOperationRegistry.stop(user.staffId)
     await Promise.all([chatWeb.reset(), crmWeb.reset()])
 
     clearSessionExpiryTimer()
@@ -1121,6 +1127,7 @@ export function registerIpcHandlers(
 
     event.preventDefault()
     quitCleanupStarted = true
+    accountOperationRegistry.stop(user.staffId)
     void (async () => {
       try {
         await Promise.all([chatWeb.reset(), crmWeb.reset()])
@@ -1243,6 +1250,8 @@ export function registerIpcHandlers(
         await automationProcessor.start()
         crmWeb.startSession()
       } catch (error) {
+        const cleanupUser = getCurrentUser()
+        if (cleanupUser) accountOperationRegistry.stop(cleanupUser.staffId)
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
         contactLoader.stopAll()
@@ -1260,7 +1269,8 @@ export function registerIpcHandlers(
           zaloRealtimeGroupManager?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountZaloOperations?.waitForIdle(30_000) ?? Promise.resolve(true),
           accountPollerController?.waitForZaloIdle(30_000) ?? Promise.resolve(true),
-          zaloRuntime.waitForWarmSessionsIdle(30_000)
+          zaloRuntime.waitForWarmSessionsIdle(30_000),
+          cleanupUser ? accountOperationRegistry.waitForProducers(cleanupUser.staffId, 30_000) : Promise.resolve(true)
         ])
         if (cleanupIdle.some(idle => !idle)) {
           console.warn('[Recovery] login cleanup did not become fully idle before auth was cleared.')
@@ -1273,6 +1283,8 @@ export function registerIpcHandlers(
       }
     },
     beforeLogout: async () => {
+      const user = getCurrentUser()
+      if (user) accountOperationRegistry.stop(user.staffId)
       await Promise.all([chatWeb.reset(), crmWeb.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()

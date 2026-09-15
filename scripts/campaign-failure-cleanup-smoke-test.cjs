@@ -46,8 +46,8 @@ function load(relative, overrides = {}) {
   }, { filename: file })
   return exports
 }
-const cleanupModule = load('src/main/services/campaignFailureCleanup.ts')
-const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { './campaignFailureCleanup': cleanupModule })
+const cleanupModule = load('src/main/services/campaignFailureCleanup.ts', { './runtimeCleanupRetry': load('src/main/services/runtimeCleanupRetry.ts') })
+const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { './campaignFailureCleanup': cleanupModule, './accountOperationRegistry': { accountOperationRegistry: { has: () => false } } })
 const parent = '10000000-0000-4000-8000-000000000001'
 const unit = '20000000-0000-4000-8000-000000000001'
 const temporary = () => Object.assign(new Error('schema cache unavailable'), { code: 'PGRST002' })

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { accountOperationRegistry } from '../../services/accountOperationRegistry'
+import type { AccountOperationClaimResult, AccountOperationContext } from '../../services/accountOperationRegistry'
 import { AutoAccount, ZaloAccount, ZaloSessionCredentials, EmailAccountConfig } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAccountFromDB, mapZaloAccountFromDB } from '../mappers'
@@ -931,21 +933,9 @@ export interface DesktopRecoveryResult {
 export type ZaloAccountRuntimeTarget = 'desktop' | 'server'
 export type AccountRuntimePreviousStatus = 'chờ xử lý' | 'tạm dừng'
 
-export interface ZaloAccountRuntimeOperationClaim {
-  claimed: boolean
-  accountId: number
-  staffId: number
-  previousStatus: 'chờ xử lý' | 'tạm dừng' | null
-  reason: string | null
-}
-
-export interface ZaloAccountTypeChangeClaim extends ZaloAccountRuntimeOperationClaim {
-  claimToken: string | null
-}
-
-export interface NonZaloAccountRuntimeOperationClaim extends ZaloAccountRuntimeOperationClaim {
-  claimToken: string | null
-}
+export type ZaloAccountRuntimeOperationClaim = AccountOperationClaimResult
+export type ZaloAccountTypeChangeClaim = AccountOperationClaimResult
+export type NonZaloAccountRuntimeOperationClaim = AccountOperationClaimResult
 
 export interface StaffZaloRunningState {
   staffId: number
@@ -993,348 +983,136 @@ function assertRuntimePreviousStatus(
   }
 }
 
-/** Reserve a Facebook/Email account through the staff-scoped DB lock/RPC. */
-export async function claimNonZaloAccountRuntimeOperation(
+/** Claims and cleanup share one immutable token, including after a lost response. */
+async function claimAccountOperation(
   accountId: number,
-  flatformType: string,
-  previousStatus: AccountRuntimePreviousStatus,
-  requiresLogin = true
-): Promise<NonZaloAccountRuntimeOperationClaim> {
-  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'non-Zalo runtime claim')
-  const normalizedFlatformType = normalizeNonZaloRuntimePlatform(flatformType)
-  assertRuntimePreviousStatus(previousStatus)
-
+  platform: AccountOperationContext['platform'],
+  runtimeTarget: ZaloAccountRuntimeTarget,
+  requiresLogin: boolean,
+  operationName: string,
+  previousStatus?: AccountRuntimePreviousStatus,
+  operationKind: 'operation' | 'type_change' = 'operation'
+): Promise<AccountOperationClaimResult> {
+  const id = normalizeRuntimeAccountId(accountId, 'account operation')
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') throw new Error('Invalid account runtime target')
   const u = requireCurrentUser()
-  const claimToken = randomUUID()
-  const cleanupAmbiguousClaim = async (): Promise<void> => {
-    try {
-      const { error: cleanupError } = await client().rpc('release_non_zalo_account_runtime_operation', {
-        p_account_id: normalizedAccountId,
-        p_staff_id: u.staffId,
-        p_platform: normalizedFlatformType,
-        p_previous_status: previousStatus,
-        p_claim_token: claimToken
-      })
-      if (cleanupError) {
-        console.warn('Failed to clean up an ambiguous non-Zalo account claim:', cleanupError.message)
-      }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up an ambiguous non-Zalo account claim:', cleanupError)
+  const rejected = (reason: string): AccountOperationClaimResult => ({
+    claimed: false, accountId: id, staffId: u.staffId,
+    previousStatus: null, claimToken: null, reason
+  })
+  if (accountOperationRegistry.has(id)) return rejected('account_operation_pending')
+  if (previousStatus === undefined) {
+    const { data, error } = await client().from('auto_accounts').select('status')
+      .eq('id', id).eq('staff_id', u.staffId).maybeSingle()
+    if (error) throw Object.assign(new Error(error.message), { code: error.code })
+    if (!data) return rejected('account_not_found')
+    if (data.status !== 'chờ xử lý' && data.status !== 'tạm dừng') return rejected('account_not_available')
+    previousStatus = data.status === 'chờ xử lý' ? 'chờ xử lý' : 'tạm dừng'
+  }
+  assertRuntimePreviousStatus(previousStatus)
+  const context: AccountOperationContext = Object.freeze({
+    accountId: id, staffId: u.staffId, platform, runtimeTarget, previousStatus,
+    claimToken: randomUUID(), operationName
+  })
+  const identity = {
+    p_account_id: id, p_staff_id: context.staffId, p_platform: platform,
+    p_runtime_target: runtimeTarget, p_previous_status: context.previousStatus,
+    p_claim_token: context.claimToken
+  }
+  return accountOperationRegistry.claim(context, async signal => {
+    if (requireCurrentUser().staffId !== context.staffId) throw new Error('Account operation staff session changed')
+    const { data, error, status } = await client().rpc('aka_agent_claim_account_operation', {
+      ...identity, p_requires_login: requiresLogin, p_operation_kind: operationKind
+    }).abortSignal(signal)
+    if (error) throw Object.assign(new Error(error.message), { code: error.code, status })
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+    if (!row || typeof row.claimed !== 'boolean') throw new Error('Invalid account operation claim response')
+    return {
+      claimed: row.claimed, accountId: id, staffId: context.staffId,
+      previousStatus: row.previous_status === 'chờ xử lý' || row.previous_status === 'tạm dừng' ? row.previous_status : null,
+      claimToken: typeof row.claim_token === 'string' ? row.claim_token : null,
+      reason: typeof row.reason === 'string' ? row.reason : null
     }
-  }
-  const { data, error } = await (async () => {
-    try {
-      return await client().rpc('claim_non_zalo_account_runtime_operation', {
-        p_account_id: normalizedAccountId,
-        p_staff_id: u.staffId,
-        p_platform: normalizedFlatformType,
-        p_previous_status: previousStatus,
-        p_claim_token: claimToken,
-        p_requires_login: requiresLogin === true
-      })
-    } catch (claimError) {
-      await cleanupAmbiguousClaim()
-      const message = claimError instanceof Error ? claimError.message : String(claimError)
-      throw new Error(
-        `Failed to claim non-Zalo account operation atomically: ${message}. ` +
-        'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
-      )
+  }, async signal => {
+    const { data, error, status } = await client().rpc('aka_agent_cleanup_account_operation', identity).abortSignal(signal)
+    if (error) throw Object.assign(new Error(error.message), { code: error.code, status })
+    const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
+    if (!row || typeof row.ok !== 'boolean' || typeof row.reason !== 'string') {
+      throw new Error('Invalid account operation cleanup response; recovery required')
     }
-  })()
-
-  if (error) {
-    await cleanupAmbiguousClaim()
-    throw new Error(
-      `Failed to claim non-Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
-    )
-  }
-
-  const rawPayload = Array.isArray(data) ? data[0] : data
-  if (!rawPayload || typeof rawPayload !== 'object') {
-    await cleanupAmbiguousClaim()
-    throw new Error('Non-Zalo account operation claim completed without a valid result payload')
-  }
-  const payload = rawPayload as Record<string, unknown>
-  const returnedPreviousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
-    ? payload.previous_status
-    : null
-  const returnedClaimToken = typeof payload.claim_token === 'string' && payload.claim_token.trim()
-    ? payload.claim_token.trim()
-    : null
-  const claimed = payload.claimed === true
-  if (claimed && (!returnedPreviousStatus || returnedClaimToken !== claimToken)) {
-    await cleanupAmbiguousClaim()
-    throw new Error('Non-Zalo account operation claim completed without an ownership token')
-  }
-  return {
-    claimed,
-    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
-    staffId: u.staffId,
-    previousStatus: returnedPreviousStatus,
-    claimToken: claimed ? claimToken : null,
-    reason: typeof payload.reason === 'string' ? payload.reason : null
-  }
+    return { ok: row.ok, reason: row.reason }
+  })
 }
 
-/** Restore only a still-running Facebook/Email claim under the same staff lock. */
+async function releaseAccountOperation(accountId: number, claimToken: string, staffId?: number): Promise<boolean> {
+  const id = normalizeRuntimeAccountId(accountId, 'account operation cleanup')
+  const token = String(claimToken || '').trim()
+  if (!token) throw new Error('Account operation token is required for cleanup')
+  const owner = staffId === undefined ? requireCurrentUser().staffId : normalizeRecoveryStaffId(staffId)
+  const outcome = await accountOperationRegistry.release(id, token, owner)
+  return outcome === 'cleaned' || outcome === 'not_owner'
+}
+
+export async function claimNonZaloAccountRuntimeOperation(
+  accountId: number, flatformType: string, previousStatus: AccountRuntimePreviousStatus, requiresLogin = true
+): Promise<NonZaloAccountRuntimeOperationClaim> {
+  const platform = normalizeNonZaloRuntimePlatform(flatformType) as 'facebook' | 'email'
+  return claimAccountOperation(accountId, platform, 'desktop', requiresLogin, 'contacts.scan', previousStatus)
+}
+
 export async function releaseNonZaloAccountRuntimeOperation(
-  accountId: number,
-  flatformType: string,
-  previousStatus: AccountRuntimePreviousStatus,
-  claimToken: string,
-  staffId?: number
+  accountId: number, flatformType: string, previousStatus: AccountRuntimePreviousStatus,
+  claimToken: string, staffId?: number
 ): Promise<boolean> {
-  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'non-Zalo runtime release')
-  const normalizedFlatformType = normalizeNonZaloRuntimePlatform(flatformType)
+  normalizeNonZaloRuntimePlatform(flatformType)
   assertRuntimePreviousStatus(previousStatus)
-  const normalizedClaimToken = String(claimToken || '').trim()
-  if (!normalizedClaimToken) {
-    throw new Error('Non-Zalo runtime claim token is required for release')
-  }
-
-  const runtimeStaffId = staffId === undefined
-    ? requireCurrentUser().staffId
-    : normalizeRecoveryStaffId(staffId)
-  const { data, error } = await client().rpc('release_non_zalo_account_runtime_operation', {
-    p_account_id: normalizedAccountId,
-    p_staff_id: runtimeStaffId,
-    p_platform: normalizedFlatformType,
-    p_previous_status: previousStatus,
-    p_claim_token: normalizedClaimToken
-  })
-
-  if (error) {
-    throw new Error(
-      `Failed to release non-Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v184 is applied; no non-atomic fallback was attempted.'
-    )
-  }
-  return data === true
+  return releaseAccountOperation(accountId, claimToken, staffId)
 }
 
 export async function claimZaloAccountRuntimeOperation(
-  accountId: number,
-  runtimeTarget: ZaloAccountRuntimeTarget,
-  requiresLogin = true
+  accountId: number, runtimeTarget: ZaloAccountRuntimeTarget, requiresLogin = true,
+  operationName = 'zalo.operation'
 ): Promise<ZaloAccountRuntimeOperationClaim> {
-  const normalizedAccountId = Math.floor(Number(accountId))
-  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
-    throw new Error('Account ID must be a positive integer for Zalo runtime claim')
-  }
-  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
-    throw new Error('Zalo runtime target must be desktop or server')
-  }
-
-  const u = requireCurrentUser()
-  const { data, error } = await client().rpc('claim_zalo_account_runtime_operation', {
-    p_account_id: normalizedAccountId,
-    p_staff_id: u.staffId,
-    p_runtime_target: runtimeTarget,
-    p_requires_login: requiresLogin === true
-  })
-
-  if (error) {
-    throw new Error(
-      `Failed to claim Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
-    )
-  }
-
-  const rawPayload = Array.isArray(data) ? data[0] : data
-  if (!rawPayload || typeof rawPayload !== 'object') {
-    throw new Error('Zalo account operation claim completed without a valid result payload')
-  }
-  const payload = rawPayload as Record<string, unknown>
-  const previousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
-    ? payload.previous_status
-    : null
-  return {
-    claimed: payload.claimed === true,
-    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
-    staffId: u.staffId,
-    previousStatus,
-    reason: typeof payload.reason === 'string' ? payload.reason : null
-  }
+  return claimAccountOperation(accountId, 'zalo', runtimeTarget, requiresLogin, operationName)
 }
 
-/**
- * Reserve an account while changing its persisted Zalo subtype. Unlike a
- * normal runtime operation this token remains authoritative after the subtype
- * flags change, and the SQL guard also rejects any running campaign/input work.
- */
 export async function claimZaloAccountTypeChange(
-  accountId: number,
-  runtimeTarget: ZaloAccountRuntimeTarget,
-  previousStatus: AccountRuntimePreviousStatus
+  accountId: number, runtimeTarget: ZaloAccountRuntimeTarget, previousStatus: AccountRuntimePreviousStatus
 ): Promise<ZaloAccountTypeChangeClaim> {
-  return claimTokenizedZaloAccountOperation(accountId, runtimeTarget, previousStatus, false)
+  return claimAccountOperation(accountId, 'zalo', runtimeTarget, false, 'zalo.type.change', previousStatus, 'type_change')
 }
 
-/** Server scans retain their claim token until dataset finalization and release. */
 export async function claimZaloServerContactScan(
-  accountId: number,
-  previousStatus: AccountRuntimePreviousStatus
+  accountId: number, previousStatus: AccountRuntimePreviousStatus
 ): Promise<ZaloAccountTypeChangeClaim> {
-  return claimTokenizedZaloAccountOperation(accountId, 'server', previousStatus, true)
-}
-
-async function claimTokenizedZaloAccountOperation(
-  accountId: number,
-  runtimeTarget: ZaloAccountRuntimeTarget,
-  previousStatus: AccountRuntimePreviousStatus,
-  requiresLogin: boolean
-): Promise<ZaloAccountTypeChangeClaim> {
-  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'Zalo account operation')
-  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
-    throw new Error('Zalo runtime target must be desktop or server')
-  }
-  assertRuntimePreviousStatus(previousStatus)
-
-  const u = requireCurrentUser()
-  const claimToken = randomUUID()
-  const cleanupAmbiguousClaim = async (): Promise<void> => {
-    try {
-      const { error: cleanupError } = await client().rpc('release_zalo_account_runtime_operation', {
-        p_account_id: normalizedAccountId,
-        p_staff_id: u.staffId,
-        p_runtime_target: runtimeTarget,
-        p_previous_status: previousStatus,
-        p_claim_token: claimToken
-      })
-      if (cleanupError) {
-        console.warn('Failed to clean up an ambiguous Zalo account operation claim:', cleanupError.message)
-      }
-    } catch (cleanupError) {
-      console.warn('Failed to clean up an ambiguous Zalo account operation claim:', cleanupError)
-    }
-  }
-
-  const { data, error } = await (async () => {
-    try {
-      return await client().rpc('claim_zalo_account_runtime_operation', {
-        p_account_id: normalizedAccountId,
-        p_staff_id: u.staffId,
-        p_runtime_target: runtimeTarget,
-        p_previous_status: previousStatus,
-        p_claim_token: claimToken,
-        p_requires_login: requiresLogin
-      })
-    } catch (claimError) {
-      await cleanupAmbiguousClaim()
-      const message = claimError instanceof Error ? claimError.message : String(claimError)
-      throw new Error(
-        `Failed to claim Zalo account operation atomically: ${message}. ` +
-        'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
-      )
-    }
-  })()
-
-  if (error) {
-    await cleanupAmbiguousClaim()
-    throw new Error(
-      `Failed to claim Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
-    )
-  }
-
-  const rawPayload = Array.isArray(data) ? data[0] : data
-  if (!rawPayload || typeof rawPayload !== 'object') {
-    await cleanupAmbiguousClaim()
-    throw new Error('Zalo account operation claim completed without a valid result payload')
-  }
-  const payload = rawPayload as Record<string, unknown>
-  const returnedPreviousStatus = payload.previous_status === 'chờ xử lý' || payload.previous_status === 'tạm dừng'
-    ? payload.previous_status
-    : null
-  const returnedClaimToken = typeof payload.claim_token === 'string' && payload.claim_token.trim()
-    ? payload.claim_token.trim()
-    : null
-  const claimed = payload.claimed === true
-  if (claimed && (returnedPreviousStatus !== previousStatus || returnedClaimToken !== claimToken)) {
-    await cleanupAmbiguousClaim()
-    throw new Error('Zalo account operation claim completed without the expected ownership token')
-  }
-
-  return {
-    claimed,
-    accountId: normalizeRecoveryCount(payload.account_id ?? normalizedAccountId),
-    staffId: u.staffId,
-    previousStatus: returnedPreviousStatus,
-    claimToken: claimed ? claimToken : null,
-    reason: typeof payload.reason === 'string' ? payload.reason : null
-  }
+  return claimAccountOperation(accountId, 'zalo', 'server', true, 'contacts.scan', previousStatus)
 }
 
 export async function releaseZaloAccountTypeChange(
-  accountId: number,
-  runtimeTarget: ZaloAccountRuntimeTarget,
-  previousStatus: AccountRuntimePreviousStatus,
-  claimToken: string
+  accountId: number, runtimeTarget: ZaloAccountRuntimeTarget,
+  previousStatus: AccountRuntimePreviousStatus, claimToken: string, staffId?: number
 ): Promise<boolean> {
-  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'Zalo account type-change release')
-  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
-    throw new Error('Zalo runtime target must be desktop or server')
-  }
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') throw new Error('Invalid account runtime target')
   assertRuntimePreviousStatus(previousStatus)
-  const normalizedClaimToken = String(claimToken || '').trim()
-  if (!normalizedClaimToken) throw new Error('Zalo account type-change claim token is required for release')
-
-  const u = requireCurrentUser()
-  const { data, error } = await client().rpc('release_zalo_account_runtime_operation', {
-    p_account_id: normalizedAccountId,
-    p_staff_id: u.staffId,
-    p_runtime_target: runtimeTarget,
-    p_previous_status: previousStatus,
-    p_claim_token: normalizedClaimToken
-  })
-  if (error) {
-    throw new Error(
-      `Failed to release Zalo account type change atomically: ${error.message}. ` +
-      'Ensure migration v219 is applied; no non-atomic fallback was attempted.'
-    )
-  }
-  return data === true
+  return releaseAccountOperation(accountId, claimToken, staffId)
 }
 
 export async function releaseZaloAccountRuntimeOperation(
-  accountId: number,
-  runtimeTarget: ZaloAccountRuntimeTarget,
-  previousStatus: 'chờ xử lý' | 'tạm dừng',
-  staffId?: number,
-  claimToken?: string
+  accountId: number, runtimeTarget: ZaloAccountRuntimeTarget,
+  previousStatus: AccountRuntimePreviousStatus, staffId?: number, claimToken?: string
 ): Promise<boolean> {
-  const normalizedAccountId = Math.floor(Number(accountId))
-  if (!Number.isSafeInteger(normalizedAccountId) || normalizedAccountId <= 0) {
-    throw new Error('Account ID must be a positive integer for Zalo runtime release')
-  }
-  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') {
-    throw new Error('Zalo runtime target must be desktop or server')
-  }
-  if (previousStatus !== 'chờ xử lý' && previousStatus !== 'tạm dừng') {
-    throw new Error('Previous Zalo account status is invalid')
-  }
-
-  const runtimeStaffId = staffId === undefined
-    ? requireCurrentUser().staffId
-    : normalizeRecoveryStaffId(staffId)
-  if (claimToken !== undefined && !claimToken.trim()) {
-    throw new Error('Zalo runtime claim token must not be empty for release')
-  }
+  if (claimToken !== undefined) return releaseAccountOperation(accountId, claimToken, staffId)
+  // Only the normal campaign scheduler still uses its existing non-operation
+  // release contract. Account-only operations always supply their own token.
+  const normalizedAccountId = normalizeRuntimeAccountId(accountId, 'Zalo runtime release')
+  if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') throw new Error('Invalid account runtime target')
+  assertRuntimePreviousStatus(previousStatus)
+  const runtimeStaffId = staffId === undefined ? requireCurrentUser().staffId : normalizeRecoveryStaffId(staffId)
   const { data, error } = await client().rpc('release_zalo_account_runtime_operation', {
-    p_account_id: normalizedAccountId,
-    p_staff_id: runtimeStaffId,
-    p_runtime_target: runtimeTarget,
-    p_previous_status: previousStatus,
-    ...(claimToken ? { p_claim_token: claimToken } : {})
+    p_account_id: normalizedAccountId, p_staff_id: runtimeStaffId,
+    p_runtime_target: runtimeTarget, p_previous_status: previousStatus
   })
-
-  if (error) {
-    throw new Error(
-      `Failed to release Zalo account operation atomically: ${error.message}. ` +
-      'Ensure migration v171 is applied; no non-atomic fallback was attempted.'
-    )
-  }
+  if (error) throw new Error(`Failed to release Zalo account operation atomically: ${error.message}. Ensure migration v171 is applied; no non-atomic fallback was attempted.`)
   return data === true
 }
 

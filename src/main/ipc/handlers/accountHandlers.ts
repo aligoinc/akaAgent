@@ -85,8 +85,9 @@ export function registerAccountHandlers(
   zaloLocalChatSync?: ZaloRealtimeRefreshController
 ): AccountZaloOperationController {
   type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
-  const localQrClaims = new Map<number, PreviousZaloAccountStatus>()
-  const localQrReleasePromises = new Map<number, Promise<void>>()
+  type LocalZaloClaim = { previousStatus: PreviousZaloAccountStatus; claimToken: string; staffId: number }
+  const localQrClaims = new Map<number, LocalZaloClaim>()
+  const localQrReleasePromises = new Map<string, Promise<void>>()
   const activeLocalOperations = new Set<Promise<unknown>>()
   let runtimeClaimsAbandoned = false
 
@@ -118,29 +119,33 @@ export function registerAccountHandlers(
 
   const claimLocalZaloOperation = async (
     accountId: number,
-    requiresLogin: boolean
-  ): Promise<PreviousZaloAccountStatus> => {
+    requiresLogin: boolean,
+    operationName = 'zalo.local.operation'
+  ): Promise<LocalZaloClaim> => {
     if (runtimeClaimsAbandoned) {
       throw new Error('Runtime Zalo của phiên cũ đang đóng. Vui lòng mở lại ứng dụng.')
     }
-    const claim = await supabase.claimZaloAccountRuntimeOperation(accountId, 'desktop', requiresLogin)
-    if (!claim.claimed || !claim.previousStatus) {
+    const claim = await supabase.claimZaloAccountRuntimeOperation(accountId, 'desktop', requiresLogin, operationName)
+    if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
       const message = claim.reason === 'runtime_not_owner'
         ? 'Chế độ chạy Zalo đã thay đổi. Vui lòng tắt và mở lại ứng dụng.'
         : 'Tài khoản Zalo đang thực hiện một tác vụ khác.'
       throw new Error(message)
     }
     try { mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
-    return claim.previousStatus
+    return { previousStatus: claim.previousStatus, claimToken: claim.claimToken, staffId: claim.staffId }
   }
 
   const releaseLocalZaloOperation = async (
     accountId: number,
-    previousStatus: PreviousZaloAccountStatus
+    claim: LocalZaloClaim
   ): Promise<boolean> => {
     if (runtimeClaimsAbandoned) return true
     try {
-      await supabase.releaseZaloAccountRuntimeOperation(accountId, 'desktop', previousStatus)
+      const released = await supabase.releaseZaloAccountRuntimeOperation(
+        accountId, 'desktop', claim.previousStatus, claim.staffId, claim.claimToken
+      )
+      if (!released) return false
       try { mainWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
       return true
     } catch (error) {
@@ -152,13 +157,14 @@ export function registerAccountHandlers(
   const runClaimedLocalZaloOperation = async <T>(
     accountId: number,
     requiresLogin: boolean,
-    operation: () => Promise<T>
+    operation: () => Promise<T>,
+    operationName: string
   ): Promise<T> => trackLocalOperation((async () => {
-    const previousStatus = await claimLocalZaloOperation(accountId, requiresLogin)
+    const claim = await claimLocalZaloOperation(accountId, requiresLogin, operationName)
     try {
       return await operation()
     } finally {
-      await releaseLocalZaloOperation(accountId, previousStatus)
+      await releaseLocalZaloOperation(accountId, claim)
     }
   })())
 
@@ -178,22 +184,20 @@ export function registerAccountHandlers(
     return labels
   }
 
-  const releaseLocalQrClaim = (accountId: number): Promise<void> => {
-    const existingRelease = localQrReleasePromises.get(accountId)
+  const releaseLocalQrClaim = (accountId: number, expectedClaim = localQrClaims.get(accountId)): Promise<void> => {
+    if (!expectedClaim || localQrClaims.get(accountId) !== expectedClaim) return Promise.resolve()
+    const existingRelease = localQrReleasePromises.get(expectedClaim.claimToken)
     if (existingRelease) return existingRelease
-    const previousStatus = localQrClaims.get(accountId)
-    if (!previousStatus) return Promise.resolve()
-
     const release = (async () => {
-      const releaseCompleted = await releaseLocalZaloOperation(accountId, previousStatus)
-      if (releaseCompleted && localQrClaims.get(accountId) === previousStatus) {
+      const releaseCompleted = await releaseLocalZaloOperation(accountId, expectedClaim)
+      if (releaseCompleted && localQrClaims.get(accountId) === expectedClaim) {
         localQrClaims.delete(accountId)
       }
     })()
-    localQrReleasePromises.set(accountId, release)
+    localQrReleasePromises.set(expectedClaim.claimToken, release)
     void release.finally(() => {
-      if (localQrReleasePromises.get(accountId) === release) {
-        localQrReleasePromises.delete(accountId)
+      if (localQrReleasePromises.get(expectedClaim.claimToken) === release) {
+        localQrReleasePromises.delete(expectedClaim.claimToken)
       }
     }).catch(() => {})
     return release
@@ -284,6 +288,7 @@ export function registerAccountHandlers(
     let zaloTypeChangePreviousStatus: PreviousZaloAccountStatus | undefined
     let zaloTypeChangeRuntimeTarget: ZaloAccountRuntimeTarget | undefined
     let zaloTypeChangeClaimToken: string | undefined
+    let zaloTypeChangeStaffId: number | undefined
     if (changesZaloType) {
       if (existing.status !== 'chờ xử lý' && existing.status !== 'tạm dừng') {
         throw new Error('Không thể đổi loại tài khoản Zalo khi tài khoản đang chạy.')
@@ -313,6 +318,7 @@ export function registerAccountHandlers(
       }
       zaloTypeChangePreviousStatus = claim.previousStatus
       zaloTypeChangeClaimToken = claim.claimToken
+      zaloTypeChangeStaffId = claim.staffId
       sendAccountStatusUpdated(mainWindow)
     }
 
@@ -341,7 +347,8 @@ export function registerAccountHandlers(
           id,
           zaloTypeChangeRuntimeTarget,
           zaloTypeChangePreviousStatus,
-          zaloTypeChangeClaimToken
+          zaloTypeChangeClaimToken,
+          zaloTypeChangeStaffId
         )
         if (!released) {
           throw new Error('Không thể hoàn tất đổi loại tài khoản Zalo. Vui lòng tải lại danh sách tài khoản.')
@@ -382,7 +389,8 @@ export function registerAccountHandlers(
           id,
           zaloTypeChangeRuntimeTarget,
           zaloTypeChangePreviousStatus,
-          zaloTypeChangeClaimToken
+          zaloTypeChangeClaimToken,
+          zaloTypeChangeStaffId
         ).catch(releaseError => {
           console.error('[ZaloRuntime] Failed to release account type-change claim:', {
             accountId: id,
@@ -498,18 +506,18 @@ export function registerAccountHandlers(
     }
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
     return trackLocalOperation((async () => {
-      const previousStatus = await claimLocalZaloOperation(accountId, false)
+      const claim = await claimLocalZaloOperation(accountId, false, 'zalo.loginQr.start')
       try {
         const result = await zaloRuntime.startLoginQr(accountId)
         if (!result.success) {
-          await releaseLocalZaloOperation(accountId, previousStatus)
+          await releaseLocalZaloOperation(accountId, claim)
           return result
         }
 
-        localQrClaims.set(accountId, previousStatus)
+        localQrClaims.set(accountId, claim)
         trackLocalOperation(
           zaloRuntime.waitForLoginQrIdle(accountId)
-            .finally(() => releaseLocalQrClaim(accountId))
+            .finally(() => releaseLocalQrClaim(accountId, claim))
         ).catch(error => {
           console.error(`[ZaloRuntime] QR completion failed for account ${accountId}:`, error)
         })
@@ -517,9 +525,9 @@ export function registerAccountHandlers(
       } catch (error) {
         const qrSettled = await zaloRuntime.cancelLoginQrAndWait(accountId).catch(() => false)
         if (qrSettled) {
-          await releaseLocalZaloOperation(accountId, previousStatus)
+          await releaseLocalZaloOperation(accountId, claim)
         } else {
-          localQrClaims.set(accountId, previousStatus)
+          localQrClaims.set(accountId, claim)
         }
         throw error
       }
@@ -540,11 +548,12 @@ export function registerAccountHandlers(
     }
     if (!zaloRuntime) return { success: false, accountId, reason: 'Zalo runtime chưa sẵn sàng' }
     return trackLocalOperation((async () => {
+      const claim = localQrClaims.get(accountId)
       const qrSettled = await zaloRuntime.cancelLoginQrAndWait(accountId)
       if (!qrSettled) {
         return { success: false, accountId, reason: 'QR chưa dừng an toàn. Vui lòng thử lại sau.' }
       }
-      await releaseLocalQrClaim(accountId)
+      if (claim) await releaseLocalQrClaim(accountId, claim)
       return { success: true, accountId }
     })())
   })
@@ -560,7 +569,7 @@ export function registerAccountHandlers(
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId))
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId), 'zalo.session.check')
     sendAccountStatusUpdated(mainWindow)
     zaloRealtimeRefresh?.refreshSoon('zalo-check-session')
     return result
@@ -579,7 +588,7 @@ export function registerAccountHandlers(
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId))
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId), 'zalo.logout')
     sendAccountStatusUpdated(mainWindow)
     zaloRealtimeRefresh?.refreshSoon('zalo-logout')
     return result
@@ -607,7 +616,7 @@ export function registerAccountHandlers(
     if (!zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     return runClaimedLocalZaloOperation(accountId, true, () => (
       syncAndPersistZaloLabels(accountId, () => zaloRuntime.listLabels(accountId))
-    ))
+    ), 'zalo.labels.sync')
   })
 
   ipcMain.handle(IPC_EVENTS.EMAIL_GET_CONFIG, async (_, accountId: number) => {
@@ -714,7 +723,7 @@ export function registerAccountHandlers(
     if (!zaloRuntime) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId))
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId), 'zalo.session.check')
     sendAccountStatusUpdated(mainWindow)
     return {
       loggedIn: result.loggedIn,
@@ -728,7 +737,7 @@ export function registerAccountHandlers(
     const account = await requireZaloAccount(accountId)
     if (!account.isZaloShowWeb) return { success: false, reason: 'Tài khoản Zalo này không dùng trình duyệt' }
     if (!zaloRuntime) return { success: false, reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId))
+    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.logout(accountId), 'zalo.logout')
     sendAccountStatusUpdated(mainWindow)
     return { success: result.success, reason: result.reason || 'Đã đăng xuất Zalo Web' }
   })
@@ -737,7 +746,7 @@ export function registerAccountHandlers(
     async stopAll(): Promise<boolean> {
       const qrSettled = await zaloRuntime?.cancelAllLoginQrAndWait() ?? true
       if (qrSettled) {
-        await Promise.allSettled(Array.from(localQrClaims.keys()).map(releaseLocalQrClaim))
+        await Promise.allSettled(Array.from(localQrClaims.entries()).map(([id, claim]) => releaseLocalQrClaim(id, claim)))
       }
       return qrSettled
     },

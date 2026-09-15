@@ -1,3 +1,4 @@
+import { accountOperationRegistry } from './accountOperationRegistry'
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
 import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
 import { BrowserWindow } from 'electron'
@@ -691,7 +692,7 @@ export class CampaignScheduler {
   private wakeRequested = false
   private activeAccountRuns = new Set<number>()
   private activeZaloAccountRuns = new Set<number>()
-  private externalAccountRuns = new Set<number>()
+  private externalAccountRuns = new Map<number, string>()
   private activeV2Aborts = new Map<number, AbortController>()
   private activeZaloCampaignRuns = new Set<number>()
   private claimedServerZaloCampaignIds = new Set<number>()
@@ -1082,14 +1083,14 @@ export class CampaignScheduler {
     return true
   }
 
-  tryReserveExternalAccount(accountId: number): boolean {
-    if (this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)) return false
-    this.externalAccountRuns.add(accountId)
+  tryReserveExternalAccount(accountId: number, reservationToken = randomUUID()): boolean {
+    if (accountOperationRegistry.has(accountId) || this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)) return false
+    this.externalAccountRuns.set(accountId, reservationToken)
     return true
   }
 
-  releaseExternalAccount(accountId: number): void {
-    this.externalAccountRuns.delete(accountId)
+  releaseExternalAccount(accountId: number, reservationToken: string): void {
+    if (this.externalAccountRuns.get(accountId) === reservationToken) this.externalAccountRuns.delete(accountId)
   }
 
   async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
@@ -1408,7 +1409,7 @@ export class CampaignScheduler {
         }
         if (!this.running) break
 
-        if (this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
+        if (accountOperationRegistry.has(account.id) || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
           continue
         }
 
@@ -1426,7 +1427,7 @@ export class CampaignScheduler {
           continue
         }
 
-        if (this.externalAccountRuns.has(account.id)) continue
+        if (accountOperationRegistry.has(account.id) || this.externalAccountRuns.has(account.id)) continue
         this.startAccountCampaignQueue(account, campaigns)
       }
 
@@ -1457,7 +1458,7 @@ export class CampaignScheduler {
   }
 
   private startAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): void {
-    if (this.activeAccountRuns.has(account.id) || this.hasFailedAccountRun(account.id)) return
+    if (accountOperationRegistry.has(account.id) || this.activeAccountRuns.has(account.id) || this.hasFailedAccountRun(account.id)) return
     this.activeAccountRuns.add(account.id)
     const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloAccount) this.activeZaloAccountRuns.add(account.id)

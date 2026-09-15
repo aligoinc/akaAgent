@@ -21,7 +21,7 @@ function loadSource(relativePath) {
     if (id.endsWith('/workflowEngine')) return { WorkflowEngineV2: class {} }
     if (!id.startsWith('.')) return require(id)
     const path = resolve(dirname(filename), `${id}.ts`)
-    if (path.includes('/shared/') || path.endsWith('/currentUser.ts') || path.endsWith('/mappers.ts')) return loadSource(path)
+    if (path.includes('/shared/') || ['/currentUser.ts', '/mappers.ts', '/accountOperationRegistry.ts', '/runtimeCleanupRetry.ts'].some(suffix => path.endsWith(suffix))) return loadSource(path)
     return {}
   }
   new Function('require', 'module', 'exports', compiled)(localRequire, module, module.exports)
@@ -38,27 +38,29 @@ const token = 'aa000000-0000-4000-8000-000000000001'
 function fixture(options = {}) {
   const steps = [], calls = [], datasets = []
   let heldToken = null, loader, saved = 0
-  db = { rpc: async (name, params) => {
+  const rpc = async (name, params) => {
     calls.push({ name, params })
     assert.equal(params.p_staff_id, user.staffId)
-    if (name === 'claim_zalo_account_runtime_operation') {
+    if (name === 'aka_agent_claim_account_operation') {
       steps.push('claim')
       if (options.claimDenied) return { data: { claimed: false, reason: 'runtime_not_owner' }, error: null }
-      heldToken = params.p_claim_token || null
+      heldToken = params.p_claim_token
       if (options.server !== false) {
         assert.equal(params.p_runtime_target, 'server')
         assert.equal(params.p_requires_login, true)
         assert.equal(params.p_previous_status, 'tạm dừng')
         assert.ok(heldToken)
-      } else assert.equal(heldToken, null)
+      }
+      assert.ok(heldToken)
       return { data: { claimed: true, account_id: 71, previous_status: 'tạm dừng', claim_token: heldToken }, error: null }
     }
-    if (name === 'release_zalo_account_runtime_operation') {
+    if (name === 'aka_agent_cleanup_account_operation') {
+      if (!heldToken) return { data: { ok: true, reason: 'not_owner' }, error: null }
       steps.push('release')
       assert.equal(params.p_previous_status, 'tạm dừng')
-      if (options.server !== false) assert.equal(params.p_claim_token, heldToken)
+      assert.equal(params.p_claim_token, heldToken)
       heldToken = null
-      return { data: true, error: null }
+      return { data: { ok: true, reason: 'cleaned' }, error: null }
     }
     assert.equal(params.p_organization_id, user.organizationId)
     if (name === 'aka_agent_finalize_zalo_server_contact_dataset') {
@@ -75,7 +77,11 @@ function fixture(options = {}) {
     datasets.push(params)
     if (options.finalizeError) return { data: null, error: { message: 'server_contact_dataset_claim_invalid' } }
     return { data: options.empty ? [] : [{ id: 19, contact_count: saved }], error: null }
-  } }
+  }
+  db = {
+    from: () => ({ select() { return this }, eq() { return this }, maybeSingle: async () => ({ data: { status: 'tạm dừng' }, error: null }) }),
+    rpc(name, params) { const promise = rpc(name, params); promise.abortSignal = () => promise; return promise }
+  }
   const service = {
     getAccount: async () => ({ ...account, isZaloServer: options.server !== false || options.chat === true }),
     claimZaloServerContactScan: accounts.claimZaloServerContactScan,
@@ -169,9 +175,14 @@ async function main() {
     assert.deepEqual(seen[0].p_contact_uids, ['member-1', 'member-2'])
   })
   await check('Subtype-change claim still permits inactive accounts without requiring login', async () => {
-    db = { rpc: async (name, p) => { assert.equal(p.p_requires_login, false); return { data: { claimed: true, account_id: 71, previous_status: 'tạm dừng', claim_token: p.p_claim_token }, error: null } } }
+    db = { rpc: (name, p) => ({ abortSignal: async () => {
+      if (name === 'aka_agent_cleanup_account_operation') return { data: { ok: true, reason: 'cleaned' }, error: null }
+      assert.equal(p.p_requires_login, false); assert.equal(p.p_operation_kind, 'type_change')
+      return { data: { claimed: true, account_id: 71, previous_status: 'tạm dừng', claim_token: p.p_claim_token }, error: null }
+    } }) }
     const claim = await auth.runWithCurrentUser(user, () => accounts.claimZaloAccountTypeChange(71, 'server', 'tạm dừng'))
     assert.equal(claim.claimed, true)
+    await auth.runWithCurrentUser(user, () => accounts.releaseZaloAccountTypeChange(71, 'server', 'tạm dừng', claim.claimToken))
   })
   console.log(`${passed} Zalo Server contact dataset checks passed`)
 }

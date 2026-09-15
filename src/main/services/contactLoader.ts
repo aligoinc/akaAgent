@@ -29,7 +29,6 @@ interface AccountRuntimeScanClaim {
   claimToken: string | null
   staffId: number | null
 }
-const ACCOUNT_RELEASE_RETRY_DELAYS_MS = [500, 1500] as const
 
 interface ContactLoadOptions {
   workflowName?: string
@@ -2783,8 +2782,8 @@ export class ContactLoader {
     if (this.zaloRuntimeClaimsAbandoned) {
       throw new Error('Runtime Zalo của phiên cũ đang đóng. Vui lòng mở lại ứng dụng.')
     }
-    const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.zaloRuntimeTarget)
-    if (!claim.claimed || !claim.previousStatus) {
+    const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.zaloRuntimeTarget, true, 'contacts.scan')
+    if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
       const reason = claim.reason === 'runtime_not_owner'
         ? 'Chế độ chạy Zalo vừa thay đổi. Vui lòng chờ runtime mới sẵn sàng rồi thử lại.'
         : 'Tài khoản đang chạy chiến dịch hoặc tác vụ khác.'
@@ -2793,7 +2792,7 @@ export class ContactLoader {
     this.broadcastAccountStatusUpdated()
     return {
       previousStatus: claim.previousStatus,
-      claimToken: null,
+      claimToken: claim.claimToken,
       staffId: claim.staffId
     }
   }
@@ -2804,7 +2803,7 @@ export class ContactLoader {
   ): Promise<void> {
     const isZalo = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZalo && this.zaloRuntimeClaimsAbandoned) return
-    if ((!isZalo || this.contactDatasetAuth === 'server_claim') && !claim.claimToken) {
+    if (!claim.claimToken) {
       console.error('Failed to restore account after contact scan: missing runtime claim token')
       return
     }
@@ -2813,34 +2812,16 @@ export class ContactLoader {
       return
     }
 
-    const retryDelays = claim.claimToken ? ACCOUNT_RELEASE_RETRY_DELAYS_MS : []
-    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
-      try {
-        const released = isZalo
-          ? await this.supabase.releaseZaloAccountRuntimeOperation(
-            account.id,
-            this.zaloRuntimeTarget,
-            claim.previousStatus,
-            claim.staffId,
-            claim.claimToken || undefined
-          )
-          : await this.supabase.releaseNonZaloAccountRuntimeOperation(
-            account.id,
-            account.flatformType,
-            claim.previousStatus,
-            claim.claimToken!,
-            claim.staffId
-          )
-        if (released) this.broadcastAccountStatusUpdated()
-        return
-      } catch (err) {
-        if (attempt >= retryDelays.length) {
-          console.error('Failed to restore account after contact scan:', err)
-          return
-        }
-        await this.sleep(retryDelays[attempt])
-      }
-    }
+    // The shared registry owns retries and retains the hold after an uncertain
+    // cleanup. This caller must not start a second finite retry loop.
+    const released = isZalo
+      ? await this.supabase.releaseZaloAccountRuntimeOperation(
+        account.id, this.zaloRuntimeTarget, claim.previousStatus, claim.staffId, claim.claimToken
+      )
+      : await this.supabase.releaseNonZaloAccountRuntimeOperation(
+        account.id, account.flatformType, claim.previousStatus, claim.claimToken, claim.staffId
+      )
+    if (released) this.broadcastAccountStatusUpdated()
   }
 
   private selectAutomationBrowser(accountId: number): void {

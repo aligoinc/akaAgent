@@ -144,15 +144,15 @@ async function checkZaloApiAccounts(
     }
 
     try {
-      const claim = await accountRepo.claimZaloAccountRuntimeOperation(account.id, 'desktop', true)
-      if (!claim.claimed || !claim.previousStatus) continue
+      const claim = await accountRepo.claimZaloAccountRuntimeOperation(account.id, 'desktop', true, 'zalo.session.poll')
+      if (!claim.claimed || !claim.previousStatus || !claim.claimToken) continue
       let result: Awaited<ReturnType<ZaloRuntimeService['checkSession']>>
       try {
         if (!canContinue()) continue
         result = await zaloRuntime.checkSession(account.id)
       } finally {
         if (canReleaseClaim()) {
-          await accountRepo.releaseZaloAccountRuntimeOperation(account.id, 'desktop', claim.previousStatus)
+          await accountRepo.releaseZaloAccountRuntimeOperation(account.id, 'desktop', claim.previousStatus, claim.staffId, claim.claimToken)
         }
       }
       const newStatus = result.account?.loginStatus || result.status
