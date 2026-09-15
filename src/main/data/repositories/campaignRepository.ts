@@ -1155,6 +1155,32 @@ async function attachCampaignSecondaryAccountNames<T extends {
   })
 }
 
+/** Small tenant-scoped access check for the external campaign-support agent. */
+export async function requireCampaignSupportAccess(id: number, staffId: number, organizationId: number): Promise<void> {
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select(`id, action_id, ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`)
+    .eq('id', id)
+    .eq('staff_id', staffId)
+    .eq('organization_id', organizationId)
+    .eq('is_delete', false)
+    .maybeSingle()
+  if (error) throw new Error('Không kiểm tra được quyền truy cập chiến dịch. Vui lòng thử lại.')
+  if (!data) throw new Error('Không tìm thấy chiến dịch hoặc bạn không có quyền truy cập.')
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const capabilities = loadCurrentUserZaloAccountCapabilities()
+  // Campaigns have no flatform_type column; platform/subtype belong to the primary account.
+  const account = data.primary_account as unknown as {
+    flatform_type?: string; is_zalo_show_web?: boolean; is_zalo_server?: boolean
+  } | null
+  const platform = String(account?.flatform_type || '').trim().toLowerCase()
+  const visibleSubtype = platform !== 'zalo' || (account?.is_zalo_show_web === true ? capabilities.web
+    : account?.is_zalo_server === true ? capabilities.server : capabilities.qr)
+  if (!visibleSubtype || !canUseCampaignActionWithEntitlements(data.action_id, platform, entitlements)) {
+    throw new Error('Bạn không có quyền truy cập chiến dịch này.')
+  }
+}
+
 export async function getCampaign(id: number): Promise<Campaign | null> {
   const u = requireCurrentUser()
   const { data, error } = await client()

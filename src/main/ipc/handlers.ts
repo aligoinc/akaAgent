@@ -33,6 +33,7 @@ import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
+import { registerCampaignSupportHandlers } from './handlers/campaignSupportHandlers'
 import { registerAkaBizIntegrationHandlers } from './handlers/akaBizIntegrationHandlers'
 import { registerCampaignImportHandlers } from './handlers/campaignImportHandlers'
 import { registerContentTemplateHandlers } from './handlers/contentTemplateHandlers'
@@ -144,6 +145,7 @@ export function registerIpcHandlers(
 ): void {
   const chatWeb = registerChatWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
+  const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -733,6 +735,8 @@ export function registerIpcHandlers(
     const user = getCurrentUser()
     if (!user) return
 
+    campaignSupport.stop()
+
     accountOperationRegistry.stop(user.staffId)
     await Promise.all([chatWeb.reset(), crmWeb.reset()])
 
@@ -1111,6 +1115,7 @@ export function registerIpcHandlers(
   let quitCleanupStarted = false
   let quitCleanupCompleted = false
   app.on('before-quit', (event) => {
+    campaignSupport.stop()
     if (quitCleanupCompleted) return
     if (quitCleanupStarted) {
       event.preventDefault()
@@ -1249,6 +1254,7 @@ export function registerIpcHandlers(
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
         crmWeb.startSession()
+        campaignSupport.startSession()
       } catch (error) {
         const cleanupUser = getCurrentUser()
         if (cleanupUser) accountOperationRegistry.stop(cleanupUser.staffId)
@@ -1283,6 +1289,7 @@ export function registerIpcHandlers(
       }
     },
     beforeLogout: async () => {
+      campaignSupport.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)
       await Promise.all([chatWeb.reset(), crmWeb.reset()])
