@@ -211,15 +211,20 @@ export class ZaloRealtimeGroupCampaignManager {
     const generation = this.generation
     const listenerSetup = (async () => {
       let previousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
+      let claimToken: string | null = null
+      let claimStaffId: number | undefined
       try {
         if (this.zaloRuntimeClaimsAbandoned) return
         const claim = await this.supabase.claimZaloAccountRuntimeOperation(
           accountId,
           this.runtimeTarget,
-          true
+          true,
+          'zalo.listener.start'
         )
-        if (!claim.claimed || !claim.previousStatus) return
+        if (!claim.claimed || !claim.previousStatus || !claim.claimToken) return
         previousStatus = claim.previousStatus
+        claimToken = claim.claimToken
+        claimStaffId = claim.staffId
         if (!this.isActiveGeneration(generation)) return
         await this.zaloRuntime.ensureRealtimeListenerReady(accountId)
         if (!this.isActiveGeneration(generation)) return
@@ -232,11 +237,11 @@ export class ZaloRealtimeGroupCampaignManager {
         })
         if (this.isActiveGeneration(generation)) this.scheduleSessionCheck(accountId)
       } finally {
-        if (previousStatus && !this.zaloRuntimeClaimsAbandoned) {
+        if (previousStatus && claimToken && !this.zaloRuntimeClaimsAbandoned) {
           await this.supabase.releaseZaloAccountRuntimeOperation(
             accountId,
             this.runtimeTarget,
-            previousStatus
+            previousStatus, claimStaffId, claimToken
           ).catch(err => {
             console.warn('[ZaloRealtimeGroupCampaignManager] Failed to release listener claim', {
               accountId,
@@ -287,11 +292,15 @@ export class ZaloRealtimeGroupCampaignManager {
   private async verifySessionAfterListenerFailure(accountId: number, generation: number): Promise<void> {
     if (!this.isActiveGeneration(generation)) return
     let previousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
+    let claimToken: string | null = null
+    let claimStaffId: number | undefined
     try {
       if (this.zaloRuntimeClaimsAbandoned) return
-      const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.runtimeTarget, true)
-      if (!claim.claimed || !claim.previousStatus) return
+      const claim = await this.supabase.claimZaloAccountRuntimeOperation(accountId, this.runtimeTarget, true, 'zalo.listener.check-session')
+      if (!claim.claimed || !claim.previousStatus || !claim.claimToken) return
       previousStatus = claim.previousStatus
+      claimToken = claim.claimToken
+      claimStaffId = claim.staffId
       if (!this.isActiveGeneration(generation)) return
       const result = await this.zaloRuntime.checkSession(accountId)
       if (!this.isActiveGeneration(generation)) return
@@ -308,11 +317,11 @@ export class ZaloRealtimeGroupCampaignManager {
         message: this.getErrorMessage(err)
       })
     } finally {
-      if (previousStatus && !this.zaloRuntimeClaimsAbandoned) {
+      if (previousStatus && claimToken && !this.zaloRuntimeClaimsAbandoned) {
         await this.supabase.releaseZaloAccountRuntimeOperation(
           accountId,
           this.runtimeTarget,
-          previousStatus
+          previousStatus, claimStaffId, claimToken
         ).catch(err => {
           console.warn('[ZaloRealtimeGroupCampaignManager] Failed to release session-check claim', {
             accountId,

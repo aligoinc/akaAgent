@@ -1,3 +1,4 @@
+import { accountOperationRegistry } from '../../main/services/accountOperationRegistry'
 import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { IPC_EVENTS, type AuthUser, type AutoAccountContact, type CampaignSummaryRefreshSignal, type ZaloLabelOption } from '../../shared/types'
@@ -44,6 +45,13 @@ const RECENT_OPERATION_LIMIT_PER_STAFF = 200
 const SNAPSHOT_BROADCAST_COALESCE_MS = 50
 const ZALO_SERVER_MODE_DISABLED_MESSAGE = 'Gói Zalo của doanh nghiệp không còn quyền chạy tài khoản trên server'
 
+interface ServerAccountClaim {
+  previousStatus: 'chờ xử lý' | 'tạm dừng'
+  claimToken: string
+  staffId: number
+  reservationToken: string
+}
+
 interface StaffRuntime {
   user: ZaloServerRuntimeUser
   state: ZaloServerRuntimeState
@@ -56,8 +64,8 @@ interface StaffRuntime {
   realtimeManager: ZaloRealtimeGroupCampaignManager | null
   eventWindow: BrowserWindow | null
   activeCommands: Set<Promise<unknown>>
-  qrAccountClaims: Map<number, 'chờ xử lý' | 'tạm dừng'>
-  qrReleasePromises: Map<number, Promise<void>>
+  qrAccountClaims: Map<number, ServerAccountClaim>
+  qrReleasePromises: Map<string, Promise<void>>
   controlOperationIds: Map<number, string>
   ownsZaloRuntimeState: boolean
   stopDeferred: boolean
@@ -168,6 +176,10 @@ export class ZaloServerRuntimeManager {
     this.state = 'stopping'
     if (this.reconcileTimer) clearInterval(this.reconcileTimer)
     this.reconcileTimer = null
+    // Startup awaits warm-session claim/cleanup inside its lifecycle queue.
+    // Stop retries before awaiting that queue, or stopRuntime cannot reach its
+    // own stop signal. In-flight claims and Zalo work still drain below.
+    for (const staffId of this.runtimes.keys()) accountOperationRegistry.stop(staffId)
     this.notifySnapshot()
     await this.reconcilePromise?.catch(() => {})
     await Promise.allSettled(Array.from(this.lifecycleTails.values()))
@@ -612,14 +624,15 @@ export class ZaloServerRuntimeManager {
           throw new Error('Runtime Zalo của staff đang dừng')
         }
       }
-      if (!bypassReservation && !runtime.scheduler?.tryReserveExternalAccount(accountId)) {
+      const reservationToken = randomUUID()
+      if (!bypassReservation && !runtime.scheduler?.tryReserveExternalAccount(accountId, reservationToken)) {
         throw new Error('Tài khoản Zalo đang thực hiện một tác vụ khác')
       }
       if (bindsControlEvents && controlOperationId) {
         runtime.controlOperationIds.set(accountId, controlOperationId)
       }
       let holdQrReservation = false
-      let claimedPreviousStatus: 'chờ xử lý' | 'tạm dừng' | null = null
+      let claimedAccount: ServerAccountClaim | null = null
       const requiresAccountClaim = command === 'zalo.loginQr.start' ||
         command === 'zalo.session.check' ||
         command === 'zalo.logout' ||
@@ -630,17 +643,18 @@ export class ZaloServerRuntimeManager {
             const claim = await runtime.supabase!.claimZaloAccountRuntimeOperation(
               accountId,
               'server',
-              command !== 'zalo.loginQr.start'
+              command !== 'zalo.loginQr.start',
+              command
             )
-            if (!claim.claimed || !claim.previousStatus) {
+            if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
               const reason = claim.reason === 'runtime_not_owner'
                 ? ZALO_SERVER_MODE_DISABLED_MESSAGE
                 : 'Tài khoản Zalo đang thực hiện một tác vụ khác'
               throw new Error(reason)
             }
-            claimedPreviousStatus = claim.previousStatus
+            claimedAccount = { previousStatus: claim.previousStatus, claimToken: claim.claimToken, staffId: claim.staffId, reservationToken }
             if (command === 'zalo.loginQr.start') {
-              runtime.qrAccountClaims.set(accountId, claim.previousStatus)
+              runtime.qrAccountClaims.set(accountId, claimedAccount)
             }
           }
 
@@ -648,16 +662,17 @@ export class ZaloServerRuntimeManager {
           case 'zalo.loginQr.start': {
             const result = await runtime.zaloRuntime!.startLoginQr(accountId)
             holdQrReservation = result.success
-            if (result.success) this.watchQrCompletion(runtime, accountId, controlOperationId)
+            if (result.success) this.watchQrCompletion(runtime, accountId, claimedAccount!, controlOperationId)
             return result
           }
-          case 'zalo.loginQr.cancel':
+          case 'zalo.loginQr.cancel': {
+            const qrClaim = runtime.qrAccountClaims.get(accountId)
             if (!await runtime.zaloRuntime!.cancelLoginQrAndWait(accountId)) {
               return { success: false, accountId, reason: 'QR chưa dừng an toàn. Vui lòng thử lại sau.' }
             }
-            await this.releaseQrAccountClaim(runtime, accountId)
-            runtime.scheduler?.releaseExternalAccount(accountId)
+            if (qrClaim) await this.releaseQrAccountClaim(runtime, accountId, qrClaim)
             return { success: true, accountId }
+          }
           case 'zalo.session.check': {
             const result = await runtime.zaloRuntime!.checkSession(accountId)
             runtime.eventWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
@@ -688,18 +703,20 @@ export class ZaloServerRuntimeManager {
             throw new Error(`Lệnh server không được hỗ trợ: ${String(command)}`)
           }
         } finally {
-          if (claimedPreviousStatus && !holdQrReservation) {
+          if (claimedAccount && !holdQrReservation) {
             if (command === 'zalo.loginQr.start') {
-              await this.releaseQrAccountClaim(runtime, accountId).catch(error => {
+              await this.releaseQrAccountClaim(runtime, accountId, claimedAccount).catch(error => {
                 console.error(`[ZaloServerRuntimeManager] Cannot release QR claim for account ${accountId}:`, error)
               })
             } else {
-              await this.restoreAccountClaim(runtime, accountId, claimedPreviousStatus).catch(error => {
+              await this.restoreAccountClaim(runtime, accountId, claimedAccount).catch(error => {
                 console.error(`[ZaloServerRuntimeManager] Cannot release command claim for account ${accountId}:`, error)
               })
             }
           }
-          if (!bypassReservation && !holdQrReservation) runtime.scheduler?.releaseExternalAccount(accountId)
+          if (!bypassReservation && !holdQrReservation && !accountOperationRegistry.has(accountId)) {
+            runtime.scheduler?.releaseExternalAccount(accountId, reservationToken)
+          }
           if (bindsControlEvents && controlOperationId && !holdQrReservation) {
             this.clearBoundControlOperation(runtime, accountId, controlOperationId)
           }
@@ -959,6 +976,8 @@ export class ZaloServerRuntimeManager {
         // The atomic recovery succeeded, so this runtime is now authorized to
         // settle subsequent server claims. Persist before maintenance/warmup;
         // if the process dies afterwards, only this VPS marker may recover.
+        await accountOperationRegistry.recover(user.staffId)
+        accountOperationRegistry.resume(user.staffId)
         this.options.ownershipStore.claim(user.staffId, liveModeBeforeRecovery.revision)
         runtime.ownsZaloRuntimeState = true
         this.assertRuntimeMayStart(runtime)
@@ -1012,6 +1031,7 @@ export class ZaloServerRuntimeManager {
       runtime.acceptsCleanupCommands = false
     }
     runtime.state = 'stopping'
+    accountOperationRegistry.stop(staffId)
     this.notifySnapshot()
     await runWithCurrentUser(runtime.user, async () => {
       try {
@@ -1032,14 +1052,15 @@ export class ZaloServerRuntimeManager {
               Promise.allSettled(pendingCommands).then(() => true),
               new Promise<false>(resolve => setTimeout(() => resolve(false), 30_000))
             ])
-        const [qrSettled, commandsSettled, schedulerIdle, contactLoaderIdle, realtimeIdle] = await Promise.all([
+        const [qrSettled, commandsSettled, schedulerIdle, contactLoaderIdle, realtimeIdle, accountOperationsIdle] = await Promise.all([
           waitForQr,
           waitForCommands,
           runtime.scheduler?.waitForIdle(30_000) ?? Promise.resolve(true),
           runtime.contactLoader?.waitForIdle(30_000, 'zalo') ?? Promise.resolve(true),
-          runtime.realtimeManager?.waitForIdle(30_000) ?? Promise.resolve(true)
+          runtime.realtimeManager?.waitForIdle(30_000) ?? Promise.resolve(true),
+          accountOperationRegistry.waitForProducers(staffId, 30_000)
         ])
-        if (!qrSettled || !commandsSettled || !schedulerIdle || !contactLoaderIdle || !realtimeIdle) {
+        if (!qrSettled || !commandsSettled || !schedulerIdle || !contactLoaderIdle || !realtimeIdle || !accountOperationsIdle) {
           runtime.stopDeferred = true
           runtime.lastError = 'Đang chờ tác vụ Zalo hiện tại kết thúc an toàn'
           return
@@ -1085,6 +1106,7 @@ export class ZaloServerRuntimeManager {
           if (!recoveredUnitLeases.ok) {
             throw new Error(`Không thể phục hồi unit lease Zalo Server (${recoveredUnitLeases.reason}).`)
           }
+          await accountOperationRegistry.recover(staffId)
           runtime.ownsZaloRuntimeState = false
           this.options.ownershipStore.release(staffId)
         }
@@ -1122,60 +1144,50 @@ export class ZaloServerRuntimeManager {
     })
   }
 
-  private async restoreAccountClaim(
-    runtime: StaffRuntime,
-    accountId: number,
-    previousStatus: 'chờ xử lý' | 'tạm dừng'
-  ): Promise<void> {
-    if (!runtime.supabase) return
+  private async restoreAccountClaim(runtime: StaffRuntime, accountId: number, claim: ServerAccountClaim): Promise<boolean> {
+    if (!runtime.supabase) return false
     const released = await runtime.supabase.releaseZaloAccountRuntimeOperation(
-      accountId,
-      'server',
-      previousStatus
+      accountId, 'server', claim.previousStatus, claim.staffId, claim.claimToken
     )
     if (released) runtime.eventWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+    return released
   }
 
-  private releaseQrAccountClaim(runtime: StaffRuntime, accountId: number): Promise<void> {
-    const existing = runtime.qrReleasePromises.get(accountId)
+  private releaseQrAccountClaim(
+    runtime: StaffRuntime, accountId: number, claim = runtime.qrAccountClaims.get(accountId)
+  ): Promise<void> {
+    if (!claim || runtime.qrAccountClaims.get(accountId) !== claim) return Promise.resolve()
+    const existing = runtime.qrReleasePromises.get(claim.claimToken)
     if (existing) return existing
-    const previousStatus = runtime.qrAccountClaims.get(accountId)
-    if (!previousStatus) return Promise.resolve()
-
     const release = runWithCurrentUser(runtime.user, async () => {
-      await this.restoreAccountClaim(runtime, accountId, previousStatus)
-      runtime.qrAccountClaims.delete(accountId)
+      const released = await this.restoreAccountClaim(runtime, accountId, claim)
+      if (released && runtime.qrAccountClaims.get(accountId) === claim) {
+        runtime.qrAccountClaims.delete(accountId)
+        runtime.scheduler?.releaseExternalAccount(accountId, claim.reservationToken)
+      }
     })
-    runtime.qrReleasePromises.set(accountId, release)
+    runtime.qrReleasePromises.set(claim.claimToken, release)
     runtime.activeCommands.add(release)
     void release.finally(() => {
-      runtime.qrReleasePromises.delete(accountId)
+      if (runtime.qrReleasePromises.get(claim.claimToken) === release) runtime.qrReleasePromises.delete(claim.claimToken)
       runtime.activeCommands.delete(release)
     }).catch(() => {})
     return release
   }
 
   private watchQrCompletion(
-    runtime: StaffRuntime,
-    accountId: number,
-    controlOperationId?: string
+    runtime: StaffRuntime, accountId: number, claim: ServerAccountClaim, controlOperationId?: string
   ): void {
     const completion = runWithCurrentUser(runtime.user, async () => {
       try {
         await runtime.zaloRuntime?.waitForLoginQrIdle(accountId)
-        await this.releaseQrAccountClaim(runtime, accountId)
-        runtime.scheduler?.releaseExternalAccount(accountId)
-        runtime.eventWindow?.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+        await this.releaseQrAccountClaim(runtime, accountId, claim)
       } finally {
-        if (controlOperationId) {
-          this.clearBoundControlOperation(runtime, accountId, controlOperationId)
-        }
+        if (controlOperationId) this.clearBoundControlOperation(runtime, accountId, controlOperationId)
       }
     })
     runtime.activeCommands.add(completion)
-    void completion.finally(() => {
-      runtime.activeCommands.delete(completion)
-    }).catch(error => {
+    void completion.finally(() => runtime.activeCommands.delete(completion)).catch(error => {
       console.error(`[ZaloServerRuntimeManager] QR completion failed for account ${accountId}:`, error)
     })
   }
