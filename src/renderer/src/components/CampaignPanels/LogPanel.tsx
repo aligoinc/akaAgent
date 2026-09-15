@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ListFilter, Sparkles, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import CampaignAssistantTab from './CampaignAssistantTab'
+import CampaignSupportTab from './CampaignSupportTab'
+import type { CampaignAssistantOpenRequest } from '../../../../shared/campaignSupport'
 
 interface LogPanelProps {
-  assistantOpenRequest?: { campaignId: number; requestedAt: number } | null
+  assistantOpenRequest?: CampaignAssistantOpenRequest | null
 }
 
 type LogPanelTab = 'progress' | 'assistant'
@@ -13,7 +15,9 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
   const { logs, addLog, clearLogs, campaigns, accounts } = useCampaignStore()
   const [activeTab, setActiveTab] = useState<LogPanelTab>('progress')
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
-  const [assistantCampaignId, setAssistantCampaignId] = useState<number | null>(null)
+  const [assistantSelection, setAssistantSelection] = useState<CampaignAssistantOpenRequest | null>(null)
+  const assistantCampaignId = assistantSelection?.campaignId ?? null
+  const assistantMode = assistantSelection?.mode ?? 'ask'
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [screenshotPreviewError, setScreenshotPreviewError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -28,7 +32,7 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
 
   useEffect(() => {
     if (!assistantOpenRequest?.campaignId) return
-    setAssistantCampaignId(assistantOpenRequest.campaignId)
+    setAssistantSelection(assistantOpenRequest)
     setActiveTab('assistant')
   }, [assistantOpenRequest])
 
@@ -154,7 +158,7 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
         </div>
       )}
       <div className="campaign-panel-header log-panel-header">
-        <span className="campaign-panel-title">{activeTab === 'assistant' ? 'Trợ lý' : 'Tiến trình'}</span>
+        <span className="campaign-panel-title">{activeTab === 'assistant' ? (assistantMode === 'ask' ? 'Hỏi AI' : 'Trợ lý AI') : 'Tiến trình'}</span>
         {activeTab === 'progress' ? (
           <button className="btn btn-ghost btn-icon" onClick={clearLogs} title="Xoá log">
             <Trash2 size={14} />
@@ -243,7 +247,9 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
           )}
         </div>
       ) : (
-        <CampaignAssistantTab campaign={assistantCampaign} />
+        assistantMode === 'campaign_support'
+          ? <CampaignSupportTab key={assistantCampaignId} campaign={assistantCampaign} startRequestId={assistantSelection?.requestId} />
+          : <CampaignAssistantTab key={assistantCampaignId} campaign={assistantCampaign} />
       )}
     </div>
   )

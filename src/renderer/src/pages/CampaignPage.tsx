@@ -4,6 +4,7 @@ import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { OpenGeneralSettings } from '../components/Settings/GeneralSettingsModal'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../../shared/types'
+import type { CampaignAssistantMode, CampaignAssistantOpenRequest } from '../../../shared/campaignSupport'
 
 interface CampaignPageProps {
   isActive: boolean
@@ -18,7 +19,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
-  const [assistantOpenRequest, setAssistantOpenRequest] = useState<{ campaignId: number; requestedAt: number } | null>(null)
+  const [assistantOpenRequest, setAssistantOpenRequest] = useState<CampaignAssistantOpenRequest | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ index: number; startX: number; startWidths: number[] } | null>(null)
 
@@ -68,8 +69,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
     }))
   }, [])
 
-  const handleAskAssistant = useCallback((campaignId: number) => {
-    setAssistantOpenRequest({ campaignId, requestedAt: Date.now() })
+  const handleAskAssistant = useCallback((campaignId: number, mode: CampaignAssistantMode) => {
+    setAssistantOpenRequest({ campaignId, mode, requestId: crypto.randomUUID() })
   }, [])
 
   return (

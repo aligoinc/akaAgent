@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Bug,
@@ -35,6 +35,27 @@ interface FeedbackImageDraft {
 const IMAGE_FILE_EXTENSION_RE = /\.(apng|avif|bmp|gif|heic|heif|jpe?g|png|svg|tiff?|webp)$/i
 const REPORT_TYPE_OPTIONS: CustomerFeedbackReportType[] = ['báo lỗi', 'đề xuất tính năng']
 const PRODUCT_OPTIONS: CustomerFeedbackProduct[] = ['sms', 'zalo', 'facebook', 'email', 'khác']
+const LAUNCHER_SIZE = 36
+const LAUNCHER_MARGIN = 12
+interface LauncherPosition { x: number; y: number }
+
+function launcherTopMargin(): number {
+  return (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--titlebar-height')) || 36) + LAUNCHER_MARGIN
+}
+
+function clampLauncherPosition(position: LauncherPosition): LauncherPosition {
+  const maxX = Math.max(LAUNCHER_MARGIN, window.innerWidth - LAUNCHER_SIZE - LAUNCHER_MARGIN)
+  const maxY = Math.max(LAUNCHER_MARGIN, window.innerHeight - LAUNCHER_SIZE - LAUNCHER_MARGIN)
+  return {
+    x: Math.min(maxX, Math.max(LAUNCHER_MARGIN, position.x)),
+    y: Math.min(maxY, Math.max(Math.min(launcherTopMargin(), maxY), position.y))
+  }
+}
+
+function defaultLauncherPosition(): LauncherPosition {
+  const inset = window.innerWidth <= 640 ? 14 : 22
+  return clampLauncherPosition({ x: window.innerWidth - LAUNCHER_SIZE - inset, y: window.innerHeight - LAUNCHER_SIZE - inset })
+}
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0 B'
@@ -68,9 +89,16 @@ function createImageId(): string {
 export default function CustomerFeedbackLauncher() {
   const showAlert = useUiStore(s => s.showAlert)
   const launcherRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: LauncherPosition; moved: boolean } | null>(null)
+  const hasMovedRef = useRef(false)
+  const suppressClickRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const closeMenuTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [position, setPosition] = useState(defaultLauncherPosition)
+  const [dragging, setDragging] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0 })
   const [activeForm, setActiveForm] = useState<FeedbackFormKind | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [supportContent, setSupportContent] = useState('')
@@ -99,6 +127,7 @@ export default function CustomerFeedbackLauncher() {
   }, [])
 
   const openMenu = useCallback(() => {
+    if (dragRef.current?.moved || suppressClickRef.current) return
     clearCloseMenuTimer()
     setMenuOpen(true)
   }, [clearCloseMenuTimer])
@@ -114,6 +143,56 @@ export default function CustomerFeedbackLauncher() {
   useEffect(() => {
     return () => clearCloseMenuTimer()
   }, [clearCloseMenuTimer])
+
+  useEffect(() => {
+    const resize = () => setPosition(current => hasMovedRef.current ? clampLauncherPosition(current) : defaultLauncherPosition())
+    window.addEventListener('resize', resize)
+    return () => window.removeEventListener('resize', resize)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!menuOpen || activeForm || !menuRef.current) return
+    const rect = menuRef.current.getBoundingClientRect()
+    const preferredTop = position.y - rect.height - 10 >= launcherTopMargin()
+      ? position.y - rect.height - 10 : position.y + LAUNCHER_SIZE + 10
+    setMenuPosition({
+      left: Math.max(LAUNCHER_MARGIN, Math.min(position.x + LAUNCHER_SIZE - rect.width, window.innerWidth - rect.width - LAUNCHER_MARGIN)) - position.x,
+      top: Math.max(launcherTopMargin(), Math.min(preferredTop, window.innerHeight - rect.height - LAUNCHER_MARGIN)) - position.y
+    })
+  }, [menuOpen, activeForm, position])
+
+  const startDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!event.isPrimary || event.button !== 0) return
+    event.preventDefault()
+    suppressClickRef.current = false
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
+      origin: position, moved: false }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  const moveDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    const dx = event.clientX - drag.startX
+    const dy = event.clientY - drag.startY
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return
+    drag.moved = true
+    hasMovedRef.current = true
+    suppressClickRef.current = true
+    clearCloseMenuTimer()
+    setMenuOpen(false)
+    setDragging(true)
+    setPosition(clampLauncherPosition({ x: drag.origin.x + dx, y: drag.origin.y + dy }))
+  }
+
+  const finishDrag = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    setDragging(false)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    if (!drag.moved && event.type === 'pointerup') event.currentTarget.focus({ preventScroll: true })
+  }
 
   const resetForm = useCallback((kind?: FeedbackFormKind) => {
     if (!kind || kind === 'support_rating') {
@@ -406,12 +485,16 @@ export default function CustomerFeedbackLauncher() {
     <>
       <div
         ref={launcherRef}
-        className="customer-feedback-launcher"
+        className={`customer-feedback-launcher${dragging ? ' is-dragging' : ''}`}
+        style={{ left: position.x, top: position.y }}
         onMouseEnter={openMenu}
-        onMouseLeave={scheduleCloseMenu}
+        onMouseLeave={() => {
+          if (!dragRef.current) suppressClickRef.current = false
+          scheduleCloseMenu()
+        }}
       >
         {menuOpen && !activeForm && (
-          <div className="customer-feedback-menu" role="menu">
+          <div ref={menuRef} className="customer-feedback-menu" role="menu" style={menuPosition}>
             <button type="button" onClick={() => openForm('support_rating')} role="menuitem">
               <Star size={16} />
               <span>Đánh giá hỗ trợ khách hàng</span>
@@ -426,13 +509,22 @@ export default function CustomerFeedbackLauncher() {
         <button
           type="button"
           className="customer-feedback-button"
-          onClick={openMenu}
+          onPointerDown={startDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={finishDrag}
+          onPointerCancel={finishDrag}
+          onLostPointerCapture={finishDrag}
+          onClick={event => {
+            if (event.detail === 0) suppressClickRef.current = false
+            if (!suppressClickRef.current) openMenu()
+          }}
           onFocus={openMenu}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          title="Gửi đánh giá hoặc báo cáo"
+          aria-label="Gửi đánh giá hoặc báo cáo"
+          title="Kéo để di chuyển · Bấm để gửi đánh giá hoặc báo cáo"
         >
-          <MessageCircleQuestion size={22} />
+          <MessageCircleQuestion size={18} />
         </button>
       </div>
 

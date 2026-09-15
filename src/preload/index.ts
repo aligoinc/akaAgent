@@ -1,5 +1,7 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
 import type { CampaignActionUsage } from '../shared/types'
+import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
+  type CampaignSupportControlRequest, type CampaignSupportImageRequest } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
   type CompleteCampaignDraftRequest } from '../shared/campaignDrafts'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -118,6 +120,24 @@ const electronAPI = {
 
   chatCampaignAssistant: (request: CampaignAssistantChatRequest): Promise<CampaignAssistantChatResponse> =>
     ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CHAT, request),
+
+  openCampaignSupport: (campaignId: number, startRequestId?: string): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId),
+  sendCampaignSupport: (request: CampaignSupportSendRequest): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.send, request),
+  controlCampaignSupport: (request: CampaignSupportControlRequest): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.control, request),
+  retryCampaignSupport: (campaignId: number, key: string): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.retry, campaignId, key),
+  resetCampaignSupport: (campaignId: number, key: string): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.reset, campaignId, key),
+  readCampaignSupportImage: (request: CampaignSupportImageRequest): Promise<string> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.image, request),
+  onCampaignSupportUpdated: (callback: (state: CampaignSupportConversation) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: CampaignSupportConversation) => callback(state)
+    ipcRenderer.on(CAMPAIGN_SUPPORT_IPC.updated, handler)
+    return () => ipcRenderer.removeListener(CAMPAIGN_SUPPORT_IPC.updated, handler)
+  },
 
   extractCampaignDataFromImage: (request: CampaignImportImageRequest): Promise<CampaignImportDataRow[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, request),

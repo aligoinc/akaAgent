@@ -43,6 +43,8 @@ import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnam
 import { utils, writeFile } from 'xlsx'
 import CampaignFormModal from './CampaignFormModal'
 import CampaignDraftRow from './CampaignDraftRow'
+import CampaignAssistantMenu from './CampaignAssistantMenu'
+import type { CampaignAssistantMode } from '../../../../shared/campaignSupport'
 import { useCampaignDrafts } from './useCampaignDrafts'
 import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './CampaignQuickEditModals'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
@@ -69,7 +71,7 @@ interface CampaignPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
-  onAskAssistant?: (campaignId: number) => void
+  onAskAssistant?: (campaignId: number, mode: CampaignAssistantMode) => void
   dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
@@ -5104,10 +5106,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
-  const handleAskAssistant = (campaign: CampaignListItem) => {
+  const handleAskAssistant = (campaign: CampaignListItem, mode: CampaignAssistantMode) => {
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
-    onAskAssistant?.(campaign.id)
+    onAskAssistant?.(campaign.id, mode)
   }
 
   const openCampaignDetailTab = (campaign: CampaignListItem, tab: DetailTab) => {
@@ -6141,10 +6143,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                       </div>
                     </div>
                     <div className="campaign-col col-assistant" onClick={e => e.stopPropagation()}>
-                      <button className="btn-icon assistant campaign-control-button campaign-label-button" onClick={() => handleAskAssistant(campaign)} title="Hỏi trợ lý aka">
-                        <Sparkles size={14} />
-                        <span>Trợ lý</span>
-                      </button>
+                      <CampaignAssistantMenu onSelect={mode => handleAskAssistant(campaign, mode)} />
                     </div>
                     <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
                       <div className="campaign-action-dropdown">
