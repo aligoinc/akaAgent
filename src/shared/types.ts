@@ -532,6 +532,9 @@ export interface FindDataTargetDataGroup {
 }
 
 export interface CampaignExtraSettings {
+  runAsPage?: boolean             // Facebook: một Page quản lý cho toàn bộ lượt chạy
+  runAsPageUid?: string
+  runAsPageName?: string
   sharePost?: boolean            // đăng bài dạng chia sẻ (timeline post: share from source link)
   postWithBackground?: boolean   // Đăng bài profile/page UI/group với phông nền Facebook
   rewriteContentEachRun?: boolean // Viết lại nội dung chính bằng AI trước mỗi lượt chạy; email chỉ áp dụng plain text

@@ -1,4 +1,7 @@
 import { accountOperationRegistry } from './accountOperationRegistry'
+import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
+import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
+import { getWorkflow } from '../data/repositories/workflowV2Repository'
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
 import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
 import { BrowserWindow } from 'electron'
@@ -694,6 +697,8 @@ export class CampaignScheduler {
   private activeZaloAccountRuns = new Set<number>()
   private externalAccountRuns = new Map<number, string>()
   private activeV2Aborts = new Map<number, AbortController>()
+  private facebookPageIdentities = new Map<number, FacebookCampaignPageIdentity>()
+  private facebookPageRestoreFailures = new Set<number>()
   private activeZaloCampaignRuns = new Set<number>()
   private claimedServerZaloCampaignIds = new Set<number>()
   private claimedServerZaloAccountIds = new Set<number>()
@@ -839,7 +844,15 @@ export class CampaignScheduler {
       } catch {}
     }
     this.stopAllBackgroundPreviews()
-    this.backgroundPages.destroyAll()
+    if (this.facebookPageIdentities.size === 0) {
+      this.backgroundPages.destroyAll()
+    } else {
+      // Let aborted Page workflows drain and execute their restore-only branch
+      // before destroying the shared browser. A force-quit remains best-effort.
+      void this.waitForIdle(60_000).then(() => {
+        if (!this.running && this.facebookPageIdentities.size === 0) this.backgroundPages.destroyAll()
+      })
+    }
     if (this.runtimeTarget !== 'server') {
       this.sendLog('⏹ Scheduler đã dừng.')
     }
@@ -1047,6 +1060,11 @@ export class CampaignScheduler {
   }
 
   private async cleanupFailedCampaignRun(run: FailedCampaignRun): Promise<void> {
+    await this.restoreFacebookPageIdentity(run.campaignId).catch(() => {})
+    if (this.facebookPageRestoreFailures.has(run.campaignId) && !Object.isFrozen(run.payload)) {
+      run.payload.campaignStatus = 'tạm dừng'
+      run.payload.accountStatus = 'tạm dừng'
+    }
     // Policy may have contributed status/note before this point. Every retry
     // now sends exactly the same payload, including after a lost response.
     Object.freeze(run.payload)
@@ -1588,6 +1606,7 @@ export class CampaignScheduler {
     campaign: Campaign,
     note?: string | null
   ): Promise<boolean> {
+    await this.restoreFacebookPageIdentity(campaign.id)
     if (campaign.dataTargetSourceMode === 'data_group') {
       const finalized = await this.supabase.finalizeDataGroupCampaign(
         campaign.id,
@@ -1701,6 +1720,7 @@ export class CampaignScheduler {
   }
 
   private async handleCampaignCompletion(campaign: Campaign): Promise<void> {
+    await this.restoreFacebookPageIdentity(campaign.id)
     // A live data-group source is an intake subscription, not a finite snapshot.
     // The DB finalizer atomically rechecks raced input, source stop/delete and hard end.
     if (campaign.dataTargetSourceMode === 'data_group') {
@@ -2395,6 +2415,8 @@ export class CampaignScheduler {
     campaign: Campaign,
     check: CampaignRunBoundaryCheck
   ): Promise<boolean> {
+    const hadPageIdentity = this.facebookPageIdentities?.has(campaign.id)
+    await this.restoreFacebookPageIdentity(campaign.id)
     if (
       this.isCampaignPauseRequested(campaign.id) ||
       this.serverZaloPauseBoundaries.has(campaign.id)
@@ -2452,7 +2474,14 @@ export class CampaignScheduler {
     }
     check = { ...check, clock: resultClock, clockUnavailable: false }
 
-    if (result.reason === 'boundary_not_due') return false
+    if (result.reason === 'boundary_not_due') {
+      if (!hadPageIdentity) return false
+      // The DB clock corrected an advisory boundary after we restored. End
+      // this execution cleanly; the next queue pass starts a fresh Page scope.
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })
+      await this.releaseRunningAccount(account.id)
+      return true
+    }
 
     this.boundaryStoppedAccountQueues.add(account.id)
 
@@ -2964,15 +2993,29 @@ export class CampaignScheduler {
 
       await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
+      if (campaign.extraSettings?.runAsPage === true) {
+        try {
+          await validateCampaignPageIdentity(campaign)
+          const workflow = await getWorkflow(workflowSelection.workflowId)
+          if (!workflow) throw new Error('Không tìm thấy workflow chạy bằng Page.')
+          this.facebookPageIdentities.set(campaign.id, new FacebookCampaignPageIdentity(campaign, workflow))
+        } catch (error) {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: getErrorMessage(error) })
+          await this.logCampaignProgress(campaign.id, `⚠️ ${getErrorMessage(error)}`)
+          await this.releaseRunningAccount(account.id)
+          return
+        }
+      }
       await this.executeCampaignV2(account, campaign, workflowSelection.workflowId, executableActionDescriptors, quotaActionDescriptors)
     } catch (err) {
       if (!runtimeClaimed) throw err
+      await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       if (err instanceof CampaignRunUnitOwnershipLostError) return
       failedRun = this.rememberFailedCampaignRun(account, campaign, err, ownedClaimToken)
       // All nested producers/resources have unwound. Policy is attempted once;
       // its status writes are deferred into the same token-checked transaction.
       try {
-        if (!failedRun.cleanup.controller.signal.aborted && !this.attemptedRunErrorPolicies.has(campaign.id)) {
+        if (!failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
           if (this.isNewsfeedDailyCampaign(campaign)) {
             this.attemptedRunErrorPolicies.add(campaign.id)
             // Unknown aggregate progress is paused by cleanup, never replayed.
@@ -2993,6 +3036,7 @@ export class CampaignScheduler {
       }
       await this.cleanupFailedCampaignRun(failedRun)
     } finally {
+      await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       const unitSettled = failedRun ? !this.failedCampaignRuns.has(campaign.id) : runtimeClaimed
         ? await this.settleActiveCampaignRunUnit(account, campaign).catch(error => {
           console.error(`Failed final unit settlement for campaign ${campaign.id}:`, error)
@@ -3019,6 +3063,9 @@ export class CampaignScheduler {
         this.failedRunErrorPolicies.delete(campaign.id)
       }
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
+      this.facebookPageIdentities.delete(campaign.id)
+      this.facebookPageRestoreFailures.delete(campaign.id)
+      if (!this.running && this.facebookPageIdentities.size === 0) this.backgroundPages.destroyAll()
     }
   }
 
@@ -3568,6 +3615,7 @@ export class CampaignScheduler {
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         const variables = {
           ...baseVariables,
+          ...this.facebookPageIdentities.get(campaign.id)?.variables(),
           ...(campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
             ? { pageInboxForceNavigate: !pageInboxOpenedForRun }
             : {}),
@@ -3671,10 +3719,12 @@ export class CampaignScheduler {
           this.startBackgroundPreview(account.id, campaign.id, page)
         }
         const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+        const pageIdentity = this.facebookPageIdentities.get(campaign.id)
+        if (pageIdentity) { pageIdentity.page = page; pageIdentity.targetStarted = false }
         try {
           const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
-          this.markCampaignRunUnitStarted(campaign.id)
-          const result = await this.engineV2.run(workflowId, variables, page, {
+          if (!pageIdentity) this.markCampaignRunUnitStarted(campaign.id)
+          const result = await this.engineV2.run(pageIdentity?.workflow || workflowId, variables, page, {
             organizationId: campaign.organizationId ?? account.organizationId ?? null,
             accountId: account.id,
             campaignId: campaign.id,
@@ -3688,6 +3738,11 @@ export class CampaignScheduler {
               if (progressLog) screenshotProgressLogs.push(progressLog)
             },
             onStepProgress: (step: RunStepV2) => {
+              if (pageIdentity) {
+                const started = pageIdentity.targetStarted
+                pageIdentity.observe(step)
+                if (!started && pageIdentity.targetStarted) this.markCampaignRunUnitStarted(campaign.id)
+              }
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
               if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
                 void this.logNewsfeedMilestoneStep(campaign, detail, account.id, step)
@@ -3697,6 +3752,12 @@ export class CampaignScheduler {
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
             }
           })
+
+          if (pageIdentity && !pageIdentity.targetStarted) {
+            const failure = result.steps.find(step => step.status === 'error')
+            await this.pauseBeforePageIdentityTarget(account, campaign, failure?.error || result.error || 'Không chuyển được sang Page đã chọn.')
+            return
+          }
 
           if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step =>
             step.blockName === 'fb_page_inbox_open' && step.status === 'success'
@@ -3900,6 +3961,13 @@ export class CampaignScheduler {
             }
           }
         } catch (err: any) {
+          // Identity cleanup cannot rewrite a finished target or contribute to
+          // bad-target counters/quota. Only the run cleanup pauses the owner.
+          if (pageIdentity?.restoreError) throw err
+          if (pageIdentity && !pageIdentity.targetStarted) {
+            await this.pauseBeforePageIdentityTarget(account, campaign, getErrorMessage(err))
+            return
+          }
           if (this.attemptedRunErrorPolicies.has(campaign.id)) throw err
           const errMsg = err?.message || String(err)
           if (this.isServerZaloCampaign(account, campaign)) {
@@ -3994,7 +4062,8 @@ export class CampaignScheduler {
           }
         } finally {
           clearInterval(accountGuard)
-          if (automationPage.source === 'background' && page) {
+          // Page campaigns keep their preview through the restore-only workflow.
+          if (automationPage.source === 'background' && page && !pageIdentity) {
             this.stopBackgroundPreview(account.id, campaign.id)
           }
           this.activeV2Aborts.delete(campaign.id)
@@ -15093,17 +15162,19 @@ export class CampaignScheduler {
           campaignId,
           override?.page || page,
           override?.title,
-          override?.context
+          override?.context,
+          () => this.backgroundPreviewTimers.get(key) === timer
         )
       } catch {
         // Preview is best-effort; workflow steps remain the source of truth.
       } finally {
-        this.backgroundPreviewCapturing.delete(key)
+        if (this.backgroundPreviewTimers.get(key) === timer) this.backgroundPreviewCapturing.delete(key)
       }
     }
 
+    const timer = setInterval(() => void capture(), 2000)
+    this.backgroundPreviewTimers.set(key, timer)
     void capture()
-    this.backgroundPreviewTimers.set(key, setInterval(() => void capture(), 2000))
   }
 
   private stopBackgroundPreview(accountId: number, campaignId: number): void {
@@ -15137,11 +15208,13 @@ export class CampaignScheduler {
     campaignId: number,
     page: PageController,
     title?: string,
-    context?: string
+    context?: string,
+    isCurrent?: () => boolean
   ): Promise<void> {
     try {
       if (!page.isConnected()) return
       const image = await page.screenshot()
+      if (isCurrent && !isCurrent()) return
       this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
         accountId,
         campaignId,
@@ -15438,6 +15511,7 @@ export class CampaignScheduler {
   }
 
   private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
+    if (updates.status !== undefined && updates.status !== 'đang chạy') await this.restoreFacebookPageIdentity(id)
     let updated: Campaign
     if (updates.status === 'hoàn thành' && this.claimedServerZaloCampaignIds.has(id)) {
       const result = await this.finalizeClaimedServerZaloCampaign(id, updates.note)
@@ -15479,6 +15553,7 @@ export class CampaignScheduler {
     id: number,
     updates: Pick<Campaign, 'status' | 'note'>
   ): Promise<Campaign> {
+    if (updates.status !== 'đang chạy') await this.restoreFacebookPageIdentity(id)
     const updated = this.claimedServerZaloCampaignIds.has(id)
       ? await this.supabase.updateClaimedZaloServerCampaign(id, updates)
       : await this.supabase.updateRunningDesktopCampaign(id, updates)
@@ -15528,6 +15603,11 @@ export class CampaignScheduler {
    * Cập nhật account xong push event để panel tài khoản reload realtime.
    */
   private async updateAccountAndBroadcast(id: number, updates: Partial<AutoAccount>): Promise<AutoAccount> {
+    if (updates.status !== undefined && updates.status !== 'đang chạy') {
+      for (const [campaignId, identity] of this.facebookPageIdentities) {
+        if (identity.campaign.accountId === id) await this.restoreFacebookPageIdentity(campaignId)
+      }
+    }
     const updated = updates.status !== undefined && this.claimedServerZaloAccountIds.has(id)
       ? await this.supabase.updateClaimedZaloServerAccount(id, updates)
       : await this.supabase.updateAccount(id, updates)
@@ -15540,6 +15620,9 @@ export class CampaignScheduler {
   }
 
   private async releaseRunningAccount(accountId: number): Promise<void> {
+    for (const [campaignId, identity] of this.facebookPageIdentities) {
+      if (identity.campaign.accountId === accountId) await this.restoreFacebookPageIdentity(campaignId)
+    }
     if (this.zaloRuntimeClaimsAbandoned && this.activeZaloAccountRuns.has(accountId)) return
     const account = await this.supabase.getAccount(accountId)
     if (!account || account.status !== 'đang chạy') return
@@ -15555,6 +15638,58 @@ export class CampaignScheduler {
       return
     }
     await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })
+  }
+
+  private async pauseBeforePageIdentityTarget(account: AutoAccount, campaign: Campaign, reason: string): Promise<void> {
+    // No action node ran. Release this unstarted unit without consuming its data.
+    await this.restoreFacebookPageIdentity(campaign.id)
+    if (!await this.settleActiveCampaignRunUnit(account, campaign, true)) return
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: reason })
+    await this.logCampaignProgress(campaign.id, `⚠️ ${reason}`)
+    await this.releaseRunningAccount(account.id)
+  }
+
+  private async restoreFacebookPageIdentity(campaignId: number): Promise<void> {
+    const identity = this.facebookPageIdentities?.get(campaignId)
+    if (!identity) return
+    const accountId = identity.campaign.accountId
+    try {
+      await identity.restore((workflow, variables, page, context) => {
+        this.setBackgroundPreviewOverride(accountId, campaignId, page, 'Đang chuyển về danh tính ban đầu')
+        this.startBackgroundPreview(accountId, campaignId, page)
+        return this.engineV2.run(workflow, variables, page, context)
+      }, {
+        accountId, campaignId, organizationId: identity.campaign.organizationId,
+        persist: true,
+        onLog: entry => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaignId}`, ...entry }) } catch {}
+        },
+        onStepProgress: step => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaignId}`, step }) } catch {}
+        }
+      })
+    } catch (error) {
+      if (!this.facebookPageRestoreFailures.has(campaignId)) {
+        this.facebookPageRestoreFailures.add(campaignId)
+        this.boundaryStoppedAccountQueues.add(accountId)
+        const note = `Không chuyển về được danh tính ban đầu: ${getErrorMessage(error)} Vui lòng kiểm tra trình duyệt trước khi tiếp tục.`
+        // Bypass the normal exit hooks to avoid recursive cleanup. The owned
+        // campaign/account must remain paused if atomic failure cleanup follows.
+        const account = await this.supabase.getAccount(accountId).catch(() => null)
+        if (account?.status === 'đang chạy') {
+          await this.supabase.updateAccount(accountId, { status: 'tạm dừng' }).catch(() => {})
+          try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
+        }
+        const updated = await this.supabase.updateRunningDesktopCampaign(campaignId, { status: 'tạm dừng', note }).catch(() => null)
+        if (updated) this.broadcastCampaignUpdate(updated)
+        await this.logCampaignProgress(campaignId, `⚠️ ${note}`).catch(() => {})
+      }
+      throw error
+    } finally {
+      if (this.backgroundPreviewTimers.has(this.backgroundPreviewKey(accountId, campaignId))) {
+        this.stopBackgroundPreview(accountId, campaignId)
+      }
+    }
   }
 
   private async resolveMediaSelection(

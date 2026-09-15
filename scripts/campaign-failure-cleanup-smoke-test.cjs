@@ -586,7 +586,9 @@ async function run() {
     return new Map(klass.members.filter(ts.isMethodDeclaration).map(m => [m.name.getText(source), { m, source }]))
   }
   const before = methods(baseline), after = methods(current)
-  for (const name of ['settleActiveCampaignRunUnit', 'releaseRunningAccount']) {
+  // Account release now awaits Page identity cleanup; its behavior is covered
+  // by facebook-page-identity-smoke-test instead of a source-text equality check.
+  for (const name of ['settleActiveCampaignRunUnit']) {
     assert.equal(after.get(name).m.getText(after.get(name).source), before.get(name).m.getText(before.get(name).source), `${name} stays unchanged`)
   }
   for (const name of ['executeCampaign', 'beginCampaignRunUnit']) {

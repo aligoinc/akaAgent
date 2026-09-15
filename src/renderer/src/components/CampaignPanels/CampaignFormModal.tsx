@@ -1,6 +1,8 @@
 import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useCampaignDraftField } from './useCampaignDraftField'
+import FacebookPageIdentitySettings from './FacebookPageIdentitySettings'
+import { supportsFacebookPageIdentity, validateFacebookPageIdentitySettings } from '../../../../shared/facebookPageIdentity'
 import { useCampaignActionUsage } from './useCampaignActionUsage'
 import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '../../../../shared/accountActionLimits'
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
@@ -1575,6 +1577,7 @@ const ALL_STEPS: StepDef[] = [
     fields: [
       { key: 'actionId', label: 'Hành động' },
       { key: 'accountIds', label: 'Tài khoản' },
+      { key: 'runAsPage', label: 'Chạy bằng Page' },
       { key: 'name', label: 'Tên chiến dịch' }
     ]
   },
@@ -1893,6 +1896,9 @@ export default function CampaignFormModal({
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
     secondaryAccountId: campaign?.secondaryAccountId ?? null as number | null,
+    runAsPage: campaign?.extraSettings?.runAsPage === true,
+    runAsPageUid: campaign?.extraSettings?.runAsPageUid || '',
+    runAsPageName: campaign?.extraSettings?.runAsPageName || '',
     dataTargetSourceMode: (campaign?.dataTargetSourceMode || (initialDataGroup ? 'data_group' : 'direct')) as CampaignDataTargetSourceMode,
     dataGroupId: campaign?.dataGroupId ?? initialDataGroup?.id ?? null as number | null,
     schedule: initSchedule(),
@@ -2784,8 +2790,19 @@ export default function CampaignFormModal({
     return mainMediaSelectionMode
   }
   const actionPlatformForAccountSelection = selectedActionPlatform || selectedActionPlatformFilter
-  const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false
-  const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true
+  const supportsRunAsPage = supportsFacebookPageIdentity(formData.actionId)
+  const runsAsPage = supportsRunAsPage && formData.runAsPage === true
+  const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false || runsAsPage
+  const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true && !runsAsPage
+  const previousPageAccountIds = useRef(formData.accountIds.join(','))
+  useEffect(() => {
+    const accountKey = formData.accountIds.join(',')
+    const changed = previousPageAccountIds.current !== accountKey
+    previousPageAccountIds.current = accountKey
+    if (changed || (!supportsRunAsPage && (formData.runAsPage || formData.runAsPageUid))) {
+      setFormData(prev => ({ ...prev, runAsPage: supportsRunAsPage && prev.runAsPage, runAsPageUid: '', runAsPageName: '' }))
+    }
+  }, [formData.accountIds, supportsRunAsPage, formData.runAsPage, formData.runAsPageUid])
   const campaignDailyLimitCap = getCampaignActionDailySendLimit(
     selectedCampaignAction || (formData.actionId ? { id: formData.actionId, flatformType: selectedActionPlatform } : null),
     entitlements
@@ -3397,6 +3414,9 @@ export default function CampaignFormModal({
     { key: 'rateLimitCount', label: 'Giới hạn trong giờ' }
   ]
   const applyVisibleStepFields = (steps: StepDef[]): StepDef[] => steps.flatMap(step => {
+    if (step.id === 'general') {
+      return [{ ...step, fields: step.fields.filter(field => field.key !== 'runAsPage' || supportsRunAsPage) }]
+    }
     if (step.id === 'schedule') {
       return [{
         ...step,
@@ -4801,6 +4821,7 @@ export default function CampaignFormModal({
     switch (key) {
       case 'actionId': return !!formData.actionId
       case 'accountIds': return formData.accountIds.length > 0
+      case 'runAsPage': return !runsAsPage || Boolean(formData.runAsPageUid && formData.runAsPageName)
       case 'name': return formData.name.trim().length > 0
       case 'schedule': return !!formData.schedule
       case 'scheduleType': return !!formData.scheduleType
@@ -6288,6 +6309,9 @@ export default function CampaignFormModal({
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: contentForSave,
           extraSettings: {
+            runAsPage: runsAsPage,
+            runAsPageUid: runsAsPage ? formData.runAsPageUid : '',
+            runAsPageName: runsAsPage ? formData.runAsPageName : '',
             sharePost: isSourceContentMode && supportsSourceSharePost ? formData.sharePost : false,
             postWithBackground: formattedContentForSave ? false : isPostBackgroundActive,
             rewriteContentEachRun: isSavingGroupSnapshot || isMobileManagedSmsCampaign || formattedContentForSave || emailBodyIsHtmlForSave
@@ -6621,6 +6645,18 @@ export default function CampaignFormModal({
         'error'
       )
       return
+    }
+    if (runsAsPage) {
+      try {
+        validateFacebookPageIdentitySettings(formData.actionId, formData, formData.secondaryAccountId)
+        const pages = await window.electronAPI.listContacts(formData.accountIds[0], 'page')
+        if (!pages.some(page => !page.isDelete && page.uid === formData.runAsPageUid && page.name === formData.runAsPageName)) {
+          throw new Error('Page đã chọn không còn trong danh sách của tài khoản. Vui lòng tải lại và chọn Page.')
+        }
+      } catch (error) {
+        showAlert(formatIpcErrorMessage(error, 'Không thể kiểm tra Page đã chọn.'), 'error')
+        return
+      }
     }
     if (formData.secondaryAccountId !== null) {
       if (!allowsSecondaryAccount) {
@@ -15653,7 +15689,7 @@ export default function CampaignFormModal({
                   <div className="stepper-form-group" ref={accountDropdownRef}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>
-                        {allowsSecondaryAccount ? 'Tài khoản chính' : 'Tài khoản'} <span className="required">*</span>
+                        {allowsSecondaryAccount || runsAsPage ? 'Tài khoản chính' : 'Tài khoản'} <span className="required">*</span>
                       </label>
                       {selectableAccounts.length > 0 && !isSingleAccountSelection && !isSavedDataGroupIdentityLocked && (
                         <button
@@ -15816,6 +15852,18 @@ export default function CampaignFormModal({
                       )}
                     </div>
                   </div>
+
+                  {supportsRunAsPage && <FacebookPageIdentitySettings
+                    accountId={formData.accountIds.length === 1 ? formData.accountIds[0] : null}
+                    multipleAccounts={formData.accountIds.length > 1}
+                    enabled={runsAsPage}
+                    pageUid={formData.runAsPageUid}
+                    pageName={formData.runAsPageName}
+                    onToggle={enabled => setFormData(prev => ({ ...prev, runAsPage: enabled,
+                      secondaryAccountId: enabled ? null : prev.secondaryAccountId,
+                      runAsPageUid: '', runAsPageName: '' }))}
+                    onSelect={(uid, name) => setFormData(prev => ({ ...prev, runAsPageUid: uid, runAsPageName: name }))}
+                  />}
 
                   {allowsSecondaryAccount && (
                     <div className="stepper-form-group">
