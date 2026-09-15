@@ -239,6 +239,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 
 **Desktop campaign resume**: từ [migration_v234_queue_desktop_campaign_while_account_running.sql](migrations/migration_v234_queue_desktop_campaign_while_account_running.sql), resume chỉ chuyển campaign `'tạm dừng'` sang `'chờ xử lý'` dù account đang `'đang chạy'` bởi campaign/tác vụ khác; scheduler và RPC claim runtime chịu trách nhiệm serialize theo account. Vẫn phải từ chối resume khi chính campaign còn runtime claim hoặc unit lease chưa giải phóng.
 
+**Control campaign creation**: từ [migration_v282](migrations/migration_v282_queue_control_campaign_while_account_running.sql), tạo mới/tạo từ nháp qua `create_control_campaign[_v2]` không kiểm tra `account.status`; không thêm danh sách trạng thái được phép tại bước tạo và không đổi status/claim của account hoặc campaign hiện hữu. `claim_campaign_runtime` chỉ cho thực thi khi account rảnh; giữ owner/subtype/active/deleted guards và timeout 60s ở cả hai RPC tạo. Smoke rollback: [v282](migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql).
+
 **Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](src/main/data/repositories/campaignRepository.ts)) dùng `action_code`:
 - Daily limit so với `auto_account_action_status.count_action_in_day` (reset 00:00 Asia/Saigon).
 - Hourly/window limit query `auto_campaign_details` theo `(account_id, action_code, created_at)` và đếm `counts_toward_limit=true` hoặc `counts_toward_limit IS NULL AND status IN ('thành công','thất bại')`; đừng default cột này thành `true` vì sẽ đổi nghĩa legacy/Facebook.
