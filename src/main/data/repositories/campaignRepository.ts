@@ -65,6 +65,7 @@ import {
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 import { randomUUID } from 'node:crypto'
+import { validateCampaignPageIdentity } from './facebookPageIdentityRepository'
 
 const client = () => getSupabaseClient()
 
@@ -1997,6 +1998,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const isSmsCampaign = isMobileManagedSmsCampaignAction(campaign.actionId)
   const extraSettings = clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements)
+  await validateCampaignPageIdentity({ actionId: String(campaign.actionId || ''), accountId, secondaryAccountId, extraSettings })
   assertAdvancedContentPersistenceContract(campaign.actionId, extraSettings)
   const sourceMode = campaign.dataTargetSourceMode || 'direct'
   if (sourceMode === 'data_group') {
@@ -2263,6 +2265,16 @@ export async function updateCampaign(id: number, updates: CampaignUpdate): Promi
     }
   }
   let normalizedSecondaryAccountId: number | null | undefined
+  if (updates.extraSettings?.runAsPage === true || updates.accountId !== undefined || updates.actionId !== undefined || updates.secondaryAccountId !== undefined) {
+    const current = await loadCurrentCampaignForUpdate()
+    const next = { ...current, ...updates }
+    const changed = next.actionId !== current.actionId || next.accountId !== current.accountId ||
+      next.secondaryAccountId !== current.secondaryAccountId ||
+      next.extraSettings?.runAsPage !== current.extraSettings?.runAsPage ||
+      next.extraSettings?.runAsPageUid !== current.extraSettings?.runAsPageUid ||
+      next.extraSettings?.runAsPageName !== current.extraSettings?.runAsPageName
+    if (changed) await validateCampaignPageIdentity(next)
+  }
   if (
     updates.actionId !== undefined ||
     updates.accountId !== undefined ||

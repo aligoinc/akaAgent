@@ -663,6 +663,7 @@ export class WorkflowEngineV2 {
     const subsetSet = subset ? (Array.isArray(subset) ? new Set(subset) : subset) : null
     const topLevelLoopBodyNodes = subsetSet ? null : this.collectAllLoopBodySubgraphs(workflow, graph)
     const ready: WorkflowNode[] = []
+    let propagatedSkip = false
     for (const node of workflow.nodes) {
       if (subsetSet && !subsetSet.has(node.id)) continue
       if (topLevelLoopBodyNodes?.has(node.id)) continue
@@ -689,7 +690,7 @@ export class WorkflowEngineV2 {
         continue
       }
 
-      const parentStates = parentEdges.map(e => nodeStates.get(e.source)!)
+      const parentStates = parentEdges.map(e => this.getParentStateForEdge(e, graph, nodeStates))
       const allDone = parentStates.every(p => p.status === 'success' || p.status === 'error' || p.status === 'skipped')
       if (!allDone) continue
 
@@ -699,7 +700,7 @@ export class WorkflowEngineV2 {
         if (mode === 'any') {
           const anySuccess = parentStates.some(p => p.status === 'success')
           if (anySuccess) ready.push(node)
-          else state.status = 'skipped'
+          else { state.status = 'skipped'; propagatedSkip = true }
           continue
         }
       }
@@ -711,7 +712,14 @@ export class WorkflowEngineV2 {
       } else {
         // 1+ parent error/skipped → node này cũng skip
         state.status = 'skipped'
+        propagatedSkip = true
       }
+    }
+    // Node array order is editor layout/history, not a topological ordering.
+    // A skip discovered late in this scan can unblock an earlier merge. Reach
+    // a fixed point before reporting that no work remains (including loops).
+    if (ready.length === 0 && propagatedSkip) {
+      return this.computeReadyInSubgraph(workflow, graph, nodeStates, subset, rootNodeIds, excludeFromParents)
     }
     return ready
   }
@@ -730,12 +738,23 @@ export class WorkflowEngineV2 {
     }
     const parents = graph.parents.get(node.id) ?? []
     for (const edge of parents) {
-      const parentState = nodeStates.get(edge.source)
+      const parentState = this.getParentStateForEdge(edge, graph, nodeStates)
       if (parentState?.status === 'success' && parentState.output) {
         Object.assign(input, parentState.output)
       }
     }
     return input
+  }
+
+  private getParentStateForEdge(edge: WorkflowEdge, graph: Graph, nodeStates: Map<string, NodeState>): NodeState {
+    const state = nodeStates.get(edge.source)!
+    if (graph.nodes.get(edge.source)?.systemType === 'ifElse' && state.status === 'success' &&
+      (edge.sourceHandle === 'true' || edge.sourceHandle === 'false') && edge.sourceHandle !== state.output.branch) {
+      // An unselected direct edge to a merge is skipped even though the
+      // condition node itself succeeded. It cannot unlock or supply that merge.
+      return { status: 'skipped', output: {} }
+    }
+    return state
   }
 
   private resolveAfterScreenshotCapture(

@@ -1,0 +1,3954 @@
+{
+  "workflows": [
+    {
+      "id": 244,
+      "name": "facebook_comment_seeding_post__test__facebook_comment_seeding_post",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "profile"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 12000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 3500
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2614,
+          "blockName": "fb_prepare_post_link_comment_iteration",
+          "config": {},
+          "id": "prepare_iters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true"
+          },
+          "id": "if_like",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2615,
+          "blockName": "fb_click_like_current_post",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_current_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2616,
+          "blockName": "fb_comment_current_post",
+          "config": {},
+          "id": "comment_current_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-prepare_iters",
+          "source": "sleep_after_nav",
+          "target": "prepare_iters"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-if_like-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "if_like"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_current_post-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_current_post"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_current_post-merge_like",
+          "source": "like_current_post",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-merge_like-comment_current_post",
+          "source": "merge_like",
+          "target": "comment_current_post"
+        }
+      ],
+      "defaultVariables": {
+        "commentImageBatches": [],
+        "commentVariants": [],
+        "enablePostLike": false,
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "URL bài post",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Like bài trước khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "label": "Ảnh comment theo lượt",
+          "name": "commentImageBatches",
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "facebook_group_post",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 27,
+          "blockName": "fb_open_composer",
+          "config": {},
+          "id": "open_composer",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 2000
+          },
+          "id": "sleep1",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 28,
+          "blockName": "fb_type_post_content",
+          "config": {},
+          "id": "type_content",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 29,
+          "blockName": "fb_drop_post_images",
+          "config": {},
+          "id": "drop_images",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 5000
+          },
+          "id": "sleep2",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 30,
+          "blockName": "fb_click_post_button",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "id": "click_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 3000
+          },
+          "id": "sleep3",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 31,
+          "blockName": "fb_detect_pending_post",
+          "config": {},
+          "id": "detect_pending",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "id": "if_comment",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "vars.commentIterations",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_comment",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.leaveGroupOnPendingApproval === true && vars.groupPostIsPending === true"
+          },
+          "id": "if_leave",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 32,
+          "blockName": "fb_leave_group_if_pending",
+          "config": {
+            "enabled": true
+          },
+          "id": "leave_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_leave",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.autoJoinGroupAfterPost === true && vars.groupPostIsPending !== true"
+          },
+          "id": "if_join",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 33,
+          "blockName": "fb_join_group_if_not_member",
+          "config": {
+            "enabled": true
+          },
+          "id": "join_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_join",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2625,
+          "blockName": "fb_click_group_post_prompt_if_present",
+          "config": {},
+          "id": "dismiss_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2624,
+          "blockName": "fb_verify_group_post_form_closed",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "id": "verify_submit",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2625,
+          "blockName": "fb_click_group_post_prompt_if_present",
+          "config": {},
+          "id": "dismiss_after_submit",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true"
+          },
+          "id": "if_submitted",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2626,
+          "blockName": "fb_get_first_group_post_link",
+          "config": {},
+          "id": "get_post_link",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2627,
+          "blockName": "fb_adjust_group_post_comments_after_pending",
+          "config": {},
+          "id": "adjust_comments_after_pending",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.skipGroupPostByKnownApproval === true"
+          },
+          "id": "if_skip_known_approval",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2629,
+          "blockName": "fb_skip_group_post_for_known_approval",
+          "config": {},
+          "id": "skip_known_approval",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_known_approval",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.copyContentFromSource === true && !!vars.sourceLink"
+          },
+          "id": "if_copy_source",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 35,
+          "blockName": "fb_scrape_post",
+          "config": {},
+          "id": "scrape_source",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2674,
+          "blockName": "fb_rewrite_source_content_ai",
+          "config": {},
+          "id": "source_ai_prompt",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2676,
+          "blockName": "fb_navigate_to_target_url",
+          "config": {},
+          "id": "nav_group_after_source",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_source_ready",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2794,
+          "blockName": "fb_select_group_post_share_targets",
+          "config": {},
+          "id": "select_group_share_targets",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2824,
+          "blockName": "fb_compose_source_manual_content",
+          "config": {},
+          "id": "compose_formatted_content",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-open_composer-sleep1",
+          "source": "open_composer",
+          "target": "sleep1"
+        },
+        {
+          "id": "e-sleep1-type_content",
+          "source": "sleep1",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-type_content-drop_images",
+          "source": "type_content",
+          "target": "drop_images"
+        },
+        {
+          "id": "e-drop_images-sleep2",
+          "source": "drop_images",
+          "target": "sleep2"
+        },
+        {
+          "id": "e-sleep2-click_post",
+          "source": "sleep2",
+          "target": "click_post"
+        },
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "sourceHandle": "true",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "sourceHandle": "false",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "comment"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_leave-leave_group-true",
+          "source": "if_leave",
+          "sourceHandle": "true",
+          "target": "leave_group"
+        },
+        {
+          "id": "e-if_leave-merge_leave-false",
+          "source": "if_leave",
+          "sourceHandle": "false",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-leave_group-merge_leave",
+          "source": "leave_group",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-merge_leave-if_join",
+          "source": "merge_leave",
+          "target": "if_join"
+        },
+        {
+          "id": "e-if_join-join_group-true",
+          "source": "if_join",
+          "sourceHandle": "true",
+          "target": "join_group"
+        },
+        {
+          "id": "e-if_join-merge_join-false",
+          "source": "if_join",
+          "sourceHandle": "false",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-join_group-merge_join",
+          "source": "join_group",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-dismiss_after_nav-wait_main",
+          "source": "dismiss_after_nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-click_post-verify_submit",
+          "source": "click_post",
+          "target": "verify_submit"
+        },
+        {
+          "id": "e-verify_submit-dismiss_after_submit",
+          "source": "verify_submit",
+          "target": "dismiss_after_submit"
+        },
+        {
+          "id": "e-dismiss_after_submit-if_submitted",
+          "source": "dismiss_after_submit",
+          "target": "if_submitted"
+        },
+        {
+          "id": "e-if_submitted-sleep3-true",
+          "source": "if_submitted",
+          "sourceHandle": "true",
+          "target": "sleep3"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "sourceHandle": "false",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-sleep3-get_post_link",
+          "source": "sleep3",
+          "target": "get_post_link"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        },
+        {
+          "id": "e-wait_main-if_skip_known_approval",
+          "source": "wait_main",
+          "target": "if_skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-skip_known_approval-true",
+          "source": "if_skip_known_approval",
+          "sourceHandle": "true",
+          "target": "skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-open_composer-false",
+          "source": "if_skip_known_approval",
+          "sourceHandle": "false",
+          "target": "open_composer"
+        },
+        {
+          "id": "e-skip_known_approval-merge_known_approval",
+          "source": "skip_known_approval",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-get_post_link-merge_known_approval",
+          "source": "get_post_link",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-merge_known_approval-detect_pending",
+          "source": "merge_known_approval",
+          "target": "detect_pending"
+        },
+        {
+          "id": "e-if-copy-source-true",
+          "source": "if_copy_source",
+          "sourceHandle": "true",
+          "target": "scrape_source"
+        },
+        {
+          "id": "e-if-copy-source-false",
+          "source": "if_copy_source",
+          "sourceHandle": "false",
+          "target": "resolve_url"
+        },
+        {
+          "id": "e-source-scrape-ai",
+          "source": "scrape_source",
+          "target": "source_ai_prompt"
+        },
+        {
+          "id": "e-source-ai-nav-group",
+          "source": "source_ai_prompt",
+          "target": "nav_group_after_source"
+        },
+        {
+          "id": "e-nav-after-source-merge",
+          "source": "nav_group_after_source",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-nav-merge-source-ready",
+          "source": "nav",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-merge-source-ready-next",
+          "source": "merge_source_ready",
+          "target": "dismiss_after_nav"
+        },
+        {
+          "id": "e-open_composer-select_group_share_targets",
+          "source": "open_composer",
+          "target": "select_group_share_targets"
+        },
+        {
+          "id": "e-select_group_share_targets-type_content",
+          "source": "select_group_share_targets",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-compose-formatted-content-type-content",
+          "source": "compose_formatted_content",
+          "target": "type_content"
+        }
+      ],
+      "defaultVariables": {
+        "autoJoinGroupAfterPost": false,
+        "campaignContent": "",
+        "commentIterations": [],
+        "copyContentFromSource": false,
+        "enableComment": false,
+        "enableGroupPostShareToJoinedGroups": false,
+        "formattedContentEnabled": false,
+        "groupPostShareMaxCount": 0,
+        "groupPostShareTargets": [],
+        "images": [],
+        "includeSourceImages": false,
+        "inputDataUid": "",
+        "leaveGroupOnPendingApproval": false,
+        "rewriteSourceContentWithAI": false,
+        "sourceContentAiPrompt": "",
+        "sourceLink": ""
+      },
+      "variablesSchema": [
+        {
+          "description": "URL hoặc UID group đã normalize bởi scheduler",
+          "label": "URL group",
+          "name": "inputDataUid",
+          "type": "string"
+        },
+        {
+          "label": "Nội dung bài đăng",
+          "name": "campaignContent",
+          "type": "string"
+        },
+        {
+          "label": "Ảnh kèm theo (paths)",
+          "name": "images",
+          "type": "array"
+        },
+        {
+          "label": "Bật comment sau khi đăng",
+          "name": "enableComment",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách comment (mỗi item {position, text})",
+          "name": "commentIterations",
+          "type": "array"
+        },
+        {
+          "label": "Rời nhóm nếu bài chờ duyệt",
+          "name": "leaveGroupOnPendingApproval",
+          "type": "boolean"
+        },
+        {
+          "label": "Tự tham gia nhóm sau khi đăng",
+          "name": "autoJoinGroupAfterPost",
+          "type": "boolean"
+        },
+        {
+          "label": "Copy nội dung từ nguồn",
+          "name": "copyContentFromSource",
+          "type": "boolean"
+        },
+        {
+          "label": "Lấy kèm hình ảnh",
+          "name": "includeSourceImages",
+          "type": "boolean"
+        },
+        {
+          "label": "Link nguồn",
+          "name": "sourceLink",
+          "type": "string"
+        },
+        {
+          "label": "Lời nhắc AI - Edit lại nội dung",
+          "name": "rewriteSourceContentWithAI",
+          "type": "boolean"
+        },
+        {
+          "label": "Lời nhắc AI",
+          "name": "sourceContentAiPrompt",
+          "placeholder": "Viết lại nội dung sau: [content]",
+          "type": "textarea"
+        },
+        {
+          "label": "Đăng bài dạng chia sẻ",
+          "name": "enableGroupPostShareToJoinedGroups",
+          "type": "boolean"
+        },
+        {
+          "label": "Group share ứng viên",
+          "name": "groupPostShareTargets",
+          "type": "json"
+        },
+        {
+          "label": "Số group share tối đa",
+          "name": "groupPostShareMaxCount",
+          "type": "number"
+        },
+        {
+          "label": "Nội dung có định dạng",
+          "name": "formattedContentEnabled",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": 247,
+      "name": "[Built-in] Facebook - Tìm kiếm data bằng search__test__facebook_find_data_search",
+      "nodes": [
+        {
+          "blockId": 2714,
+          "blockName": "fb_prepare_search_data_context",
+          "config": {},
+          "id": "prepare",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2715,
+          "blockName": "fb_open_search_posts",
+          "config": {},
+          "id": "open_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2716,
+          "blockName": "fb_apply_search_post_filters",
+          "config": {},
+          "id": "post_filters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2717,
+          "blockName": "fb_collect_search_posts",
+          "config": {},
+          "id": "collect_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2718,
+          "blockName": "fb_extract_data_from_search_posts",
+          "config": {},
+          "id": "extract_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2719,
+          "blockName": "fb_collect_search_post_comments",
+          "config": {},
+          "id": "collect_comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2720,
+          "blockName": "fb_extract_data_from_search_comments",
+          "config": {},
+          "id": "extract_comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2721,
+          "blockName": "fb_open_search_groups",
+          "config": {},
+          "id": "open_groups",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2722,
+          "blockName": "fb_apply_search_group_filters",
+          "config": {},
+          "id": "group_filters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2723,
+          "blockName": "fb_collect_search_groups",
+          "config": {},
+          "id": "collect_groups",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2724,
+          "blockName": "fb_find_search_data_summary",
+          "config": {},
+          "id": "summary",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-prepare-open-posts",
+          "source": "prepare",
+          "target": "open_posts"
+        },
+        {
+          "id": "e-open-posts-filters",
+          "source": "open_posts",
+          "target": "post_filters"
+        },
+        {
+          "id": "e-post-filters-collect",
+          "source": "post_filters",
+          "target": "collect_posts"
+        },
+        {
+          "id": "e-collect-posts-extract",
+          "source": "collect_posts",
+          "target": "extract_posts"
+        },
+        {
+          "id": "e-extract-posts-comments",
+          "source": "extract_posts",
+          "target": "collect_comments"
+        },
+        {
+          "id": "e-collect-comments-extract",
+          "source": "collect_comments",
+          "target": "extract_comments"
+        },
+        {
+          "id": "e-extract-comments-open-groups",
+          "source": "extract_comments",
+          "target": "open_groups"
+        },
+        {
+          "id": "e-open-groups-filters",
+          "source": "open_groups",
+          "target": "group_filters"
+        },
+        {
+          "id": "e-group-filters-collect",
+          "source": "group_filters",
+          "target": "collect_groups"
+        },
+        {
+          "id": "e-collect-groups-summary",
+          "source": "collect_groups",
+          "target": "summary"
+        }
+      ],
+      "defaultVariables": {
+        "commentContentAI": "",
+        "commentKeywords": "",
+        "countCommentFindData": 30,
+        "countSearchGroupFindData": 20,
+        "countSearchPostFindData": 10,
+        "isFindCommentByContentAI": false,
+        "isFindCommentByKeywords": false,
+        "isFindFacebookGroup": false,
+        "isFindInComment": false,
+        "isFindInPost": true,
+        "isFindLinkGroupZalo": false,
+        "isFindPhone": true,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "isFindPostLink": false,
+        "isFindUid": false,
+        "minSearchGroupMembers": 0,
+        "minSearchGroupPostsPerDay": 0,
+        "postContentAI": "",
+        "postKeywords": "",
+        "searchGroupCity": "",
+        "searchGroupMineOnly": false,
+        "searchGroupNearMe": false,
+        "searchGroupPublicOnly": false,
+        "searchPostAuthorFilter": "all",
+        "searchPostDateFilter": "all",
+        "searchPostRecentOnly": false,
+        "searchPostSeenOnly": false,
+        "searchPostTaggedLocation": "all"
+      },
+      "variablesSchema": [
+        {
+          "label": "Từ khóa",
+          "name": "inputDataUid",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Tìm số điện thoại",
+          "name": "isFindPhone",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Zalo",
+          "name": "isFindLinkGroupZalo",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm UID",
+          "name": "isFindUid",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link bài post",
+          "name": "isFindPostLink",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Facebook",
+          "name": "isFindFacebookGroup",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trên post",
+          "name": "isFindInPost",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trong comment",
+          "name": "isFindInComment",
+          "type": "boolean"
+        },
+        {
+          "default": 10,
+          "label": "Số post tối đa / từ khóa",
+          "name": "countSearchPostFindData",
+          "type": "number"
+        },
+        {
+          "default": 30,
+          "label": "Số comment tối đa / post",
+          "name": "countCommentFindData",
+          "type": "number"
+        },
+        {
+          "default": 20,
+          "label": "Số group tối đa / từ khóa",
+          "name": "countSearchGroupFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Bài viết mới đây",
+          "name": "searchPostRecentOnly",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Bài viết đã xem",
+          "name": "searchPostSeenOnly",
+          "type": "boolean"
+        },
+        {
+          "default": "all",
+          "label": "Ngày đăng",
+          "name": "searchPostDateFilter",
+          "type": "string"
+        },
+        {
+          "default": "all",
+          "label": "Bài viết của",
+          "name": "searchPostAuthorFilter",
+          "type": "string"
+        },
+        {
+          "default": "all",
+          "label": "Vị trí được gắn thẻ",
+          "name": "searchPostTaggedLocation",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tỉnh/Thành phố",
+          "name": "searchGroupCity",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Gần tôi",
+          "name": "searchGroupNearMe",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Nhóm công khai",
+          "name": "searchGroupPublicOnly",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Nhóm của tôi",
+          "name": "searchGroupMineOnly",
+          "type": "boolean"
+        },
+        {
+          "default": 0,
+          "label": "Thành viên tối thiểu",
+          "name": "minSearchGroupMembers",
+          "type": "number"
+        },
+        {
+          "default": 0,
+          "label": "Bài đăng tối thiểu/ngày",
+          "name": "minSearchGroupPostsPerDay",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá comment",
+          "name": "isFindCommentByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá comment",
+          "name": "commentKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa comment bằng AI",
+          "name": "isFindCommentByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa comment",
+          "name": "commentContentAI",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 252,
+      "name": "facebook_group_post__test__facebook_group_post",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 27,
+          "blockName": "fb_open_composer",
+          "config": {},
+          "id": "open_composer",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 2000
+          },
+          "id": "sleep1",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 28,
+          "blockName": "fb_type_post_content",
+          "config": {},
+          "id": "type_content",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 29,
+          "blockName": "fb_drop_post_images",
+          "config": {},
+          "id": "drop_images",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 5000
+          },
+          "id": "sleep2",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 30,
+          "blockName": "fb_click_post_button",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "id": "click_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 3000
+          },
+          "id": "sleep3",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 31,
+          "blockName": "fb_detect_pending_post",
+          "config": {},
+          "id": "detect_pending",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "id": "if_comment",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "vars.commentIterations",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_comment",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.leaveGroupOnPendingApproval === true && vars.groupPostIsPending === true"
+          },
+          "id": "if_leave",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 32,
+          "blockName": "fb_leave_group_if_pending",
+          "config": {
+            "enabled": true
+          },
+          "id": "leave_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_leave",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.autoJoinGroupAfterPost === true && vars.groupPostIsPending !== true"
+          },
+          "id": "if_join",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 33,
+          "blockName": "fb_join_group_if_not_member",
+          "config": {
+            "enabled": true
+          },
+          "id": "join_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_join",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2625,
+          "blockName": "fb_click_group_post_prompt_if_present",
+          "config": {},
+          "id": "dismiss_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2624,
+          "blockName": "fb_verify_group_post_form_closed",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "id": "verify_submit",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2625,
+          "blockName": "fb_click_group_post_prompt_if_present",
+          "config": {},
+          "id": "dismiss_after_submit",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true"
+          },
+          "id": "if_submitted",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2626,
+          "blockName": "fb_get_first_group_post_link",
+          "config": {},
+          "id": "get_post_link",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2627,
+          "blockName": "fb_adjust_group_post_comments_after_pending",
+          "config": {},
+          "id": "adjust_comments_after_pending",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.skipGroupPostByKnownApproval === true"
+          },
+          "id": "if_skip_known_approval",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2629,
+          "blockName": "fb_skip_group_post_for_known_approval",
+          "config": {},
+          "id": "skip_known_approval",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_known_approval",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.copyContentFromSource === true && !!vars.sourceLink"
+          },
+          "id": "if_copy_source",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 35,
+          "blockName": "fb_scrape_post",
+          "config": {},
+          "id": "scrape_source",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2674,
+          "blockName": "fb_rewrite_source_content_ai",
+          "config": {},
+          "id": "source_ai_prompt",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2676,
+          "blockName": "fb_navigate_to_target_url",
+          "config": {},
+          "id": "nav_group_after_source",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_source_ready",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2794,
+          "blockName": "fb_select_group_post_share_targets",
+          "config": {},
+          "id": "select_group_share_targets",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2824,
+          "blockName": "fb_compose_source_manual_content",
+          "config": {},
+          "id": "compose_formatted_content",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-open_composer-sleep1",
+          "source": "open_composer",
+          "target": "sleep1"
+        },
+        {
+          "id": "e-sleep1-type_content",
+          "source": "sleep1",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-type_content-drop_images",
+          "source": "type_content",
+          "target": "drop_images"
+        },
+        {
+          "id": "e-drop_images-sleep2",
+          "source": "drop_images",
+          "target": "sleep2"
+        },
+        {
+          "id": "e-sleep2-click_post",
+          "source": "sleep2",
+          "target": "click_post"
+        },
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "sourceHandle": "true",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "sourceHandle": "false",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "comment"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_leave-leave_group-true",
+          "source": "if_leave",
+          "sourceHandle": "true",
+          "target": "leave_group"
+        },
+        {
+          "id": "e-if_leave-merge_leave-false",
+          "source": "if_leave",
+          "sourceHandle": "false",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-leave_group-merge_leave",
+          "source": "leave_group",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-merge_leave-if_join",
+          "source": "merge_leave",
+          "target": "if_join"
+        },
+        {
+          "id": "e-if_join-join_group-true",
+          "source": "if_join",
+          "sourceHandle": "true",
+          "target": "join_group"
+        },
+        {
+          "id": "e-if_join-merge_join-false",
+          "source": "if_join",
+          "sourceHandle": "false",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-join_group-merge_join",
+          "source": "join_group",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-dismiss_after_nav-wait_main",
+          "source": "dismiss_after_nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-click_post-verify_submit",
+          "source": "click_post",
+          "target": "verify_submit"
+        },
+        {
+          "id": "e-verify_submit-dismiss_after_submit",
+          "source": "verify_submit",
+          "target": "dismiss_after_submit"
+        },
+        {
+          "id": "e-dismiss_after_submit-if_submitted",
+          "source": "dismiss_after_submit",
+          "target": "if_submitted"
+        },
+        {
+          "id": "e-if_submitted-sleep3-true",
+          "source": "if_submitted",
+          "sourceHandle": "true",
+          "target": "sleep3"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "sourceHandle": "false",
+          "target": "merge_comment"
+        },
+        {
+          "id": "e-sleep3-get_post_link",
+          "source": "sleep3",
+          "target": "get_post_link"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        },
+        {
+          "id": "e-wait_main-if_skip_known_approval",
+          "source": "wait_main",
+          "target": "if_skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-skip_known_approval-true",
+          "source": "if_skip_known_approval",
+          "sourceHandle": "true",
+          "target": "skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-open_composer-false",
+          "source": "if_skip_known_approval",
+          "sourceHandle": "false",
+          "target": "open_composer"
+        },
+        {
+          "id": "e-skip_known_approval-merge_known_approval",
+          "source": "skip_known_approval",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-get_post_link-merge_known_approval",
+          "source": "get_post_link",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-merge_known_approval-detect_pending",
+          "source": "merge_known_approval",
+          "target": "detect_pending"
+        },
+        {
+          "id": "e-if-copy-source-true",
+          "source": "if_copy_source",
+          "sourceHandle": "true",
+          "target": "scrape_source"
+        },
+        {
+          "id": "e-if-copy-source-false",
+          "source": "if_copy_source",
+          "sourceHandle": "false",
+          "target": "resolve_url"
+        },
+        {
+          "id": "e-source-scrape-ai",
+          "source": "scrape_source",
+          "target": "source_ai_prompt"
+        },
+        {
+          "id": "e-source-ai-nav-group",
+          "source": "source_ai_prompt",
+          "target": "nav_group_after_source"
+        },
+        {
+          "id": "e-nav-after-source-merge",
+          "source": "nav_group_after_source",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-nav-merge-source-ready",
+          "source": "nav",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-merge-source-ready-next",
+          "source": "merge_source_ready",
+          "target": "dismiss_after_nav"
+        },
+        {
+          "id": "e-open_composer-select_group_share_targets",
+          "source": "open_composer",
+          "target": "select_group_share_targets"
+        },
+        {
+          "id": "e-select_group_share_targets-type_content",
+          "source": "select_group_share_targets",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-compose-formatted-content-type-content",
+          "source": "compose_formatted_content",
+          "target": "type_content"
+        }
+      ],
+      "defaultVariables": {
+        "autoJoinGroupAfterPost": false,
+        "campaignContent": "",
+        "commentIterations": [],
+        "copyContentFromSource": false,
+        "enableComment": false,
+        "enableGroupPostShareToJoinedGroups": false,
+        "formattedContentEnabled": false,
+        "groupPostShareMaxCount": 0,
+        "groupPostShareTargets": [],
+        "images": [],
+        "includeSourceImages": false,
+        "inputDataUid": "",
+        "leaveGroupOnPendingApproval": false,
+        "rewriteSourceContentWithAI": false,
+        "sourceContentAiPrompt": "",
+        "sourceLink": ""
+      },
+      "variablesSchema": [
+        {
+          "description": "URL hoặc UID group đã normalize bởi scheduler",
+          "label": "URL group",
+          "name": "inputDataUid",
+          "type": "string"
+        },
+        {
+          "label": "Nội dung bài đăng",
+          "name": "campaignContent",
+          "type": "string"
+        },
+        {
+          "label": "Ảnh kèm theo (paths)",
+          "name": "images",
+          "type": "array"
+        },
+        {
+          "label": "Bật comment sau khi đăng",
+          "name": "enableComment",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách comment (mỗi item {position, text})",
+          "name": "commentIterations",
+          "type": "array"
+        },
+        {
+          "label": "Rời nhóm nếu bài chờ duyệt",
+          "name": "leaveGroupOnPendingApproval",
+          "type": "boolean"
+        },
+        {
+          "label": "Tự tham gia nhóm sau khi đăng",
+          "name": "autoJoinGroupAfterPost",
+          "type": "boolean"
+        },
+        {
+          "label": "Copy nội dung từ nguồn",
+          "name": "copyContentFromSource",
+          "type": "boolean"
+        },
+        {
+          "label": "Lấy kèm hình ảnh",
+          "name": "includeSourceImages",
+          "type": "boolean"
+        },
+        {
+          "label": "Link nguồn",
+          "name": "sourceLink",
+          "type": "string"
+        },
+        {
+          "label": "Lời nhắc AI - Edit lại nội dung",
+          "name": "rewriteSourceContentWithAI",
+          "type": "boolean"
+        },
+        {
+          "label": "Lời nhắc AI",
+          "name": "sourceContentAiPrompt",
+          "placeholder": "Viết lại nội dung sau: [content]",
+          "type": "textarea"
+        },
+        {
+          "label": "Đăng bài dạng chia sẻ",
+          "name": "enableGroupPostShareToJoinedGroups",
+          "type": "boolean"
+        },
+        {
+          "label": "Group share ứng viên",
+          "name": "groupPostShareTargets",
+          "type": "json"
+        },
+        {
+          "label": "Số group share tối đa",
+          "name": "groupPostShareMaxCount",
+          "type": "number"
+        },
+        {
+          "label": "Nội dung có định dạng",
+          "name": "formattedContentEnabled",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": 284,
+      "name": "facebook_join_group",
+      "nodes": [
+        {
+          "blockId": 2793,
+          "blockName": "fb_join_group",
+          "config": {},
+          "id": "join_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [],
+      "defaultVariables": {},
+      "variablesSchema": [
+        {
+          "label": "Group URL/UID",
+          "name": "targetUid",
+          "type": "string"
+        },
+        {
+          "label": "Tên group",
+          "name": "targetName",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 239,
+      "name": "[Built-in] Facebook - Tìm kiếm data bằng search",
+      "nodes": [
+        {
+          "blockId": 2714,
+          "blockName": "fb_prepare_search_data_context",
+          "config": {},
+          "id": "prepare",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2715,
+          "blockName": "fb_open_search_posts",
+          "config": {},
+          "id": "open_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2716,
+          "blockName": "fb_apply_search_post_filters",
+          "config": {},
+          "id": "post_filters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2717,
+          "blockName": "fb_collect_search_posts",
+          "config": {},
+          "id": "collect_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2718,
+          "blockName": "fb_extract_data_from_search_posts",
+          "config": {},
+          "id": "extract_posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2719,
+          "blockName": "fb_collect_search_post_comments",
+          "config": {},
+          "id": "collect_comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2720,
+          "blockName": "fb_extract_data_from_search_comments",
+          "config": {},
+          "id": "extract_comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2721,
+          "blockName": "fb_open_search_groups",
+          "config": {},
+          "id": "open_groups",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2722,
+          "blockName": "fb_apply_search_group_filters",
+          "config": {},
+          "id": "group_filters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2723,
+          "blockName": "fb_collect_search_groups",
+          "config": {},
+          "id": "collect_groups",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2724,
+          "blockName": "fb_find_search_data_summary",
+          "config": {},
+          "id": "summary",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-prepare-open-posts",
+          "source": "prepare",
+          "target": "open_posts"
+        },
+        {
+          "id": "e-open-posts-filters",
+          "source": "open_posts",
+          "target": "post_filters"
+        },
+        {
+          "id": "e-post-filters-collect",
+          "source": "post_filters",
+          "target": "collect_posts"
+        },
+        {
+          "id": "e-collect-posts-extract",
+          "source": "collect_posts",
+          "target": "extract_posts"
+        },
+        {
+          "id": "e-extract-posts-comments",
+          "source": "extract_posts",
+          "target": "collect_comments"
+        },
+        {
+          "id": "e-collect-comments-extract",
+          "source": "collect_comments",
+          "target": "extract_comments"
+        },
+        {
+          "id": "e-extract-comments-open-groups",
+          "source": "extract_comments",
+          "target": "open_groups"
+        },
+        {
+          "id": "e-open-groups-filters",
+          "source": "open_groups",
+          "target": "group_filters"
+        },
+        {
+          "id": "e-group-filters-collect",
+          "source": "group_filters",
+          "target": "collect_groups"
+        },
+        {
+          "id": "e-collect-groups-summary",
+          "source": "collect_groups",
+          "target": "summary"
+        }
+      ],
+      "defaultVariables": {
+        "commentContentAI": "",
+        "commentKeywords": "",
+        "countCommentFindData": 30,
+        "countSearchGroupFindData": 20,
+        "countSearchPostFindData": 10,
+        "isFindCommentByContentAI": false,
+        "isFindCommentByKeywords": false,
+        "isFindFacebookGroup": false,
+        "isFindInComment": false,
+        "isFindInPost": true,
+        "isFindLinkGroupZalo": false,
+        "isFindPhone": true,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "isFindPostLink": false,
+        "isFindUid": false,
+        "minSearchGroupMembers": 0,
+        "minSearchGroupPostsPerDay": 0,
+        "postContentAI": "",
+        "postKeywords": "",
+        "searchGroupCity": "",
+        "searchGroupMineOnly": false,
+        "searchGroupNearMe": false,
+        "searchGroupPublicOnly": false,
+        "searchPostAuthorFilter": "all",
+        "searchPostDateFilter": "all",
+        "searchPostRecentOnly": false,
+        "searchPostSeenOnly": false,
+        "searchPostTaggedLocation": "all"
+      },
+      "variablesSchema": [
+        {
+          "label": "Từ khóa",
+          "name": "inputDataUid",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Tìm số điện thoại",
+          "name": "isFindPhone",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Zalo",
+          "name": "isFindLinkGroupZalo",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm UID",
+          "name": "isFindUid",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link bài post",
+          "name": "isFindPostLink",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Facebook",
+          "name": "isFindFacebookGroup",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trên post",
+          "name": "isFindInPost",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trong comment",
+          "name": "isFindInComment",
+          "type": "boolean"
+        },
+        {
+          "default": 10,
+          "label": "Số post tối đa / từ khóa",
+          "name": "countSearchPostFindData",
+          "type": "number"
+        },
+        {
+          "default": 30,
+          "label": "Số comment tối đa / post",
+          "name": "countCommentFindData",
+          "type": "number"
+        },
+        {
+          "default": 20,
+          "label": "Số group tối đa / từ khóa",
+          "name": "countSearchGroupFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Bài viết mới đây",
+          "name": "searchPostRecentOnly",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Bài viết đã xem",
+          "name": "searchPostSeenOnly",
+          "type": "boolean"
+        },
+        {
+          "default": "all",
+          "label": "Ngày đăng",
+          "name": "searchPostDateFilter",
+          "type": "string"
+        },
+        {
+          "default": "all",
+          "label": "Bài viết của",
+          "name": "searchPostAuthorFilter",
+          "type": "string"
+        },
+        {
+          "default": "all",
+          "label": "Vị trí được gắn thẻ",
+          "name": "searchPostTaggedLocation",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tỉnh/Thành phố",
+          "name": "searchGroupCity",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Gần tôi",
+          "name": "searchGroupNearMe",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Nhóm công khai",
+          "name": "searchGroupPublicOnly",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Nhóm của tôi",
+          "name": "searchGroupMineOnly",
+          "type": "boolean"
+        },
+        {
+          "default": 0,
+          "label": "Thành viên tối thiểu",
+          "name": "minSearchGroupMembers",
+          "type": "number"
+        },
+        {
+          "default": 0,
+          "label": "Bài đăng tối thiểu/ngày",
+          "name": "minSearchGroupPostsPerDay",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá comment",
+          "name": "isFindCommentByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá comment",
+          "name": "commentKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa comment bằng AI",
+          "name": "isFindCommentByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa comment",
+          "name": "commentContentAI",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 285,
+      "name": "facebook_join_group__test__facebook_join_group",
+      "nodes": [
+        {
+          "blockId": 2793,
+          "blockName": "fb_join_group",
+          "config": {},
+          "id": "join_group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [],
+      "defaultVariables": {},
+      "variablesSchema": [
+        {
+          "label": "Group URL/UID",
+          "name": "targetUid",
+          "type": "string"
+        },
+        {
+          "label": "Tên group",
+          "name": "targetName",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 207,
+      "name": "facebook_comment_seeding_post",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "profile"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 12000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 3500
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2614,
+          "blockName": "fb_prepare_post_link_comment_iteration",
+          "config": {},
+          "id": "prepare_iters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true"
+          },
+          "id": "if_like",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2615,
+          "blockName": "fb_click_like_current_post",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_current_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2616,
+          "blockName": "fb_comment_current_post",
+          "config": {},
+          "id": "comment_current_post",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-prepare_iters",
+          "source": "sleep_after_nav",
+          "target": "prepare_iters"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-if_like-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "if_like"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_current_post-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_current_post"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_current_post-merge_like",
+          "source": "like_current_post",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-merge_like-comment_current_post",
+          "source": "merge_like",
+          "target": "comment_current_post"
+        }
+      ],
+      "defaultVariables": {
+        "commentImageBatches": [],
+        "commentVariants": [],
+        "enablePostLike": false,
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "URL bài post",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Like bài trước khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "label": "Ảnh comment theo lượt",
+          "name": "commentImageBatches",
+          "type": "array"
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "name": "[Built-in] Facebook - Tìm kiếm data trong group",
+      "nodes": [
+        {
+          "blockId": 2599,
+          "blockName": "fb_open_group_discussion",
+          "config": {},
+          "id": "node-open-group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "config": {},
+          "id": "node-sort-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2601,
+          "blockName": "fb_collect_group_posts",
+          "config": {},
+          "id": "node-collect-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2602,
+          "blockName": "fb_extract_data_from_group_posts",
+          "config": {},
+          "id": "node-extract-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2603,
+          "blockName": "fb_collect_group_comments",
+          "config": {},
+          "id": "node-collect-comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2604,
+          "blockName": "fb_extract_data_from_group_comments",
+          "config": {},
+          "id": "node-extract-comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2605,
+          "blockName": "fb_find_group_data_summary",
+          "config": {},
+          "id": "node-summary",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2638,
+          "blockName": "fb_open_group_members",
+          "config": {},
+          "id": "node-open-members",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2639,
+          "blockName": "fb_collect_group_members",
+          "config": {},
+          "id": "node-collect-members",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-open-sort",
+          "source": "node-open-group",
+          "target": "node-sort-posts"
+        },
+        {
+          "id": "e-sort-collect-posts",
+          "source": "node-sort-posts",
+          "target": "node-collect-posts"
+        },
+        {
+          "id": "e-collect-extract-posts",
+          "source": "node-collect-posts",
+          "target": "node-extract-posts"
+        },
+        {
+          "id": "e-extract-posts-collect-comments",
+          "source": "node-extract-posts",
+          "target": "node-collect-comments"
+        },
+        {
+          "id": "e-collect-comments-extract",
+          "source": "node-collect-comments",
+          "target": "node-extract-comments"
+        },
+        {
+          "id": "e-extract-comments-open-members",
+          "source": "node-extract-comments",
+          "target": "node-open-members"
+        },
+        {
+          "id": "e-open-members-collect",
+          "source": "node-open-members",
+          "target": "node-collect-members"
+        },
+        {
+          "id": "e-collect-members-summary",
+          "source": "node-collect-members",
+          "target": "node-summary"
+        }
+      ],
+      "defaultVariables": {
+        "commentContentAI": "",
+        "commentKeywords": "",
+        "countCommentFindData": 30,
+        "countGroupMemberFindData": 100,
+        "countPostFindData": 10,
+        "isFindCommentByContentAI": false,
+        "isFindCommentByKeywords": false,
+        "isFindInComment": false,
+        "isFindInGroupMembers": false,
+        "isFindInPost": false,
+        "isFindLinkGroupZalo": false,
+        "isFindNewInteractors": false,
+        "isFindPhone": true,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "isFindPostLink": false,
+        "isFindUid": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "sortTypeComment": "most_relevant",
+        "sortTypePost": "most_relevant",
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "Group URL/UID",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Tìm số điện thoại",
+          "name": "isFindPhone",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Zalo",
+          "name": "isFindLinkGroupZalo",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm UID",
+          "name": "isFindUid",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link bài post",
+          "name": "isFindPostLink",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trên post",
+          "name": "isFindInPost",
+          "type": "boolean"
+        },
+        {
+          "default": "most_relevant",
+          "label": "Sắp xếp post",
+          "name": "sortTypePost",
+          "type": "string"
+        },
+        {
+          "default": 10,
+          "label": "Số post tối đa",
+          "name": "countPostFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm trong comment",
+          "name": "isFindInComment",
+          "type": "boolean"
+        },
+        {
+          "default": "most_relevant",
+          "label": "Sắp xếp comment",
+          "name": "sortTypeComment",
+          "type": "string"
+        },
+        {
+          "default": 30,
+          "label": "Số comment tối đa",
+          "name": "countCommentFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm thành viên group",
+          "name": "isFindInGroupMembers",
+          "type": "boolean"
+        },
+        {
+          "default": 100,
+          "label": "Số thành viên tối đa",
+          "name": "countGroupMemberFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm người tương tác mới",
+          "name": "isFindNewInteractors",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá comment",
+          "name": "isFindCommentByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá comment",
+          "name": "commentKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa comment bằng AI",
+          "name": "isFindCommentByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa comment",
+          "name": "commentContentAI",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 245,
+      "name": "facebook_comment_seeding__test__facebook_comment_seeding",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "id": "prepare_iters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true"
+          },
+          "id": "if_like",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2074,
+          "blockName": "fb_click_like",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_at_pos",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment_at_pos",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-prepare_iters",
+          "source": "sleep_after_nav",
+          "target": "prepare_iters"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-if_like-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "if_like"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_at_pos-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_at_pos-merge_like",
+          "source": "like_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-merge_like-comment_at_pos",
+          "source": "merge_like",
+          "target": "comment_at_pos"
+        }
+      ],
+      "defaultVariables": {
+        "commentVariants": [],
+        "enablePostLike": false,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "postsPerTarget": 3,
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài trước khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 246,
+      "name": "[Built-in] Facebook - Tìm kiếm data trong group__test__facebook_find_data_group",
+      "nodes": [
+        {
+          "blockId": 2599,
+          "blockName": "fb_open_group_discussion",
+          "config": {},
+          "id": "node-open-group",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "config": {},
+          "id": "node-sort-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2601,
+          "blockName": "fb_collect_group_posts",
+          "config": {},
+          "id": "node-collect-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2602,
+          "blockName": "fb_extract_data_from_group_posts",
+          "config": {},
+          "id": "node-extract-posts",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2603,
+          "blockName": "fb_collect_group_comments",
+          "config": {},
+          "id": "node-collect-comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2604,
+          "blockName": "fb_extract_data_from_group_comments",
+          "config": {},
+          "id": "node-extract-comments",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2605,
+          "blockName": "fb_find_group_data_summary",
+          "config": {},
+          "id": "node-summary",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2638,
+          "blockName": "fb_open_group_members",
+          "config": {},
+          "id": "node-open-members",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2639,
+          "blockName": "fb_collect_group_members",
+          "config": {},
+          "id": "node-collect-members",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-open-sort",
+          "source": "node-open-group",
+          "target": "node-sort-posts"
+        },
+        {
+          "id": "e-sort-collect-posts",
+          "source": "node-sort-posts",
+          "target": "node-collect-posts"
+        },
+        {
+          "id": "e-collect-extract-posts",
+          "source": "node-collect-posts",
+          "target": "node-extract-posts"
+        },
+        {
+          "id": "e-extract-posts-collect-comments",
+          "source": "node-extract-posts",
+          "target": "node-collect-comments"
+        },
+        {
+          "id": "e-collect-comments-extract",
+          "source": "node-collect-comments",
+          "target": "node-extract-comments"
+        },
+        {
+          "id": "e-extract-comments-open-members",
+          "source": "node-extract-comments",
+          "target": "node-open-members"
+        },
+        {
+          "id": "e-open-members-collect",
+          "source": "node-open-members",
+          "target": "node-collect-members"
+        },
+        {
+          "id": "e-collect-members-summary",
+          "source": "node-collect-members",
+          "target": "node-summary"
+        }
+      ],
+      "defaultVariables": {
+        "commentContentAI": "",
+        "commentKeywords": "",
+        "countCommentFindData": 30,
+        "countGroupMemberFindData": 100,
+        "countPostFindData": 10,
+        "isFindCommentByContentAI": false,
+        "isFindCommentByKeywords": false,
+        "isFindInComment": false,
+        "isFindInGroupMembers": false,
+        "isFindInPost": false,
+        "isFindLinkGroupZalo": false,
+        "isFindNewInteractors": false,
+        "isFindPhone": true,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "isFindPostLink": false,
+        "isFindUid": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "sortTypeComment": "most_relevant",
+        "sortTypePost": "most_relevant",
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "Group URL/UID",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Tìm số điện thoại",
+          "name": "isFindPhone",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link group Zalo",
+          "name": "isFindLinkGroupZalo",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm UID",
+          "name": "isFindUid",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm link bài post",
+          "name": "isFindPostLink",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Tìm trên post",
+          "name": "isFindInPost",
+          "type": "boolean"
+        },
+        {
+          "default": "most_relevant",
+          "label": "Sắp xếp post",
+          "name": "sortTypePost",
+          "type": "string"
+        },
+        {
+          "default": 10,
+          "label": "Số post tối đa",
+          "name": "countPostFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm trong comment",
+          "name": "isFindInComment",
+          "type": "boolean"
+        },
+        {
+          "default": "most_relevant",
+          "label": "Sắp xếp comment",
+          "name": "sortTypeComment",
+          "type": "string"
+        },
+        {
+          "default": 30,
+          "label": "Số comment tối đa",
+          "name": "countCommentFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm thành viên group",
+          "name": "isFindInGroupMembers",
+          "type": "boolean"
+        },
+        {
+          "default": 100,
+          "label": "Số thành viên tối đa",
+          "name": "countGroupMemberFindData",
+          "type": "number"
+        },
+        {
+          "default": false,
+          "label": "Tìm người tương tác mới",
+          "name": "isFindNewInteractors",
+          "type": "boolean"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá comment",
+          "name": "isFindCommentByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá comment",
+          "name": "commentKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa comment bằng AI",
+          "name": "isFindCommentByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa comment",
+          "name": "commentContentAI",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "name": "facebook_comment_seeding",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "id": "prepare_iters",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "systemType": "loop",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true"
+          },
+          "id": "if_like",
+          "systemType": "ifElse",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 2074,
+          "blockName": "fb_click_like",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_at_pos",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment_at_pos",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "systemType": "merge",
+          "position": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-prepare_iters",
+          "source": "sleep_after_nav",
+          "target": "prepare_iters"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-if_like-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "if_like"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_at_pos-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_at_pos-merge_like",
+          "source": "like_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-merge_like-comment_at_pos",
+          "source": "merge_like",
+          "target": "comment_at_pos"
+        }
+      ],
+      "defaultVariables": {
+        "commentVariants": [],
+        "enablePostLike": false,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "postsPerTarget": 3,
+        "targetUrl": ""
+      },
+      "variablesSchema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài trước khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": 2670,
+      "name": "fb_get_current_identity_name",
+      "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst currentSelector = await helpers.element('FbCurrentIdentityLink')\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\nasync function rawText(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    const el = xpathAll(selector)[0] || null;\n    return el ? String(el.innerText || el.textContent || '').trim() : '';\n  `, selector)\n}\n\nhelpers.log('Đang lấy tên Facebook identity hiện tại')\nawait page.navigate('https://facebook.com')\nconst opened = await rawClick(menuSelector)\nif (!opened || opened.clicked !== true) throw new Error('Không tìm thấy nút mở menu profile/page hiện tại')\nawait helpers.sleep(stepMs + 500, signal)\n\nconst identityName = String(await rawText(currentSelector) || '').trim()\nawait rawClick(menuSelector).catch(() => null)\nawait helpers.sleep(stepMs + 500, signal)\n\nif (!identityName) throw new Error('Không lấy được tên Facebook identity hiện tại')\nvars.originalIdentityName = identityName\nhelpers.log('Identity hiện tại: ' + identityName)\nreturn { ok: true, identityName }\n",
+      "kind": "js",
+      "systemType": null,
+      "defaultConfig": {
+        "facebookStepMs": 1000
+      }
+    },
+    {
+      "id": 2671,
+      "name": "fb_switch_identity_by_name",
+      "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst useOriginalIdentity = input.useOriginalIdentity === true\nconst identityNameFromVars = String(input.identityNameFromVars || '').trim()\nconst identityName = String(\n  useOriginalIdentity\n    ? (vars.originalIdentityName || '')\n    : identityNameFromVars\n      ? (vars[identityNameFromVars] || '')\n      : (input.identityName || vars.identityName || vars.pageName || '')\n).trim()\n\nif (!identityName) {\n  return {\n    ok: false,\n    identityName,\n    message: useOriginalIdentity ? 'Không có tên profile gốc để chuyển lại' : 'Thiếu tên identity/page cần chuyển'\n  }\n}\n\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst seeAllSelector = await helpers.element('FbIdentitySeeAllButton')\nconst searchSelector = await helpers.element('FbIdentitySearchInput')\nconst selectTemplate = await helpers.element('FbIdentitySelectByNameButton')\n\nfunction xpathLiteral(value) {\n  const text = String(value || '')\n  if (!text.includes(\"'\")) return \"'\" + text + \"'\"\n  const singleQuoteLiteral = '\"\\'\"'\n  return 'concat(' + text.split(\"'\").map(part => \"'\" + part + \"'\").join(', ' + singleQuoteLiteral + ', ') + ')'\n}\n\nconst selectSelector = selectTemplate.replace(\"'$page_name'\", xpathLiteral(identityName)).replace('$page_name', identityName)\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\ntry {\n  helpers.log('Đang chuyển Facebook identity sang \"' + identityName + '\"')\n  await page.navigate('https://facebook.com')\n  const opened = await rawClick(menuSelector)\n  if (!opened || opened.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút mở menu profile/page hiện tại' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  const seeAll = await rawClick(seeAllSelector)\n  if (!seeAll || seeAll.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút xem tất cả profile/page' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  let selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  await page.type(searchSelector, identityName, { clearFirst: true })\n  await helpers.sleep(stepMs + 500, signal)\n\n  selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  return { ok: false, identityName, message: 'Không tìm thấy page/profile \"' + identityName + '\"' }\n} catch (e) {\n  if (signal && signal.aborted) throw e\n  const message = e && e.message ? String(e.message) : String(e)\n  return { ok: false, identityName, message: 'Có lỗi xảy ra khi chọn page/profile: ' + message }\n}\n",
+      "kind": "js",
+      "systemType": null,
+      "defaultConfig": {
+        "facebookStepMs": 1000
+      }
+    },
+    {
+      "id": 1,
+      "name": "if_else",
+      "code": "",
+      "kind": "system",
+      "systemType": "ifElse",
+      "defaultConfig": {
+        "condition": "true"
+      }
+    },
+    {
+      "id": 4,
+      "name": "merge",
+      "code": "",
+      "kind": "system",
+      "systemType": "merge",
+      "defaultConfig": {
+        "mode": "all"
+      }
+    }
+  ]
+}

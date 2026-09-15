@@ -1,0 +1,99 @@
+.facebook-page-identity {
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.facebook-page-identity.is-enabled {
+  background: color-mix(in srgb, var(--accent-primary) 5%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-default));
+}
+
+.facebook-page-identity-heading { display: flex; align-items: flex-start; gap: 10px; }
+.facebook-page-identity-heading > div { min-width: 0; }
+.facebook-page-identity-heading strong { display: block; font-size: 13px; font-weight: 600; }
+.facebook-page-identity-heading p { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+
+.facebook-page-identity-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 0;
+  background: var(--border-strong);
+  cursor: pointer;
+}
+
+.facebook-page-identity-switch span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast);
+}
+
+.facebook-page-identity-switch[aria-checked=true] { background: var(--accent-primary); }
+.facebook-page-identity-switch[aria-checked=true] span { transform: translateX(14px); }
+.facebook-page-identity-body { position: relative; margin-top: 12px; }
+.facebook-page-identity-label { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; row-gap: 4px; margin-bottom: 6px; }
+.facebook-page-identity-label label { flex: 1; margin: 0; white-space: nowrap; }
+.facebook-page-identity-label > span { color: var(--text-secondary); font-size: 11px; }
+.facebook-page-identity-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.facebook-page-identity-select { display: flex; align-items: center; gap: 8px; flex: 1 1 240px; min-width: 0; height: 38px; padding: 0 12px; text-align: left; cursor: pointer; }
+.facebook-page-identity-select > svg { flex: none; color: var(--text-secondary); }
+.facebook-page-identity-load { flex: none; height: 38px; }
+.facebook-page-identity button:disabled { opacity: .55; cursor: not-allowed; }
+.facebook-page-identity button:focus-visible, .facebook-page-identity-menu button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.facebook-page-identity-select:not(:disabled):hover { border-color: var(--border-hover); }
+.facebook-page-avatar { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; border-radius: 50%; color: var(--accent-primary); background: var(--bg-accent-subtle); font-size: 11px; font-weight: 600; }
+.facebook-page-identity-name { flex: 1; min-width: 0; }
+.facebook-page-identity-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.facebook-page-identity-name small { display: block; margin-top: 2px; color: var(--text-secondary); font-size: 11px; }
+.facebook-page-identity-select .facebook-page-identity-name { display: flex; align-items: baseline; gap: 8px; }
+.facebook-page-identity-select .facebook-page-identity-name small { flex: none; max-width: 50%; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.facebook-page-identity-menu {
+  position: fixed;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+
+.facebook-page-identity-menu button { display: flex; align-items: center; gap: 8px; padding: 8px; width: 100%; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-primary); text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
+.facebook-page-identity-menu button[aria-selected=true] { background: var(--bg-accent-subtle); border-color: color-mix(in srgb, var(--accent-primary) 30%, var(--border-default)); }
+.facebook-page-identity-menu button:hover { background: var(--bg-hover); }
+.facebook-page-identity-menu button > svg { flex: none; color: var(--accent-primary); }
+.facebook-page-identity-menu p { padding: 12px; text-align: center; font-size: 12px; color: var(--text-secondary); }
+
+.facebook-page-identity-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent-info) 20%, var(--border-default));
+  background: color-mix(in srgb, var(--accent-info) 6%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.facebook-page-identity-hint svg { flex: none; margin-top: 2px; color: var(--accent-info); }
+.facebook-page-identity-help, .facebook-page-identity-error { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.facebook-page-identity-error { color: var(--accent-error); }
+.facebook-page-identity .is-spinning { animation: facebook-page-spin .9s linear infinite; }
+@keyframes facebook-page-spin { to { transform: rotate(360deg); } }

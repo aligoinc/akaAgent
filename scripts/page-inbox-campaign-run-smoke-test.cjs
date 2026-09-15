@@ -73,6 +73,7 @@ function fixture(options = {}) {
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
     activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(),
+    facebookPageIdentities: new Map(),
     attemptedRunErrorPolicies: new Set(),
     zaloMessageOptOutContexts: new Map(), pauseRequests: new Set(),
     supabase: {
@@ -122,7 +123,7 @@ function fixture(options = {}) {
     }
   })
   return {
-    scheduler, stats,
+    scheduler, stats, account, campaign,
     run: async (statuses = ['hoàn thành', 'chờ xử lý', 'chờ xử lý']) => {
       details = statuses.map((status, index) => ({ id: index + 1, name: `Customer ${index + 1}`, status }))
       await scheduler.executeCampaignV2(account, campaign, 227, [], [])
@@ -172,4 +173,5 @@ async function main() {
   console.log('PASS other campaign actions receive no Page Inbox navigation flag')
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { fixture }
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })
