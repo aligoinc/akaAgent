@@ -2,6 +2,14 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Chuyển SQL Account akaBiz
+
+API ở repo akaBizApi gọi `akabiz_migrate_sql_account_v1(jsonb)` qua service_role ([v285](migrations/migration_v285_akabiz_sql_account_migration.sql)); `org_organization.sql_account_id` là dấu hoàn tất (không có ràng buộc unique), nhiều org có thể cùng phone/customer. Trigger quota chỉ cho import backend bỏ kiểm tra active/expiry/quota trong ngữ cảnh org của RPC; các guard runtime/claim khác giữ nguyên, không đặt `sql_staff_id` cho nhân viên khách. Shop SQL chưa có UID vẫn được tạo với `zalo_account_id=NULL`, trạng thái chưa đăng nhập; response có `skipped_products` cho quyền SQL ngoài phạm vi.
+
+v285 đã apply ngày 18/09/2026; akaBizApi build local rồi deploy `--prebuilt --prod` tại `akabiz-api.vercel.app`. Checksum và rollback smoke live: [audit](docs/SQL_ACCOUNT_MIGRATION_AUDIT.md), [smoke SQL](migrations/tests/migration_v285_sql_account_migration_smoke.sql).
+
+Zalo Server tiếp nhận session mới chưa xác minh qua discovery 60 giây, kể cả runtime staff đang chạy; [zaloServerSessionRestorer.ts](src/server/main/zaloServerSessionRestorer.ts) dùng reservation + claim `requires_login=false`, rồi xác thực qua runtime hiện có trước khi cập nhật đăng nhập. Chỉ xét account Server active có session và `zalo_session_last_verified_at IS NULL`, không chạy tenant Chat; lỗi tạm thời backoff 1–15 phút, phiên chắc chắn hỏng chờ session mới, cleanup chưa xác nhận vẫn giữ khóa. Không cần migration DB; kiểm chứng bằng `node scripts/zalo-server-session-restore-smoke-test.cjs`, xem [hướng dẫn](docs/ZALO_SERVER_SESSION_RESTORE.md).
+
 ## Bắt buộc dùng skill cho RPC migration
 
 Mọi task tạo, sửa, review hoặc apply SQL có `CREATE OR REPLACE FUNCTION`, `DROP/ALTER FUNCTION` hay thay đổi RPC **bắt buộc** dùng skill [`safe-supabase-rpc-migration`](.agents/skills/safe-supabase-rpc-migration/SKILL.md) trước khi dựng body SQL. Không được lấy body từ migration cũ trước khi đã đọc đúng signature đang chạy bằng `pg_get_functiondef()` và thêm preflight checksum fail-closed.

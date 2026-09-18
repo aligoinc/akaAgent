@@ -849,6 +849,28 @@ export class ZaloRuntimeService {
     this.webRuntime.clearAll()
   }
 
+  /** Called only while the Server owns the account's operation claim. */
+  async restoreUnverifiedServerSession(
+    accountId: number,
+    expectedSessionUpdatedAt: string | null
+  ): Promise<'restored' | 'invalid' | 'retry' | 'skipped'> {
+    const account = await this.supabase.getAccount(accountId)
+    // Discovery can race a QR login, logout, disable or subtype change. A
+    // claimed account must still contain the same unverified Server session.
+    if (!account || account.flatformType !== 'zalo' || !account.isZaloServer ||
+      account.isZaloShowWeb || !account.isActive || account.isDelete ||
+      account.zaloSessionLastVerifiedAt ||
+      (account.zaloSessionUpdatedAt ?? null) !== expectedSessionUpdatedAt) return 'skipped'
+
+    const result = await this.checkSession(accountId)
+    if (result.success && result.loggedIn) return 'restored'
+    if (result.success && (
+      result.reason === 'Chưa có session Zalo' ||
+      this.isDefinitivelyInvalidStoredSessionError(new Error(result.reason || ''))
+    )) return 'invalid'
+    return 'retry'
+  }
+
   async checkSession(accountId: number): Promise<ZaloSessionCheckResult> {
     const current = await this.supabase.getAccount(accountId)
     if (!current || current.flatformType !== 'zalo') {
