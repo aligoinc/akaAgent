@@ -645,6 +645,7 @@ export async function updateAccountZaloSession(
     session: ZaloSessionCredentials
     verified?: boolean
     clearError?: boolean
+    expectedServerSessionUpdatedAt?: string | null
   }
 ): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
@@ -662,7 +663,7 @@ export async function updateAccountZaloSession(
     updated_at: now
   }
 
-  const { data, error } = await client()
+  let query = client()
     .from('auto_accounts')
     .update(removeUndefined(payload))
     .eq('id', id)
@@ -670,6 +671,17 @@ export async function updateAccountZaloSession(
     .eq('flatform_type', 'zalo')
     .eq('is_zalo_show_web', false)
     .eq('is_delete', false)
+  if (input.expectedServerSessionUpdatedAt !== undefined) {
+    query = query
+      .eq('is_zalo_server', true)
+      .eq('is_active', true)
+      .not('zalo_session', 'is', null)
+      .is('zalo_session_last_verified_at', null)
+    query = input.expectedServerSessionUpdatedAt === null
+      ? query.is('zalo_session_updated_at', null)
+      : query.eq('zalo_session_updated_at', input.expectedServerSessionUpdatedAt)
+  }
+  const { data, error } = await query
     .select(ACCOUNT_SELECT)
     .single()
 

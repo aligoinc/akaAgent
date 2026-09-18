@@ -45,6 +45,11 @@ interface CachedZaloApi {
   lastError?: string | null
 }
 
+interface VerifiedZaloSession {
+  api: API
+  accountInfo: Awaited<ReturnType<API['fetchAccountInfo']>>
+}
+
 type ZaloListenerStatus = 'idle' | 'starting' | 'running' | 'disconnected' | 'closed' | 'error' | 'stopped'
 
 interface ZaloListenerState {
@@ -415,7 +420,7 @@ export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
   private apiCache = new Map<number, CachedZaloApi>()
   private apiLoginInflight = new Map<number, Promise<API>>()
-  private verifyInflight = new Map<number, Promise<void>>()
+  private verifyInflight = new Map<number, Promise<VerifiedZaloSession>>()
   private listenerStates = new Map<number, ZaloListenerState>()
   private realtimeListenerSubscribers = new Map<number, Set<ZaloRealtimeListenerHandlers>>()
   private loginQrSubscribers = new Set<(event: ZaloLoginQrEvent) => unknown>()
@@ -768,6 +773,16 @@ export class ZaloRuntimeService {
       let verificationSucceeded = false
       try {
         if (this.warmSessionClaimsAbandoned) return
+        if (runtimeTarget === 'server' && entry.session && !entry.account.zaloSessionLastVerifiedAt) {
+          // New staff runtimes also need the imported identity finalized before
+          // verification removes this account from background discovery.
+          try {
+            await this.restoreUnverifiedServerSession(entry.account.id, entry.account.zaloSessionUpdatedAt ?? null)
+          } catch {
+            console.warn('[ZaloRuntime] Imported session restoration will retry', { accountId: entry.account.id })
+          }
+          continue
+        }
         await this.verifyAccountSession(entry.account.id)
         verificationSucceeded = true
         if (this.cacheVersion !== version) return
@@ -862,7 +877,7 @@ export class ZaloRuntimeService {
       account.zaloSessionLastVerifiedAt ||
       (account.zaloSessionUpdatedAt ?? null) !== expectedSessionUpdatedAt) return 'skipped'
 
-    const result = await this.checkSession(accountId)
+    const result = await this.checkSession(accountId, { restoreServerSession: { expectedSessionUpdatedAt } })
     if (result.success && result.loggedIn) return 'restored'
     if (result.success && (
       result.reason === 'Chưa có session Zalo' ||
@@ -871,7 +886,10 @@ export class ZaloRuntimeService {
     return 'retry'
   }
 
-  async checkSession(accountId: number): Promise<ZaloSessionCheckResult> {
+  async checkSession(
+    accountId: number,
+    options: { restoreServerSession?: { expectedSessionUpdatedAt: string | null } } = {}
+  ): Promise<ZaloSessionCheckResult> {
     const current = await this.supabase.getAccount(accountId)
     if (!current || current.flatformType !== 'zalo') {
       return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
@@ -937,8 +955,9 @@ export class ZaloRuntimeService {
       return { success: true, loggedIn: false, status: account.loginStatus, reason: 'Chưa có session Zalo', account }
     }
 
+    let verified: VerifiedZaloSession
     try {
-      await this.verifyAccountSession(accountId)
+      verified = await this.verifyAccountSession(accountId)
     } catch (err) {
       const runtimeChanged = await this.getQrRuntimeChangedResult(accountId)
       if (runtimeChanged) return runtimeChanged
@@ -968,7 +987,9 @@ export class ZaloRuntimeService {
     }
 
     try {
-      const account = await this.supabase.markAccountZaloSessionCheck(accountId, { ok: true }, false)
+      const account = options.restoreServerSession
+        ? await this.persistRestoredServerSession(accountId, verified, entry.session, options.restoreServerSession.expectedSessionUpdatedAt)
+        : await this.supabase.markAccountZaloSessionCheck(accountId, { ok: true }, false)
       this.updateCachedVerification(account)
       return { success: true, loggedIn: true, status: account.loginStatus, account }
     } catch (err) {
@@ -976,6 +997,32 @@ export class ZaloRuntimeService {
       if (runtimeChanged) return runtimeChanged
       throw err
     }
+  }
+
+  private async persistRestoredServerSession(
+    accountId: number,
+    verified: VerifiedZaloSession,
+    fallbackSession: ZaloSessionCredentials,
+    expectedSessionUpdatedAt: string | null
+  ): Promise<AutoAccount> {
+    const cacheVersion = this.cacheVersion
+    const accountVersion = this.getAccountCacheVersion(accountId)
+    const profile = await this.loadOwnProfile(verified.api, verified.accountInfo)
+    const credentials = this.getSessionCredentialsFromApi(verified.api, fallbackSession)
+    const zaloAccount = await this.supabase.upsertZaloAccount(profile)
+    this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
+    // Identity link and verified state are written together, and only for the
+    // same unverified session. A failed write stays eligible for discovery.
+    const updated = await this.supabase.updateAccountZaloSession(accountId, {
+      zaloAccountId: zaloAccount.id,
+      session: credentials,
+      verified: true,
+      clearError: true,
+      expectedServerSessionUpdatedAt: expectedSessionUpdatedAt
+    })
+    this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
+    this.cacheApi(updated, verified.api)
+    return updated
   }
 
   private async getQrRuntimeChangedResult(accountId: number): Promise<ZaloSessionCheckResult | null> {
@@ -2694,13 +2741,13 @@ export class ZaloRuntimeService {
     return this.getErrorMessage(err).toLowerCase().includes('already started')
   }
 
-  private async verifyAccountSession(accountId: number): Promise<void> {
+  private async verifyAccountSession(accountId: number): Promise<VerifiedZaloSession> {
     const inflight = this.verifyInflight.get(accountId)
     if (inflight) return inflight
 
     const cacheVersion = this.cacheVersion
     const accountVersion = this.getAccountCacheVersion(accountId)
-    let promise!: Promise<void>
+    let promise!: Promise<VerifiedZaloSession>
     promise = this.verifyAccountSessionOnce(accountId, cacheVersion, accountVersion)
       .finally(() => {
         if (this.verifyInflight.get(accountId) === promise) {
@@ -2814,12 +2861,13 @@ export class ZaloRuntimeService {
     accountId: number,
     cacheVersion: number,
     accountVersion: number
-  ): Promise<void> {
+  ): Promise<VerifiedZaloSession> {
     try {
       const api = await this.ensureApi(accountId)
       this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
-      await this.verifyAuthenticatedApi(api)
+      const accountInfo = await this.verifyAuthenticatedApi(api)
       this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
+      return { api, accountInfo }
     } catch (firstErr) {
       this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
       console.warn('[ZaloRuntime] Zalo API verification failed, retrying with a fresh session login', {
@@ -2829,16 +2877,18 @@ export class ZaloRuntimeService {
       this.clearQrAccountRuntimeCache(accountId)
       const retryApi = await this.ensureApi(accountId)
       this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
-      await this.verifyAuthenticatedApi(retryApi)
+      const accountInfo = await this.verifyAuthenticatedApi(retryApi)
       this.assertQrRuntimeGeneration(accountId, cacheVersion, accountVersion)
+      return { api: retryApi, accountInfo }
     }
   }
 
-  private async verifyAuthenticatedApi(api: API): Promise<void> {
+  private async verifyAuthenticatedApi(api: API): Promise<VerifiedZaloSession['accountInfo']> {
     const info = await api.fetchAccountInfo()
     if (!info || typeof info !== 'object' || !('profile' in info)) {
       throw new Error('Không xác thực được session Zalo')
     }
+    return info
   }
 
   private async loginWithSession(account: AutoAccount, session: ZaloSessionCredentials): Promise<API> {

@@ -141,7 +141,8 @@ export class ZaloServerRuntimeManager {
   private sequence = 0
   private reconcileTimer: ReturnType<typeof setInterval> | null = null
   private reconcilePromise: Promise<void> | null = null
-  private sessionRestorePromise: Promise<void> | null = null
+  private readonly queuedSessionRestores = new Set<StaffRuntime>()
+  private readonly activeSessionRestores = new Map<StaffRuntime, Promise<void>>()
   private readonly lifecycleTails = new Map<number, Promise<void>>()
   private initialDiscoveryComplete = false
   private lastDiscoveredStaffIds = new Set<number>()
@@ -177,6 +178,7 @@ export class ZaloServerRuntimeManager {
   async stop(): Promise<void> {
     if (this.state === 'stopped' || this.state === 'stopping') return
     this.state = 'stopping'
+    this.queuedSessionRestores.clear()
     if (this.reconcileTimer) clearInterval(this.reconcileTimer)
     this.reconcileTimer = null
     // Startup awaits warm-session claim/cleanup inside its lifecycle queue.
@@ -807,28 +809,41 @@ export class ZaloServerRuntimeManager {
   }
 
   private queueSessionRestores(): void {
-    if (this.sessionRestorePromise || this.isStoppingOrStopped()) return
-    const runtimes = Array.from(this.runtimes.values()).filter(runtime =>
-      runtime.sessionRestorer && this.canRestoreSessions(runtime)
-    )
-    // Reuse the discovery tick and bound DB/Zalo concurrency. Verification
-    // runs outside discovery so slow login/cleanup cannot block capability
-    // refresh. Each staff's normal shutdown still drains its active operation.
-    const operation = runWithConcurrency(runtimes, RECONCILE_LIFECYCLE_CONCURRENCY, async runtime => {
-      if (!this.canRestoreSessions(runtime)) return
-      const restore = runWithCurrentUser(runtime.user, async () => runtime.sessionRestorer!.run())
-      runtime.activeCommands.add(restore)
-      try {
-        await restore
-      } catch {
-        console.warn('[ZaloServerRuntimeManager] Pending session discovery will retry', { staffId: runtime.user.staffId })
-      } finally {
-        runtime.activeCommands.delete(restore)
+    if (this.isStoppingOrStopped()) return
+    for (const runtime of this.queuedSessionRestores) {
+      if (!this.canRestoreSessions(runtime)) this.queuedSessionRestores.delete(runtime)
+    }
+    for (const runtime of this.runtimes.values()) {
+      if (runtime.sessionRestorer && this.canRestoreSessions(runtime) && !this.activeSessionRestores.has(runtime)) {
+        this.queuedSessionRestores.add(runtime)
       }
-    }).finally(() => {
-      if (this.sessionRestorePromise === operation) this.sessionRestorePromise = null
-    })
-    this.sessionRestorePromise = operation
+    }
+    this.drainSessionRestores()
+  }
+
+  private drainSessionRestores(): void {
+    if (this.isStoppingOrStopped()) {
+      this.queuedSessionRestores.clear()
+      return
+    }
+    // Each completed staff can participate in the next discovery tick even if
+    // another staff is still logging in or retaining its claim for cleanup.
+    while (this.activeSessionRestores.size < RECONCILE_LIFECYCLE_CONCURRENCY && this.queuedSessionRestores.size > 0) {
+      const runtime = this.queuedSessionRestores.values().next().value!
+      this.queuedSessionRestores.delete(runtime)
+      if (!this.canRestoreSessions(runtime) || this.activeSessionRestores.has(runtime)) continue
+      const operation = runWithCurrentUser(runtime.user, async () => runtime.sessionRestorer!.run())
+        .catch(() => {
+          console.warn('[ZaloServerRuntimeManager] Pending session discovery will retry', { staffId: runtime.user.staffId })
+        })
+        .finally(() => {
+          runtime.activeCommands.delete(operation)
+          this.activeSessionRestores.delete(runtime)
+          this.drainSessionRestores()
+        })
+      this.activeSessionRestores.set(runtime, operation)
+      runtime.activeCommands.add(operation)
+    }
   }
 
   private async startRuntime(

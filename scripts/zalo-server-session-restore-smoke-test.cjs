@@ -12,7 +12,8 @@ function fixture() {
   const user = { staffId: 890, organizationId: 865, isChatSync: false }
   const state = { rows: [], queries: [], claims: [], released: [], logs: [], events: [], held: new Set(),
     running: true, capability: true, now: 0, logins: 0, verifications: 0, error: null, loginWait: null,
-    claimWait: null, claimDenied: false, keepClaim: false, beforeClaim: null, reads: 0 }
+    claimWait: null, claimDenied: false, keepClaim: false, beforeClaim: null, reads: 0,
+    profiles: [], writes: [], profileError: null, writeError: null, beforeProfile: null }
   const auth = { requireCurrentUser: () => user, getCurrentUser: () => user, runWithCurrentUser: (_user, fn) => fn() }
   const registry = { has: id => state.held.has(id), stop() {}, waitForProducers: async () => true, recover: async () => state.held.clear() }
   function load(relative, overrides = {}) {
@@ -42,25 +43,37 @@ function fixture() {
       gt(key, value) { query.filters.push(row => row[key] > value); return this },
       order(key, options) { assert.equal(key, 'id'); assert.equal(options.ascending, true); return this },
       limit(value) { query.limit = value; return this },
+      update(value) { query.update = value; return this },
+      single() { query.single = true; return this },
+      maybeSingle() { query.single = true; return this },
       then(resolve, reject) {
-        const data = state.rows.filter(row => query.filters.every(test => test(row)))
-          .sort((a, b) => a.id - b.id).slice(0, query.limit)
-          .map(row => Object.fromEntries(query.select.split(',').map(key => [key.trim(), row[key.trim()]])))
-        return Promise.resolve({ data, error: null }).then(resolve, reject)
+        let rows = state.rows.filter(row => query.filters.every(test => test(row))).sort((a, b) => a.id - b.id)
+        if (query.limit !== null) rows = rows.slice(0, query.limit)
+        if (query.update) {
+          state.writes.push(query.update)
+          if (state.writeError) return Promise.resolve({ data: null, error: state.writeError }).then(resolve, reject)
+          if (!rows.length) return Promise.resolve({ data: null, error: { message: 'No matching account' } }).then(resolve, reject)
+          rows.forEach(row => Object.assign(row, query.update))
+        }
+        const data = rows.map(row => query.select === 'id, zalo_session_updated_at'
+          ? { id: row.id, zalo_session_updated_at: row.zalo_session_updated_at } : { ...row })
+        return Promise.resolve({ data: query.single ? data[0] ?? null : data, error: null }).then(resolve, reject)
       }
     }
     return builder
   } }
   const repo = load('src/main/data/repositories/accountRepository.ts', {
     '../currentUser': auth, '../supabaseClient': { getSupabaseClient: () => db },
+    '../mappers': { mapAccountFromDB: row => account(row) },
     './entitlementRepository': { loadCurrentUserZaloAccountCapabilities: () => ({ server: state.capability }),
-      ensureCurrentUserFeatureActive: async () => {} }
+      ensureCurrentUserFeatureActive: async () => {}, ensureCurrentUserCanUseZaloAccountType: async () => {},
+      loadCurrentUserEffectiveEntitlements: async () => ({}), canUseAccountWithEntitlementsAndCapabilities: () => true }
   })
   function add(id = 4224, overrides = {}) {
     const row = { id, staff_id: 890, organization_id: 865, is_active: true, is_delete: false,
       flatform_type: 'zalo', is_zalo_show_web: false, is_zalo_server: true,
       status: 'chờ xử lý', login_status: 'chưa đăng nhập', zalo_session_updated_at: '2026-09-18T07:23:00Z',
-      zalo_session_last_verified_at: null, zalo_session_last_error: null,
+      zalo_session_last_verified_at: null, zalo_session_last_error: null, zalo_account_id: null,
       zalo_session: { cookie: [{ value: 'TEST_SESSION_SECRET' }], imei: 'test-imei', userAgent: 'test-agent' }, ...overrides }
     state.rows.push(row)
     return row
@@ -69,10 +82,19 @@ function fixture() {
     isActive: row.is_active, isDelete: row.is_delete, flatformType: row.flatform_type,
     isZaloShowWeb: row.is_zalo_show_web, isZaloServer: row.is_zalo_server,
     loginStatus: row.login_status, status: row.status, zaloSessionUpdatedAt: row.zalo_session_updated_at,
-    zaloSessionLastVerifiedAt: row.zalo_session_last_verified_at, zaloSessionLastError: row.zalo_session_last_error })
+    zaloSessionLastVerifiedAt: row.zalo_session_last_verified_at, zaloSessionLastError: row.zalo_session_last_error,
+    zaloAccountId: row.zalo_account_id })
   const find = id => state.rows.find(row => row.id === id)
   const supabase = {
     listPendingZaloServerSessions: repo.listPendingZaloServerSessions,
+    listZaloAccountsWithSession: async () => state.rows.filter(row => row.zalo_session).map(row => ({ account: account(row), session: row.zalo_session })),
+    updateAccountZaloSession: repo.updateAccountZaloSession,
+    async upsertZaloAccount(profile) {
+      if (state.beforeProfile) await state.beforeProfile()
+      if (state.profileError) throw state.profileError
+      state.profiles.push(profile)
+      return { id: 9001, ...profile }
+    },
     getAccount: async id => account(find(id)),
     getAccountZaloSession: async id => { state.reads++; const row = find(id); return row && {
       account: account(row), session: row.zalo_session?.imei ? row.zalo_session : null
@@ -108,7 +130,13 @@ function fixture() {
     recoverCampaignRuntimeUnitLeasesV2: async () => ({ ok: true })
   }
   class ZaloApiError extends Error {}
-  const api = { async fetchAccountInfo() { state.verifications++; return { profile: { userId: 'test-user' } } } }
+  const api = {
+    async fetchAccountInfo() { state.verifications++; return { profile: {
+      userId: 'test-user', displayName: 'Test Zalo', phoneNumber: '0900000000', avatar: 'https://example.com/avatar.jpg'
+    } } },
+    getOwnId: () => 'test-user',
+    getContext: () => ({ cookie: { toJSON: () => ({ cookies: [{ value: 'ROTATED_TEST_SESSION_SECRET' }] }) }, imei: 'test-imei', userAgent: 'test-agent' })
+  }
   class Zalo {
     async login(session) {
       assert.ok(session.imei); state.logins++
@@ -160,6 +188,15 @@ async function main() {
     const row = f.add(); await f.restorer.run()
     assert.equal(row.login_status, 'đã đăng nhập'); assert.ok(row.zalo_session_last_verified_at)
     assert.equal(row.status, 'chờ xử lý'); assert.equal(f.state.logins, 1); assert.equal(f.state.verifications, 1)
+    assert.equal(row.zalo_account_id, 9001)
+    assert.equal(f.state.profiles[0].zaloUid, 'test-user')
+    assert.equal(f.state.profiles[0].displayName, 'Test Zalo')
+    assert.equal(f.state.profiles[0].phone, '0900000000')
+    assert.equal(f.state.profiles[0].avatarUrl, 'https://example.com/avatar.jpg')
+    assert.equal(row.zalo_session.cookie[0].value, 'ROTATED_TEST_SESSION_SECRET')
+    assert.equal(f.state.writes.length, 1, 'link, credentials and verified status are one account write')
+    assert.equal(f.state.writes[0].zalo_account_id, 9001)
+    assert.ok(f.state.writes[0].zalo_session_last_verified_at)
     assert.equal(await f.zaloRuntime.ensureApi(row.id), f.api); assert.equal(f.state.logins, 1)
     await f.restorer.run(); assert.equal(f.state.claims.length, 1)
     assert.deepEqual(f.state.events, ['ACCOUNT_STATUS_UPDATED'])
@@ -191,6 +228,65 @@ async function main() {
     f.state.now = 179999; await f.restorer.run(); assert.equal(f.state.logins, 4)
     f.state.now = 180000; f.state.error = null; await f.restorer.run()
     assert.equal(row.login_status, 'đã đăng nhập'); assert.equal(f.state.logins, 5)
+  })
+  for (const failure of ['profileError', 'writeError']) await test(`${failure} keeps import pending and retries without another Zalo login`, async () => {
+    const f = fixture(), row = f.add(), original = row.zalo_session
+    f.state[failure] = new Error('temporary DB failure TEST_SESSION_SECRET')
+    await f.restorer.run()
+    assert.equal(row.zalo_account_id, null); assert.equal(row.zalo_session_last_verified_at, null)
+    assert.equal(row.login_status, 'chưa đăng nhập'); assert.equal(row.zalo_session, original)
+    assert.equal(f.state.released.length, 1); assert.equal(f.state.logins, 1)
+    f.state.now = 59999; await f.restorer.run(); assert.equal(f.state.claims.length, 1)
+    f.state.now = 60000; f.state[failure] = null; await f.restorer.run()
+    assert.equal(row.zalo_account_id, 9001); assert.ok(row.zalo_session_last_verified_at)
+    assert.equal(row.login_status, 'đã đăng nhập'); assert.equal(f.state.logins, 1)
+    assert.equal(JSON.stringify([f.state.logs, f.state.events]).includes('TEST_SESSION_SECRET'), false)
+  })
+  for (const [name, change] of Object.entries({
+    'newer QR session': row => { row.zalo_session_updated_at = '2026-09-18T10:00:00Z'; row.zalo_account_id = 9002; row.zalo_session = { imei: 'replacement' } },
+    'already verified': row => { row.zalo_session_last_verified_at = '2026-09-18T10:00:00Z' },
+    'logged out': row => { row.zalo_session_updated_at = null; row.zalo_session = null },
+    'disabled': row => { row.is_active = false },
+    'moved to Desktop': row => { row.is_zalo_server = false },
+    'deleted': row => { row.is_delete = true }
+  })) await test(`account write protects concurrent change during profile persistence: ${name}`, async () => {
+    const f = fixture(), row = f.add(); let expected
+    f.state.beforeProfile = () => { change(row); expected = { ...row } }
+    await f.restorer.run()
+    assert.equal(row.zalo_account_id, expected.zalo_account_id)
+    assert.equal(row.zalo_session, expected.zalo_session)
+    assert.equal(row.zalo_session_updated_at, expected.zalo_session_updated_at)
+    assert.equal(row.zalo_session_last_verified_at, expected.zalo_session_last_verified_at)
+    assert.equal(row.login_status, 'chưa đăng nhập'); assert.equal(f.state.released.length, 1)
+  })
+  await test('unversioned legacy session can finalize its identity with a null timestamp guard', async () => {
+    const f = fixture(), row = f.add(1, { zalo_session_updated_at: null, zalo_account_id: 8999 })
+    await f.restorer.run()
+    assert.equal(row.zalo_account_id, 9001); assert.ok(row.zalo_session_last_verified_at)
+  })
+  await test('unversioned session cleared during verification is not restored', async () => {
+    const f = fixture(), row = f.add(1, { zalo_session_updated_at: null })
+    f.state.beforeProfile = () => { row.zalo_session = null }
+    await f.restorer.run()
+    assert.equal(row.zalo_session, null); assert.equal(row.zalo_account_id, null)
+    assert.equal(row.zalo_session_last_verified_at, null); assert.equal(row.login_status, 'chưa đăng nhập')
+  })
+  await test('server startup also finalizes pending identity before marking verified', async () => {
+    const f = fixture(), row = f.add()
+    await f.zaloRuntime.warmStoredSessions('server')
+    assert.equal(row.zalo_account_id, 9001); assert.equal(row.login_status, 'đã đăng nhập')
+    assert.ok(row.zalo_session_last_verified_at); assert.equal(f.state.verifications, 1)
+    assert.equal(f.state.released.length, 1); assert.equal(f.state.claims[0].name, 'zalo.session.warm')
+    await f.restorer.run(); assert.equal(f.state.claims.length, 1)
+    assert.equal(await f.zaloRuntime.ensureApi(row.id), f.api); assert.equal(f.state.logins, 1)
+  })
+  await test('failed startup persistence leaves the account eligible for background retry', async () => {
+    const f = fixture(), row = f.add(); f.state.profileError = new Error('DB unavailable')
+    await f.zaloRuntime.warmStoredSessions('server')
+    assert.equal(row.zalo_session_last_verified_at, null); assert.equal(row.zalo_account_id, null)
+    assert.equal(f.state.released.length, 1)
+    f.state.profileError = null; await f.restorer.run()
+    assert.equal(row.zalo_account_id, 9001); assert.equal(row.login_status, 'đã đăng nhập')
   })
   await test('campaign/QR reservations and DB ownership refusal defer the account without logging in', async () => {
     const f = fixture(), row = f.add()
@@ -250,11 +346,53 @@ async function main() {
     await manager.doReconcile(); await flush()
     assert.equal(runtime.activeCommands.size, 1); assert.equal(f.state.logins, 1)
     await manager.doReconcile(); assert.equal(f.state.logins, 1)
-    const background = manager.sessionRestorePromise
+    const background = Promise.all([...runtime.activeCommands])
     const stopping = manager.stopRuntime(890); await flush()
     assert.equal(manager.runtimes.has(890), true, 'do not recover while login is in progress')
     f.state.loginWait.resolve(); await background; await stopping
     assert.equal(runtime.activeCommands.size, 0); assert.equal(manager.runtimes.has(890), false)
+  })
+  await test('one blocked runtime does not block future discovery for healthy staff', async () => {
+    const f = fixture(), blocked = deferred(); let healthyRuns = 0, blockedRuns = 0
+    const { ZaloServerRuntimeManager } = f.load('src/server/main/zaloServerRuntimeManager.ts', { '../../main/data/currentUser': f.auth })
+    const manager = new ZaloServerRuntimeManager({}); manager.state = 'running'
+    const addRuntime = (staffId, run) => {
+      const runtime = { user: { staffId }, state: 'running', ownsZaloRuntimeState: true, activeCommands: new Set(), sessionRestorer: { run } }
+      manager.runtimes.set(staffId, runtime); return runtime
+    }
+    const slow = addRuntime(1, () => { blockedRuns++; return blocked.promise })
+    const healthy = addRuntime(2, async () => { healthyRuns++ })
+    manager.queueSessionRestores(); await flush()
+    manager.queueSessionRestores(); await flush()
+    manager.queueSessionRestores(); await flush()
+    assert.equal(healthyRuns, 3); assert.equal(blockedRuns, 1)
+    assert.equal(slow.activeCommands.size, 1); assert.equal(healthy.activeCommands.size, 0)
+    blocked.resolve(); await Promise.all([...slow.activeCommands]); assert.equal(manager.activeSessionRestores.size, 0)
+  })
+  await test('restore queue caps concurrency, deduplicates ticks and skips lost ownership/stopped work', async () => {
+    const f = fixture(), jobs = new Map(); let peak = 0, active = 0
+    const { ZaloServerRuntimeManager } = f.load('src/server/main/zaloServerRuntimeManager.ts', { '../../main/data/currentUser': f.auth })
+    const manager = new ZaloServerRuntimeManager({}); manager.state = 'running'
+    for (let staffId = 1; staffId <= 30; staffId++) {
+      const runtime = { user: { staffId }, state: 'running', ownsZaloRuntimeState: true, activeCommands: new Set(),
+        sessionRestorer: { async run() {
+          assert.equal(jobs.has(staffId), false, 'one queued run per staff')
+          const job = deferred(); jobs.set(staffId, job); peak = Math.max(peak, ++active)
+          try { await job.promise } finally { active-- }
+        } } }
+      manager.runtimes.set(staffId, runtime)
+    }
+    manager.queueSessionRestores(); manager.queueSessionRestores(); await flush()
+    assert.equal(jobs.size, 25); assert.equal(manager.queuedSessionRestores.size, 5)
+    manager.runtimes.get(26).ownsZaloRuntimeState = false
+    jobs.get(1).resolve(); await flush()
+    assert.equal(jobs.has(26), false); assert.equal(jobs.has(27), true); assert.equal(active, 25)
+    manager.state = 'stopping'
+    for (const job of jobs.values()) job.resolve()
+    await flush()
+    assert.equal(peak, 25); assert.equal(jobs.has(28), false)
+    assert.equal(manager.activeSessionRestores.size, 0); assert.equal(manager.queuedSessionRestores.size, 0)
+    assert.ok([...manager.runtimes.values()].every(runtime => runtime.activeCommands.size === 0))
   })
   console.log(`${passed} session restore smoke tests passed`)
 }
