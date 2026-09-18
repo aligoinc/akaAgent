@@ -89,8 +89,9 @@ export class SupabaseService {
   listZaloAccountsWithSession(runtimeTarget?: accountRepo.ZaloAccountRuntimeTarget) {
     return accountRepo.listZaloAccountsWithSession(runtimeTarget)
   }
+  listPendingZaloServerSessions() { return accountRepo.listPendingZaloServerSessions() }
   upsertZaloAccount(input: accountRepo.ZaloAccountUpsertInput) { return accountRepo.upsertZaloAccount(input) }
-  updateAccountZaloSession(id: number, input: { zaloAccountId: number; session: ZaloSessionCredentials; verified?: boolean; clearError?: boolean }) {
+  updateAccountZaloSession(id: number, input: Parameters<typeof accountRepo.updateAccountZaloSession>[1]) {
     return accountRepo.updateAccountZaloSession(id, input)
   }
   markAccountZaloSessionCheck(

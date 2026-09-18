@@ -37,6 +37,7 @@ import { SupabaseService } from '../../main/services/supabase'
 import { ZaloRealtimeGroupCampaignManager } from '../../main/services/zaloRealtimeGroupCampaignManager'
 import { ZaloRuntimeService } from '../../main/services/zaloRuntimeService'
 import type { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
+import { ZaloServerSessionRestorer } from './zaloServerSessionRestorer'
 
 const RECONCILE_INTERVAL_MS = 60_000
 const RECONCILE_LIFECYCLE_CONCURRENCY = 25
@@ -63,6 +64,7 @@ interface StaffRuntime {
   zaloRuntime: ZaloRuntimeService | null
   realtimeManager: ZaloRealtimeGroupCampaignManager | null
   eventWindow: BrowserWindow | null
+  sessionRestorer: ZaloServerSessionRestorer | null
   activeCommands: Set<Promise<unknown>>
   qrAccountClaims: Map<number, ServerAccountClaim>
   qrReleasePromises: Map<string, Promise<void>>
@@ -139,6 +141,8 @@ export class ZaloServerRuntimeManager {
   private sequence = 0
   private reconcileTimer: ReturnType<typeof setInterval> | null = null
   private reconcilePromise: Promise<void> | null = null
+  private readonly queuedSessionRestores = new Set<StaffRuntime>()
+  private readonly activeSessionRestores = new Map<StaffRuntime, Promise<void>>()
   private readonly lifecycleTails = new Map<number, Promise<void>>()
   private initialDiscoveryComplete = false
   private lastDiscoveredStaffIds = new Set<number>()
@@ -174,6 +178,7 @@ export class ZaloServerRuntimeManager {
   async stop(): Promise<void> {
     if (this.state === 'stopped' || this.state === 'stopping') return
     this.state = 'stopping'
+    this.queuedSessionRestores.clear()
     if (this.reconcileTimer) clearInterval(this.reconcileTimer)
     this.reconcileTimer = null
     // Startup awaits warm-session claim/cleanup inside its lifecycle queue.
@@ -794,7 +799,51 @@ export class ZaloServerRuntimeManager {
     })
     this.lastDiscoveredStaffIds = activeStaffIds
     this.initialDiscoveryComplete = true
+    this.queueSessionRestores()
     this.notifySnapshot()
+  }
+
+  private canRestoreSessions(runtime: StaffRuntime): boolean {
+    return !this.isStoppingOrStopped() && this.runtimes.get(runtime.user.staffId) === runtime &&
+      runtime.state === 'running' && runtime.ownsZaloRuntimeState && !runtime.user.isChatSync
+  }
+
+  private queueSessionRestores(): void {
+    if (this.isStoppingOrStopped()) return
+    for (const runtime of this.queuedSessionRestores) {
+      if (!this.canRestoreSessions(runtime)) this.queuedSessionRestores.delete(runtime)
+    }
+    for (const runtime of this.runtimes.values()) {
+      if (runtime.sessionRestorer && this.canRestoreSessions(runtime) && !this.activeSessionRestores.has(runtime)) {
+        this.queuedSessionRestores.add(runtime)
+      }
+    }
+    this.drainSessionRestores()
+  }
+
+  private drainSessionRestores(): void {
+    if (this.isStoppingOrStopped()) {
+      this.queuedSessionRestores.clear()
+      return
+    }
+    // Each completed staff can participate in the next discovery tick even if
+    // another staff is still logging in or retaining its claim for cleanup.
+    while (this.activeSessionRestores.size < RECONCILE_LIFECYCLE_CONCURRENCY && this.queuedSessionRestores.size > 0) {
+      const runtime = this.queuedSessionRestores.values().next().value!
+      this.queuedSessionRestores.delete(runtime)
+      if (!this.canRestoreSessions(runtime) || this.activeSessionRestores.has(runtime)) continue
+      const operation = runWithCurrentUser(runtime.user, async () => runtime.sessionRestorer!.run())
+        .catch(() => {
+          console.warn('[ZaloServerRuntimeManager] Pending session discovery will retry', { staffId: runtime.user.staffId })
+        })
+        .finally(() => {
+          runtime.activeCommands.delete(operation)
+          this.activeSessionRestores.delete(runtime)
+          this.drainSessionRestores()
+        })
+      this.activeSessionRestores.set(runtime, operation)
+      runtime.activeCommands.add(operation)
+    }
   }
 
   private async startRuntime(
@@ -813,6 +862,7 @@ export class ZaloServerRuntimeManager {
       zaloRuntime: null,
       realtimeManager: null,
       eventWindow: null,
+      sessionRestorer: null,
       activeCommands: new Set(),
       qrAccountClaims: new Map(),
       qrReleasePromises: new Map(),
@@ -952,6 +1002,16 @@ export class ZaloServerRuntimeManager {
         runtime.zaloRuntime = zaloRuntime
         runtime.realtimeManager = realtimeManager
         runtime.eventWindow = eventWindow
+        runtime.sessionRestorer = new ZaloServerSessionRestorer({
+          supabase,
+          scheduler,
+          zaloRuntime,
+          isRunning: () => this.canRestoreSessions(runtime),
+          onStatusUpdated: () => {
+            eventWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED)
+            if (this.canRestoreSessions(runtime)) realtimeManager?.refreshSoon('restored-server-session')
+          }
+        })
 
         const liveModeBeforeRecovery = await loadStaffZaloAccountCapabilitySnapshot(user.staffId)
         this.assertRuntimeMayStart(runtime)

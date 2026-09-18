@@ -63,6 +63,11 @@ export interface AccountZaloSession {
   session: ZaloSessionCredentials | null
 }
 
+export interface PendingZaloServerSession {
+  accountId: number
+  sessionUpdatedAt: string | null
+}
+
 export interface AccountEmailSession {
   account: AutoAccount
   session: EmailAccountConfig | null
@@ -217,6 +222,43 @@ export async function listZaloAccountsWithSession(
       (runtimeTarget === undefined || entry.account.isZaloServer === (runtimeTarget === 'server')) &&
       canUseZaloAccountWithCapabilities(entry.account, capabilities)
     ))
+}
+
+/** Discovery reads metadata only; credentials are loaded after the runtime claim. */
+export async function listPendingZaloServerSessions(): Promise<PendingZaloServerSession[]> {
+  const u = requireCurrentUser()
+  if (u.isChatSync || !loadCurrentUserZaloAccountCapabilities().server) return []
+  await ensureCurrentUserFeatureActive('zalo')
+  const items: PendingZaloServerSession[] = []
+  const pageSize = 1000
+  let afterId = 0
+  while (true) {
+    const { data, error } = await client()
+      .from('auto_accounts')
+      .select('id, zalo_session_updated_at')
+      .eq('staff_id', u.staffId)
+      .eq('organization_id', u.organizationId)
+      .eq('is_delete', false)
+      .eq('is_active', true)
+      .eq('flatform_type', 'zalo')
+      .eq('is_zalo_show_web', false)
+      .eq('is_zalo_server', true)
+      .not('zalo_session', 'is', null)
+      .is('zalo_session_last_verified_at', null)
+      .gt('id', afterId)
+      .order('id', { ascending: true })
+      .limit(pageSize)
+    if (error) throw new Error('Failed to discover unverified Zalo Server sessions')
+    for (const row of data || []) {
+      const accountId = Number(row.id)
+      if (!Number.isSafeInteger(accountId) || accountId <= afterId) {
+        throw new Error('Invalid account ID in Zalo Server session discovery')
+      }
+      items.push({ accountId, sessionUpdatedAt: row.zalo_session_updated_at ?? null })
+      afterId = accountId
+    }
+    if (!data || data.length < pageSize) return items
+  }
 }
 
 export async function listAccounts(): Promise<AutoAccount[]> {
@@ -603,6 +645,7 @@ export async function updateAccountZaloSession(
     session: ZaloSessionCredentials
     verified?: boolean
     clearError?: boolean
+    expectedServerSessionUpdatedAt?: string | null
   }
 ): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
@@ -620,7 +663,7 @@ export async function updateAccountZaloSession(
     updated_at: now
   }
 
-  const { data, error } = await client()
+  let query = client()
     .from('auto_accounts')
     .update(removeUndefined(payload))
     .eq('id', id)
@@ -628,6 +671,17 @@ export async function updateAccountZaloSession(
     .eq('flatform_type', 'zalo')
     .eq('is_zalo_show_web', false)
     .eq('is_delete', false)
+  if (input.expectedServerSessionUpdatedAt !== undefined) {
+    query = query
+      .eq('is_zalo_server', true)
+      .eq('is_active', true)
+      .not('zalo_session', 'is', null)
+      .is('zalo_session_last_verified_at', null)
+    query = input.expectedServerSessionUpdatedAt === null
+      ? query.is('zalo_session_updated_at', null)
+      : query.eq('zalo_session_updated_at', input.expectedServerSessionUpdatedAt)
+  }
+  const { data, error } = await query
     .select(ACCOUNT_SELECT)
     .single()
 
