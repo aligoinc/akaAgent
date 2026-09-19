@@ -179,6 +179,8 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   const [customStartDate, setCustomStartDate] = useState(today)
   const [customEndDate, setCustomEndDate] = useState(today)
   const [loadingOptions, setLoadingOptions] = useState(false)
+  const [filtersReady, setFiltersReady] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingReport, setLoadingReport] = useState(false)
   const [report, setReport] = useState<AccountActionReportResult | null>(null)
   const [openDropdown, setOpenDropdown] = useState<ReportFilterDropdown | null>(null)
@@ -245,6 +247,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
     targetPlatform = platform
   ) => {
     if (!window.electronAPI) return
+    setLoadError(null)
     if (accountIds.length === 0 || actionCodes.length === 0) {
       setDetailModal(null)
       setDetailResult(null)
@@ -267,7 +270,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       setReport(result)
     } catch (err: any) {
       console.error('Failed to load account action report:', err)
-      showAlert(err?.message || 'Không thể tải báo cáo.', 'error')
+      setLoadError(err?.message || 'Không thể tải báo cáo.')
     } finally {
       setLoadingReport(false)
     }
@@ -276,6 +279,8 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   const loadOptions = async (nextPlatform = platform) => {
     if (!window.electronAPI) return
     setLoadingOptions(true)
+    setFiltersReady(false)
+    setLoadError(null)
     try {
       const [nextAccounts, nextGroups, nextActions] = await Promise.all([
         window.electronAPI.listAccounts(),
@@ -291,10 +296,11 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       setActions(nextActions)
       setSelectedAccountIds(new Set(nextAccountIds))
       setSelectedActionCodes(new Set(nextActionCodes))
+      setFiltersReady(true)
       await loadReport(nextAccountIds, nextActionCodes, nextPlatform)
     } catch (err: any) {
       console.error('Failed to load report filters:', err)
-      showAlert(err?.message || 'Không thể tải bộ lọc báo cáo.', 'error')
+      setLoadError(err?.message || 'Không thể tải bộ lọc báo cáo.')
     } finally {
       setLoadingOptions(false)
     }
@@ -309,7 +315,8 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       return
     }
 
-    void loadReport()
+    if (!filtersReady) void loadOptions(platform)
+    else void loadReport()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive])
 
@@ -553,6 +560,12 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       ? `${selectedActionCodeList.length} hành động`
       : 'Chưa chọn'
 
+  const retryReport = () => {
+    if (loadingOptions || loadingReport) return
+    if (filtersReady) void loadReport()
+    else void loadOptions(platform)
+  }
+
   const toggleDropdown = (dropdown: ReportFilterDropdown) => {
     setOpenDropdown(current => current === dropdown ? null : dropdown)
   }
@@ -600,7 +613,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
             <span>Bộ lọc</span>
           </div>
           <div className="report-panel-actions">
-            <button className="btn btn-primary report-load-button" onClick={() => loadReport()} disabled={loadingOptions || loadingReport}>
+            <button className="btn btn-primary report-load-button" onClick={retryReport} disabled={loadingOptions || loadingReport}>
               <Search size={14} />
               Tải báo cáo
             </button>
@@ -804,7 +817,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
             </div>
           </div>
           <div className="report-main-actions">
-            <button className="btn btn-secondary" onClick={handleExport} disabled={loadingReport || !report || report.rows.length === 0}>
+            <button className="btn btn-secondary" onClick={handleExport} disabled={loadingOptions || loadingReport || !!loadError || !report || report.rows.length === 0}>
               <Download size={14} />
               Xuất Excel
             </button>
@@ -812,8 +825,13 @@ export default function ReportPage({ isActive }: ReportPageProps) {
         </div>
 
         <div className="report-table-wrap">
-          {loadingReport ? (
+          {loadingOptions || loadingReport ? (
             <div className="report-empty-state">Đang tải báo cáo...</div>
+          ) : loadError ? (
+            <div className="report-empty-state" role="alert">
+              <p>{loadError}</p>
+              <button className="btn btn-primary" onClick={retryReport}>Thử lại</button>
+            </div>
           ) : !report ? (
             <div className="report-empty-state">Chưa có dữ liệu báo cáo.</div>
           ) : report.rows.length === 0 || report.actions.length === 0 ? (
