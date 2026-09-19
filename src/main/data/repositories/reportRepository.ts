@@ -40,6 +40,7 @@ const REPORT_COUNT_DETAIL_STATUSES: CampaignDetailStatus[] = [
 ]
 
 interface ReportDetailRow {
+  id: number
   account_id: number | null
   action_code: string | null
   status: CampaignDetailStatus
@@ -47,6 +48,7 @@ interface ReportDetailRow {
 
 interface PendingInputRow {
   id: number
+  campaign_id: number
   schedule: string | null
   auto_campaigns?: Record<string, unknown> | Record<string, unknown>[] | null
 }
@@ -429,9 +431,80 @@ function mapPendingInputRecordToRow(
   }
 }
 
+/** Read only scoped, in-range inputs. Never page the global pending ledger. */
+async function readPendingReportInputs(
+  staffId: number,
+  organizationId: number,
+  accountIds: number[],
+  actionCodes: string[],
+  query: Pick<AccountActionReportQuery, 'startIso' | 'endIso'>,
+  signal: AbortSignal,
+  onPage: (page: PendingInputRow[]) => void
+): Promise<void> {
+  const campaigns: Record<string, unknown>[] = []
+  const selectedActions = new Set(actionCodes)
+  for (let accountOffset = 0; accountOffset < accountIds.length; accountOffset += 200) {
+    for (let afterId = 0; ;) {
+      const { data, error } = await client().from('auto_campaigns')
+        .select('id,name,account_id,action_id,schedule,extra_settings,auto_campaign_actions(limit_check_action_codes,name)')
+        .eq('staff_id', staffId).eq('organization_id', organizationId).eq('is_delete', false)
+        .in('account_id', accountIds.slice(accountOffset, accountOffset + 200))
+        .gt('id', afterId).order('id').limit(PAGE_SIZE).abortSignal(signal)
+      if (error) throw new Error(`Không thể tải chiến dịch báo cáo: ${error.message}`)
+      const page = (data || []) as Record<string, unknown>[]
+      campaigns.push(...page.filter(row => pendingCampaignActions(row).some(action => selectedActions.has(action.code))))
+      if (page.length < PAGE_SIZE) break
+      afterId = Number(page[page.length - 1].id)
+    }
+  }
+  const campaignById = new Map(campaigns.map(row => [Number(row.id), row]))
+  const startMs = Date.parse(query.startIso), endMs = Date.parse(query.endIso)
+  // These branches are disjoint: input.schedule wins; only NULL falls back to
+  // campaign.schedule. An old campaign may contain inputs scheduled for today.
+  for (const ownSchedule of [true, false]) {
+    const eligible = campaigns.filter(row => ownSchedule || isWithinRange(String(row.schedule || ''), startMs, endMs))
+    for (let offset = 0; offset < eligible.length; offset += 200) {
+      const ids = eligible.slice(offset, offset + 200).map(row => Number(row.id))
+      for (let afterId = 0; ;) {
+        let request = client().from('auto_campaign_input_data')
+          .select('id,campaign_id,schedule,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)')
+          .in('campaign_id', ids).eq('is_delete', false).eq('status', 'chờ xử lý')
+          .eq('auto_campaigns.staff_id', staffId).eq('auto_campaigns.organization_id', organizationId)
+          .eq('auto_campaigns.is_delete', false).in('auto_campaigns.account_id', accountIds)
+        request = ownSchedule
+          ? request.gte('schedule', query.startIso).lt('schedule', query.endIso)
+          : request.is('schedule', null)
+        const { data, error } = await request.gt('id', afterId).order('id').limit(PAGE_SIZE).abortSignal(signal)
+        if (error) throw new Error(`Không thể tải dữ liệu chờ trong báo cáo: ${error.message}`)
+        const page = (data || []) as PendingInputRow[]
+        onPage(page.flatMap(row => {
+          const campaign = campaignById.get(Number(row.campaign_id))
+          return campaign && isWithinRange(String(row.schedule || campaign.schedule || ''), startMs, endMs)
+            ? [{ ...row, auto_campaigns: campaign }] : []
+        }))
+        if (page.length < PAGE_SIZE) break
+        afterId = Number(page[page.length - 1].id)
+      }
+    }
+  }
+}
+
+function pendingCampaignActions(row: Record<string, unknown>) {
+  const action = getNestedObject(row.auto_campaign_actions)
+  const campaign = {
+    id: Number(row.id), actionId: String(row.action_id || ''), accountId: Number(row.account_id),
+    extraSettings: (row.extra_settings as Campaign['extraSettings']) || {}
+  } as Campaign
+  return getCampaignExecutableActionDescriptors(campaign, action ? {
+    id: campaign.actionId, name: String(action.name || ''),
+    limitCheckActionCodes: Array.isArray(action.limit_check_action_codes) ? action.limit_check_action_codes as string[] : []
+  } as CampaignAction : undefined)
+}
+
 export async function getAccountActionReport(input: AccountActionReportQuery): Promise<AccountActionReportResult> {
   const u = requireCurrentUser()
   const query = normalizeQuery(input)
+  const signal = AbortSignal.timeout(20_000)
   const explicitAccountFilter = Array.isArray(input.accountIds)
   const explicitActionFilter = Array.isArray(input.actionCodes)
 
@@ -464,13 +537,14 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
     .from('auto_accounts')
     .select('id, name, flatform_type, account_group_id, auto_account_groups(name)')
     .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
     .order('name', { ascending: true })
 
   if (query.flatformType) accountQuery = accountQuery.eq('flatform_type', query.flatformType)
   if (explicitAccountFilter) accountQuery = accountQuery.in('id', requestedAccountIds)
 
-  const { data: accountRows, error: accountError } = await accountQuery
+  const { data: accountRows, error: accountError } = await accountQuery.abortSignal(signal)
   if (accountError) throw new Error(`Failed to list report accounts: ${accountError.message}`)
 
   const accounts = (accountRows || [])
@@ -489,14 +563,12 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
   }
 
   const accountIds = accounts.map(account => account.id)
-  const startMs = new Date(query.startIso).getTime()
-  const endMs = new Date(query.endIso).getTime()
 
-  let detailFrom = 0
+  let detailAfterId = 0
   while (true) {
     let detailQuery = client()
       .from('auto_campaign_details')
-      .select('account_id, action_code, status')
+      .select('id, account_id, action_code, status')
       .eq('is_delete', false)
       .in('account_id', accountIds)
       .in('action_code', actionCodes)
@@ -504,7 +576,7 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('id', { ascending: true })
-      .range(detailFrom, detailFrom + PAGE_SIZE - 1)
+      .gt('id', detailAfterId).limit(PAGE_SIZE).abortSignal(signal)
 
     const { data, error } = await detailQuery
     if (error) throw new Error(`Failed to list report campaign details: ${error.message}`)
@@ -525,76 +597,20 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
     }
 
     if (page.length < PAGE_SIZE) break
-    detailFrom += PAGE_SIZE
+    detailAfterId = Number(page[page.length - 1].id)
   }
 
-  let pendingFrom = 0
-  while (true) {
-    const { data, error } = await client()
-      .from('auto_campaign_input_data')
-      .select(`
-        id,
-        schedule,
-        auto_campaigns!inner(
-          id,
-          account_id,
-          action_id,
-          schedule,
-          extra_settings,
-          auto_campaign_actions(limit_check_action_codes, name)
-        )
-      `)
-      .eq('is_delete', false)
-      .eq('status', 'chờ xử lý')
-      .eq('auto_campaigns.staff_id', u.staffId)
-      .eq('auto_campaigns.is_delete', false)
-      .in('auto_campaigns.account_id', accountIds)
-      .order('id', { ascending: true })
-      .range(pendingFrom, pendingFrom + PAGE_SIZE - 1)
-
-    if (error) throw new Error(`Failed to list report pending inputs: ${error.message}`)
-
-    const page = (data || []) as PendingInputRow[]
-    for (const inputRow of page) {
-      const campaignRow = getNestedObject(inputRow.auto_campaigns)
-      if (!campaignRow) continue
-
-      const effectiveSchedule = String(inputRow.schedule || campaignRow.schedule || '').trim()
-      if (!isWithinRange(effectiveSchedule, startMs, endMs)) continue
-
-      const accountId = Number(campaignRow.account_id)
-      const reportRow = rowByAccountId.get(accountId)
-      if (!reportRow) continue
-
-      const actionRow = getNestedObject(campaignRow.auto_campaign_actions)
-      const campaign = {
-        id: Number(campaignRow.id),
-        actionId: String(campaignRow.action_id || ''),
-        accountId,
-        schedule: String(campaignRow.schedule || '') || undefined,
-        extraSettings: (campaignRow.extra_settings as Campaign['extraSettings']) || {}
-      } as Campaign
-      const campaignAction = actionRow
-        ? {
-          id: campaign.actionId,
-          name: String(actionRow.name || ''),
-          limitCheckActionCodes: Array.isArray(actionRow.limit_check_action_codes)
-            ? actionRow.limit_check_action_codes as string[]
-            : []
-        } as CampaignAction
-        : undefined
-
-      for (const action of getCampaignExecutableActionDescriptors(campaign, campaignAction)) {
-        if (!actionCodeSet.has(action.code)) continue
-        const cell = reportRow.countsByActionCode[action.code] || makeEmptyCell()
-        cell.pendingCount += 1
-        reportRow.countsByActionCode[action.code] = cell
+  await readPendingReportInputs(u.staffId, u.organizationId, accountIds, actionCodes, query, signal, page => {
+    for (const input of page) {
+      const campaign = getNestedObject(input.auto_campaigns)!
+      const row = rowByAccountId.get(Number(campaign.account_id))
+      if (!row) continue
+      for (const action of pendingCampaignActions(campaign)) {
+        const cell = row.countsByActionCode[action.code]
+        if (cell) cell.pendingCount += 1
       }
     }
-
-    if (page.length < PAGE_SIZE) break
-    pendingFrom += PAGE_SIZE
-  }
+  })
 
   return {
     query,
@@ -683,93 +699,38 @@ async function getPendingDetailRows(
   query: AccountActionReportDetailQuery,
   account: AccountActionReportAccount,
   action: AccountActionReportAction,
-  staffId: number
+  staffId: number,
+  organizationId: number
 ): Promise<AccountActionReportDetailResult> {
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
   const limit = query.pageSize || DETAIL_PAGE_SIZE
-  const startMs = new Date(query.startIso).getTime()
-  const endMs = new Date(query.endIso).getTime()
+  const signal = AbortSignal.timeout(20_000)
+  const pending: PendingInputRow[] = []
+  await readPendingReportInputs(staffId, organizationId, [account.id], [action.code], query, signal, page => pending.push(...page))
+  pending.sort((a, b) => Number(a.id) - Number(b.id))
+  const total = pending.length
+  const selected = query.exportAll ? pending : pending.slice(offset, offset + limit)
+  const selectedById = new Map(selected.map(row => [Number(row.id), row]))
   const rows: AccountActionReportDetailRow[] = []
-  let total = 0
-  let from = 0
-
-  while (true) {
-    const { data, error } = await client()
-      .from('auto_campaign_input_data')
-      .select(`
-        id,
-        campaign_id,
-        name,
-        phone,
-        uid,
-        email,
-        note,
-        schedule,
-        created_at,
-        auto_campaigns!inner(
-          id,
-          name,
-          account_id,
-          action_id,
-          schedule,
-          extra_settings,
-          auto_campaign_actions(limit_check_action_codes, name)
-        )
-      `)
-      .eq('is_delete', false)
-      .eq('status', 'chờ xử lý')
-      .eq('auto_campaigns.staff_id', staffId)
-      .eq('auto_campaigns.is_delete', false)
-      .eq('auto_campaigns.account_id', account.id)
-      .order('id', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1)
-
-    if (error) throw new Error(`Failed to list report pending details: ${error.message}`)
-
-    const page = (data || []) as PendingDetailInputRow[]
-    for (const inputRow of page) {
-      const campaignRow = getNestedObject(inputRow.auto_campaigns)
-      if (!campaignRow) continue
-
-      const effectiveSchedule = String(inputRow.schedule || campaignRow.schedule || '').trim()
-      if (!isWithinRange(effectiveSchedule, startMs, endMs)) continue
-
-      const actionRow = getNestedObject(campaignRow.auto_campaign_actions)
-      const campaign = {
-        id: Number(campaignRow.id),
-        actionId: String(campaignRow.action_id || ''),
-        accountId: account.id,
-        schedule: String(campaignRow.schedule || '') || undefined,
-        extraSettings: (campaignRow.extra_settings as Campaign['extraSettings']) || {}
-      } as Campaign
-      const campaignAction = actionRow
-        ? {
-          id: campaign.actionId,
-          name: String(actionRow.name || ''),
-          limitCheckActionCodes: Array.isArray(actionRow.limit_check_action_codes)
-            ? actionRow.limit_check_action_codes as string[]
-            : []
-        } as CampaignAction
-        : undefined
-      const descriptor = getCampaignExecutableActionDescriptors(campaign, campaignAction)
-        .find(item => item.code === action.code)
-      if (!descriptor) continue
-
-      const currentIndex = total
-      total += 1
-      if (query.exportAll || (currentIndex >= offset && rows.length < limit)) {
-        rows.push(mapPendingInputRecordToRow(
-          inputRow,
-          account,
-          { ...action, name: descriptor.name || action.name },
-          campaignRow,
-          effectiveSchedule
-        ))
-      }
+  // Fetch target fields only for the requested page (or explicit export).
+  for (let from = 0; from < selected.length; from += 200) {
+    const { data, error } = await client().from('auto_campaign_input_data')
+      .select('id,campaign_id,name,phone,uid,email,note,schedule,created_at,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)')
+      .in('id', selected.slice(from, from + 200).map(row => row.id))
+      .eq('is_delete', false).eq('status', 'chờ xử lý')
+      .eq('auto_campaigns.staff_id', staffId).eq('auto_campaigns.organization_id', organizationId)
+      .eq('auto_campaigns.is_delete', false).eq('auto_campaigns.account_id', account.id)
+      .order('id').abortSignal(signal)
+    if (error) throw new Error(`Không thể tải chi tiết dữ liệu chờ: ${error.message}`)
+    for (const input of (data || []) as PendingDetailInputRow[]) {
+      const snapshot = selectedById.get(Number(input.id))
+      const campaign = getNestedObject(snapshot?.auto_campaigns)
+      if (!campaign || Number(campaign.id) !== Number(input.campaign_id)) continue
+      const effectiveSchedule = String(input.schedule || campaign.schedule || '')
+      if (!isWithinRange(effectiveSchedule, Date.parse(query.startIso), Date.parse(query.endIso))) continue
+      const descriptor = pendingCampaignActions(campaign).find(item => item.code === action.code)
+      rows.push(mapPendingInputRecordToRow(input, account, { ...action, name: descriptor?.name || action.name }, campaign, effectiveSchedule))
     }
-
-    if (page.length < PAGE_SIZE) break
-    from += PAGE_SIZE
   }
 
   return {
@@ -794,7 +755,7 @@ export async function getAccountActionReportDetails(
   const action = await loadReportAction(account, query.actionCode)
 
   if (query.statusBucket === 'pending') {
-    return getPendingDetailRows(query, account, action, u.staffId)
+    return getPendingDetailRows(query, account, action, u.staffId, u.organizationId)
   }
 
   return getCampaignDetailRows(query, account, action, u.staffId)
