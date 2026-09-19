@@ -1,3 +1,5 @@
+import { ReportReadFlights, reportFlightKey } from '../../domain/reports/reportReadFlights'
+import { completedReportCursor, pendingReportPartitions, pendingReportFilter, readPendingReportPage } from '../../domain/reports/reportPaging'
 import {
   AccountActionReportAccount,
   AccountActionReportAction,
@@ -13,7 +15,7 @@ import {
   CampaignDetailStatus
 } from '../../../shared/types'
 import { getCampaignExecutableActionDescriptors } from '../../domain/campaigns/campaignActionDescriptors'
-import { requireCurrentUser } from '../currentUser'
+import { requireCurrentUser, runWithCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import * as accountActionRepo from './accountActionRepository'
 import {
@@ -21,6 +23,7 @@ import {
   loadCurrentUserEffectiveEntitlements
 } from './entitlementRepository'
 
+const reportFlights = new ReportReadFlights()
 const client = () => getSupabaseClient()
 const PAGE_SIZE = 1000
 const DETAIL_PAGE_SIZE = 100
@@ -66,6 +69,8 @@ interface CampaignDetailRecord {
   data: Record<string, unknown> | string | null
   post_url: string | null
   created_at: string | null
+  auto_campaigns?: Record<string, unknown> | Record<string, unknown>[] | null
+  report_input?: Record<string, unknown> | Record<string, unknown>[] | null
 }
 
 interface PendingDetailInputRow {
@@ -79,21 +84,6 @@ interface PendingDetailInputRow {
   schedule: string | null
   created_at: string | null
   auto_campaigns?: Record<string, unknown> | Record<string, unknown>[] | null
-}
-
-interface CampaignInfo {
-  id: number
-  name: string
-}
-
-interface InputDataInfo {
-  id: number
-  name?: string | null
-  uid?: string | null
-  phone?: string | null
-  email?: string | null
-  note?: string | null
-  schedule?: string | null
 }
 
 function normalizeNumberIds(values: unknown): number[] | undefined {
@@ -282,52 +272,6 @@ function isHttpUrl(value: string | null | undefined): boolean {
   return /^https?:\/\//i.test(String(value || '').trim())
 }
 
-function uniqueIds(values: Array<number | null | undefined>): number[] {
-  return Array.from(new Set(values
-    .map(value => Number(value))
-    .filter(value => Number.isFinite(value) && value > 0)
-  ))
-}
-
-async function loadCampaignInfoMap(staffId: number, campaignIds: number[]): Promise<Map<number, CampaignInfo>> {
-  if (campaignIds.length === 0) return new Map()
-
-  const { data, error } = await client()
-    .from('auto_campaigns')
-    .select('id, name')
-    .eq('staff_id', staffId)
-    .in('id', campaignIds)
-
-  if (error) throw new Error(`Failed to list report detail campaigns: ${error.message}`)
-  return new Map((data || []).map(row => [
-    Number(row.id),
-    { id: Number(row.id), name: String(row.name || '') }
-  ]))
-}
-
-async function loadInputDataInfoMap(inputDataIds: number[]): Promise<Map<number, InputDataInfo>> {
-  if (inputDataIds.length === 0) return new Map()
-
-  const { data, error } = await client()
-    .from('auto_campaign_input_data')
-    .select('id, name, uid, phone, email, note, schedule')
-    .in('id', inputDataIds)
-
-  if (error) throw new Error(`Failed to list report detail input data: ${error.message}`)
-  return new Map((data || []).map(row => [
-    Number(row.id),
-    {
-      id: Number(row.id),
-      name: (row.name as string | null) ?? null,
-      uid: (row.uid as string | null) ?? null,
-      phone: (row.phone as string | null) ?? null,
-      email: (row.email as string | null) ?? null,
-      note: (row.note as string | null) ?? null,
-      schedule: (row.schedule as string | null) ?? null
-    }
-  ]))
-}
-
 async function loadReportAccount(query: AccountActionReportDetailQuery, staffId: number): Promise<AccountActionReportAccount> {
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   if (query.flatformType && !canUseAccountPlatformWithEntitlements(query.flatformType, entitlements)) {
@@ -366,17 +310,16 @@ async function loadReportAction(account: AccountActionReportAccount, actionCode:
 function mapCampaignDetailRecordToRow(
   detail: CampaignDetailRecord,
   account: AccountActionReportAccount,
-  action: AccountActionReportAction,
-  campaignMap: Map<number, CampaignInfo>,
-  inputDataMap: Map<number, InputDataInfo>
+  action: AccountActionReportAction
 ): AccountActionReportDetailRow {
   const data = normalizeRecord(detail.data)
-  const inputData = detail.input_data_id ? inputDataMap.get(Number(detail.input_data_id)) : undefined
-  const campaign = detail.campaign_id ? campaignMap.get(Number(detail.campaign_id)) : undefined
-  const targetName = inputData?.name || firstText(data, ['targetName', 'name', 'profileName', 'groupName', 'pageName'])
-  const targetUid = inputData?.uid || firstText(data, ['targetUid', 'uid', 'targetUrl', 'profileUrl', 'groupUrl', 'pageUrl'])
-  const targetPhone = inputData?.phone || firstText(data, ['targetPhone', 'phone'])
-  const targetEmail = inputData?.email || firstText(data, ['targetEmail', 'email'])
+  // Left embedding retains history when input data is missing or outside the tenant.
+  const inputData = getNestedObject(detail.report_input)
+  const campaign = getNestedObject(detail.auto_campaigns)
+  const targetName = textValue(inputData?.name) || firstText(data, ['targetName', 'name', 'profileName', 'groupName', 'pageName'])
+  const targetUid = textValue(inputData?.uid) || firstText(data, ['targetUid', 'uid', 'targetUrl', 'profileUrl', 'groupUrl', 'pageUrl'])
+  const targetPhone = textValue(inputData?.phone) || firstText(data, ['targetPhone', 'phone'])
+  const targetEmail = textValue(inputData?.email) || firstText(data, ['targetEmail', 'email'])
   const postUrl = detail.post_url || firstText(data, ['postUrl', 'post_url'])
   const detailParts = [
     textValue(detail.log),
@@ -390,7 +333,7 @@ function mapCampaignDetailRecordToRow(
     accountId: account.id,
     accountName: account.name,
     campaignId: detail.campaign_id ?? null,
-    campaignName: campaign?.name || null,
+    campaignName: textValue(campaign?.name),
     actionCode: detail.action_code || action.code,
     actionName: detail.action_name || action.name,
     targetName,
@@ -431,16 +374,9 @@ function mapPendingInputRecordToRow(
   }
 }
 
-/** Read only scoped, in-range inputs. Never page the global pending ledger. */
-async function readPendingReportInputs(
-  staffId: number,
-  organizationId: number,
-  accountIds: number[],
-  actionCodes: string[],
-  query: Pick<AccountActionReportQuery, 'startIso' | 'endIso'>,
-  signal: AbortSignal,
-  onPage: (page: PendingInputRow[]) => void
-): Promise<void> {
+async function loadPendingReportCampaigns(
+  staffId: number, organizationId: number, accountIds: number[], actionCodes: string[], signal: AbortSignal
+): Promise<Record<string, unknown>[]> {
   const campaigns: Record<string, unknown>[] = []
   const selectedActions = new Set(actionCodes)
   for (let accountOffset = 0; accountOffset < accountIds.length; accountOffset += 200) {
@@ -457,6 +393,20 @@ async function readPendingReportInputs(
       afterId = Number(page[page.length - 1].id)
     }
   }
+  return campaigns
+}
+
+/** Read only scoped, in-range inputs. Never page the global pending ledger. */
+async function readPendingReportInputs(
+  staffId: number,
+  organizationId: number,
+  accountIds: number[],
+  actionCodes: string[],
+  query: Pick<AccountActionReportQuery, 'startIso' | 'endIso'>,
+  signal: AbortSignal,
+  onPage: (page: PendingInputRow[]) => void
+): Promise<void> {
+  const campaigns = await loadPendingReportCampaigns(staffId, organizationId, accountIds, actionCodes, signal)
   const campaignById = new Map(campaigns.map(row => [Number(row.id), row]))
   const startMs = Date.parse(query.startIso), endMs = Date.parse(query.endIso)
   // These branches are disjoint: input.schedule wins; only NULL falls back to
@@ -502,6 +452,12 @@ function pendingCampaignActions(row: Record<string, unknown>) {
 }
 
 export async function getAccountActionReport(input: AccountActionReportQuery): Promise<AccountActionReportResult> {
+  const user = requireCurrentUser(), query = normalizeQuery(input)
+  return reportFlights.run(reportFlightKey('summary', [user.staffId, user.organizationId, user.entitlements, user.zaloAccountCapabilities], query),
+    () => runWithCurrentUser(user, () => loadAccountActionReport(query)))
+}
+
+async function loadAccountActionReport(input: AccountActionReportQuery): Promise<AccountActionReportResult> {
   const u = requireCurrentUser()
   const query = normalizeQuery(input)
   const signal = AbortSignal.timeout(20_000)
@@ -624,15 +580,17 @@ async function getCampaignDetailRows(
   query: AccountActionReportDetailQuery,
   account: AccountActionReportAccount,
   action: AccountActionReportAction,
-  staffId: number
+  staffId: number,
+  organizationId: number
 ): Promise<AccountActionReportDetailResult> {
+  const signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
   const statuses = getDetailStatuses(query.statusBucket, query.actionCode)
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
   const rows: CampaignDetailRecord[] = []
   let total = 0
 
-  const runQuery = async (from: number, to: number) => {
-    const request = client()
+  const runQuery = async (from: number, to: number, after?: CampaignDetailRecord) => {
+    let request = client()
       .from('auto_campaign_details')
       .select(`
         id,
@@ -646,45 +604,52 @@ async function getCampaignDetailRows(
         log,
         data,
         post_url,
-        created_at
-      `, { count: 'exact' })
+        created_at,
+        auto_campaigns(id,name,staff_id,organization_id),
+        report_input:auto_campaign_input_data!auto_campaign_details_input_data_id_fkey(name,uid,phone,email,auto_campaigns!inner(staff_id,organization_id))
+      `, query.exportAll ? {} : { count: 'exact' })
       .eq('is_delete', false)
       .eq('account_id', account.id)
       .eq('action_code', action.code)
+      .eq('auto_campaigns.staff_id', staffId)
+      .eq('auto_campaigns.organization_id', organizationId)
+      .eq('report_input.auto_campaigns.staff_id', staffId)
+      .eq('report_input.auto_campaigns.organization_id', organizationId)
       .in('status', statuses)
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(from, to)
+    if (query.exportAll) {
+      if (after) request = request.or(completedReportCursor(after))
+      request = request.limit(PAGE_SIZE)
+    } else request = request.range(from, to)
 
-    const { data, error, count } = await request
+    const { data, error, count } = await request.abortSignal(signal)
     if (error) throw new Error(`Failed to list report action details: ${error.message}`)
     return { data: (data || []) as CampaignDetailRecord[], count: count ?? 0 }
   }
 
   if (query.exportAll) {
-    let from = 0
+    let after: CampaignDetailRecord | undefined
     while (true) {
-      const { data, count } = await runQuery(from, from + PAGE_SIZE - 1)
-      if (from === 0) total = count
+      const { data } = await runQuery(0, PAGE_SIZE - 1, after)
       rows.push(...data)
       if (data.length < PAGE_SIZE) break
-      from += PAGE_SIZE
+      const last = data[data.length - 1]
+      if (after && last.id === after.id) throw new Error('Report export cursor did not advance')
+      after = last
     }
-    total = total || rows.length
+    total = rows.length
   } else {
     const { data, count } = await runQuery(offset, offset + (query.pageSize || DETAIL_PAGE_SIZE) - 1)
     rows.push(...data)
     total = count
   }
 
-  const campaignMap = await loadCampaignInfoMap(staffId, uniqueIds(rows.map(row => row.campaign_id)))
-  const inputDataMap = await loadInputDataInfoMap(uniqueIds(rows.map(row => row.input_data_id)))
-
   return {
     query,
-    rows: rows.map(row => mapCampaignDetailRecordToRow(row, account, action, campaignMap, inputDataMap)),
+    rows: rows.map(row => mapCampaignDetailRecordToRow(row, account, action)),
     total,
     page: query.exportAll ? 1 : query.page || 1,
     pageSize: query.exportAll ? Math.max(rows.length, 1) : query.pageSize || DETAIL_PAGE_SIZE,
@@ -704,34 +669,37 @@ async function getPendingDetailRows(
 ): Promise<AccountActionReportDetailResult> {
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
   const limit = query.pageSize || DETAIL_PAGE_SIZE
-  const signal = AbortSignal.timeout(20_000)
-  const pending: PendingInputRow[] = []
-  await readPendingReportInputs(staffId, organizationId, [account.id], [action.code], query, signal, page => pending.push(...page))
-  pending.sort((a, b) => Number(a.id) - Number(b.id))
-  const total = pending.length
-  const selected = query.exportAll ? pending : pending.slice(offset, offset + limit)
-  const selectedById = new Map(selected.map(row => [Number(row.id), row]))
-  const rows: AccountActionReportDetailRow[] = []
-  // Fetch target fields only for the requested page (or explicit export).
-  for (let from = 0; from < selected.length; from += 200) {
-    const { data, error } = await client().from('auto_campaign_input_data')
-      .select('id,campaign_id,name,phone,uid,email,note,schedule,created_at,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)')
-      .in('id', selected.slice(from, from + 200).map(row => row.id))
-      .eq('is_delete', false).eq('status', 'chờ xử lý')
+  const signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
+  const campaigns = await loadPendingReportCampaigns(staffId, organizationId, [account.id], [action.code], signal)
+  const campaignById = new Map(campaigns.map(row => [Number(row.id), row]))
+  const partitions = pendingReportPartitions(campaigns.map(row => ({ id: Number(row.id), schedule: row.schedule })), query.startIso, query.endIso)
+  const result = await readPendingReportPage<PendingDetailInputRow>(partitions, offset, limit, !!query.exportAll, async (partition, page) => {
+    let request = client().from('auto_campaign_input_data')
+      .select(page.head
+        ? 'id,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)'
+        : 'id,campaign_id,name,phone,uid,email,note,schedule,created_at,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)',
+        page.head ? { count: 'exact', head: true } : {})
+      .in('campaign_id', partition.campaignIds).eq('is_delete', false).eq('status', 'chờ xử lý')
       .eq('auto_campaigns.staff_id', staffId).eq('auto_campaigns.organization_id', organizationId)
       .eq('auto_campaigns.is_delete', false).eq('auto_campaigns.account_id', account.id)
-      .order('id').abortSignal(signal)
-    if (error) throw new Error(`Không thể tải chi tiết dữ liệu chờ: ${error.message}`)
-    for (const input of (data || []) as PendingDetailInputRow[]) {
-      const snapshot = selectedById.get(Number(input.id))
-      const campaign = getNestedObject(snapshot?.auto_campaigns)
-      if (!campaign || Number(campaign.id) !== Number(input.campaign_id)) continue
-      const effectiveSchedule = String(input.schedule || campaign.schedule || '')
-      if (!isWithinRange(effectiveSchedule, Date.parse(query.startIso), Date.parse(query.endIso))) continue
-      const descriptor = pendingCampaignActions(campaign).find(item => item.code === action.code)
-      rows.push(mapPendingInputRecordToRow(input, account, { ...action, name: descriptor?.name || action.name }, campaign, effectiveSchedule))
+      .or(pendingReportFilter(partition, query.startIso, query.endIso, page.after))
+    if (!page.head) {
+      request = request.order('campaign_id').order('id')
+      request = query.exportAll ? request.limit(page.limit) : request.range(page.offset, page.offset + page.limit - 1)
     }
-  }
+    const { data, error, count } = await request.abortSignal(signal)
+    if (error) throw new Error(`Không thể tải chi tiết dữ liệu chờ: ${error.message}`)
+    return { rows: (data || []) as unknown as PendingDetailInputRow[], count }
+  })
+  const rows = result.rows.flatMap(input => {
+    const campaign = campaignById.get(Number(input.campaign_id))
+    if (!campaign) return []
+    const effectiveSchedule = String(input.schedule || campaign.schedule || '')
+    if (!isWithinRange(effectiveSchedule, Date.parse(query.startIso), Date.parse(query.endIso))) return []
+    const descriptor = pendingCampaignActions(campaign).find(item => item.code === action.code)
+    return [mapPendingInputRecordToRow(input, account, { ...action, name: descriptor?.name || action.name }, campaign, effectiveSchedule)]
+  })
+  const total = result.total
 
   return {
     query,
@@ -746,7 +714,13 @@ async function getPendingDetailRows(
   }
 }
 
-export async function getAccountActionReportDetails(
+export async function getAccountActionReportDetails(input: AccountActionReportDetailQuery): Promise<AccountActionReportDetailResult> {
+  const user = requireCurrentUser(), query = normalizeDetailQuery(input)
+  return reportFlights.run(reportFlightKey('details', [user.staffId, user.organizationId, user.entitlements, user.zaloAccountCapabilities], query),
+    () => runWithCurrentUser(user, () => loadAccountActionReportDetails(query)))
+}
+
+async function loadAccountActionReportDetails(
   input: AccountActionReportDetailQuery
 ): Promise<AccountActionReportDetailResult> {
   const u = requireCurrentUser()
@@ -758,5 +732,5 @@ export async function getAccountActionReportDetails(
     return getPendingDetailRows(query, account, action, u.staffId, u.organizationId)
   }
 
-  return getCampaignDetailRows(query, account, action, u.staffId)
+  return getCampaignDetailRows(query, account, action, u.staffId, u.organizationId)
 }
