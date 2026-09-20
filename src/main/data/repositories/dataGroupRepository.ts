@@ -6,6 +6,8 @@ import {
   CreateCampaignBundleRequest,
   CreateDataGroupRequest,
   DataGroup,
+  DataGroupAccountOption,
+  DataGroupAccountOptionsQuery,
   DataGroupCampaignTargetPreview,
   DataGroupCampaignTargetPreviewRequest,
   DataGroupIngestRequest,
@@ -275,7 +277,7 @@ function throwRpcError(prefix: string, error: { message?: string } | null): neve
     data_group_bound_members_mismatch: 'Nhóm còn data khác tài khoản hoặc chưa có tài khoản. Hãy chuyển/gỡ các data này trước khi lưu.',
     data_group_bound_source_mismatch: 'Data hoặc nguồn tự động không thuộc tài khoản Zalo đã gắn với nhóm.',
     data_group_bound_rule_mismatch: 'Điều kiện động có tài khoản, tag hoặc group không phù hợp. Hãy sửa hoặc gỡ điều kiện này trước.',
-    data_group_bound_account_read_only: 'Tài khoản của nhóm tự sinh không thể sửa thủ công.',
+    data_group_bound_source_unknown: 'Chưa xác định được tài khoản nguồn của nhóm. Hãy kiểm tra nguồn data trước khi gắn tài khoản.',
     invalid_data_type_category_item: 'Loại data không hợp lệ hoặc đã ngừng sử dụng.',
     invalid_data_type_category_context: 'Loại data không thuộc danh mục Loại dữ liệu.',
     data_group_ingest_semantic_type_mismatch: 'Data thêm vào không đúng loại của nhóm.',
@@ -350,6 +352,33 @@ export async function createDataGroup(request: CreateDataGroupRequest): Promise<
   })
   if (error) throwRpcError('Failed to create data group', error)
   return mapDataGroup(unwrapRpcRow(data))
+}
+
+export async function getDataGroupAccountOptions(query: DataGroupAccountOptionsQuery): Promise<DataGroupAccountOption[]> {
+  const { data, error } = await client().rpc('aka_agent_get_data_group_account_options', {
+    ...identityParams(),
+    p_group_id: query.groupId ?? null,
+    p_data_type_category_item_id: query.dataTypeCategoryItemId
+  })
+  if (error) throwRpcError('Failed to load Data Group account options', error)
+  const reasons: Record<string, string> = {
+    data_group_bound_type_invalid: 'Loại data không hỗ trợ gắn tài khoản Zalo',
+    data_group_bound_account_invalid: 'Tài khoản đã xoá hoặc không còn quyền sử dụng',
+    data_group_bound_source_unknown: 'Chưa xác định được tài khoản nguồn của nhóm',
+    data_group_bound_source_mismatch: 'Không khớp tài khoản của nguồn data hoặc tự động hoá',
+    data_group_bound_rule_mismatch: 'Không khớp tài khoản, tag hoặc group trong bộ lọc động'
+  }
+  return unwrapRpcRows(data).map(row => {
+    const reason = asNullableString(row.reason)
+    const mismatchCount = reason?.match(/^data_group_bound_members_mismatch:(\d+)$/)?.[1]
+    return {
+      accountId: asNullableNumber(row.account_id),
+      accountName: asString(row.account_name),
+      disabledReason: mismatchCount
+        ? `Có ${mismatchCount} data khác tài khoản hoặc chưa có tài khoản`
+        : reason ? reasons[reason] || 'Không phù hợp với dữ liệu hoặc cấu hình hiện tại của nhóm' : null
+    }
+  })
 }
 
 export async function updateDataGroup(request: UpdateDataGroupRequest): Promise<DataGroup> {
