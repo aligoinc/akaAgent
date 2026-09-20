@@ -1,6 +1,6 @@
 import { AkaBizContactTag, ContactType } from '../../../shared/types'
 import { mapAkaBizContactTagFromDB } from '../mappers'
-import { requireCurrentUser } from '../currentUser'
+import { getCurrentUserCredentials, requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
 export interface AkaBizContactTagTarget {
@@ -18,7 +18,6 @@ const client = () => getSupabaseClient()
 const CONTACT_TAG_QUERY_CHUNK_SIZE = 100
 const CONTACT_TAG_CLEANUP_PAGE_SIZE = 1000
 const CONTACT_TAG_WRITE_CHUNK_SIZE = 100
-const CONTACT_TAG_WRITE_CONCURRENCY = 5
 
 function normalizeName(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim()
@@ -35,63 +34,6 @@ function normalizeTagIds(values: unknown): number[] {
     ids.push(id)
   }
   return ids
-}
-
-function sameNumberArray(a: number[], b: number[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index])
-}
-
-async function updateContactTagRows(
-  rows: Array<{ id: unknown; akabizTagIds: number[] }>,
-  staffId: number,
-  errorPrefix: string
-): Promise<void> {
-  const now = new Date().toISOString()
-
-  // A partial upsert is unsafe here because existing contacts have other
-  // required columns. Keep each PATCH scoped to tag fields, but bound the
-  // number of requests in flight and process large mutations in chunks.
-  for (let from = 0; from < rows.length; from += CONTACT_TAG_WRITE_CHUNK_SIZE) {
-    const chunk = rows.slice(from, from + CONTACT_TAG_WRITE_CHUNK_SIZE)
-    let nextIndex = 0
-    let firstError: Error | null = null
-    const workerCount = Math.min(CONTACT_TAG_WRITE_CONCURRENCY, chunk.length)
-    await Promise.all(Array.from({ length: workerCount }, async () => {
-      while (!firstError && nextIndex < chunk.length) {
-        const index = nextIndex
-        nextIndex += 1
-        const row = chunk[index]
-        try {
-          const { error } = await client()
-            .from('auto_account_contacts')
-            .update({ akabiz_tag_ids: row.akabizTagIds, updated_at: now })
-            .eq('id', row.id)
-            .eq('staff_id', staffId)
-
-          if (error) throw new Error(`${errorPrefix}: ${error.message}`)
-        } catch (error) {
-          firstError ||= error instanceof Error ? error : new Error(String(error))
-        }
-      }
-    }))
-    if (firstError) throw firstError
-  }
-}
-
-async function listActiveTagIds(tagIds: number[], staffId: number): Promise<number[]> {
-  const ids = normalizeTagIds(tagIds)
-  if (ids.length === 0) return []
-
-  const { data, error } = await client()
-    .from('auto_contact_tags')
-    .select('id')
-    .eq('staff_id', staffId)
-    .eq('is_delete', false)
-    .in('id', ids)
-
-  if (error) throw new Error(`Failed to validate akaBiz contact tags: ${error.message}`)
-  const active = new Set((data || []).map(row => Number(row.id)).filter(id => Number.isFinite(id) && id > 0))
-  return ids.filter(id => active.has(id))
 }
 
 async function getTag(tagId: number, staffId: number): Promise<AkaBizContactTag> {
@@ -187,7 +129,8 @@ async function removeTagFromContacts(tagId: number, staffId: number): Promise<vo
   while (true) {
     let query = client()
       .from('auto_account_contacts')
-      .select('id, akabiz_tag_ids')
+      .select('id')
+      .eq('is_delete', false)
       .eq('staff_id', staffId)
       .contains('akabiz_tag_ids', [tagId])
       .order('id', { ascending: true })
@@ -200,11 +143,7 @@ async function removeTagFromContacts(tagId: number, staffId: number): Promise<vo
     const rows = data || []
     if (rows.length === 0) break
     lastId = Number(rows[rows.length - 1].id)
-    const updates = rows.map(row => ({
-      id: row.id,
-      akabizTagIds: normalizeTagIds(row.akabiz_tag_ids).filter(id => id !== tagId)
-    }))
-    await updateContactTagRows(updates, staffId, 'Failed to cleanup deleted akaBiz tag from contacts')
+    await mutateContactTags(rows.map(row => Number(row.id)), [tagId], 'remove')
     if (rows.length < CONTACT_TAG_CLEANUP_PAGE_SIZE) break
   }
 }
@@ -226,24 +165,41 @@ export async function deleteAkaBizContactTag(tagId: number): Promise<void> {
   await removeTagFromContacts(id, u.staffId)
 }
 
-async function applyTagsToRows(
-  rows: Array<{ id: unknown; akabiz_tag_ids?: unknown }>,
+async function mutateContactTags(
+  ids: number[],
   tagIds: number[],
-  staffId: number
+  mode: 'add' | 'remove'
 ): Promise<number> {
-  const activeTagIds = await listActiveTagIds(tagIds, staffId)
-  if (activeTagIds.length === 0 || rows.length === 0) return 0
-
-  const updates: Array<{ id: unknown; akabizTagIds: number[] }> = []
-  for (const row of rows) {
-    const current = normalizeTagIds(row.akabiz_tag_ids)
-    const next = normalizeTagIds([...current, ...activeTagIds])
-    if (sameNumberArray(current, next)) continue
-    updates.push({ id: row.id, akabizTagIds: next })
+  const contactIds = normalizeTagIds(ids)
+  const tags = normalizeTagIds(tagIds)
+  if (tags.length === 0 || contactIds.length === 0) return 0
+  const user = requireCurrentUser()
+  // Service-role Server callers have no Desktop login credentials.
+  const credentials = getCurrentUserCredentials()
+  let count = 0
+  for (let from = 0; from < contactIds.length; from += CONTACT_TAG_WRITE_CHUNK_SIZE) {
+    const params = {
+      p_staff_id: user.staffId,
+      p_organization_id: user.organizationId,
+      p_contact_ids: contactIds.slice(from, from + CONTACT_TAG_WRITE_CHUNK_SIZE),
+      p_tag_ids: tags,
+      p_auth_username: credentials?.username ?? null,
+      p_auth_password: credentials?.password ?? null,
+      p_mode: mode
+    }
+    // Retry only transactions PostgreSQL has already rolled back in full.
+    for (let attempt = 0; ; attempt++) {
+      const { data, error } = await client().rpc('aka_agent_mutate_contact_tags', params)
+      if (error && ['40P01', '40001'].includes(error.code) && attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+        continue
+      }
+      if (error) throw new Error(`Failed to update akaBiz contact tags: ${error.message}`)
+      count += Number(data?.count) || 0
+      break
+    }
   }
-
-  await updateContactTagRows(updates, staffId, 'Failed to apply akaBiz contact tags')
-  return updates.length
+  return count
 }
 
 export async function applyAkaBizTagsToContactIds(
@@ -254,11 +210,11 @@ export async function applyAkaBizTagsToContactIds(
   const ids = normalizeTagIds(contactIds)
   if (ids.length === 0) return { success: true, count: 0 }
 
-  const rowsById = new Map<number, { id: unknown; akabiz_tag_ids?: unknown }>()
+  const rowsById = new Map<number, { id: unknown }>()
   for (let from = 0; from < ids.length; from += CONTACT_TAG_QUERY_CHUNK_SIZE) {
     const { data, error } = await client()
       .from('auto_account_contacts')
-      .select('id, akabiz_tag_ids')
+      .select('id')
       .eq('staff_id', u.staffId)
       .eq('is_delete', false)
       .in('id', ids.slice(from, from + CONTACT_TAG_QUERY_CHUNK_SIZE))
@@ -267,7 +223,7 @@ export async function applyAkaBizTagsToContactIds(
     for (const row of data || []) rowsById.set(Number(row.id), row)
   }
 
-  const count = await applyTagsToRows(Array.from(rowsById.values()), tagIds, u.staffId)
+  const count = await mutateContactTags(Array.from(rowsById.keys()), tagIds, 'add')
   return { success: true, count }
 }
 
@@ -302,13 +258,13 @@ export async function applyAkaBizTagsToContactTargets(
     targetsByScope.set(key, scope)
   }
 
-  const rowsById = new Map<number, { id: unknown; akabiz_tag_ids?: unknown }>()
+  const rowsById = new Map<number, { id: unknown }>()
   for (const scope of targetsByScope.values()) {
     const uids = Array.from(scope.uids)
     for (let from = 0; from < uids.length; from += CONTACT_TAG_QUERY_CHUNK_SIZE) {
       const { data, error } = await client()
         .from('auto_account_contacts')
-        .select('id, akabiz_tag_ids')
+        .select('id')
         .eq('account_id', scope.accountId)
         .eq('staff_id', u.staffId)
         .eq('contact_type', scope.contactType)
@@ -320,6 +276,6 @@ export async function applyAkaBizTagsToContactTargets(
     }
   }
 
-  const count = await applyTagsToRows(Array.from(rowsById.values()), tagIds, u.staffId)
+  const count = await mutateContactTags(Array.from(rowsById.keys()), tagIds, 'add')
   return { success: true, count }
 }

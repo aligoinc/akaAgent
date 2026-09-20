@@ -119,6 +119,8 @@ const STATUS_FILTER_OPTIONS: Array<{ value: DataGroupMemberStatusFilter; label: 
   { value: 'all', label: 'Tất cả' },
   { value: 'friend', label: 'Bạn bè' },
   { value: 'stranger', label: 'Người lạ' },
+  { value: 'request_sent', label: 'Gửi lời mời kết bạn' },
+  { value: 'request_received', label: 'Nhận kết bạn' },
   { value: 'joined', label: 'Đã tham gia' },
   { value: 'not_joined', label: 'Chưa tham gia' }
 ]
@@ -412,6 +414,10 @@ const getMemberDataTypeLabel = (member: DataGroupMember, group?: DataGroup | nul
 const getMemberStatus = (member: DataGroupMember) => {
   if (member.isDelete) return { label: 'Đã gỡ', tone: 'is-muted' }
   if (member.contactType === 'person') {
+    if (member.flatformType === 'zalo' && member.zaloFriendStatus) {
+      const labels = { friend: 'Bạn bè', request_sent: 'Gửi lời mời kết bạn', request_received: 'Nhận kết bạn', stranger: 'Người lạ' }
+      return { label: labels[member.zaloFriendStatus], tone: member.zaloFriendStatus === 'friend' ? 'is-active' : 'is-muted' }
+    }
     if (member.isFriend === true) return { label: 'Bạn bè', tone: 'is-active' }
     if (member.isFriend === false) return { label: 'Người lạ', tone: 'is-muted' }
     return { label: 'Chưa xác định', tone: 'is-muted' }
@@ -530,6 +536,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupColor, setNewGroupColor] = useState(DEFAULT_GROUP_COLOR)
   const [newGroupDataTypeCategoryItemId, setNewGroupDataTypeCategoryItemId] = useState<number | ''>('')
+  const [newGroupBoundAccountId, setNewGroupBoundAccountId] = useState<number | ''>('')
+  const [editingGroupBoundAccountId, setEditingGroupBoundAccountId] = useState<number | ''>('')
+  const zaloAccountOptions = accounts.filter(account => account.flatformType === 'zalo' && !account.isDelete)
+  const supportsAccountBinding = (typeId: number | '') => dataTypeItems.some(item => item.id === typeId && ['zalo_person', 'zalo_group'].includes(item.code))
   const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
   const [editingGroupName, setEditingGroupName] = useState('')
   const [editingGroupDataTypeCategoryItemId, setEditingGroupDataTypeCategoryItemId] = useState<number | ''>('')
@@ -1037,6 +1047,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     try {
       const created = await api.createDataGroup({
         name,
+        boundZaloAccountId: supportsAccountBinding(newGroupDataTypeCategoryItemId) ? newGroupBoundAccountId || null : null,
         color: newGroupColor,
         dataTypeCategoryItemId: newGroupDataTypeCategoryItemId === ''
           ? null
@@ -1048,6 +1059,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       setCreatingGroup(false)
       setNewGroupName('')
       setNewGroupDataTypeCategoryItemId('')
+      setNewGroupBoundAccountId('')
       setNewGroupColor(DATA_GROUP_COLORS[(groupTotal + 1) % DATA_GROUP_COLORS.length])
       const createdMatchesCurrentList = (
         (!compatibleActionId && compatibleDataTypeCategoryItemId == null && !unrestrictedOnly)
@@ -1076,6 +1088,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const startRenameGroup = (group: DataGroup) => {
     setEditingGroupId(group.id)
     setEditingGroupName(group.name)
+    setEditingGroupBoundAccountId(group.boundZaloAccountId ?? '')
     setEditingGroupDataTypeCategoryItemId(getGroupDataTypeId(group) ?? '')
   }
 
@@ -1104,7 +1117,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const nameChanged = name !== group.name
     const dataTypeChanged = !isDatasetAutoGroup(group)
       && nextDataTypeCategoryItemId !== getGroupDataTypeId(group)
-    if (!nameChanged && !dataTypeChanged) {
+    const nextBoundAccountId = supportsAccountBinding(editingGroupDataTypeCategoryItemId) ? editingGroupBoundAccountId || null : null
+    const bindingChanged = !isDatasetAutoGroup(group) && nextBoundAccountId !== (group.boundZaloAccountId ?? null)
+    if (!nameChanged && !dataTypeChanged && !bindingChanged) {
       setEditingGroupId(null)
       return
     }
@@ -1114,23 +1129,17 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         groupId: group.id
       }
       if (nameChanged) request.name = name
+      if (bindingChanged) request.boundZaloAccountId = nextBoundAccountId
       if (dataTypeChanged) {
         request.dataTypeCategoryItemId = nextDataTypeCategoryItemId
       }
       const updated = await api.updateDataGroup(request)
       updateGroupInState(updated)
       setEditingGroupId(null)
-      showAlert(
-        nameChanged && dataTypeChanged
-          ? 'Đã cập nhật tên và loại data của nhóm.'
-          : nameChanged
-            ? 'Đã đổi tên nhóm data.'
-            : 'Đã cập nhật loại data của nhóm.',
-        'success'
-      )
+      showAlert('Đã cập nhật nhóm data.', 'success')
       await Promise.all([
         loadGroups({ silent: true }),
-        dataTypeChanged ? loadMembers({ silent: true }) : Promise.resolve(),
+        (dataTypeChanged || bindingChanged) ? loadMembers({ silent: true }) : Promise.resolve(),
         notifyGroupsChanged()
       ])
     } catch (err: any) {
@@ -1411,6 +1420,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       )
       setMoveTargets(allGroups.filter(group => (
         group.id !== activeGroupId
+        && (group.boundZaloAccountId == null || selectedMembers.every(member => member.sourceAccountId === group.boundZaloAccountId))
         && (
           getGroupDataTypeId(group) == null
           || (!onlyUnrestrictedTargets && getGroupDataTypeId(group) === compatibleDataTypeId)
@@ -1478,7 +1488,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const rows = exportedMembers.map(member => {
         const account = getAccountDisplay(member)
         return {
-          'Tên': member.name || '',
+          'Tên': member.zaloName || member.name || '',
+          'Tên hiển thị': member.displayName || '',
           'UID': member.uid || '',
           'Số điện thoại': member.phone || '',
           'Email': member.email || '',
@@ -1851,6 +1862,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <button type="button" className="btn btn-primary data-group-manager-create-button" onClick={() => {
                   setNewGroupName(createDefaultDataGroupName())
                   setNewGroupDataTypeCategoryItemId('')
+                  setNewGroupBoundAccountId('')
                   setCreatingGroup(true)
                 }}>
                   <Plus size={15} /> Thêm nhóm
@@ -1880,13 +1892,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     </div>
                   </div>
                   <div className="data-group-manager-create-name-field">
-                    <label htmlFor="data-group-manager-new-type">Loại data</label>
+                    <label htmlFor="data-group-manager-new-type">Loại data chính</label>
                     <select
                       id="data-group-manager-new-type"
                       className="stepper-input"
                       value={newGroupDataTypeCategoryItemId}
                       onChange={event => {
                         setNewGroupDataTypeCategoryItemId(event.target.value ? Number(event.target.value) : '')
+                        setNewGroupBoundAccountId('')
                       }}
                       disabled={busyAction === 'create' || dataTypesLoading || unrestrictedOnly}
                     >
@@ -1896,11 +1909,20 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       ))}
                     </select>
                   </div>
+                  {supportsAccountBinding(newGroupDataTypeCategoryItemId) && <div className="data-group-manager-create-name-field">
+                    <label htmlFor="data-group-manager-new-account">Tài khoản Zalo</label>
+                    <select id="data-group-manager-new-account" className="stepper-input" value={newGroupBoundAccountId} onChange={event => setNewGroupBoundAccountId(event.target.value ? Number(event.target.value) : '')} disabled={busyAction === 'create'}>
+                      <option value="">Không gắn tài khoản</option>
+                      {zaloAccountOptions.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+                    </select>
+                    <small>Khi gắn tài khoản, nhóm chỉ nhận data của tài khoản này.</small>
+                  </div>}
                   <div className="data-group-manager-create-actions">
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
                       setCreatingGroup(false)
                       setNewGroupName('')
                       setNewGroupDataTypeCategoryItemId('')
+                      setNewGroupBoundAccountId('')
                     }}>Huỷ</button>
                     <button type="submit" className="btn btn-primary btn-sm" disabled={!newGroupName.trim() || busyAction === 'create'}>
                       {busyAction === 'create' ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Tạo
@@ -1985,6 +2007,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                               setEditingGroupDataTypeCategoryItemId(
                                 event.target.value ? Number(event.target.value) : ''
                               )
+                              setEditingGroupBoundAccountId('')
                             }}
                             disabled={
                               rowBusy
@@ -2010,6 +2033,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                               <option key={item.id} value={item.id}>{item.name}</option>
                             ))}
                           </select>
+                          {supportsAccountBinding(editingGroupDataTypeCategoryItemId) && <select className="data-group-manager-edit-type-select" aria-label="Tài khoản Zalo của nhóm" value={editingGroupBoundAccountId} onChange={event => setEditingGroupBoundAccountId(event.target.value ? Number(event.target.value) : '')} disabled={rowBusy || isDatasetAutoGroup(group)}>
+                            <option value="">Không gắn tài khoản</option>
+                            {editingGroupBoundAccountId && !zaloAccountOptions.some(account => account.id === editingGroupBoundAccountId) && <option value={editingGroupBoundAccountId}>{group.boundZaloAccountName || `Tài khoản ${editingGroupBoundAccountId}`} (không khả dụng)</option>}
+                            {zaloAccountOptions.map(account => <option key={account.id} value={account.id}>{account.name}</option>)}
+                          </select>}
                         </div>
                       ) : (
                         <>
@@ -2032,6 +2060,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                           <div className="data-group-manager-group-meta">
                             <span>{formatCount(group.activeMembershipCount)} data</span>
                             <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
+                            {group.boundZaloAccountId && <span title="Tài khoản Zalo đã gắn">{group.boundZaloAccountName || `Tài khoản ${group.boundZaloAccountId}`}</span>}
                           </div>
                         </>
                       )}
@@ -2254,6 +2283,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       />
                     </th>
                     <th>Tên</th>
+                    <th>Tên hiển thị</th>
                     <th>UID</th>
                     <th>Số điện thoại</th>
                     <th>Link</th>
@@ -2267,11 +2297,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 </thead>
                 <tbody>
                   {!activeGroupId ? (
-                    <tr><td colSpan={11}><div className="data-group-manager-table-empty"><Database size={36} /><span>Chọn một nhóm ở bên trái để xem data.</span></div></td></tr>
+                    <tr><td colSpan={12}><div className="data-group-manager-table-empty"><Database size={36} /><span>Chọn một nhóm ở bên trái để xem data.</span></div></td></tr>
                   ) : membersLoading ? (
-                    <tr><td colSpan={11}><div className="data-group-manager-table-empty"><LoaderCircle size={24} className="spin" /><span>Đang tải data trong nhóm...</span></div></td></tr>
+                    <tr><td colSpan={12}><div className="data-group-manager-table-empty"><LoaderCircle size={24} className="spin" /><span>Đang tải data trong nhóm...</span></div></td></tr>
                   ) : members.length === 0 ? (
-                    <tr><td colSpan={11}><div className="data-group-manager-table-empty"><Database size={36} /><span>Không có data phù hợp với bộ lọc.</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddMenuOpen(true)}><Plus size={13} /> Thêm data vào nhóm</button></div></td></tr>
+                    <tr><td colSpan={12}><div className="data-group-manager-table-empty"><Database size={36} /><span>Không có data phù hợp với bộ lọc.</span><button type="button" className="btn btn-secondary btn-sm" onClick={() => setAddMenuOpen(true)}><Plus size={13} /> Thêm data vào nhóm</button></div></td></tr>
                   ) : members.map(member => {
                     const account = getAccountDisplay(member)
                     const status = getMemberStatus(member)
@@ -2282,10 +2312,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         <td className="is-name" title={(member.provenance || []).length > 0 ? `${member.name || member.email || 'Data'} · ${getMemberSourceText(member)}` : member.name || member.email || undefined}>
                           {(member.provenance || []).length > 0 ? (
                             <button type="button" className="data-group-manager-name-button" onClick={() => setProvenanceMember(member)}>
-                              {member.name || member.email || '—'}
+                              {member.zaloName || member.name || member.email || '—'}
                             </button>
-                          ) : member.name || member.email || '—'}
+                          ) : member.zaloName || member.name || member.email || '—'}
                         </td>
+                        <td title={member.displayName || undefined}>{member.displayName || '—'}</td>
                         <td className="is-uid" title={member.uid || member.email || undefined}>{member.uid || member.email || '—'}</td>
                         <td title={member.phone || undefined}>{member.phone || '—'}</td>
                         <td className="is-link" title={member.url || undefined}>{member.url || '—'}</td>
@@ -2353,6 +2384,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <DataGroupDynamicFilterPanel
                   api={dataGroupApi}
                   groupId={activeGroup.id}
+                  boundZaloAccountId={activeGroup.boundZaloAccountId}
                   groupName={activeGroup.name}
                   groupDataTypeName={panelData?.group.dataTypeName || 'Zalo · User theo UID'}
                   isSupported={activeGroupDataTypeCode === 'zalo_person'}
@@ -2412,7 +2444,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       <h4>Chi tiết</h4>
                       <dl className="data-group-info-details">
                         <div><dt>Loại nhóm</dt><dd>{panelData.group.dataTypeName}</dd></div>
-                        <div><dt>Gắn với tài khoản</dt><dd>{panelData.accountBreakdown.length > 0 ? `${panelData.accountBreakdown[0].name}${panelData.accountBreakdown.length > 1 ? ` +${panelData.accountBreakdown.length - 1}` : ''}` : 'Chưa gắn tài khoản'}</dd></div>
+                        <div><dt>Tài khoản Zalo</dt><dd>{activeGroup.boundZaloAccountId ? activeGroup.boundZaloAccountName || accounts.find(account => account.id === activeGroup.boundZaloAccountId)?.name || `Tài khoản ${activeGroup.boundZaloAccountId}` : 'Không gắn tài khoản'}</dd></div>
                         <div><dt>Nguồn data</dt><dd>{panelData.sourceBreakdown.length > 0 ? panelData.sourceBreakdown.slice(0, 3).map(item => `${getSourceKindLabel(item.kind)} ${formatCount(item.count)}`).join(' · ') : 'Chưa có nguồn'}</dd></div>
                         <div><dt>Người tạo</dt><dd>{panelData.group.creatorName}</dd></div>
                         <div><dt>Ngày tạo</dt><dd>{formatPanelDate(panelData.group.createdAt)}</dd></div>
@@ -2813,8 +2845,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         <div className="data-group-scan-layer">
           <Suspense fallback={<div className="data-group-scan-loading"><LoaderCircle size={24} className="spin" /> Đang mở quét data...</div>}>
             <LazyDataScanModal
-              initialAction={getInitialScanAction(initialPlatform, initialContactType)}
-              initialAccountId={initialAccountId || undefined}
+              initialAction={scanTargetGroup.boundZaloAccountId ? getInitialScanAction('zalo', getGroupDataTypeCode(scanTargetGroup) === 'zalo_group' ? 'group' : 'person') : getInitialScanAction(initialPlatform, initialContactType)}
+              initialAccountId={scanTargetGroup.boundZaloAccountId || initialAccountId || undefined}
+              lockAccount={!!scanTargetGroup.boundZaloAccountId}
               allowedActions={availableScanActions}
               targetDataGroup={scanTargetGroup}
               onClose={() => {

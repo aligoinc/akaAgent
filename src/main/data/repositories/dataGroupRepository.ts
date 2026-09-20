@@ -89,6 +89,8 @@ function mapDataGroup(row: DbRow): DataGroup {
     color: asString(row.color, '#6366f1'),
     sortOrder: asNumber(row.sort_order),
     revision: asNumber(row.revision),
+    boundZaloAccountId: asNullableNumber(row.bound_zalo_account_id),
+    boundZaloAccountName: asNullableString(row.bound_zalo_account_name),
     dataTypeCategoryItemId: asNullableNumber(row.data_type_category_item_id),
     dataTypeCode: asNullableString(row.data_type_code) as DataGroup['dataTypeCode'],
     dataTypeName: asNullableString(row.data_type_name),
@@ -143,6 +145,9 @@ function mapDataGroupMember(row: DbRow): DataGroupMember {
     id: asNumber(row.id ?? row.membership_id),
     groupId: asNumber(row.group_id),
     contactId: asNumber(row.contact_id),
+    zaloName: asNullableString(row.zalo_name),
+    displayName: asNullableString(row.display_name),
+    zaloFriendStatus: asNullableString(row.zalo_friend_status) as DataGroupMember['zaloFriendStatus'],
     name: asString(row.name),
     uid: asNullableString(row.uid),
     url: asNullableString(row.url),
@@ -265,6 +270,12 @@ function serverRuntimeParams(context: DataGroupRuntimeContext): {
 function throwRpcError(prefix: string, error: { message?: string } | null): never {
   const rawMessage = error?.message || 'unknown_error'
   const semanticMessages: Record<string, string> = {
+    data_group_bound_account_invalid: 'Tài khoản Zalo không còn khả dụng hoặc không thuộc nhóm của bạn.',
+    data_group_bound_type_invalid: 'Chỉ nhóm Zalo User theo UID hoặc Zalo Group/link được gắn tài khoản.',
+    data_group_bound_members_mismatch: 'Nhóm còn data khác tài khoản hoặc chưa có tài khoản. Hãy chuyển/gỡ các data này trước khi lưu.',
+    data_group_bound_source_mismatch: 'Data hoặc nguồn tự động không thuộc tài khoản Zalo đã gắn với nhóm.',
+    data_group_bound_rule_mismatch: 'Điều kiện động có tài khoản, tag hoặc group không phù hợp. Hãy sửa hoặc gỡ điều kiện này trước.',
+    data_group_bound_account_read_only: 'Tài khoản của nhóm tự sinh không thể sửa thủ công.',
     invalid_data_type_category_item: 'Loại data không hợp lệ hoặc đã ngừng sử dụng.',
     invalid_data_type_category_context: 'Loại data không thuộc danh mục Loại dữ liệu.',
     data_group_ingest_semantic_type_mismatch: 'Data thêm vào không đúng loại của nhóm.',
@@ -277,12 +288,16 @@ function throwRpcError(prefix: string, error: { message?: string } | null): neve
     zalo_add_group_member_upload_requires_phone: 'Upload trực tiếp cho chiến dịch thêm thành viên Zalo chỉ nhận số điện thoại.',
     facebook_comment_seeding_upload_must_be_unrestricted: 'Upload cho comment seeding phải dùng nhóm Mọi loại dữ liệu.'
   }
+  if (rawMessage.includes('data_group_bound_members_mismatch:')) {
+    const count = rawMessage.match(/data_group_bound_members_mismatch:(\d+)/)?.[1]
+    throw new Error(`Nhóm còn ${count || ''} data khác tài khoản hoặc chưa có tài khoản. Hãy chuyển/gỡ các data này trước khi lưu.`)
+  }
   const matchedCode = Object.keys(semanticMessages).find(code => rawMessage.includes(code))
   throw new Error(matchedCode ? semanticMessages[matchedCode] : `${prefix}: ${rawMessage}`)
 }
 
 export async function listDataGroups(query: DataGroupListQuery = {}): Promise<DataGroupListResult> {
-  const { data, error } = await client().rpc('aka_agent_list_data_groups', {
+  const { data, error } = await client().rpc('aka_agent_list_data_groups_v2', {
     ...identityParams(),
     p_search: asNullableString(query.search),
     p_compatible_action_id: asNullableString(query.compatibleActionId),
@@ -325,9 +340,10 @@ export async function listDataTypeCategoryItems(): Promise<DataTypeCategoryItem[
 }
 
 export async function createDataGroup(request: CreateDataGroupRequest): Promise<DataGroup> {
-  const { data, error } = await client().rpc('aka_agent_create_data_group', {
+  const { data, error } = await client().rpc('aka_agent_create_data_group_v2', {
     ...identityParams(),
     p_name: request.name,
+    p_bound_zalo_account_id: request.boundZaloAccountId ?? null,
     p_color: request.color || null,
     p_request_id: request.requestId || null,
     p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null
@@ -337,9 +353,11 @@ export async function createDataGroup(request: CreateDataGroupRequest): Promise<
 }
 
 export async function updateDataGroup(request: UpdateDataGroupRequest): Promise<DataGroup> {
-  const { data, error } = await client().rpc('aka_agent_update_data_group', {
+  const { data, error } = await client().rpc('aka_agent_update_data_group_v2', {
     ...identityParams(),
     p_group_id: request.groupId,
+    p_bound_zalo_account_id: request.boundZaloAccountId ?? null,
+    p_update_bound_account: Object.prototype.hasOwnProperty.call(request, 'boundZaloAccountId'),
     p_name: request.name ?? null,
     p_color: request.color ?? null,
     p_sort_order: request.sortOrder ?? null,
@@ -389,7 +407,7 @@ export async function duplicateDataGroup(
 export async function listDataGroupMembers(
   query: DataGroupMemberListQuery
 ): Promise<DataGroupMemberListResult> {
-  const { data, error } = await client().rpc('aka_agent_list_data_group_members', {
+  const { data, error } = await client().rpc('aka_agent_list_data_group_members_v2', {
     ...identityParams(),
     p_group_id: query.groupId,
     p_search: asNullableString(query.search),
@@ -734,6 +752,7 @@ function mapDynamicFilterConfig(payloadValue: unknown, groupId: number): DataGro
   return {
     id: asNullableNumber(filter.id),
     groupId: asNumber(filter.group_id, groupId),
+    boundZaloAccountId: asNullableNumber(filter.bound_zalo_account_id),
     isEnabled: filter.is_enabled === true,
     revision: asNumber(filter.revision),
     evaluationIntervalMinutes: asNumber(filter.evaluation_interval_minutes, 15),

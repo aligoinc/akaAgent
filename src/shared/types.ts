@@ -1734,6 +1734,8 @@ export interface DataGroup {
   color: string
   sortOrder: number
   revision: number
+  boundZaloAccountId?: number | null
+  boundZaloAccountName?: string | null
   dataTypeCategoryItemId?: number | null
   dataTypeCode?: DataTypeCategoryCode | null
   dataTypeName?: string | null
@@ -1903,6 +1905,7 @@ export interface DataGroupDynamicFilterRule {
 export interface DataGroupDynamicFilterConfig {
   id?: number | null
   groupId: number
+  boundZaloAccountId?: number | null
   isEnabled: boolean
   revision: number
   evaluationIntervalMinutes: number
@@ -1970,6 +1973,9 @@ export interface DataGroupMember {
   id: number
   groupId: number
   contactId: number
+  zaloName?: string | null
+  displayName?: string | null
+  zaloFriendStatus?: 'friend' | 'request_sent' | 'request_received' | 'stranger' | null
   name: string
   uid?: string | null
   url?: string | null
@@ -2054,6 +2060,8 @@ export type DataGroupMemberStatusFilter =
   | 'all'
   | 'friend'
   | 'stranger'
+  | 'request_sent'
+  | 'request_received'
   | 'joined'
   | 'not_joined'
   /** Kept for older renderer builds; new UI uses the explicit states above. */
@@ -2088,6 +2096,7 @@ export interface DataGroupMemberIdListResult {
 
 export interface CreateDataGroupRequest {
   name: string
+  boundZaloAccountId?: number | null
   color?: string
   requestId?: string
   dataTypeCategoryItemId?: number | null
@@ -2095,6 +2104,8 @@ export interface CreateDataGroupRequest {
 
 export interface UpdateDataGroupRequest {
   groupId: number
+  /** Omitted preserves the binding; null explicitly removes it. */
+  boundZaloAccountId?: number | null
   name?: string
   color?: string
   sortOrder?: number
