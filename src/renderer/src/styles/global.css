@@ -19869,6 +19869,89 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   }
 }
 
+
+/* Create and edit use the same modal, independent of the sidebar layout. */
+.data-group-form-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3460;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--modal-backdrop-strong, rgba(0, 0, 0, 0.6));
+  backdrop-filter: blur(3px);
+}
+
+.data-group-form-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 20px 64px rgba(0, 0, 0, 0.28);
+  outline: none;
+}
+
+.data-group-form-header {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.data-group-form-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 12px;
+  background: var(--bg-accent-subtle, rgba(99, 102, 241, 0.12));
+  color: var(--accent-primary, #6366f1);
+}
+
+.data-group-form-header h2 { flex: 1; margin: 0; font-size: 18px; font-weight: 600; }
+.data-group-form-header .btn-icon { width: 36px; height: 36px; flex: none; }
+.data-group-form { display: flex; flex-direction: column; min-height: 0; }
+.data-group-form-fields { display: grid; gap: 20px; padding: 24px; overflow-y: auto; min-height: 0; }
+.data-group-form-fields .data-group-form-field { display: grid; gap: 8px; min-width: 0; margin: 0; font-size: 13px; font-weight: 500; }
+.data-group-form-fields input:not([type="color"]),
+.data-group-form-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 400;
+}
+.data-group-form-fields input:focus,
+.data-group-form-fields select:focus { border-color: var(--accent-primary, #6366f1); outline: 2px solid var(--bg-accent-subtle, rgba(99, 102, 241, 0.12)); }
+.data-group-form-fields input[type="color"] { width: 64px; height: 38px; padding: 4px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-primary); cursor: pointer; }
+.data-group-form-fields .required,
+.data-group-form-fields [role="alert"] { color: var(--danger, #ef4444); }
+.data-group-form-fields small { white-space: normal; font-weight: 400; }
+.data-group-form-actions { display: flex; justify-content: flex-end; gap: 10px; flex: none; padding: 16px 24px; border-top: 1px solid var(--border-default); }
+.data-group-form-actions .btn { min-height: 40px; padding: 8px 18px; }
+@media (max-width: 540px) {
+  .data-group-form-backdrop { padding: 16px; }
+  .data-group-form-modal { max-height: calc(100dvh - 32px); }
+  .data-group-form-header { padding: 16px; }
+  .data-group-form-fields { padding: 20px 16px; }
+  .data-group-form-actions { padding: 16px; }
+}
+
 /* =========== STAFF-SHARED DATA GROUPS =========== */
 .data-group-manager-backdrop {
   position: fixed;
@@ -20038,39 +20121,6 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   justify-content: center;
 }
 
-.data-group-manager-create-form {
-  display: grid;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 2px var(--bg-accent-subtle);
-}
-
-.data-group-manager-create-name-field {
-  display: grid;
-  gap: 6px;
-}
-
-.data-group-manager-create-row,
-.data-group-manager-create-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.data-group-manager-create-row .stepper-input {
-  min-width: 0;
-  height: 32px;
-  flex: 1;
-}
-
-.data-group-manager-create-actions {
-  justify-content: flex-end;
-  margin-top: 1px;
-}
-
 .data-group-manager-sidebar-type-filter {
   width: 100%;
   height: 36px;
@@ -20235,22 +20285,6 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.data-group-manager-rename-input {
-  width: 100%;
-  height: 29px;
-  padding: 0 7px;
-  border-color: var(--border-active);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.data-group-manager-edit-fields {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-  padding: 2px 0;
 }
 
 .data-group-manager-edit-type-select {
@@ -22693,19 +22727,7 @@ body.theme-light :is(
   box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 
-.data-group-info-rename {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-}
 
-.data-group-info-rename input {
-  min-width: 0;
-  height: 30px;
-  flex: 1;
-}
 
 .data-group-info-badges {
   display: flex;

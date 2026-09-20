@@ -35,7 +35,7 @@ window.electronAPI={
  getDataGroupPanel:async id=>({group:{...groups.find(g=>g.id===id),creatorName:'Người kiểm thử'},summary:{activeMembershipCount:1,runCount:0,campaignCount:0},quality:{withLinkCount:0,withPhoneCount:0,withUidCount:1,duplicateCount:0},sourceBreakdown:[],dataTypeBreakdown:[],accountBreakdown:[],tags:[],history:[],campaigns:[]}),
  getDataGroupDynamicFilter:async id=>{window.calls.push(['getFilter',id]);return configs[id]||{groupId:id,boundZaloAccountId:groups.find(g=>g.id===id).boundZaloAccountId,isEnabled:false,revision:1,matchedCount:0,lastEnteredCount:0,lastExitedCount:0,rules:[],catalog:{fields,operators:[],scopes:[],joins:[]},values,accounts}},
  saveDataGroupDynamicFilter:async r=>{window.calls.push(['saveFilter',r]);return configs[r.groupId]={...await window.electronAPI.getDataGroupDynamicFilter(r.groupId),...r}},
- createDataGroup:async r=>{window.calls.push(['createGroup',r]);const t=types.find(t=>t.id===r.dataTypeCategoryItemId);const g={...r,id:groups.length+1,dataTypeCode:t?.code,dataTypeName:t?.name,activeMembershipCount:0,isDelete:false};groups=[g,...groups];return g},
+ createDataGroup:async r=>{window.calls.push(['createGroup',r]);if(window.deferGroupSave)await new Promise(resolve=>window.finishGroupSave=resolve);const t=types.find(t=>t.id===r.dataTypeCategoryItemId);const g={...r,id:groups.length+1,dataTypeCode:t?.code,dataTypeName:t?.name,activeMembershipCount:0,isDelete:false};groups=[g,...groups];return g},
  updateDataGroup:async r=>{window.calls.push(['updateGroup',r]);let g=groups.find(g=>g.id===r.groupId);Object.assign(g,r);return {...g}}
 };
 useCampaignStore.setState({accounts,loadAccounts:async()=>{}});
@@ -56,23 +56,25 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.clock.install();
  await page.goto(url);await page.getByRole('columnheader',{name:'Tên hiển thị',exact:true}).waitFor();
  assert.equal(await page.getByRole('cell',{name:'Nguyễn An',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'An - cửa hàng',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'Nhận kết bạn',exact:true}).count(),1);
+ const editor=page.getByRole('dialog',{name:'Sửa nhóm data',exact:true});
  // Existing manual and dataset-derived groups use the same selectable options.
  for(const [groupName,id] of [['Khách Zalo',1],['Quét Zalo A',2]]){
   const row=page.locator('.data-group-manager-group-row').nth(id-1);
   await row.getByTitle('Sửa nhóm',{exact:true}).click();
-  const select=row.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
+  const select=editor.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
   await select.locator('option[value="12"]').waitFor({state:'attached'});
   assert.equal(await select.isEnabled(),true);
   assert.equal(await select.locator('option[value="12"]').isDisabled(),true);
   assert.equal(await select.locator('option[value="14"]').isDisabled(),true);
   assert.match(await select.locator('option[value="12"]').textContent(),/Không khớp/);
   await select.selectOption('11');
-  await row.getByTitle('Lưu',{exact:true}).click();
+  await editor.getByRole('button',{name:'Lưu nhóm',exact:true}).click();
+  await editor.waitFor({state:'hidden'});
   if(id===2) assert.equal(await page.evaluate(()=>window.calls.some(c=>c[0]==='updateGroup'&&c[1].groupId===2&&c[1].boundZaloAccountId===11)),true);
  }
  const mixedRow=page.locator('.data-group-manager-group-row').nth(2);
  await mixedRow.getByTitle('Sửa nhóm',{exact:true}).click();
- const mixedSelect=mixedRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
+ const mixedSelect=editor.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
  await mixedSelect.locator('option[value="12"]').waitFor({state:'attached'});
  assert.equal(await mixedSelect.locator('option[value="11"]').isDisabled(),true);
  assert.equal(await mixedSelect.locator('option[value="12"]').isDisabled(),true);
@@ -80,31 +82,48 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  const accountReads=await page.evaluate(()=>window.calls.filter(c=>c[0]==='accountOptions').length);
  await page.clock.fastForward(90_000);
  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='accountOptions').length),accountReads,'Account options must not poll');
- await mixedRow.getByTitle('Huỷ',{exact:true}).click();
+ await editor.getByRole('button',{name:'Huỷ',exact:true}).click();
  // Failed availability loads keep the selector disabled until an explicit retry succeeds.
  await page.evaluate(()=>window.rejectAccountOptions=true);
  const firstRow=page.locator('.data-group-manager-group-row').nth(0);
  await firstRow.getByTitle('Sửa nhóm',{exact:true}).click();
- await firstRow.getByRole('alert').waitFor();
- assert.equal(await firstRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isDisabled(),true);
- await firstRow.getByRole('button',{name:'Thử lại',exact:true}).click();
- await firstRow.locator('option[value="12"]').waitFor({state:'attached'});
- assert.equal(await firstRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isEnabled(),true);
- await firstRow.getByTitle('Huỷ',{exact:true}).click();
+ await editor.getByRole('alert').waitFor();
+ assert.equal(await editor.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isDisabled(),true);
+ await editor.getByRole('button',{name:'Thử lại',exact:true}).click();
+ await editor.locator('option[value="12"]').waitFor({state:'attached'});
+ assert.equal(await editor.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isEnabled(),true);
+ await editor.getByRole('button',{name:'Huỷ',exact:true}).click();
  // A response for a closed editor cannot replace the newly opened group's options.
  await page.evaluate(()=>{window.deferAccountOptions=true;window.pendingAccountOptions=[]});
  await firstRow.getByTitle('Sửa nhóm',{exact:true}).click();
  await page.waitForFunction(()=>window.pendingAccountOptions.length===1);
- await firstRow.getByTitle('Huỷ',{exact:true}).click();
+ await editor.getByRole('button',{name:'Huỷ',exact:true}).click();
  await mixedRow.getByTitle('Sửa nhóm',{exact:true}).click();
  await page.waitForFunction(()=>window.pendingAccountOptions.length===2);
  await page.evaluate(()=>window.pendingAccountOptions[1].resolve());
  await mixedSelect.locator('option[value="11"]').waitFor({state:'attached'});
  await page.evaluate(()=>window.pendingAccountOptions[0].resolve());
  assert.equal(await mixedSelect.locator('option[value="11"]').isDisabled(),true);
- await mixedRow.getByTitle('Huỷ',{exact:true}).click();
+ await editor.getByRole('button',{name:'Huỷ',exact:true}).click();
  await page.evaluate(()=>window.deferAccountOptions=false);
- await page.getByRole('button',{name:'Thêm nhóm',exact:true}).click();
+ // The info-panel pencil opens the same editor and does not duplicate fields.
+ await page.locator('.data-group-info-overview').getByTitle('Sửa nhóm',{exact:true}).click();
+ await editor.waitFor();
+ assert.equal(await page.locator('.data-group-manager-modal input#data-group-manager-new-name').count(),0);
+ await page.keyboard.press('Escape');
+ await editor.waitFor({state:'hidden'});
+ const createButton=page.getByRole('button',{name:'Thêm nhóm',exact:true});
+ await createButton.click();
+ const createDialog=page.getByRole('dialog',{name:'Tạo nhóm data',exact:true});
+ await createDialog.waitFor();
+ assert.equal(await createDialog.locator('#data-group-manager-new-name').evaluate(el=>el===document.activeElement),true);
+ await createDialog.getByRole('button',{name:'Đóng form nhóm data'}).focus();
+ await page.keyboard.press('Shift+Tab');
+ assert.equal(await createDialog.getByRole('button',{name:'Tạo nhóm',exact:true}).evaluate(el=>el===document.activeElement),true);
+ await page.keyboard.press('Escape');
+ await createDialog.waitFor({state:'hidden'});
+ assert.equal(await createButton.evaluate(el=>el===document.activeElement),true);
+ await createButton.click();
  assert.equal(await page.locator('#data-group-manager-new-account').count(),0);
  await page.locator('#data-group-manager-new-type').selectOption('101');
  assert.equal(await page.locator('#data-group-manager-new-account').inputValue(),'');
@@ -113,7 +132,16 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.screenshot({path:dir+'/create.png',fullPage:true});
  await page.locator('#data-group-manager-new-type').selectOption('103');assert.equal(await page.locator('#data-group-manager-new-account').count(),0);
  await page.locator('#data-group-manager-new-type').selectOption('101');assert.equal(await page.locator('#data-group-manager-new-account').inputValue(),'');
- await page.locator('#data-group-manager-new-account').selectOption('11');await page.locator('#data-group-manager-new-name').fill('Nhóm gắn A');await page.getByRole('button',{name:'Tạo',exact:true}).click();
+ await page.locator('#data-group-manager-new-account').selectOption('11');await page.locator('#data-group-manager-new-name').fill('Nhóm gắn A');await page.evaluate(()=>window.deferGroupSave=true);
+ await createDialog.getByRole('button',{name:'Tạo nhóm',exact:true}).click();
+ await page.waitForFunction(()=>!!window.finishGroupSave);
+ assert.equal(await createDialog.getByRole('button',{name:'Đóng form nhóm data'}).isDisabled(),true);
+ await page.keyboard.press('Escape');
+ assert.equal(await createDialog.isVisible(),true,'Saving must keep the modal open');
+ await page.locator('.data-group-form-backdrop').click({position:{x:5,y:5}});
+ assert.equal(await createDialog.isVisible(),true);
+ await page.evaluate(()=>window.finishGroupSave());
+ await createDialog.waitFor({state:'hidden'});
  await page.getByRole('tab',{name:/Bộ lọc động/}).click();await page.getByRole('switch').waitFor();
  const initialFilterReads=await page.evaluate(()=>window.calls.filter(c=>c[0]==='getFilter').length);
  await page.clock.fastForward(90_000);
@@ -129,6 +157,6 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.screenshot({path:dir+'/filter.png',fullPage:true});
  await page.locator('.data-group-dynamic-editor footer').getByRole('button',{name:'Thêm điều kiện',exact:true}).click();await page.getByRole('button',{name:'Lưu bộ lọc',exact:true}).click();
  const calls=await page.evaluate(()=>window.calls);assert.equal(calls.find(c=>c[0]==='createGroup')[1].boundZaloAccountId,11);assert.equal(calls.find(c=>c[0]==='saveFilter')[1].rules[0].accountId,null);assert.deepEqual(errors,[]);
- console.log(JSON.stringify({passed:true,checks:['account eligibility for manual/auto/mixed groups','disabled reasons before save','account availability retry','stale response fence','names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/create.png',dir+'/filter.png']}));
+ console.log(JSON.stringify({passed:true,checks:['create/edit modal from sidebar and info panel','focus trap and return','busy close protection','account eligibility for manual/auto/mixed groups','disabled reasons before save','account availability retry','stale response fence','names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/create.png',dir+'/filter.png']}));
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

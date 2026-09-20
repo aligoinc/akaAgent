@@ -66,6 +66,7 @@ import {
   type DataGroupElectronAPI
 } from '../DataGroups/dataGroupApi'
 import DataGroupDynamicFilterPanel from '../DataGroups/DataGroupDynamicFilterPanel'
+import DataGroupFormDialog from '../DataGroups/DataGroupFormDialog'
 import DataGroupAccountSelect, { useDataGroupAccountOptions } from '../DataGroups/DataGroupAccountSelect'
 import CampaignDataUploadModal, {
   type CampaignDataUploadSubmission
@@ -545,13 +546,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const code = dataTypeItems.find(item => item.id === typeId)?.code ?? getGroupDataTypeCode(group)
     return code === 'zalo_person' || code === 'zalo_group'
   }
-  const [editingGroupId, setEditingGroupId] = useState<number | null>(null)
+  const [editingGroup, setEditingGroup] = useState<DataGroup | null>(null)
+  const [editingGroupColor, setEditingGroupColor] = useState(DEFAULT_GROUP_COLOR)
   const [editingGroupName, setEditingGroupName] = useState('')
   const [editingGroupDataTypeCategoryItemId, setEditingGroupDataTypeCategoryItemId] = useState<number | ''>('')
   const createAccountOptions = useDataGroupAccountOptions(null, newGroupDataTypeCategoryItemId,
     creatingGroup && supportsAccountBinding(newGroupDataTypeCategoryItemId))
-  const editAccountOptions = useDataGroupAccountOptions(editingGroupId, editingGroupDataTypeCategoryItemId,
-    editingGroupId !== null && supportsAccountBinding(editingGroupDataTypeCategoryItemId))
+  const editAccountOptions = useDataGroupAccountOptions(editingGroup?.id ?? null, editingGroupDataTypeCategoryItemId,
+    editingGroup !== null && supportsAccountBinding(editingGroupDataTypeCategoryItemId))
   const canSaveGroupBinding = (group: DataGroup) => {
     if (!supportsAccountBinding(editingGroupDataTypeCategoryItemId)) return true
     const changed = (editingGroupBoundAccountId || null) !== (group.boundZaloAccountId ?? null)
@@ -1036,7 +1038,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     setStatusFilter('all')
     setDatasetFilterId('')
     setMemberPage(1)
-    setEditingGroupId(null)
+    setEditingGroup(null)
   }
 
   const updateGroupInState = (updated: DataGroup) => {
@@ -1057,7 +1059,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     event.preventDefault()
     const name = newGroupName.trim()
     const api = getDataGroupApi()
-    if (!api || !name || (supportsAccountBinding(newGroupDataTypeCategoryItemId) && !createAccountOptions.allows(newGroupBoundAccountId))) return
+    if (busyAction || !api || !name || (supportsAccountBinding(newGroupDataTypeCategoryItemId) && !createAccountOptions.allows(newGroupBoundAccountId))) return
     setBusyAction('create')
     try {
       const created = await api.createDataGroup({
@@ -1101,7 +1103,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const startRenameGroup = (group: DataGroup) => {
-    setEditingGroupId(group.id)
+    setEditingGroup(group)
+    setEditingGroupColor(group.color || DEFAULT_GROUP_COLOR)
     setEditingGroupName(group.name)
     setEditingGroupBoundAccountId(group.boundZaloAccountId ?? '')
     setEditingGroupDataTypeCategoryItemId(getGroupDataTypeId(group) ?? '')
@@ -1125,17 +1128,18 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const submitRenameGroup = async (group: DataGroup) => {
     const name = editingGroupName.trim()
     const api = getDataGroupApi()
-    if (!api || !name || !canSaveGroupBinding(group)) return
+    if (busyAction || !api || !name || !canSaveGroupBinding(group)) return
     const nextDataTypeCategoryItemId = editingGroupDataTypeCategoryItemId === ''
       ? null
       : editingGroupDataTypeCategoryItemId
     const nameChanged = name !== group.name
+    const colorChanged = editingGroupColor !== (group.color || DEFAULT_GROUP_COLOR)
     const dataTypeChanged = !isDatasetAutoGroup(group)
       && nextDataTypeCategoryItemId !== getGroupDataTypeId(group)
     const nextBoundAccountId = supportsAccountBinding(editingGroupDataTypeCategoryItemId) ? editingGroupBoundAccountId || null : null
     const bindingChanged = nextBoundAccountId !== (group.boundZaloAccountId ?? null)
-    if (!nameChanged && !dataTypeChanged && !bindingChanged) {
-      setEditingGroupId(null)
+    if (!nameChanged && !colorChanged && !dataTypeChanged && !bindingChanged) {
+      setEditingGroup(null)
       return
     }
     setBusyAction(`rename:${group.id}`)
@@ -1144,13 +1148,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         groupId: group.id
       }
       if (nameChanged) request.name = name
+      if (colorChanged) request.color = editingGroupColor
       if (bindingChanged) request.boundZaloAccountId = nextBoundAccountId
       if (dataTypeChanged) {
         request.dataTypeCategoryItemId = nextDataTypeCategoryItemId
       }
       const updated = await api.updateDataGroup(request)
       updateGroupInState(updated)
-      setEditingGroupId(null)
+      setEditingGroup(null)
       showAlert('Đã cập nhật nhóm data.', 'success')
       await Promise.all([
         loadGroups({ silent: true }),
@@ -1826,12 +1831,24 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const dataGroupApi = getDataGroupApi()
+  const formOpen = creatingGroup || editingGroup !== null
+  const formName = creatingGroup ? newGroupName : editingGroupName
+  const formTypeId = creatingGroup ? newGroupDataTypeCategoryItemId : editingGroupDataTypeCategoryItemId
+  const formAccountId = creatingGroup ? newGroupBoundAccountId : editingGroupBoundAccountId
+  const formAccountOptions = creatingGroup ? createAccountOptions : editAccountOptions
+  const formColor = creatingGroup ? newGroupColor : editingGroupColor
+  const formBusy = busyAction !== null
+  const closeGroupForm = () => {
+    if (formBusy) return
+    setCreatingGroup(false)
+    setEditingGroup(null)
+  }
 
   const modal = (
     <div className="data-group-manager-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data">
+      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null}>
         <header className="data-group-manager-header">
           <span className="data-group-manager-header-icon"><Folder size={19} /></span>
           <div className="data-group-manager-heading">
@@ -1874,76 +1891,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
-              {!creatingGroup ? (
-                <button type="button" className="btn btn-primary data-group-manager-create-button" onClick={() => {
-                  setNewGroupName(createDefaultDataGroupName())
-                  setNewGroupDataTypeCategoryItemId('')
-                  setNewGroupBoundAccountId('')
-                  setCreatingGroup(true)
-                }}>
-                  <Plus size={15} /> Thêm nhóm
-                </button>
-              ) : (
-                <form className="data-group-manager-create-form" onSubmit={handleCreateGroup}>
-                  <div className="data-group-manager-create-name-field">
-                    <label htmlFor="data-group-manager-new-name">
-                      Tên nhóm dữ liệu<span className="required">*</span>
-                    </label>
-                    <div className="data-group-manager-create-row">
-                      <label className="data-group-color-input" title="Màu nhóm">
-                        <span style={{ background: newGroupColor }} />
-                        <input type="color" value={newGroupColor} onChange={event => setNewGroupColor(event.target.value)} />
-                      </label>
-                      <input
-                        id="data-group-manager-new-name"
-                        className="stepper-input"
-                        value={newGroupName}
-                        onChange={event => setNewGroupName(event.target.value)}
-                        maxLength={255}
-                        autoFocus
-                        disabled={busyAction === 'create'}
-                        required
-                        aria-required="true"
-                      />
-                    </div>
-                  </div>
-                  <div className="data-group-manager-create-name-field">
-                    <label htmlFor="data-group-manager-new-type">Loại data chính</label>
-                    <select
-                      id="data-group-manager-new-type"
-                      className="stepper-input"
-                      value={newGroupDataTypeCategoryItemId}
-                      onChange={event => {
-                        setNewGroupDataTypeCategoryItemId(event.target.value ? Number(event.target.value) : '')
-                        setNewGroupBoundAccountId('')
-                      }}
-                      disabled={busyAction === 'create' || dataTypesLoading || unrestrictedOnly}
-                    >
-                      <option value="">Mọi loại dữ liệu</option>
-                      {dataTypeItems.map(item => (
-                        <option key={item.id} value={item.id}>{item.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {supportsAccountBinding(newGroupDataTypeCategoryItemId) && <div className="data-group-manager-create-name-field">
-                    <label htmlFor="data-group-manager-new-account">Tài khoản Zalo</label>
-                    <DataGroupAccountSelect id="data-group-manager-new-account" label="Tài khoản Zalo của nhóm mới"
-                      value={newGroupBoundAccountId} onChange={setNewGroupBoundAccountId}
-                      state={createAccountOptions} disabled={busyAction === 'create'} />
-                  </div>}
-                  <div className="data-group-manager-create-actions">
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
-                      setCreatingGroup(false)
-                      setNewGroupName('')
-                      setNewGroupDataTypeCategoryItemId('')
-                      setNewGroupBoundAccountId('')
-                    }}>Huỷ</button>
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={!newGroupName.trim() || busyAction === 'create' || (supportsAccountBinding(newGroupDataTypeCategoryItemId) && !createAccountOptions.allows(newGroupBoundAccountId))}>
-                      {busyAction === 'create' ? <LoaderCircle size={13} className="spin" /> : <Check size={13} />} Tạo
-                    </button>
-                  </div>
-                </form>
-              )}
+              <button type="button" className="btn btn-primary data-group-manager-create-button" disabled={busyAction !== null} onClick={() => {
+                setNewGroupName(createDefaultDataGroupName())
+                setNewGroupDataTypeCategoryItemId('')
+                setNewGroupBoundAccountId('')
+                setCreatingGroup(true)
+              }}>
+                <Plus size={15} /> Thêm nhóm
+              </button>
             </div>
 
             <div className="data-group-manager-group-list">
@@ -1955,7 +1910,6 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <div className="data-group-manager-empty"><Folder size={32} /><span>Chưa có nhóm data.<br />Bấm “Thêm nhóm” để tạo mới.</span></div>
               ) : groups.map(group => {
                 const isActive = group.id === activeGroupId
-                const isEditing = group.id === editingGroupId
                 const rowBusy = busyAction?.endsWith(`:${group.id}`) === true
                 return (
                   <div
@@ -2000,111 +1954,41 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       />
                     </label>
                     <div className="data-group-manager-group-main">
-                      {isEditing ? (
-                        <div className="data-group-manager-edit-fields" onClick={event => event.stopPropagation()}>
-                          <input
-                            className="stepper-input data-group-manager-rename-input"
-                            value={editingGroupName}
-                            onChange={event => setEditingGroupName(event.target.value)}
-                            onKeyDown={event => {
-                              if (event.key === 'Enter') void submitRenameGroup(group)
-                              if (event.key === 'Escape') setEditingGroupId(null)
-                            }}
-                            disabled={rowBusy}
-                            autoFocus
-                            aria-label="Tên nhóm dữ liệu"
-                          />
-                          <select
-                            className="data-group-manager-edit-type-select"
-                            value={editingGroupDataTypeCategoryItemId}
-                            onChange={event => {
-                              setEditingGroupDataTypeCategoryItemId(
-                                event.target.value ? Number(event.target.value) : ''
-                              )
-                              setEditingGroupBoundAccountId('')
-                            }}
-                            disabled={
-                              rowBusy
-                              || dataTypesLoading
-                              || unrestrictedOnly
-                              || isDatasetAutoGroup(group)
-                            }
-                            aria-label="Loại data của nhóm"
-                            title={
-                              isDatasetAutoGroup(group)
-                                ? 'Loại của nhóm tự sinh được đồng bộ từ dataset'
-                                : 'Loại data của nhóm'
-                            }
-                          >
-                            <option value="">Mọi loại dữ liệu</option>
-                            {getGroupDataTypeId(group) != null
-                              && !dataTypeItems.some(item => item.id === getGroupDataTypeId(group)) && (
-                              <option value={getGroupDataTypeId(group) || ''}>
-                                {getGroupDataTypeName(group)} (ngừng sử dụng)
-                              </option>
-                            )}
-                            {dataTypeItems.map(item => (
-                              <option key={item.id} value={item.id}>{item.name}</option>
-                            ))}
-                          </select>
-                          {supportsAccountBinding(editingGroupDataTypeCategoryItemId) && <DataGroupAccountSelect
-                            label="Tài khoản Zalo của nhóm" value={editingGroupBoundAccountId} onChange={setEditingGroupBoundAccountId}
-                            state={editAccountOptions} disabled={rowBusy} currentName={group.boundZaloAccountName} />}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="data-group-manager-group-name-row">
-                            <div className="data-group-manager-group-name" title={group.name}>{group.name}</div>
-                            <button
-                              type="button"
-                              className="data-group-manager-id-copy"
-                              onClick={event => {
-                                event.stopPropagation()
-                                void copyGroupId(group.id)
-                              }}
-                              title={`Sao chép ID nhóm ${group.id}`}
-                              aria-label={`Sao chép ID nhóm ${group.id}`}
-                            >
-                              <span>ID: {group.id}</span>
-                              <Copy size={11} />
-                            </button>
-                          </div>
-                          <div className="data-group-manager-group-meta">
-                            <span>{formatCount(group.activeMembershipCount)} data</span>
-                            <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
-                            {group.boundZaloAccountId && <span title="Tài khoản Zalo đã gắn">{group.boundZaloAccountName || `Tài khoản ${group.boundZaloAccountId}`}</span>}
-                          </div>
-                        </>
-                      )}
+                      <div className="data-group-manager-group-name-row">
+                        <div className="data-group-manager-group-name" title={group.name}>{group.name}</div>
+                        <button
+                          type="button"
+                          className="data-group-manager-id-copy"
+                          onClick={event => {
+                            event.stopPropagation()
+                            void copyGroupId(group.id)
+                          }}
+                          title={`Sao chép ID nhóm ${group.id}`}
+                          aria-label={`Sao chép ID nhóm ${group.id}`}
+                        >
+                          <span>ID: {group.id}</span>
+                          <Copy size={11} />
+                        </button>
+                      </div>
+                      <div className="data-group-manager-group-meta">
+                        <span>{formatCount(group.activeMembershipCount)} data</span>
+                        <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
+                        {group.boundZaloAccountId && <span title="Tài khoản Zalo đã gắn">{group.boundZaloAccountName || `Tài khoản ${group.boundZaloAccountId}`}</span>}
+                      </div>
                     </div>
                     <div className="data-group-manager-group-actions">
-                      {isEditing ? (
-                        <>
-                          <button type="button" className="btn-icon is-success" onClick={event => {
-                            event.stopPropagation()
-                            void submitRenameGroup(group)
-                          }} disabled={rowBusy || !canSaveGroupBinding(group)} title="Lưu"><Check size={13} /></button>
-                          <button type="button" className="btn-icon" onClick={event => {
-                            event.stopPropagation()
-                            setEditingGroupId(null)
-                          }} disabled={rowBusy} title="Huỷ"><X size={13} /></button>
-                        </>
-                      ) : (
-                        <>
-                          <button type="button" className="btn-icon" onClick={event => {
-                            event.stopPropagation()
-                            startRenameGroup(group)
-                          }} title="Sửa nhóm"><Pencil size={13} /></button>
-                          <button type="button" className="btn-icon" onClick={event => {
-                            event.stopPropagation()
-                            requestDuplicateGroup(group)
-                          }} disabled={rowBusy} title="Nhân bản"><Copy size={13} /></button>
-                          <button type="button" className="btn-icon data-group-manager-delete-action" onClick={event => {
-                            event.stopPropagation()
-                            handleDeleteGroup(group)
-                          }} disabled={rowBusy} title="Xoá nhóm"><Trash2 size={13} /></button>
-                        </>
-                      )}
+                      <button type="button" className="btn-icon" onClick={event => {
+                        event.stopPropagation()
+                        startRenameGroup(group)
+                      }} disabled={busyAction !== null} title="Sửa nhóm"><Pencil size={13} /></button>
+                      <button type="button" className="btn-icon" onClick={event => {
+                        event.stopPropagation()
+                        requestDuplicateGroup(group)
+                      }} disabled={rowBusy} title="Nhân bản"><Copy size={13} /></button>
+                      <button type="button" className="btn-icon data-group-manager-delete-action" onClick={event => {
+                        event.stopPropagation()
+                        handleDeleteGroup(group)
+                      }} disabled={rowBusy} title="Xoá nhóm"><Trash2 size={13} /></button>
                     </div>
                   </div>
                 )
@@ -2420,33 +2304,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     <section className="data-group-info-overview">
                       <div className="data-group-info-name-row">
                         <span className="data-group-info-color" style={{ background: activeGroup.color }} />
-                        {editingGroupId === activeGroup.id ? (
-                          <div className="data-group-info-rename">
-                            <input
-                              className="stepper-input"
-                              value={editingGroupName}
-                              onChange={event => setEditingGroupName(event.target.value)}
-                              onKeyDown={event => {
-                                if (event.key === 'Enter') void submitRenameGroup(activeGroup)
-                                if (event.key === 'Escape') setEditingGroupId(null)
-                              }}
-                              autoFocus
-                            />
-                            <button type="button" className="btn-icon is-success" disabled={busyAction === `rename:${activeGroup.id}` || !canSaveGroupBinding(activeGroup)} onClick={() => void submitRenameGroup(activeGroup)}><Check size={13} /></button>
-                          </div>
-                        ) : (
-                          <>
-                            <strong title={activeGroup.name}>{activeGroup.name}</strong>
-                            <button type="button" className="btn-icon" onClick={() => startRenameGroup(activeGroup)} title="Sửa nhóm"><Pencil size={13} /></button>
-                          </>
-                        )}
+                        <strong title={activeGroup.name}>{activeGroup.name}</strong>
+                        <button type="button" className="btn-icon" disabled={busyAction !== null} onClick={() => startRenameGroup(activeGroup)} title="Sửa nhóm"><Pencil size={13} /></button>
                       </div>
-                      {editingGroupId === activeGroup.id && supportsAccountBinding(editingGroupDataTypeCategoryItemId) && <div className="data-group-manager-edit-fields">
-                        <label>Tài khoản Zalo</label>
-                        <DataGroupAccountSelect label="Tài khoản Zalo trong thông tin nhóm"
-                          value={editingGroupBoundAccountId} onChange={setEditingGroupBoundAccountId}
-                          state={editAccountOptions} disabled={busyAction === `rename:${activeGroup.id}`} currentName={activeGroup.boundZaloAccountName} />
-                      </div>}
                       <div className="data-group-info-badges">
                         <button type="button" onClick={() => void copyGroupId(activeGroup.id)}>ID {activeGroup.id}<Copy size={10} /></button>
                         <span>{panelData.group.dataTypeName}</span>
@@ -2859,6 +2719,65 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   return createPortal(
     <>
       {modal}
+      {formOpen && <DataGroupFormDialog title={creatingGroup ? 'Tạo nhóm data' : 'Sửa nhóm data'} busy={formBusy} onClose={closeGroupForm}>
+        <form className="data-group-form" onSubmit={event => {
+          if (creatingGroup) void handleCreateGroup(event)
+          else {
+            event.preventDefault()
+            if (editingGroup) void submitRenameGroup(editingGroup)
+          }
+        }}>
+          <div className="data-group-form-fields">
+            <label className="data-group-form-field" htmlFor="data-group-manager-new-name">
+              <span>Tên nhóm <span className="required">*</span></span>
+              <input id="data-group-manager-new-name" className="stepper-input" value={formName}
+                onChange={event => (creatingGroup ? setNewGroupName : setEditingGroupName)(event.target.value)}
+                maxLength={255} required disabled={formBusy} />
+            </label>
+            <label className="data-group-form-field" htmlFor="data-group-manager-new-type">
+              <span>Loại data chính</span>
+              <select id="data-group-manager-new-type" className="stepper-input" value={formTypeId}
+                onChange={event => {
+                  const typeId = event.target.value ? Number(event.target.value) : ''
+                  if (creatingGroup) {
+                    setNewGroupDataTypeCategoryItemId(typeId)
+                    setNewGroupBoundAccountId('')
+                  } else {
+                    setEditingGroupDataTypeCategoryItemId(typeId)
+                    setEditingGroupBoundAccountId('')
+                  }
+                }}
+                disabled={formBusy || dataTypesLoading || unrestrictedOnly || (!!editingGroup && isDatasetAutoGroup(editingGroup))}>
+                <option value="">Mọi loại dữ liệu</option>
+                {editingGroup && getGroupDataTypeId(editingGroup) != null
+                  && !dataTypeItems.some(item => item.id === getGroupDataTypeId(editingGroup)) && (
+                  <option value={getGroupDataTypeId(editingGroup) || ''}>{getGroupDataTypeName(editingGroup)} (ngừng sử dụng)</option>
+                )}
+                {dataTypeItems.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </label>
+            {supportsAccountBinding(formTypeId) && <div className="data-group-form-field">
+              <label htmlFor="data-group-manager-new-account">Tài khoản Zalo</label>
+              <DataGroupAccountSelect id="data-group-manager-new-account" label="Tài khoản Zalo của nhóm"
+                value={formAccountId} onChange={creatingGroup ? setNewGroupBoundAccountId : setEditingGroupBoundAccountId}
+                state={formAccountOptions} disabled={formBusy} currentName={editingGroup?.boundZaloAccountName} />
+            </div>}
+            <label className="data-group-form-field">
+              <span>Màu nhóm</span>
+              <input type="color" aria-label="Màu nhóm" value={formColor} disabled={formBusy}
+                onChange={event => (creatingGroup ? setNewGroupColor : setEditingGroupColor)(event.target.value)} />
+            </label>
+          </div>
+          <footer className="data-group-form-actions">
+            <button type="button" className="btn btn-secondary" onClick={closeGroupForm} disabled={formBusy}>Huỷ</button>
+            <button type="submit" className="btn btn-primary" disabled={formBusy || !formName.trim() || (creatingGroup
+              ? supportsAccountBinding(formTypeId) && !createAccountOptions.allows(formAccountId)
+              : !editingGroup || !canSaveGroupBinding(editingGroup))}>
+              {formBusy && <LoaderCircle size={15} className="spin" />}{formBusy ? 'Đang lưu…' : creatingGroup ? 'Tạo nhóm' : 'Lưu nhóm'}
+            </button>
+          </footer>
+        </form>
+      </DataGroupFormDialog>}
       {showScanPicker && scanTargetGroup && (
         <div className="data-group-scan-layer">
           <Suspense fallback={<div className="data-group-scan-loading"><LoaderCircle size={24} className="spin" /> Đang mở quét data...</div>}>
