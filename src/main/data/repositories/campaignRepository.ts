@@ -1,3 +1,4 @@
+import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
 import {
   AccountActionLimitStatus,
   ActionLimitConfig,
@@ -1197,7 +1198,7 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
     u.staffId,
     u.organizationId
   )
-  return campaign
+  return rememberCampaignLogSnapshot(campaign)
 }
 
 export async function getCampaignConfig(id: number): Promise<CampaignConfig | null> {
@@ -1268,6 +1269,10 @@ export async function setZaloServerCampaignStatus(
 
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
   if (!row) throw new Error('Zalo Server campaign control returned no result')
+  if (row.ok === true && row.reason === 'updated') recordKnownCampaignLog(normalizedCampaignId,
+    status === 'tạm dừng' ? 'campaign_pause_requested' : 'campaign_resume_requested',
+    status === 'tạm dừng' ? 'Đã nhận yêu cầu tạm dừng chiến dịch (dừng mềm).' : 'Đã nhận yêu cầu tiếp tục chiến dịch.',
+    row.account_status == null ? null : String(row.account_status))
   return {
     ok: row.ok === true,
     reason: String(row.reason || 'invalid_transition'),

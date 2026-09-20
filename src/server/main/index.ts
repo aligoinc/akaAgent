@@ -1,3 +1,4 @@
+import { setAccountLogSource } from '../../main/services/accountLogService'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
@@ -14,6 +15,9 @@ import { installServerFileLogger, type ServerFileLogger } from './serverFileLogg
 import { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerGateway } from './zaloServerGateway'
 import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
+
+// This process hosts the legacy Zalo Server runtime, including startup recovery.
+setAccountLogSource('zalo_server')
 
 let mainWindow: BrowserWindow | null = null
 let gateway: ZaloServerGateway | null = null

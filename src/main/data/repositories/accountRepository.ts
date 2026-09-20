@@ -1,3 +1,4 @@
+import { recordAccountLog, recordAccountState, rememberAccountLogSnapshot, recordRecoverySnapshots } from '../../services/accountLogService'
 import { randomUUID } from 'node:crypto'
 import { accountOperationRegistry } from '../../services/accountOperationRegistry'
 import type { AccountOperationClaimResult, AccountOperationContext } from '../../services/accountOperationRegistry'
@@ -151,7 +152,7 @@ export async function getAccountIgnoringCapability(id: number): Promise<AutoAcco
     .maybeSingle()
 
   if (error) throw new Error(`Failed to get account: ${error.message}`)
-  return data ? mapAccountFromDB(toDbRow(data)) : null
+  return data ? rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data))) : null
 }
 
 export async function getAccount(id: number): Promise<AutoAccount | null> {
@@ -180,7 +181,7 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
 
   if (error) throw new Error(`Failed to get account Zalo session: ${error.message}`)
   if (!data) return null
-  const account = mapAccountFromDB(toDbRow(data))
+  const account = rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data)))
   await ensureCurrentUserCanUseZaloAccountType(false, account.isZaloServer)
   return {
     account,
@@ -214,7 +215,7 @@ export async function listZaloAccountsWithSession(
   if (error) throw new Error(`Failed to list Zalo accounts with session: ${error.message}`)
   return (data || [])
     .map(row => ({
-      account: mapAccountFromDB(toDbRow(row)),
+      account: rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(row))),
       session: normalizeZaloSession((row as any).zalo_session)
     }))
     .filter(entry => (
@@ -274,7 +275,7 @@ export async function listAccounts(): Promise<AutoAccount[]> {
 
   if (error) throw new Error(`Failed to list accounts: ${error.message}`)
   const accounts = (data || [])
-    .map(row => mapAccountFromDB(toDbRow(row)))
+    .map(row => rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(row))))
     .filter(account => canUseAccountWithEntitlementsAndCapabilities(
       account,
       entitlements,
@@ -492,7 +493,7 @@ export async function updateAccount(
       ? 'Tài khoản Zalo đã bắt đầu chạy hoặc loại tài khoản đã thay đổi. Vui lòng thử lại.'
       : 'Không tìm thấy tài khoản')
   }
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), current)
 }
 
 export async function setZaloServerAccountStatus(
@@ -522,6 +523,11 @@ export async function setZaloServerAccountStatus(
 
   const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
   if (!row) throw new Error('Zalo Server account control returned no result')
+  if (row.ok === true && row.reason === 'updated') {
+    recordAccountLog({ accountId: normalizedAccountId, accountStatus: row.account_status == null ? null : String(row.account_status),
+      eventType: status === 'tạm dừng' ? 'account_pause_requested' : 'account_resume_requested',
+      message: status === 'tạm dừng' ? 'Đã nhận yêu cầu tạm dừng tài khoản (dừng mềm).' : 'Đã nhận yêu cầu tiếp tục tài khoản.' })
+  }
   return {
     ok: row.ok === true,
     reason: String(row.reason || 'invalid_transition'),
@@ -555,7 +561,7 @@ export async function updateClaimedZaloServerAccount(
     .maybeSingle()
 
   if (error) throw new Error(`Failed to update claimed Zalo Server account: ${error.message}`)
-  if (data) return mapAccountFromDB(toDbRow(data))
+  if (data) return recordAccountState(mapAccountFromDB(toDbRow(data)))
 
   const current = await getAccount(id)
   if (!current) throw new Error('Không tìm thấy tài khoản Zalo Server sau xung đột trạng thái')
@@ -686,7 +692,7 @@ export async function updateAccountZaloSession(
     .single()
 
   if (error) throw new Error(`Failed to update account Zalo session: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), account)
 }
 
 export async function markAccountZaloSessionCheck(
@@ -695,7 +701,7 @@ export async function markAccountZaloSessionCheck(
   expectedShowWeb: boolean
 ): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
-  await requireCompatibleZaloAccount(id, expectedShowWeb)
+  const previous = await requireCompatibleZaloAccount(id, expectedShowWeb)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -717,7 +723,7 @@ export async function markAccountZaloSessionCheck(
     .single()
 
   if (error) throw new Error(`Failed to mark account Zalo session check: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), previous, result.ok ? null : result.error)
 }
 
 /**
@@ -733,7 +739,7 @@ export async function updateAccountZaloWebSession(
   }
 ): Promise<AutoAccount> {
   await ensureCurrentUserCanUseZaloAccountType(true)
-  await requireCompatibleZaloAccount(id, true)
+  const previous = await requireCompatibleZaloAccount(id, true)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const { data, error } = await client()
@@ -756,12 +762,12 @@ export async function updateAccountZaloWebSession(
     .single()
 
   if (error) throw new Error(`Failed to update account Zalo Web session: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), previous, input.error)
 }
 
 export async function clearAccountZaloSession(id: number): Promise<AutoAccount> {
   await ensureCurrentUserFeatureActive('zalo')
-  await requireCompatibleZaloAccount(id)
+  const previous = await requireCompatibleZaloAccount(id)
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -779,7 +785,7 @@ export async function clearAccountZaloSession(id: number): Promise<AutoAccount> 
     .single()
 
   if (error) throw new Error(`Failed to clear account Zalo session: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), previous)
 }
 
 export async function clearInvalidLocalZaloSession(
@@ -788,7 +794,7 @@ export async function clearInvalidLocalZaloSession(
   verificationError: string
 ): Promise<AutoAccount | null> {
   await ensureCurrentUserFeatureActive('zalo')
-  await requireCompatibleZaloAccount(id, false, false)
+  const previous = await requireCompatibleZaloAccount(id, false, false)
   const u = requireCurrentUser()
   const update = client()
     .from('auto_accounts')
@@ -815,7 +821,7 @@ export async function clearInvalidLocalZaloSession(
     .maybeSingle()
 
   if (error) throw new Error(`Failed to clear invalid local Zalo session: ${error.message}`)
-  return data ? mapAccountFromDB(toDbRow(data)) : null
+  return data ? recordAccountState(mapAccountFromDB(toDbRow(data)), previous, verificationError) : null
 }
 
 export async function getAccountEmailSession(id: number): Promise<AccountEmailSession | null> {
@@ -832,7 +838,7 @@ export async function getAccountEmailSession(id: number): Promise<AccountEmailSe
   if (error) throw new Error(`Failed to get account email session: ${error.message}`)
   if (!data) return null
   return {
-    account: mapAccountFromDB(toDbRow(data)),
+    account: rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data))),
     session: normalizeEmailSession((data as any).email_session)
   }
 }
@@ -866,7 +872,7 @@ export async function updateAccountEmailSession(
     .single()
 
   if (error) throw new Error(`Failed to update account email session: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), undefined)
 }
 
 export async function markAccountEmailSessionCheck(
@@ -892,7 +898,7 @@ export async function markAccountEmailSessionCheck(
     .single()
 
   if (error) throw new Error(`Failed to mark account email session check: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), undefined, result.ok ? null : result.error)
 }
 
 export async function clearAccountEmailSession(id: number): Promise<AutoAccount> {
@@ -914,7 +920,7 @@ export async function clearAccountEmailSession(id: number): Promise<AutoAccount>
     .single()
 
   if (error) throw new Error(`Failed to clear account email session: ${error.message}`)
-  return mapAccountFromDB(toDbRow(data))
+  return recordAccountState(mapAccountFromDB(toDbRow(data)), undefined)
 }
 
 export async function deleteAccount(id: number): Promise<void> {
@@ -941,7 +947,7 @@ export async function getEligibleAccounts(): Promise<AutoAccount[]> {
 
   if (error) throw new Error(`Failed to get eligible accounts: ${error.message}`)
   return (data || [])
-    .map(row => mapAccountFromDB(toDbRow(row)))
+    .map(row => rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(row))))
     .filter(account => canUseAccountWithEntitlementsAndCapabilities(
       account,
       entitlements,
@@ -1094,7 +1100,19 @@ async function claimAccountOperation(
     if (!row || typeof row.ok !== 'boolean' || typeof row.reason !== 'string') {
       throw new Error('Invalid account operation cleanup response; recovery required')
     }
+    if (row.ok === true && row.reason === 'cleaned' && operationName !== 'zalo.session.poll') {
+      recordAccountLog({ accountId: id, campaignId: null, accountStatus: null,
+        eventType: 'operation_finished', message: 'Đã giải phóng tài khoản sau thao tác runtime (giữ trạng thái điều khiển mới hơn).', details: { operation: operationName } })
+    }
     return { ok: row.ok, reason: row.reason }
+  }).then(result => {
+    // The registry has validated the token, previous status and lifecycle fence.
+    if (result.claimed && operationName !== 'zalo.session.poll') {
+      recordAccountLog({ accountId: id, campaignId: null, accountStatus: 'đang chạy',
+        eventType: 'status_changed', message: 'Tài khoản bắt đầu thao tác runtime.',
+        details: { operation: operationName, previous_account_status: context.previousStatus } })
+    }
+    return result
   })
 }
 
@@ -1167,6 +1185,9 @@ export async function releaseZaloAccountRuntimeOperation(
     p_runtime_target: runtimeTarget, p_previous_status: previousStatus
   })
   if (error) throw new Error(`Failed to release Zalo account operation atomically: ${error.message}. Ensure migration v171 is applied; no non-atomic fallback was attempted.`)
+  if (data === true) recordAccountLog({ accountId: normalizedAccountId, accountStatus: previousStatus,
+    eventType: 'status_changed', message: `Đã giải phóng runtime; trạng thái tài khoản: ${previousStatus}.`,
+    details: { previous_account_status: 'đang chạy' } })
   return data === true
 }
 
@@ -1233,6 +1254,9 @@ export async function recoverServerZaloRunningState(
   }
 
   const payload = rawPayload as Record<string, unknown>
+  if (normalizeRecoveryCount(payload.accounts_reset) > 0 || normalizeRecoveryCount(payload.campaigns_reset) > 0) {
+    recordRecoverySnapshots(normalizedStaffId, options.requireServerMode === false ? 'desktop' : 'server')
+  }
   return {
     staffId: normalizeRecoveryCount(payload.staff_id ?? normalizedStaffId),
     accountsReset: normalizeRecoveryCount(payload.accounts_reset),
@@ -1291,6 +1315,9 @@ export async function resetDesktopRunningStatuses(
   }
 
   const payload = rawPayload as Record<string, unknown>
+  if (normalizeRecoveryCount(payload.accounts_reset) > 0 || normalizeRecoveryCount(payload.campaigns_reset) > 0) {
+    recordRecoverySnapshots(normalizedStaffId, 'desktop', shouldExcludeZalo)
+  }
   return {
     staffId: normalizeRecoveryCount(payload.staff_id ?? normalizedStaffId),
     excludeZalo: payload.exclude_zalo === true,

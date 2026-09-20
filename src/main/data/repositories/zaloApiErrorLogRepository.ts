@@ -1,3 +1,4 @@
+import { recordAccountLog } from '../../services/accountLogService'
 import { getSupabaseClient } from '../supabaseClient'
 
 const client = () => getSupabaseClient()
@@ -66,6 +67,12 @@ function textOrNull(value: unknown): string | null {
 }
 
 export async function createZaloApiErrorLog(input: ZaloApiErrorLogInput): Promise<void> {
+  if (input.accountId != null) recordAccountLog({
+    accountId: input.accountId, campaignId: input.campaignId, eventType: 'zalo_error',
+    message: input.zaloErrorMessage || 'Zalo API trả về lỗi.',
+    details: { error_code: input.zaloErrorCode, normalized_error_code: input.normalizedErrorCode,
+      api: input.apiName, action_code: input.actionCode }
+  })
   const payload = {
     staff_id: input.staffId ?? null,
     organization_id: input.organizationId ?? null,

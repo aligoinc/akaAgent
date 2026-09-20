@@ -1,3 +1,4 @@
+import { recordAccountLog } from './accountLogService'
 import { BrowserWindow } from 'electron'
 import type { PageInboxScanInfo, PageInboxScanOptions, PageInboxScanStopReason } from '../../shared/types'
 import { DEFAULT_PAGE_INBOX_ESTIMATE_SECONDS, PAGE_INBOX_ESTIMATE_SETTING_KEY, formatPageInboxScanDate, getPageInboxScanCutoff, normalizePageInboxEstimateSeconds, parsePageInboxTimestamp, validatePageInboxScanOptions } from '../../shared/pageInboxScan'
@@ -2365,6 +2366,9 @@ export class ContactLoader {
     result: ContactLoadResult,
     runKey?: string
   ): ContactLoadResult {
+    if (!result.success && result.error) recordAccountLog({
+      accountId, eventType: 'runtime_error', message: result.error, details: { operation: 'data_scan' }
+    })
     const payload = runKey ? { ...result, runKey } : result
     try {
       this.mainWindow.webContents.send(IPC_EVENTS.CONTACTS_COMPLETED, {
