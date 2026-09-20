@@ -12005,10 +12005,25 @@ button.btn-icon.campaign-control-button.assistant {
 }
 
 .action-limit-card {
+  --action-limit-success: var(--accent-success);
+  --action-limit-success-bg: rgba(16, 185, 129, 0.15);
+  --action-limit-warning: var(--accent-warning);
+  --action-limit-warning-bg: rgba(245, 158, 11, 0.15);
+  --action-limit-danger: var(--accent-error);
+  --action-limit-danger-bg: rgba(239, 68, 68, 0.15);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: 11px;
   background: var(--bg-elevated);
-  padding: 12px;
+  padding: 14px 16px;
+}
+
+body.theme-light .action-limit-card {
+  --action-limit-success: #047857;
+  --action-limit-success-bg: #ddf5ec;
+  --action-limit-warning: #92600c;
+  --action-limit-warning-bg: #fdf0d5;
+  --action-limit-danger: #b91c1c;
+  --action-limit-danger-bg: #fde8e8;
 }
 
 .action-limit-card.disabled {
@@ -12033,7 +12048,8 @@ button.btn-icon.campaign-control-button.assistant {
 
 .action-limit-card-header strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .action-limit-card-header .action-limit-check-text {
@@ -12057,38 +12073,129 @@ button.btn-icon.campaign-control-button.assistant {
   margin-top: 4px;
 }
 
-.action-limit-hour-group {
-  flex: 1;
+.action-limit-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 18px;
+}
+
+.action-limit-fields > .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.action-limit-fields .stepper-input {
+  height: 40px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.action-limit-fields .stepper-input-unit {
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .action-limit-usage {
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
-.action-limit-usage strong {
-  color: var(--text-primary);
+.action-limit-usage-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.action-limit-usage-track {
+  flex: 1;
+  min-width: 24px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--border-default);
+}
+
+.action-limit-usage-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.action-limit-usage-row.is-success .action-limit-usage-fill {
+  background: #10b981;
+}
+
+.action-limit-usage-row.is-warning .action-limit-usage-fill {
+  background: #f59e0b;
+}
+
+.action-limit-usage-row.is-danger .action-limit-usage-fill {
+  background: #ef4444;
+}
+
+.action-limit-usage-row.is-info .action-limit-usage-fill {
+  background: #4f7df3;
+}
+
+.action-limit-usage-caption {
+  flex-shrink: 0;
+}
+
+.action-limit-usage-caption.is-full {
+  color: var(--action-limit-danger);
+  font-weight: 700;
+}
+
+.action-limit-used-pill {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.action-limit-used-pill.is-success {
+  color: var(--action-limit-success);
+  background: var(--action-limit-success-bg);
+}
+
+.action-limit-used-pill.is-warning {
+  color: var(--action-limit-warning);
+  background: var(--action-limit-warning-bg);
+}
+
+.action-limit-used-pill.is-danger {
+  color: var(--action-limit-danger);
+  background: var(--action-limit-danger-bg);
 }
 
 .action-limit-usage-source {
   display: block;
+  margin-top: 4px;
   color: var(--text-tertiary);
   font-size: 11px;
 }
 
-.action-limit-hour-label-row {
+.action-limit-label-row {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 4px 9px;
+  min-height: 22px;
+  margin-bottom: 7px;
 }
 
-.action-limit-hour-label-row label {
+.action-limit-label-row label {
   margin-bottom: 0;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .action-limit-minute-toggle {
@@ -12097,7 +12204,7 @@ button.btn-icon.campaign-control-button.assistant {
   background: transparent;
   color: var(--accent-primary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   padding: 0;
 }
@@ -12107,12 +12214,11 @@ button.btn-icon.campaign-control-button.assistant {
 }
 
 .action-limit-minute-field {
-  flex: 1;
+  margin-top: 12px;
 }
 
 .action-limit-minute-field.is-hidden {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .stepper-input-unit-wrap {
