@@ -4,6 +4,7 @@ import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
 import { getWorkflow } from '../data/repositories/workflowV2Repository'
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
+import { buildMessageOptOutSource } from '../../shared/messageOptOutSource'
 import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
 import { BrowserWindow } from 'electron'
 import { createHash, randomUUID } from 'crypto'
@@ -338,6 +339,7 @@ interface ZaloShareMessageCapacity {
 }
 
 interface ZaloMessageDispatchResponse {
+  contentSentAt?: string
   sequence: 'combined' | 'content_only' | 'media_only' | 'media_then_content' | 'content_then_media'
   response?: ZaloMessageSendResult
   mediaResponse?: ZaloMessageSendResult
@@ -12754,7 +12756,7 @@ export class CampaignScheduler {
       originalName: user.originalName || user.displayName || '',
       gender: user.gender ?? null,
       isFriend,
-      raw: user.raw
+      raw: { ...user.raw, profileAvatar: user.avatar || null }
     }
   }
 
@@ -13835,6 +13837,7 @@ export class CampaignScheduler {
       if (!hasContent) return response
       try {
         response.contentResponse = await send(message, [])
+        response.contentSentAt = new Date().toISOString()
         return response
       } catch (err) {
         throw new ZaloPartialSendError('content_after_media', err, response)
@@ -13852,6 +13855,7 @@ export class CampaignScheduler {
       const contentResponse = await send(message, [])
       const response: ZaloMessageDispatchResponse = {
         sequence: 'content_then_media',
+        contentSentAt: new Date().toISOString(),
         contentResponse
       }
       try {
@@ -13862,9 +13866,11 @@ export class CampaignScheduler {
       }
     }
 
+    const response = await send(message, safeAttachments)
     return {
       sequence: safeAttachments.length > 0 ? 'combined' : 'content_only',
-      response: await send(message, safeAttachments)
+      response,
+      ...(hasContent ? { contentSentAt: new Date().toISOString() } : {})
     }
   }
 
@@ -13953,7 +13959,16 @@ export class CampaignScheduler {
           actionCode,
           actionName,
           log: `Đã gửi tin nhắn đến ${this.getZaloTargetLabel(target)}`,
-          data: { target, message, attachments, response }
+          data: {
+            target, message, attachments, response,
+            messageOptOutSource: buildMessageOptOutSource(
+              campaign.extraSettings?.zaloOptOutLinkEnabled === true && campaign.extraSettings?.zaloMessageSendMode !== ZALO_MESSAGE_SEND_MODE_SHARE
+                ? this.zaloMessageOptOutContexts.get(this.zaloMessageOptOutContextKey(campaign.id, Number(metadata?.campaignInputDataId ?? options.inputData?.id)))?.linkId
+                : null,
+              target,
+              response.contentSentAt
+            )
+          }
         })
       }
     } catch (err) {
@@ -14024,7 +14039,16 @@ export class CampaignScheduler {
           actionCode,
           actionName,
           log: `Đã gửi tin nhắn đến ${this.getZaloTargetLabel(target)}`,
-          data: { target, message, attachments, response }
+          data: {
+            target, message, attachments, response,
+            messageOptOutSource: buildMessageOptOutSource(
+              campaign.extraSettings?.zaloOptOutLinkEnabled === true && campaign.extraSettings?.zaloMessageSendMode !== ZALO_MESSAGE_SEND_MODE_SHARE
+                ? this.zaloMessageOptOutContexts.get(this.zaloMessageOptOutContextKey(campaign.id, Number(metadata?.campaignInputDataId ?? options.inputData?.id)))?.linkId
+                : null,
+              target,
+              response.contentSentAt
+            )
+          }
         })
       }
     } catch (err) {

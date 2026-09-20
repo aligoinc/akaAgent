@@ -1,4 +1,5 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import type { CampaignActionUsage } from '../shared/types'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest } from '../shared/campaignSupport'
@@ -14,6 +15,7 @@ import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProto
 export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
+  listMessageOptOutCustomers: (query?: MessageOptOutCustomerQuery): Promise<MessageOptOutCustomerPage> => ipcRenderer.invoke(MESSAGE_OPT_OUT_CUSTOMERS_IPC, query),
   listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),
   getCampaignDraft: (id: string): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.get, id),
   saveCampaignDraft: (request: SaveCampaignDraftRequest): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.save, request),

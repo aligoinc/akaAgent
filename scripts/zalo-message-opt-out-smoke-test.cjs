@@ -92,5 +92,46 @@ async function main() {
   assert.equal(richFooter.result.msg, `Hi\n\nTừ chối nhận tin: ${link}`)
   assert.deepEqual(richFooter.result.styles, [{ start: 0, len: 2, st: 'b' }])
   console.log('PASS: active-source validation, short link codec, selected/spun content, whitespace, fallback, rich styles, AI order')
+  const sourceHelpers = load('src/shared/messageOptOutSource.ts')
+  const runtimeNames = ['zaloSendPhoneMessage', 'zaloSendFriendMessage', 'dispatchZaloMessage', 'getZaloOutgoingMessageText']
+  const runtimeMethods = runtimeNames.map(name => scheduler.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name).getText(source)).join('\n')
+  const runtimeCode = ts.transpileModule(`class RuntimeHarness { ${runtimeMethods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const RuntimeHarness = new Function('buildMessageOptOutSource', 'ZALO_MESSAGE_SEND_MODE_SHARE', 'ZaloPartialSendError', runtimeCode + '; return RuntimeHarness')(
+    sourceHelpers.buildMessageOptOutSource, 'share', class extends Error {})
+  const target = { uid: 'u1', globalId: 'global-1', displayName: 'Lan', raw: { profileAvatar: 'https://example.com/lan.png' } }
+  for (const method of ['zaloSendPhoneMessage', 'zaloSendFriendMessage']) {
+    for (const enabled of [true, false]) {
+      const instance = new RuntimeHarness()
+      let fail = false
+      Object.assign(instance, {
+        zaloRuntime: { sendMessageToUser: async () => { if (fail) throw new Error('send failed'); return {} } },
+        buildZaloOutgoingMessage: async () => 'Hello',
+        throwIfZaloRuntimeStopping: () => {},
+        createZaloSuccessDetail: data => ({ status: 'thành công', ...data }),
+        createZaloErrorDetail: async () => ({ status: 'thất bại' }),
+        getZaloTargetLabel: value => value.displayName,
+        firstNonEmptyString: (...values) => values.find(Boolean),
+        getCachedZaloMessageOptOutTarget: () => target,
+        upsertZaloResolvedProfileTarget: async () => {}, applyAkaBizTagsToZaloTarget: async () => {},
+        zaloMessageOptOutContextKey: (a,b) => `${a}:${b}`,
+        zaloMessageOptOutContexts: new Map([['1:2', {linkId:id}]])
+      })
+      const options = { enabled:true, target, targetUid:'u1', inputData:{id:2}, attachments:[] }
+      const campaign = { id:1, extraSettings:{zaloOptOutLinkEnabled:enabled} }
+      const result = await instance[method]({id:3}, campaign, options)
+      const metadata = result.detail.data.messageOptOutSource
+      assert.equal(!!metadata, enabled)
+      if (enabled) {
+        assert.equal(metadata.optOutId,id); assert.equal(metadata.zaloGlobalId,'global-1')
+        assert.equal(metadata.zaloAvatar,'https://example.com/lan.png'); assert(Number.isFinite(Date.parse(metadata.sentAt)))
+      }
+      fail = true
+      assert.equal((await instance[method]({id:3},campaign,options)).detail.data?.messageOptOutSource,undefined)
+    }
+  }
+  assert.equal(sourceHelpers.buildMessageOptOutSource(null,target,new Date().toISOString()),undefined)
+  assert.equal(sourceHelpers.buildMessageOptOutSource(id,{uid:'u1'},new Date().toISOString()),undefined)
+  assert.equal(sourceHelpers.buildMessageOptOutSource(id,target,'invalid'),undefined)
+  console.log('PASS: actual Desktop phone/friend send methods only annotate successful prepared-link sends')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

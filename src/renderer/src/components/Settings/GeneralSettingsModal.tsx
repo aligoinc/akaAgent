@@ -12,8 +12,9 @@ import {
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
+import MessageOptOutCustomersSettings from './MessageOptOutCustomersSettings'
 
-export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync'
+export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers'
 export interface GeneralSettingsOpenOptions {
   initialAccountId?: number
   onClose?: () => void
@@ -654,10 +655,17 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
               <Ban size={15} />
               <span>Danh sách không gửi tin</span>
             </button>
+            <button
+              className={`general-settings-nav-item ${activeMenu === 'messageOptOutCustomers' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('messageOptOutCustomers')}
+            >
+              <Ban size={15} />
+              <span>Khách hàng từ chối nhận tin</span>
+            </button>
           </aside>
 
-          <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : ''}`}>
-            {activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
+          <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : activeMenu === 'messageOptOutCustomers' ? 'message-opt-out-content' : ''}`}>
+            {activeMenu === 'messageOptOutCustomers' ? <MessageOptOutCustomersSettings key={`${user?.organizationId}:${user?.staffId}`} /> : activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
               <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
             ) : (
               <div className="akabiz-integration-grid">

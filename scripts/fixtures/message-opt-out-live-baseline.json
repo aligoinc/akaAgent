@@ -1,0 +1,78 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-09-20",
+  "functions": [
+    {
+      "checksum": "92b00c0827a801e9ffece28d14805f84",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_check_zalo_message_opt_out(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_phone text DEFAULT NULL::text, p_zalo_global_id text DEFAULT NULL::text)\n RETURNS TABLE(is_opted_out boolean, matched_by text)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_organization_id bigint;\n  v_phone text := NULLIF(public.aka_agent_internal_normalize_phone(p_phone), '');\n  v_zalo_global_id text := NULLIF(pg_catalog.btrim(p_zalo_global_id), '');\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0\n    OR p_account_id IS NULL OR p_account_id <= 0\n    OR p_staff_id IS NULL OR p_staff_id <= 0 THEN\n    RAISE EXCEPTION 'invalid_zalo_message_opt_out_scope';\n  END IF;\n\n  SELECT campaign.organization_id\n  INTO v_organization_id\n  FROM public.auto_campaigns AS campaign\n  JOIN public.auto_accounts AS account\n    ON account.id = campaign.account_id\n   AND account.staff_id = p_staff_id\n   AND account.organization_id = campaign.organization_id\n   AND account.flatform_type = 'zalo'\n   AND COALESCE(account.is_delete, false) = false\n  JOIN public.org_staff AS staff\n    ON staff.id = p_staff_id\n   AND staff.organization_id = campaign.organization_id\n   AND staff.is_active = true\n  WHERE campaign.id = p_campaign_id\n    AND campaign.account_id = p_account_id\n    AND campaign.staff_id = p_staff_id\n    AND campaign.action_id IN (\n      'zalo_message_phone',\n      'zalo_message_friend',\n      'zalo_message_birthday',\n      'zalo_message_group_member',\n      'zalo_message_group_realtime',\n      'zalo_message_remarketing_customer',\n      'zalo_message_friend_recommendation'\n    )\n    AND COALESCE(campaign.is_delete, false) = false;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'zalo_message_opt_out_scope_not_found';\n  END IF;\n\n  IF v_phone IS NOT NULL AND EXISTS (\n    SELECT 1\n    FROM public.auto_zalo_message_opt_outs AS opt_out\n    WHERE opt_out.staff_id = p_staff_id\n      AND opt_out.organization_id = v_organization_id\n      AND opt_out.phone = v_phone\n      AND opt_out.confirmed_at IS NOT NULL\n  ) THEN\n    RETURN QUERY SELECT true, 'phone'::text;\n    RETURN;\n  END IF;\n\n  IF v_zalo_global_id IS NOT NULL AND EXISTS (\n    SELECT 1\n    FROM public.auto_zalo_message_opt_outs AS opt_out\n    WHERE opt_out.staff_id = p_staff_id\n      AND opt_out.organization_id = v_organization_id\n      AND opt_out.zalo_global_id = v_zalo_global_id\n      AND opt_out.confirmed_at IS NOT NULL\n  ) THEN\n    RETURN QUERY SELECT true, 'zalo_global_id'::text;\n    RETURN;\n  END IF;\n\n  RETURN QUERY SELECT false, NULL::text;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "s",
+      "signature": "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)"
+    },
+    {
+      "checksum": "4fe1c52c866b3afec96e956302a52eee",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_confirm_zalo_message_opt_out(p_id uuid)\n RETURNS TABLE(state text)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  UPDATE public.auto_zalo_message_opt_outs AS opt_out\n  SET confirmed_at = COALESCE(opt_out.confirmed_at, pg_catalog.clock_timestamp())\n  WHERE opt_out.id = p_id;\n\n  IF FOUND THEN\n    RETURN QUERY SELECT 'confirmed'::text;\n  ELSE\n    RETURN QUERY SELECT 'invalid'::text;\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "signature": "aka_agent_confirm_zalo_message_opt_out(uuid)"
+    },
+    {
+      "checksum": "abd87ff2937831d2ee3ab999f2ebe091",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_inspect_zalo_message_opt_out(p_id uuid)\n RETURNS TABLE(state text)\n LANGUAGE sql\n STABLE PARALLEL SAFE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT COALESCE(\n    (\n      SELECT CASE\n        WHEN opt_out.confirmed_at IS NULL THEN 'pending'\n        ELSE 'confirmed'\n      END\n      FROM public.auto_zalo_message_opt_outs AS opt_out\n      WHERE opt_out.id = p_id\n    ),\n    'invalid'\n  )::text\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "s",
+      "signature": "aka_agent_inspect_zalo_message_opt_out(uuid)"
+    },
+    {
+      "checksum": "b3ad52bceed9a68a6648956fbc622629",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_normalize_phone(p_value text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE PARALLEL SAFE STRICT\n SET search_path TO 'pg_catalog'\nAS $function$\n  select case\n    when public.normalize_phone(p_value) ~ '^0[35789][0-9]{8}$' then public.normalize_phone(p_value)\n    else ''\n  end;\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "prosecdef": false,
+      "provolatile": "i",
+      "signature": "aka_agent_internal_normalize_phone(text)"
+    },
+    {
+      "checksum": "0217c031e0d6aaef63c2589cbe1f7b94",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_prepare_zalo_message_opt_out(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_phone text, p_zalo_global_id text)\n RETURNS TABLE(id uuid, is_opted_out boolean)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_organization_id bigint;\n  v_phone text := NULLIF(public.aka_agent_internal_normalize_phone(p_phone), '');\n  v_zalo_global_id text := NULLIF(pg_catalog.btrim(p_zalo_global_id), '');\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0\n    OR p_account_id IS NULL OR p_account_id <= 0\n    OR p_staff_id IS NULL OR p_staff_id <= 0 THEN\n    RAISE EXCEPTION 'invalid_zalo_message_opt_out_scope';\n  END IF;\n  IF v_zalo_global_id IS NULL THEN\n    RAISE EXCEPTION 'zalo_global_id_required';\n  END IF;\n\n  SELECT campaign.organization_id\n  INTO v_organization_id\n  FROM public.auto_campaigns AS campaign\n  JOIN public.auto_accounts AS account\n    ON account.id = campaign.account_id\n   AND account.staff_id = p_staff_id\n   AND account.organization_id = campaign.organization_id\n   AND account.flatform_type = 'zalo'\n   AND COALESCE(account.is_delete, false) = false\n  JOIN public.org_staff AS staff\n    ON staff.id = p_staff_id\n   AND staff.organization_id = campaign.organization_id\n   AND staff.is_active = true\n  WHERE campaign.id = p_campaign_id\n    AND campaign.account_id = p_account_id\n    AND campaign.staff_id = p_staff_id\n    AND campaign.action_id IN (\n      'zalo_message_phone',\n      'zalo_message_friend',\n      'zalo_message_birthday',\n      'zalo_message_group_member',\n      'zalo_message_group_realtime',\n      'zalo_message_remarketing_customer',\n      'zalo_message_friend_recommendation'\n    )\n    AND COALESCE(campaign.is_delete, false) = false;\n\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'zalo_message_opt_out_scope_not_found';\n  END IF;\n\n  RETURN QUERY\n  INSERT INTO public.auto_zalo_message_opt_outs AS opt_out (\n    phone,\n    zalo_global_id,\n    staff_id,\n    organization_id\n  )\n  VALUES (\n    v_phone,\n    v_zalo_global_id,\n    p_staff_id,\n    v_organization_id\n  )\n  ON CONFLICT (staff_id, organization_id, zalo_global_id)\n  DO UPDATE SET phone = COALESCE(EXCLUDED.phone, opt_out.phone)\n  RETURNING opt_out.id, opt_out.confirmed_at IS NOT NULL;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "signature": "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)"
+    },
+    {
+      "checksum": "5a9a503db72b965eb644739f5f60905d",
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "s",
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)"
+    }
+  ]
+}

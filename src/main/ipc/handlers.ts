@@ -42,6 +42,7 @@ import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHan
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerAppNotificationHandlers } from './handlers/appNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
+import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutCustomerHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -146,6 +147,7 @@ export function registerIpcHandlers(
   const chatWeb = registerChatWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
+  registerMessageOptOutCustomerHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
