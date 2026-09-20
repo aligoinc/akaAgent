@@ -74,4 +74,14 @@ Chấp nhận thiếu log do mất mạng, timeout, DB từ chối kết nối, 
 - Chat API dùng HTTP RPC cho từng sự kiện; giữ timeout 5 giây và gửi sau commit, không batch/queue/retry. Test burst 100 event xác nhận đủ 100 request được phát trước response đầu tiên.
 - QR cùng hết hạn ở hai lượt được ghi hai dòng. Listener lỗi → phục hồi → lỗi lại và đổi listener đều có baseline mới; polling không đổi vẫn không sinh thêm log.
 - Đã apply v293 lên production; smoke rollback và HTTP RPC trả 204 đạt, không lưu dòng thử nghiệm. Chi tiết signature/checksum/quyền ở audit liên kết trên.
-- Runtime vẫn chỉ được build local, chưa deploy Chat API/worker hoặc phát hành installer mới.
+- Chat API/worker đã deploy sau vòng kiểm chứng; Desktop/Server đã build local, chưa phát hành installer mới.
+
+## Deploy Chat API và worker ngày 20/09/2026
+
+- App Fly `aka-agent-chat-api`; code commit `b38028ecde930de1af5c3ca5252819a8888a94db` của akaAgentChatApi.
+- Image `registry.fly.io/aka-agent-chat-api:account-logs-b38028e-20260920`, digest `sha256:68e375aea13771276057429fb884a2411c62d7ae789cb03768e43fed4d1b79ac`.
+- Cập nhật lần lượt sole worker `784574da214578` và API `7845747fe073e8`; giữ nguyên cấu hình, số machine và `zalo_runtime` `0803139f1d1058` (image/instance không đổi).
+- `/health/live` và `/health/ready` trả 200; admin snapshot có 2 runtime running, đủ 36 account, `lastError=null`, kênh campaign connected. Worker stats sau rollout không có infrastructure error, backlog bằng 0 tại lần kiểm tra.
+- Đã thấy log `source=chat_api` mới ghi vào DB từ hoạt động hiện hữu; không tự tạo sự kiện/hành động Zalo để test.
+- Trước deploy: toàn bộ 1.139 test Chat và typecheck/build đạt; synthetic local 1.500/1.500 event ACK; Desktop/Server typecheck/build đạt. Hai migration đã apply trước đó, không chạy lại khi deploy.
+- Chưa phát hành installer Desktop/Zalo Server cũ. Chi tiết baseline rollback ở `akaAgentChatApi/docs/ACCOUNT_LOG_DEPLOYMENT.md`.
