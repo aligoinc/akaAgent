@@ -1,3 +1,4 @@
+import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
 import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
@@ -1081,6 +1082,9 @@ export class CampaignScheduler {
       }
     )
     if (outcome !== 'cleaned' && outcome !== 'not_owner') return
+    if (outcome === 'cleaned') recordAccountLog({ accountId: run.accountId, campaignId: run.campaignId,
+      accountStatus: null, eventType: 'runtime_recovered', message: 'Đã dọn lượt chiến dịch lỗi và giải phóng quyền runtime.' })
+    clearAccountCampaignLogContext(run.accountId, run.campaignId)
     this.failedCampaignRuns.delete(run.campaignId)
     this.activeCampaignRunUnits.delete(run.campaignId)
     if (outcome === 'not_owner') this.boundaryStoppedAccountQueues.add(run.accountId)
@@ -2875,6 +2879,9 @@ export class CampaignScheduler {
         this.sendLog(`⚠️ Chiến dịch "${campaign.name}" đã dừng vì DB trả ownership token không hợp lệ.`)
         return
       }
+      recordCampaignState({ ...campaign, status: claimed.campaignStatus ?? 'đang chạy' },
+        { ...account, status: claimed.accountStatus ?? 'đang chạy' })
+      recordAccountState({ ...account, status: claimed.accountStatus ?? 'đang chạy' }, account)
       runtimeClaimed = true
       ownedClaimToken = runtimeClaimToken
       this.attemptedRunErrorPolicies.delete(campaign.id)
@@ -3006,6 +3013,8 @@ export class CampaignScheduler {
           return
         }
       }
+      recordAccountLog({ accountId: account.id, campaignId: campaign.id, eventType: 'campaign_started',
+        message: `Bắt đầu thực thi chiến dịch ${campaign.name}.`, details: { campaign_name: campaign.name } })
       await this.executeCampaignV2(account, campaign, workflowSelection.workflowId, executableActionDescriptors, quotaActionDescriptors)
     } catch (err) {
       if (!runtimeClaimed) throw err
@@ -3062,6 +3071,7 @@ export class CampaignScheduler {
         this.attemptedRunErrorPolicies.delete(campaign.id)
         this.failedRunErrorPolicies.delete(campaign.id)
       }
+      if (unitSettled && !this.failedCampaignRuns.has(campaign.id)) clearAccountCampaignLogContext(account.id, campaign.id)
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
       this.facebookPageIdentities.delete(campaign.id)
       this.facebookPageRestoreFailures.delete(campaign.id)
@@ -8425,6 +8435,8 @@ export class CampaignScheduler {
       if (!this.isServerZaloCampaign(account, campaign)) {
         await this.completeCampaignPause(campaign)
         await this.releaseRunningAccount(account.id)
+        recordAccountLog({ accountId: account.id, campaignId: campaign.id, eventType: 'campaign_paused',
+          message: 'Đã kết thúc lượt hiện tại và dừng thực thi chiến dịch.' })
         return
       }
 
@@ -8448,6 +8460,8 @@ export class CampaignScheduler {
       const label = boundary === 'account' ? 'tài khoản' : 'chiến dịch'
       await this.logCampaignProgress(campaign.id, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
       await this.releaseRunningAccount(account.id)
+      recordAccountLog({ accountId: account.id, campaignId: campaign.id, eventType: 'campaign_paused',
+        message: 'Đã kết thúc lượt hiện tại và dừng thực thi chiến dịch.' })
       this.serverZaloPauseBoundaries.delete(campaign.id)
       try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
     } catch (error) {
@@ -15542,6 +15556,10 @@ export class CampaignScheduler {
     } else {
       updated = await this.supabase.updateCampaign(id, updates)
     }
+    if (updates.note === CAMPAIGN_PAUSE_PENDING_NOTE && updated.note === CAMPAIGN_PAUSE_PENDING_NOTE) {
+      recordAccountLog({ accountId: updated.accountId, campaignId: id, eventType: 'campaign_pause_requested',
+        message: 'Đã nhận yêu cầu tạm dừng; đang chờ lượt hiện tại kết thúc.' })
+    }
     this.broadcastCampaignUpdate(
       updated,
       updates.extraSettings !== undefined ? { invalidateConfig: true } : undefined
@@ -15563,11 +15581,16 @@ export class CampaignScheduler {
 
   private broadcastCampaignUpdate(
     campaign: Pick<Campaign, 'id' | 'updatedAt' | 'status' | 'note'> & {
+      accountId?: number
+      name?: string
       schedule?: string | null
       lastRunAt?: string | null
     },
     options?: { invalidateConfig?: true }
   ): void {
+    if (campaign.accountId !== undefined) {
+      recordCampaignState({ id: campaign.id, accountId: campaign.accountId, name: campaign.name, status: campaign.status, note: campaign.note })
+    }
     try {
       const signal: CampaignSummaryRefreshSignal = {
         id: campaign.id,

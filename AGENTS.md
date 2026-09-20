@@ -18,6 +18,8 @@ Migration mới theo quy ước repo: `migrations/migration_v<N>_<mo_ta>.sql`; k
 
 **Chỉ reload schema khi thực sự cần thiết**: chỉ yêu cầu PostgREST reload khi metadata mà API sử dụng đã thay đổi (bảng/cột, quan hệ, signature/kiểu trả về hoặc thuộc tính RPC liên quan đến API), hoặc đã xác nhận schema cache bị cũ. Thay đổi chỉ dữ liệu, code/config trong `auto_blocks`/`auto_workflows` hoặc seed row không cần reload; không thêm `NOTIFY pgrst, 'reload schema'` theo thói quen. Trước khi chọn công cụ apply, kiểm tra cả DDL phụ: bước chuẩn bị `supabase_migrations` bằng `CREATE/ALTER ... IF NOT EXISTS` cũng có thể kích hoạt trigger reload dù không đổi cấu trúc API. Với bản chỉ đổi dữ liệu, ưu tiên đường thực thi không phát sinh DDL phụ không cần thiết, vẫn giữ transaction, checksum/preflight và lịch sử migration theo quy ước. Không tự tắt trigger reload chung để né vấn đề; khi metadata API thực sự đổi, vẫn phải bảo đảm cache được cập nhật và kiểm tra API sau apply. Sự cố 08–09/09/2026 đã ghi nhận reload sau migration bị timeout và gây `PGRST002`/HTTP 503; chưa xác nhận nội dung SQL của migration làm DB quá tải.
 
+Tài khoản dùng `auto_account_logs` chỉ để chẩn đoán, không tham gia nghiệp vụ. Chat gửi mỗi event qua HTTP RPC v293 sau commit (5 giây, không queue/batch/retry); QR không dùng dedupe polling, listener reset baseline khi phục hồi/đổi instance. Xem [ACCOUNT_LOGS.md](docs/ACCOUNT_LOGS.md) và [audit RPC](docs/ACCOUNT_LOG_HTTP_RPC_AUDIT.md).
+
 ## Commands
 
 ```bash

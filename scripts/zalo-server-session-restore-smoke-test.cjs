@@ -27,7 +27,9 @@ function fixture() {
     vm.runInNewContext(code, { exports, Error, Buffer, URL, AbortController, setTimeout, clearTimeout,
       setInterval, clearInterval, queueMicrotask,
       console: { log: (...args) => state.logs.push(args), warn: (...args) => state.logs.push(args), error: (...args) => state.logs.push(args) },
-      require: id => overrides[id] || (id.startsWith('node:') || id === 'crypto' ? require(id) : fallback)
+      require: id => id.endsWith('/accountLogService')
+        ? new Proxy({ recordAccountState: account => account, rememberAccountLogSnapshot: account => account }, { get: (obj, key) => obj[key] || (() => {}) })
+        : overrides[id] || (id.startsWith('node:') || id === 'crypto' ? require(id) : fallback)
     }, { filename: file })
     return exports
   }

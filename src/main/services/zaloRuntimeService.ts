@@ -1,3 +1,4 @@
+import { recordAccountWarning } from './accountLogService'
 import { promises as fs } from 'node:fs'
 import type { WebContents } from 'electron'
 import { Zalo, LoginQRCallbackEventType, ThreadType, ZaloApiError, FriendRecommendationsType } from 'zca-js'
@@ -62,6 +63,7 @@ interface ZaloListenerState {
   readyAt?: number
   lastEventAt?: number
   lastError?: string | null
+  accountLogWarning?: string
 }
 
 export interface ZaloListenerStatusEvent {
@@ -698,6 +700,9 @@ export class ZaloRuntimeService {
   }
 
   private publishLoginQrEvent(event: ZaloLoginQrEvent): void {
+    if (['error', 'expired', 'declined'].includes(event.status)) {
+      recordAccountWarning(event.accountId, event.message || `QR login: ${event.status}`, { operation: 'zalo.login_qr' })
+    }
     this.emitLoginQrEvent(event)
     for (const subscriber of Array.from(this.loginQrSubscribers)) {
       try {
@@ -2499,6 +2504,19 @@ export class ZaloRuntimeService {
   }
 
   private emitZaloListenerStatus(state: ZaloListenerState, extra: Partial<ZaloListenerStatusEvent> = {}): void {
+    // Each listener instance owns its baseline. Recovery clears it, and a new
+    // session cannot inherit the previous listener's warning suppression.
+    try {
+      if (state.lastError) {
+        const signature = JSON.stringify([state.status, state.lastError, extra.code, extra.reason])
+        if (state.accountLogWarning !== signature) {
+          state.accountLogWarning = signature
+          recordAccountWarning(state.accountId, state.lastError, {
+            runtime_state: state.status, close_code: extra.code, reason: extra.reason
+          })
+        }
+      } else state.accountLogWarning = undefined
+    } catch { /* diagnostic metadata cannot interrupt listener delivery */ }
     this.notifyRealtimeSubscribers(
       state.accountId,
       (handlers) => handlers.status?.({
@@ -2535,6 +2553,9 @@ export class ZaloRuntimeService {
       state.readyAt = Date.now()
       state.lastEventAt = state.readyAt
       state.lastError = null
+      // A cipher refresh may recover an error while status/ready are unchanged,
+      // in which case no status event below is emitted to reset the baseline.
+      state.accountLogWarning = undefined
       if (changed) this.emitZaloListenerStatus(state)
     })
     api.listener.on('disconnected', (code, reason) => {
