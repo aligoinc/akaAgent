@@ -2,6 +2,16 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Supabase/Postgres: phải thảo luận trước khi tăng connection
+
+Connection là tài nguyên có giới hạn, dùng chung giữa các service và toàn bộ client của hệ thống. **Không tự ý thêm nguồn connection hoặc tăng ngân sách connection. Phải trình bày đề xuất và chờ người dùng đồng ý trước khi triển khai thay đổi đó.** Yêu cầu làm một tính năng không mặc nhiên cho phép tăng connection.
+
+- Áp dụng khi thêm `pg.Client`/`pg.Pool` hoặc client SQL tương đương, pool riêng cho feature/log, connection giữ lâu cho listener/job, tăng `pool.max`/giới hạn pooler/Postgres, hoặc tăng process/worker/replica làm tăng tổng connection. Không tạo connection/pool theo request, event, account hay staff.
+- Trước khi xin ý kiến, kiểm tra cách kết nối hiện tại; nêu lý do cần thêm, số connection hiện tại và mức tối đa dự kiến trên **tất cả process/replica**, thời gian giữ/release/timeout và phương án tái sử dụng kết nối. Phân biệt client connection tới pooler với backend connection vào Postgres; số liệu chưa biết phải ghi rõ, không tự giả định còn dư capacity.
+- Ưu tiên cơ chế kết nối hiện có; HTTP/Data API/RPC vẫn dùng tài nguyên DB và pool phía server, không coi là miễn phí hoặc dùng để bỏ qua đánh giá tải. Không tự tăng pool để chữa timeout khi chưa xác định nguyên nhân.
+- Với `auto_account_logs`, giữ request HTTP nền hiện tại; không mở connection SQL riêng cho mỗi log và không chiếm pool nghiệp vụ để ghi log.
+- Quy tắc yêu cầu thảo luận dành cho việc thêm nguồn/tăng ngân sách connection; query thông thường, checkout/release hoặc reconnect trong cơ chế và giới hạn đã được chấp thuận không cần xin lại từng lần.
+
 ## Chuyển SQL Account akaBiz
 
 API ở repo akaBizApi gọi `akabiz_migrate_sql_account_v1(jsonb)` qua service_role ([v285](migrations/migration_v285_akabiz_sql_account_migration.sql)); `org_organization.sql_account_id` là dấu hoàn tất (không có ràng buộc unique), nhiều org có thể cùng phone/customer. Trigger quota chỉ cho import backend bỏ kiểm tra active/expiry/quota trong ngữ cảnh org của RPC; các guard runtime/claim khác giữ nguyên, không đặt `sql_staff_id` cho nhân viên khách. Shop SQL chưa có UID vẫn được tạo với `zalo_account_id=NULL`, trạng thái chưa đăng nhập; response có `skipped_products` cho quyền SQL ngoài phạm vi.
