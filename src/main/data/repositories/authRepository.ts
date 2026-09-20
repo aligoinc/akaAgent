@@ -43,6 +43,7 @@ interface StaffRow extends StaffDeviceColumns {
   username: string
   password: string
   is_active: boolean
+  is_admin: boolean | null
   is_admin_akabiz: boolean
   use_test_workflow: boolean
   is_policy_accepted: boolean
@@ -74,6 +75,7 @@ const STAFF_SELECT = [
   'username',
   'password',
   'is_active',
+  'is_admin',
   'is_admin_akabiz',
   'use_test_workflow',
   'is_policy_accepted',
@@ -169,6 +171,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     phone: staffRow.phone || null,
     organizationName: (org?.name as string) || '',
     isAdminAkabiz: !!staffRow.is_admin_akabiz,
+    isAdmin: staffRow.is_admin === true,
     useTestWorkflow: !!staffRow.use_test_workflow,
     isZaloServer: zaloRuntimeMode.isZaloServer && !zaloAccountCapabilities.web,
     isZaloShowWeb: zaloAccountCapabilities.web,

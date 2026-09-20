@@ -27,9 +27,11 @@ import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeed
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
+import { canAccessAdmin } from '../../shared/admin'
 
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const CrmPage = lazy(() => import('./pages/CrmPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 interface UpdateInfo {
   localVersion: string
@@ -70,6 +72,7 @@ export default function App() {
     upsertCampaign
   } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
+  const canOpenAdmin = canAccessAdmin(user)
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<AppPage>('campaigns')
   const [chatOpenedSessionId, setChatOpenedSessionId] = useState<string | null>(null)
@@ -77,6 +80,7 @@ export default function App() {
   const chatSessionId = user?.chatWebEnabledAtLogin ? user.chatWebSessionId : undefined
   const crmStaffKey = user?.organizationId === 1 ? `${user.organizationId}:${user.staffId}` : undefined
   const handlePageChange = useCallback((page: AppPage) => {
+    if (page === 'admin' && !canOpenAdmin) return
     if (page === 'chat') {
       if (!chatSessionId) return
       setChatOpenedSessionId(chatSessionId)
@@ -86,7 +90,11 @@ export default function App() {
       setCrmOpenedStaffKey(crmStaffKey)
     }
     setActivePage(page)
-  }, [chatSessionId, crmStaffKey])
+  }, [chatSessionId, crmStaffKey, canOpenAdmin])
+
+  useEffect(() => {
+    if (!canOpenAdmin) setActivePage(previous => previous === 'admin' ? 'campaigns' : previous)
+  }, [canOpenAdmin])
 
   useEffect(() => {
     setChatOpenedSessionId(null)
@@ -426,6 +434,11 @@ export default function App() {
         />
 
         <div className="app-main">
+          {activePage === 'admin' && canOpenAdmin && (
+            <Suspense fallback={<div className="empty-state" role="status">Đang mở Admin akaBiz…</div>}>
+              <AdminPage key={`${user.organizationId}:${user.staffId}`} />
+            </Suspense>
+          )}
           {crmStaffKey && crmOpenedStaffKey === crmStaffKey && (
             <div style={{ display: activePage === 'crm' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <Suspense fallback={<div className="empty-state" role="status">Đang mở CRM…</div>}>

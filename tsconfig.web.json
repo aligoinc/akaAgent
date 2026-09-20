@@ -19,6 +19,7 @@
     }
   },
   "include": [
+    "src/preload/**/*.ts",
     "src/renderer/**/*",
     "src/server/renderer/**/*",
     "src/shared/**/*"

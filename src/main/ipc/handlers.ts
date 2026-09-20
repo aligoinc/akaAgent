@@ -30,6 +30,8 @@ import { registerAccountContactHandlers } from './handlers/accountContactHandler
 import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
+import { registerAdminHandlers } from './handlers/adminHandlers'
+import { readLiveAdminFlag } from '../data/repositories/adminRepository'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
@@ -146,6 +148,7 @@ export function registerIpcHandlers(
 ): void {
   const chatWeb = registerChatWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
+  const admin = registerAdminHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)
   const supabase = new SupabaseService()
@@ -740,7 +743,7 @@ export function registerIpcHandlers(
     campaignSupport.stop()
 
     accountOperationRegistry.stop(user.staffId)
-    await Promise.all([chatWeb.reset(), crmWeb.reset()])
+    await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
 
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
@@ -778,10 +781,11 @@ export function registerIpcHandlers(
 
     sessionExpiryCheckRunning = true
     try {
-      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts] = await Promise.all([
+      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts, liveAdminFlag] = await Promise.all([
         loadOrganizationEntitlementAccess(checkedUser.organizationId),
         loadOrganizationAccountProducts(checkedUser.organizationId),
-        loadOrganizationChatSyncProducts(checkedUser.organizationId)
+        loadOrganizationChatSyncProducts(checkedUser.organizationId),
+        readLiveAdminFlag(checkedUser).catch(() => false)
       ])
       const liveEntitlements = liveEntitlementAccess.entitlements
       const currentUser = getCurrentUser()
@@ -797,6 +801,7 @@ export function registerIpcHandlers(
       const nextZaloAccountCapabilities = liveEntitlementAccess.zaloAccountCapabilities
       const updatedUser = {
         ...currentUser,
+        isAdmin: liveAdminFlag,
         entitlements: liveEntitlements,
         accountProducts: liveAccountProducts,
         isChatSync: liveEntitlementAccess.chatSyncEnabled,
@@ -824,6 +829,8 @@ export function registerIpcHandlers(
       } else {
         setCurrentUser(updatedUser)
       }
+      await admin.revokeIfNeeded()
+      if (currentUser.isAdmin !== liveAdminFlag) notifyRendererUserUpdated(updatedUser)
     } catch (err) {
       console.error(`[AuthSessionExpiry] ${reason}: failed to refresh entitlements:`, err)
     } finally {
@@ -1137,7 +1144,7 @@ export function registerIpcHandlers(
     accountOperationRegistry.stop(user.staffId)
     void (async () => {
       try {
-        await Promise.all([chatWeb.reset(), crmWeb.reset()])
+        await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1206,7 +1213,7 @@ export function registerIpcHandlers(
   // Register domain handlers
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
-      await Promise.all([chatWeb.reset(), crmWeb.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
       const handoffAckGeneration = desktopHandoffAckGeneration
@@ -1256,6 +1263,7 @@ export function registerIpcHandlers(
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
         crmWeb.startSession()
+        admin.startSession()
         campaignSupport.startSession()
       } catch (error) {
         const cleanupUser = getCurrentUser()
@@ -1294,7 +1302,7 @@ export function registerIpcHandlers(
       campaignSupport.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)
-      await Promise.all([chatWeb.reset(), crmWeb.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
