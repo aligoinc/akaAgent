@@ -1,6 +1,8 @@
 import type {
   CreateDataGroupRequest,
   DataGroup,
+  DataGroupAccountOption,
+  DataGroupAccountOptionsQuery,
   DataGroupDataset,
   DataGroupDynamicFilterConfig,
   DataGroupIngestRequest,
@@ -31,6 +33,7 @@ import type {
 export interface DataGroupElectronAPI {
   listDataGroups: (query?: DataGroupListQuery) => Promise<DataGroupListResult>
   createDataGroup: (request: CreateDataGroupRequest) => Promise<DataGroup>
+  getDataGroupAccountOptions: (query: DataGroupAccountOptionsQuery) => Promise<DataGroupAccountOption[]>
   updateDataGroup: (request: UpdateDataGroupRequest) => Promise<DataGroup>
   deleteDataGroup: (
     groupId: number,

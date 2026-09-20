@@ -10,9 +10,10 @@ import Modal from './src/renderer/src/components/DataScan/DataGroupManagerModal'
 import {useCampaignStore} from './src/renderer/src/stores/campaignStore';
 import {useUiStore} from './src/renderer/src/stores/uiStore';
 import './src/renderer/src/styles/global.css';
-const accounts=[{id:11,name:'Zalo A',flatformType:'zalo',isDelete:false},{id:12,name:'Zalo B',flatformType:'zalo',isDelete:false},{id:13,name:'Facebook C',flatformType:'facebook',isDelete:false}];
+const accounts=[{id:11,name:'Zalo A',flatformType:'zalo',isDelete:false},{id:12,name:'Zalo B',flatformType:'zalo',isDelete:false},{id:13,name:'Facebook C',flatformType:'facebook',isDelete:false},{id:14,name:'Zalo hết quyền',flatformType:'zalo',isDelete:false}];
 const types=[{id:101,code:'zalo_person',name:'Zalo · User theo UID'},{id:102,code:'zalo_group',name:'Zalo · Group/link'},{id:103,code:'phone',name:'Số điện thoại'}];
 let groups=[{id:1,name:'Khách Zalo',color:'#10b981',revision:1,dataTypeCode:'zalo_person',dataTypeName:types[0].name,dataTypeCategoryItemId:101,boundZaloAccountId:11,boundZaloAccountName:'Zalo A',activeMembershipCount:1,isDelete:false,datasetSyncMode:'manual'}];
+groups.push({...groups[0],id:2,name:'Quét Zalo A',boundZaloAccountId:null,boundZaloAccountName:null,datasetSyncMode:'dataset_auto'}, {...groups[0],id:3,name:'Nhóm nhiều tài khoản',boundZaloAccountId:null,boundZaloAccountName:null});
 const members=[{id:1,contactId:1,groupId:1,name:'Tên cũ',zaloName:'Nguyễn An',displayName:'An - cửa hàng',zaloFriendStatus:'request_received',contactType:'person',flatformType:'zalo',sourceAccountId:11,uid:'123456',isDelete:false,provenance:[]}];
 window.calls=[];
 const fields=[['zalo_tag','Tag Zalo'],['akabiz_tag','Tag akaBiz'],['zalo_friend_status','Trạng thái bạn bè Zalo']].map(([code,name],id)=>({id,code,name,metadata:{},sortOrder:id}));
@@ -20,6 +21,14 @@ const values=[{key:'11:1',label:'Khách mới',fieldCode:'zalo_tag',accountId:11
 const configs={};
 window.electronAPI={
  listAccounts:async()=>accounts,listDataTypeCategoryItems:async()=>types,
+ getDataGroupAccountOptions:async q=>{
+  window.calls.push(['accountOptions',q]);
+  if(window.rejectAccountOptions){window.rejectAccountOptions=false;throw new Error('Không tải được tài khoản thử nghiệm')}
+  const result=[{accountId:null,accountName:'Không gắn tài khoản',disabledReason:null},...accounts.filter(a=>a.flatformType==='zalo').map(a=>({accountId:a.id,accountName:a.name,
+   disabledReason:a.id===14?'Tài khoản không còn quyền sử dụng':q.groupId===3?'Có data khác tài khoản':(q.groupId===1||q.groupId===2)&&a.id===12?'Không khớp tài khoản nguồn':null}))];
+  if(window.deferAccountOptions) return await new Promise(resolve=>window.pendingAccountOptions.push({groupId:q.groupId,resolve:()=>resolve(result)}));
+  return result;
+ },
  listDataGroups:async()=>({groups,total:groups.length}),
  listDataGroupMembers:async q=>{window.calls.push(['listMembers',q]);return {members:q.groupId===1?members:[],total:q.groupId===1?1:0}},
  listDataGroupDatasets:async()=>[],getDataGroupLatestIngestStats:async()=>({}),
@@ -47,11 +56,59 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.clock.install();
  await page.goto(url);await page.getByRole('columnheader',{name:'Tên hiển thị',exact:true}).waitFor();
  assert.equal(await page.getByRole('cell',{name:'Nguyễn An',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'An - cửa hàng',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'Nhận kết bạn',exact:true}).count(),1);
+ // Existing manual and dataset-derived groups use the same selectable options.
+ for(const [groupName,id] of [['Khách Zalo',1],['Quét Zalo A',2]]){
+  const row=page.locator('.data-group-manager-group-row').nth(id-1);
+  await row.getByTitle('Sửa nhóm',{exact:true}).click();
+  const select=row.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
+  await select.locator('option[value="12"]').waitFor({state:'attached'});
+  assert.equal(await select.isEnabled(),true);
+  assert.equal(await select.locator('option[value="12"]').isDisabled(),true);
+  assert.equal(await select.locator('option[value="14"]').isDisabled(),true);
+  assert.match(await select.locator('option[value="12"]').textContent(),/Không khớp/);
+  await select.selectOption('11');
+  await row.getByTitle('Lưu',{exact:true}).click();
+  if(id===2) assert.equal(await page.evaluate(()=>window.calls.some(c=>c[0]==='updateGroup'&&c[1].groupId===2&&c[1].boundZaloAccountId===11)),true);
+ }
+ const mixedRow=page.locator('.data-group-manager-group-row').nth(2);
+ await mixedRow.getByTitle('Sửa nhóm',{exact:true}).click();
+ const mixedSelect=mixedRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true});
+ await mixedSelect.locator('option[value="12"]').waitFor({state:'attached'});
+ assert.equal(await mixedSelect.locator('option[value="11"]').isDisabled(),true);
+ assert.equal(await mixedSelect.locator('option[value="12"]').isDisabled(),true);
+ assert.equal(await mixedSelect.locator('option[value=""]').isEnabled(),true);
+ const accountReads=await page.evaluate(()=>window.calls.filter(c=>c[0]==='accountOptions').length);
+ await page.clock.fastForward(90_000);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='accountOptions').length),accountReads,'Account options must not poll');
+ await mixedRow.getByTitle('Huỷ',{exact:true}).click();
+ // Failed availability loads keep the selector disabled until an explicit retry succeeds.
+ await page.evaluate(()=>window.rejectAccountOptions=true);
+ const firstRow=page.locator('.data-group-manager-group-row').nth(0);
+ await firstRow.getByTitle('Sửa nhóm',{exact:true}).click();
+ await firstRow.getByRole('alert').waitFor();
+ assert.equal(await firstRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isDisabled(),true);
+ await firstRow.getByRole('button',{name:'Thử lại',exact:true}).click();
+ await firstRow.locator('option[value="12"]').waitFor({state:'attached'});
+ assert.equal(await firstRow.getByRole('combobox',{name:'Tài khoản Zalo của nhóm',exact:true}).isEnabled(),true);
+ await firstRow.getByTitle('Huỷ',{exact:true}).click();
+ // A response for a closed editor cannot replace the newly opened group's options.
+ await page.evaluate(()=>{window.deferAccountOptions=true;window.pendingAccountOptions=[]});
+ await firstRow.getByTitle('Sửa nhóm',{exact:true}).click();
+ await page.waitForFunction(()=>window.pendingAccountOptions.length===1);
+ await firstRow.getByTitle('Huỷ',{exact:true}).click();
+ await mixedRow.getByTitle('Sửa nhóm',{exact:true}).click();
+ await page.waitForFunction(()=>window.pendingAccountOptions.length===2);
+ await page.evaluate(()=>window.pendingAccountOptions[1].resolve());
+ await mixedSelect.locator('option[value="11"]').waitFor({state:'attached'});
+ await page.evaluate(()=>window.pendingAccountOptions[0].resolve());
+ assert.equal(await mixedSelect.locator('option[value="11"]').isDisabled(),true);
+ await mixedRow.getByTitle('Huỷ',{exact:true}).click();
+ await page.evaluate(()=>window.deferAccountOptions=false);
  await page.getByRole('button',{name:'Thêm nhóm',exact:true}).click();
  assert.equal(await page.locator('#data-group-manager-new-account').count(),0);
  await page.locator('#data-group-manager-new-type').selectOption('101');
  assert.equal(await page.locator('#data-group-manager-new-account').inputValue(),'');
- assert.equal(await page.locator('#data-group-manager-new-account option').count(),3);
+ await page.locator('#data-group-manager-new-account option[value="14"]').waitFor({state:'attached'});assert.equal(await page.locator('#data-group-manager-new-account option').count(),4);assert.equal(await page.locator('#data-group-manager-new-account option[value="14"]').isDisabled(),true);
  await page.locator('#data-group-manager-new-account').selectOption('11');
  await page.screenshot({path:dir+'/create.png',fullPage:true});
  await page.locator('#data-group-manager-new-type').selectOption('103');assert.equal(await page.locator('#data-group-manager-new-account').count(),0);
@@ -72,6 +129,6 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.screenshot({path:dir+'/filter.png',fullPage:true});
  await page.locator('.data-group-dynamic-editor footer').getByRole('button',{name:'Thêm điều kiện',exact:true}).click();await page.getByRole('button',{name:'Lưu bộ lọc',exact:true}).click();
  const calls=await page.evaluate(()=>window.calls);assert.equal(calls.find(c=>c[0]==='createGroup')[1].boundZaloAccountId,11);assert.equal(calls.find(c=>c[0]==='saveFilter')[1].rules[0].accountId,null);assert.deepEqual(errors,[]);
- console.log(JSON.stringify({passed:true,checks:['names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/create.png',dir+'/filter.png']}));
+ console.log(JSON.stringify({passed:true,checks:['account eligibility for manual/auto/mixed groups','disabled reasons before save','account availability retry','stale response fence','names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/create.png',dir+'/filter.png']}));
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

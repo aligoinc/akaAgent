@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import type { PageInboxScanOptions } from '../../../shared/types'
-import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -272,6 +272,10 @@ export function registerAccountContactHandlers(
 
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_CREATE, async (_, request: CreateDataGroupRequest) => {
     return supabase.createDataGroup(request)
+  })
+
+  ipcMain.handle(IPC_EVENTS.DATA_GROUPS_ACCOUNT_OPTIONS, async (_, query: DataGroupAccountOptionsQuery) => {
+    return supabase.getDataGroupAccountOptions(query)
   })
 
   ipcMain.handle(IPC_EVENTS.DATA_GROUPS_UPDATE, async (_, request: UpdateDataGroupRequest) => {

@@ -1728,6 +1728,17 @@ export type DataGroupRelationshipKind =
   | 'zalo_group_members'
   | 'zalo_remarketing_customers'
 
+export interface DataGroupAccountOptionsQuery {
+  groupId?: number | null
+  dataTypeCategoryItemId: number | null
+}
+
+export interface DataGroupAccountOption {
+  accountId: number | null
+  accountName: string
+  disabledReason: string | null
+}
+
 export interface DataGroup {
   id: number
   name: string
@@ -3234,6 +3245,7 @@ export const IPC_EVENTS = {
   DATA_GROUPS_LIST: 'data-groups:list',
   DATA_GROUPS_CREATE: 'data-groups:create',
   DATA_GROUPS_UPDATE: 'data-groups:update',
+  DATA_GROUPS_ACCOUNT_OPTIONS: 'data-groups:account-options',
   DATA_GROUPS_DELETE: 'data-groups:delete',
   DATA_GROUPS_DUPLICATE: 'data-groups:duplicate',
   DATA_GROUPS_LIST_MEMBERS: 'data-groups:list-members',
