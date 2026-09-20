@@ -1,12 +1,16 @@
 # Tạo chiến dịch không phụ thuộc trạng thái chạy của tài khoản
 
+Luồng **sửa** chiến dịch dùng RPC riêng; phần còn sót của v282 đã được xử lý và kiểm thử trong [v287 — Sửa chiến dịch khi tài khoản đang bận](CONTROL_CAMPAIGN_QUEUE_EDITING.md).
+
+Luồng nạp data theo lô sau khi tạo (form tạo mới/nhân bản/từ nháp), gắn nhóm và tiếp tục nhận data được sửa bổ sung trong [v288](CONTROL_CAMPAIGN_QUEUE_DATA.md).
+
 ## Hành vi
 
 RPC Control Web trước v282 chỉ nhận tài khoản Zalo Server ở trạng thái `chờ xử lý` hoặc `tạm dừng`. Tài khoản đang thực hiện chiến dịch hay tác vụ khác bị trả về `control_account_not_found`, dù tài khoản tồn tại và vẫn hợp lệ.
 
 [Migration v282](../migrations/migration_v282_queue_control_campaign_while_account_running.sql) bỏ hẳn điều kiện `account.status` khi tạo campaign, cùng nguyên tắc với luồng tạo Desktop. Không duy trì danh sách trạng thái tài khoản được phép tạo. Campaign mới vào hàng chờ; wrapper v2 vẫn giữ `p_initial_status='tạm dừng'` cho luồng cần tạo ở trạng thái tạm dừng. Không thay đổi account, claim token, input hoặc campaign đang chạy.
 
-Scheduler vẫn dùng `claim_campaign_runtime(bigint,bigint,bigint,text)` để chỉ bắt đầu campaign khi account đã về `chờ xử lý`. Tạo từ nháp dùng cùng API tạo nên nhận bản sửa này. Nháp có tài khoản đã xóa, vô hiệu hóa, sai chủ sở hữu hoặc sai subtype vẫn bị từ chối.
+Scheduler vẫn dùng `claim_campaign_runtime(bigint,bigint,bigint,text)` để chỉ bắt đầu campaign khi account đã về `chờ xử lý`. Tạo từ nháp dùng cùng API tạo cho bước tạo record; bước thêm data theo lô cần thêm v288. Nháp có tài khoản đã xóa, vô hiệu hóa, sai chủ sở hữu hoặc sai subtype vẫn bị từ chối.
 
 ## Audit RPC
 

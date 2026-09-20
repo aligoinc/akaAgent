@@ -378,6 +378,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Campaign account busy**: cấu hình/nạp data không được phụ thuộc `account.status`; phải kiểm tra riêng các RPC create, update, add/append và preflight/bind/reactivate nguồn nhóm (kể cả bundle), giữ guard của chính campaign và runtime claim. V287/v288 đã apply production; xem [sửa campaign](docs/CONTROL_CAMPAIGN_QUEUE_EDITING.md:1) và [data/source + smoke](docs/CONTROL_CAMPAIGN_QUEUE_DATA.md:1).
+
 - **Campaign-support restart/cancel**: chọn lại menu là yêu cầu hỏi mới, còn chuyển tab hoặc `Tạo mới` trong khung chat không tự gửi lại. Abort HTTP không dừng tác vụ trên server; phải giữ requestId/payload cũ, chờ cancel hoặc trạng thái kết thúc trước khi tạo hội thoại mới. Xem [campaignSupportService.ts](src/main/services/campaignSupportService.ts) và `node scripts/run-campaign-support-smoke-test.cjs`.
 
 - **Blocklist pagination/retry**: PostgREST `PGRST103` (HTTP 416) không trả `count`; dùng HEAD cùng bộ lọc để tìm trang cuối, chỉ retry GET tối đa một lần nếu trang tồn tại trở lại. Kết quả mutation từng phần phải qua IPC bằng object thường, không gắn field vào `Error`; xem [accountContactRepository.ts](src/main/data/repositories/accountContactRepository.ts:3700) và [smoke test](scripts/run-zalo-friend-blocklist-smoke-test.cjs:1).
