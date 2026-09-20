@@ -19938,7 +19938,10 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 }
 .data-group-form-fields input:focus,
 .data-group-form-fields select:focus { border-color: var(--accent-primary, #6366f1); outline: 2px solid var(--bg-accent-subtle, rgba(99, 102, 241, 0.12)); }
-.data-group-form-fields input[type="color"] { width: 64px; height: 38px; padding: 4px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-primary); cursor: pointer; }
+.data-group-form-fields input[type="color"] { appearance: none; width: 38px; height: 38px; padding: 3px; overflow: hidden; border: 1px solid var(--border-default); border-radius: 50%; background: var(--bg-primary); cursor: pointer; }
+.data-group-form-fields input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.data-group-form-fields input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.data-group-form-fields input[type="color"]::-moz-color-swatch { border: 0; border-radius: 50%; }
 .data-group-form-fields .required,
 .data-group-form-fields [role="alert"] { color: var(--danger, #ef4444); }
 .data-group-form-fields small { white-space: normal; font-weight: 400; }
@@ -19960,16 +19963,16 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 0;
   background: var(--modal-backdrop-soft);
   backdrop-filter: blur(3px);
 }
 
 .data-group-manager-modal {
   position: relative;
-  width: min(1480px, 100%);
-  height: min(880px, 100%);
-  min-height: 520px;
+  width: 100%;
+  height: 90%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -19978,6 +19981,8 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   background: var(--bg-secondary);
   box-shadow: var(--shadow-lg);
 }
+
+.data-group-manager-modal.is-fullscreen { height: 100%; border-radius: 0; }
 
 .data-group-manager-header {
   min-height: 65px;
@@ -19989,6 +19994,9 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   border-bottom: 1px solid var(--border-default);
   background: var(--bg-secondary);
 }
+
+.data-group-manager-list-refresh.btn-icon { width: 28px; height: 28px; flex: none; }
+.data-group-manager-section-title > .data-group-manager-list-refresh { margin-left: auto; }
 
 .data-group-manager-header-icon {
   width: 34px;
@@ -20036,8 +20044,25 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   flex: 1;
 }
 
+.data-group-panel-resizer {
+  position: relative;
+  width: 6px;
+  flex: 0 0 6px;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--bg-secondary);
+}
+.data-group-panel-resizer::after { content: ''; position: absolute; inset: 0 2px; background: var(--border-default); }
+.data-group-panel-resizer:hover::after,
+.data-group-panel-resizer:focus-visible::after { background: var(--accent-primary); }
+.data-group-panel-resizer:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.data-group-manager-workspace.is-resizing,
+.data-group-manager-workspace.is-resizing * { cursor: col-resize !important; user-select: none; }
+@media (max-width: 1050px) { .data-group-panel-resizer.is-info { display: none; } }
+@media (max-width: 760px) { .data-group-panel-resizer { display: none; } }
+
 .data-group-manager-sidebar {
-  width: 280px;
+  width: var(--data-group-sidebar-width, 280px);
   min-width: 260px;
   min-height: 0;
   display: flex;
@@ -21273,8 +21298,8 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 
 /* Data Group design 1a: contextual information rail */
 .data-group-info-panel {
-  width: 372px;
-  min-width: 360px;
+  width: var(--data-group-info-width, 372px);
+  min-width: 330px;
   min-height: 0;
   display: flex;
   flex: none;
@@ -23475,10 +23500,6 @@ body.theme-light :is(
     display: none;
   }
 
-  .data-group-manager-sidebar {
-    width: 270px;
-  }
-
   .data-group-manager-context-filters label:first-child select {
     width: 155px;
   }
@@ -23494,7 +23515,7 @@ body.theme-light :is(
 
 @media (max-width: 760px) {
   .data-group-manager-backdrop {
-    padding: 8px;
+    padding: 0;
   }
 
   .data-group-manager-modal {

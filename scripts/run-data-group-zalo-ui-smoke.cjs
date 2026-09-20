@@ -29,8 +29,8 @@ window.electronAPI={
   if(window.deferAccountOptions) return await new Promise(resolve=>window.pendingAccountOptions.push({groupId:q.groupId,resolve:()=>resolve(result)}));
   return result;
  },
- listDataGroups:async()=>({groups,total:groups.length}),
- listDataGroupMembers:async q=>{window.calls.push(['listMembers',q]);return {members:q.groupId===1?members:[],total:q.groupId===1?1:0}},
+ listDataGroups:async()=>{window.calls.push(['listGroups']);return {groups,total:groups.length}},
+ listDataGroupMembers:async q=>{window.calls.push(['listMembers',q]);if(window.deferMemberRefresh)await new Promise(resolve=>window.finishMemberRefresh=resolve);return {members:q.groupId===1?members:[],total:q.groupId===1?1:0}},
  listDataGroupDatasets:async()=>[],getDataGroupLatestIngestStats:async()=>({}),
  getDataGroupPanel:async id=>({group:{...groups.find(g=>g.id===id),creatorName:'Người kiểm thử'},summary:{activeMembershipCount:1,runCount:0,campaignCount:0},quality:{withLinkCount:0,withPhoneCount:0,withUidCount:1,duplicateCount:0},sourceBreakdown:[],dataTypeBreakdown:[],accountBreakdown:[],tags:[],history:[],campaigns:[]}),
  getDataGroupDynamicFilter:async id=>{window.calls.push(['getFilter',id]);return configs[id]||{groupId:id,boundZaloAccountId:groups.find(g=>g.id===id).boundZaloAccountId,isEnabled:false,revision:1,matchedCount:0,lastEnteredCount:0,lastExitedCount:0,rules:[],catalog:{fields,operators:[],scopes:[],joins:[]},values,accounts}},
@@ -56,6 +56,57 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.clock.install();
  await page.goto(url);await page.getByRole('columnheader',{name:'Tên hiển thị',exact:true}).waitFor();
  assert.equal(await page.getByRole('cell',{name:'Nguyễn An',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'An - cửa hàng',exact:true}).count(),1);assert.equal(await page.getByRole('cell',{name:'Nhận kết bạn',exact:true}).count(),1);
+ const manager=page.getByRole('dialog',{name:'Quản lý nhóm data',exact:true});
+ const sidebar=page.locator('.data-group-manager-sidebar');
+ const info=page.getByRole('complementary',{name:'Thông tin nhóm data'});
+ const leftHandle=page.getByRole('separator',{name:'Đổi độ rộng danh sách nhóm'});
+ const rightHandle=page.getByRole('separator',{name:'Đổi độ rộng thông tin nhóm'});
+ const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<2,`${actual} should equal ${expected}`);
+ const drag=async(handle,delta)=>{const box=await handle.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+80);await page.mouse.down();await page.mouse.move(box.x+box.width/2+delta,box.y+80,{steps:10});await page.mouse.up()};
+ near((await manager.boundingBox()).width,1500);near((await manager.boundingBox()).height,864);
+ const sidebarWidth=(await sidebar.boundingBox()).width;
+ const infoWidth=(await info.boundingBox()).width;
+ await drag(leftHandle,80);near((await sidebar.boundingBox()).width,sidebarWidth+80);
+ await drag(rightHandle,-70);near((await info.boundingBox()).width,infoWidth+70);
+ await leftHandle.press('ArrowRight');near((await sidebar.boundingBox()).width,sidebarWidth+90);
+ await page.getByRole('button',{name:'Toàn màn hình form data',exact:true}).click();
+ near((await manager.boundingBox()).height,960);near((await manager.boundingBox()).y,0);
+ near((await sidebar.boundingBox()).width,sidebarWidth+90);
+ await page.getByRole('button',{name:'Thu nhỏ form data',exact:true}).click();
+ near((await manager.boundingBox()).height,864);
+ await page.setViewportSize({width:1060,height:780});
+ await drag(leftHandle,2000);
+ assert.ok((await page.locator('.data-group-manager-content').boundingBox()).width>=319,'Dragging must leave room for the table');
+ assert.ok((await info.boundingBox()).width>=330,'Info panel must keep its minimum width');
+ await page.setViewportSize({width:740,height:780});
+ assert.equal(await leftHandle.isVisible(),false);assert.equal(await rightHandle.isVisible(),false);
+ await page.setViewportSize({width:1500,height:960});
+ await leftHandle.dblclick();await rightHandle.dblclick();
+ near((await sidebar.boundingBox()).width,280);near((await info.boundingBox()).width,372);
+ await page.screenshot({path:dir+'/layout.png',fullPage:true});
+ const refreshData=page.getByRole('button',{name:'Làm mới danh sách data',exact:true});
+ const refreshGroups=page.getByRole('button',{name:'Làm mới danh sách nhóm',exact:true});
+ await page.getByRole('combobox',{name:'Hiển thị',exact:true}).selectOption('request_received');
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="Làm mới danh sách data"]').disabled);
+ const beforeRefresh=await page.evaluate(()=>({groups:window.calls.filter(c=>c[0]==='listGroups').length,members:window.calls.filter(c=>c[0]==='listMembers').length,query:window.calls.filter(c=>c[0]==='listMembers').at(-1)[1]}));
+ await page.evaluate(()=>window.deferMemberRefresh=true);
+ await refreshData.click();
+ await page.waitForFunction(()=>!!window.finishMemberRefresh);
+ assert.equal(await refreshData.isDisabled(),true);
+ assert.equal(await refreshData.getAttribute('aria-busy'),'true');
+ assert.equal(await refreshGroups.isEnabled(),true);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='listGroups').length),beforeRefresh.groups,'Refreshing data must not reload the group list');
+ await refreshGroups.click();
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="Làm mới danh sách nhóm"]').disabled);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='listMembers').length),beforeRefresh.members+1,'Refreshing groups must not reload members of the unchanged selection');
+ await page.evaluate(()=>{window.deferMemberRefresh=false;window.finishMemberRefresh()});
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="Làm mới danh sách data"]').disabled);
+ const afterRefresh=await page.evaluate(()=>({groups:window.calls.filter(c=>c[0]==='listGroups').length,members:window.calls.filter(c=>c[0]==='listMembers').length,query:window.calls.filter(c=>c[0]==='listMembers').at(-1)[1]}));
+ assert.equal(afterRefresh.groups,beforeRefresh.groups+1);assert.equal(afterRefresh.members,beforeRefresh.members+1);assert.deepEqual(afterRefresh.query,beforeRefresh.query);
+ assert.equal(await page.getByRole('combobox',{name:'Hiển thị',exact:true}).inputValue(),'request_received');
+ await page.clock.fastForward(90_000);
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='listMembers').length),afterRefresh.members,'Member refresh must only run on demand');
+ await page.getByRole('combobox',{name:'Hiển thị',exact:true}).selectOption('all');
  const editor=page.getByRole('dialog',{name:'Sửa nhóm data',exact:true});
  // Existing manual and dataset-derived groups use the same selectable options.
  for(const [groupName,id] of [['Khách Zalo',1],['Quét Zalo A',2]]){
@@ -150,6 +201,11 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.waitForFunction(count=>window.calls.filter(c=>c[0]==='getFilter').length===count+1,initialFilterReads);
  await page.getByRole('switch').click();
  assert.equal(await page.getByRole('button',{name:'Làm mới',exact:true}).isDisabled(),true,'Refresh must not discard unsaved rules');
+ await refreshGroups.click();
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="Làm mới danh sách nhóm"]').disabled);
+ await refreshData.click();
+ await page.waitForFunction(()=>!document.querySelector('[aria-label="Làm mới danh sách data"]').disabled);
+ assert.equal(await page.getByRole('button',{name:'Làm mới',exact:true}).isDisabled(),true,'List refresh must preserve unsaved dynamic-filter edits');
  await page.getByRole('button',{name:/Thêm điều kiện/}).first().click();
  await page.getByRole('dialog',{name:'Thêm điều kiện bộ lọc động'}).waitFor();assert.equal(await page.locator('.data-group-dynamic-editor-locked').getByText('Zalo A',{exact:true}).count(),1);
  await page.locator('.data-group-dynamic-field-list').getByRole('button',{name:/Trạng thái bạn bè Zalo/}).click();
@@ -157,6 +213,6 @@ createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onC
  await page.screenshot({path:dir+'/filter.png',fullPage:true});
  await page.locator('.data-group-dynamic-editor footer').getByRole('button',{name:'Thêm điều kiện',exact:true}).click();await page.getByRole('button',{name:'Lưu bộ lọc',exact:true}).click();
  const calls=await page.evaluate(()=>window.calls);assert.equal(calls.find(c=>c[0]==='createGroup')[1].boundZaloAccountId,11);assert.equal(calls.find(c=>c[0]==='saveFilter')[1].rules[0].accountId,null);assert.deepEqual(errors,[]);
- console.log(JSON.stringify({passed:true,checks:['create/edit modal from sidebar and info panel','focus trap and return','busy close protection','account eligibility for manual/auto/mixed groups','disabled reasons before save','account availability retry','stale response fence','names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/create.png',dir+'/filter.png']}));
+ console.log(JSON.stringify({passed:true,checks:['100% width and 90% height','fullscreen toggle preserves panel widths','drag and keyboard resize with minimum widths','responsive resize handles','create/edit modal from sidebar and info panel','focus trap and return','busy close protection','account eligibility for manual/auto/mixed groups','disabled reasons before save','account availability retry','stale response fence','names/status table','optional account/type visibility/reset','Zalo-only options','create payload','inherited dynamic account','four friendship choices','no idle polling','manual refresh','unsaved rule protection','filter save'],screenshots:[dir+'/layout.png',dir+'/create.png',dir+'/filter.png']}));
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

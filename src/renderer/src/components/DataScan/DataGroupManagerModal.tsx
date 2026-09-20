@@ -27,10 +27,13 @@ import {
   Info,
   Link2,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   Palette,
   Pencil,
   Phone,
   Plus,
+  RefreshCw,
   Save,
   Search,
   Tag,
@@ -67,6 +70,7 @@ import {
 } from '../DataGroups/dataGroupApi'
 import DataGroupDynamicFilterPanel from '../DataGroups/DataGroupDynamicFilterPanel'
 import DataGroupFormDialog from '../DataGroups/DataGroupFormDialog'
+import DataGroupWorkspace from '../DataGroups/DataGroupWorkspace'
 import DataGroupAccountSelect, { useDataGroupAccountOptions } from '../DataGroups/DataGroupAccountSelect'
 import CampaignDataUploadModal, {
   type CampaignDataUploadSubmission
@@ -488,6 +492,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     compatibleDataTypeCategoryItemId,
     unrestrictedOnly = false
   } = props
+  const [fullscreen, setFullscreen] = useState(false)
+  const refreshInFlightRef = useRef({ groups: false, members: false })
   const { accounts, loadAccounts, updateCampaign } = useCampaignStore()
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
@@ -995,6 +1001,16 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   useEffect(() => {
     void loadMembers()
   }, [loadMembers])
+
+  const refreshList = async (list: 'groups' | 'members') => {
+    if (refreshInFlightRef.current[list]) return
+    refreshInFlightRef.current[list] = true
+    try {
+      await (list === 'groups' ? loadGroups() : loadMembers())
+    } finally {
+      refreshInFlightRef.current[list] = false
+    }
+  }
 
   useEffect(() => {
     if (accountDirectorySignatureRef.current === accountDirectorySignature) return
@@ -1848,22 +1864,28 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     <div className="data-group-manager-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null}>
+      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}${fullscreen ? ' is-fullscreen' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null}>
         <header className="data-group-manager-header">
           <span className="data-group-manager-header-icon"><Folder size={19} /></span>
           <div className="data-group-manager-heading">
             <h2>Quản lý nhóm data</h2>
             <p>Nhóm dùng chung cho mọi tài khoản &amp; loại data · thêm data từ file hoặc từ dữ liệu quét</p>
           </div>
+          <button type="button" className="btn-icon" onClick={() => setFullscreen(value => !value)} title={fullscreen ? 'Thu nhỏ form data' : 'Toàn màn hình form data'} aria-label={fullscreen ? 'Thu nhỏ form data' : 'Toàn màn hình form data'} aria-pressed={fullscreen}>
+            {fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+          </button>
           <button type="button" className="btn-icon" onClick={onClose} title="Đóng"><X size={18} /></button>
         </header>
 
-        <div className="data-group-manager-workspace">
+        <DataGroupWorkspace showInfo={!selectionMode} defaultInfoWidth={372}>
           <aside className="data-group-manager-sidebar">
             <div className="data-group-manager-sidebar-head">
               <div className="data-group-manager-section-title">
                 <span>Nhóm data</span>
                 <span className="data-group-manager-count-pill">{formatCount(groupTotal)} nhóm</span>
+                <button type="button" className="btn-icon data-group-manager-list-refresh" onClick={() => void refreshList('groups')} disabled={groupsLoading || selectingAllMembers || busyAction !== null} title="Làm mới danh sách nhóm" aria-label="Làm mới danh sách nhóm" aria-busy={groupsLoading}>
+                  <RefreshCw size={15} className={groupsLoading ? 'spin' : undefined} />
+                </button>
               </div>
               <label className="data-group-manager-search-field">
                 <Search size={15} />
@@ -2251,6 +2273,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
 
             <div className="data-group-manager-member-pager">
               <span>Hiển thị {formatCount(memberRangeStart)}–{formatCount(memberRangeEnd)} / {formatCount(memberTotal)} data</span>
+              <button type="button" className="btn-icon data-group-manager-list-refresh" onClick={() => void refreshList('members')} disabled={!activeGroupId || membersLoading || memberSearchPending || selectingAllMembers || busyAction !== null} title="Làm mới danh sách data" aria-label="Làm mới danh sách data" aria-busy={membersLoading}>
+                <RefreshCw size={15} className={membersLoading ? 'spin' : undefined} />
+              </button>
               <div>
                 <button type="button" className="btn-icon" onClick={() => setMemberPage(page => Math.max(1, page - 1))} disabled={memberPage <= 1 || membersLoading}><ChevronLeft size={15} /></button>
                 <span>Trang {memberPage}/{memberPageCount}</span>
@@ -2426,7 +2451,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               </div>}
             </aside>
           )}
-        </div>
+        </DataGroupWorkspace>
 
         {selectionMode && (
           <footer className="data-group-manager-picker-footer">
