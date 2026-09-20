@@ -12903,20 +12903,54 @@ export default function CampaignFormModal({
     const groupLimit = selectedPrimaryAccount?.accountGroupSettings?.byActionCode?.[actionCode]
     const effectiveLimit = resolveAccountActionLimitConfig(limit, groupLimit, dailyLimitCap)
     const usage = actionUsage.rows.find(row => row.actionCode === actionCode)
-    const renderUsage = (kind: 'daily' | 'window') => {
-      if (actionUsage.status === 'idle') return null
+    const getUsageDisplay = (kind: 'daily' | 'window') => {
       const field = kind === 'daily' ? 'dailyLimit' : 'rateLimitCount'
       const configuredLimit = effectiveLimit?.[field]
       // Same positive-value fallback as campaignRepository.resolveAccountRateLimitStatus.
       const threshold = configuredLimit && configuredLimit > 0 ? configuredLimit : kind === 'daily' ? 30 : 9
       const count = kind === 'daily' ? usage?.dailyActionCount : usage?.windowActionCount
-      const fromGroup = normalizePositiveActionLimit(groupLimit?.[field]) !== undefined
+      const percent = count === undefined ? 0 : Math.min(100, Math.max(0, Math.round(count / threshold * 100)))
+      const full = count !== undefined && count >= threshold
+      const tone = count === undefined ? 'muted' : kind === 'daily'
+        ? full ? 'danger' : percent >= 80 ? 'warning' : 'success'
+        : full ? 'warning' : 'info'
+      return { count, threshold, percent, full, tone, fromGroup: normalizePositiveActionLimit(groupLimit?.[field]) !== undefined }
+    }
+    const dailyUsage = getUsageDisplay('daily')
+    const windowUsage = getUsageDisplay('window')
+    const usageWindowMatchesLimit = actionRateLimitMinutes === CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES &&
+      (normalizePositiveActionLimit(effectiveLimit?.rateLimitMinutes) ?? actionRateLimitMinutes) === CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES
+    const renderUsage = (kind: 'daily' | 'window') => {
+      if (actionUsage.status === 'idle') return null
+      const { count, threshold, percent, full, tone, fromGroup } = kind === 'daily' ? dailyUsage : windowUsage
+      const usageLabel = `${kind === 'daily' ? 'Đã chạy trong ngày' : `Đã chạy trong giờ (${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút)`}: ${count ?? '—'}/${threshold} ${actionLimitUnit}`
+      const remaining = count === undefined ? 'Chưa có số liệu' : full
+        ? 'Đã đạt giới hạn ngày'
+        : `còn ${threshold - count} ${actionLimitUnit}`
       return (
         <div className="action-limit-usage" aria-live="polite">
-          <span>{kind === 'daily' ? 'Đã chạy trong ngày' : `Đã chạy trong giờ (${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút)`}: </span>
-          {actionUsage.status === 'loading' ? <span>Đang tải…</span> : (
-            <span><strong>{count ?? '—'}/{threshold}</strong> {actionLimitUnit}</span>
-          )}
+          <div className={`action-limit-usage-row is-${tone}`}>
+            <span
+              className="action-limit-usage-track"
+              role={count === undefined ? undefined : 'progressbar'}
+              aria-label={`Giới hạn ${getActionCodeLabel(actionCode)} ${kind === 'daily' ? 'trong ngày' : `trong ${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút`}`}
+              aria-valuemin={count === undefined ? undefined : 0}
+              aria-valuemax={count === undefined ? undefined : threshold}
+              aria-valuenow={count === undefined ? undefined : Math.min(count, threshold)}
+              aria-valuetext={count === undefined ? undefined : usageLabel}
+              title={usageLabel}
+            >
+              <span className="action-limit-usage-fill" style={{ width: `${percent}%` }} />
+            </span>
+            <span
+              className={`action-limit-usage-caption${kind === 'daily' && full ? ' is-full' : ''}`}
+              title={usageLabel}
+            >
+              {actionUsage.status === 'loading' ? 'Đang tải…' : kind === 'daily' ? remaining : (
+                `${usageWindowMatchesLimit ? 'trong giờ' : `trong ${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút`} ${count ?? '—'}/${threshold}`
+              )}
+            </span>
+          </div>
           {fromGroup && (
             <span className="action-limit-usage-source">Theo nhóm {selectedPrimaryAccount?.accountGroupName || 'tài khoản'}</span>
           )}
@@ -12929,11 +12963,19 @@ export default function CampaignFormModal({
         <div className="action-limit-card-header">
           <strong>Giới hạn {getActionCodeLabel(actionCode)}</strong>
         </div>
-        <div className="stepper-form-row">
-          <div className="stepper-form-group third">
-            <label>Giới hạn trong ngày (đến 24h)</label>
+        <div className="action-limit-fields">
+          <div className="stepper-form-group">
+            <div className="action-limit-label-row">
+              <label htmlFor={`action-limit-day-${actionCode}`}>Giới hạn trong ngày (đến 24h)</label>
+              {actionUsage.status !== 'idle' && (
+                <span className={`action-limit-used-pill is-${dailyUsage.tone}`} aria-live="polite">
+                  {actionUsage.status === 'loading' ? 'Đang tải…' : `đã chạy ${dailyUsage.count ?? '—'}/${dailyUsage.threshold}`}
+                </span>
+              )}
+            </div>
             <div className="stepper-input-unit-wrap">
               <input
+                id={`action-limit-day-${actionCode}`}
                 type="number"
                 max={dailyLimitCap ?? undefined}
                 value={limit.dailyLimit}
@@ -12944,12 +12986,14 @@ export default function CampaignFormModal({
             </div>
             {renderUsage('daily')}
           </div>
-          <div className="stepper-form-group third action-limit-hour-group">
-            <div className="action-limit-hour-label-row">
-              <label>Giới hạn trong giờ ({actionRateLimitMinutesLabel} phút)</label>
+          <div className="stepper-form-group action-limit-hour-group">
+            <div className="action-limit-label-row">
+              <label htmlFor={`action-limit-hour-${actionCode}`}>Giới hạn trong giờ ({actionRateLimitMinutesLabel} phút)</label>
               <button
                 type="button"
                 className="action-limit-minute-toggle"
+                aria-expanded={isRateLimitMinuteEditorOpen}
+                aria-controls={`action-limit-minute-field-${actionCode}`}
                 onClick={() => setExpandedRateLimitMinuteActions(prev => ({
                   ...prev,
                   [actionCode]: !prev[actionCode]
@@ -12960,6 +13004,7 @@ export default function CampaignFormModal({
             </div>
             <div className="stepper-input-unit-wrap">
               <input
+                id={`action-limit-hour-${actionCode}`}
                 type="number"
                 value={limit.rateLimitCount}
                 onChange={e => updateActionLimit(actionCode, 'rateLimitCount', parseInt(e.target.value) || 0)}
@@ -12968,19 +13013,23 @@ export default function CampaignFormModal({
               <span className="stepper-input-unit">{actionLimitUnit}</span>
             </div>
             {renderUsage('window')}
-          </div>
-          <div className={`stepper-form-group third action-limit-minute-field${isRateLimitMinuteEditorOpen ? '' : ' is-hidden'}`}>
-            <label>Trong số phút:</label>
-            <div className="stepper-input-unit-wrap">
-              <input
-                type="number"
-                min={1}
-                value={actionRateLimitMinutes}
-                onChange={e => updateActionLimit(actionCode, 'rateLimitMinutes', parseInt(e.target.value) || 0)}
-                className="stepper-input stepper-input-with-unit"
-                disabled={!isRateLimitMinuteEditorOpen}
-              />
-              <span className="stepper-input-unit">phút</span>
+            <div
+              id={`action-limit-minute-field-${actionCode}`}
+              className={`action-limit-minute-field${isRateLimitMinuteEditorOpen ? '' : ' is-hidden'}`}
+            >
+              <label htmlFor={`action-limit-minute-${actionCode}`}>Trong số phút:</label>
+              <div className="stepper-input-unit-wrap">
+                <input
+                  id={`action-limit-minute-${actionCode}`}
+                  type="number"
+                  min={1}
+                  value={actionRateLimitMinutes}
+                  onChange={e => updateActionLimit(actionCode, 'rateLimitMinutes', parseInt(e.target.value) || 0)}
+                  className="stepper-input stepper-input-with-unit"
+                  disabled={!isRateLimitMinuteEditorOpen}
+                />
+                <span className="stepper-input-unit">phút</span>
+              </div>
             </div>
           </div>
         </div>

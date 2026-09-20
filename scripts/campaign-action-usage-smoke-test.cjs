@@ -149,17 +149,17 @@ async function main() {
         assert.equal((await probe()).status,'error'); assert.equal(await calls(),6,'no automatic retry');
         for(const mode of ['new','edit','clone','draft']) {
           await run('usageFixture.openForm('+JSON.stringify(mode)+')');
-          await wait('document.querySelector(".action-limit-usage")?.textContent.includes("12/40")');
+          await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/40")');
           assert.equal(await calls(),1,mode+' initializes only once');
           assert.ok(await run('document.body.textContent.includes("3/7")'),'hourly group limit');
           assert.ok(await run('document.body.textContent.includes("Theo nhóm Nhóm smoke")'));
-          assert.ok(await run('document.body.textContent.includes("Đã chạy trong giờ (65 phút)")'));
+          assert.ok(await run('document.body.textContent.includes("trong 65 phút 3/7")'));
         }
         await run('document.querySelector(".action-limit-minute-toggle").click()');
         await run('const field=document.querySelector(".action-limit-minute-field input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(field,"120");field.dispatchEvent(new Event("input",{bubbles:true}));');
         await run('window.dispatchEvent(new Event("focus"));document.querySelectorAll(".stepper-step")[1].click()');
         await delay(700); assert.equal(await calls(),1,'minute edits, navigation and focus do not query');
-        assert.ok(await run('document.body.textContent.includes("Đã chạy trong giờ (65 phút): 3/7")'));
+        assert.ok(await run('document.body.textContent.includes("trong 65 phút 3/7")'));
         await run('const inputs=document.querySelectorAll(".action-limit-card")[1].querySelectorAll("input");for(const [index,value] of [[0,"20"],[1,"4"]]){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(inputs[index],value);inputs[index].dispatchEvent(new Event("input",{bubbles:true}));}');
         await delay(400); assert.equal(await calls(),1,'editing thresholds does not count again');
         assert.ok(await run('document.querySelectorAll(".action-limit-card")[1].textContent.includes("12/20")'));
