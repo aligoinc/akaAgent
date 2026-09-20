@@ -69,6 +69,7 @@ import {
   type DataGroupElectronAPI
 } from '../DataGroups/dataGroupApi'
 import DataGroupDynamicFilterPanel from '../DataGroups/DataGroupDynamicFilterPanel'
+import DataGroupExternalSyncPanel from '../DataGroups/DataGroupExternalSyncPanel'
 import DataGroupFormDialog from '../DataGroups/DataGroupFormDialog'
 import DataGroupWorkspace from '../DataGroups/DataGroupWorkspace'
 import DataGroupAccountSelect, { useDataGroupAccountOptions } from '../DataGroups/DataGroupAccountSelect'
@@ -293,6 +294,7 @@ const getSourceKindLabel = (kind?: string | null) => ({
   upload: 'File tải lên',
   scan: 'Dữ liệu quét',
   automation: 'Tự động hóa',
+  external_sync: 'Google Sheet',
   api: 'API',
   legacy: 'Dữ liệu cũ',
   legacy_unknown: 'Chưa xác định'
@@ -442,6 +444,7 @@ const PROVENANCE_LABELS: Record<string, string> = {
   scan: 'Quét data',
   automation: 'Tự động hóa',
   dynamic_filter: 'Bộ lọc động',
+  external_sync: 'Đồng bộ Google Sheet',
   api: 'API',
   legacy: 'Dữ liệu cũ',
   legacy_unknown: 'Dữ liệu cũ'
@@ -454,7 +457,7 @@ const getProvenanceTitle = (source: DataProvenance) => (
   || source.kind
 )
 
-const getMemberSourceText = (member: DataGroupMember) => member.sourceName?.trim() || '—'
+const getMemberSourceText = (member: DataGroupMember) => member.sourceCode === 'external_sync' ? 'Google Sheet' : member.sourceName?.trim() || '—'
 
 const getMemberAutomationText = (member: DataGroupMember) => (
   member.sourceCode === 'automation'
@@ -573,7 +576,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [panelLoading, setPanelLoading] = useState(false)
   const [panelError, setPanelError] = useState<string | null>(null)
   const [panelRefreshRevision, setPanelRefreshRevision] = useState(0)
-  const [infoPanelTab, setInfoPanelTab] = useState<'info' | 'dynamic-filter'>('info')
+  const [externalSyncCount, setExternalSyncCount] = useState(0)
+  const [externalSyncDialogOpen, setExternalSyncDialogOpen] = useState(false)
+  const [externalSyncPanelWide, setExternalSyncPanelWide] = useState(() => window.matchMedia('(min-width: 1051px)').matches)
+  const [infoPanelTab, setInfoPanelTab] = useState<'info' | 'dynamic-filter' | 'external-sync'>('info')
   const [dynamicFilterRuleCount, setDynamicFilterRuleCount] = useState(0)
   const [noteEditing, setNoteEditing] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
@@ -587,6 +593,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [accountFilterId, setAccountFilterId] = useState<number | ''>(lockedAccountFilterId)
   const [contactTypeFilter, setContactTypeFilter] = useState<ContactType | ''>(lockedContactTypeFilter)
   const [dataTypeFilterId, setDataTypeFilterId] = useState<number | ''>('')
+  const [sourceFilter, setSourceFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<DataGroupMemberStatusFilter>('all')
   const [datasetFilterId, setDatasetFilterId] = useState<number | ''>('')
   const [memberPage, setMemberPage] = useState(1)
@@ -613,6 +620,13 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const [moveOnlyUnrestrictedTargets, setMoveOnlyUnrestrictedTargets] = useState(false)
   const [deleteGroupCandidate, setDeleteGroupCandidate] = useState<DataGroup | null>(null)
   const [detachAutomationsOnDelete, setDetachAutomationsOnDelete] = useState(true)
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1051px)')
+    const changed = () => setExternalSyncPanelWide(media.matches)
+    media.addEventListener('change', changed)
+    return () => media.removeEventListener('change', changed)
+  }, [])
 
   useEffect(() => {
     void loadAccounts()
@@ -697,6 +711,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const data = await api.getDataGroupPanel(activeGroupId)
       if (loadSeq !== panelLoadSeqRef.current) return
       setPanelData(data)
+      setExternalSyncCount(data.summary.externalSyncSourceCount || 0)
       setNoteDraft(data.group.note || '')
       setNoteEditing(false)
       setSelectedPanelCampaign(previous => (
@@ -916,6 +931,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       includeAccountless: accountFilterId === '',
       contactTypes: contactTypeFilter === '' ? undefined : [contactTypeFilter],
       dataTypeCategoryItemIds: dataTypeFilterId === '' ? undefined : [dataTypeFilterId],
+      sourceCodes: sourceFilter ? [sourceFilter] as DataGroupMemberListQuery['sourceCodes'] : undefined,
       status: statusFilter,
       datasetIds: datasetFilterId === '' ? undefined : [datasetFilterId],
       offset: (memberPage - 1) * MEMBER_PAGE_SIZE,
@@ -929,7 +945,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     datasetFilterId,
     debouncedMemberSearch,
     memberPage,
-    statusFilter
+    statusFilter,
+    sourceFilter
   ])
 
   const memberSelectionScopeKey = useMemo(() => JSON.stringify([
@@ -939,6 +956,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     accountFilterId,
     contactTypeFilter,
     dataTypeFilterId,
+    sourceFilter,
     statusFilter,
     datasetFilterId
   ]), [
@@ -949,6 +967,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     datasetFilterId,
     debouncedMemberSearch,
     memberSearch,
+    sourceFilter,
     statusFilter
   ])
   memberSelectionScopeRef.current = memberSelectionScopeKey
@@ -1002,6 +1021,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     void loadMembers()
   }, [loadMembers])
 
+  const refreshSyncedData = useCallback(() => {
+    void Promise.all([loadPanel(), loadMembers({ silent: true }), loadGroups({ silent: true })])
+  }, [loadPanel, loadMembers, loadGroups])
+
   const refreshList = async (list: 'groups' | 'members') => {
     if (refreshInFlightRef.current[list]) return
     refreshInFlightRef.current[list] = true
@@ -1051,6 +1074,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     setAccountFilterId(lockedAccountFilterId)
     setContactTypeFilter(lockedContactTypeFilter)
     setDataTypeFilterId('')
+    setSourceFilter('')
+    setExternalSyncCount(0)
+    setExternalSyncDialogOpen(false)
     setStatusFilter('all')
     setDatasetFilterId('')
     setMemberPage(1)
@@ -1864,7 +1890,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     <div className="data-group-manager-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}${fullscreen ? ' is-fullscreen' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null}>
+      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}${fullscreen ? ' is-fullscreen' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null || externalSyncDialogOpen}>
         <header className="data-group-manager-header">
           <span className="data-group-manager-header-icon"><Folder size={19} /></span>
           <div className="data-group-manager-heading">
@@ -1876,6 +1902,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           </button>
           <button type="button" className="btn-icon" onClick={onClose} title="Đóng"><X size={18} /></button>
         </header>
+
+          {externalSyncDialogOpen && activeGroup && <DataGroupFormDialog title="Đồng bộ ngoài" busy={false} onClose={() => setExternalSyncDialogOpen(false)} className="sheet-sync-narrow-dialog">
+            <DataGroupExternalSyncPanel key={`${activeGroup.id}:${activeGroup.dataTypeCode}:${activeGroup.boundZaloAccountId}`} group={{ ...activeGroup, dataTypeCode: activeGroupDataTypeCode as DataGroup['dataTypeCode'] }} onCountChange={setExternalSyncCount} onChanged={() => { void loadPanel() }} onSynced={refreshSyncedData} />
+          </DataGroupFormDialog>}
 
         <DataGroupWorkspace showInfo={!selectionMode} defaultInfoWidth={372}>
           <aside className="data-group-manager-sidebar">
@@ -2066,6 +2096,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   </div>
                 </div>
               </div>
+              {!selectionMode && activeGroup && <button type="button" className="btn data-group-sync-narrow-button" onClick={() => setExternalSyncDialogOpen(true)}><RefreshCw size={14} />Đồng bộ ngoài</button>}
               <div className="data-group-manager-context-filters">
                 <label>
                   <span>Tài khoản</span>
@@ -2110,6 +2141,14 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   placeholder="Tìm theo tên, UID, SĐT hoặc link..."
                   disabled={!activeGroupId}
                 />
+              </label>
+              <label className="data-group-manager-inline-filter">
+                <span>Nguồn dữ liệu</span>
+                <select value={sourceFilter} aria-label="Nguồn dữ liệu" onChange={event => { setSourceFilter(event.target.value); setMemberPage(1) }} disabled={!activeGroupId}>
+                  <option value="">Tất cả nguồn</option>
+                  <option value="upload">Upload data</option><option value="scan">Quét data</option>
+                  <option value="automation">Tự động hóa</option><option value="dynamic_filter">Bộ lọc động</option><option value="external_sync">Đồng bộ ngoài</option>
+                </select>
               </label>
               <label className="data-group-manager-inline-filter">
                 <span>Hiển thị</span>
@@ -2290,6 +2329,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <div className="data-group-info-tabs" role="tablist" aria-label="Panel nhóm data">
                   <button type="button" role="tab" aria-selected={infoPanelTab === 'info'} className={infoPanelTab === 'info' ? 'is-active' : ''} onClick={() => setInfoPanelTab('info')}>Thông tin</button>
                   <button type="button" role="tab" aria-selected={infoPanelTab === 'dynamic-filter'} className={infoPanelTab === 'dynamic-filter' ? 'is-active' : ''} onClick={() => setInfoPanelTab('dynamic-filter')}>Bộ lọc động <span>{dynamicFilterRuleCount}</span></button>
+                  <button type="button" role="tab" aria-selected={infoPanelTab === 'external-sync'} className={infoPanelTab === 'external-sync' ? 'is-active' : ''} onClick={() => setInfoPanelTab('external-sync')}>Đồng bộ ngoài <span>{externalSyncCount}</span></button>
                 </div>
                 {infoPanelTab === 'info' && (
                   <div className="data-group-info-header-actions">
@@ -2301,7 +2341,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 )}
               </div>
 
-              {infoPanelTab === 'dynamic-filter' && activeGroup && dataGroupApi ? (
+              {infoPanelTab === 'external-sync' ? (
+                activeGroup ? !externalSyncDialogOpen && <DataGroupExternalSyncPanel key={`${activeGroup.id}:${activeGroup.dataTypeCode}:${activeGroup.boundZaloAccountId}`} group={{ ...activeGroup, dataTypeCode: activeGroupDataTypeCode as DataGroup['dataTypeCode'] }} active={externalSyncPanelWide} onCountChange={setExternalSyncCount} onChanged={() => { void loadPanel() }} onSynced={refreshSyncedData} />
+                  : <div className="data-group-info-empty">Chọn nhóm để cấu hình đồng bộ.</div>
+              ) : infoPanelTab === 'dynamic-filter' && activeGroup && dataGroupApi ? (
                 <DataGroupDynamicFilterPanel
                   api={dataGroupApi}
                   groupId={activeGroup.id}

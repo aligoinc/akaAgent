@@ -67,6 +67,12 @@ Code/config đang chạy trong `auto_blocks`/`auto_workflows` cũng phải lấy
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC event constants (cả 2 phía import) |
 
+### Đồng bộ Google Sheet vào nhóm data
+
+Tab **Đồng bộ ngoài** dùng `dataGroupExternalSync` qua main/preload/renderer và RPC tenant; parser/mapper dùng chung Desktop/Edge tại [googleSheetSync.ts](src/shared/googleSheetSync.ts). V297–301 đã apply, Edge `aka-agent-google-sheet-sync` v3 dùng xác thực nội bộ Vault. Cron 66 hiện có kiểm tra nguồn đến hạn mỗi 30 giây, một lease toàn hệ thống; không thêm SQL pool/job. Import chỉ thêm mới, giữ seen ledger khi gỡ data/xóa nguồn; preview không ghi. Xem [hướng dẫn](docs/DATA_GROUP_GOOGLE_SHEET_SYNC.md) và [audit index v301](docs/DATA_GROUP_SHEET_V301_AUDIT.md).
+
+UI chỉ theo dõi pending/running mỗi 10 giây, tối đa 5 phút, khi tab/dialog đồng bộ hiện và không mở editor; thành công tải lại member/group/panel rồi dừng. Sửa nguồn tự kết nối, đổi chế độ tiêu đề tự đọc lại, cột thay đổi phải ghép lại; chỉ mount một panel giữa chế độ rộng/hẹp. Kiểm chứng bằng parser smoke, UI smoke Google Sheet, SQL rollback và hai typecheck/build.
+
 ### Admin akaBiz (desktop)
 
 Cron Admin v296 tối ưu lọc log job thưa/đã tắt: thử cửa sổ PK 5.000 dòng, thiếu 101 kết quả mới dùng lọc/top-N sort `runid+0` để tránh index scan ngược trên toàn heap; vẫn cursor `runid`, trả 100 dòng và không thêm index/pool/timer. Body live và audit hiện tại ở [ADMIN_CRON_V296_AUDIT.md](docs/ADMIN_CRON_V296_AUDIT.md), không lấy lại body v294 để ghi đè. UI lịch có diễn giải tiếng Việt bên cạnh cron gốc; phần thông báo gọi người nhận là “khách hàng” nhưng vẫn lưu theo `org_staff`.
@@ -405,6 +411,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Google Sheet phone/runtime parity**: dùng `normalizeVietnamMobilePhone` chung cho preview và Edge, không viết regex riêng làm mất SĐT thiếu `0` đầu. Import `.ts` trực tiếp để CLI đóng gói dependency; giữ `rewriteRelativeImportExtensions` ở hai tsconfig. Sửa mapper phải kiểm tra Deno và deploy Edge, không chỉ build Desktop ([audit](docs/DATA_GROUP_SHEET_V301_AUDIT.md)).
 
 - **Data Group account eligibility**: không suy ra tài khoản hợp lệ từ trang thành viên đang hiển thị hoặc riêng `accountBreakdown`; phải xét toàn bộ data, provenance, nguồn dataset/automation và rule bằng RPC dùng chung với DB guard. Giữ helper VOLATILE để đọc lại sau khi writer lấy group lock; phản hồi preview cũ không được ghi đè editor mới và preview không thay thế kiểm tra lúc lưu ([audit](docs/DATA_GROUP_ACCOUNT_OPTIONS.md)).
 

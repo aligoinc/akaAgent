@@ -2,18 +2,26 @@ import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Folder, X } from 'lucide-react'
 
-export default function DataGroupFormDialog({ title, busy, onClose, children }: {
+const focusableSelector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]:not(:disabled)'
+
+export default function DataGroupFormDialog({ title, busy, onClose, children, icon, subtitle, className = '' }: {
   title: string
   busy: boolean
   onClose: () => void
   children: ReactNode
+  icon?: ReactNode
+  subtitle?: string
+  className?: string
 }) {
   const dialogRef = useRef<HTMLElement>(null)
   const returnFocusRef = useRef(document.activeElement)
   const titleId = useId()
 
   useEffect(() => {
-    dialogRef.current?.querySelector<HTMLInputElement>('input:not([disabled])')?.focus()
+    const dialog = dialogRef.current
+    const initialFocus = dialog?.querySelector<HTMLElement>('input:not(:disabled)')
+      || dialog?.querySelector<HTMLElement>(focusableSelector) || dialog
+    initialFocus?.focus()
     return () => {
       const previousFocus = returnFocusRef.current
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true })
@@ -28,7 +36,7 @@ export default function DataGroupFormDialog({ title, busy, onClose, children }: 
     <div className="data-group-form-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget && !busy) onClose()
     }}>
-      <section ref={dialogRef} className="data-group-form-modal" role="dialog" aria-modal="true"
+      <section ref={dialogRef} className={`data-group-form-modal ${className}`} role="dialog" aria-modal="true"
         aria-labelledby={titleId} aria-busy={busy} tabIndex={-1} onKeyDown={event => {
           if (event.key === 'Escape') {
             event.preventDefault()
@@ -36,9 +44,10 @@ export default function DataGroupFormDialog({ title, busy, onClose, children }: 
             if (!busy) onClose()
           }
           if (event.key !== 'Tab') return
-          const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
-            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
-          )).filter(item => item.getClientRects().length > 0)
+          // A nested portal must not also run its parent dialog's focus trap.
+          event.stopPropagation()
+          const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(focusableSelector))
+            .filter(item => item.getClientRects().length > 0 && !item.closest('[inert]'))
           const first = items[0]
           const last = items[items.length - 1]
           if (!first) {
@@ -53,8 +62,8 @@ export default function DataGroupFormDialog({ title, busy, onClose, children }: 
           }
         }}>
         <header className="data-group-form-header">
-          <span className="data-group-form-icon"><Folder size={20} /></span>
-          <h2 id={titleId}>{title}</h2>
+          <span className="data-group-form-icon">{icon || <Folder size={20} />}</span>
+          <div className="data-group-form-heading"><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>
           <button type="button" className="btn-icon" aria-label="Đóng form nhóm data" onClick={onClose} disabled={busy}><X size={20} /></button>
         </header>
         {children}
