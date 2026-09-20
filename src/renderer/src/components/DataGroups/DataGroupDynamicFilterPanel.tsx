@@ -7,6 +7,7 @@ import {
   LoaderCircle,
   Lock,
   Plus,
+  RefreshCw,
   SlidersHorizontal,
   Trash2,
   UserRound,
@@ -25,6 +26,7 @@ import type { DataGroupElectronAPI } from './dataGroupApi'
 interface DataGroupDynamicFilterPanelProps {
   api: DataGroupElectronAPI
   groupId: number
+  boundZaloAccountId?: number | null
   groupName: string
   groupDataTypeName: string
   isSupported: boolean
@@ -58,7 +60,7 @@ const FIELD_DESCRIPTION_FALLBACKS: Record<DataGroupDynamicFilterFieldCode, strin
   zalo_tag: 'Tag gắn trên chính tài khoản Zalo',
   akabiz_tag: 'Tag do akaBiz gắn theo phễu khách',
   zalo_group_membership: 'Vào / ra một group Zalo',
-  zalo_friend_status: 'Đã là bạn, chưa là bạn, đã gửi lời mời'
+  zalo_friend_status: 'Bạn bè, gửi lời mời kết bạn, nhận kết bạn, người lạ'
 }
 
 const OPERATOR_FALLBACKS: Record<DataGroupDynamicFilterOperatorCode, string> = {
@@ -79,34 +81,33 @@ const DEFAULT_OPERATORS: Record<DataGroupDynamicFilterFieldCode, DataGroupDynami
 
 const formatCount = (value: number) => new Intl.NumberFormat('vi-VN').format(value)
 
+const normalizeConfig = (config: DataGroupDynamicFilterConfig): DataGroupDynamicFilterConfig => {
+  const labels: Record<string, string> = { friend: 'Bạn bè', request_sent: 'Gửi lời mời kết bạn', request_received: 'Nhận kết bạn', stranger: 'Người lạ' }
+  const values = [...config.values]
+  const rules = config.rules.map(rule => {
+    const accountId = config.boundZaloAccountId ?? rule.accountId
+    const valueKeys = rule.valueKeys.map(key => {
+      if (rule.fieldCode === 'zalo_friend_status') return ['not_friend', 'unknown', 'removed'].includes(key) ? 'stranger' : key
+      if (accountId && ['zalo_tag', 'zalo_group_membership'].includes(rule.fieldCode) && !key.includes(':')) return `${accountId}:${key}`
+      return key
+    })
+    const valueLabels = valueKeys.map((key, index) => {
+      const option = values.find(value => value.fieldCode === rule.fieldCode && value.key === key)
+      const label = rule.fieldCode === 'zalo_friend_status' ? labels[key] || key : option?.label || rule.valueLabels[index] || key
+      if (!option) values.push({ key, label, fieldCode: rule.fieldCode, accountId: accountId ?? null })
+      return label
+    })
+    return { ...rule, valueKeys, valueLabels }
+  })
+  return { ...config, values, rules }
+}
+
 const normalizeRuleOrder = (rules: DataGroupDynamicFilterRule[]) => {
   const positions: Record<DataGroupDynamicFilterScopeCode, number> = { enter: 0, leave: 0 }
   return rules.map(rule => ({
     ...rule,
     sortOrder: positions[rule.scopeCode]++
   }))
-}
-
-const mergeLocalTagValues = (
-  config: DataGroupDynamicFilterConfig,
-  zaloTagNameById?: Map<string, string>,
-  akaBizTagNameById?: Map<number, string>
-) => {
-  const values = [...config.values]
-  const known = new Set(values.map(value => `${value.fieldCode}:${value.key}`))
-  zaloTagNameById?.forEach((label, key) => {
-    const identity = `zalo_tag:${key}`
-    if (known.has(identity)) return
-    known.add(identity)
-    values.push({ key, label, fieldCode: 'zalo_tag', accountId: null, secondaryLabel: 'Tag Zalo' })
-  })
-  akaBizTagNameById?.forEach((label, key) => {
-    const identity = `akabiz_tag:${key}`
-    if (known.has(identity)) return
-    known.add(identity)
-    values.push({ key: String(key), label, fieldCode: 'akabiz_tag', accountId: null, secondaryLabel: 'Tag akaBiz' })
-  })
-  return { ...config, values }
 }
 
 const createDraftRule = (
@@ -125,11 +126,10 @@ const createDraftRule = (
 export default function DataGroupDynamicFilterPanel({
   api,
   groupId,
+  boundZaloAccountId,
   groupName,
   groupDataTypeName,
   isSupported,
-  zaloTagNameById,
-  akaBizTagNameById,
   onRuleCountChange,
   onSaved,
   showAlert
@@ -144,7 +144,7 @@ export default function DataGroupDynamicFilterPanel({
   const [hasLocalChanges, setHasLocalChanges] = useState(false)
   const loadSequenceRef = useRef(0)
 
-  const loadConfig = useCallback(async (quiet = false) => {
+  const loadConfig = useCallback(async () => {
     const loadSequence = ++loadSequenceRef.current
     if (!isSupported) {
       setConfig(null)
@@ -153,14 +153,10 @@ export default function DataGroupDynamicFilterPanel({
       setError(null)
       return
     }
-    if (!quiet) setLoading(true)
+    setLoading(true)
     setError(null)
     try {
-      const next = mergeLocalTagValues(
-        await api.getDataGroupDynamicFilter(groupId),
-        zaloTagNameById,
-        akaBizTagNameById
-      )
+      const next = normalizeConfig(await api.getDataGroupDynamicFilter(groupId))
       if (loadSequence !== loadSequenceRef.current) return
       setConfig(next)
       setRules(normalizeRuleOrder(next.rules))
@@ -171,9 +167,9 @@ export default function DataGroupDynamicFilterPanel({
       console.error('Failed to load Data Group dynamic filter:', loadError)
       setError(loadError?.message || 'Không thể tải bộ lọc động.')
     } finally {
-      if (!quiet && loadSequence === loadSequenceRef.current) setLoading(false)
+      if (loadSequence === loadSequenceRef.current) setLoading(false)
     }
-  }, [akaBizTagNameById, api, groupId, isSupported, zaloTagNameById])
+  }, [api, groupId, isSupported, boundZaloAccountId])
 
   useEffect(() => {
     setConfig(null)
@@ -190,12 +186,6 @@ export default function DataGroupDynamicFilterPanel({
   useEffect(() => {
     onRuleCountChange(rules.length)
   }, [onRuleCountChange, rules.length])
-
-  useEffect(() => {
-    if (!isSupported || editor || hasLocalChanges || saving) return
-    const refreshTimer = window.setInterval(() => void loadConfig(true), 30_000)
-    return () => window.clearInterval(refreshTimer)
-  }, [editor, hasLocalChanges, isSupported, loadConfig, saving])
 
   const rulesByScope = useMemo(() => ({
     enter: rules.filter(rule => rule.scopeCode === 'enter'),
@@ -228,7 +218,7 @@ export default function DataGroupDynamicFilterPanel({
 
   const editorValues = useMemo(() => {
     if (!editor || !config) return []
-    const selectedAccountId = editor.draft.accountId ?? null
+    const selectedAccountId = config.boundZaloAccountId ?? editor.draft.accountId ?? null
     const seen = new Set<string>()
     return config.values.filter(value => {
       if (value.fieldCode !== editor.draft.fieldCode) return false
@@ -308,15 +298,11 @@ export default function DataGroupDynamicFilterPanel({
     }
     setSaving(true)
     try {
-      const saved = mergeLocalTagValues(
-        await api.saveDataGroupDynamicFilter({
-          groupId,
-          isEnabled,
-          rules: normalizeRuleOrder(rules)
-        }),
-        zaloTagNameById,
-        akaBizTagNameById
-      )
+      const saved = normalizeConfig(await api.saveDataGroupDynamicFilter({
+        groupId,
+        isEnabled,
+        rules: normalizeRuleOrder(rules)
+      }))
       setConfig(saved)
       setRules(normalizeRuleOrder(saved.rules))
       setIsEnabled(saved.isEnabled)
@@ -348,6 +334,7 @@ export default function DataGroupDynamicFilterPanel({
         </div>
         {scopeRules.map((rule, scopeIndex) => {
           const index = rules.indexOf(rule)
+          const effectiveAccountId = config?.boundZaloAccountId ?? rule.accountId
           const fieldName = fieldNameByCode.get(rule.fieldCode) || FIELD_FALLBACKS[rule.fieldCode]
           const operatorName = operatorNameByCode.get(rule.operatorCode) || OPERATOR_FALLBACKS[rule.operatorCode]
           return (
@@ -382,7 +369,7 @@ export default function DataGroupDynamicFilterPanel({
                   <b>{operatorName}</b>
                   {rule.valueLabels.map((label, valueIndex) => <span key={`${rule.valueKeys[valueIndex]}-${valueIndex}`}>{label}</span>)}
                 </div>
-                <footer><UserRound size={12} /> {rule.accountId ? accountNameById.get(rule.accountId) || `Tài khoản ${rule.accountId}` : 'Tất cả tài khoản Zalo'}</footer>
+                <footer><UserRound size={12} /> {effectiveAccountId ? accountNameById.get(effectiveAccountId) || `Tài khoản ${effectiveAccountId}` : 'Tất cả tài khoản Zalo'}</footer>
               </article>
             </div>
           )
@@ -440,7 +427,8 @@ export default function DataGroupDynamicFilterPanel({
           {isEnabled ? 'Chỉ xử lý data thay đổi sau khi lưu' : 'Đang tắt — nhóm giữ nguyên data hiện có'}
           {(config?.queueCount || 0) > 0 ? ` · ${formatCount(config?.queueCount || 0)} đang chờ` : ''}
         </span>
-        <button type="button" className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>{saving ? <LoaderCircle size={14} className="spin" /> : null} Lưu bộ lọc</button>
+        <button type="button" className="btn btn-secondary" onClick={() => void loadConfig()} disabled={loading || saving || hasLocalChanges || !!editor} title={hasLocalChanges ? 'Lưu thay đổi trước khi làm mới' : 'Cập nhật cấu hình và số liệu bộ lọc'}><RefreshCw size={14} className={loading ? 'spin' : undefined} /> Làm mới</button>
+        <button type="button" className="btn btn-primary" onClick={() => void handleSave()} disabled={saving || loading}>{saving ? <LoaderCircle size={14} className="spin" /> : null} Lưu bộ lọc</button>
       </div>
 
       {editor && config && createPortal(
@@ -469,8 +457,8 @@ export default function DataGroupDynamicFilterPanel({
                   <strong>Lấy theo nhóm data — không sửa được</strong>
                   <dl>
                     <div><dt>Nhóm dữ liệu</dt><dd>{groupDataTypeName}</dd></div>
-                    <div><dt>Tài khoản</dt><dd>{editor.draft.accountId
-                      ? accountNameById.get(editor.draft.accountId) || `Tài khoản ${editor.draft.accountId}`
+                    <div><dt>Tài khoản</dt><dd>{(config.boundZaloAccountId ?? editor.draft.accountId)
+                      ? accountNameById.get((config.boundZaloAccountId ?? editor.draft.accountId)!) || `Tài khoản ${config.boundZaloAccountId ?? editor.draft.accountId}`
                       : config.accounts.filter(account => !account.isDelete).map(account => account.name).join(' · ') || 'Tất cả tài khoản Zalo'}</dd></div>
                   </dl>
                 </div>
@@ -509,7 +497,7 @@ export default function DataGroupDynamicFilterPanel({
               <div className="data-group-dynamic-editor-section">
                 <strong>Giá trị</strong>
                 <div className="data-group-dynamic-value-list">
-                  {editorValues.length === 0 ? <p>Chưa có dữ liệu phù hợp. Hãy đồng bộ tag hoặc group Zalo trước.</p> : editorValues.map(value => <button key={`${value.fieldCode}-${value.accountId || 'all'}-${value.key}`} type="button" className={editor.draft.valueKeys.includes(value.key) ? 'is-selected' : ''} onClick={() => toggleDraftValue(value)}>{value.label}</button>)}
+                  {editorValues.length === 0 ? <p>Chưa có dữ liệu phù hợp. Hãy đồng bộ tag hoặc group Zalo trước.</p> : editorValues.map(value => <button key={`${value.fieldCode}-${value.accountId || 'all'}-${value.key}`} type="button" className={editor.draft.valueKeys.includes(value.key) ? 'is-selected' : ''} onClick={() => toggleDraftValue(value)}>{value.label}{!config.boundZaloAccountId && value.accountName ? ` · ${value.accountName}` : ''}</button>)}
                 </div>
                 <small className="data-group-dynamic-value-hint">{editor.draft.valueKeys.length > 1 ? `Đã chọn ${editor.draft.valueKeys.length} giá trị — thỏa mãn 1 trong các giá trị này.` : 'Bấm để chọn, có thể chọn nhiều giá trị.'}</small>
               </div>
