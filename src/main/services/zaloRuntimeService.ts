@@ -7,6 +7,7 @@ import { AutoAccount, AutoProxy, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrS
 import { SupabaseService } from './supabase'
 import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepository'
 import type { ZaloOutgoingText } from './zaloFormattedContent'
+import { buildZaloForwardMessageInfo } from '../../shared/zaloForwardMessage'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
@@ -132,7 +133,7 @@ interface ZaloForwardMessageRequestTarget {
 interface ZaloRawForwardMessagePayload {
   targets: ZaloForwardMessageRequestTarget[]
   type: ThreadType
-  message: string
+  message: ZaloOutgoingText
 }
 
 type ZaloRawForwardMessageApi = API & {
@@ -1850,7 +1851,7 @@ export class ZaloRuntimeService {
   async forwardMessageToUsers(
     accountId: number,
     userIds: string[],
-    message: string
+    message: ZaloOutgoingText
   ): Promise<ZaloForwardMessageResult> {
     return this.forwardMessage(accountId, userIds, ThreadType.User, message)
   }
@@ -1858,7 +1859,7 @@ export class ZaloRuntimeService {
   async forwardMessageToGroups(
     accountId: number,
     groupIds: string[],
-    message: string
+    message: ZaloOutgoingText
   ): Promise<ZaloForwardMessageResult> {
     const normalizedGroupIds = groupIds
       .map(groupId => String(groupId || '').trim().replace(/^g/i, ''))
@@ -1937,11 +1938,11 @@ export class ZaloRuntimeService {
     accountId: number,
     threadIds: string[],
     type: ThreadType,
-    message: string
+    message: ZaloOutgoingText
   ): Promise<ZaloForwardMessageResult> {
     const api = await this.ensureApi(accountId)
     const safeThreadIds = threadIds.map(item => String(item || '').trim()).filter(Boolean)
-    const text = String(message || '').trim()
+    const text = (typeof message === 'string' ? message : message.msg).trim()
     if (safeThreadIds.length === 0) throw new ZaloApiError('Missing thread IDs')
     if (!text) throw new ZaloApiError('Missing message content')
 
@@ -1974,7 +1975,7 @@ export class ZaloRuntimeService {
     const targetLabel = type === ThreadType.Group ? 'group' : 'người dùng'
     const response = sendTargets.length > 0
       ? await this.withTimeout(
-          this.forwardMessageRaw(api, sendTargets, type, text),
+          this.forwardMessageRaw(api, sendTargets, type, message),
           ZALO_MESSAGE_SEND_TIMEOUT_MS,
           `Chia sẻ tin nhắn Zalo đến ${targetLabel} quá thời gian chờ (${Math.round(ZALO_MESSAGE_SEND_TIMEOUT_MS / 1000)} giây)`
         )
@@ -2013,7 +2014,7 @@ export class ZaloRuntimeService {
     api: API,
     targets: ZaloForwardMessageRequestTarget[],
     type: ThreadType,
-    message: string
+    message: ZaloOutgoingText
   ): Promise<unknown> {
     const customApi = api as ZaloRawForwardMessageApi
     if (typeof customApi.akaForwardMessageBatch !== 'function') {
@@ -2031,7 +2032,7 @@ export class ZaloRuntimeService {
               ttl: 0,
               msgType: '1',
               totalIds: forwardTargets.length,
-              msgInfo: JSON.stringify({ message: props.message })
+              msgInfo: JSON.stringify(buildZaloForwardMessageInfo(props.message))
             }
           : {
               toIds: forwardTargets,
@@ -2039,7 +2040,7 @@ export class ZaloRuntimeService {
               ttl: 0,
               msgType: '1',
               totalIds: forwardTargets.length,
-              msgInfo: JSON.stringify({ message: props.message })
+              msgInfo: JSON.stringify(buildZaloForwardMessageInfo(props.message))
             }
         const encryptedParams = utils.encodeAES(JSON.stringify(params))
         if (!encryptedParams) throw new ZaloApiError('Failed to encrypt params')

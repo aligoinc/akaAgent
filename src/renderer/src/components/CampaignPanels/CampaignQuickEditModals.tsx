@@ -905,7 +905,6 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         formattedContentEnabled: true,
         rewriteContentEachRun: false,
         postWithBackground: false,
-        zaloMessageSendMode: 'normal',
         content: plainTextToFormattedContent(current.content),
         advancedContentEnabled: current.advancedContentEnabled,
         advancedContentItems: current.advancedContentItems.map(item => ({
@@ -1954,8 +1953,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         }
         const groupSnapshotMustUsePlain = isGroupSnapshotSource && (
           (!isEmailCampaign && !canUseFormattedContent) ||
-          isPostBackgroundActive ||
-          formData.zaloMessageSendMode === 'share'
+          isPostBackgroundActive
         )
         if (groupSnapshotMustUsePlain) {
           nextExtraSettings.advancedContentManualDraft = projectAdvancedContentManualDraftToPlain(
@@ -1992,7 +1990,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         }
       }
       if (isZaloMessageCampaign && !isLegacyManualAdvancedSource) {
-        nextExtraSettings.zaloMessageSendMode = isFormattedContentEnabled ? 'normal' : formData.zaloMessageSendMode
+        nextExtraSettings.zaloMessageSendMode = formData.zaloMessageSendMode
       }
       if (supportsStopMessagesLink(campaign.actionId, nextExtraSettings.zaloMessageSendMode)) {
         nextExtraSettings.zaloOptOutLinkEnabled = formData.zaloOptOutLinkEnabled

@@ -264,6 +264,13 @@ export function renderContentSpinMax(content: string | undefined | null): string
   }, 0)
 }
 
+/** Deterministic fallback for a whole message that spun empty without media. */
+export function renderContentSpinNonEmpty(content: string | undefined | null): string {
+  return renderSpin(String(content || ''), renderedOptions => (
+    renderedOptions.find(option => option.trim().length > 0) ?? renderedOptions[0] ?? ''
+  ), 0)
+}
+
 export function unescapeContentSpin(content: string | undefined | null): string {
   const raw = String(content || '')
   let output = ''

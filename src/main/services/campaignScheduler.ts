@@ -22,7 +22,7 @@ import {
   isImageOrVideoMediaSource,
   isVideoMediaSource
 } from '../../shared/mediaTypes'
-import { renderContentSpin, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
+import { renderContentSpin, renderContentSpinNonEmpty, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import {
   isFormattedContentEmpty,
   sanitizeFormattedContent,
@@ -710,7 +710,6 @@ export class CampaignScheduler {
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
-  private formattedZaloShareWarnings = new Set<number>()
   private backgroundPages = new BackgroundPageManager()
   private backgroundPreviewTimers = new Map<string, ReturnType<typeof setInterval>>()
   private backgroundPreviewCapturing = new Set<string>()
@@ -3257,18 +3256,6 @@ export class CampaignScheduler {
       return
     }
 
-    if (
-      this.isFormattedContentCampaign(campaign) &&
-      campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE &&
-      !this.formattedZaloShareWarnings.has(campaign.id)
-    ) {
-      this.formattedZaloShareWarnings.add(campaign.id)
-      await this.logCampaignProgress(
-        campaign.id,
-        '⚠️ Nội dung có định dạng không hỗ trợ chế độ chia sẻ; chiến dịch sẽ gửi tin nhắn thường.'
-      )
-    }
-
     // Materialization, blocklist loading and content validation may take long
     // enough to reach the cutoff. No ordinary target is reserved at this point.
     if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
@@ -4796,7 +4783,6 @@ export class CampaignScheduler {
 
   private shouldUseZaloShareMessageBatch(campaign: Campaign): boolean {
     return (
-      !this.isFormattedContentCampaign(campaign) &&
       campaign.extraSettings?.zaloMessageSendMode === ZALO_MESSAGE_SEND_MODE_SHARE &&
       (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID)
     )
@@ -4852,7 +4838,9 @@ export class CampaignScheduler {
         const baseMessage = this.getRawCampaignContentForIndex(campaign, 0)
         simpleAttachments = await this.resolveCampaignMediaForIndex(campaign, 0, false, mediaTempPaths)
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        if (!baseMessage.trim() && simpleAttachments.length === 0) {
+        if (!(this.isFormattedContentCampaign(campaign)
+          ? this.getZaloOutgoingMessageText(convertHtmlToZaloMessage(baseMessage))
+          : baseMessage).trim() && simpleAttachments.length === 0) {
           const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
           await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
@@ -5083,7 +5071,7 @@ export class CampaignScheduler {
         if (batch.length === 0 && invalidBatchTargets.length === 0) continue
 
         let batchAttachments: string[] = []
-        let message = ''
+        let message: ZaloOutgoingText = ''
         if (batch.length > 0) {
           const rawBatchMessage = this.getRawCampaignContentForIndex(campaign, batchIndex)
           batchAttachments = usesAdvancedContent
@@ -5091,7 +5079,7 @@ export class CampaignScheduler {
             : (simpleAttachments || [])
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           batchIndex += 1
-          message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage)
+          message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage, batchAttachments.length > 0)
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         }
         const contentStopReason = this.getZaloRuntimeStopReason(campaign.id)
@@ -5112,6 +5100,19 @@ export class CampaignScheduler {
           return
         }
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        if (batch.length > 0 && !this.getZaloOutgoingMessageText(message).trim() && batchAttachments.length === 0) {
+          // The fallback also rendered empty: no branch can supply text.
+          // Leave inputs unclaimed rather than recording an unsent batch.
+          if (this.isCampaignPauseRequested(campaign.id)) {
+            await this.completePauseAtBoundary(account, campaign)
+            return
+          }
+          stoppedBeforeCompletion = true
+          const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
+          await this.updateRunningCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
+          await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+          break
+        }
         if (!await this.beginCampaignRunUnit(
           account,
           campaign,
@@ -5358,9 +5359,17 @@ export class CampaignScheduler {
   private async getZaloShareMessageForBatch(
     account: AutoAccount,
     campaign: Campaign,
-    message: string
-  ): Promise<string> {
-    const original = this.renderSpinContent(message)
+    message: string,
+    hasMedia = false
+  ): Promise<ZaloOutgoingText> {
+    const render = (spin: (text: string) => string): ZaloOutgoingText => this.isFormattedContentCampaign(campaign)
+      ? convertHtmlToZaloMessage(transformFormattedContentText(message, spin))
+      : spin(message)
+    let original = render(text => this.renderSpinContent(text))
+    if (!hasMedia && !this.getZaloOutgoingMessageText(original).trim()) {
+      original = render(renderContentSpinNonEmpty)
+    }
+    if (typeof original !== 'string') return original
     const content = original.trim()
     if (campaign.extraSettings?.rewriteContentEachRun !== true || !content) {
       return original
@@ -5442,7 +5451,7 @@ export class CampaignScheduler {
     batch: ZaloShareMessageTarget[],
     invalidTargets: CampaignInputData[],
     actionDescriptor: CampaignActionDescriptor,
-    message: string,
+    message: ZaloOutgoingText,
     attachments: string[],
     optOutContexts: ReadonlyMap<number, ZaloMessageOptOutRuntimeContext>
   ): Promise<ZaloShareMessageBatchResult> {
@@ -5455,7 +5464,7 @@ export class CampaignScheduler {
     }
 
     const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-    const trimmedMessage = String(message || '').trim()
+    const trimmedMessage = this.getZaloOutgoingMessageText(message).trim()
     const mediaFailures = new Map<number, unknown>()
     const mediaResponses = new Map<number, unknown>()
     const startedInputDataIds = new Set<number>()
@@ -5517,8 +5526,8 @@ export class CampaignScheduler {
         textBatch.forEach(item => startedInputDataIds.add(item.detail.id))
         try {
           forwardResult = isGroup
-            ? await this.zaloRuntime.forwardMessageToGroups(account.id, textBatch.map(item => item.threadId), trimmedMessage)
-            : await this.zaloRuntime.forwardMessageToUsers(account.id, textBatch.map(item => item.threadId), trimmedMessage)
+            ? await this.zaloRuntime.forwardMessageToGroups(account.id, textBatch.map(item => item.threadId), message)
+            : await this.zaloRuntime.forwardMessageToUsers(account.id, textBatch.map(item => item.threadId), message)
         } catch (err) {
           forwardError = err
         }

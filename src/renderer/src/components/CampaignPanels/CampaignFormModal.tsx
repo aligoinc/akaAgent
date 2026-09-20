@@ -2460,7 +2460,7 @@ export default function CampaignFormModal({
   )
   const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isMobileManagedSmsCampaign
   const isPhoneOrUidInputCampaign = isZaloAddGroupMemberCampaign
-  const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share' && !isFormattedContentEnabled
+  const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
   const supportsZaloOptOutLink = isZaloMessageCampaign && !isZaloMessageGroupCampaign && !isZaloShareMessageMode
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
@@ -2675,7 +2675,6 @@ export default function CampaignFormModal({
     : supportsFormattedContent(formData.actionId)
   const groupSnapshotMustUsePlain = (isAdvancedGroupSource || preserveSavedGroupSnapshotOnSave) && (
     !groupSnapshotTargetSupportsRich ||
-    formData.zaloMessageSendMode === 'share' ||
     (canUsePostBackground && formData.postWithBackground)
   )
   const groupSnapshotEffectiveRich = isAdvancedGroupSource &&
@@ -4008,20 +4007,18 @@ export default function CampaignFormModal({
   useEffect(() => {
     setFormData(prev => {
       if (!prev.formattedContentEnabled || !supportsFormattedContent(prev.actionId)) return prev
-      if (!prev.rewriteContentEachRun && !prev.postWithBackground && prev.zaloMessageSendMode === 'normal') return prev
+      if (!prev.rewriteContentEachRun && !prev.postWithBackground) return prev
       return {
         ...prev,
         rewriteContentEachRun: false,
-        postWithBackground: false,
-        zaloMessageSendMode: 'normal'
+        postWithBackground: false
       }
     })
   }, [
     formData.actionId,
     formData.formattedContentEnabled,
     formData.postWithBackground,
-    formData.rewriteContentEachRun,
-    formData.zaloMessageSendMode
+    formData.rewriteContentEachRun
   ])
 
   useEffect(() => {
@@ -4392,7 +4389,6 @@ export default function CampaignFormModal({
         formattedContentEnabled: true,
         rewriteContentEachRun: false,
         postWithBackground: false,
-        zaloMessageSendMode: 'normal',
         content: plainTextToFormattedContent(current.content),
         advancedContentEnabled: current.advancedContentEnabled,
         advancedContentItems: current.advancedContentItems.map(item => ({
@@ -5285,7 +5281,6 @@ export default function CampaignFormModal({
           formattedContentEnabled: channelName !== 'email' && applyRich && supportsFormattedContent(current.actionId),
           rewriteContentEachRun: applyRich ? false : current.rewriteContentEachRun,
           postWithBackground: applyRich || snapshots.length > 0 ? false : current.postWithBackground,
-          zaloMessageSendMode: applyRich ? 'normal' : current.zaloMessageSendMode,
           emailSubject: channelName === 'email' ? String(resolved.subject || '') : current.emailSubject,
           emailBodyIsHtml: channelName === 'email' ? applyRich : current.emailBodyIsHtml
         }))
@@ -5310,8 +5305,7 @@ export default function CampaignFormModal({
           snapshots.length > 0
         )
     const compatibilityChanges = target === 'content' && (
-      (formData.postWithBackground && (applyRich || snapshots.length > 0)) ||
-      (formData.zaloMessageSendMode === 'share' && applyRich)
+      formData.postWithBackground && (applyRich || snapshots.length > 0)
     )
 
     if (currentContent || replacesMedia || compatibilityChanges) {
@@ -6425,7 +6419,7 @@ export default function CampaignFormModal({
             zaloRealtimeGroupIds: selectedZaloRealtimeGroupIds,
             zaloRealtimeGroupNames: selectedZaloRealtimeGroupNames,
             zaloRealtimeEndDate: isZaloMessageGroupRealtimeCampaign ? formData.zaloRealtimeEndDate : null,
-            zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && !formattedContentForSave ? formData.zaloMessageSendMode : 'normal',
+            zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) ? formData.zaloMessageSendMode : 'normal',
             zaloOptOutLinkEnabled: supportsZaloOptOutLink ? formData.zaloOptOutLinkEnabled : false,
             enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.enableZaloTag : false,
             zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
@@ -10370,38 +10364,18 @@ export default function CampaignFormModal({
           checked={formData.zaloMessageSendMode === 'share'}
           onChange={e => {
             const checked = e.target.checked
-            const applyMode = () => {
-              if (checked && formData.formattedContentEnabled) {
-                normalizeManualAdvancedContentItemsToPlain()
-              }
-              setFormData(current => {
-                const compatibleState = checked && current.formattedContentEnabled
-                  ? convertFormattedStateToPlain(current)
-                  : current
-                return {
-                  ...compatibleState,
-                  zaloMessageSendMode: checked ? 'share' : 'normal',
-                  zaloOptOutLinkEnabled: checked ? false : compatibleState.zaloOptOutLinkEnabled,
-                  enableZaloTag: checked ? false : compatibleState.enableZaloTag,
-                  zaloTagId: checked ? '' : compatibleState.zaloTagId,
-                  zaloTagName: checked ? '' : compatibleState.zaloTagName,
-                  enableZaloAlias: checked ? false : compatibleState.enableZaloAlias,
-                  enableAkaBizTag: checked ? false : compatibleState.enableAkaBizTag,
-                  akaBizTagIds: checked ? [] : compatibleState.akaBizTagIds,
-                  akaBizTagNames: checked ? [] : compatibleState.akaBizTagNames
-                }
-              })
-            }
-
-            if (checked && (isFormattedContentEnabled || groupSnapshotSaveEffectiveRich)) {
-              showConfirm(
-                'Gửi dạng chia sẻ không hỗ trợ nội dung có định dạng. Nội dung sẽ được chuyển sang văn bản thường.',
-                applyMode,
-                { title: 'Chuyển sang nội dung thường', confirmText: 'Chuyển và bật', variant: 'primary' }
-              )
-              return
-            }
-            applyMode()
+            setFormData(current => ({
+              ...current,
+              zaloMessageSendMode: checked ? 'share' : 'normal',
+              zaloOptOutLinkEnabled: checked ? false : current.zaloOptOutLinkEnabled,
+              enableZaloTag: checked ? false : current.enableZaloTag,
+              zaloTagId: checked ? '' : current.zaloTagId,
+              zaloTagName: checked ? '' : current.zaloTagName,
+              enableZaloAlias: checked ? false : current.enableZaloAlias,
+              enableAkaBizTag: checked ? false : current.enableAkaBizTag,
+              akaBizTagIds: checked ? [] : current.akaBizTagIds,
+              akaBizTagNames: checked ? [] : current.akaBizTagNames
+            }))
           }}
         />
         <span>Gửi dạng chia sẻ tin nhắn, gửi nhanh cho 50 người mỗi lần (không áp dụng cá nhân hoá nội dung tin nhắn)</span>
@@ -14590,8 +14564,7 @@ export default function CampaignFormModal({
           formattedContentEnabled: targetChannel !== 'email' && shouldUseRich && supportsFormattedContent(current.actionId),
           emailBodyIsHtml: targetChannel === 'email' ? shouldUseRich : current.emailBodyIsHtml,
           rewriteContentEachRun: shouldUseRich ? false : current.rewriteContentEachRun,
-          postWithBackground: shouldUseRich ? false : current.postWithBackground,
-          zaloMessageSendMode: shouldUseRich ? 'normal' : current.zaloMessageSendMode
+          postWithBackground: shouldUseRich ? false : current.postWithBackground
         }
       })
       setManualAdvancedPickedVariants([])
