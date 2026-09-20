@@ -2768,6 +2768,8 @@ export interface AuthUser {
   phone?: string | null
   organizationName: string
   isAdminAkabiz: boolean
+  /** org_staff.is_admin; absent on legacy/server identities means no Admin access. */
+  isAdmin?: boolean
   useTestWorkflow: boolean
   isZaloServer: boolean
   /** Legacy organization-level snapshot kept only for restart compatibility. */

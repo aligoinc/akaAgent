@@ -20,6 +20,7 @@ import {
   Moon,
   RefreshCw,
   ServerCog,
+  ShieldCheck,
   Settings,
   SlidersHorizontal,
   Sun,
@@ -30,10 +31,11 @@ import { useThemeStore } from '../../stores/themeStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/deviceChange'
+import { canAccessAdmin } from '../../../../shared/admin'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin'
 
 interface TopBarProps {
   activePage: AppPage
@@ -92,6 +94,7 @@ export default function TopBar({
   const canOpenWorkflowEditor = isAdminAkabiz
   const canOpenChat = user?.chatWebEnabledAtLogin === true
   const canOpenCrm = user?.organizationId === 1
+  const canOpenAdmin = canAccessAdmin(user)
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -205,9 +208,14 @@ export default function TopBar({
       })
     }
 
+    if (canOpenAdmin) {
+      items.push({ key: 'admin', label: 'Admin akaBiz', icon: <ShieldCheck size={18} />,
+        active: activePage === 'admin', onClick: () => onPageChange('admin') })
+    }
     return items
   }, [
     activePage,
+    canOpenAdmin,
     canOpenWorkflowEditor,
     canOpenChat,
     canOpenCrm,

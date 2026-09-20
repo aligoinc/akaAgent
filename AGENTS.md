@@ -67,6 +67,19 @@ Code/config đang chạy trong `auto_blocks`/`auto_workflows` cũng phải lấy
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC event constants (cả 2 phía import) |
 
+### Admin akaBiz (desktop)
+
+Cron Admin v296 tối ưu lọc log job thưa/đã tắt: thử cửa sổ PK 5.000 dòng, thiếu 101 kết quả mới dùng lọc/top-N sort `runid+0` để tránh index scan ngược trên toàn heap; vẫn cursor `runid`, trả 100 dòng và không thêm index/pool/timer. Body live và audit hiện tại ở [ADMIN_CRON_V296_AUDIT.md](docs/ADMIN_CRON_V296_AUDIT.md), không lấy lại body v294 để ghi đè. UI lịch có diễn giải tiếng Việt bên cạnh cron gốc; phần thông báo gọi người nhận là “khách hàng” nhưng vẫn lưu theo `org_staff`.
+
+
+Menu **Admin akaBiz** dưới **Cài đặt Workflow** chỉ nhận `org_staff.is_admin IS TRUE AND organization_id=1`, qua `AuthUser.isAdmin`; tuyệt đối không dùng `isAdminAkabiz` để cấp quyền này. Cờ được đọc lúc login/bootstrap và refresh quyền hiện có. IPC `admin:*` chỉ nhận main renderer frame; RPC `aka_agent_admin_{docs,notifications,settings,cron,triggers}` luôn xác thực process-only credentials và gọi helper `aka_agent_admin_assert_access` kiểm tra live staff active/admin/org1. Không mở rộng discovery Zalo Server vì cờ desktop này.
+
+Migration v294 chỉ thêm bảng `auto_admin_api_docs` (RLS, RPC-only) và sáu function mới; không thay ACL legacy `org_staff`/`auto_system_settings`. Thông báo dùng nguyên `app.notification`/`org_staff.app_notification`, xóa bằng `''`; sửa raw text/JSON kể cả tương lai/hết hạn. Settings chỉ sửa mô tả/giá trị với CAS, secret list bị che và reveal riêng; không log/persist secret. Cron/trigger chỉ đọc, log keyset 100 dòng theo `runid`, không polling hoặc chạy SQL; body hàm chỉ tải khi mở chi tiết. Tái sử dụng Supabase HTTP client, không thêm pool/connection riêng.
+
+`AdminDocsWebService` tạo một guest cho tài liệu đang mở, partition `persist:akaagent_admin_docs_1_<staffId>_<docId>` riêng CRM/akaChat; main nhận ID và lấy URL từ DB. Guest/popup sandbox, không preload/Node; khác origin mở ngoài. Chuyển doc/menu, logout/expire/đổi staff/mất quyền đóng guest/popup; cookie giữ riêng. Guest crash phải tạo mới, không reload guest cũ. Xem [hướng dẫn](docs/ADMIN_AKABIZ.md), [audit](docs/ADMIN_AKABIZ_MIGRATION_AUDIT.md); smoke fixture: `node scripts/run-admin-smoke-test.cjs`.
+
+Doc API chỉ cấp `clipboard-sanitized-write` cho guest/popup đang được service quản lý, đúng origin và còn quyền; không cấp clipboard read hoặc tự focus/show cửa sổ. Form secret dùng revision của bản nháp để phản hồi reveal đến muộn không ghi đè nội dung vừa nhập/xóa.
+
 ### Auto-update
 
 Renderer kiểm tra phiên bản khi mở app và mỗi 60 phút. Với phiên bản local `>= 6.0.0`, auto-check chỉ đổi button thành `Có phiên bản mới X.Y.Z` (kèm trạng thái nổi bật), tuyệt đối không tự mở modal; modal chỉ mở khi user bấm button. Riêng client legacy `< 6.0.0` vẫn tự mở modal ở lần startup khi có bản mới và chỉ tiếp tục auth bootstrap sau khi user đóng modal. Auto-check định kỳ không tự mở modal ở bất kỳ phiên bản nào.
