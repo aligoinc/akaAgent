@@ -1720,6 +1720,7 @@ export type DataProvenanceKind =
   | 'scan'
   | 'automation'
   | 'dynamic_filter'
+  | 'external_sync'
   | 'api'
   | 'legacy'
   | 'legacy_unknown'
@@ -1834,6 +1835,7 @@ export interface DataGroupPanelData {
     latestDataAddedAt?: string | null
   }
   summary: {
+    externalSyncSourceCount?: number
     activeMembershipCount: number
     uniqueTargetCount: number
     duplicateCount: number
@@ -2011,7 +2013,7 @@ export interface DataGroupMember {
   /** One display source selected by the membership's primary provenance origin. */
   primaryOriginId?: number | null
   sourceCategoryItemId?: number | null
-  sourceCode?: 'upload' | 'scan' | 'automation' | 'dynamic_filter' | null
+  sourceCode?: 'upload' | 'scan' | 'automation' | 'dynamic_filter' | 'external_sync' | null
   sourceName?: string | null
   sourceAutomationId?: number | null
   sourceAutomationName?: string | null
@@ -2080,6 +2082,7 @@ export type DataGroupMemberStatusFilter =
   | 'inactive'
 
 export interface DataGroupMemberListQuery {
+  sourceCodes?: Array<'upload' | 'scan' | 'automation' | 'dynamic_filter' | 'external_sync'>
   groupId: number
   search?: string
   accountIds?: number[]

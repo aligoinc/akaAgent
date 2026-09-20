@@ -31,6 +31,7 @@ import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
+import { registerDataGroupExternalSyncHandlers } from './handlers/dataGroupExternalSyncHandlers'
 import { readLiveAdminFlag } from '../data/repositories/adminRepository'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
@@ -149,6 +150,7 @@ export function registerIpcHandlers(
   const chatWeb = registerChatWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
+  registerDataGroupExternalSyncHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)
   const supabase = new SupabaseService()

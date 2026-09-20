@@ -436,7 +436,8 @@ export async function duplicateDataGroup(
 export async function listDataGroupMembers(
   query: DataGroupMemberListQuery
 ): Promise<DataGroupMemberListResult> {
-  const { data, error } = await client().rpc('aka_agent_list_data_group_members_v2', {
+  const { data, error } = await client().rpc(query.sourceCodes?.length ? 'aka_agent_list_data_group_members_v3' : 'aka_agent_list_data_group_members_v2', {
+    ...(query.sourceCodes?.length ? { p_source_codes: query.sourceCodes } : {}),
     ...identityParams(),
     p_group_id: query.groupId,
     p_search: asNullableString(query.search),
@@ -860,6 +861,7 @@ export async function getDataGroupPanel(groupId: number): Promise<DataGroupPanel
       latestDataAddedAt: asNullableString(group.latest_data_added_at)
     },
     summary: {
+      externalSyncSourceCount: asNumber(summary.external_sync_source_count),
       activeMembershipCount: asNumber(summary.active_membership_count),
       uniqueTargetCount: asNumber(summary.unique_target_count),
       duplicateCount: asNumber(summary.duplicate_count),

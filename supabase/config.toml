@@ -4,6 +4,10 @@ verify_jwt = false
 [functions.aka-agent-email-notification-worker]
 verify_jwt = false
 
+# Authenticated by the Vault-backed x-internal-token, plus a one-use DB lease.
+[functions.aka-agent-google-sheet-sync]
+verify_jwt = false
+
 [functions.email-open]
 verify_jwt = false
 
