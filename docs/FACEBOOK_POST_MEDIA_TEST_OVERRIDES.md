@@ -1,6 +1,57 @@
-# Facebook post media: v302 test and v303 production promotion
+# Facebook post media: native upload with missing-input fallback
 
-## Current state: v303
+## Current state: v304
+
+Campaign 16586 failed in block 29 after v303 because the matched composer form
+contained zero file inputs. The earlier local fixture always supplied a file
+input; it did not establish that Facebook always renders one. The user requested
+legacy drag/drop as a fallback and explicitly requested no technical progress
+messages for selecting the upload method.
+
+v304 changes only the shared code of blocks 29 and 2672, derived from freshly
+captured production rows. A unique, valid form with one valid media input still
+uses `uploadFile`. A unique, valid form with **zero** file inputs uses `dropFile`
+on the same uniquely marked form. Missing/ambiguous forms, multiple inputs,
+disabled/non-media inputs, cancellation, upload exceptions and partial uploads
+do not trigger fallback. Markers are removed in `finally` for both paths.
+No fallback log, new output field or progress message is added. Existing workflow
+graphs, overrides, elements, runtime methods and publication checks are untouched.
+
+| Block | ID | Source code MD5 | v304 code MD5 |
+| --- | --- | --- | --- |
+| `fb_drop_post_images` | 29 | `75bf3975ef06fc9a6f6b9613f248af16` | `61194e7c1fb6209a292c30694e27efac` |
+| `fb_post_current_identity_ui` | 2672 | `c42c9828416a761a782f4cf12bdff9f7` | `51fd63984172218e62d581bc3ec5555e` |
+
+The new numbered migration checks full live block rows, workflow rows, action
+mappings and the composer element before changing anything. It does not edit or
+reapply v302/v303. No DDL, RPC replacement or PostgREST reload is needed.
+
+Applied on 2026-09-21 at 14:12:29 (Asia/Ho_Chi_Minh) to production
+`cgjbsmqtfhqvttudyjzq`, history version `20260921070828`, name
+`migration_v304_facebook_post_media_missing_input_fallback`. The linked CLI's
+temporary-role authentication failed, so the verified project's Supabase
+`execute_sql` connector applied the data-only transaction and inserted history
+into the existing history table atomically, without auxiliary DDL. Postflight
+confirmed exact target code hashes, unchanged block metadata except timestamps,
+and unchanged workflows, action mappings and composer element. The recorded SQL
+MD5 matches the local file: `954717730a3e4590ca172f4c2335f4d6`.
+
+Validation: `node scripts/facebook-post-upload-test-smoke.cjs` passed with real
+Electron/CDP: existing hidden-input cases, zero-input fallback with eight files,
+Page helper fallback, cancellation before/after preparation, partial upload/drop,
+exceptions, ambiguity and cleanup. The helper emits no technical progress logs.
+The migration passed inside a transaction ending with `ROLLBACK`; a deliberately
+wrong source checksum was rejected before any update.
+Wrong workflow checksum was also rejected. Both Node and renderer typechecks
+passed. Facebook's live DOM and final attachment routing still need user testing.
+
+The legacy fallback still dispatches bubbling drag/drop events. Local tests prove
+the intended editor receives each drop, but do not prove Facebook's global
+handlers cannot route it into Messenger, as the user observed before v302.
+`fileCount` means injected files, not confirmed attachment previews. No live
+Facebook post was published and no campaign was resumed during verification.
+
+## Historical v303 promotion
 
 After the user confirmed successful testing, v303 was applied on 2026-09-21 to
 linked production `cgjbsmqtfhqvttudyjzq`. Migration history:
