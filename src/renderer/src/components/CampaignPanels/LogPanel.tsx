@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Activity, ListFilter, Sparkles, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import CampaignAssistantTab from './CampaignAssistantTab'
@@ -20,7 +20,6 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
   const assistantMode = assistantSelection?.mode ?? 'ask'
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [screenshotPreviewError, setScreenshotPreviewError] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!window.electronAPI) return
@@ -58,8 +57,10 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
   }, [accounts, logs])
 
   const filteredLogs = useMemo(() => {
-    if (filterAccountId === null) return logs
-    return logs.filter(log => log.accountId === filterAccountId)
+    const visibleLogs = filterAccountId === null
+      ? [...logs]
+      : logs.filter(log => log.accountId === filterAccountId)
+    return visibleLogs.reverse()
   }, [filterAccountId, logs])
 
   useEffect(() => {
@@ -67,13 +68,6 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
       setFilterAccountId(null)
     }
   }, [accountOptions, filterAccountId])
-
-  // Auto-scroll to bottom on new logs or when changing the account filter.
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [filteredLogs])
 
   const handlePreviewScreenshot = async (filePath: string, title?: string) => {
     if (!filePath || !window.electronAPI?.readBlockScreenshotDataUrl) return
@@ -207,7 +201,7 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
       )}
 
       {activeTab === 'progress' ? (
-        <div className="log-panel-content" ref={scrollRef}>
+        <div className="log-panel-content">
           {screenshotPreviewError && (
             <div className="log-panel-error">{screenshotPreviewError}</div>
           )}
