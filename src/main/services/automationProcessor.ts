@@ -218,11 +218,15 @@ export class AutomationProcessor {
     this.schedule(0, generation)
   }
 
-  async stop(timeoutMs = MAX_STOP_WAIT_MS): Promise<boolean> {
+  stopAcceptingNewWork(): void {
     this.running = false
     this.generation += 1
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
+  }
+
+  async stop(timeoutMs = MAX_STOP_WAIT_MS): Promise<boolean> {
+    this.stopAcceptingNewWork()
     const cycle = this.cyclePromise
     if (!cycle) return true
     const settled = await this.waitForCycle(

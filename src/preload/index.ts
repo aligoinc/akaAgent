@@ -1,6 +1,7 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { adminAPI } from './adminBridge'
+import { staffManagementAPI } from './staffManagementBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
@@ -21,6 +22,7 @@ export type ElectronAPI = typeof electronAPI
 const electronAPI = {
   listMessageOptOutCustomers: (query?: MessageOptOutCustomerQuery): Promise<MessageOptOutCustomerPage> => ipcRenderer.invoke(MESSAGE_OPT_OUT_CUSTOMERS_IPC, query),
   admin: adminAPI,
+  staffManagement: staffManagementAPI,
   dataGroupExternalSync: dataGroupExternalSyncAPI,
   listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),
   getCampaignDraft: (id: string): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.get, id),

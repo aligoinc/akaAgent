@@ -182,6 +182,7 @@ async function migrationGate(): Promise<void> {
     runInNewContext(code, { exports, console, require: (name: string) => {
       if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => client }
       if (name.endsWith('deviceIdentity')) return { getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new' }), getLegacyDeviceIdentity: async () => { oldIdentityReads++; return { fingerprintHash: 'legacy' } } }
+      if (name.endsWith('staffManagementRepository')) return { readStaffAccess: async () => ({ isActive: true, timeAllowed: true, isAdmin: false }) }
       if (name.endsWith('entitlementRepository')) return { ensureAkaAgentSubscriptionActive: async () => {} }
       return {}
     } })
@@ -227,6 +228,7 @@ async function recoveryGate(): Promise<void> {
         getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new' }),
         getLegacyDeviceIdentity: async () => { throw new Error('Explicit recovery must not fall back to legacy fingerprint') }
       }
+      if (name.endsWith('staffManagementRepository')) return { readStaffAccess: async () => ({ isActive: true, timeAllowed: true, isAdmin: false }) }
       if (name.endsWith('entitlementRepository')) return { ensureAkaAgentSubscriptionActive: async () => {
         entitlementChecks++
         if (scenario === 'expired') throw new Error('Tài khoản đã hết hạn')

@@ -31,8 +31,9 @@ import { registerAuthHandlers } from './handlers/authHandlers'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
+import { registerStaffManagementHandlers } from './handlers/staffManagementHandlers'
+import { readStaffAccess } from '../data/repositories/staffManagementRepository'
 import { registerDataGroupExternalSyncHandlers } from './handlers/dataGroupExternalSyncHandlers'
-import { readLiveAdminFlag } from '../data/repositories/adminRepository'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
 import { registerAiHandlers } from './handlers/aiHandlers'
@@ -49,6 +50,7 @@ import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutC
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
+  getCurrentUserCredentials,
   setCurrentUser,
   setCurrentUserCredentials
 } from '../data/currentUser'
@@ -150,6 +152,7 @@ export function registerIpcHandlers(
   const chatWeb = registerChatWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
+  registerStaffManagementHandlers(mainWindow)
   registerDataGroupExternalSyncHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)
@@ -780,18 +783,39 @@ export function registerIpcHandlers(
 
     const checkedUser = getCurrentUser()
     if (!checkedUser) return
+    const checkedCredentials = getCurrentUserCredentials()
 
     sessionExpiryCheckRunning = true
     try {
-      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts, liveAdminFlag] = await Promise.all([
+      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts, liveStaffAccess] = await Promise.all([
         loadOrganizationEntitlementAccess(checkedUser.organizationId),
         loadOrganizationAccountProducts(checkedUser.organizationId),
         loadOrganizationChatSyncProducts(checkedUser.organizationId),
-        readLiveAdminFlag(checkedUser).catch(() => false)
+        checkedCredentials
+          ? readStaffAccess(checkedUser.staffId, checkedCredentials.username, checkedCredentials.password).catch(() => null)
+          : Promise.resolve(null)
       ])
       const liveEntitlements = liveEntitlementAccess.entitlements
       const currentUser = getCurrentUser()
-      if (!currentUser || currentUser.staffId !== checkedUser.staffId) return
+      if (!currentUser || currentUser.staffId !== checkedUser.staffId || currentUser.organizationId !== checkedUser.organizationId || getCurrentUserCredentials() !== checkedCredentials) return
+
+      if (liveStaffAccess && (!liveStaffAccess.isActive || !liveStaffAccess.timeAllowed)) {
+        // Drain an already claimed target before the normal session cleanup.
+        campaignScheduler.stopAcceptingNewZaloWork()
+        automationProcessor.stopAcceptingNewWork()
+        if (currentUser.isAdmin) {
+          const revokedUser = { ...currentUser, isAdmin: false }
+          setCurrentUser(revokedUser)
+          notifyRendererUserUpdated(revokedUser)
+          await admin.revokeIfNeeded()
+        }
+        const idle = await Promise.all([campaignScheduler.waitForIdle(1000), automationProcessor.waitForIdle(1000)])
+        if (!idle.every(Boolean)) return
+        if (getCurrentUser()?.staffId !== checkedUser.staffId || getCurrentUserCredentials() !== checkedCredentials) return
+        await expireCurrentSession(reason)
+        return
+      }
+      const liveAdminFlag = liveStaffAccess?.isAdmin === true
 
       if (!hasAnyEntitlement(liveEntitlements)) {
         await expireCurrentSession(reason)
