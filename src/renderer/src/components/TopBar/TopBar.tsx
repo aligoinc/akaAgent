@@ -25,6 +25,7 @@ import {
   SlidersHorizontal,
   Sun,
   User,
+  Users,
   Zap
 } from 'lucide-react'
 import { useThemeStore } from '../../stores/themeStore'
@@ -32,10 +33,11 @@ import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/deviceChange'
 import { canAccessAdmin } from '../../../../shared/admin'
+import { canManageStaff } from '../../../../shared/staffManagement'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management'
 
 interface TopBarProps {
   activePage: AppPage
@@ -371,6 +373,9 @@ export default function TopBar({
                 <SlidersHorizontal size={16} />
                 <span>Cài đặt</span>
               </button>
+              {canManageStaff(user) && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onPageChange('staff-management') }}>
+                <Users size={18} /><span>Quản lý nhân viên</span>
+              </button>}
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenChangePassword} role="menuitem">
                 <KeyRound size={16} />
                 <span>Đổi mật khẩu</span>

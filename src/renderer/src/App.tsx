@@ -28,10 +28,12 @@ import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequ
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 import { canAccessAdmin } from '../../shared/admin'
+import { canManageStaff } from '../../shared/staffManagement'
 
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const CrmPage = lazy(() => import('./pages/CrmPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'))
 
 interface UpdateInfo {
   localVersion: string
@@ -73,6 +75,7 @@ export default function App() {
   } = useCampaignStore()
   const canOpenWorkflowEditor = !!user?.isAdminAkabiz
   const canOpenAdmin = canAccessAdmin(user)
+  const canOpenStaffManagement = canManageStaff(user)
   // Default to campaigns; workflow-editor is only available for akaBiz admin staff.
   const [activePage, setActivePage] = useState<AppPage>('campaigns')
   const [chatOpenedSessionId, setChatOpenedSessionId] = useState<string | null>(null)
@@ -81,6 +84,7 @@ export default function App() {
   const crmStaffKey = user?.organizationId === 1 ? `${user.organizationId}:${user.staffId}` : undefined
   const handlePageChange = useCallback((page: AppPage) => {
     if (page === 'admin' && !canOpenAdmin) return
+    if (page === 'staff-management' && !canOpenStaffManagement) return
     if (page === 'chat') {
       if (!chatSessionId) return
       setChatOpenedSessionId(chatSessionId)
@@ -90,7 +94,11 @@ export default function App() {
       setCrmOpenedStaffKey(crmStaffKey)
     }
     setActivePage(page)
-  }, [chatSessionId, crmStaffKey, canOpenAdmin])
+  }, [chatSessionId, crmStaffKey, canOpenAdmin, canOpenStaffManagement])
+
+  useEffect(() => {
+    if (!canOpenStaffManagement) setActivePage(previous => previous === 'staff-management' ? 'campaigns' : previous)
+  }, [canOpenStaffManagement])
 
   useEffect(() => {
     if (!canOpenAdmin) setActivePage(previous => previous === 'admin' ? 'campaigns' : previous)
@@ -434,6 +442,11 @@ export default function App() {
         />
 
         <div className="app-main">
+          {activePage === 'staff-management' && canOpenStaffManagement && (
+            <Suspense fallback={<div className="empty-state" role="status">Đang mở Quản lý nhân viên…</div>}>
+              <StaffManagementPage key={`${user.organizationId}:${user.staffId}`} />
+            </Suspense>
+          )}
           {activePage === 'admin' && canOpenAdmin && (
             <Suspense fallback={<div className="empty-state" role="status">Đang mở Admin akaBiz…</div>}>
               <AdminPage key={`${user.organizationId}:${user.staffId}`} />

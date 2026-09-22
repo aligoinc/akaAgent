@@ -17,6 +17,7 @@ import {
   loadOrganizationEntitlementAccess
 } from './entitlementRepository'
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
+import { readStaffAccess } from './staffManagementRepository'
 
 const client = () => getSupabaseClient()
 
@@ -118,7 +119,10 @@ function throwAuthTechnicalError(context: string, userMessage: string, error: un
   throw new Error(userMessage)
 }
 
-async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'organization_id'>): Promise<void> {
+async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organization_id' | 'username' | 'password'>): Promise<void> {
+  const access = await readStaffAccess(staff.id, staff.username, staff.password)
+  if (!access.isActive) throw new Error('Tài khoản đã bị khoá.')
+  if (!access.timeAllowed) throw new Error('Tài khoản nhân viên đã hết hạn sử dụng.')
   await ensureAkaAgentSubscriptionActive(staff.organization_id)
 }
 

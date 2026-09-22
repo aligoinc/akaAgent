@@ -41,7 +41,8 @@ function fixture() {
   const account = { id: 3883, staffId: user.staffId, organizationId: user.organizationId, flatformType: 'zalo',
     isZaloServer: true, isZaloShowWeb: false, isActive: true, status: 'chờ xử lý', loginStatus: 'đã đăng nhập', hasZaloSession: true }
   const state = { token: null, claimFailures: 0, claimWait: null, claimError: null, cleanupFailures: 0, loseClaim: false, loseCleanup: false, cleanupReason: null, cleanupWait: null,
-    calls: [], sends: 0, recovery: 0, claims: 0, cleanups: 0 }
+    calls: [], sends: 0, recovery: 0, claims: 0, cleanups: 0,
+    capabilityError: null, capabilityReads: 0, serverEnabled: true }
   const db = {
     from: () => ({ select() { return this }, eq() { return this }, maybeSingle: async () => ({ data: { status: account.status }, error: null }) }),
     rpc(name, args) {
@@ -88,12 +89,16 @@ function fixture() {
   })
   const { ZaloServerRuntimeManager } = load('src/server/main/zaloServerRuntimeManager.ts', {
     '../../main/services/accountOperationRegistry': operations, '../../main/data/currentUser': auth,
-    '../../main/data/repositories/zaloRuntimeModeRepository': { loadStaffZaloAccountCapabilitySnapshot: async () => ({ server: true }) }
+    '../../main/data/repositories/zaloRuntimeModeRepository': { loadStaffZaloAccountCapabilitySnapshot: async () => {
+      state.capabilityReads++
+      if (state.capabilityError) throw state.capabilityError
+      return { server: state.serverEnabled }
+    } }
   })
   const manager = new ZaloServerRuntimeManager({ ownershipStore: { release() {} }, broadcastSnapshot() {} })
   manager.state = 'running'; manager.notifySnapshot = () => {}
   const runtime = {
-    user, state: 'running', ownsZaloRuntimeState: true, activeCommands: new Set(), qrAccountClaims: new Map(), qrReleasePromises: new Map(), controlOperationIds: new Map(),
+    user, state: 'running', startedAt: '2026-09-22T00:00:00.000Z', ownsZaloRuntimeState: true, activeCommands: new Set(), qrAccountClaims: new Map(), qrReleasePromises: new Map(), controlOperationIds: new Map(),
     eventWindow: { webContents: { send() {} } }, scheduler,
     contactLoader: { stopAll() {}, waitForIdle: async () => true },
     realtimeManager: { stop() {}, waitForIdle: async () => true, refreshSoon() {} },
@@ -133,6 +138,112 @@ function startWarmup(f, verification = async () => {}) {
 let passed = 0
 async function test(name, run) { await run(); console.log('PASS ' + name); passed++ }
 async function main() {
+  await test('staff expiry: Stop reaches a running scan; received rows persist before the account is released', async () => {
+    const f = fixture(), page = deferred(), saved = []
+    const { ContactLoader } = f.load('src/main/services/contactLoader.ts')
+    let reads = 0
+    f.runtime.zaloRuntime.getAllGroups = async () => ({ group1: '1', group2: '1' })
+    f.runtime.zaloRuntime.getGroupInfoBatch = async () => { reads++; return page.promise }
+    f.runtime.supabase.upsertZaloGroupContacts = async rows => {
+      assert.equal(f.registry.has(3883), true, 'retain ownership through result persistence')
+      saved.push(...rows); return rows.length
+    }
+    const loader = Object.assign(Object.create(ContactLoader.prototype), {
+      supabase: f.runtime.supabase, mainWindow: f.runtime.eventWindow, zaloRuntime: f.runtime.zaloRuntime,
+      zaloRuntimeTarget: 'server', contactDatasetAuth: 'server_claim', zaloRuntimeClaimsAbandoned: false,
+      activeLoads: new Map(), cancelledLoads: new Set(), sendProgress() {}
+    })
+    f.runtime.contactLoader = loader
+    const scan = f.manager.executeCommand(811, 'contacts.loadGroups', [3883]); await flush()
+    assert.equal(reads, 1); assert.equal(f.registry.has(3883), true)
+    // This is the error returned by the capability loader after v305 staff expiry.
+    f.state.capabilityError = new Error('Không thể kiểm tra quyền tài khoản Zalo. Vui lòng thử lại sau.')
+    const readsBeforeCancel = f.state.capabilityReads
+    const result = await f.manager.executeCommand(811, 'contacts.cancel', [3883, { expectedRuntimeStartedAt: f.runtime.startedAt }])
+    assert.equal(result.success, true)
+    assert.equal(loader.activeLoads.get(3883).variables.contactScanCancelled, true)
+    assert.equal(f.registry.has(3883), true, 'Stop must not release a still-pending external read')
+    assert.equal(f.state.capabilityReads, readsBeforeCancel, 'owned cleanup is independent of the new-work permission RPC')
+    page.resolve({ gridInfoMap: { group1: { groupId: 'group1', name: 'One' }, group2: { groupId: 'group2', name: 'Two' } } })
+    const completed = await scan
+    assert.equal(completed.stopped, true); assert.equal(completed.count, 2)
+    assert.deepEqual(saved.map(row => row.zaloGroupId), ['group1', 'group2'])
+    assert.equal(reads, 1); assert.equal(f.state.cleanups, 1)
+    assert.equal(f.registry.has(3883), false); assert.equal(f.scheduler.externalAccountRuns.has(3883), false)
+    assert.equal(f.runtime.activeCommands.size, 0); assert.equal(loader.activeLoads.size, 0)
+    assert.equal(f.account.status, 'chờ xử lý')
+    await assert.rejects(f.manager.executeCommand(811, 'contacts.loadGroups', [3883]), /Không thể kiểm tra quyền/)
+    assert.equal(f.state.claims, 1, 'expiry still rejects new work')
+  })
+  for (const draining of [false, true]) await test(`staff expiry: cancel QR waits for completion and releases its token (draining=${draining})`, async () => {
+    const f = fixture(), qr = deferred(), cancel = deferred()
+    f.runtime.zaloRuntime.startLoginQr = async () => ({ success: true })
+    f.runtime.zaloRuntime.waitForLoginQrIdle = () => qr.promise
+    f.runtime.zaloRuntime.cancelLoginQrAndWait = async () => { await cancel.promise; qr.resolve(); return true }
+    await f.manager.executeCommand(811, 'zalo.loginQr.start', [3883])
+    assert.equal(f.registry.has(3883), true)
+    f.state.capabilityError = new Error('Active staff 811 was not found')
+    if (draining) Object.assign(f.runtime, { state: 'stopping', gracefulCapabilityLoss: true, acceptsCleanupCommands: true })
+    const stop = f.manager.executeCommand(811, 'zalo.loginQr.cancel', [3883, { expectedRuntimeStartedAt: f.runtime.startedAt }])
+    await flush(); assert.equal(f.state.cleanups, 0); assert.equal(f.registry.has(3883), true)
+    cancel.resolve(); assert.equal((await stop).success, true); await flush()
+    assert.equal(f.state.cleanups, 1); assert.equal(f.state.token, null)
+    assert.equal(f.registry.has(3883), false); assert.equal(f.scheduler.externalAccountRuns.has(3883), false)
+    assert.equal(f.runtime.qrAccountClaims.size, 0); assert.equal(f.runtime.activeCommands.size, 0)
+  })
+  await test('expiry drain still accepts QR cancellation and completes scoped recovery', async () => {
+    const f = fixture(), qr = deferred()
+    f.runtime.zaloRuntime.startLoginQr = async () => ({ success: true })
+    f.runtime.zaloRuntime.waitForLoginQrIdle = () => qr.promise
+    f.runtime.zaloRuntime.cancelLoginQrAndWait = async () => { qr.resolve(); return true }
+    await f.manager.executeCommand(811, 'zalo.loginQr.start', [3883])
+    f.state.capabilityError = new Error('Active staff 811 was not found')
+    const drain = f.manager.stopRuntime(811, true); await flush()
+    assert.equal(f.runtime.state, 'stopping'); assert.equal(f.runtime.acceptsCleanupCommands, true)
+    assert.equal(f.state.recovery, 0)
+    await f.manager.executeCommand(811, 'zalo.loginQr.cancel', [3883, { expectedRuntimeStartedAt: f.runtime.startedAt }])
+    await flush(); await f.clock.advance(50); await drain
+    assert.equal(f.state.recovery, 1); assert.equal(f.registry.has(3883), false)
+    assert.equal(f.manager.runtimes.has(811), false); assert.equal(f.account.status, 'chờ xử lý')
+  })
+  await test('cleanup rejects a stale runtime, foreign staff/account, changed subtype and forced shutdown', async () => {
+    for (const scenario of ['stale', 'staff', 'account', 'local', 'web', 'forced', 'closed-cleanup', 'server-stop', 'replaced-during-read', 'forced-during-read']) {
+      const f = fixture(); let cancelled = 0
+      f.runtime.contactLoader.cancelLoad = () => { cancelled++ }
+      const guard = { expectedRuntimeStartedAt: f.runtime.startedAt }
+      if (scenario === 'stale') guard.expectedRuntimeStartedAt = 'old-runtime'
+      if (scenario === 'account') f.runtime.supabase.getAccountIgnoringCapability = async () => null
+      if (scenario === 'local') f.account.isZaloServer = false
+      if (scenario === 'web') f.account.isZaloShowWeb = true
+      if (scenario === 'forced') Object.assign(f.runtime, { state: 'stopping', gracefulCapabilityLoss: false, acceptsCleanupCommands: false })
+      if (scenario === 'closed-cleanup') Object.assign(f.runtime, { state: 'stopping', gracefulCapabilityLoss: true, acceptsCleanupCommands: false })
+      if (scenario === 'server-stop') f.manager.state = 'stopping'
+      if (scenario.endsWith('during-read')) f.runtime.supabase.getAccountIgnoringCapability = async () => {
+        if (scenario === 'replaced-during-read') f.manager.runtimes.set(811, { ...f.runtime, startedAt: 'new-runtime' })
+        else Object.assign(f.runtime, { state: 'stopping', gracefulCapabilityLoss: false, acceptsCleanupCommands: false })
+        return f.account
+      }
+      await assert.rejects(f.manager.executeCommand(scenario === 'staff' ? 812 : 811, 'contacts.cancel', [3883, guard]))
+      assert.equal(cancelled, 0, scenario); assert.equal(f.runtime.activeCommands.size, 0, scenario)
+    }
+  })
+  await test('legacy unguarded cleanup still requires live access; guarded cleanup never grants new-work access', async () => {
+    const f = fixture(); let cancelled = 0
+    f.runtime.contactLoader.cancelLoad = () => { cancelled++ }
+    await f.manager.executeCommand(811, 'contacts.cancel', [3883])
+    assert.equal(cancelled, 1); assert.equal(f.state.capabilityReads, 1)
+    f.state.serverEnabled = false
+    await assert.rejects(f.manager.executeCommand(811, 'contacts.cancel', [3883]), /không còn quyền/)
+    await f.manager.executeCommand(811, 'contacts.cancel', [3883, { expectedRuntimeStartedAt: f.runtime.startedAt }])
+    assert.equal(cancelled, 2)
+    for (const command of ['contacts.loadFriends', 'zalo.loginQr.start', 'zalo.session.check', 'zalo.logout', 'campaign.pause']) {
+      await assert.rejects(f.manager.executeCommand(811, command, [3883, { expectedRuntimeStartedAt: f.runtime.startedAt }]), /không còn quyền/)
+    }
+    assert.equal(f.state.claims, 0)
+    f.state.capabilityError = new Error('Active staff 811 was not found')
+    await assert.rejects(f.manager.executeCommand(811, 'contacts.cancel', [3883]), /Active staff/)
+    assert.equal(cancelled, 2)
+  })
   await test('3883 command retains account through repeated PGRST002; no repeated Zalo action', async () => {
     const f = fixture(); f.state.cleanupFailures = 3
     const job = f.manager.executeCommand(811, 'zalo.session.check', [3883])

@@ -532,44 +532,27 @@ export class ZaloServerRuntimeManager {
 
     const cleanupCommand = command === 'contacts.cancel' || command === 'zalo.loginQr.cancel'
     const cleanupGuard = cleanupCommand ? this.parseCleanupRuntimeGuard(args[1]) : null
-    const liveCapabilities = await loadStaffZaloAccountCapabilitySnapshot(staffId)
-    if (this.isStoppingOrStopped() || this.runtimes.get(staffId) !== runtime) {
-      throw new Error('Runtime Zalo của staff đang dừng')
+    const ownedCleanup = cleanupCommand && this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)
+    if (cleanupGuard && !ownedCleanup) {
+      throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
     }
 
-    let queueGracefulStop = false
-    if (!liveCapabilities.server) {
-      if (!cleanupCommand) throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
-      if (!this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)) {
-        throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
-      }
-      if (runtime.state === 'running') {
-        runtime.state = 'stopping'
-        runtime.gracefulCapabilityLoss = true
-        runtime.acceptsCleanupCommands = true
-        runtime.scheduler?.stopAcceptingNewZaloWork()
-        runtime.realtimeManager?.stop()
-        queueGracefulStop = true
-        this.notifySnapshot()
-      } else if (
-        runtime.state !== 'stopping' ||
-        !runtime.gracefulCapabilityLoss ||
-        !runtime.acceptsCleanupCommands
-      ) {
-        throw new Error('Runtime Zalo của staff đang dừng')
-      }
-    } else if (runtime.state !== 'running') {
-      if (
-        !cleanupCommand ||
-        runtime.state !== 'stopping' ||
-        !runtime.gracefulCapabilityLoss ||
-        !runtime.acceptsCleanupCommands ||
-        !this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)
-      ) {
-        throw new Error('Runtime Zalo của staff đang dừng')
-      }
-    } else if (cleanupGuard && !this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)) {
-      throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
+    // The authenticated connection and exact runtime generation authorize only
+    // cancellation of existing work. Staff expiry makes the capability RPC
+    // throw, so it must not gate this cleanup path. Discovery and fresh claims
+    // still enforce live access; legacy clients without a generation keep the
+    // existing capability check before they may cancel.
+    if (!ownedCleanup) {
+      const liveCapabilities = await loadStaffZaloAccountCapabilitySnapshot(staffId)
+      if (!liveCapabilities.server) throw new Error(ZALO_SERVER_MODE_DISABLED_MESSAGE)
+    }
+    if (this.isStoppingOrStopped() || this.runtimes.get(staffId) !== runtime || (
+      runtime.state !== 'running' && !(
+        ownedCleanup && runtime.state === 'stopping' &&
+        runtime.gracefulCapabilityLoss && runtime.acceptsCleanupCommands
+      )
+    )) {
+      throw new Error('Runtime Zalo của staff đang dừng')
     }
 
     let releaseCleanupLease = (): void => {}
@@ -578,15 +561,6 @@ export class ZaloServerRuntimeManager {
       cleanupLease = new Promise<void>(resolve => { releaseCleanupLease = resolve })
       runtime.activeCommands.add(cleanupLease)
     }
-    if (queueGracefulStop) {
-      void this.runStaffLifecycle(staffId, async () => {
-        if (this.runtimes.get(staffId) !== runtime) return
-        await this.stopRuntime(staffId, true)
-      }).catch(error => {
-        console.error(`[ZaloServerRuntimeManager] Failed to drain staff ${staffId} after capability loss:`, error)
-      })
-    }
-
     try {
       if (command === 'campaign.pause') {
         const campaignId = this.normalizePositiveId(args[0], 'Campaign ID')

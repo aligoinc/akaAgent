@@ -17,6 +17,7 @@ function loadSource(relativePath) {
   const localRequire = id => {
     if (id === 'electron') return {}
     if (id.endsWith('/supabaseClient')) return { getSupabaseClient: () => db }
+    if (id.endsWith('/accountLogService')) return { recordAccountLog() {} }
     if (id.endsWith('/backgroundPageManager')) return { BackgroundPageManager: class {} }
     if (id.endsWith('/workflowEngine')) return { WorkflowEngineV2: class {} }
     if (!id.startsWith('.')) return require(id)
