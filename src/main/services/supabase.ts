@@ -186,7 +186,7 @@ export class SupabaseService {
   updateClaimedZaloServerCampaign(id: number, updates: CampaignUpdate) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
   }
-  updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note'>, expectedRuntimeClaimToken?: string) {
+  updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note' | 'schedule'>, expectedRuntimeClaimToken?: string) {
     return campaignRepo.updateRunningDesktopCampaign(id, updates, expectedRuntimeClaimToken)
   }
   reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {

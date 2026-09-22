@@ -43,6 +43,7 @@ import {
   ContentTemplateGroup,
   CreateContentTemplateInput,
   actionSupportsDataGroup,
+  getCampaignInputDataRequirement,
   isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
@@ -6007,10 +6008,16 @@ export default function CampaignFormModal({
     }
   }
 
-  const normalizeCampaignInputDataForSave = (rows: Partial<CampaignInputData>[]): Partial<CampaignInputData>[] => {
+  const normalizeCampaignInputDataForSave = (
+    rows: Partial<CampaignInputData>[],
+    actionId = formData.actionId
+  ): Partial<CampaignInputData>[] => {
+    const requiresPhone = [ZALO_MESSAGE_PHONE_ACTION_ID, SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID].includes(actionId)
+    const requiresPhoneOrUid = actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID
+    const requiresEmail = actionId === EMAIL_SEND_ACTION_ID
     return rows
       .map(row => {
-        const phone = isPhoneInputCampaign || isPhoneOrUidInputCampaign
+        const phone = requiresPhone || requiresPhoneOrUid
           ? (normalizeVietnamMobilePhone(row.phone) || '')
           : String(row.phone || '').trim()
         return {
@@ -6028,13 +6035,47 @@ export default function CampaignFormModal({
           note: String(row.note || '').trim()
         }
       })
-      .filter(row => isPhoneInputCampaign
+      .filter(row => requiresPhone
         ? row.phone.length > 0
-        : isPhoneOrUidInputCampaign
+        : requiresPhoneOrUid
           ? row.phone.length > 0 || row.uid.length > 0
-          : isEmailCampaign
+          : requiresEmail
             ? isValidEmailAddress(row.email)
             : row.uid.length > 0)
+  }
+
+  const prepareCampaignSaveItemInputs = (
+    item: CampaignSaveBundleItem,
+    waitsForFindData = false
+  ): CampaignSaveBundleItem => {
+    const { campaignPayload } = item
+    const actionId = campaignPayload.actionId || ''
+    const settings = campaignPayload.extraSettings || {}
+    const hasLiveGroupSource = actionSupportsDataGroup(actionId) &&
+      campaignPayload.dataTargetSourceMode === 'data_group' &&
+      Number.isSafeInteger(campaignPayload.dataGroupId) && Number(campaignPayload.dataGroupId) > 0
+    const generatesDataAtRuntime = SIMPLE_CAMPAIGN_ACTIONS.has(actionId) ||
+      [ZALO_MESSAGE_BIRTHDAY_ACTION_ID, ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID,
+        ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID, ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID].includes(actionId) ||
+      (actionId === MESSAGE_UID_ACTION_ID && settings.useSuggestedFriends === true) ||
+      (actionId === ZALO_MESSAGE_FRIEND_ACTION_ID &&
+        ['all_friends', 'tagged_friends'].includes(settings.zaloFriendTargetMode || 'selected'))
+    const dataGroupSnapshots = item.dataGroupSnapshots || []
+    const hasSnapshots = actionSupportsDataGroup(actionId) &&
+      campaignPayload.dataTargetSourceMode === 'direct' && dataGroupSnapshots.length > 0
+    const details = hasLiveGroupSource || generatesDataAtRuntime
+      ? []
+      : normalizeCampaignInputDataForSave(item.details, actionId)
+    const requirement = getCampaignInputDataRequirement(actionId)
+    if (requirement && details.length === 0 && !hasLiveGroupSource && !generatesDataAtRuntime && !hasSnapshots && !waitsForFindData) {
+      const accountName = accounts.find(account => account.id === campaignPayload.accountId)?.name
+      throw new Error(
+        `Chiến dịch "${campaignPayload.name || actionId}"${accountName ? ` (${accountName})` : ''} chưa có ${requirement.label} hợp lệ. ` +
+        'Vui lòng bổ sung data hoặc bỏ chiến dịch này trước khi tạo.'
+      )
+    }
+    // Use this exact normalized copy for both preflight and persistence; keep the editable draft intact.
+    return { ...item, details, dataGroupSnapshots }
   }
 
   const buildCampaignSaveBundleItems = (
@@ -7214,6 +7255,16 @@ export default function CampaignFormModal({
       }
     }
 
+    if (!isDataGroupSource && !isEditingSavedCampaign && !isSimpleCampaign && !hideDetailsSection &&
+      !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData &&
+      formData.splitDataAcrossAccounts && validDetails.length > 0 && validDetails.length < formData.accountIds.length) {
+      showAlert(
+        `Có ${validDetails.length} data hợp lệ nhưng đang chia cho ${formData.accountIds.length} tài khoản. Vui lòng thêm data, giảm số tài khoản hoặc tắt chia data để mỗi chiến dịch có ít nhất 1 data.`,
+        'error'
+      )
+      return
+    }
+
     if (!isDataGroupSource && !isEditingSavedCampaign && !hideDetailsSection) {
       setDetails(validDetails)
     }
@@ -7231,7 +7282,7 @@ export default function CampaignFormModal({
       return
     }
 
-    const saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
+    let saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
     for (const { campaignPayload } of saveBundleItems) {
       const extra = campaignPayload.extraSettings || {}
       const error = validateStopMessagesSettings(campaignPayload.content, extra, campaignPayload.actionId || formData.actionId, formattedContentToPlainText)
@@ -7284,10 +7335,19 @@ export default function CampaignFormModal({
       } = useCampaignStore.getState()
       const linkedDraftTempIds: number[] = []
       const linkedDraftTempIdSet = new Set<number>()
-      const collectLinkedDraftTempIds = (ids: number[], enabled: boolean): void => {
+      const linkedDraftTargetFields = new Map<number, Set<FindDataTargetCampaignField>>()
+      const collectLinkedDraftTempIds = (
+        ids: number[], enabled: boolean, targetField?: FindDataTargetCampaignField
+      ): void => {
         if (!enabled) return
         for (const id of ids) {
-          if (id >= 0 || linkedDraftTempIdSet.has(id)) continue
+          if (id >= 0) continue
+          if (targetField) {
+            const fields = linkedDraftTargetFields.get(id) || new Set<FindDataTargetCampaignField>()
+            fields.add(targetField)
+            linkedDraftTargetFields.set(id, fields)
+          }
+          if (linkedDraftTempIdSet.has(id)) continue
           linkedDraftTempIdSet.add(id)
           linkedDraftTempIds.push(id)
         }
@@ -7295,31 +7355,38 @@ export default function CampaignFormModal({
       if (isFindDataCampaign) {
         collectLinkedDraftTempIds(
           formData.findUidTargetCampaignIds,
-          formData.isFindUid && handleFoundUidData
+          formData.isFindUid && handleFoundUidData,
+          'findUidTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findPostLinkTargetCampaignIds,
-          formData.isFindPostLink && handleFoundPostLinkData
+          formData.isFindPostLink && handleFoundPostLinkData,
+          'findPostLinkTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findPhoneZaloMessagePhoneTargetCampaignIds,
-          formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData
+          formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData,
+          'findPhoneZaloMessagePhoneTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findZaloGroupLinkJoinTargetCampaignIds,
-          formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData
+          formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData,
+          'findZaloGroupLinkJoinTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findFacebookGroupPostTargetCampaignIds,
-          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData,
+          'findFacebookGroupPostTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findFacebookGroupCommentTargetCampaignIds,
-          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData,
+          'findFacebookGroupCommentTargetCampaignIds'
         )
         collectLinkedDraftTempIds(
           formData.findFacebookGroupJoinTargetCampaignIds,
-          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData
+          isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData,
+          'findFacebookGroupJoinTargetCampaignIds'
         )
       }
       collectLinkedDraftTempIds(
@@ -7328,16 +7395,32 @@ export default function CampaignFormModal({
       )
 
       const linkedDraftProgressStartIndexByTempId = new Map<number, number>()
+      const preparedLinkedDrafts = new Map<number, InternalCampaignDraft>()
+      if (!isEditingSavedCampaign) {
+        saveBundleItems = saveBundleItems.map(item => prepareCampaignSaveItemInputs(item))
+      }
       let campaignWorkItemCount = saveBundleItems.length
-      const newCampaignItemsToValidate = campaign?.id
+      const newCampaignItemsToValidate = isEditingSavedCampaign
         ? []
         : [...saveBundleItems]
       for (const tempId of linkedDraftTempIds) {
         const draft = internalCampaignDrafts.find(item => item.tempId === tempId)
         if (!draft || draft.items.length === 0) continue
+        const preparedDraft = {
+          ...draft,
+          items: draft.items.map(item => {
+            const actionId = item.campaignPayload.actionId || ''
+            const targetField = actionId === ZALO_MESSAGE_PHONE_ACTION_ID ? 'findPhoneZaloMessagePhoneTargetCampaignIds'
+              : actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID ? 'findZaloGroupLinkJoinTargetCampaignIds'
+              : getFindDataTargetCampaignField(actionId)
+            const waitsForFindData = !!targetField && linkedDraftTargetFields.get(tempId)?.has(targetField) === true
+            return prepareCampaignSaveItemInputs(item, waitsForFindData)
+          })
+        }
+        preparedLinkedDrafts.set(tempId, preparedDraft)
         linkedDraftProgressStartIndexByTempId.set(tempId, campaignWorkItemCount)
-        campaignWorkItemCount += draft.items.length
-        newCampaignItemsToValidate.push(...draft.items)
+        campaignWorkItemCount += preparedDraft.items.length
+        newCampaignItemsToValidate.push(...preparedDraft.items)
       }
       await assertCampaignSaveItemsWithinInputLimit(newCampaignItemsToValidate)
       updateSaveProgress(5, 'Đã kiểm tra giới hạn data.')
@@ -7565,7 +7648,7 @@ export default function CampaignFormModal({
               id: undefined,
               campaignId: savedCampaign.id
             }))
-            await runCampaignInputDataWriteWithProgress(
+            const insertedCount = await runCampaignInputDataWriteWithProgress(
               progressRequestId => createCampaignInputDataBatch(rowsToCreate, progressRequestId),
               progress => {
                 const ratio = progress.totalCount > 0
@@ -7579,6 +7662,9 @@ export default function CampaignFormModal({
                 )
               }
             )
+            if (insertedCount !== rowsToCreate.length) {
+              throw new Error(`Không lưu đủ data chiến dịch (${insertedCount}/${rowsToCreate.length} dòng). Chiến dịch được giữ tạm dừng. Vui lòng kiểm tra data và thử lại.`)
+            }
             setItemProgress(
               0.86,
               'Đã lưu xong data chiến dịch.',
@@ -7684,7 +7770,7 @@ export default function CampaignFormModal({
         const existingIds = createdDraftIdsByTempId.get(tempId)
         if (existingIds) return existingIds
 
-        const draft = internalCampaignDrafts.find(item => item.tempId === tempId)
+        const draft = preparedLinkedDrafts.get(tempId)
         if (!draft) return []
 
         const createdIds = await persistDraftCampaign(draft, linkTargetIds, linkTargetField)
