@@ -1,4 +1,4 @@
-# Audit migration Quản lý nhân viên v305–v306
+# Audit migration Quản lý nhân viên v305–v308
 
 Applied to **akachat / `cgjbsmqtfhqvttudyjzq`** on 22/09/2026. History: `20260922095837 / migration_v305_staff_management`.
 
@@ -115,3 +115,29 @@ Validation:
 - Electron smoke passed with the real UI/preload/IPC/repository and mock DB: root badge/count/read-only behavior, unique root parent choice, preselected root on add staff, existing department retained on edit, and existing secret/retry/bulk/permission flows. Visual inspection passed for both themes, wide/narrow and the department/staff dialogs. Both TypeScript projects and the final Desktop production build passed.
 
 Apply used linked Management HTTP and an INSERT into the existing migration history table in the same transaction. No history-table DDL or explicit PostgREST reload was added; global DDL watchers remain enabled. No Chat repository code, Server binary or installer deployment is required for this department change. Updated default selection/count/badge behavior is in the new Desktop renderer.
+
+## V308: department managers, matching Chat's current rule
+
+Applied to the verified linked project `cgjbsmqtfhqvttudyjzq` on 22/09/2026, history `20260922122633 / migration_v308_staff_department_managers`.
+
+| Exact signature | Captured source MD5 | Applied target MD5 |
+|---|---|---|
+| `public.aka_agent_staff_management(bigint,text,text,text,jsonb)` | `182c5e461d34e1028e5c6e19e32abe00` | `fe73d8c5812d395aa2d3a1d448418ef0` |
+| `public.aka_agent_staff_management_row(bigint)` | `9e5db7f61b5768852c8dece5f6e6aebe` | `e4d06c369e7c05e29c69ce089e549da6` |
+
+Captured exact live definitions, owner, result type, security, volatility, config and ACL before editing. The management body matched v307; the row helper matched v305 apart from `pg_get_functiondef` header formatting. Dependency/source inspection found only the management entry point calling the row helper; no additional stored caller of the entry point. No newer live patch was replaced. Both functions keep their original `postgres` owner, `jsonb` return, DEFINER mode, volatility, search path and ACL; management also keeps its lock/statement timeouts. Preflight and postflight validate both definition checksum and attributes.
+
+The existing relationship `org_group_staff.is_admin` stores department-manager status. `saveStaff` accepts optional `isDepartmentManager`: explicit true clears other managers in the selected department and grants this staff; false removes the role without removing the selected department. Old payloads omitting the key preserve the old same-relationship/new-relationship behavior. New output is additive JSON: each staff includes `managerGroupIds`, each department includes manager IDs/names independently of the current staff page/filter. No password or additional credential is returned. `org_staff.is_admin` is never changed by this option.
+
+`saveStaff` now takes Chat's existing organization advisory lock, after the Desktop organization lock and before actor/staff rows, just as v307 already did for `saveGroup`. This coordinates manager replacement and the staff-create count/check/write with Chat. Existing tenant/credential/admin/expiry checks, root/phone/quota guards, staff revision, request replay, immutable username/expiry and device handling stay intact. Only function bodies and migration history changed; no new table, column, constraint, trigger, connection or pool was added, and no business rows were backfilled.
+
+Validation completed:
+
+- V308 manager smoke, v307 root smoke and full v305 business/runtime/legacy-contract smoke passed together inside rollback before apply and again after apply. Covers manager create/replace/transfer/demotion, root assignment, no organization-admin escalation, tenant separation, malformed flag rejection, metadata outside the filtered staff page, membership preservation, stale revision rejection, retry preserving a newer manager and omitted-key legacy behavior.
+- Post-apply exact checksums, owner, result, security, volatility, config and ACL match the table above and captured source attributes. Apply used existing linked Management HTTP plus a history INSERT in the same transaction; no history-table preparation DDL or explicit schema reload. Global DDL watchers remain enabled.
+- Concurrent HTTP harness passed two Desktop nominations and simultaneous Desktop/Chat-contract nominations: one manager remained. The Chat side reproduces the current repository's lock and membership write sequence; this is a database-contract test, not a deployed Chat HTTP test. Existing root creation, quota, normalized phone, CAS, device replay and queued admin-revocation checks also passed; the isolated fixture was removed by guarded cleanup.
+- PostgREST: legacy staff columns and staff-expiry column probes HTTP 200; management rejected invalid credentials with expected `staff_access_denied`/HTTP 400; legacy device preparation returned `not_found`/HTTP 200. No signature, ACL or schema-cache errors.
+- Both typechecks, Desktop/Server production builds and Staff Electron smoke passed. Actual UI/preload/IPC/repository with mock DB covered checked state on edit, transfer preserving the checkbox, replacement explanation, demotion, new manager creation, immutable retry payload, disabled checkbox while retrying, list display and existing permission/secret/bulk flows. Visual inspection completed for replacement, dark mode and narrow dialogs, using the coded Chat manager form with the existing akaAgent design styles.
+- Security advisor notices for anon/authenticated access to the existing credential-checked management DEFINER RPC remain intentional; ACL is unchanged. Other pre-existing project findings were outside this patch.
+
+The Desktop UI needs an updated build. Chat uses the shared membership data through its existing permission checks; no Chat code or deployment is part of this change. Department-manager status does not grant access to other staff's akaAgent accounts/campaigns or to the organization-admin menu.

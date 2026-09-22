@@ -90,6 +90,8 @@ Doc API chỉ cấp `clipboard-sanitized-write` cho guest/popup đang được s
 
 Menu dưới **Cài đặt** dành cho `org_staff.is_admin IS TRUE` ở mọi tổ chức; module [staffManagement](src/shared/staffManagement.ts) đi qua main-frame IPC và RPC kiểm tra credential/admin/tenant live, dùng Supabase HTTP hiện có. Quota lấy `org_organization.max_staff`; mật khẩu tải riêng, không log/storage; mutation giữ revision và request ID khi retry. Hướng dẫn, hạn nhân viên và audit v305–307: [STAFF_MANAGEMENT.md](docs/STAFF_MANAGEMENT.md), [STAFF_MANAGEMENT_MIGRATION_AUDIT.md](docs/STAFF_MANAGEMENT_MIGRATION_AUDIT.md).
 
+V308 thêm trưởng phòng qua `org_group_staff.is_admin`, cùng quy tắc Chat: một phòng trong form, cấp người mới thay người cũ; chuyển phòng giữ lựa chọn vai trò. `saveStaff` cùng lock tổ chức Chat, không đổi admin tổ chức; payload cũ thiếu `isDepartmentManager` giữ hành vi cũ. Smoke SQL v308 và Electron kiểm tra vai trò, CAS/replay, phân quyền và hiển thị.
+
 ### Auto-update
 
 Renderer kiểm tra phiên bản khi mở app và mỗi 60 phút. Với phiên bản local `>= 6.0.0`, auto-check chỉ đổi button thành `Có phiên bản mới X.Y.Z` (kèm trạng thái nổi bật), tuyệt đối không tự mở modal; modal chỉ mở khi user bấm button. Riêng client legacy `< 6.0.0` vẫn tự mở modal ở lần startup khi có bản mới và chỉ tiếp tục auth bootstrap sau khi user đóng modal. Auto-check định kỳ không tự mở modal ở bất kỳ phiên bản nào.

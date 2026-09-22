@@ -87,6 +87,33 @@ DO $worker$ DECLARE r jsonb; BEGIN BEGIN
   assert operation('resetDevices',dict(old,requestId=str(uuid.uuid4()))).get('error')=='staff_conflict'
   assert query("SELECT aka_agent_device_fingerprint_hash=repeat('b',64) preserved FROM org_staff WHERE id=%d"%row['id'])[0]['preserved']
   print('PASS cross-transaction device revision and idempotent replay preserve newer binding')
+  # Two different staff may be nominated at once; only one remains manager.
+  candidates=query('SELECT public.aka_agent_staff_management_row(id) r FROM org_staff WHERE organization_id=%d AND is_admin IS NOT TRUE ORDER BY id LIMIT 2'%fixture['org'])
+  assert len(candidates)==2
+  candidate_rows=[item['r'] for item in candidates]
+  manager_requests=[request(id=c['id'],name=c['name'],phone=c['phone'],groupId=fixture['group'],isDepartmentManager=True,expectedVersion=c['version']) for c in candidate_rows]
+  results=race('saveStaff',manager_requests)
+  assert all('id' in r for r in results),results
+  managers=query('SELECT staff_id FROM org_group_staff WHERE organization_id=%d AND group_id=%d AND is_admin IS TRUE'%(fixture['org'],fixture['group']))
+  assert len(managers)==1 and managers[0]['staff_id'] in [c['id'] for c in candidate_rows],managers
+  print('PASS concurrent Desktop nominations retain exactly one department manager')
+  # Exercise Chat's transaction lock + delete/replace/insert membership contract.
+  # Reset only this synthetic group's flags so each candidate starts ordinary.
+  query('UPDATE org_group_staff SET is_admin=false WHERE organization_id=%d'%fixture['org'])
+  desktop_candidate=query('SELECT public.aka_agent_staff_management_row(%d) r'%candidate_rows[0]['id'])[0]['r']
+  chat_candidate=candidate_rows[1]
+  chat_manager="""BEGIN; SET LOCAL lock_timeout='3s'; SET LOCAL statement_timeout='12s';
+ SELECT pg_advisory_xact_lock(hashtextextended('aka-agent-chat:workspace-staff:%d',0));
+ DELETE FROM org_group_staff WHERE organization_id=%d AND staff_id=%d;
+ UPDATE org_group_staff SET is_admin=false WHERE organization_id=%d AND group_id=%d AND is_admin IS TRUE;
+ INSERT INTO org_group_staff(organization_id,staff_id,group_id,is_admin) VALUES(%d,%d,%d,true);
+ SELECT pg_sleep(0.8); COMMIT;"""%(fixture['org'],fixture['org'],chat_candidate['id'],fixture['org'],fixture['group'],fixture['org'],chat_candidate['id'],fixture['group'])
+  with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+   chat_job=pool.submit(query,chat_manager)
+   desktop_job=pool.submit(operation,'saveStaff',request(id=desktop_candidate['id'],name=desktop_candidate['name'],phone=desktop_candidate['phone'],groupId=fixture['group'],isDepartmentManager=True,expectedVersion=desktop_candidate['version']),0.8)
+   chat_job.result();assert 'id' in desktop_job.result()
+  assert query('SELECT count(*) n FROM org_group_staff WHERE organization_id=%d AND group_id=%d AND is_admin IS TRUE'%(fixture['org'],fixture['group']))[0]['n']==1
+  print('PASS concurrent Chat/Desktop nominations share the lock and retain one manager')
   # The blocking transaction revokes the actor while another mutation waits.
   blocker="BEGIN; SET LOCAL application_name='%s_revoke'; SELECT pg_advisory_xact_lock(hashtextextended('aka-agent-staff-management:%d',0)); UPDATE org_staff SET is_admin=false WHERE id=%d; SELECT pg_sleep(3); COMMIT;"%(marker,fixture['org'],fixture['staff'])
   with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:

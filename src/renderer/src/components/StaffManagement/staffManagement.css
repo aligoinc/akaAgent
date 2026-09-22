@@ -151,6 +151,10 @@ body.theme-light .staff-management {
 .sm-staff-table .sm-check-cell { width: 42px; padding-left: 16px; padding-right: 0; }
 .sm-staff-table .sm-name { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
 .sm-name > svg { color: var(--sm-faint); }
+.sm-department-manager { display: flex; align-items: center; gap: 4px; margin-top: 4px; color: var(--sm-green); font-size: 11px; }
+.sm-staff-departments { display: flex; flex-direction: column; gap: 3px; }
+.sm-staff-departments > span { display: inline-flex; align-items: center; gap: 4px; }
+.sm-manager-role { color: var(--sm-green); font-weight: 600; }
 .sm-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
 .sm-status-active { --sm-status-color: var(--sm-green); color: var(--sm-green); }
 .sm-status-locked { --sm-status-color: var(--sm-yellow); color: var(--sm-yellow); }
@@ -195,6 +199,13 @@ body.theme-light .staff-management {
 .sm-field-label { margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: var(--sm-muted); }
 .sm-required { color: var(--sm-red); display: contents; }
 .sm-dialog .sm-field-help { font-size: 11px; color: var(--sm-faint); font-weight: 400; line-height: 1.5; }
+.sm-dialog .sm-manager-option { display: flex; flex-direction: row; align-items: flex-start; gap: 10px; padding: 12px 13px; border: 1px solid var(--sm-border); border-radius: 11px; background: var(--sm-table-head); cursor: pointer; }
+.sm-manager-option > input { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--sm-green); }
+.sm-manager-option strong { color: var(--sm-heading); font-size: 12.5px; }
+.sm-manager-option small { display: block; margin-top: 4px; color: var(--sm-muted); font-size: 11.5px; line-height: 1.5; font-weight: 400; }
+.sm-dialog .sm-manager-selected { border-color: var(--sm-green); background: var(--sm-green-bg); }
+.sm-manager-option:focus-within { outline: 2px solid var(--sm-accent); outline-offset: 2px; }
+.sm-manager-option:has(input:disabled) { opacity: .5; cursor: not-allowed; }
 .sm-department-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .sm-radio-chip, .sm-status-option { position: relative; }
 .sm-radio-chip input, .sm-status-option input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }

@@ -14,14 +14,14 @@ let groups: StaffGroup[] = [
   { id: 4, name: 'Kinh doanh 2 — Thứ cấp', parentId: 2, staffCount: 1, version: 'g4' },
   { id: 5, name: 'Phòng Marketing', parentId: 1, staffCount: 1, version: 'g5' },
   { id: 6, name: 'Phòng CSKH', parentId: 1, staffCount: 1, version: 'g6' }
-]
+].map(row => ({ ...row, managers: [] }))
 let rows: ManagedStaff[] = ['Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàng Nam', 'Phạm Minh Tuấn', 'Đỗ Hoàng Nam', 'Vũ Thùy Dung'].map((name, i) => ({
   id: 101 + i, name, phone: `090123456${i}`, username: `9.090123456${i}`,
   isAdmin: !i, isActive: i !== 2, status: i === 2 ? 'locked' : i === 4 ? 'expired' : 'active',
   createdAt: '2026-09-22T01:00:00Z', expirationDate: i === 4 ? '2026-09-21T00:00:00+07:00' : '2027-09-23T00:00:00+07:00',
   effectiveExpirationDate: i === 4 ? '2026-09-21T00:00:00+07:00' : i === 3 ? '2026-09-26T00:00:00+07:00' : '2027-09-23T00:00:00+07:00',
   expirySource: 'staff', daysRemaining: i === 4 ? 0 : i === 3 ? 4 : 366,
-  groupIds: [i + 1], groupNames: [groups[i].name], version: `s${i}`
+  groupIds: [i + 1], groupNames: [groups[i].name], managerGroupIds: i === 1 || i === 2 ? [i + 1] : [], version: `s${i}`
 }))
 let delay = false, fail = '', failAfterCommit = false, rev = 0
 const calls: { action: string; input: any }[] = []
@@ -37,13 +37,16 @@ Object.assign(globalThis, { staffSmokeClient: { rpc(_name: string, args: any) { 
   if (a === 'list') {
     let items = rows.filter(row => (!p.search || `${row.name} ${row.phone} ${row.username}`.toLowerCase().includes(p.search.toLowerCase())) && (!p.status || p.status==='all' || row.status===p.status) && (!p.groupId || row.groupIds.includes(p.groupId)))
     const total = items.length; items = items.slice((p.page||0)*100, ((p.page||0)+1)*100)
-    data = { items, groups, total, page: p.page||0, organization: { id: 9, name: 'Công ty TNHH akaBiz', staffCount: rows.length, maxStaff: 25, staffDurationDays: 365, useOrganizationExpiration: false, today: '2026-09-22', expirationDate: '2028-09-22T00:00:00+07:00' } }
+    const listedGroups = groups.map(group => ({ ...group, managers: rows.filter(row => row.managerGroupIds.includes(group.id)).map(row => ({ id: row.id, name: row.name })) }))
+    data = { items, groups: listedGroups, total, page: p.page||0, organization: { id: 9, name: 'Công ty TNHH akaBiz', staffCount: rows.length, maxStaff: 25, staffDurationDays: 365, useOrganizationExpiration: false, today: '2026-09-22', expirationDate: '2028-09-22T00:00:00+07:00' } }
   }
   if (a === 'revealPassword') data = { password: 'staff-fixture-secret' }
-  if (a === 'saveGroup') { const row = { id: p.id || groups.length+1, name: p.name, parentId: p.parentId ?? 1, staffCount: 0, version: `g${++rev}` }; groups = [...groups.filter(g => g.id!==row.id), row]; data = { id: row.id } }
+  if (a === 'saveGroup') { const row = { id: p.id || groups.length+1, name: p.name, parentId: p.parentId ?? 1, staffCount: 0, version: `g${++rev}`, managers: [] }; groups = [...groups.filter(g => g.id!==row.id), row]; data = { id: row.id } }
   if (a === 'saveStaff') {
     const prior = rows.find(row => row.id===p.id)
-    const row = { ...(prior || rows[1]), id: p.id || 200+ ++rev, name: p.name, phone: p.phone, username: prior?.username || `9.${p.phone}`, groupIds: [p.groupId], groupNames: [groups.find(g => g.id===p.groupId)!.name], version: `s${++rev}` }
+    const manager = p.isDepartmentManager ?? !!prior?.managerGroupIds.includes(p.groupId)
+    const row = { ...(prior || rows[1]), id: p.id || 200+ ++rev, name: p.name, phone: p.phone, username: prior?.username || `9.${p.phone}`, groupIds: [p.groupId], groupNames: [groups.find(g => g.id===p.groupId)!.name], managerGroupIds: manager ? [p.groupId] : [], version: `s${++rev}` }
+    if (manager) rows = rows.map(other => other.id === row.id || !other.managerGroupIds.includes(p.groupId) ? other : { ...other, managerGroupIds: other.managerGroupIds.filter(id => id !== p.groupId), version: `s${++rev}` })
     rows = [...rows.filter(r => r.id!==row.id), row]; data=row
   }
   if (a === 'setStatus') { rows = rows.map(row => p.targets.some((t: any) => t.id===row.id) ? { ...row, isActive: p.isActive, status: p.isActive?'active':'locked', version:`s${++rev}` } : row); data = { count:p.targets.length } }

@@ -11,9 +11,11 @@ Giao diện React dựng từ `Quản lý nhân viên.dc.html` trong bộ thiế
 - Click hoặc Enter/Space trên dòng để chọn; thanh công cụ thao tác trên dòng đó. Đánh dấu checkbox để đổi máy/trạng thái nhiều người; **Sửa** chỉ bật khi có đúng một người.
 - Mặc định xem toàn tổ chức. Chọn phòng ban lọc cả phòng ban con. Tìm theo tên, SĐT, username; lọc hoạt động/tạm khóa/hết hạn; mỗi trang 100 người.
 - Mỗi tổ chức có một dòng gốc `org_group.parent_id=NULL`, hiển thị tên tổ chức và không sửa ở màn hình này. Các phòng ban nằm dưới gốc hoặc một phòng ban cùng tổ chức; không chọn chính nó/hậu duệ. Số phòng ban không tính dòng tổ chức, cùng quy tắc Chat Web. V307 tự tạo gốc khi thêm phòng ban đầu tiên và chuyển `parentId=NULL` của caller Desktop cũ thành ID gốc; dùng chung advisory lock với luồng tạo phòng ban Chat để tránh tạo hai gốc đồng thời. Dữ liệu có nhiều gốc bị từ chối khi lưu phòng ban, không tự đoán gốc hay sửa hàng loạt tổ chức khác.
-- Mỗi form nhân viên chọn một phòng ban, có thể chọn ngay dòng tổ chức. Form thêm chọn sẵn dòng đầu cây (gốc tổ chức), form sửa giữ phòng ban đang có; nếu nhân viên chưa được phân công thì chọn dòng đầu. DB vẫn dùng `org_group_staff`; giữ `is_admin` của quan hệ không đổi, quan hệ mới luôn `false`.
+- Mỗi form nhân viên chọn một phòng ban, có thể chọn ngay dòng tổ chức. Form thêm chọn sẵn dòng đầu cây (gốc tổ chức), form sửa giữ phòng ban đang có; nếu nhân viên chưa được phân công thì chọn dòng đầu. DB vẫn dùng `org_group_staff`.
+- Từ v308, form có **Là trưởng phòng**, mặc định tắt khi tạo và đọc đúng quyền khi sửa. Mỗi phòng tối đa một trưởng phòng; bật cho người mới sẽ bỏ quyền của trưởng phòng hiện tại, tên người bị thay được hiển thị trước khi lưu. Đổi phòng giữ lựa chọn trưởng phòng như Chat; bỏ chọn chỉ gỡ quyền, vẫn giữ phòng. Bảng phòng ban hiện tên trưởng phòng, bảng nhân viên đánh dấu vai trò ở cột phòng ban. Quyền dùng trong Chat và không cấp `org_staff.is_admin` hay quyền xem tài khoản/chiến dịch người khác trong akaAgent.
+- RPC dùng chung lock tổ chức với Chat khi lưu nhân viên và phòng ban. Caller cũ thiếu `isDepartmentManager` giữ nguyên cách cũ: quan hệ không đổi giữ quyền, quan hệ mới không tự cấp trưởng phòng. DB vẫn hỗ trợ nhiều quan hệ nhưng form chỉ lưu một phòng; không hỗ trợ kiêm nhiệm qua màn hình này.
 - Tạo nhân viên: chuẩn hóa SĐT, username `organization_id.SĐT`, mật khẩu `123456`, hoạt động, không có quyền admin. Quota `org_organization.max_staff` tính mọi nhân viên chưa xóa, kể cả admin, khóa, hết hạn. Khóa transaction theo tổ chức ngăn hai yêu cầu cùng lấy suất cuối hoặc tạo trùng SĐT.
-- Sửa nhân viên chỉ đổi tên, SĐT và phòng ban. Username, mật khẩu, hạn được giữ nguyên. Vì username không đổi, một SĐT từng dùng để tạo username có thể chưa dùng lại được cho tài khoản mới; lỗi unique được hiển thị rõ.
+- Sửa nhân viên đổi tên, SĐT, phòng ban và vai trò trưởng phòng. Username, mật khẩu, hạn được giữ nguyên. Vì username không đổi, một SĐT từng dùng để tạo username có thể chưa dùng lại được cho tài khoản mới; lỗi unique được hiển thị rõ.
 - Đổi trạng thái một hoặc nhiều nhân viên; không tự khóa hoặc khóa admin hoạt động cuối cùng. Hết hạn tự tính. Màn hình không xóa, gia hạn, sửa hạn hoặc cấp admin.
 - Mật khẩu chỉ tải riêng khi bấm **Hiện**; API danh sách không trả mật khẩu. Xóa giá trị trong bộ nhớ renderer khi ẩn, đổi bộ lọc/trang, rời màn hình hoặc mất quyền. Phản hồi đến muộn không hiện lại giá trị đã ẩn. Không log/persist mật khẩu được tải.
 - Đổi máy gỡ `aka_agent_device_fingerprint_hash` của akaAgent v2. Không sửa fingerprint legacy, không trừ `device_changes_remaining`, không kết thúc phiên/presence đang mở. Chuẩn bị lấy revision rồi CAS khi xác nhận; UUID và ledger bảo đảm retry không gỡ liên kết mới.
@@ -78,6 +80,7 @@ node scripts/run-device-change-smoke-test.cjs
 node scripts/run-admin-smoke-test.cjs
 supabase db query --linked --file migrations/tests/migration_v305_staff_management_smoke.sql
 supabase db query --linked --file migrations/tests/migration_v307_staff_department_root_smoke.sql
+supabase db query --linked --file migrations/tests/migration_v308_staff_department_managers_smoke.sql
 supabase db query --linked --file migrations/tests/migration_v281_account_menu_device_change_unlimited_smoke.sql
 ```
 

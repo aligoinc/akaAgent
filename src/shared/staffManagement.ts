@@ -7,12 +7,13 @@ export function canManageStaff(user: Pick<AuthUser, 'isAdmin'> | null | undefine
 export type StaffStatus = 'active' | 'locked' | 'expired'
 export interface StaffGroup {
   id: number; name: string; parentId: number | null; staffCount: number; version: string
+  managers: { id: number; name: string }[]
 }
 export interface ManagedStaff {
   id: number; name: string; phone: string; username: string; isAdmin: boolean; isActive: boolean
   createdAt: string; expirationDate: string | null; effectiveExpirationDate: string | null
   expirySource: 'staff' | 'organization'; status: StaffStatus; daysRemaining: number | null
-  groupIds: number[]; groupNames: string[]; version: string
+  groupIds: number[]; groupNames: string[]; managerGroupIds: number[]; version: string
 }
 export interface StaffOrganization {
   id: number; name: string; maxStaff: number; staffCount: number; staffDurationDays: number
@@ -23,6 +24,7 @@ export interface StaffPage { items: ManagedStaff[]; groups: StaffGroup[]; organi
 export interface StaffVersion { id: number; expectedVersion: string }
 export interface StaffSave {
   id?: number; name: string; phone: string; groupId: number; expectedVersion?: string; requestId: string
+  isDepartmentManager?: boolean
 }
 export interface StaffGroupSave {
   id?: number; name: string; parentId: number | null; expectedVersion?: string; requestId: string

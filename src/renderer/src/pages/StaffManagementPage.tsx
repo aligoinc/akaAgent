@@ -67,6 +67,8 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
     ? String(editor.row?.groupIds[0] ?? groups[0]?.row.id ?? '')
     : editor.kind === 'group' ? String(editor.row?.parentId ?? root?.id ?? '') : '')
   const [isActive, setIsActive] = useState(true)
+  const [isDepartmentManager, setIsDepartmentManager] = useState(editor.kind === 'staff'
+    && !!editor.row?.managerGroupIds?.includes(editor.row.groupIds[0]))
   const [devices, setDevices] = useState<StaffDevice[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -94,7 +96,7 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
     inFlight.current = true; setBusy(true); setError('')
     try {
       if (editor.kind === 'group') await api().saveGroup({ id: editor.row?.id, name: name.trim(), parentId: group ? Number(group) : null, expectedVersion: editor.row?.version, requestId: requestId.current })
-      if (editor.kind === 'staff') await api().saveStaff({ id: editor.row?.id, name: name.trim(), phone, groupId: Number(group), expectedVersion: editor.row?.version, requestId: requestId.current })
+      if (editor.kind === 'staff') await api().saveStaff({ id: editor.row?.id, name: name.trim(), phone, groupId: Number(group), isDepartmentManager, expectedVersion: editor.row?.version, requestId: requestId.current })
       if (editor.kind === 'status') await api().setStatus({ targets: versionTargets(editor.rows), isActive, requestId: requestId.current })
       if (editor.kind === 'device' && devices) await api().resetDevices({ targets: devices.map(row => ({ id: row.id, expectedVersion: row.version })), requestId: requestId.current })
       if (alive.current) onSaved()
@@ -117,6 +119,7 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
   const newExpiry = new Date(`${data.organization.today}T00:00:00+07:00`)
   newExpiry.setUTCDate(newExpiry.getUTCDate() + data.organization.staffDurationDays + 1)
   const existingStaff = editor.kind === 'staff' ? editor.row : undefined
+  const otherManagers = (data.groups.find(row => row.id === Number(group))?.managers || []).filter(manager => manager.id !== existingStaff?.id)
   const freeSeats = Math.max(0, data.organization.maxStaff - data.organization.staffCount)
   const expiryNote = data.organization.useOrganizationExpiration
     ? `Đang dùng hạn tổ chức: ${date(data.organization.expirationDate)}.`
@@ -157,6 +160,13 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
               </label>)}
             </div>
           </div>
+          <label className={`sm-manager-option ${isDepartmentManager ? 'sm-manager-selected' : ''}`}>
+            <input type="checkbox" checked={isDepartmentManager} aria-label="Là trưởng phòng" aria-describedby="sm-manager-help" onChange={event => setIsDepartmentManager(event.target.checked)} />
+            <span><strong>Là trưởng phòng</strong><small id="sm-manager-help">{otherManagers.length
+              ? `${otherManagers.map(manager => manager.name).join(', ')} hiện là trưởng phòng. ${isDepartmentManager ? 'Lưu sẽ chuyển quyền trưởng phòng sang nhân viên này.' : 'Bật lựa chọn này để thay trưởng phòng hiện tại.'}`
+              : 'Mỗi phòng có tối đa một trưởng phòng.'}</small></span>
+          </label>
+          <p className="sm-field-help">Trưởng phòng xem được hội thoại của phòng và phòng con trong Chat khi có quyền trên tài khoản Zalo. Quyền này không cấp admin tổ chức.</p>
           <section className="sm-info-card sm-login-card" aria-labelledby="sm-login-info-title">
             <h3 id="sm-login-info-title"><LockKeyhole size={14} />Thông tin đăng nhập — {existingStaff ? 'giữ nguyên' : 'tự động tạo'}</h3>
             <div className="sm-form-grid">
@@ -313,7 +323,9 @@ export default function StaffManagementPage() {
               if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); pickGroup(row.id) }
             }}>
               <td className="sm-number sm-muted">{row.parentId === null ? '—' : index}</td>
-              <td><span className="sm-department-name" style={{ paddingLeft: depth ? (depth - 1) * 16 : 0 }}>{depth > 0 && <i />}{groupName(row, data.organization.name)}{row.parentId === null && <span className="sm-badge sm-badge-green">Tổ chức</span>}</span></td>
+              <td><span className="sm-department-name" style={{ paddingLeft: depth ? (depth - 1) * 16 : 0 }}>{depth > 0 && <i />}{groupName(row, data.organization.name)}{row.parentId === null && <span className="sm-badge sm-badge-green">Tổ chức</span>}</span>
+                {!!row.managers?.length && <span className="sm-department-manager" style={{ paddingLeft: depth ? (depth - 1) * 16 : 0 }}><UserRound size={12} />Trưởng phòng: {row.managers.map(manager => manager.name).join(', ')}</span>}
+              </td>
               <td className="sm-muted">{parentName(row, data)}</td>
               <td className="sm-group-staff-count">{row.staffCount}</td>
             </tr>)}
@@ -363,7 +375,9 @@ export default function StaffManagementPage() {
               <td className="sm-muted">{date(row.createdAt)}</td>
               <td className="sm-muted" title={`Hạn nhân viên: ${date(row.expirationDate)}; nguồn: ${row.expirySource === 'staff' ? 'nhân viên, giới hạn bởi gói' : 'tổ chức'}`}>{date(row.effectiveExpirationDate)}</td>
               <td><span className={`sm-days ${row.status === 'expired' ? 'sm-expired' : row.daysRemaining !== null && row.daysRemaining <= 15 ? 'sm-soon' : ''}`}>{row.daysRemaining === null ? '—' : row.status === 'expired' ? 'Hết hạn' : `${row.daysRemaining} ngày`}</span></td>
-              <td className="sm-muted">{row.groupNames.join(', ') || '—'}</td>
+              <td className="sm-muted"><span className="sm-staff-departments">{row.groupNames.length ? row.groupNames.map((name, groupIndex) => <span key={`${row.groupIds[groupIndex]}-${groupIndex}`} className={row.managerGroupIds?.includes(row.groupIds[groupIndex]) ? 'sm-manager-role' : undefined}>
+                {row.managerGroupIds?.includes(row.groupIds[groupIndex]) && <UserRound size={13} aria-label="Trưởng phòng" />}<span>{name}</span>
+              </span>) : '—'}</span></td>
             </tr>)}
             {(loading || !rows.length) && <tr><td colSpan={11} className="sm-empty" role="status">{loading ? 'Đang tải nhân viên…' : 'Không có nhân viên phù hợp.'}</td></tr>}
           </tbody>

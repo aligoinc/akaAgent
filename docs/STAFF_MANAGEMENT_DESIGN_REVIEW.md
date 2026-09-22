@@ -26,6 +26,7 @@ Nguồn: `/Users/lequangnhut/Downloads/Thiết kế akaAgent (7)/Quản lý
 - Mặc định toàn tổ chức; chọn phòng ban thực sự lọc cả hậu duệ. Có nút trở lại toàn tổ chức.
 - Một dòng gốc đại diện tổ chức, hiển thị badge “Tổ chức”, không tính vào số phòng ban và không sửa như phòng ban thường. Chọn “trực thuộc tổ chức” dùng ID dòng gốc; không tạo thêm dòng `parent_id=NULL`. Đây là quy tắc dữ liệu dùng chung với Chat Web, cập nhật tại v307 sau lượt đối chiếu UI ban đầu.
 - Form thêm nhân viên chọn sẵn dòng đầu cây (tổ chức), vẫn cho chọn một phòng ban khác. Form sửa giữ phòng ban hiện tại; nhân viên chưa phân công mới dùng mặc định đầu cây.
+- Bổ sung lựa chọn **Là trưởng phòng** theo form `workspace-staff-settings.tsx` của Chat Web, đặt sau chọn phòng và dùng palette/geometry của akaAgent. Cấp người mới hiển thị tên trưởng phòng sẽ bị thay; chuyển phòng giữ lựa chọn vai trò, chỉ áp dụng cho một phòng. Tên/biểu tượng trưởng phòng xuất hiện trong hai bảng, không thêm quyền admin tổ chức. Đây là phần mở rộng theo yêu cầu sau prototype; v308 lưu bằng quan hệ DB hiện có.
 - Hết hạn tự tính, không cho người dùng chọn trạng thái Hết hạn, gia hạn, sửa hạn hoặc cấp admin.
 - Đổi máy không ép đăng xuất và không trừ lượt; bỏ lời mô tả ép đăng xuất của prototype.
 - Sửa nhân viên hiển thị username thực tế, mật khẩu che và hạn đã cấp; không giả định mật khẩu hiện tại là `123456`, không tính lại hạn từ cấu hình mới.
