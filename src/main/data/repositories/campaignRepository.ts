@@ -2472,7 +2472,7 @@ export async function updateClaimedZaloServerCampaign(
  */
 export async function updateRunningDesktopCampaign(
   id: number,
-  updates: Pick<CampaignUpdate, 'status' | 'note'>,
+  updates: Pick<CampaignUpdate, 'status' | 'note' | 'schedule'>,
   expectedRuntimeClaimToken?: string
 ): Promise<Campaign> {
   if (updates.status !== 'chờ xử lý' && updates.status !== 'tạm dừng') {
@@ -2485,6 +2485,7 @@ export async function updateRunningDesktopCampaign(
     updated_at: new Date().toISOString()
   }
   if (updates.note !== undefined) payload.note = updates.note
+  if (updates.schedule !== undefined) payload.schedule = updates.schedule
 
   let query = client()
     .from('auto_campaigns')

@@ -1876,6 +1876,39 @@ export class CampaignScheduler {
     }
 
     const details = await this.supabase.listCampaignInputData(campaign.id)
+    // Inputs can arrive after the executor's snapshot. Keep the current slot
+    // while due work remains; resetting it here would postpone unsent data.
+    if (details.some(detail => !detail.isDelete && detail.status === 'chờ xử lý' &&
+      !this.getFutureInputSchedule(detail, now))) {
+      await this.updateRunningCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        note: 'Còn data đã đến lịch, chiến dịch sẽ tiếp tục xử lý.'
+      })
+      return true
+    }
+    // Finish pending input schedules before starting another full daily slot.
+    // This includes future inputs that were absent from the executor's snapshot.
+    let earliestFutureInputSchedule: Date | null = null
+    for (const detail of details) {
+      if (detail.isDelete || detail.status !== 'chờ xử lý') continue
+      const scheduledAt = this.getFutureInputSchedule(detail, now)
+      if (scheduledAt && (!earliestFutureInputSchedule || scheduledAt < earliestFutureInputSchedule)) {
+        earliestFutureInputSchedule = scheduledAt
+      }
+    }
+    if (earliestFutureInputSchedule) {
+      const schedule = earliestFutureInputSchedule.toISOString()
+      const updated = await this.updateRunningCampaignAndBroadcast(campaign.id, {
+        status: 'chờ xử lý',
+        schedule,
+        note: null
+      })
+      if (updated.status === 'chờ xử lý' && updated.schedule &&
+        new Date(updated.schedule).getTime() === earliestFutureInputSchedule.getTime()) {
+        await this.logCampaignProgress(campaign.id, `⏳ Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(earliestFutureInputSchedule)}`)
+      }
+      return true
+    }
     const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length
     if (details.length > 0 && resettableCount === 0) {
       const completed = await this.transitionCampaignToCompleted(campaign)
@@ -4825,10 +4858,10 @@ export class CampaignScheduler {
       const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
       const usesAdvancedContent = this.shouldUseAdvancedContent(campaign)
       let simpleAttachments: string[] | null = null
-      const isGroup = campaign.actionId === ZALO_MESSAGE_GROUP_ACTION_ID
-      const targetKindLabel = isGroup ? 'group Zalo' : 'bạn bè Zalo'
 
-      if (usesAdvancedContent) {
+      // With no inputs, skip content/media work and fall through to the normal
+      // finalizer below. It rechecks raced data, source state and user control.
+      if (details.length > 0 && usesAdvancedContent) {
         const advancedContentError = this.getAdvancedContentConfigError(campaign, true)
         if (advancedContentError) {
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })
@@ -4836,7 +4869,7 @@ export class CampaignScheduler {
           await this.releaseRunningAccount(account.id)
           return
         }
-      } else {
+      } else if (details.length > 0) {
         const baseMessage = this.getRawCampaignContentForIndex(campaign, 0)
         simpleAttachments = await this.resolveCampaignMediaForIndex(campaign, 0, false, mediaTempPaths)
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
@@ -4849,14 +4882,6 @@ export class CampaignScheduler {
           await this.releaseRunningAccount(account.id)
           return
         }
-      }
-
-      if (details.length === 0) {
-        const note = `Không có ${targetKindLabel} để gửi tin`
-        await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-        await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
-        await this.releaseRunningAccount(account.id)
-        return
       }
 
       let zaloFriendBlocklistSkippedCount = 0
@@ -15602,7 +15627,7 @@ export class CampaignScheduler {
 
   private async updateRunningCampaignAndBroadcast(
     id: number,
-    updates: Pick<Campaign, 'status' | 'note'>
+    updates: Pick<Campaign, 'status' | 'note'> & Partial<Pick<Campaign, 'schedule'>>
   ): Promise<Campaign> {
     if (updates.status !== 'đang chạy') await this.restoreFacebookPageIdentity(id)
     const updated = this.claimedServerZaloCampaignIds.has(id)
