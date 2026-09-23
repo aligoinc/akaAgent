@@ -90,6 +90,8 @@ Doc API chỉ cấp `clipboard-sanitized-write` cho guest/popup đang được s
 
 ### Quản lý nhân viên (desktop)
 
+V310 dùng `org_organization.use_staff_expiration`: mặc định false cho tổ chức hiện có và tổ chức mới → hạn tổ chức; true → kiểm tra thêm hạn nhân viên, NULL vẫn kế thừa hạn tổ chức. Quyền sản phẩm luôn được kiểm tra. V312 đã drop cột `use_organization_expiration`; hướng dẫn và checksum trong [audit](docs/STAFF_MANAGEMENT_MIGRATION_AUDIT.md).
+
 Menu dưới **Cài đặt** dành cho `org_staff.is_admin IS TRUE` ở mọi tổ chức; module [staffManagement](src/shared/staffManagement.ts) đi qua main-frame IPC và RPC kiểm tra credential/admin/tenant live, dùng Supabase HTTP hiện có. Quota lấy `org_organization.max_staff`; mật khẩu tải riêng, không log/storage; mutation giữ revision và request ID khi retry. Hướng dẫn, hạn nhân viên và audit v305–307: [STAFF_MANAGEMENT.md](docs/STAFF_MANAGEMENT.md), [STAFF_MANAGEMENT_MIGRATION_AUDIT.md](docs/STAFF_MANAGEMENT_MIGRATION_AUDIT.md).
 
 V308 thêm trưởng phòng qua `org_group_staff.is_admin`, cùng quy tắc Chat: một phòng trong form, cấp người mới thay người cũ; chuyển phòng giữ lựa chọn vai trò. `saveStaff` cùng lock tổ chức Chat, không đổi admin tổ chức; payload cũ thiếu `isDepartmentManager` giữ hành vi cũ. Smoke SQL v308 và Electron kiểm tra vai trò, CAS/replay, phân quyền và hiển thị.
@@ -420,6 +422,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- Hạn nhân viên: không đọc/ghi cột đã bỏ `use_organization_expiration`. Giữ field JSON RPC `useOrganizationExpiration = NOT useStaffExpiration` cho client cũ; code mới ưu tiên cờ mới và chỉ dùng field cũ làm fallback. Fixture kiểm thử hết hạn riêng phải bật `use_staff_expiration=true` rõ ràng.
 
 - **Share campaign rỗng lặp lịch (sửa 22/09/2026, chưa phát hành)**: [nhánh share](src/main/services/campaignScheduler.ts:4828) bỏ chuẩn bị nội dung/media khi không có input và đi qua `handleCampaignCompletion`, không release sớm về `chờ xử lý` với lịch cũ. Giữ finalizer atomic để bảo toàn data mới, nguồn nhóm động và lệnh tạm dừng; lịch input tương lai vẫn defer. Chat API dùng lại `completeOrReschedule`; nguồn tự lấy data/tìm data/realtime giữ quy tắc chờ hiện có. Smoke: `node scripts/campaign-empty-share-smoke-test.cjs` và `node scripts/zalo-rich-share-smoke-test.cjs`.
   Khi lần đọc lại có data chưa xoá, đang chờ và đã đến lịch, `handleMultiDailyTimeSlotAfterCompletion` dùng `updateRunningCampaignAndBroadcast` để giữ lịch/data trước mọi reset/chuyển slot; nếu chỉ còn data tương lai thì hẹn theo lịch gần nhất bằng cùng cập nhật có điều kiện, không reset input hoặc ghi đè lệnh tạm dừng. Chat `completeOrReschedule` kiểm tra cùng điều kiện bằng giờ DB trước lịch tương lai/realtime/slot rồi gọi `releaseClaim`; kiểm thử phải mô phỏng data xuất hiện giữa hai lần đọc và kiểm tra payload/guard repository, không chỉ mock kết quả finalizer.

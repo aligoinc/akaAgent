@@ -141,3 +141,38 @@ Validation completed:
 - Security advisor notices for anon/authenticated access to the existing credential-checked management DEFINER RPC remain intentional; ACL is unchanged. Other pre-existing project findings were outside this patch.
 
 The Desktop UI needs an updated build. Chat uses the shared membership data through its existing permission checks; no Chat code or deployment is part of this change. Department-manager status does not grant access to other staff's akaAgent accounts/campaigns or to the organization-admin menu.
+
+## V310 — staff expiry is opt-in (23/09/2026)
+
+Renamed from v312 to v310 at the user’s request. Only the repository labels and migration-history `name` changed; the original history version `20260923073740` and executed `statements` are retained. No schema/RPC was reapplied or reloaded for the rename.
+
+Applied to `cgjbsmqtfhqvttudyjzq`; history `20260923073740 / migration_v310_staff_expiration_opt_in`. Adds `org_organization.use_staff_expiration boolean NOT NULL DEFAULT false`. All 936 existing organizations now use organization/product expiry by default; no staff dates were rewritten. `true` also checks individual staff expiry, with NULL falling back to products.
+
+At v310, the old DB column was retained but deprecated and ignored by policy; v312 below removes it. Legacy RPC JSON `useOrganizationExpiration` is always derived as `NOT useStaffExpiration`. Desktop/WebApp normalize either response during rollout. There is no dual-write trigger, new connection source or polling.
+
+Exact definitions and owner/security/volatility/config/ACL were captured from live before editing. Time/access bodies match v305 (header formatting differs); row/management match v308 exactly. Preserved v306 single timestamp, v307 organization root, v308 manager replacement/shared Chat lock, quota, CAS, request replay, device reset and all tenant checks. All 13 dependent auth/runtime RPC definitions and ACLs remain unchanged, including v309 session checks and held-unit cleanup paths.
+
+| Exact signature | Source MD5 | Applied MD5 |
+|---|---|---|
+| `public.aka_agent_staff_time_allowed(bigint)` | `878cba86a2426dae09bc9f69a163680e` | `a294e60011edd8d42e90ac2f74ce744c` |
+| `public.aka_agent_staff_access(bigint,text,text)` | `632942ca116ca830d4a7f5fff72e871f` | `ca59bfbfa79c7e40ec50788e77b9d022` |
+| `public.aka_agent_staff_management_row(bigint)` | `e4d06c369e7c05e29c69ce089e549da6` | `4964edb52ffc866f610036212d14fb08` |
+| `public.aka_agent_staff_management(bigint,text,text,text,jsonb)` | `fe73d8c5812d395aa2d3a1d448418ef0` | `689c389e3380c75497c720e7e6c5dafb` |
+
+Validation:
+
+- Fail-closed checksum/attribute preflight; target reapply preserves an organization already opted in. New column metadata verified as boolean, NOT NULL, default false.
+- Before apply: migration and v310/v309/v308/v305 synthetic business/auth/runtime smoke passed inside rollback. After apply: the same four smoke suites passed again inside rollback. Coverage includes both modes, NULL fallback, product expiry, Vietnam day boundary, actual anon/service-role calls, manager/CAS/device replay and settling a held runtime unit after expiry.
+- Post-apply definitions match the four target checksums; owner, security, volatility, config and ACL are unchanged. Chat fixture matches the applied helper exactly; Chat role retains EXECUTE.
+- PostgREST: old/new column SELECT and boolean helper HTTP 200; invalid credentials yield the original access/management errors (HTTP 400); legacy device RPC HTTP 200. API metadata reload is required for the new column.
+- Desktop: both typechecks, desktop/server builds and Electron staff, session-expiry, auth (112 checks), device smoke passed.
+- WebApp: typecheck, all 1,345 unit/integration tests and build passed. Chat API: typecheck, all 1,273 tests and build passed. No Chat production source or deployment is needed: existing callers use the shared DB helper.
+- WebApp Playwright staff flow passed on Desktop Chromium, Android Chromium and iPhone WebKit. Used an isolated local server because the existing port 4173 server had development mocks enabled and bypassed HTTP fixtures. Existing server was left running unchanged.
+
+## V312 — drop unused organization-expiry column (23/09/2026)
+
+Applied `migration_v312_drop_legacy_organization_expiration` to `cgjbsmqtfhqvttudyjzq`, history `20260923075817`. Removed only `org_organization.use_organization_expiration` with RESTRICT. The canonical `use_staff_expiration` default remains false; no staff dates or policy values were updated.
+
+Fresh catalog/body audit found only the column's own default dependency, with no function/view/materialized-view/policy/cron references. Preflight checks the four exact live signatures and attributes from the v310 table above; their source and post-apply MD5s are identical to that table's Applied MD5 column. Owner, security, volatility, config and ACL are unchanged. No RPC definition was replaced.
+
+The drop and a second idempotent execution passed in rollback, followed by v310/v309/v308/v305 business/auth/runtime smoke. The same smoke suites passed after apply, including valid web/native authentication and held-unit settlement after expiry. Existing v310 smoke no longer writes the removed column. PostgREST exposes the remaining flag, rejects an explicit removed-column SELECT as expected, and keeps the existing helper/auth/management RPC responses. WebApp health remains HTTP 200. Schema refresh was requested because a real API column was removed; no app redeploy, pool or connection-budget change was required.

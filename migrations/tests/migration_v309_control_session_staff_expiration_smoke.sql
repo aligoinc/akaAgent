@@ -41,7 +41,7 @@ BEGIN
     ('deleted staff',true,NULL::timestamptz,400,false,true,'invalid_staff',false)
   ) AS cases(label,org_mode,staff_expiry,product_days,active,deleted,expected,allowed)
   LOOP
-    UPDATE public.org_organization SET use_organization_expiration=c.org_mode WHERE id=org_id;
+    UPDATE public.org_organization SET use_staff_expiration=NOT c.org_mode WHERE id=org_id;
     UPDATE public.org_staff SET expiration_date=c.staff_expiry,is_active=c.active,
       deleted_at=CASE WHEN c.deleted THEN now() ELSE NULL END WHERE id=staff_id;
     UPDATE public.org_organization_product SET expiration_date=day_start+make_interval(days=>c.product_days) WHERE id=product_id;

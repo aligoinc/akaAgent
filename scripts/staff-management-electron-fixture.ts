@@ -23,6 +23,7 @@ let rows: ManagedStaff[] = ['Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàn
   expirySource: 'staff', daysRemaining: i === 4 ? 0 : i === 3 ? 4 : 366,
   groupIds: [i + 1], groupNames: [groups[i].name], managerGroupIds: i === 1 || i === 2 ? [i + 1] : [], version: `s${i}`
 }))
+let useStaffExpiration = true
 let delay = false, fail = '', failAfterCommit = false, rev = 0
 const calls: { action: string; input: any }[] = []
 const ledger = new Map<string, unknown>()
@@ -38,7 +39,7 @@ Object.assign(globalThis, { staffSmokeClient: { rpc(_name: string, args: any) { 
     let items = rows.filter(row => (!p.search || `${row.name} ${row.phone} ${row.username}`.toLowerCase().includes(p.search.toLowerCase())) && (!p.status || p.status==='all' || row.status===p.status) && (!p.groupId || row.groupIds.includes(p.groupId)))
     const total = items.length; items = items.slice((p.page||0)*100, ((p.page||0)+1)*100)
     const listedGroups = groups.map(group => ({ ...group, managers: rows.filter(row => row.managerGroupIds.includes(group.id)).map(row => ({ id: row.id, name: row.name })) }))
-    data = { items, groups: listedGroups, total, page: p.page||0, organization: { id: 9, name: 'Công ty TNHH akaBiz', staffCount: rows.length, maxStaff: 25, staffDurationDays: 365, useOrganizationExpiration: false, today: '2026-09-22', expirationDate: '2028-09-22T00:00:00+07:00' } }
+    data = { items, groups: listedGroups, total, page: p.page||0, organization: { id: 9, name: 'Công ty TNHH akaBiz', staffCount: rows.length, maxStaff: 25, staffDurationDays: 365, useStaffExpiration, today: '2026-09-22', expirationDate: '2028-09-22T00:00:00+07:00' } }
   }
   if (a === 'revealPassword') data = { password: 'staff-fixture-secret' }
   if (a === 'saveGroup') { const row = { id: p.id || groups.length+1, name: p.name, parentId: p.parentId ?? 1, staffCount: 0, version: `g${++rev}`, managers: [] }; groups = [...groups.filter(g => g.id!==row.id), row]; data = { id: row.id } }
@@ -60,7 +61,7 @@ app.whenReady().then(async () => {
   setCurrentUser(user); setCurrentUserCredentials({ username:'9.admin', password:'fixture-actor-password' })
   const window = new BrowserWindow({ show:false, width:1530, height:980, webPreferences: { preload:join(directory,'preload.cjs'), contextIsolation:true, sandbox:true, nodeIntegration:false } })
   registerStaffManagementHandlers(window)
-  Object.assign(globalThis, { staffSmoke: { calls, state:()=>({rows,groups}), delay:(value:boolean)=>{delay=value}, fail:(value:string)=>{fail=value}, loseResponse:()=>{failAfterCommit=true}, revoke:()=>{setCurrentUser({...user,isAdmin:false});window.webContents.send(IPC_EVENTS.AUTH_USER_UPDATED,getCurrentUser())}, restore:()=>{setCurrentUser(user);window.webContents.send(IPC_EVENTS.AUTH_USER_UPDATED,user)}, addPage:()=>{rows = Array.from({length:105},(_,i)=>({...rows[1],id:1000+i,name:`Nhân viên ${i+1}`}))} } })
+  Object.assign(globalThis, { staffSmoke: { calls, expiryMode:(value:boolean)=>{useStaffExpiration=value}, state:()=>({rows,groups}), delay:(value:boolean)=>{delay=value}, fail:(value:string)=>{fail=value}, loseResponse:()=>{failAfterCommit=true}, revoke:()=>{setCurrentUser({...user,isAdmin:false});window.webContents.send(IPC_EVENTS.AUTH_USER_UPDATED,getCurrentUser())}, restore:()=>{setCurrentUser(user);window.webContents.send(IPC_EVENTS.AUTH_USER_UPDATED,user)}, addPage:()=>{rows = Array.from({length:105},(_,i)=>({...rows[1],id:1000+i,name:`Nhân viên ${i+1}`}))} } })
   await window.loadURL(`${process.env.STAFF_FIXTURE_URL}/staff-fixture`)
 })
 app.on('window-all-closed',()=>app.quit())

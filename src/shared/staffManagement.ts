@@ -17,7 +17,7 @@ export interface ManagedStaff {
 }
 export interface StaffOrganization {
   id: number; name: string; maxStaff: number; staffCount: number; staffDurationDays: number
-  useOrganizationExpiration: boolean; expirationDate: string | null; today: string
+  useStaffExpiration: boolean; expirationDate: string | null; today: string
 }
 export interface StaffQuery { search?: string; groupId?: number | null; status?: StaffStatus | 'all'; page?: number }
 export interface StaffPage { items: ManagedStaff[]; groups: StaffGroup[]; organization: StaffOrganization; total: number; page: number }
@@ -45,10 +45,15 @@ export interface StaffManagementApi {
 export type StaffManagementAction = keyof StaffManagementApi
 export interface StaffAccess {
   isAdmin: boolean; isActive: boolean; timeAllowed: boolean
-  expirationDate: string | null; useOrganizationExpiration: boolean
+  expirationDate: string | null; useStaffExpiration: boolean
 }
 
 export function staffErrorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error || 'Không thể hoàn tất thao tác.'))
     .replace(/^Error invoking remote method '[^']+':\s*/i, '').replace(/^Error:\s*/i, '')
+}
+
+/** Accept the old RPC field during rollout; an explicit new flag always wins. */
+export function resolveUseStaffExpiration(value: { useStaffExpiration?: unknown; useOrganizationExpiration?: unknown }): boolean {
+  return typeof value.useStaffExpiration === 'boolean' ? value.useStaffExpiration : value.useOrganizationExpiration === false
 }
