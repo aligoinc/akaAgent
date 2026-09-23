@@ -133,10 +133,54 @@ async function main() {
     } }, { enabled: true, target: { uid: 'u1', raw: {} }, labelId: 7, labelName: 'A' })
     if (accountId === 3) {
       assert.equal(result.skipped, true); assert.equal(result.detail, undefined)
-      assert.equal(calls.length, 0); assert.match(logs[0], /chưa cấu hình đầy đủ tag/)
+      assert.equal(calls.length, 0); assert.match(logs[0], /chưa chọn tag cần gắn/)
     } else {
       assert.deepEqual(calls[0], [accountId, 'u1', settings[accountId].zaloTagId, settings[accountId].zaloTagSkipTagIds])
       assert.equal(calls[1][1], accountId)
+    }
+  }
+  // Missing skip configuration is not a matched exclusion. Both auxiliary actions
+  // must execute, using the fallback account's destination label rather than the primary's.
+  for (const actionId of ['zalo_message_phone', 'zalo_message_friend', 'zalo_message_group_member', 'zalo_message_group_realtime', 'zalo_message_remarketing_customer', 'zalo_message_friend_recommendation']) {
+    for (const exclusions of [undefined, [], ['invalid']]) {
+      for (const enabled of [undefined, true]) {
+        const calls = []; const logs = []; const scheduler = new Scheduler()
+        Object.assign(scheduler, {
+          zaloRuntime: {
+            applyLabelToUser: async (...args) => { calls.push(['tag', ...args]); return { id: 17, text: 'B' } },
+            changeUserAlias: async (...args) => calls.push(['alias', ...args]),
+            getFriendRequestStatus: async () => { throw new Error('Missing friend conditions must not request friendship') }
+          },
+          supabase: { appendZaloTagsToExistingContacts: async (...args) => calls.push(['mirror', ...args]) },
+          throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
+          logCampaignProgress: async (_id, log) => logs.push(log), createZaloSuccessDetail: data => data,
+          getTemplateBusinessNow: async () => undefined, renderZaloTemplate: text => text
+        })
+        const campaign = { id: 1, actionId, accountId: 1, extraSettings: {
+          zaloTagSkipIfHasSelectedTags: enabled, zaloTagSettingsByAccountId: {
+            1: settings['1'], 2: { zaloTagId: '17', zaloTagName: 'B', zaloTagSkipTagIds: exclusions }
+          }
+        } }
+        const helpers = scheduler.createBlockRuntimeHelpers({ id: 2 }, campaign, { id: 100 }, null)
+        const target = { uid: 'u1', raw: { isFr: 1 } }
+        const tag = await helpers.zaloApplyContactTag({ enabled: true, target, labelId: 7 })
+        const alias = await helpers.zaloChangeContactAlias({ enabled: true, target, alias: 'Tên mới' })
+        assert.equal(tag.skipped, undefined); assert.equal(alias.skipped, undefined)
+        assert.deepEqual(calls[0], ['tag', 2, 'u1', '17', []])
+        assert.deepEqual(calls.map(call => call[0]), ['tag', 'mirror', 'alias'])
+        assert.equal(logs.length, enabled ? 1 : 0)
+        if (enabled) assert.match(logs[0], /Chưa cấu hình tag loại trừ.*vẫn gắn tag/)
+        assert.equal(tag.detail.actionCode, 'zalo_tag_contact')
+        assert.equal(alias.detail.actionCode, 'zalo_change_alias')
+        if (enabled) {
+          let stopped = false
+          const before = calls.length
+          scheduler.logCampaignProgress = async () => { stopped = true }
+          scheduler.throwIfZaloRuntimeStopping = () => { if (stopped) throw new Error('runtime stopped') }
+          await assert.rejects(helpers.zaloApplyContactTag({ enabled: true, target, labelId: 7 }), /runtime stopped/)
+          assert.equal(calls.length, before, 'do not mutate after a stop while warning about missing exclusions')
+        }
+      }
     }
   }
   assert.deepEqual(contract.pickZaloAccountTagSettings(settings, [2]), { '2': settings['2'] })
