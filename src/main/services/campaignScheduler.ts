@@ -14528,9 +14528,8 @@ export class CampaignScheduler {
     const tagSettings = resolveZaloAccountTagSettings({
       ...campaign.extraSettings, zaloTagId: options.labelId, zaloTagName: options.labelName
     }, account.id)
-    if (!tagSettings || (campaign.extraSettings?.zaloTagSettingsByAccountId !== undefined &&
-      (!tagSettings.zaloTagId || (campaign.extraSettings.zaloTagSkipIfHasSelectedTags === true && tagSettings.zaloTagSkipTagIds.length === 0)))) {
-      await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: chưa cấu hình đầy đủ tag cho tài khoản ${account.name || account.id}`)
+    if (!tagSettings || (campaign.extraSettings?.zaloTagSettingsByAccountId !== undefined && !tagSettings.zaloTagId)) {
+      await this.logCampaignProgress(campaign.id, `Không thể gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: chưa chọn tag cần gắn cho tài khoản ${account.name || account.id}`)
       return { ok: true, skipped: true, zaloTarget: target }
     }
     const labelId = campaign.extraSettings?.zaloTagSettingsByAccountId === undefined ? options.labelId : tagSettings.zaloTagId
@@ -14553,6 +14552,10 @@ export class CampaignScheduler {
       const skipLabelIds = campaign.extraSettings?.zaloTagSkipIfHasSelectedTags === true
         ? tagSettings.zaloTagSkipTagIds
         : []
+      if (campaign.extraSettings?.zaloTagSkipIfHasSelectedTags === true && skipLabelIds.length === 0) {
+        await this.logCampaignProgress(campaign.id, `⚠️ Chưa cấu hình tag loại trừ cho tài khoản ${account.name || account.id}; vẫn gắn tag Zalo cho ${this.getZaloTargetLabel(target)} theo cấu hình`)
+        this.throwIfZaloRuntimeStopping(campaign.id)
+      }
       const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId, skipLabelIds)
       if (isZaloLabelSkipResult(label)) {
         this.throwIfZaloRuntimeStopping(campaign.id)
