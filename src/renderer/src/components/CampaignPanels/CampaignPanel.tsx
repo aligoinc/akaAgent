@@ -6728,7 +6728,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
-                  <div className="detail-export-bar detail-filter-bar">
+                  <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
                     {renderDetailFilters(
                       'inputDataTime',
                       'inputDataStatus',
@@ -6782,15 +6782,17 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         )}
                       </div>
                     )}
-                    {renderDetailSort('inputDataSort')}
-	                    <label className="campaign-input-data-search">
-	                      <Search size={14} />
-	                      <input
-	                        value={inputDataSearch}
-	                        onChange={event => setInputDataSearch(event.target.value)}
-	                        placeholder="Tìm tên, UID, SĐT, email, key..."
-	                      />
-	                    </label>
+                    <div className="campaign-data-search-sort">
+                      {renderDetailSort('inputDataSort')}
+                      <label className="campaign-input-data-search">
+                        <Search size={14} />
+                        <input
+                          value={inputDataSearch}
+                          onChange={event => setInputDataSearch(event.target.value)}
+                          placeholder="Tìm tên, UID, SĐT, email, key..."
+                        />
+                      </label>
+                    </div>
 	                    <div className="detail-filter-actions input-data-filter-actions">
 	                      <button
 	                        className="btn btn-secondary btn-sm"
@@ -6965,7 +6967,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               {/* Tab: Campaign Details (per-milestone log) */}
               {detailTab === 'actions' && (
                 <>
-                  <div className="detail-export-bar detail-filter-bar">
+                  <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
                     {renderDetailFilters(
                       'actionsTime',
                       'actionsStatus',
@@ -6976,15 +6978,17 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                       actionDetailStatusOptions,
                       value => setActionDetailFilters(prev => ({ ...prev, status: value }))
                     )}
-                    {renderDetailSort('actionsSort')}
-                    <label className="campaign-input-data-search">
-                      <Search size={14} />
-                      <input
-                        value={actionDetailSearch}
-                        onChange={event => setActionDetailSearch(event.target.value)}
-                        placeholder="Tìm hành động, trạng thái, nội dung, link..."
-                      />
-                    </label>
+                    <div className="campaign-data-search-sort">
+                      {renderDetailSort('actionsSort')}
+                      <label className="campaign-input-data-search">
+                        <Search size={14} />
+                        <input
+                          value={actionDetailSearch}
+                          onChange={event => setActionDetailSearch(event.target.value)}
+                          placeholder="Tìm hành động, trạng thái, nội dung, link..."
+                        />
+                      </label>
+                    </div>
                     <div className="detail-filter-actions">
                       <button
                         className="btn btn-secondary"

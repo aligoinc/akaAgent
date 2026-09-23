@@ -23959,6 +23959,18 @@ body.theme-light :is(
   flex-shrink: 0;
 }
 
+.campaign-data-filter-bar {
+  justify-content: flex-start;
+}
+
+.campaign-data-search-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
 .campaign-data-sort > button {
   height: 30px;
   white-space: nowrap;
