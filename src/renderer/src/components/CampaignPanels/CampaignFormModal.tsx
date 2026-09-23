@@ -1,3 +1,7 @@
+import ZaloCampaignTagSettings from './ZaloCampaignTagSettings'
+import './ZaloAuxiliaryActions.css'
+import ZaloTagMultiSelector from './ZaloTagMultiSelector'
+import { normalizeZaloAccountTagSettings, pickZaloAccountTagSettings, resolveZaloAccountTagSettings, type ZaloTagSettingsByAccountId } from '../../../../shared/zaloAuxiliaryActions'
 import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useCampaignDraftField } from './useCampaignDraftField'
@@ -6,7 +10,7 @@ import { supportsFacebookPageIdentity, validateFacebookPageIdentitySettings } fr
 import { useCampaignActionUsage } from './useCampaignActionUsage'
 import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '../../../../shared/accountActionLimits'
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
-import { useState, useEffect, useMemo, useRef, type ChangeEvent, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, useId, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -1756,6 +1760,7 @@ export default function CampaignFormModal({
   const internalSmsContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const externalSmsContentTextareaRef = useRef<HTMLTextAreaElement>(null)
   const zaloAliasTemplateInputRef = useRef<HTMLInputElement>(null)
+  const zaloAliasTemplateInputId = useId()
   const emailHtmlEditorRef = useRef<EmailHtmlEditorHandle | null>(null)
   const advancedContentEditorRefs = useRef<Record<string, EmailHtmlEditorHandle>>({})
   const advancedContentTextareaRefs = useRef<Record<string, HTMLTextAreaElement>>({})
@@ -2036,14 +2041,15 @@ export default function CampaignFormModal({
       : [] as string[],
     zaloRealtimeEndDate: initRealtimeEndDate(),
     enableZaloTag: campaign?.extraSettings?.enableZaloTag ?? false,
-    zaloTagId: campaign?.extraSettings?.zaloTagId ?? '',
-    zaloTagName: campaign?.extraSettings?.zaloTagName || '',
+    zaloTagSkipIfFriend: campaign?.extraSettings?.zaloTagSkipIfFriend ?? false,
+    zaloTagSkipIfHasSelectedTags: campaign?.extraSettings?.zaloTagSkipIfHasSelectedTags ?? false,
     enableAkaBizTag: campaign?.extraSettings?.enableAkaBizTag ?? false,
     akaBizTagIds: getCampaignIdList(campaign?.extraSettings?.akaBizTagIds),
     akaBizTagNames: Array.isArray(campaign?.extraSettings?.akaBizTagNames)
       ? campaign.extraSettings.akaBizTagNames.map(name => String(name || '').trim())
       : [] as string[],
     enableZaloAlias: campaign?.extraSettings?.enableZaloAlias ?? false,
+    zaloAliasSkipIfFriend: campaign?.extraSettings?.zaloAliasSkipIfFriend ?? false,
     zaloAliasTemplate: campaign?.extraSettings?.zaloAliasTemplate || getDefaultZaloAliasTemplate(initialActionId),
     zaloMessageSendMode: (campaign?.extraSettings?.zaloMessageSendMode || 'normal') as ZaloMessageSendMode,
     zaloOptOutLinkEnabled: campaign?.extraSettings?.zaloOptOutLinkEnabled ?? false,
@@ -2359,6 +2365,36 @@ export default function CampaignFormModal({
   const [zaloLabelsLoading, setZaloLabelsLoading] = useState(false)
   const [zaloLabelsSyncing, setZaloLabelsSyncing] = useState(false)
   const [zaloLabelsError, setZaloLabelsError] = useState('')
+  const [zaloTagSettingsByAccountId, setZaloTagSettingsByAccountId] = useCampaignDraftField<ZaloTagSettingsByAccountId>(
+    draftPayload, draftValuesRef, 'zaloTagSettingsByAccountId', () => {
+      if (draftPayload?.values.zaloTagSettingsByAccountId !== undefined) return {}
+      const legacyDraft = draftPayload?.values.formData as Record<string, unknown> | undefined
+      const source = legacyDraft ?? campaign?.extraSettings ?? {}
+      if (source.zaloTagSettingsByAccountId !== undefined) {
+        const map = source.zaloTagSettingsByAccountId as ZaloTagSettingsByAccountId
+        return map && typeof map === 'object' && !Array.isArray(map)
+          ? pickZaloAccountTagSettings(map, Object.keys(map)) : {}
+      }
+      // A legacy flat configuration belongs only to its original primary account.
+      const ownerId = legacyDraft && Array.isArray(legacyDraft.accountIds)
+        ? Number(legacyDraft.accountIds[0]) : campaign?.accountId
+      return ownerId ? { [String(ownerId)]: normalizeZaloAccountTagSettings(source) } : {}
+    }
+  )
+  const zaloTagAccountIds = Array.from(new Set([
+    ...formData.accountIds,
+    ...(formData.secondaryAccountId !== null ? [formData.secondaryAccountId] : [])
+  ]))
+  const zaloTagAccountKey = zaloTagAccountIds.join(',')
+  useEffect(() => {
+    setZaloTagSettingsByAccountId(previous => {
+      const next = pickZaloAccountTagSettings(previous, zaloTagAccountIds)
+      return Object.keys(next).length === Object.keys(previous).length ? previous : next
+    })
+  }, [zaloTagAccountKey])
+  const currentZaloTagAccountRef = useRef(formData.accountIds[0])
+  currentZaloTagAccountRef.current = formData.accountIds[0]
+  useEffect(() => { setZaloLabelsSyncing(false) }, [formData.accountIds[0]])
   const [akaBizContactTags, setAkaBizContactTags] = useState<AkaBizContactTag[]>([])
   const [akaBizContactTagsLoading, setAkaBizContactTagsLoading] = useState(false)
   const [akaBizContactTagsError, setAkaBizContactTagsError] = useState('')
@@ -2532,9 +2568,10 @@ export default function CampaignFormModal({
   const canUseOtherDataSources = isZaloMessagePhoneCampaign && !isEditingSavedCampaign
   const canUploadData = !isMessageFriendCampaign && !isFacebookGroupInviteCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
   const showActionOptionsSection = isMessageUidCampaign || isFacebookGroupInviteCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloAddGroupMemberCampaign || isZaloCancelSentFriendRequestCampaign
-  const needsZaloLabels =
-    ((isZaloMessagePhoneCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag) ||
-    (isZaloMessageFriendCampaign && ((!isZaloShareMessageMode && formData.enableZaloTag) || formData.zaloFriendTargetMode === 'tagged_friends'))
+  const supportsZaloAuxiliaryActions = isZaloMessagePhoneCampaign ||
+    (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign ||
+    isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
+  const needsZaloLabels = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'tagged_friends'
   const selectedZaloFriendBlocklist = zaloFriendBlocklists.find(group => group.id === formData.zaloFriendBlocklistId) || null
   const showFoundDataHandlingSection = isFindDataGroupCampaign && (
     formData.isFindPhone ||
@@ -4212,10 +4249,6 @@ export default function CampaignFormModal({
       .then(labels => {
         if (cancelled) return
         setZaloLabels(labels)
-        const selectedId = String(formData.zaloTagId || '')
-        if (selectedId && !labels.some(label => String(label.id) === selectedId)) {
-          setFormData(prev => ({ ...prev, zaloTagId: '', zaloTagName: '' }))
-        }
         const labelById = new Map(labels.map(label => [String(label.id), label]))
         const sourceTagIds = formData.zaloFriendSourceTagIds.map(id => String(id || '').trim()).filter(Boolean)
         const nextSourceTagIds = sourceTagIds.filter(id => labelById.has(id))
@@ -4538,11 +4571,8 @@ export default function CampaignFormModal({
     setZaloLabelsError('')
     try {
       const labels = await window.electronAPI.syncZaloLabels(accountId)
+      if (currentZaloTagAccountRef.current !== accountId) return
       setZaloLabels(labels)
-      const selectedId = String(formData.zaloTagId || '')
-      if (selectedId && !labels.some(label => String(label.id) === selectedId)) {
-        setFormData(prev => ({ ...prev, zaloTagId: '', zaloTagName: '' }))
-      }
       const labelById = new Map(labels.map(label => [String(label.id), label]))
       const sourceTagIds = formData.zaloFriendSourceTagIds.map(id => String(id || '').trim()).filter(Boolean)
       const nextSourceTagIds = sourceTagIds.filter(id => labelById.has(id))
@@ -4556,11 +4586,12 @@ export default function CampaignFormModal({
       }
       showAlert(`Đã tải ${labels.length} tag Zalo.`, 'success')
     } catch (err) {
+      if (currentZaloTagAccountRef.current !== accountId) return
       const message = formatIpcErrorMessage(err, 'Không tải được tag Zalo.')
       setZaloLabelsError(message)
       showAlert(message, 'error')
     } finally {
-      setZaloLabelsSyncing(false)
+      if (currentZaloTagAccountRef.current === accountId) setZaloLabelsSyncing(false)
     }
   }
 
@@ -6102,6 +6133,8 @@ export default function CampaignFormModal({
     }
 
     return formData.accountIds.map((accountId, index) => {
+      const tagSettings = normalizeZaloAccountTagSettings(zaloTagSettingsByAccountId[String(accountId)])
+      const campaignTagAccounts = [accountId, ...(allowsSecondaryAccount && formData.secondaryAccountId !== null ? [formData.secondaryAccountId] : [])]
       const accountRateLimitMinutes = isVoiceCallCampaign
         ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES
         : getAccountRateLimitMinutes(accountId)
@@ -6463,8 +6496,14 @@ export default function CampaignFormModal({
             zaloMessageSendMode: (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) ? formData.zaloMessageSendMode : 'normal',
             zaloOptOutLinkEnabled: supportsZaloOptOutLink ? formData.zaloOptOutLinkEnabled : false,
             enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.enableZaloTag : false,
-            zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? formData.zaloTagId : null,
-            zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? formData.zaloTagName : '',
+            zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? tagSettings.zaloTagId : null,
+            zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? tagSettings.zaloTagName : '',
+            zaloTagSettingsByAccountId: supportsZaloAuxiliaryActions ? pickZaloAccountTagSettings(zaloTagSettingsByAccountId, campaignTagAccounts) : undefined,
+            zaloTagSkipIfFriend: supportsZaloAuxiliaryActions && formData.zaloTagSkipIfFriend,
+            zaloTagSkipIfHasSelectedTags: supportsZaloAuxiliaryActions && formData.zaloTagSkipIfHasSelectedTags,
+            zaloTagSkipTagIds: supportsZaloAuxiliaryActions ? tagSettings.zaloTagSkipTagIds : [],
+            zaloTagSkipTagNames: supportsZaloAuxiliaryActions ? tagSettings.zaloTagSkipTagNames : [],
+            zaloAliasSkipIfFriend: supportsZaloAuxiliaryActions && formData.zaloAliasSkipIfFriend,
             enableAkaBizTag: supportsAkaBizContactTags ? formData.enableAkaBizTag : false,
             akaBizTagIds: selectedAkaBizTagIds,
             akaBizTagNames: selectedAkaBizTagNames,
@@ -6648,6 +6687,20 @@ export default function CampaignFormModal({
       showAlert(akaBizContactTagsLoading ? 'Tag akaBiz đang tải. Vui lòng chờ tải xong.' : 'Vui lòng tải lại tag akaBiz trước khi lưu chiến dịch.', 'error')
       return
     }
+    if (supportsZaloAuxiliaryActions && formData.enableZaloTag) {
+      for (const accountId of zaloTagAccountIds) {
+        const tagSettings = resolveZaloAccountTagSettings({ zaloTagSettingsByAccountId }, accountId)
+        const accountName = accounts.find(account => account.id === accountId)?.name || String(accountId)
+        if (!tagSettings?.zaloTagId) {
+          showAlert(`Vui lòng chọn tag Zalo cần gắn cho tài khoản ${accountName}.`, 'error')
+          return
+        }
+        if (formData.zaloTagSkipIfHasSelectedTags && tagSettings.zaloTagSkipTagIds.length === 0) {
+          showAlert(`Vui lòng chọn ít nhất một tag trong điều kiện không gắn tag cho tài khoản ${accountName}.`, 'error')
+          return
+        }
+      }
+    }
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
@@ -6773,10 +6826,6 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
         return
       }
-      if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
-        showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
-        return
-      }
       if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
         showAlert('Vui lòng nhập template đổi tên Zalo.', 'error')
         return
@@ -6848,10 +6897,6 @@ export default function CampaignFormModal({
       }
       if (supportsAkaBizContactTags && formData.enableAkaBizTag && getCampaignIdList(formData.akaBizTagIds).length === 0) {
         showAlert('Vui lòng chọn tag akaBiz cần gắn.', 'error')
-        return
-      }
-      if (!isZaloShareMessageMode && formData.enableZaloTag && !formData.zaloTagId) {
-        showAlert('Vui lòng chọn tag Zalo cần gắn.', 'error')
         return
       }
       if (!isZaloShareMessageMode && formData.enableZaloAlias && !formData.zaloAliasTemplate.trim()) {
@@ -9332,127 +9377,70 @@ export default function CampaignFormModal({
     </>
   )
 
-  const renderZaloTagSelector = ({
-    label,
-    value,
-    onChange,
-    emptyHint = 'Bấm “Tải tag” để lấy tag từ Zalo và lưu vào danh sách.'
-  }: {
-    label: string
-    value: number | string | null | undefined
-    onChange: (id: string, name: string) => void
-    emptyHint?: string
-  }) => (
-    <div className="stepper-form-group" style={{ maxWidth: 360 }}>
-      <label>{label}</label>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <select
-          className="stepper-input"
-          value={String(value || '')}
-          disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
-          onChange={e => {
-            const item = zaloLabels.find(labelItem => String(labelItem.id) === e.target.value)
-            onChange(e.target.value, item?.text || '')
-          }}
-        >
-          <option value="">{zaloLabelsLoading ? 'Đang tải tag đã lưu...' : '-- Chọn tag --'}</option>
-          {zaloLabels.map(labelItem => (
-            <option key={labelItem.id} value={labelItem.id}>{labelItem.text}</option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-          disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
-          onClick={handleSyncZaloLabels}
-        >
-          {zaloLabelsSyncing ? <Loader2 size={14} /> : <RefreshCw size={14} />}
-          {zaloLabelsSyncing ? 'Đang tải' : 'Tải tag'}
-        </button>
-      </div>
-      {zaloLabelsError && <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>{zaloLabelsError}</div>}
-      {!zaloLabelsLoading && !zaloLabelsError && zaloLabels.length === 0 && (
-        <div className="schedule-hint">{emptyHint}</div>
-      )}
+  const renderZaloTagMultiSelector = (props: {
+    label: string; values: string[]; onChange: (ids: string[], names: string[]) => void; emptyHint?: string
+  }) => <ZaloTagMultiSelector {...props} labels={zaloLabels}
+    disabled={zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0}
+    loading={zaloLabelsLoading} syncing={zaloLabelsSyncing} error={zaloLabelsError} onSync={handleSyncZaloLabels} />
+
+  const renderZaloTagSkipOptions = () => formData.enableZaloTag && <ZaloCampaignTagSettings
+    accounts={zaloTagAccountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}`,
+      secondary: id === formData.secondaryAccountId }))}
+    settings={zaloTagSettingsByAccountId}
+    skipIfFriend={formData.zaloTagSkipIfFriend}
+    skipIfHasSelectedTags={formData.zaloTagSkipIfHasSelectedTags}
+    onSkipIfFriendChange={value => setFormData(previous => ({ ...previous, zaloTagSkipIfFriend: value }))}
+    onSkipIfHasSelectedTagsChange={value => setFormData(previous => ({ ...previous, zaloTagSkipIfHasSelectedTags: value }))}
+    onChange={(accountId, value) => setZaloTagSettingsByAccountId(previous => ({ ...previous, [String(accountId)]: value }))}
+  />
+
+  const renderZaloAuxiliaryOptions = () => (
+    <div className="zalo-auxiliary-actions">
+      <section className={`zalo-auxiliary-card${formData.enableZaloTag ? ' is-enabled' : ''}`}>
+        <label className="schedule-checkbox-label zalo-auxiliary-toggle">
+          <input type="checkbox" checked={formData.enableZaloTag}
+            onChange={e => setFormData(p => ({ ...p, enableZaloTag: e.target.checked }))} />
+          <span>Kiêm gắn tag Zalo</span>
+        </label>
+        {formData.enableZaloTag && <div className="zalo-auxiliary-body">{renderZaloTagSkipOptions()}</div>}
+      </section>
+      <section className={`zalo-auxiliary-card${formData.enableZaloAlias ? ' is-enabled' : ''}`}>
+        <label className="schedule-checkbox-label zalo-auxiliary-toggle">
+          <input type="checkbox" checked={formData.enableZaloAlias}
+            onChange={e => setFormData(p => ({
+              ...p,
+              enableZaloAlias: e.target.checked,
+              zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
+                ? getDefaultZaloAliasTemplate(p.actionId)
+                : p.zaloAliasTemplate
+            }))} />
+          <span>Kiêm đổi tên</span>
+        </label>
+        {formData.enableZaloAlias && <div className="zalo-auxiliary-body">
+          <div className="stepper-form-group">
+            <div className="message-personalization-field-header">
+              <div className="message-personalization-field-title">
+                <label htmlFor={zaloAliasTemplateInputId}>Mẫu đổi tên</label>
+                {renderMessagePersonalizationDropdown('zaloAliasTemplate', 'field')}
+              </div>
+            </div>
+            <input id={zaloAliasTemplateInputId} ref={zaloAliasTemplateInputRef} type="text" className="stepper-input"
+              value={formData.zaloAliasTemplate}
+              onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
+              placeholder={defaultZaloAliasTemplate} />
+          </div>
+          <div className="zalo-auxiliary-rules zalo-alias-rules" role="group" aria-label="Không đổi tên trong trường hợp">
+            <span className="zalo-auxiliary-rule-heading">Không đổi tên trong trường hợp</span>
+            <label className="schedule-checkbox-label">
+              <input type="checkbox" checked={formData.zaloAliasSkipIfFriend}
+                onChange={e => setFormData(p => ({ ...p, zaloAliasSkipIfFriend: e.target.checked }))} />
+              <span>Đã là bạn bè</span>
+            </label>
+          </div>
+        </div>}
+      </section>
     </div>
   )
-
-  const renderZaloTagMultiSelector = ({
-    label,
-    values,
-    onChange,
-    emptyHint = 'Bấm “Tải tag” để lấy tag từ Zalo.'
-  }: {
-    label: string
-    values: string[]
-    onChange: (ids: string[], names: string[]) => void
-    emptyHint?: string
-  }) => {
-    const selected = new Set(values.map(id => String(id || '').trim()).filter(Boolean))
-    const disabled = zaloLabelsLoading || zaloLabelsSyncing || formData.accountIds.length === 0
-    const updateSelection = (id: string, checked: boolean) => {
-      const next = new Set(selected)
-      if (checked) next.add(id)
-      else next.delete(id)
-      const ids = zaloLabels
-        .map(item => String(item.id))
-        .filter(itemId => next.has(itemId))
-      const names = ids.map(idValue => zaloLabels.find(item => String(item.id) === idValue)?.text || '')
-      onChange(ids, names)
-    }
-
-    return (
-      <div className="stepper-form-group" style={{ maxWidth: 420 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <label style={{ marginBottom: 0 }}>{label}</label>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-            disabled={disabled}
-            onClick={handleSyncZaloLabels}
-          >
-            {zaloLabelsSyncing ? <Loader2 size={14} /> : <RefreshCw size={14} />}
-            {zaloLabelsSyncing ? 'Đang tải' : 'Tải tag'}
-          </button>
-        </div>
-        {zaloLabelsError && <div className="schedule-hint" style={{ color: 'var(--text-error)' }}>{zaloLabelsError}</div>}
-        {!zaloLabelsLoading && !zaloLabelsError && zaloLabels.length === 0 && (
-          <div className="schedule-hint">{emptyHint}</div>
-        )}
-        {zaloLabels.length > 0 && (
-          <div
-            style={{
-              display: 'grid',
-              gap: 8,
-              marginTop: 8,
-              padding: 10,
-              border: '1px solid var(--border-default)',
-              borderRadius: 6,
-              maxHeight: 180,
-              overflowY: 'auto'
-            }}
-          >
-            {zaloLabels.map(labelItem => {
-              const id = String(labelItem.id)
-              return (
-                <label key={id} className="schedule-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(id)}
-                    disabled={disabled}
-                    onChange={e => updateSelection(id, e.target.checked)}
-                  />
-                  <span>{labelItem.text}</span>
-                </label>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    )
-  }
 
   const renderAkaBizContactTagOption = () => {
     if (!supportsAkaBizContactTags) return null
@@ -9470,9 +9458,9 @@ export default function CampaignFormModal({
     }
 
     return (
-      <>
-        <div className="stepper-form-group">
-          <label className="schedule-checkbox-label">
+      <div className="zalo-auxiliary-actions">
+        <section className={`zalo-auxiliary-card akabiz-tag-card${formData.enableAkaBizTag ? ' is-enabled' : ''}`}>
+          <label className="schedule-checkbox-label zalo-auxiliary-toggle">
             <input
               type="checkbox"
               checked={formData.enableAkaBizTag}
@@ -9485,60 +9473,49 @@ export default function CampaignFormModal({
             />
             <span>Kiêm gắn tag akaBiz</span>
           </label>
-        </div>
 
-        {formData.enableAkaBizTag && (
-          <div className="stepper-form-group" style={{ maxWidth: 420 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <label style={{ marginBottom: 0 }}>Tag akaBiz</label>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
-                onClick={() => handleOpenGeneralSettings('akabizTags')}
-                disabled={!onOpenGeneralSettings}
-                title={onOpenGeneralSettings ? 'Quản lý tag akaBiz' : 'Không thể mở quản lý tag akaBiz trong form này'}
-              >
-                <Settings2 size={14} />
-                <span>Quản lý</span>
-              </button>
-            </div>
-
-            {akaBizContactTagsLoading ? (
-              <div className="schedule-hint">Đang tải tag akaBiz...</div>
-            ) : akaBizContactTagsError ? (
-              <div className="schedule-hint" role="alert">{akaBizContactTagsError} <button type="button" className="btn btn-secondary" onClick={() => void loadAkaBizContactTags()}>Tải lại tag</button></div>
-            ) : akaBizContactTags.length === 0 ? (
-              <div className="schedule-hint">Chưa có tag akaBiz.</div>
-            ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 8,
-                  marginTop: 8,
-                  padding: 10,
-                  border: '1px solid var(--border-default)',
-                  borderRadius: 6,
-                  maxHeight: 180,
-                  overflowY: 'auto'
-                }}
-              >
-                {akaBizContactTags.map(tag => (
-                  <label key={tag.id} className="schedule-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(tag.id)}
-                      disabled={akaBizContactTagsLoading}
-                      onChange={e => updateSelection(tag.id, e.target.checked)}
-                    />
-                    <span>{tag.name}</span>
-                  </label>
-                ))}
+          {formData.enableAkaBizTag && (
+            <div className="zalo-auxiliary-body">
+              <div className="zalo-tag-choices-heading">
+                <span>Tag akaBiz</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+                  onClick={() => handleOpenGeneralSettings('akabizTags')}
+                  disabled={!onOpenGeneralSettings}
+                  title={onOpenGeneralSettings ? 'Quản lý tag akaBiz' : 'Không thể mở quản lý tag akaBiz trong form này'}
+                >
+                  <Settings2 size={14} />
+                  <span>Quản lý</span>
+                </button>
               </div>
-            )}
-          </div>
-        )}
-      </>
+
+              {akaBizContactTagsLoading ? (
+                <div className="zalo-auxiliary-hint">Đang tải tag akaBiz...</div>
+              ) : akaBizContactTagsError ? (
+                <div className="zalo-auxiliary-error" role="alert">{akaBizContactTagsError} <button type="button" className="btn btn-secondary" onClick={() => void loadAkaBizContactTags()}>Tải lại tag</button></div>
+              ) : akaBizContactTags.length === 0 ? (
+                <div className="zalo-auxiliary-hint">Chưa có tag akaBiz.</div>
+              ) : (
+                <div className="zalo-tag-choices-list" role="group" aria-label="Tag akaBiz">
+                  {akaBizContactTags.map(tag => (
+                    <label key={tag.id} className="zalo-tag-choice">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(tag.id)}
+                        disabled={akaBizContactTagsLoading}
+                        onChange={e => updateSelection(tag.id, e.target.checked)}
+                      />
+                      <span>{tag.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
     )
   }
 
@@ -10354,63 +10331,7 @@ export default function CampaignFormModal({
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
-      <div className="stepper-form-group">
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.enableZaloTag}
-            onChange={e => setFormData(p => ({
-              ...p,
-              enableZaloTag: e.target.checked,
-              zaloTagId: e.target.checked ? p.zaloTagId : '',
-              zaloTagName: e.target.checked ? p.zaloTagName : ''
-            }))}
-          />
-          <span>Kiêm gắn tag Zalo</span>
-        </label>
-      </div>
-      {formData.enableZaloTag && (
-        renderZaloTagSelector({
-          label: 'Tag Zalo',
-          value: formData.zaloTagId,
-          onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
-        })
-      )}
-
-      <div className="stepper-form-group">
-        <label className="schedule-checkbox-label">
-          <input
-            type="checkbox"
-            checked={formData.enableZaloAlias}
-            onChange={e => setFormData(p => ({
-              ...p,
-              enableZaloAlias: e.target.checked,
-              zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
-                ? getDefaultZaloAliasTemplate(p.actionId)
-                : p.zaloAliasTemplate
-            }))}
-          />
-          <span>Kiêm đổi tên</span>
-        </label>
-      </div>
-      {formData.enableZaloAlias && (
-        <div className="stepper-form-group">
-          <div className="message-personalization-field-header">
-            <div className="message-personalization-field-title">
-              <label>Mẫu đổi tên</label>
-              {renderMessagePersonalizationDropdown('zaloAliasTemplate', 'field')}
-            </div>
-          </div>
-          <input
-            ref={zaloAliasTemplateInputRef}
-            type="text"
-            className="stepper-input"
-            value={formData.zaloAliasTemplate}
-            onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
-            placeholder={defaultZaloAliasTemplate}
-          />
-        </div>
-      )}
+      {renderZaloAuxiliaryOptions()}
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
@@ -10455,8 +10376,6 @@ export default function CampaignFormModal({
               zaloMessageSendMode: checked ? 'share' : 'normal',
               zaloOptOutLinkEnabled: checked ? false : current.zaloOptOutLinkEnabled,
               enableZaloTag: checked ? false : current.enableZaloTag,
-              zaloTagId: checked ? '' : current.zaloTagId,
-              zaloTagName: checked ? '' : current.zaloTagName,
               enableZaloAlias: checked ? false : current.enableZaloAlias,
               enableAkaBizTag: checked ? false : current.enableAkaBizTag,
               akaBizTagIds: checked ? [] : current.akaBizTagIds,
@@ -10586,61 +10505,7 @@ export default function CampaignFormModal({
         <>
           <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
-          <div className="stepper-form-group">
-            <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={formData.enableZaloTag}
-                onChange={e => setFormData(p => ({
-                  ...p,
-                  enableZaloTag: e.target.checked,
-                  zaloTagId: e.target.checked ? p.zaloTagId : '',
-                  zaloTagName: e.target.checked ? p.zaloTagName : ''
-                }))}
-              />
-              <span>Kiêm gắn tag Zalo</span>
-            </label>
-          </div>
-          {formData.enableZaloTag && renderZaloTagSelector({
-            label: 'Tag Zalo',
-            value: formData.zaloTagId,
-            onChange: (id, name) => setFormData(p => ({ ...p, zaloTagId: id, zaloTagName: name }))
-          })}
-
-          <div className="stepper-form-group">
-            <label className="schedule-checkbox-label">
-              <input
-                type="checkbox"
-                checked={formData.enableZaloAlias}
-                onChange={e => setFormData(p => ({
-                  ...p,
-                  enableZaloAlias: e.target.checked,
-                  zaloAliasTemplate: e.target.checked && !p.zaloAliasTemplate.trim()
-                    ? getDefaultZaloAliasTemplate(p.actionId)
-                    : p.zaloAliasTemplate
-                }))}
-              />
-              <span>Kiêm đổi tên</span>
-            </label>
-          </div>
-          {formData.enableZaloAlias && (
-            <div className="stepper-form-group">
-              <div className="message-personalization-field-header">
-                <div className="message-personalization-field-title">
-                  <label>Mẫu đổi tên</label>
-                  {renderMessagePersonalizationDropdown('zaloAliasTemplate', 'field')}
-                </div>
-              </div>
-              <input
-                ref={zaloAliasTemplateInputRef}
-                type="text"
-                className="stepper-input"
-                value={formData.zaloAliasTemplate}
-                onChange={e => setFormData(p => ({ ...p, zaloAliasTemplate: e.target.value }))}
-                placeholder={defaultZaloAliasTemplate}
-              />
-            </div>
-          )}
+          {renderZaloAuxiliaryOptions()}
         </>
       )}
     </>
@@ -11231,6 +11096,18 @@ export default function CampaignFormModal({
     const actionName = campaignActions.find(action => action.id === actionId)?.name
     const name = String(payload.name || `Chiến dịch tạm #${Math.abs(draft.tempId)}`)
     const displayName = draft.items.length > 1 && id !== 0 ? `${name} (${draft.items.length} tài khoản)` : name
+    const draftTagSettings: ZaloTagSettingsByAccountId = {}
+    for (const item of draft.items) {
+      const extra = item.campaignPayload.extraSettings
+      if (!extra || (!extra.enableZaloTag && extra.zaloTagSettingsByAccountId === undefined)) continue
+      for (const accountId of [item.campaignPayload.accountId, item.campaignPayload.secondaryAccountId]) {
+        if (!accountId) continue
+        // Flat legacy settings have no evidence for a secondary account.
+        if (extra.zaloTagSettingsByAccountId === undefined && accountId !== item.campaignPayload.accountId) continue
+        const settings = resolveZaloAccountTagSettings(extra, accountId)
+        if (settings) draftTagSettings[String(accountId)] = settings
+      }
+    }
 
     return {
       id,
@@ -11253,7 +11130,9 @@ export default function CampaignFormModal({
       refreshData: payload.refreshData,
       note: payload.note,
       content: payload.content,
-      extraSettings: payload.extraSettings as CampaignExtraSettings | undefined,
+      extraSettings: Object.keys(draftTagSettings).length > 0
+        ? { ...payload.extraSettings, zaloTagSettingsByAccountId: draftTagSettings }
+        : payload.extraSettings as CampaignExtraSettings | undefined,
       images: payload.images,
       isDelete: false,
       actionName,

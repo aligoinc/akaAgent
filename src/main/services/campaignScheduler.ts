@@ -1,3 +1,4 @@
+import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
 import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
@@ -14475,16 +14476,64 @@ export class CampaignScheduler {
     }
   }
 
+  private async resolveZaloAuxiliaryFriendStatus(
+    account: AutoAccount,
+    campaign: Campaign,
+    target: ZaloResolvedTarget,
+    checks: Map<string, Promise<boolean | null>>
+  ): Promise<boolean | null> {
+    const known = readZaloApiFriendStatus(target.raw)
+    if (known !== null) return known
+    const key = `${account.id}:${target.uid}`
+    let pending = checks.get(key)
+    if (!pending) {
+      pending = (async () => {
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        let status: boolean | null = null
+        try {
+          const response = await this.zaloRuntime!.getFriendRequestStatus(account.id, target.uid)
+          // Use the API field, not the runtime's false default for a missing field.
+          status = readZaloApiFriendStatus(response.raw)
+        } catch {
+          this.throwIfZaloRuntimeStopping(campaign.id)
+        }
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        if (status === null) {
+          await this.logCampaignProgress(campaign.id, `⚠️ Không xác định được trạng thái bạn bè của ${this.getZaloTargetLabel(target)} sau khi kiểm tra bổ sung; vẫn thực hiện gắn tag/đổi tên theo cấu hình`)
+        }
+        return status
+      })()
+      checks.set(key, pending)
+    }
+    const status = await pending
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    return status
+  }
+
   private async zaloApplyContactTag(
     account: AutoAccount,
     campaign: Campaign,
-    options: ZaloApplyContactTagOptions
+    options: ZaloApplyContactTagOptions,
+    friendshipChecks = new Map<string, Promise<boolean | null>>()
   ): Promise<ZaloActionHelperResult> {
     if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const target = options.target
     if (!target?.uid) return { ok: true, skipped: true }
-    const labelId = options.labelId
+    if (campaign.extraSettings?.zaloTagSkipIfFriend === true &&
+      await this.resolveZaloAuxiliaryFriendStatus(account, campaign, target, friendshipChecks) === true) {
+      await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
+      return { ok: true, skipped: true, zaloTarget: target }
+    }
+    const tagSettings = resolveZaloAccountTagSettings({
+      ...campaign.extraSettings, zaloTagId: options.labelId, zaloTagName: options.labelName
+    }, account.id)
+    if (!tagSettings || (campaign.extraSettings?.zaloTagSettingsByAccountId !== undefined &&
+      (!tagSettings.zaloTagId || (campaign.extraSettings.zaloTagSkipIfHasSelectedTags === true && tagSettings.zaloTagSkipTagIds.length === 0)))) {
+      await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: chưa cấu hình đầy đủ tag cho tài khoản ${account.name || account.id}`)
+      return { ok: true, skipped: true, zaloTarget: target }
+    }
+    const labelId = campaign.extraSettings?.zaloTagSettingsByAccountId === undefined ? options.labelId : tagSettings.zaloTagId
     if (!labelId) {
       return {
         ok: true,
@@ -14501,9 +14550,17 @@ export class CampaignScheduler {
     }
 
     try {
-      const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId)
+      const skipLabelIds = campaign.extraSettings?.zaloTagSkipIfHasSelectedTags === true
+        ? tagSettings.zaloTagSkipTagIds
+        : []
+      const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId, skipLabelIds)
+      if (isZaloLabelSkipResult(label)) {
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã có tag ${label.matchedLabelNames.join(', ')}`)
+        return { ok: true, skipped: true, zaloTarget: target }
+      }
       this.throwIfZaloRuntimeStopping(campaign.id)
-      const labelName = label.text || options.labelName || ''
+      const labelName = label.text || tagSettings.zaloTagName || ''
       await this.supabase.appendZaloTagsToExistingContacts(
         account.id,
         'person',
@@ -14568,12 +14625,18 @@ export class CampaignScheduler {
   private async zaloChangeContactAlias(
     account: AutoAccount,
     campaign: Campaign,
-    options: ZaloChangeContactAliasOptions
+    options: ZaloChangeContactAliasOptions,
+    friendshipChecks = new Map<string, Promise<boolean | null>>()
   ): Promise<ZaloActionHelperResult> {
     if (!options.enabled) return { ok: true, skipped: true, zaloTarget: options.target ?? null }
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const target = options.target
     if (!target?.uid) return { ok: true, skipped: true }
+    if (campaign.extraSettings?.zaloAliasSkipIfFriend === true &&
+      await this.resolveZaloAuxiliaryFriendStatus(account, campaign, target, friendshipChecks) === true) {
+      await this.logCampaignProgress(campaign.id, `Bỏ qua đổi tên Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
+      return { ok: true, skipped: true, zaloTarget: target }
+    }
     const businessNow = await this.getTemplateBusinessNow(options.alias)
     const alias = this.renderZaloTemplate(
       options.alias,
@@ -14630,6 +14693,8 @@ export class CampaignScheduler {
     mainPage: PageController | null
   ): BlockRuntimeHelpers {
     let sequenceNo = 0
+    // This helper instance belongs to one input/run; never reuse friendship across inputs.
+    const auxiliaryFriendshipChecks = new Map<string, Promise<boolean | null>>()
     const normalizeEvent = (
       rawEvent: CampaignRunEventInput,
       metadata: BlockRuntimeMetadata
@@ -14724,8 +14789,8 @@ export class CampaignScheduler {
       zaloJoinGroupLink: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloJoinGroupLink(account, campaign, options)),
       zaloSendPhoneFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendPhoneFriendRequest(account, campaign, options)),
       zaloCancelSentFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloCancelSentFriendRequest(account, campaign, options)),
-      zaloApplyContactTag: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloApplyContactTag(account, campaign, options)),
-      zaloChangeContactAlias: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloChangeContactAlias(account, campaign, options)),
+      zaloApplyContactTag: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloApplyContactTag(account, campaign, options, auxiliaryFriendshipChecks)),
+      zaloChangeContactAlias: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloChangeContactAlias(account, campaign, options, auxiliaryFriendshipChecks)),
       emailSendMessage: (options) => this.emailSendMessage(account, campaign, options)
     }
   }

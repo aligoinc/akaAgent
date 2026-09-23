@@ -1,4 +1,5 @@
 import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
+import type { ZaloTagSettingsByAccountId } from './zaloAuxiliaryActions'
 
 // ============================================
 // Campaign Automation Types
@@ -617,12 +618,18 @@ export interface CampaignExtraSettings {
   friendRequestMessage?: string
   zaloMessageSendMode?: 'normal' | 'share'
   enableZaloTag?: boolean
+  zaloTagSkipIfFriend?: boolean
+  zaloTagSkipIfHasSelectedTags?: boolean
+  zaloTagSkipTagIds?: Array<number | string>
+  zaloTagSkipTagNames?: string[]
   zaloTagId?: number | string | null
   zaloTagName?: string | null
+  zaloTagSettingsByAccountId?: ZaloTagSettingsByAccountId
   enableAkaBizTag?: boolean
   akaBizTagIds?: number[]
   akaBizTagNames?: string[]
   enableZaloAlias?: boolean
+  zaloAliasSkipIfFriend?: boolean
   zaloAliasTemplate?: string
   zaloFriendTargetMode?: 'selected' | 'all_friends' | 'tagged_friends'
   zaloFriendSourceTagIds?: Array<number | string>
