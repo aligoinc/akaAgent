@@ -23960,15 +23960,28 @@ body.theme-light :is(
 }
 
 .campaign-data-filter-bar {
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: stretch;
 }
 
-.campaign-data-search-sort {
+.campaign-data-filter-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
+  gap: 10px;
   max-width: 100%;
+}
+
+.campaign-data-filter-fields > .campaign-input-data-search {
+  margin-left: auto;
+}
+
+.campaign-data-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .campaign-data-sort > button {

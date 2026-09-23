@@ -6729,61 +6729,60 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               {detailTab === 'data' && (
                 <>
                   <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
-                    {renderDetailFilters(
-                      'inputDataTime',
-                      'inputDataStatus',
-                      inputDataFilters,
-                      handleInputDataTimePresetChange,
-                      value => setInputDataFilters(prev => ({ ...prev, dateFrom: value })),
-                      value => setInputDataFilters(prev => ({ ...prev, dateTo: value })),
-                      INPUT_DATA_STATUS_FILTER_OPTIONS,
-                      value => setInputDataFilters(prev => ({ ...prev, status: value })),
-                      <div className="report-dropdown-field detail-filter-dropdown-field input-data-origin-filter">
-                        <span>Nguồn thêm data</span>
-                        <button
-                          type="button"
-                          className={`report-filter-button detail-filter-button ${openDetailDropdown === 'inputDataOrigin' ? 'active' : ''}`}
-                          onClick={event => handleDetailDropdownToggle(
-                            'inputDataOrigin',
-                            event.currentTarget,
-                            DETAIL_POPOVER_MIN_WIDTH,
-                            getDetailOptionPopoverHeight(INPUT_DATA_ORIGIN_FILTER_OPTIONS.length)
-                          )}
-                        >
-                          <strong>{getInputDataOriginFilterLabel(inputDataOriginFilter)}</strong>
-                          <ChevronDown size={14} />
-                        </button>
-                        {openDetailDropdown === 'inputDataOrigin' && detailPopoverPosition && (
-                          <div
-                            className="report-filter-popover detail-filter-popover"
-                            style={{
-                              top: detailPopoverPosition.top ?? 'auto',
-                              bottom: detailPopoverPosition.bottom ?? 'auto',
-                              left: detailPopoverPosition.left,
-                              width: detailPopoverPosition.width
-                            }}
+                    <div className="campaign-data-filter-fields">
+                      {renderDetailFilters(
+                        'inputDataTime',
+                        'inputDataStatus',
+                        inputDataFilters,
+                        handleInputDataTimePresetChange,
+                        value => setInputDataFilters(prev => ({ ...prev, dateFrom: value })),
+                        value => setInputDataFilters(prev => ({ ...prev, dateTo: value })),
+                        INPUT_DATA_STATUS_FILTER_OPTIONS,
+                        value => setInputDataFilters(prev => ({ ...prev, status: value })),
+                        <div className="report-dropdown-field detail-filter-dropdown-field input-data-origin-filter">
+                          <span>Nguồn thêm data</span>
+                          <button
+                            type="button"
+                            className={`report-filter-button detail-filter-button ${openDetailDropdown === 'inputDataOrigin' ? 'active' : ''}`}
+                            onClick={event => handleDetailDropdownToggle(
+                              'inputDataOrigin',
+                              event.currentTarget,
+                              DETAIL_POPOVER_MIN_WIDTH,
+                              getDetailOptionPopoverHeight(INPUT_DATA_ORIGIN_FILTER_OPTIONS.length)
+                            )}
                           >
-                            <div className="report-option-list">
-                              {INPUT_DATA_ORIGIN_FILTER_OPTIONS.map(option => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  className={`report-option-button ${inputDataOriginFilter === option.value ? 'selected' : ''}`}
-                                  onClick={() => {
-                                    setInputDataOriginFilter(option.value)
-                                    closeDetailDropdown()
-                                  }}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
+                            <strong>{getInputDataOriginFilterLabel(inputDataOriginFilter)}</strong>
+                            <ChevronDown size={14} />
+                          </button>
+                          {openDetailDropdown === 'inputDataOrigin' && detailPopoverPosition && (
+                            <div
+                              className="report-filter-popover detail-filter-popover"
+                              style={{
+                                top: detailPopoverPosition.top ?? 'auto',
+                                bottom: detailPopoverPosition.bottom ?? 'auto',
+                                left: detailPopoverPosition.left,
+                                width: detailPopoverPosition.width
+                              }}
+                            >
+                              <div className="report-option-list">
+                                {INPUT_DATA_ORIGIN_FILTER_OPTIONS.map(option => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    className={`report-option-button ${inputDataOriginFilter === option.value ? 'selected' : ''}`}
+                                    onClick={() => {
+                                      setInputDataOriginFilter(option.value)
+                                      closeDetailDropdown()
+                                    }}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="campaign-data-search-sort">
-                      {renderDetailSort('inputDataSort')}
+                          )}
+                        </div>
+                      )}
                       <label className="campaign-input-data-search">
                         <Search size={14} />
                         <input
@@ -6793,51 +6792,54 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         />
                       </label>
                     </div>
-	                    <div className="detail-filter-actions input-data-filter-actions">
-	                      <button
-	                        className="btn btn-secondary btn-sm"
-	                        onClick={() => handleInputDataBatchStatus('chờ xử lý')}
-	                        title="Tiếp tục hoặc chạy lại đúng input đã chọn"
-	                      >
-	                        <Play size={12} /> Tiếp tục / chạy lại
-	                      </button>
-	                      <button
-	                        className="btn btn-secondary btn-sm"
-	                        onClick={() => handleInputDataBatchStatus('tạm dừng')}
-	                        title="Tạm dừng data đã chọn"
-	                      >
-	                        <Pause size={12} /> Tạm dừng
-	                      </button>
-	                      <div className="input-data-action-menu" ref={inputDataActionMenuRef}>
+                    <div className="campaign-data-toolbar-actions">
+                      {renderDetailSort('inputDataSort')}
+                      <div className="detail-filter-actions input-data-filter-actions">
                         <button
-                          className="btn btn-secondary"
-                          onClick={handleInputDataActionMenuToggle}
-                          title="Hành động với data đã chọn"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleInputDataBatchStatus('chờ xử lý')}
+                          title="Tiếp tục hoặc chạy lại đúng input đã chọn"
                         >
-                          Hành động <ChevronDown size={14} />
+                          <Play size={12} /> Tiếp tục / chạy lại
                         </button>
-                        {openInputDataActionMenu && (
-                          <div className="input-data-action-menu-list">
-                            <button type="button" onClick={handleCreateCampaignFromInputData}>
-                              <Plus size={14} /> Tạo chiến dịch
-                            </button>
-                            <button type="button" onClick={handleOpenAddInputDataModal}>
-                              <Plus size={14} /> Thêm vào chiến dịch
-                            </button>
-                            {selectedCampaignSummary?.dataTargetSourceMode !== 'data_group' && (
-                              <button type="button" onClick={() => void handleOpenAddDataToCurrentCampaignModal(selectedCampaignSummary)}>
-                                <Plus size={14} /> Thêm data
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleInputDataBatchStatus('tạm dừng')}
+                          title="Tạm dừng data đã chọn"
+                        >
+                          <Pause size={12} /> Tạm dừng
+                        </button>
+                        <div className="input-data-action-menu" ref={inputDataActionMenuRef}>
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleInputDataActionMenuToggle}
+                            title="Hành động với data đã chọn"
+                          >
+                            Hành động <ChevronDown size={14} />
+                          </button>
+                          {openInputDataActionMenu && (
+                            <div className="input-data-action-menu-list">
+                              <button type="button" onClick={handleCreateCampaignFromInputData}>
+                                <Plus size={14} /> Tạo chiến dịch
                               </button>
-                            )}
-                            <button type="button" onClick={() => { setOpenInputDataActionMenu(false); handleExportCampaignInputData() }}>
-                              <Download size={14} /> Xuất Excel
-                            </button>
-                          </div>
+                              <button type="button" onClick={handleOpenAddInputDataModal}>
+                                <Plus size={14} /> Thêm vào chiến dịch
+                              </button>
+                              {selectedCampaignSummary?.dataTargetSourceMode !== 'data_group' && (
+                                <button type="button" onClick={() => void handleOpenAddDataToCurrentCampaignModal(selectedCampaignSummary)}>
+                                  <Plus size={14} /> Thêm data
+                                </button>
+                              )}
+                              <button type="button" onClick={() => { setOpenInputDataActionMenu(false); handleExportCampaignInputData() }}>
+                                <Download size={14} /> Xuất Excel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {inputDataActionLoading && (
+                          <RefreshCw size={14} className="spin input-data-action-spinner" />
                         )}
                       </div>
-                      {inputDataActionLoading && (
-                        <RefreshCw size={14} className="spin input-data-action-spinner" />
-                      )}
                     </div>
                   </div>
                   {loadingCampaignInputData ? (
@@ -6968,18 +6970,17 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               {detailTab === 'actions' && (
                 <>
                   <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
-                    {renderDetailFilters(
-                      'actionsTime',
-                      'actionsStatus',
-                      actionDetailFilters,
-                      handleActionDetailTimePresetChange,
-                      value => setActionDetailFilters(prev => ({ ...prev, dateFrom: value })),
-                      value => setActionDetailFilters(prev => ({ ...prev, dateTo: value })),
-                      actionDetailStatusOptions,
-                      value => setActionDetailFilters(prev => ({ ...prev, status: value }))
-                    )}
-                    <div className="campaign-data-search-sort">
-                      {renderDetailSort('actionsSort')}
+                    <div className="campaign-data-filter-fields">
+                      {renderDetailFilters(
+                        'actionsTime',
+                        'actionsStatus',
+                        actionDetailFilters,
+                        handleActionDetailTimePresetChange,
+                        value => setActionDetailFilters(prev => ({ ...prev, dateFrom: value })),
+                        value => setActionDetailFilters(prev => ({ ...prev, dateTo: value })),
+                        actionDetailStatusOptions,
+                        value => setActionDetailFilters(prev => ({ ...prev, status: value }))
+                      )}
                       <label className="campaign-input-data-search">
                         <Search size={14} />
                         <input
@@ -6989,26 +6990,29 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         />
                       </label>
                     </div>
-                    <div className="detail-filter-actions">
-                      <button
-                        className="btn btn-secondary"
-                        onClick={handleLoadCampaignDetails}
-                        disabled={loadingCampaignDetailPage}
-                        title="Tải lại kết quả chạy"
-                      >
-                        <RefreshCw size={14} className={loadingCampaignDetailPage ? 'spin' : ''} /> Tải lại
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={handleExportCampaignDetails}
-                        disabled={loadingCampaignDetailPage || exportingCampaignDetails || campaignDetailPageTotal === 0}
-                        title="Xuất lịch sử hành động ra Excel"
-                      >
-                        {exportingCampaignDetails
-                          ? <RefreshCw size={14} className="spin" />
-                          : <Download size={14} />}
-                        {exportingCampaignDetails ? ' Đang xuất...' : ' Xuất Excel'}
-                      </button>
+                    <div className="campaign-data-toolbar-actions">
+                      {renderDetailSort('actionsSort')}
+                      <div className="detail-filter-actions">
+                        <button
+                          className="btn btn-secondary"
+                          onClick={handleLoadCampaignDetails}
+                          disabled={loadingCampaignDetailPage}
+                          title="Tải lại kết quả chạy"
+                        >
+                          <RefreshCw size={14} className={loadingCampaignDetailPage ? 'spin' : ''} /> Tải lại
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={handleExportCampaignDetails}
+                          disabled={loadingCampaignDetailPage || exportingCampaignDetails || campaignDetailPageTotal === 0}
+                          title="Xuất lịch sử hành động ra Excel"
+                        >
+                          {exportingCampaignDetails
+                            ? <RefreshCw size={14} className="spin" />
+                            : <Download size={14} />}
+                          {exportingCampaignDetails ? ' Đang xuất...' : ' Xuất Excel'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {loadingCampaignDetailPage ? (

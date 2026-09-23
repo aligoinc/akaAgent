@@ -46,20 +46,20 @@ async function main() {
       && window.sortSmoke.store.getState().campaignInputData[0]?.id === id, id)
     await tab('Data ban đầu').click()
     await waitInput(205)
-    const assertSortLeft = async (placeholder, tabName) => {
+    const assertTwoRowToolbar = async (placeholder, tabName) => {
       for (const width of [850, 1024, 1600]) {
         await page.setViewportSize({ width, height: 1100 })
-        const group = page.locator('.campaign-data-search-sort')
         const sort = await sortButton().boundingBox()
         const search = await page.getByPlaceholder(placeholder).locator('..').boundingBox()
-        const filters = await page.locator('.campaign-data-filter-bar .detail-filter-controls').boundingBox()
-        const bounds = await group.boundingBox()
-        assert.ok(sort.x + sort.width <= search.x, 'sort must stay next to search')
-        if (bounds.y >= filters.y + filters.height) assert.ok(Math.abs(bounds.x - filters.x) <= 1, 'wrapped sort group must align left')
-        await page.locator('.campaign-data-filter-bar').screenshot({ path: `/tmp/akaagent-sort-wrap-${tabName}-${width}.png` })
+        const actions = await page.locator('.campaign-data-toolbar-actions').boundingBox()
+        const fields = await page.locator('.campaign-data-filter-fields').boundingBox()
+        assert.ok(sort.y >= search.y + search.height, 'sort must be below search')
+        assert.ok(Math.abs(sort.x - actions.x) <= 1, 'sort must align to the left edge')
+        assert.ok(Math.abs(search.x + search.width - fields.x - fields.width) <= 1, 'search must align to the right edge')
+        await page.locator('.campaign-data-filter-bar').screenshot({ path: `/tmp/akaagent-toolbar-${tabName}-${width}.png` })
       }
     }
-    await assertSortLeft('Tìm tên, UID, SĐT, email, key...', 'input')
+    await assertTwoRowToolbar('Tìm tên, UID, SĐT, email, key...', 'input')
     await sortButton().click()
     assert.equal(await page.getByRole('menuitemradio').count(), 4)
     assert.equal(await page.getByRole('menuitemradio', { name: 'Tạo mới nhất' }).getAttribute('aria-checked'), 'true')
@@ -117,7 +117,7 @@ async function main() {
     assert.equal(await search.inputValue(), 'Data 2')
     await tab('Kết quả chạy').click()
     await page.waitForFunction(() => window.sortSmoke.store.getState().campaignDetailPageItems[0]?.id === 205)
-    await assertSortLeft('Tìm hành động, trạng thái, nội dung, link...', 'results')
+    await assertTwoRowToolbar('Tìm hành động, trạng thái, nội dung, link...', 'results')
     await sortButton().click()
     assert.equal(await page.getByRole('menuitemradio').count(), 2)
     await page.getByRole('menuitemradio', { name: 'Tạo cũ nhất', exact: true }).click()
