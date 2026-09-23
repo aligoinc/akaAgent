@@ -73,6 +73,8 @@ Tab **Đồng bộ ngoài** dùng `dataGroupExternalSync` qua main/preload/rende
 
 UI chỉ theo dõi pending/running mỗi 10 giây, tối đa 5 phút, khi tab/dialog đồng bộ hiện và không mở editor; thành công tải lại member/group/panel rồi dừng. Sửa nguồn tự kết nối, đổi chế độ tiêu đề tự đọc lại, cột thay đổi phải ghép lại; chỉ mount một panel giữa chế độ rộng/hẹp. Kiểm chứng bằng parser smoke, UI smoke Google Sheet, SQL rollback và hai typecheck/build.
 
+V311 cấp thêm `EXECUTE` cho `service_role` trên `aka_agent_data_group_external_sync(bigint,bigint,text,text,text,jsonb)` và `aka_agent_list_data_group_members_v3` để Web gọi được RPC; giữ nguyên body/owner/ACL Desktop và không reload schema. Smoke phải đổi role SQL thật bằng `SET LOCAL ROLE service_role`, không chỉ đặt JWT claim. Xem [audit v311](docs/DATA_GROUP_SHEET_V311_AUDIT.md).
+
 ### Admin akaBiz (desktop)
 
 Cron Admin v296 tối ưu lọc log job thưa/đã tắt: thử cửa sổ PK 5.000 dòng, thiếu 101 kết quả mới dùng lọc/top-N sort `runid+0` để tránh index scan ngược trên toàn heap; vẫn cursor `runid`, trả 100 dòng và không thêm index/pool/timer. Body live và audit hiện tại ở [ADMIN_CRON_V296_AUDIT.md](docs/ADMIN_CRON_V296_AUDIT.md), không lấy lại body v294 để ghi đè. UI lịch có diễn giải tiếng Việt bên cạnh cron gốc; phần thông báo gọi người nhận là “khách hàng” nhưng vẫn lưu theo `org_staff`.
