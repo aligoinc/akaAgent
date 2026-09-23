@@ -23955,6 +23955,22 @@ body.theme-light :is(
   font-size: 12px;
 }
 
+.campaign-data-sort {
+  flex-shrink: 0;
+}
+
+.campaign-data-sort > button {
+  height: 30px;
+  white-space: nowrap;
+}
+
+.campaign-data-sort .report-option-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .campaign-input-data-pager {
   min-height: 38px;
   display: flex;

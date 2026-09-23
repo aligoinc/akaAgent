@@ -979,8 +979,14 @@ export interface CampaignInputDataOrigin {
 
 export type CampaignInputOriginFilter = 'all' | 'data_group' | 'automation' | 'manual_or_api' | 'direct'
 
+export type CampaignDetailSort = 'created_desc' | 'created_asc'
+export type CampaignInputDataSort = CampaignDetailSort | 'processed_desc' | 'processed_asc'
+
 export interface CampaignInputDataPageQuery {
   campaignId: number
+  /** Restrict to a fixed selection (at most 500 IDs per request). */
+  inputDataIds?: number[]
+  sort?: CampaignInputDataSort
   search?: string
   status?: CampaignInputStatus | ''
   originFilter?: CampaignInputOriginFilter
@@ -1197,6 +1203,7 @@ export interface CampaignDetailAutomationTrigger {
 
 export interface CampaignDetailPageQuery {
   campaignId: number
+  sort?: CampaignDetailSort
   search?: string
   status?: CampaignDetailStatus | ''
   dateFrom?: string | null
