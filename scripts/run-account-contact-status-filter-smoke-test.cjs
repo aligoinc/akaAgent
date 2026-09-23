@@ -41,6 +41,7 @@ async function main() {
     name: `Person ${String(index + 1).padStart(4, '0')}`, uid: `uid-${index + 1}`,
     is_friend: index < 50 ? true : index < 1050 ? false : null,
     is_delete: false,
+    zalo_user: index % 4 === 3 ? null : { gender: [0, 1, null][index % 4] },
     extra_data: { zaloTagIds: index % 2 === 0 ? ['vip'] : [], phone: `090${String(index).padStart(7, '0')}` },
     akabiz_tag_ids: index % 5 === 0 ? [3] : []
   }))
@@ -57,8 +58,13 @@ async function main() {
       const predicates = []
       let range
       let counted = false
+      let withZaloGender = false
       const query = {
-        select(_fields, options) { counted = options?.count === 'exact'; return query },
+        select(fields, options) {
+          counted = options?.count === 'exact'
+          withZaloGender = fields.includes('zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender)')
+          return query
+        },
         eq(key, value) { predicates.push(row => row[key] === value); return query },
         in(key, values) { predicates.push(row => values.includes(row[key])); return query },
         or(expression) {
@@ -71,7 +77,10 @@ async function main() {
         range(from, to) { range = [from, to]; return query },
         then(onFulfilled, onRejected) {
           const matching = rows.filter(row => predicates.every(predicate => predicate(row)))
-          const data = range ? matching.slice(range[0], range[1] + 1) : matching
+          const data = (range ? matching.slice(range[0], range[1] + 1) : matching).map(row => {
+            const { zalo_user, ...contact } = row
+            return withZaloGender ? { ...contact, zalo_user } : contact
+          })
           calls.push({ range, rowCount: data.length })
           return Promise.resolve({ data, error: null, count: counted ? matching.length : null }).then(onFulfilled, onRejected)
         }
@@ -87,6 +96,11 @@ async function main() {
     const input = { contactType: 'person', statusFilter: 'active', limit: 100, offset: 0, ...query }
     const result = exported ? await exportContactsPage(11, input) : await listContactsPage(11, input)
     assert.deepEqual((exported ? result : result.contacts).map(row => row.id), expectedIds, `${name}: selected contacts`)
+    for (const contact of exported ? result : result.contacts) {
+      const source = rows.find(row => row.id === contact.id)
+      assert.equal(contact.extraData?.gender, source.zalo_user?.gender, `${name}: linked gender including 0/null/missing`)
+      assert.equal(contact.extraData?.phone, source.extra_data.phone, `${name}: existing metadata stays intact`)
+    }
     assert.equal(calls.reduce((total, call) => total + call.rowCount, 0), expectedRowsRead, `${name}: DB rows fetched`)
     passed += 1
     console.log(`PASS ${name}: ${calls.length} DB request(s), ${expectedRowsRead} rows fetched`)
