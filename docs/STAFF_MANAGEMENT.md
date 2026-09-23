@@ -25,12 +25,12 @@ Giao diện React dựng từ `Quản lý nhân viên.dc.html` trong bộ thiế
 | Cột | Ý nghĩa |
 |---|---|
 | `org_organization.staff_duration_days` | Integer dương hoặc NULL; NULL hiểu là 365 ngày |
-| `org_organization.use_organization_expiration` | Boolean, mặc định false; chỉ cấu hình ngoài màn hình này |
+| `org_organization.use_staff_expiration` | Boolean NOT NULL, mặc định false = dùng hạn tổ chức; true = kiểm tra thêm hạn nhân viên; chỉ cấu hình ngoài màn hình này |
 | `org_staff.expiration_date` | Timestamptz nullable; xét **ngày Việt Nam**, còn hiệu lực hết ngày đó |
 
 Nhân viên tạo qua RPC quản lý nhận ngày hạn do DB tính: ngày Việt Nam lúc tạo + số ngày cấu hình + 1. Ví dụ tạo ngày 22/09/2026, cấu hình NULL → 365, hạn nhân viên là 23/09/2027. Thay số ngày sau đó không tính lại ngày hạn đã cấp. Migration giữ các nhân viên hiện hữu có hạn NULL; không backfill. V306 dùng cùng một timestamp DB cho ngày tạo và ngày tính hạn, tránh lệch ngày nếu transaction bắt đầu sát nửa đêm.
 
-`use_organization_expiration=false`: dùng hạn nhân viên, NULL thì kế thừa hạn tổ chức. `true`: bỏ giới hạn riêng của nhân viên, dùng hạn tổ chức. Hạn hiệu lực hiển thị là hạn sớm hơn giữa hạn riêng áp dụng và hạn gói akaAgent xa nhất. Nhân viên luôn cần quyền sản phẩm tương ứng còn hạn:
+`use_staff_expiration=false` (mặc định): dùng hạn tổ chức. `true`: kiểm tra thêm hạn nhân viên, NULL thì kế thừa hạn tổ chức. V310 đặt cờ mới false cho mọi tổ chức hiện có; không đảo dữ liệu từ cờ cũ. V312 đã drop cột `use_organization_expiration` sau khi xác nhận không còn nơi dùng; RPC giữ field JSON cũ `useOrganizationExpiration = NOT useStaffExpiration` để app cũ đọc đúng chế độ. Hạn hiệu lực hiển thị là hạn sớm hơn giữa hạn riêng áp dụng và hạn gói akaAgent xa nhất. Nhân viên luôn cần quyền sản phẩm tương ứng còn hạn:
 
 | Tính năng | Product ID |
 |---|---|

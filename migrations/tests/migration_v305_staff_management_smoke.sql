@@ -14,6 +14,7 @@ BEGIN
     SELECT customer_id,'__staff_v305_rollback__','0999999305',3,s.id,s.id FROM public.org_staff s WHERE s.organization_id=1 AND s.is_admin IS TRUE LIMIT 1 RETURNING org_organization.id INTO org_id;
   INSERT INTO public.org_organization(customer_id,name,phone,max_staff,staff_id_created,staff_id_owner)
     SELECT customer_id,'__staff_v305_foreign__','0999999304',3,s.id,s.id FROM public.org_staff s WHERE s.organization_id=1 AND s.is_admin IS TRUE LIMIT 1 RETURNING org_organization.id INTO other_org;
+  UPDATE public.org_organization SET use_staff_expiration=true WHERE id=org_id;
   INSERT INTO public.org_staff(organization_id,name,phone,is_admin) VALUES(org_id,'Admin fixture','0999999305',true) RETURNING org_staff.id,org_staff.username INTO actor_id,username;
   INSERT INTO public.org_staff(organization_id,name,phone,is_admin) VALUES(other_org,'Foreign fixture','0999999304',true) RETURNING org_staff.id INTO other_id;
   INSERT INTO public.org_group(organization_id,name) VALUES(other_org,'Foreign group') RETURNING org_group.id INTO foreign_group;
@@ -60,9 +61,9 @@ BEGIN
   UPDATE public.org_staff s SET expiration_date=(today-1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' WHERE s.id=member_id;
   IF public.aka_agent_staff_time_allowed(member_id) THEN RAISE EXCEPTION 'staff expiry ignored'; END IF;
   IF public.aka_agent_staff_management_row(member_id)->>'status'<>'expired' THEN RAISE EXCEPTION 'package longer than staff'; END IF;
-  UPDATE public.org_organization o SET use_organization_expiration=true WHERE o.id=org_id;
+  UPDATE public.org_organization o SET use_staff_expiration=false WHERE o.id=org_id;
   IF NOT public.aka_agent_staff_time_allowed(member_id) THEN RAISE EXCEPTION 'organization mode failed'; END IF;
-  UPDATE public.org_organization o SET use_organization_expiration=false,staff_duration_days=10 WHERE o.id=org_id;
+  UPDATE public.org_organization o SET use_staff_expiration=true,staff_duration_days=10 WHERE o.id=org_id;
   UPDATE public.org_staff s SET expiration_date=today::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' WHERE s.id=member_id;
   IF NOT public.aka_agent_staff_time_allowed(member_id) THEN RAISE EXCEPTION 'inclusive Vietnam expiry failed'; END IF;
   UPDATE public.org_staff s SET expiration_date=saved_expiry WHERE s.id=member_id;

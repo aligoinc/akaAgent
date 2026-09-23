@@ -121,7 +121,7 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
   const existingStaff = editor.kind === 'staff' ? editor.row : undefined
   const otherManagers = (data.groups.find(row => row.id === Number(group))?.managers || []).filter(manager => manager.id !== existingStaff?.id)
   const freeSeats = Math.max(0, data.organization.maxStaff - data.organization.staffCount)
-  const expiryNote = data.organization.useOrganizationExpiration
+  const expiryNote = !data.organization.useStaffExpiration
     ? `Đang dùng hạn tổ chức: ${date(data.organization.expirationDate)}.`
     : existingStaff && !existingStaff.expirationDate
       ? 'Nhân viên chưa có hạn riêng nên dùng hạn tổ chức.'
@@ -299,7 +299,7 @@ export default function StaffManagementPage() {
       </div>
       {data && <>
         <div className="sm-summary-card"><span>Nhân viên</span><strong>{data.organization.staffCount} / {data.organization.maxStaff}</strong><i /><span className={`sm-badge ${quotaFull ? 'sm-badge-red' : 'sm-badge-green'}`}>{quotaFull ? 'Đã đầy' : `Còn ${data.organization.maxStaff - data.organization.staffCount} chỗ`}</span></div>
-        <div className="sm-summary-card"><span>Hạn dùng tính theo</span><strong className="sm-mode-badge">{data.organization.useOrganizationExpiration ? `Hạn của tổ chức · ${date(data.organization.expirationDate)}` : 'Hạn của nhân viên'}</strong></div>
+        <div className="sm-summary-card"><span>Hạn dùng tính theo</span><strong className="sm-mode-badge">{!data.organization.useStaffExpiration ? `Hạn của tổ chức · ${date(data.organization.expirationDate)}` : 'Hạn của nhân viên'}</strong></div>
       </>}
       <button className="sm-reload" aria-label="Tải lại" title="Tải lại" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw size={16} /></button>
     </div>
@@ -389,7 +389,7 @@ export default function StaffManagementPage() {
         <span className="sm-login-rule">Mật khẩu mặc định <b>123456</b> · Username = <b>{data?.organization.id ?? 'ID tổ chức'}.SĐT</b></span>
       </div>
     </section>
-    {data && <div className="sm-expiry-note"><Info size={14} /><span>{data.organization.useOrganizationExpiration ? 'Nhân viên dùng hạn tổ chức.' : 'Dùng hạn nhân viên; chưa có hạn riêng thì dùng hạn tổ chức.'} Luôn cần gói sản phẩm còn hiệu lực. Hạn tổ chức: <strong>{date(data.organization.expirationDate)}</strong>.</span></div>}
+    {data && <div className="sm-expiry-note"><Info size={14} /><span>{!data.organization.useStaffExpiration ? 'Nhân viên dùng hạn tổ chức.' : 'Dùng hạn nhân viên; chưa có hạn riêng thì dùng hạn tổ chức.'} Luôn cần gói sản phẩm còn hiệu lực. Hạn tổ chức: <strong>{date(data.organization.expirationDate)}</strong>.</span></div>}
     {editor && data && <StaffEditor editor={editor} data={data} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); setNotice('Đã lưu thay đổi.'); setRevision(value => value + 1) }} />}
   </main>
 }

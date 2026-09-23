@@ -1,4 +1,4 @@
-import { canManageStaff, type StaffAccess, type StaffManagementAction } from '../../../shared/staffManagement'
+import { canManageStaff, resolveUseStaffExpiration, type StaffAccess, type StaffManagementAction } from '../../../shared/staffManagement'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -39,6 +39,9 @@ export async function callStaffManagement(action: StaffManagementAction, input: 
     // Do not expose SQL/details or log a response containing a password.
     throw new Error('Không thể xác nhận thao tác. Hãy thử lại; yêu cầu đang lưu sẽ giữ nguyên để tránh thực hiện trùng.')
   }
+  if (action === 'list' && data?.organization) {
+    return { ...data, organization: { ...data.organization, useStaffExpiration: resolveUseStaffExpiration(data.organization) } }
+  }
   return data
 }
 
@@ -47,11 +50,11 @@ export async function readStaffAccess(staffId: number, username: string, passwor
     p_staff_id: staffId, p_username: username, p_password: password
   }).abortSignal(AbortSignal.timeout(5000))
   if (error) {
-    if (error.message?.includes('staff_auth_invalid')) return { isAdmin: false, isActive: false, timeAllowed: false, expirationDate: null, useOrganizationExpiration: false }
+    if (error.message?.includes('staff_auth_invalid')) return { isAdmin: false, isActive: false, timeAllowed: false, expirationDate: null, useStaffExpiration: false }
     throw new Error('Không thể kiểm tra quyền sử dụng nhân viên. Vui lòng thử lại.')
   }
   if (!data || typeof data.isActive !== 'boolean' || typeof data.timeAllowed !== 'boolean' || typeof data.isAdmin !== 'boolean') {
     throw new Error('Không thể xác minh quyền sử dụng nhân viên.')
   }
-  return data as StaffAccess
+  return { ...data, useStaffExpiration: resolveUseStaffExpiration(data) } as StaffAccess
 }
