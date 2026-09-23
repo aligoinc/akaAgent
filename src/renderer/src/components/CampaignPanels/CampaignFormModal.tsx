@@ -10466,6 +10466,9 @@ export default function CampaignFormModal({
         />
         <span>Gửi dạng chia sẻ tin nhắn, gửi nhanh cho 50 người mỗi lần (không áp dụng cá nhân hoá nội dung tin nhắn)</span>
       </label>
+      <div className="schedule-hint" style={{ marginTop: 6 }}>
+        Lưu ý: Chỉ nên gửi bằng chữ, không nên chọn ảnh để gửi. Nếu bạn chọn ảnh, Zalo sẽ tự động chuyển gửi bằng cách chia sẻ thành gửi tin nhắn riêng cho từng bạn (nhóm). Khi đó, gửi nhiều quá sẽ bị dừng gửi theo cơ chế Zalo.
+      </div>
     </div>
   )
 
@@ -11810,55 +11813,6 @@ export default function CampaignFormModal({
     )
   }
 
-  const renderExternalCampaignPicker = (
-    kind: AkaBizCampaignListKind,
-    isIntegrated: boolean,
-    selectedIds: number[],
-    onConfirm: (campaignIds: number[]) => void,
-    emptyText: string
-  ) => {
-    if (akabizIntegrationsLoading || akabizIntegrations === null) {
-      return <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>Đang tải tích hợp...</div>
-    }
-
-    if (!isIntegrated) {
-      return (
-        <div className="external-campaign-empty">
-          <div>Chưa tích hợp tài khoản akaBiz phù hợp.</div>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleOpenGeneralSettings()}
-            disabled={!onOpenGeneralSettings}
-          >
-            Mở Cài đặt chung
-          </button>
-        </div>
-      )
-    }
-
-    const source: CampaignPickerSource = { type: 'external', kind }
-    return (
-      <div className="campaign-picker-field">
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm campaign-picker-select-button"
-          onClick={() => openCampaignPicker({
-            title: 'Chọn chiến dịch',
-            source,
-            columns: ['name', 'account', 'status', 'schedule'],
-            emptyText,
-            selectedIds,
-            onConfirm
-          })}
-        >
-          Chọn chiến dịch
-        </button>
-        {renderSelectedCampaignSummary(source, selectedIds, 'Chưa chọn chiến dịch nào.')}
-      </div>
-    )
-  }
-
   const renderFindDataSourceCampaignPicker = () => {
     const renderFindDataSourceKindBlock = (
       sourceKind: FindDataSourceKind,
@@ -12129,149 +12083,6 @@ export default function CampaignFormModal({
   }
 
   const renderFoundDataHandling = () => {
-    const externalOptions: ReactNode[] = [
-      formData.isFindPhone && (
-        <div key="phone-sms" className="extra-comment-options">
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={handleFoundPhoneSmsData}
-              onChange={e => {
-                const checked = e.target.checked
-                setHandleFoundPhoneSmsData(checked)
-                if (!checked) setFormData(p => ({ ...p, findPhoneSmsTargetCampaignIds: [] }))
-              }}
-            />
-            <span>Đẩy SĐT sang akaBiz Sms</span>
-          </label>
-          {handleFoundPhoneSmsData && (
-            <div className="stepper-form-group" style={{ marginTop: 12 }}>
-              <label>Chọn chiến dịch</label>
-              {renderExternalCampaignPicker(
-                'sms',
-                hasSmsIntegration,
-                formData.findPhoneSmsTargetCampaignIds || [],
-                ids => setFormData(p => ({ ...p, findPhoneSmsTargetCampaignIds: ids })),
-                'Không có chiến dịch akaBiz Sms phù hợp để nhận SĐT.'
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      formData.isFindPhone && (
-        <div key="phone-zalo-web" className="extra-comment-options">
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={handleFoundPhoneZaloWebData}
-              onChange={e => {
-                const checked = e.target.checked
-                setHandleFoundPhoneZaloWebData(checked)
-                if (!checked) setFormData(p => ({ ...p, findPhoneZaloWebTargetCampaignIds: [] }))
-              }}
-            />
-            <span>Đẩy SĐT sang akaBiz Zalo Web</span>
-          </label>
-          {handleFoundPhoneZaloWebData && (
-            <div className="stepper-form-group" style={{ marginTop: 12 }}>
-              <label>Chọn chiến dịch</label>
-              {renderExternalCampaignPicker(
-                'zaloPhone',
-                hasZaloWebIntegration,
-                formData.findPhoneZaloWebTargetCampaignIds || [],
-                ids => setFormData(p => ({ ...p, findPhoneZaloWebTargetCampaignIds: ids })),
-                'Không có chiến dịch akaBiz Zalo Web phù hợp để nhận SĐT.'
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      formData.isFindPhone && (
-        <div key="phone-desktop" className="extra-comment-options">
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={handleFoundPhoneAkaBizDesktopData}
-              onChange={e => {
-                const checked = e.target.checked
-                setHandleFoundPhoneAkaBizDesktopData(checked)
-                if (!checked) setFormData(p => ({ ...p, findPhoneAkaBizDesktopTargetCampaignIds: [] }))
-              }}
-            />
-            <span>Đẩy SĐT sang akaBiz Desktop</span>
-          </label>
-          {handleFoundPhoneAkaBizDesktopData && (
-            <div className="stepper-form-group" style={{ marginTop: 12 }}>
-              <label>Chọn chiến dịch</label>
-              {renderExternalCampaignPicker(
-                'desktopZaloPhone',
-                hasAkaBizDesktopIntegration,
-                formData.findPhoneAkaBizDesktopTargetCampaignIds || [],
-                ids => setFormData(p => ({ ...p, findPhoneAkaBizDesktopTargetCampaignIds: ids })),
-                'Không có chiến dịch akaBiz Desktop phù hợp để nhận SĐT.'
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      formData.isFindLinkGroupZalo && (
-        <div key="zalo-link-web" className="extra-comment-options">
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={handleFoundZaloGroupLinkWebData}
-              onChange={e => {
-                const checked = e.target.checked
-                setHandleFoundZaloGroupLinkWebData(checked)
-                if (!checked) setFormData(p => ({ ...p, findZaloGroupLinkWebTargetCampaignIds: [] }))
-              }}
-            />
-            <span>Đẩy link group Zalo sang akaBiz Zalo Web</span>
-          </label>
-          {handleFoundZaloGroupLinkWebData && (
-            <div className="stepper-form-group" style={{ marginTop: 12 }}>
-              <label>Chọn chiến dịch</label>
-              {renderExternalCampaignPicker(
-                'zaloGroupLink',
-                hasZaloWebIntegration,
-                formData.findZaloGroupLinkWebTargetCampaignIds || [],
-                ids => setFormData(p => ({ ...p, findZaloGroupLinkWebTargetCampaignIds: ids })),
-                'Không có chiến dịch akaBiz Zalo Web phù hợp để nhận link group Zalo.'
-              )}
-            </div>
-          )}
-        </div>
-      ),
-      formData.isFindLinkGroupZalo && (
-        <div key="zalo-link-desktop" className="extra-comment-options">
-          <label className="schedule-checkbox-label">
-            <input
-              type="checkbox"
-              checked={handleFoundZaloGroupLinkAkaBizDesktopData}
-              onChange={e => {
-                const checked = e.target.checked
-                setHandleFoundZaloGroupLinkAkaBizDesktopData(checked)
-                if (!checked) setFormData(p => ({ ...p, findZaloGroupLinkAkaBizDesktopTargetCampaignIds: [] }))
-              }}
-            />
-            <span>Đẩy link group Zalo sang akaBiz Desktop</span>
-          </label>
-          {handleFoundZaloGroupLinkAkaBizDesktopData && (
-            <div className="stepper-form-group" style={{ marginTop: 12 }}>
-              <label>Chọn chiến dịch</label>
-              {renderExternalCampaignPicker(
-                'desktopZaloGroupLink',
-                hasAkaBizDesktopIntegration,
-                formData.findZaloGroupLinkAkaBizDesktopTargetCampaignIds || [],
-                ids => setFormData(p => ({ ...p, findZaloGroupLinkAkaBizDesktopTargetCampaignIds: ids })),
-                'Không có chiến dịch akaBiz Desktop phù hợp để nhận link group Zalo.'
-              )}
-            </div>
-          )}
-        </div>
-      )
-    ]
-
     const facebookOptions: ReactNode[] = [
       formData.isFindUid && (
         <div key="uid-message" className="extra-comment-options">
@@ -12489,7 +12300,6 @@ export default function CampaignFormModal({
 
     return (
       <div className="found-data-handling-groups">
-        {renderFoundDataHandlingGroup('Hệ thống ngoài (akaBiz)', externalOptions)}
         {renderFoundDataHandlingGroup('Chiến dịch Facebook', facebookOptions)}
         {renderFoundDataHandlingGroup('Chiến dịch Zalo', zaloOptions)}
         {renderFoundDataHandlingGroup('Nhóm data', dataGroupOptions)}

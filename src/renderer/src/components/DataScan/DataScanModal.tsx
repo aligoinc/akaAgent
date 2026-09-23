@@ -888,6 +888,13 @@ const getContactPhoneText = (contact: AutoAccountContact) => {
   return normalizeVietnamMobilePhone(value)
 }
 
+const getZaloGenderText = (contact: AutoAccountContact) => {
+  const gender = contact.extraData?.gender
+  if (gender === 0 || gender === '0') return 'Nam'
+  if (gender === 1 || gender === '1') return 'Nữ'
+  return 'Chưa xác định'
+}
+
 const getExtraNumber = (contact: AutoAccountContact, key: string) => {
   const value = Number(contact.extraData?.[key])
   return Number.isFinite(value) ? value : null
@@ -1215,6 +1222,7 @@ export default function DataScanModal({
   const shouldExcludeZaloGroupLeadership = canExcludeZaloGroupLeadership && excludeZaloGroupLeadership
   const showFriendStatusColumn = !isUploadDataAction && actionDef.contactType === 'person' && !isZaloGroupMembersAction && !isZaloRemarketingCustomersAction
   const showZaloPhoneColumn = !isUploadDataAction && actionDef.platform === 'zalo' && !isZaloRemarketingCustomersAction
+  const showZaloGenderColumn = action === 'zalo_friends'
   const showZaloTagColumn = !isUploadDataAction && actionDef.platform === 'zalo'
   const showAkaBizTagColumn = !isUploadDataAction && actionDef.platform === 'zalo'
   const statusFilterOptions = useMemo(
@@ -2907,6 +2915,7 @@ export default function DataScanModal({
     : 4
       + (showAvatarColumn ? 1 : 0)
       + (showZaloPhoneColumn ? 1 : 0)
+      + (showZaloGenderColumn ? 1 : 0)
       + (showZaloTagColumn ? 1 : 0)
       + (showAkaBizTagColumn ? 1 : 0)
       + (showFriendStatusColumn ? 1 : 0)
@@ -3712,7 +3721,7 @@ export default function DataScanModal({
             'Trạng thái của người nhận trong tin nhắn gần nhất'
           ]
           : [
-            ...(actionDef.platform === 'zalo' ? ['Tên', 'Số điện thoại', 'UID'] : EXPORT_HEADERS),
+            ...(actionDef.platform === 'zalo' ? ['Tên', ...(showZaloGenderColumn ? ['Giới tính'] : []), 'Số điện thoại', 'UID'] : EXPORT_HEADERS),
             ...(showZaloTagColumn ? ['Tag Zalo'] : []),
             ...(showAkaBizTagColumn ? ['Tag akaBiz'] : [])
           ]
@@ -3760,6 +3769,7 @@ export default function DataScanModal({
           }
           return [
             contact.name || '',
+            ...(showZaloGenderColumn ? [getZaloGenderText(contact)] : []),
             ...(actionDef.platform === 'zalo'
               ? [getContactPhoneText(contact), contact.uid || contact.url || '']
               : [contact.uid || contact.url || '']),
@@ -3807,6 +3817,7 @@ export default function DataScanModal({
           ]
           : [
             { wch: 24 },
+            ...(showZaloGenderColumn ? [{ wch: 16 }] : []),
             ...(actionDef.platform === 'zalo'
               ? [{ wch: 16 }, { wch: 48 }]
               : [{ wch: 48 }]),
@@ -4833,6 +4844,7 @@ export default function DataScanModal({
                     <>
                   {showAvatarColumn && <th className="data-scan-avatar-col">Ảnh đại diện</th>}
                   <th>Tên</th>
+                  {showZaloGenderColumn && <th>Giới tính</th>}
                   {showZaloPhoneColumn && <th>Số điện thoại</th>}
                   <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
                   {showZaloTagColumn && <th>Tag Zalo</th>}
@@ -4961,6 +4973,9 @@ export default function DataScanModal({
                           <td className="data-scan-text-cell data-scan-name-cell" title={contact.name || undefined}>
                             {contact.name || '-'}
                           </td>
+                          {showZaloGenderColumn && (
+                            <td className="data-scan-text-cell">{getZaloGenderText(contact)}</td>
+                          )}
                           {showZaloPhoneColumn && (
                             <td className="data-scan-text-cell data-scan-phone-cell" title={getContactPhoneText(contact) || undefined}>
                               {getContactPhoneText(contact) || '-'}

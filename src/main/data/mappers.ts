@@ -340,6 +340,8 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
 }
 
 export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccountContact {
+  const zaloUser = row.zalo_user as { gender?: number | null } | null | undefined
+  const extraData = row.extra_data as Record<string, unknown> | undefined
   return {
     id: row.id as number,
     accountId: row.account_id as number,
@@ -348,7 +350,7 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     name: row.name as string,
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
-    extraData: row.extra_data as Record<string, unknown> | undefined,
+    extraData: zaloUser ? { ...extraData, gender: zaloUser.gender ?? null } : extraData,
     akaBizTagIds: Array.isArray(row.akabiz_tag_ids)
       ? (row.akabiz_tag_ids as unknown[]).map(Number).filter(id => Number.isFinite(id) && id > 0)
       : [],

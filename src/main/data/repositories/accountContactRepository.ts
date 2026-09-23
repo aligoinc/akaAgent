@@ -993,6 +993,8 @@ export async function saveUploadDataset(
   return { success: true, count: contacts.length, datasets, rows: normalizedRows }
 }
 
+// Fetch the linked profile in the same request so existing scans expose gender.
+const CONTACT_LIST_SELECT = '*, zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender)'
 const CONTACT_LIST_DEFAULT_LIMIT = 100
 const CONTACT_LIST_MAX_LIMIT = 20000
 const CONTACT_LIST_FETCH_CHUNK = 1000
@@ -1517,7 +1519,7 @@ async function listContactsPageFromDb(
 ): Promise<ContactListResult> {
   let dbQuery: any = client()
     .from('auto_account_contacts')
-    .select('*', { count: 'exact' })
+    .select(CONTACT_LIST_SELECT, { count: 'exact' })
     .eq('account_id', accountId)
     .eq('staff_id', staffId)
     .eq('is_delete', false)
@@ -1551,7 +1553,7 @@ async function fetchContactRowsForList(
       const chunk = ids.slice(i, i + idChunkSize)
       let query = client()
         .from('auto_account_contacts')
-        .select('*')
+        .select(CONTACT_LIST_SELECT)
         .eq('account_id', accountId)
         .eq('staff_id', staffId)
         .eq('is_delete', false)
@@ -1570,7 +1572,7 @@ async function fetchContactRowsForList(
     while (true) {
       let query = client()
         .from('auto_account_contacts')
-        .select('*')
+        .select(CONTACT_LIST_SELECT)
         .eq('account_id', accountId)
         .eq('staff_id', staffId)
         .eq('is_delete', false)
