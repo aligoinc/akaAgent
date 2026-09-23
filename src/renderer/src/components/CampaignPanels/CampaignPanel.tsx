@@ -6782,6 +6782,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         )}
                       </div>
                     )}
+                    {renderDetailSort('inputDataSort')}
 	                    <label className="campaign-input-data-search">
 	                      <Search size={14} />
 	                      <input
@@ -6790,7 +6791,6 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 	                        placeholder="Tìm tên, UID, SĐT, email, key..."
 	                      />
 	                    </label>
-                    {renderDetailSort('inputDataSort')}
 	                    <div className="detail-filter-actions input-data-filter-actions">
 	                      <button
 	                        className="btn btn-secondary btn-sm"
@@ -6976,6 +6976,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                       actionDetailStatusOptions,
                       value => setActionDetailFilters(prev => ({ ...prev, status: value }))
                     )}
+                    {renderDetailSort('actionsSort')}
                     <label className="campaign-input-data-search">
                       <Search size={14} />
                       <input
@@ -6984,7 +6985,6 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         placeholder="Tìm hành động, trạng thái, nội dung, link..."
                       />
                     </label>
-                    {renderDetailSort('actionsSort')}
                     <div className="detail-filter-actions">
                       <button
                         className="btn btn-secondary"
