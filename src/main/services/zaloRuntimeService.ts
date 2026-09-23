@@ -1,3 +1,4 @@
+import { findZaloExcludedLabels, type ZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountWarning } from './accountLogService'
 import { promises as fs } from 'node:fs'
 import type { WebContents } from 'electron'
@@ -2166,7 +2167,7 @@ export class ZaloRuntimeService {
     return api.undoFriendRequest(uid)
   }
 
-  async applyLabelToUser(accountId: number, uid: string, labelId: number | string): Promise<LabelData> {
+  async applyLabelToUser(accountId: number, uid: string, labelId: number | string, skipLabelIds: string[] = []): Promise<LabelData | ZaloLabelSkipResult> {
     const api = await this.ensureApi(accountId)
     const targetUid = String(uid || '').trim()
     if (!targetUid) throw new Error('UID Zalo không hợp lệ')
@@ -2174,6 +2175,8 @@ export class ZaloRuntimeService {
     if (!Number.isFinite(id) || id <= 0) throw new Error('Tag Zalo không hợp lệ')
     const response = await api.getLabels()
     const labels = Array.isArray(response?.labelData) ? response.labelData : []
+    const skipped = findZaloExcludedLabels(labels, targetUid, skipLabelIds)
+    if (skipped) return skipped
     const label = labels.find(item => Number(item.id) === id)
     if (!label) throw new Error('Tag Zalo không tồn tại')
 

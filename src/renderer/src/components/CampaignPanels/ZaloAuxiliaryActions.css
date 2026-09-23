@@ -1,0 +1,216 @@
+.zalo-auxiliary-actions {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  container-type: inline-size;
+}
+
+.zalo-auxiliary-card {
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.zalo-auxiliary-card > .zalo-auxiliary-toggle {
+  padding: 12px 16px;
+  gap: 9px;
+  font-weight: 600;
+}
+
+.zalo-auxiliary-card.is-enabled > .zalo-auxiliary-toggle {
+  background: var(--bg-accent-subtle);
+  border-radius: calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0 0;
+}
+
+.zalo-auxiliary-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.zalo-auxiliary-body .stepper-form-group {
+  margin-bottom: 0;
+}
+
+.zalo-tag-settings {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.zalo-tag-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 14px;
+}
+
+.zalo-tag-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zalo-tag-input-row .stepper-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.zalo-tag-sync {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.zalo-auxiliary-rules {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-default);
+}
+
+.zalo-auxiliary-rule-heading,
+.zalo-tag-choices-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.zalo-auxiliary-rule-options {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.zalo-auxiliary-rule-heading {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 4px;
+  background: var(--bg-accent-subtle);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.zalo-auxiliary-rule-heading .zalo-auxiliary-hint {
+  font-weight: 400;
+}
+
+.zalo-auxiliary-rule-options .schedule-checkbox-label,
+.zalo-alias-rules .schedule-checkbox-label {
+  gap: 8px;
+  font-size: 12px;
+}
+
+.zalo-auxiliary-hint {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.zalo-auxiliary-rule-heading .zalo-auxiliary-hint,
+.zalo-tag-choices-heading .zalo-auxiliary-hint {
+  margin: 0;
+}
+
+.zalo-auxiliary-error {
+  color: var(--accent-error);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.zalo-tag-choices {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zalo-tag-choices-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  max-height: 144px;
+  padding: 2px;
+  margin: -2px;
+  overflow-y: auto;
+}
+
+.zalo-tag-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.zalo-tag-choice:has(input:checked) {
+  border-color: var(--accent-primary);
+  background: var(--bg-accent-subtle);
+  color: var(--text-primary);
+}
+
+.zalo-tag-choice:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.zalo-tag-choice:focus-within {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.zalo-tag-choice:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zalo-tag-choice input {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent-primary);
+  cursor: inherit;
+}
+
+.zalo-tag-choice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.zalo-alias-rules {
+  justify-items: start;
+  gap: 10px;
+}
+
+@container (max-width: 540px) {
+  .zalo-tag-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .zalo-auxiliary-card > .zalo-auxiliary-toggle {
+    padding: 12px;
+  }
+
+  .zalo-auxiliary-body {
+    padding: 12px;
+  }
+}
