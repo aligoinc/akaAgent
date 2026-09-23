@@ -194,6 +194,10 @@ Convention quan trọng (xem memory `campaign_conventions.md`):
 
 ### Campaign system
 
+Sắp xếp ở **Data ban đầu** dùng RPC `aka_agent_list_campaign_input_data_page_v2` (v313): `created_at` hoặc `COALESCE(date_action, created_at)`, trước phân trang, NULL cuối và ID cùng chiều để phá hoà. **Kết quả chạy** chỉ sort `created_at`. Hai tab mặc định tạo mới nhất, giữ lựa chọn riêng khi tải lại/chuyển tab, reset khi đổi campaign; export theo cùng thứ tự. Không có cột cập nhật mới; reset chạy lại xoá `date_action` thì dùng lại thời gian tạo. Giữ overload RPC cũ và thứ tự scheduler. Xem [audit v313](docs/CAMPAIGN_DATA_SORT_V313_AUDIT.md), smoke `node scripts/run-campaign-data-sort-ui-smoke.cjs`. V314 sửa export/tạo chiến dịch từ data đã chọn: RPC `aka_agent_list_campaign_input_data_page_by_ids` lấy tối đa 500 ID cố định mỗi lần, kiểm tra đủ ID rồi sort toàn bộ kết quả với độ chính xác microsecond; không quét OFFSET toàn campaign. Xem [audit v314](docs/CAMPAIGN_INPUT_SELECTION_V314_AUDIT.md), smoke `node scripts/campaign-input-selection-smoke.cjs`.
+
+V315–316 tối ưu **Kết quả chạy**: partial index `(campaign_id, created_at, id) WHERE is_delete=false`, RPC `aka_agent_list_campaign_details_page` kiểm tra credential/staff/tenant rồi phân trang ID trước khi đọc payload, trả `{items,total}` cùng snapshot kể cả trang rỗng. Hai khóa sort có `NOT NULL`, nên một index dùng cả hai chiều; không thêm `NULLS LAST` vào SQL RPC nếu chưa kiểm tra execution plan vì có thể mất backward index scan. Index v315 phải chạy từng phase bằng `node scripts/apply-campaign-details-page-index.cjs --apply` (CONCURRENTLY, không bọc transaction); v316 mới cần schema reload. Không sửa RPC input, không thêm cột/pool. Xem [audit v315–316](docs/CAMPAIGN_DETAILS_PAGE_V315_V316_AUDIT.md), smoke `node scripts/campaign-details-page-smoke.cjs`.
+
 Tiến trình lưu campaign thuộc state của `CampaignSaveControls`; form chỉ giữ cờ bắt đầu/đang lưu và chuyển tiến trình qua ref. Giữ form/editor mounted trong lúc lưu, dùng `inert` để khóa nhập liệu và khóa nút đóng/hủy; không thay form bằng loading body vì lỗi validation sẽ làm mất vị trí cuộn và chạy lại animation. Tick phần trăm/số dòng không được cập nhật state ở `CampaignFormModal`.
 
 Domain (sau migration_v4 drop engine v1):
@@ -422,6 +426,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Campaign data sort/export**: export input đã chọn phải đọc theo batch ID cố định và xác nhận đủ ID; không quét OFFSET khi `date_action` có thể đổi giữa các lượt. Kết quả chạy phải phân trang ID trước payload và giữ exact count cho cả trang rỗng. Index v315 build CONCURRENTLY bằng script riêng; kiểm tra invariant NOT NULL trước khi đổi ORDER BY ([audit v314](docs/CAMPAIGN_INPUT_SELECTION_V314_AUDIT.md), [audit v315–316](docs/CAMPAIGN_DETAILS_PAGE_V315_V316_AUDIT.md)).
 
 - Hạn nhân viên: không đọc/ghi cột đã bỏ `use_organization_expiration`. Giữ field JSON RPC `useOrganizationExpiration = NOT useStaffExpiration` cho client cũ; code mới ưu tiên cờ mới và chỉ dùng field cũ làm fallback. Fixture kiểm thử hết hạn riêng phải bật `use_staff_expiration=true` rõ ràng.
 

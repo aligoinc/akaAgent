@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
+import { loadSelectedCampaignInputData } from '../../../../shared/campaignInputDataSelection'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
@@ -23,7 +24,9 @@ import {
   type CampaignAutomationExecutionRole,
   type CampaignImportPlatform,
   type CampaignDetail,
+  type CampaignDetailSort,
   type CampaignInputData,
+  type CampaignInputDataSort,
   type CampaignInputOriginFilter,
   type CampaignInputStatus,
   type CampaignListItem,
@@ -80,7 +83,7 @@ type DetailTab = 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' |
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
-type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'actionsTime' | 'actionsStatus' | 'findDataLogScope'
+type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
 type CampaignTableRow =
@@ -90,6 +93,13 @@ type CampaignListSortItem = Pick<CampaignListItem, 'status' | 'schedule' | 'last
   id: number | string
 }
 type FindDataLogScope = 'visible' | 'all'
+
+const CAMPAIGN_DATA_SORT_OPTIONS: ReadonlyArray<{ value: CampaignInputDataSort; label: string }> = [
+  { value: 'created_desc', label: 'Tạo mới nhất' },
+  { value: 'created_asc', label: 'Tạo cũ nhất' },
+  { value: 'processed_desc', label: 'Cập nhật gần nhất' },
+  { value: 'processed_asc', label: 'Cập nhật xa nhất' }
+]
 
 interface CampaignFilterOption {
   value: string
@@ -2586,10 +2596,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [inputDataSearch, setInputDataSearch] = useState('')
   const [debouncedInputDataSearch, setDebouncedInputDataSearch] = useState('')
   const [inputDataPage, setInputDataPage] = useState(1)
+  const [inputDataSort, setInputDataSort] = useState<CampaignInputDataSort>('created_desc')
   const [actionDetailFilters, setActionDetailFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [actionDetailSearch, setActionDetailSearch] = useState('')
   const [debouncedActionDetailSearch, setDebouncedActionDetailSearch] = useState('')
   const [actionDetailPage, setActionDetailPage] = useState(1)
+  const [actionDetailSort, setActionDetailSort] = useState<CampaignDetailSort>('created_desc')
   const [exportingCampaignDetails, setExportingCampaignDetails] = useState(false)
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
@@ -2876,6 +2888,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         ? null
         : parseDateInputBoundary(inputDataFilters.dateTo, 'end')
       loadCampaignInputData(selectedCampaignId, {
+        sort: inputDataSort,
         search: debouncedInputDataSearch.trim() || undefined,
         status: inputDataFilters.status as CampaignInputStatus | '',
         originFilter: inputDataOriginFilter,
@@ -2894,6 +2907,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         ? null
         : parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
       loadCampaignDetailPage(selectedCampaignId, {
+        sort: actionDetailSort,
         search: debouncedActionDetailSearch.trim() || undefined,
         status: actionDetailFilters.status,
         dateFrom: dateStart?.toISOString() || null,
@@ -2949,12 +2963,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     inputDataFilters.timePreset,
     inputDataOriginFilter,
     inputDataPage,
+    inputDataSort,
     debouncedActionDetailSearch,
     actionDetailFilters.dateFrom,
     actionDetailFilters.dateTo,
     actionDetailFilters.status,
     actionDetailFilters.timePreset,
-    actionDetailPage
+    actionDetailPage,
+    actionDetailSort
   ])
 
   useEffect(() => {
@@ -3096,11 +3112,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
   useEffect(() => {
     setInputDataFilters(createDefaultDetailFilters())
+    setInputDataSort('created_desc')
     setInputDataOriginFilter('all')
     setInputDataSearch('')
     setDebouncedInputDataSearch('')
     setInputDataPage(1)
     setActionDetailFilters(createDefaultDetailFilters())
+    setActionDetailSort('created_desc')
     setActionDetailSearch('')
     setDebouncedActionDetailSearch('')
     setActionDetailPage(1)
@@ -3765,36 +3783,20 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
   const resolveSelectedInputDataRows = async (): Promise<CampaignInputData[]> => {
     if (!selectedCampaign || selectedInputDataIds.size === 0) return []
-    const selectedIds = new Set(selectedInputDataIds)
-    const rowById = new Map(selectedInputDataRows.map(row => [row.id, row]))
-    if (rowById.size < selectedIds.size) {
-      let offset = 0
-      const limit = 500
-      while (rowById.size < selectedIds.size) {
-        const page = await window.electronAPI.listCampaignInputDataPage({
-          campaignId: selectedCampaign.id,
-          search: debouncedInputDataSearch.trim() || undefined,
-          status: inputDataFilters.status as CampaignInputStatus | '',
-          originFilter: inputDataOriginFilter,
-          dateFrom: inputDataFilters.timePreset === 'all'
-            ? null
-            : parseDateInputBoundary(inputDataFilters.dateFrom, 'start')?.toISOString() || null,
-          dateTo: inputDataFilters.timePreset === 'all'
-            ? null
-            : parseDateInputBoundary(inputDataFilters.dateTo, 'end')?.toISOString() || null,
-          offset,
-          limit
-        })
-        for (const row of page.items) {
-          if (selectedIds.has(row.id)) rowById.set(row.id, row)
-        }
-        offset += page.items.length
-        if (page.items.length === 0 || offset >= page.total) break
-      }
-    }
-    return Array.from(selectedIds)
-      .map(id => rowById.get(id))
-      .filter((row): row is CampaignInputData => !!row)
+    return loadSelectedCampaignInputData({
+      campaignId: selectedCampaign.id,
+      inputDataIds: Array.from(selectedInputDataIds),
+      sort: inputDataSort,
+      search: debouncedInputDataSearch.trim() || undefined,
+      status: inputDataFilters.status as CampaignInputStatus | '',
+      originFilter: inputDataOriginFilter,
+      dateFrom: inputDataFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(inputDataFilters.dateFrom, 'start')?.toISOString() || null,
+      dateTo: inputDataFilters.timePreset === 'all'
+        ? null
+        : parseDateInputBoundary(inputDataFilters.dateTo, 'end')?.toISOString() || null
+    }, query => window.electronAPI.listCampaignInputDataPage(query))
   }
 
   const handleCreateCampaignFromInputData = async () => {
@@ -4483,6 +4485,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       ? null
       : parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
     return {
+      sort: actionDetailSort,
       search: debouncedActionDetailSearch.trim() || undefined,
       status: actionDetailFilters.status,
       dateFrom: dateStart?.toISOString() || null,
@@ -4966,7 +4969,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       showAlert('Đã xuất dữ liệu ra Excel.', 'success')
     } catch (err) {
       console.error('Failed to export campaign input data:', err)
-      showAlert('Không thể xuất file Excel dữ liệu.', 'error')
+      showAlert(formatIpcErrorMessage(err, 'Không thể xuất file Excel dữ liệu.'), 'error')
     } finally {
       setInputDataActionLoading(false)
     }
@@ -5339,6 +5342,71 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     campaignDrafts.refresh()
     setShowManualCampaignLoading(true)
     loadCampaigns().finally(() => setShowManualCampaignLoading(false))
+  }
+
+  const renderDetailSort = (target: 'inputDataSort' | 'actionsSort') => {
+    const inputData = target === 'inputDataSort'
+    const value = inputData ? inputDataSort : actionDetailSort
+    const options = inputData ? CAMPAIGN_DATA_SORT_OPTIONS : CAMPAIGN_DATA_SORT_OPTIONS.slice(0, 2)
+    const label = options.find(option => option.value === value)!.label
+    const title = inputData
+      ? 'Cập nhật là thời gian xử lý data; chưa có thời gian xử lý thì dùng thời gian tạo.'
+      : 'Sắp xếp theo thời gian tạo kết quả chạy.'
+    return (
+      <div className="detail-filter-dropdown-field campaign-data-sort">
+        <button
+          type="button"
+          className={`btn btn-secondary ${openDetailDropdown === target ? 'active' : ''}`}
+          aria-label={`Sắp xếp ${inputData ? 'data ban đầu' : 'kết quả chạy'}: ${label}`}
+          aria-haspopup="menu"
+          aria-expanded={openDetailDropdown === target}
+          title={title}
+          onClick={event => handleDetailDropdownToggle(
+            target, event.currentTarget, DETAIL_POPOVER_MIN_WIDTH, getDetailOptionPopoverHeight(options.length)
+          )}
+        >
+          <ArrowUpDown size={14} /><span>{label}</span><ChevronDown size={14} />
+        </button>
+        {openDetailDropdown === target && detailPopoverPosition && (
+          <div
+            className="report-filter-popover detail-filter-popover"
+            style={{
+              top: detailPopoverPosition.top ?? 'auto',
+              bottom: detailPopoverPosition.bottom ?? 'auto',
+              left: detailPopoverPosition.left,
+              width: detailPopoverPosition.width
+            }}
+            role="menu"
+            aria-label="Thứ tự sắp xếp"
+          >
+            <div className="report-option-list">
+              {options.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={value === option.value}
+                  className={`report-option-button ${value === option.value ? 'selected' : ''}`}
+                  onClick={() => {
+                    if (inputData) {
+                      setInputDataSort(option.value)
+                      setInputDataPage(1)
+                    } else if (option.value === 'created_desc' || option.value === 'created_asc') {
+                      setActionDetailSort(option.value)
+                      setActionDetailPage(1)
+                    }
+                    closeDetailDropdown()
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {value === option.value && <Check size={14} aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const renderDetailFilters = (
@@ -5919,7 +5987,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               setCampaignFormInitialDataGroup(undefined)
               setCampaignFormModalZIndex(undefined)
               loadCampaigns()
-              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+              if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
               if (openedFromDataGroup) {
                 window.dispatchEvent(new Event('aka-agent:data-group-campaign-form-closed'))
               }
@@ -5934,7 +6002,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             onClose={() => {
               setLimitUpdateCampaign(null)
               loadCampaigns()
-              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+              if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
             }}
           />
         )}
@@ -5947,7 +6015,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             onClose={() => {
               setContentMediaUpdateCampaign(null)
               loadCampaigns()
-              if (selectedCampaignId) loadCampaignInputData(selectedCampaignId)
+              if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
             }}
           />
         )}
@@ -6722,6 +6790,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 	                        placeholder="Tìm tên, UID, SĐT, email, key..."
 	                      />
 	                    </label>
+                    {renderDetailSort('inputDataSort')}
 	                    <div className="detail-filter-actions input-data-filter-actions">
 	                      <button
 	                        className="btn btn-secondary btn-sm"
@@ -6915,6 +6984,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         placeholder="Tìm hành động, trạng thái, nội dung, link..."
                       />
                     </label>
+                    {renderDetailSort('actionsSort')}
                     <div className="detail-filter-actions">
                       <button
                         className="btn btn-secondary"

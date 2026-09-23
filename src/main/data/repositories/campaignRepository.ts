@@ -4028,17 +4028,30 @@ export async function listCampaignInputDataPage(
   if (!Number.isFinite(campaignId) || campaignId <= 0) throw new Error('Chiến dịch không hợp lệ.')
   const limit = Math.min(500, Math.max(1, Math.trunc(query.limit || 100)))
   const offset = Math.max(0, Math.trunc(query.offset || 0))
-  const { data, error } = await client().rpc('aka_agent_list_campaign_input_data_page', {
+  const sort = query.sort ?? 'created_desc'
+  if (!['created_desc', 'created_asc', 'processed_desc', 'processed_asc'].includes(sort)) {
+    throw new Error('Thứ tự sắp xếp data không hợp lệ.')
+  }
+  const ids = query.inputDataIds
+  if (ids !== undefined && (!Array.isArray(ids) || ids.length === 0 || ids.length > 500
+    || ids.some(id => !Number.isSafeInteger(id) || id <= 0) || new Set(ids).size !== ids.length)) {
+    throw new Error('Danh sách ID data không hợp lệ (tối đa 500 ID mỗi lần).')
+  }
+  const { data, error } = await client().rpc(ids === undefined
+    ? 'aka_agent_list_campaign_input_data_page_v2'
+    : 'aka_agent_list_campaign_input_data_page_by_ids', {
     p_staff_id: u.staffId,
     p_organization_id: u.organizationId,
     p_campaign_id: campaignId,
     p_search: nullableString(query.search),
     p_status: nullableString(query.status),
     p_origin_filter: query.originFilter || 'all',
+    p_sort: sort,
     p_date_from: nullableString(query.dateFrom),
     p_date_to: nullableString(query.dateTo),
-    p_offset: offset,
-    p_limit: limit,
+    p_offset: ids === undefined ? offset : 0,
+    p_limit: ids === undefined ? limit : ids.length,
+    ...(ids === undefined ? {} : { p_input_data_ids: ids }),
     p_auth_username: auth.username,
     p_auth_password: auth.password
   })
@@ -6003,8 +6016,7 @@ const normalizeCampaignDetailPageDate = (value: string | null | undefined, label
 const normalizeCampaignDetailSearch = (value: string | null | undefined): string | null => {
   const text = String(value || '').trim().slice(0, 200)
   if (!text) return null
-  // Build a PostgREST OR expression only from ordinary searchable characters;
-  // punctuation that can alter filter grammar is deliberately discarded.
+  // Preserve the search grammar used by the original PostgREST page query.
   return text
     .replace(/[^\p{L}\p{N}\s@:/._+#=\-]/gu, ' ')
     .replace(/\s+/g, ' ')
@@ -6014,6 +6026,10 @@ const normalizeCampaignDetailSearch = (value: string | null | undefined): string
 export async function listCampaignDetailsPage(
   query: CampaignDetailPageQuery
 ): Promise<CampaignDetailPageResult> {
+  const sort = query.sort ?? 'created_desc'
+  if (sort !== 'created_desc' && sort !== 'created_asc') {
+    throw new Error('Thứ tự sắp xếp kết quả không hợp lệ.')
+  }
   const u = requireCurrentUser()
   const campaignId = Math.trunc(Number(query.campaignId))
   const staffId = Math.trunc(Number(u.staffId))
@@ -6023,16 +6039,6 @@ export async function listCampaignDetailsPage(
     throw new Error('Phiên làm việc không có staff/tenant hợp lệ.')
   }
 
-  const { data: ownedCampaign, error: campaignError } = await client()
-    .from('auto_campaigns')
-    .select('id')
-    .eq('id', campaignId)
-    .eq('staff_id', staffId)
-    .eq('organization_id', organizationId)
-    .maybeSingle()
-  if (campaignError) throw new Error(`Failed to validate campaign detail access: ${campaignError.message}`)
-  if (!ownedCampaign) throw new Error('Không tìm thấy chiến dịch hoặc bạn không có quyền xem kết quả.')
-
   const limit = Math.min(500, Math.max(1, Math.trunc(Number(query.limit) || 100)))
   const offset = Math.max(0, Math.trunc(Number(query.offset) || 0))
   const status = String(query.status || '').trim().slice(0, 120)
@@ -6041,35 +6047,30 @@ export async function listCampaignDetailsPage(
   const dateTo = normalizeCampaignDetailPageDate(query.dateTo, 'Ngày kết thúc')
   if (dateFrom && dateTo && dateFrom > dateTo) throw new Error('Khoảng thời gian lọc không hợp lệ.')
 
-  let pageQuery = client()
-    .from('auto_campaign_details')
-    .select('*', { count: 'exact' })
-    .eq('campaign_id', campaignId)
-    .eq('is_delete', false)
-
-  if (status) pageQuery = pageQuery.eq('status', status)
-  if (dateFrom) pageQuery = pageQuery.gte('created_at', dateFrom)
-  if (dateTo) pageQuery = pageQuery.lte('created_at', dateTo)
-  if (search) {
-    const pattern = `*${search}*`
-    pageQuery = pageQuery.or([
-      `action_name.ilike.${pattern}`,
-      `action_code.ilike.${pattern}`,
-      `status.ilike.${pattern}`,
-      `error_code.ilike.${pattern}`,
-      `log.ilike.${pattern}`,
-      `post_url.ilike.${pattern}`
-    ].join(','))
-  }
-
-  const { data, error, count } = await pageQuery
-    .order('created_at', { ascending: false })
-    .order('id', { ascending: false })
-    .range(offset, offset + limit - 1)
+  const auth = requireCurrentUserCredentials()
+  // The RPC validates campaign ownership, pages over narrow index keys, then
+  // reads full rows only for that page. Count and items share one DB snapshot.
+  const { data, error } = await client().rpc('aka_agent_list_campaign_details_page', {
+    p_staff_id: staffId,
+    p_organization_id: organizationId,
+    p_campaign_id: campaignId,
+    p_search: search,
+    p_status: status || null,
+    p_date_from: dateFrom,
+    p_date_to: dateTo,
+    p_offset: offset,
+    p_limit: limit,
+    p_sort: sort,
+    p_auth_username: auth.username,
+    p_auth_password: auth.password
+  })
 
   if (error) throw new Error(`Failed to list campaign detail page: ${error.message}`)
+  if (!data || !Array.isArray(data.items) || !Number.isSafeInteger(Number(data.total)) || Number(data.total) < 0) {
+    throw new Error('Dữ liệu phân trang kết quả không hợp lệ.')
+  }
   const itemsWithInputData = await enrichCampaignDetailsWithInputData(
-    (data || []).map(row => mapCampaignDetailFromDB(row)),
+    (data.items as Record<string, unknown>[]).map(row => mapCampaignDetailFromDB(row)),
     campaignId
   )
   const items = await enrichCampaignDetailsWithTriggeredAutomations(
@@ -6078,7 +6079,7 @@ export async function listCampaignDetailsPage(
     organizationId,
     campaignId
   )
-  return { items, total: Math.max(0, Number(count) || 0) }
+  return { items, total: Number(data.total) }
 }
 
 export async function listAllCampaignDetailsByCampaign(campaignId: number): Promise<CampaignDetail[]> {
