@@ -9,6 +9,7 @@ import {
 } from '../../data/repositories/zaloRuntimeModeRepository'
 import type { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import type { FacebookLoginService } from '../../services/facebookLoginService'
+import { accountOperationRegistry } from '../../services/accountOperationRegistry'
 
 const AUTO_CHECK_INTERVAL = 30_000
 const ZALO_AUTO_CHECK_INTERVAL = 30 * 60 * 1000
@@ -83,25 +84,29 @@ async function checkFacebookWebviewAccounts(
 
 async function hasZaloWebAuthenticationCookies(wcId: number): Promise<boolean | null> {
   const wc = webContents.fromId(wcId)
-  if (!wc || wc.isDestroyed()) return null
+  if (!wc || wc.isDestroyed() || wc.isCrashed()) return null
   const cookies = await wc.session.cookies.get({ url: 'https://chat.zalo.me/' })
   const names = new Set(
     cookies
       .filter(cookie => String(cookie.value || '').length > 0)
       .map(cookie => cookie.name.toLowerCase())
   )
-  return ZALO_WEB_AUTH_COOKIE_NAMES.every(name => names.has(name))
+  if (wc.isDestroyed() || wc.isCrashed()) return null
+  if (ZALO_WEB_AUTH_COOKIE_NAMES.every(name => names.has(name))) return true
+  return wc.isLoadingMainFrame() ? null : false
 }
 
 async function checkZaloWebviewAccounts(
   accounts: AutoAccount[],
   webviewRegistry: WebviewRegistry,
   zaloRuntime: ZaloRuntimeService | undefined,
-  canContinue: () => boolean
+  canContinue: () => boolean,
+  startRecovery: (account: AutoAccount) => boolean
 ): Promise<boolean> {
   if (!zaloRuntime) return false
   const accountById = new Map(accounts.map(account => [account.id, account]))
   let hasChanges = false
+  let recoveryStarted = false
 
   for (const { accountId, connected } of webviewRegistry.listRegistered()) {
     if (!canContinue()) break
@@ -109,15 +114,21 @@ async function checkZaloWebviewAccounts(
     const account = accountById.get(accountId)
     if (
       account?.flatformType !== 'zalo' ||
-      !account.isZaloShowWeb ||
-      account.loginStatus !== 'đã đăng nhập'
+      !account.isZaloShowWeb || account.isZaloServer
     ) continue
     const wcId = webviewRegistry.getWebContentsId(accountId)
     if (!wcId) continue
 
     try {
       const hasAuthCookies = await hasZaloWebAuthenticationCookies(wcId)
-      if (hasAuthCookies !== false || !canContinue()) continue
+      if (!canContinue()) break
+      if (hasAuthCookies === true) {
+        if (recoveryStarted || !account.isActive || account.isDelete || account.status === 'đang chạy'
+          || accountOperationRegistry.has(accountId)) continue
+        recoveryStarted = startRecovery(account)
+        continue
+      }
+      if (hasAuthCookies !== false || account.loginStatus !== 'đã đăng nhập') continue
       zaloRuntime.invalidateWebSession(accountId)
       await accountRepo.markAccountZaloSessionCheck(accountId, {
         ok: false,
@@ -131,6 +142,40 @@ async function checkZaloWebviewAccounts(
   }
 
   return hasChanges
+}
+
+/** Runs outside the poller tick, but remains tracked until token cleanup settles. */
+async function recoverZaloWebAccount(
+  account: AutoAccount,
+  zaloRuntime: ZaloRuntimeService,
+  canContinue: () => boolean,
+  canReleaseClaim: () => boolean,
+  notifyChanged: () => void,
+  reportFailure: (account: AutoAccount, reason: string) => void
+): Promise<void> {
+  try {
+    if (!canContinue()) return
+    const claim = await accountRepo.claimZaloAccountRuntimeOperation(account.id, 'desktop', false, 'zalo.web.recover')
+    if (!claim.claimed || !claim.previousStatus || !claim.claimToken) {
+      if (canContinue()) reportFailure(account, 'Chưa thể nhận lượt kiểm tra. Hãy bấm Kiểm tra đăng nhập khi tài khoản đã rảnh.')
+      return
+    }
+    try {
+      if (!canContinue()) return
+      const result = await zaloRuntime.checkSession(account.id, { recoverWebSession: true })
+      if (canContinue() && !result.success) {
+        reportFailure(account, result.reason || 'Chưa xác minh được phiên; hãy bấm Kiểm tra đăng nhập để thử lại.')
+      }
+    } finally {
+      if (canReleaseClaim()) await accountRepo.releaseZaloAccountRuntimeOperation(
+        account.id, 'desktop', claim.previousStatus, claim.staffId, claim.claimToken
+      )
+      if (canContinue()) notifyChanged()
+    }
+  } catch (error) {
+    console.warn('[AutoCheck] Zalo Web recovery incomplete:', { accountId: account.id, error })
+    if (canContinue()) reportFailure(account, 'Chưa hoàn tất phục hồi phiên Zalo Web. Hãy bấm Kiểm tra đăng nhập để thử lại.')
+  }
 }
 
 async function checkZaloApiAccounts(
@@ -198,6 +243,9 @@ export function startAccountPoller(
   let zaloRuntimeBlocked = false
   let zaloClaimsAbandoned = false
   let activeZaloCheck: Promise<boolean> | null = null
+  let activeWebRecovery: Promise<void> | null = null
+  let zaloWorkGeneration = 0
+  let zaloClaimGeneration = 0
   let lastZaloAutoCheckAt = Date.now()
   let lastStaffId: number | null = null
 
@@ -227,7 +275,23 @@ export function startAccountPoller(
         now - lastZaloAutoCheckAt >= ZALO_AUTO_CHECK_INTERVAL
       let hasZaloChanges = false
       if ((shouldCheckZaloWeb || shouldCheckZaloApi) && !zaloRuntimeBlocked) {
+        const workGeneration = zaloWorkGeneration
+        const claimGeneration = zaloClaimGeneration
         const canContinue = () => !zaloRuntimeBlocked && !zaloClaimsAbandoned
+          && workGeneration === zaloWorkGeneration && claimGeneration === zaloClaimGeneration
+          && getCurrentUser()?.staffId === user.staffId
+        const canReleaseClaim = () => !zaloClaimsAbandoned && claimGeneration === zaloClaimGeneration
+        const notifyChanged = (): void => {
+          try { mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch { /* Window closed. */ }
+        }
+        const reportRecoveryFailure = (account: AutoAccount, reason: string): void => {
+          try {
+            mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_LOG, {
+              timestamp: new Date().toISOString(), accountId: account.id, accountName: account.name,
+              message: `Zalo Web "${account.name}": ${reason}`
+            })
+          } catch { /* The window may have closed during recovery. */ }
+        }
         const operation = (async () => {
           let changed = false
           if (shouldCheckZaloWeb) {
@@ -235,7 +299,23 @@ export function startAccountPoller(
               accounts,
               webviewRegistry,
               zaloRuntime,
-              canContinue
+              canContinue,
+              account => {
+                if (activeWebRecovery || !canContinue() || !zaloRuntime
+                  || !zaloRuntime.takeWebSessionRecovery(account.id)) return false
+                // One background recovery at a time, with no new timer. Consume
+                // its local budget before claiming, and keep it tracked through
+                // slow claims/cleanup without holding the shared poller tick.
+                const runtime = zaloRuntime
+                const recovery = Promise.resolve().then(() => recoverZaloWebAccount(
+                  account, runtime, canContinue, canReleaseClaim, notifyChanged, reportRecoveryFailure
+                )).finally(() => {
+                  if (activeWebRecovery === recovery) activeWebRecovery = null
+                })
+                activeWebRecovery = recovery
+                void recovery.catch(() => {})
+                return true
+              }
             )
           }
           if (shouldCheckZaloApi && canContinue()) {
@@ -243,7 +323,7 @@ export function startAccountPoller(
               accounts,
               zaloRuntime,
               canContinue,
-              () => !zaloClaimsAbandoned
+              canReleaseClaim
             ) || changed
           }
           return changed
@@ -267,23 +347,32 @@ export function startAccountPoller(
   return {
     blockZaloRuntime(): void {
       zaloRuntimeBlocked = true
+      zaloWorkGeneration += 1
     },
     resetZaloRuntimeBlock(): void {
       zaloRuntimeBlocked = false
+      zaloWorkGeneration += 1
     },
     abandonZaloClaims(): void {
       zaloClaimsAbandoned = true
+      zaloClaimGeneration += 1
     },
     resetZaloClaims(): void {
       zaloClaimsAbandoned = false
+      zaloClaimGeneration += 1
     },
     async waitForZaloIdle(timeoutMs = 30_000): Promise<boolean> {
-      const pending = activeZaloCheck
-      if (!pending) return true
-      return await Promise.race([
-        pending.then(() => true, () => true),
-        new Promise<false>(resolve => setTimeout(() => resolve(false), Math.max(0, timeoutMs)))
-      ])
+      const pending = [activeZaloCheck, activeWebRecovery].filter(work => work !== null)
+      if (pending.length === 0) return true
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        return await Promise.race([
+          Promise.allSettled(pending).then(() => true),
+          new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), Math.max(0, timeoutMs)) })
+        ])
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
     }
   }
 }

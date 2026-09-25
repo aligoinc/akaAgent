@@ -472,6 +472,10 @@ export class ZaloRuntimeService {
     this.webRuntime.invalidate(accountId)
   }
 
+  takeWebSessionRecovery(accountId: number): boolean {
+    return this.webRuntime.takeRecovery(accountId)
+  }
+
   async resetAccountTypeSession(accountId: number): Promise<void> {
     const qrSettled = await this.cancelLoginQrAndWait(accountId)
     if (!qrSettled) {
@@ -895,55 +899,86 @@ export class ZaloRuntimeService {
 
   async checkSession(
     accountId: number,
-    options: { restoreServerSession?: { expectedSessionUpdatedAt: string | null } } = {}
+    options: {
+      restoreServerSession?: { expectedSessionUpdatedAt: string | null }
+      /** Only under a dedicated account operation claim, never a campaign claim. */
+      recoverWebSession?: boolean
+    } = {}
   ): Promise<ZaloSessionCheckResult> {
     const current = await this.supabase.getAccount(accountId)
     if (!current || current.flatformType !== 'zalo') {
       return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Không tìm thấy tài khoản Zalo' }
     }
     if (current.isZaloShowWeb) {
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        let checkedApi: API | null = null
-        try {
-          checkedApi = await this.webRuntime.ensureApi(accountId)
-          // A cached API can outlive a manual logout performed inside Zalo Web.
-          // Verify it against the live Chromium cookies before reporting login.
-          await checkedApi.fetchAccountInfo()
-          if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
-          const account = await this.supabase.getAccount(accountId)
-          if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
-          return {
-            success: true,
-            loggedIn: true,
-            status: account?.loginStatus || 'đã đăng nhập',
-            account: account || undefined
-          }
-        } catch (err) {
-          const generationChanged = checkedApi
-            ? !this.webRuntime.isCurrentApi(accountId, checkedApi)
-            : this.webRuntime.hasVerifiedSession(accountId)
-              || this.webRuntime.hasPendingVerification(accountId)
-          if (generationChanged) {
-            continue
-          }
+      const check = this.webRuntime.beginSessionCheck(accountId)
+      let verifiedApi: API | undefined
+      try {
+        let recoverWebSession = options.recoverWebSession === true
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          let checkedApi: API | null = null
+          const isAttemptCurrent = this.webRuntime.captureSessionGuard(accountId)
+          try {
+            if (recoverWebSession) {
+              recoverWebSession = false
+              checkedApi = await this.webRuntime.recoverSession(accountId)
+            }
+            checkedApi = checkedApi || await this.webRuntime.ensureApi(accountId)
+            // A pre-existing API needs a fresh request; a new/shared build has
+            // already verified the live session and persisted the same identity.
+            if (checkedApi === check.cachedApi) await checkedApi.fetchAccountInfo()
+            if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
+            const account = await this.supabase.getAccount(accountId)
+            if (!this.webRuntime.isCurrentApi(accountId, checkedApi)) continue
+            verifiedApi = checkedApi
+            return {
+              success: true,
+              loggedIn: true,
+              status: account?.loginStatus || 'đã đăng nhập',
+              account: account || undefined
+            }
+          } catch (err) {
+            const generationChanged = checkedApi
+              ? !this.webRuntime.isCurrentApi(accountId, checkedApi)
+              : !isAttemptCurrent() || this.webRuntime.hasVerifiedSession(accountId)
+                || this.webRuntime.hasPendingVerification(accountId)
+            if (generationChanged) {
+              continue
+            }
 
-          const message = this.getErrorMessage(err)
-          this.webRuntime.invalidateApi(accountId)
-          const account = await this.supabase.markAccountZaloSessionCheck(accountId, {
-            ok: false,
-            error: message
-          }, true)
-          return { success: true, loggedIn: false, status: account.loginStatus, reason: message, account }
+            const message = this.getErrorMessage(err)
+            const isCookieReadCurrent = this.webRuntime.captureSessionGuard(accountId)
+            const hasCookies = await this.webRuntime.hasAuthenticationCookies(accountId).catch(() => null)
+            // Reading Chromium cookies is asynchronous. Do not invalidate a new
+            // bootstrap/API which won the race while classifying the old error.
+            if (!isCookieReadCurrent()) continue
+            if (checkedApi ? !this.webRuntime.isCurrentApi(accountId, checkedApi)
+              : this.webRuntime.hasVerifiedSession(accountId) || this.webRuntime.hasPendingVerification(accountId)) continue
+            this.webRuntime.invalidateApi(accountId, message)
+            if (hasCookies !== false) {
+              return {
+                success: false, loggedIn: false, status: current.loginStatus,
+                reason: `Chưa xác minh được phiên Zalo Web: ${message}`
+              }
+            }
+            this.webRuntime.invalidate(accountId)
+            const account = await this.supabase.markAccountZaloSessionCheck(accountId, {
+              ok: false,
+              error: 'Zalo Web đã đăng xuất'
+            }, true)
+            return { success: true, loggedIn: false, status: account.loginStatus, reason: 'Zalo Web đã đăng xuất', account }
+          }
         }
-      }
-      const account = await this.supabase.getAccount(accountId)
-      const message = 'Phiên Zalo Web vừa thay đổi; vui lòng thử lại'
-      return {
-        success: false,
-        loggedIn: false,
-        status: account?.loginStatus || 'chưa đăng nhập',
-        reason: message,
-        account: account || undefined
+        const account = await this.supabase.getAccount(accountId)
+        const message = 'Phiên Zalo Web vừa thay đổi; vui lòng thử lại'
+        return {
+          success: false,
+          loggedIn: false,
+          status: account?.loginStatus || 'chưa đăng nhập',
+          reason: message,
+          account: account || undefined
+        }
+      } finally {
+        check.finish(verifiedApi)
       }
     }
     const entry = await this.supabase.getAccountZaloSession(accountId)

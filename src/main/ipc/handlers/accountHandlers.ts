@@ -572,7 +572,8 @@ export function registerAccountHandlers(
         ?? { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa kết nối akaAgent Zalo Server' }
     }
     if (!zaloRuntime) return { success: false, loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId), 'zalo.session.check')
+    const result = await runClaimedLocalZaloOperation(accountId, false,
+      () => zaloRuntime.checkSession(accountId, { recoverWebSession: account.isZaloShowWeb === true }), 'zalo.session.check')
     sendAccountStatusUpdated(mainWindow)
     zaloRealtimeRefresh?.refreshSoon('zalo-check-session')
     return result
@@ -736,7 +737,8 @@ export function registerAccountHandlers(
     if (!zaloRuntime) {
       return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Zalo runtime chưa sẵn sàng' }
     }
-    const result = await runClaimedLocalZaloOperation(accountId, false, () => zaloRuntime.checkSession(accountId), 'zalo.session.check')
+    const result = await runClaimedLocalZaloOperation(accountId, false,
+      () => zaloRuntime.checkSession(accountId, { recoverWebSession: true }), 'zalo.session.check')
     sendAccountStatusUpdated(mainWindow)
     return {
       loggedIn: result.loggedIn,

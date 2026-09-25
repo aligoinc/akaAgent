@@ -1442,6 +1442,12 @@ export class CampaignScheduler {
           continue
         }
 
+        // Unknown Web verification keeps the last login status. Wait for the
+        // bounded recovery/next captured bootstrap before claiming campaigns;
+        // a scheduler tick must not turn that state into repeated DB/API work.
+        if (account.flatformType === 'zalo' && account.isZaloShowWeb && this.zaloRuntime
+          && !this.zaloRuntime.hasVerifiedWebSession(account.id)) continue
+
         if (campaigns.length === 0) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
@@ -8554,6 +8560,7 @@ export class CampaignScheduler {
       return false
     }
 
+    let verificationReason: string | undefined
     try {
       this.throwIfZaloRuntimeStopping(campaign.id)
       const result = await this.zaloRuntime.checkSession(account.id)
@@ -8564,6 +8571,7 @@ export class CampaignScheduler {
         // Window may be closed
       }
       if (result.loggedIn) return true
+      if (account.isZaloShowWeb && !result.success) verificationReason = result.reason
     } catch (err) {
       this.throwIfZaloRuntimeStopping(campaign.id)
       console.error('Failed to verify Zalo session before campaign run:', err)
@@ -8574,7 +8582,7 @@ export class CampaignScheduler {
       }
     }
 
-    const message = 'Tài khoản Zalo chưa đăng nhập hoặc phiên đăng nhập đã hết hạn'
+    const message = verificationReason || 'Tài khoản Zalo chưa đăng nhập hoặc phiên đăng nhập đã hết hạn'
     await this.updateCampaignPreflightNote(campaign, message)
     await this.logCampaignProgress(campaign, `⚠️ ${message}`)
     return false
