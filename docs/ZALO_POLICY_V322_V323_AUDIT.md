@@ -4,8 +4,8 @@
 
 - Production: `cgjbsmqtfhqvttudyjzq`.
 - **Schema v322 đã apply**, history `20260925201346`. REST đọc `disable_action_days` và `disable_action_time` trả HTTP 200.
-- **Dữ liệu v323 chưa apply**. Người dùng tự phát hành runtime; chỉ áp dụng policy sau bước đó.
-- Sau SQL smoke/rollback, live vẫn có 25 policy, hai global id 12/13 còn nguyên và 0 policy `days_at_time`. Toàn bộ 25 checksum cũ khớp snapshot.
+- **Dữ liệu v323 đã apply theo yêu cầu trực tiếp của người dùng** lúc 2026-09-26 03:27:21 giờ Việt Nam, history `20260925202721`. Người dùng quản lý phát hành runtime; trạng thái phát hành binary chưa được xác minh trong lần apply này.
+- Live có 43 policy: thêm 18 row id 42–59, trong đó 4 row `days_at_time`; globals 12/13 đã bỏ mã Zalo và vô hiệu hóa. Toàn bộ 23 policy ngoài phạm vi không đổi; không cập nhật khóa hành động hay campaign.
 - Source ở nhánh `codex/zalo-policy-days-at-time`, nền `7dbba81` / `origin/dev_3`. Worktree riêng không chứa phần Facebook đang sửa tại saved repo. Không đổi version phát hành, không upload bộ cài.
 
 ## Thay đổi
@@ -41,15 +41,15 @@ Tổng 18 bản ghi / 15 mã. JSON cấu hình đầy đủ: [desired.json](../m
 
 [before.json](../migrations/snapshots/zalo-policy-v323/before.json) chụp live lúc 2026-09-25 20:04:23 UTC, gồm toàn bộ row/checksum, schema và trigger metadata. [after-schema.json](../migrations/snapshots/zalo-policy-v323/after-schema.json) xác nhận schema và dữ liệu sau smoke.
 
+[pre-apply.json](../migrations/snapshots/zalo-policy-v323/pre-apply.json) chụp lại live ngay trước apply; 25 checksum vẫn khớp preflight. [post-apply.json](../migrations/snapshots/zalo-policy-v323/post-apply.json) lưu các row/checksum và history sau commit. SQL verify và REST HTTP 200 cùng xác nhận đủ 18 cấu hình, hai global đã vô hiệu hóa và cờ/thời gian đúng bản chốt.
+
 v323 khóa bảng auto_error ngắn trong transaction (lock timeout 3 giây, statement timeout 30 giây), đối chiếu cả 25 checksum và row count trước ghi. Tạo 18 policy có internal error_code riêng, bỏ các mã đã xử lý khỏi globals 12/13 và vô hiệu hóa hai global. Không xóa bản ghi. Cuối transaction đối chiếu cấu hình, uniqueness mã+action và checksum các policy ngoài phạm vi.
 
-1. Schema v322 đã hoàn tất; không chạy lại migration đó.
-2. Hợp nhất runtime vào bản phát hành thích hợp và phát hành Desktop/Server theo quy trình hiện có. Build kiểm thử ở worktree hiện giữ version 7.4.0 của nền; chưa phải một release đã tăng version hoặc bộ cài đã upload.
-3. Sau khi runtime đã phát hành, chạy từ worktree:
+1. Schema v322 và dữ liệu v323 đều đã hoàn tất; không chạy lại lệnh apply hoặc smoke dùng snapshot trước migration.
+2. Người dùng phát hành Desktop/Server theo quy trình hiện có. Build kiểm thử ở worktree giữ version 7.4.0 của nền; chưa phải một release đã tăng version hoặc bộ cài đã upload. App chưa cập nhật đọc policy bằng fallback 24/48 giờ đã kiểm thử; app mới dùng X/Y.
+3. Lệnh kiểm tra sau apply, chạy từ worktree:
 
    ```bash
-   ZALO_POLICY_LINKED_ROOT=/Users/lequangnhut/Repos/akaAgent node scripts/zalo-policy-migration.cjs smoke
-   ZALO_POLICY_LINKED_ROOT=/Users/lequangnhut/Repos/akaAgent node scripts/zalo-policy-migration.cjs apply-after-runtime-release
    ZALO_POLICY_LINKED_ROOT=/Users/lequangnhut/Repos/akaAgent node scripts/zalo-policy-migration.cjs verify
    ```
 
@@ -68,7 +68,7 @@ Rollback dữ liệu: [migration_v323_zalo_scoped_policies_rollback.sql](../migr
 - `node scripts/zalo-rich-share-smoke-test.cjs`: PASS Local/Server friend/group share và kết quả hỗn hợp.
 - `node scripts/campaign-failure-cleanup-smoke-test.cjs`: PASS cleanup Desktop/Server, nested pause và bảo toàn claim/settle.
 - SQL schema rollback smoke: PASS invalid/valid constraints. v323 smoke: PASS từ chối checksum bị đổi, cấu hình 18 policy, unchanged policies và rollback. Dùng ID âm trong transaction để không tăng sequence production.
-- REST probe: HTTP 200 cho hai cột mới. Sau smoke toàn bộ checksum policy cũ không đổi; chưa áp dụng dữ liệu v323.
+- REST probe: HTTP 200 cho hai cột mới. Sau smoke toàn bộ checksum policy cũ không đổi. Sau apply v323: SQL verify PASS; REST đối chiếu 18 cấu hình PASS; 23 policy ngoài phạm vi giữ nguyên.
 - Security advisor đã đọc; báo RLS chưa bật trên auto_error vốn có sẵn. Task không thay ACL/RLS hoặc tạo bảng/RPC; không xử lý cảnh báo ngoài phạm vi.
 - Excel đã sửa 223, fallback 120/802, hướng dẫn triển khai; render và export/reimport qua artifact tool đã kiểm tra. Không thêm lại policy giữ nguyên.
 
