@@ -26,6 +26,9 @@ const ACCOUNT_SELECT = [
   'id',
   'name',
   'flatform_type',
+  'facebook_uid',
+  'facebook_login_managed',
+  'facebook_login_claim_generation',
   'is_zalo_show_web',
   'is_zalo_server',
   'username',
@@ -141,24 +144,28 @@ async function ensureAccountQuotaAvailable(staffId: number, flatformType: string
   )
 }
 
-export async function getAccountIgnoringCapability(id: number): Promise<AutoAccount | null> {
+export async function getAccountIgnoringCapability(id: number, signal?: AbortSignal): Promise<AutoAccount | null> {
+  signal?.throwIfAborted()
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const query = client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
-    .maybeSingle()
-
+  if (signal) query.abortSignal(signal)
+  const { data, error } = await query.maybeSingle()
+  signal?.throwIfAborted()
   if (error) throw new Error(`Failed to get account: ${error.message}`)
   return data ? rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data))) : null
 }
 
-export async function getAccount(id: number): Promise<AutoAccount | null> {
-  const account = await getAccountIgnoringCapability(id)
+export async function getAccount(id: number, signal?: AbortSignal): Promise<AutoAccount | null> {
+  const account = await getAccountIgnoringCapability(id, signal)
+  signal?.throwIfAborted()
   if (!account) return null
   const entitlements = await loadCurrentUserEffectiveEntitlements()
+  signal?.throwIfAborted()
   return canUseAccountWithEntitlementsAndCapabilities(
     account,
     entitlements,
@@ -1051,7 +1058,9 @@ async function claimAccountOperation(
   requiresLogin: boolean,
   operationName: string,
   previousStatus?: AccountRuntimePreviousStatus,
-  operationKind: 'operation' | 'type_change' = 'operation'
+  operationKind: 'operation' | 'type_change' = 'operation',
+  retrySignal?: AbortSignal,
+  facebookClaimGeneration?: number
 ): Promise<AccountOperationClaimResult> {
   const id = normalizeRuntimeAccountId(accountId, 'account operation')
   if (runtimeTarget !== 'desktop' && runtimeTarget !== 'server') throw new Error('Invalid account runtime target')
@@ -1070,20 +1079,30 @@ async function claimAccountOperation(
     previousStatus = data.status === 'chờ xử lý' ? 'chờ xử lý' : 'tạm dừng'
   }
   assertRuntimePreviousStatus(previousStatus)
+  const cancellableFacebookLogin = platform === 'facebook' && operationName === 'facebook.login'
+  if (cancellableFacebookLogin && (!Number.isSafeInteger(facebookClaimGeneration) || facebookClaimGeneration! < 0)) {
+    throw new Error('Không đọc được phiên xử lý tài khoản Facebook. Hãy tải lại tài khoản.')
+  }
   const context: AccountOperationContext = Object.freeze({
     accountId: id, staffId: u.staffId, platform, runtimeTarget, previousStatus,
-    claimToken: randomUUID(), operationName
+    claimToken: randomUUID(), operationName,
+    ...(cancellableFacebookLogin ? { facebookClaimGeneration } : {})
   })
   const identity = {
     p_account_id: id, p_staff_id: context.staffId, p_platform: platform,
     p_runtime_target: runtimeTarget, p_previous_status: context.previousStatus,
     p_claim_token: context.claimToken
   }
+  const facebookIdentity = { p_account_id: id, p_staff_id: context.staffId,
+    p_previous_status: context.previousStatus, p_claim_token: context.claimToken,
+    p_generation: context.facebookClaimGeneration }
   return accountOperationRegistry.claim(context, async signal => {
     if (requireCurrentUser().staffId !== context.staffId) throw new Error('Account operation staff session changed')
-    const { data, error, status } = await client().rpc('aka_agent_claim_account_operation', {
+    const { data, error, status } = await (cancellableFacebookLogin
+      ? client().rpc('aka_agent_facebook_account_operation', { ...facebookIdentity, p_action: 'claim' })
+      : client().rpc('aka_agent_claim_account_operation', {
       ...identity, p_requires_login: requiresLogin, p_operation_kind: operationKind
-    }).abortSignal(signal)
+    })).abortSignal(signal)
     if (error) throw Object.assign(new Error(error.message), { code: error.code, status })
     const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
     if (!row || typeof row.claimed !== 'boolean') throw new Error('Invalid account operation claim response')
@@ -1094,7 +1113,9 @@ async function claimAccountOperation(
       reason: typeof row.reason === 'string' ? row.reason : null
     }
   }, async signal => {
-    const { data, error, status } = await client().rpc('aka_agent_cleanup_account_operation', identity).abortSignal(signal)
+    const { data, error, status } = await (cancellableFacebookLogin
+      ? client().rpc('aka_agent_facebook_account_operation', { ...facebookIdentity, p_action: 'cleanup' })
+      : client().rpc('aka_agent_cleanup_account_operation', identity)).abortSignal(signal)
     if (error) throw Object.assign(new Error(error.message), { code: error.code, status })
     const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null
     if (!row || typeof row.ok !== 'boolean' || typeof row.reason !== 'string') {
@@ -1105,7 +1126,7 @@ async function claimAccountOperation(
         eventType: 'operation_finished', message: 'Đã giải phóng tài khoản sau thao tác runtime (giữ trạng thái điều khiển mới hơn).', details: { operation: operationName } })
     }
     return { ok: row.ok, reason: row.reason }
-  }).then(result => {
+  }, retrySignal).then(result => {
     // The registry has validated the token, previous status and lifecycle fence.
     if (result.claimed && operationName !== 'zalo.session.poll') {
       recordAccountLog({ accountId: id, campaignId: null, accountStatus: 'đang chạy',
@@ -1126,10 +1147,11 @@ async function releaseAccountOperation(accountId: number, claimToken: string, st
 }
 
 export async function claimNonZaloAccountRuntimeOperation(
-  accountId: number, flatformType: string, previousStatus: AccountRuntimePreviousStatus, requiresLogin = true
+  accountId: number, flatformType: string, previousStatus: AccountRuntimePreviousStatus, requiresLogin = true,
+  operationName = 'contacts.scan', retrySignal?: AbortSignal, facebookClaimGeneration?: number
 ): Promise<NonZaloAccountRuntimeOperationClaim> {
   const platform = normalizeNonZaloRuntimePlatform(flatformType) as 'facebook' | 'email'
-  return claimAccountOperation(accountId, platform, 'desktop', requiresLogin, 'contacts.scan', previousStatus)
+  return claimAccountOperation(accountId, platform, 'desktop', requiresLogin, operationName, previousStatus, 'operation', retrySignal, facebookClaimGeneration)
 }
 
 export async function releaseNonZaloAccountRuntimeOperation(

@@ -1,4 +1,5 @@
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
@@ -20,6 +21,21 @@ export type ElectronAPI = typeof electronAPI
 
 
 const electronAPI = {
+  facebookLogin: {
+    preview: (input: FacebookImportInput): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.preview, input),
+    start: (id: string): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.start, id),
+    stop: (): Promise<void> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.stop),
+    state: (): Promise<FacebookImportState | null> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.state),
+    restore: (id: number): Promise<void> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.restore, id),
+    login: (id: number, input: FacebookCredentialUpdate): Promise<void> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.login, id, input),
+    metadata: (id: number): Promise<FacebookLoginMetadata> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.metadata, id),
+    save: (id: number, input: FacebookCredentialUpdate): Promise<void> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.save, id, input),
+    onProgress: (callback: (state: FacebookImportState | null) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: FacebookImportState | null): void => callback(state)
+      ipcRenderer.on(FACEBOOK_LOGIN_IPC.progress, handler)
+      return () => ipcRenderer.removeListener(FACEBOOK_LOGIN_IPC.progress, handler)
+    }
+  },
   listMessageOptOutCustomers: (query?: MessageOptOutCustomerQuery): Promise<MessageOptOutCustomerPage> => ipcRenderer.invoke(MESSAGE_OPT_OUT_CUSTOMERS_IPC, query),
   admin: adminAPI,
   staffManagement: staffManagementAPI,

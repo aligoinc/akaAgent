@@ -8,11 +8,14 @@ import {
   isZaloLocalStartupHandoffBlocked
 } from '../../data/repositories/zaloRuntimeModeRepository'
 import type { ZaloRuntimeService } from '../../services/zaloRuntimeService'
+import type { FacebookLoginService } from '../../services/facebookLoginService'
 
 const AUTO_CHECK_INTERVAL = 30_000
 const ZALO_AUTO_CHECK_INTERVAL = 30 * 60 * 1000
 const ZALO_WEB_AUTH_COOKIE_NAMES = ['zpsid', 'zpw_sek'] as const
 
+// Existing visible-tab check for accounts created manually. Keep its original
+// cookie/DOM rules; HTTP verification belongs to the automatic-import accounts.
 async function checkAccountLogin(accountId: number, wcId: number): Promise<string | null> {
   try {
     const wc = webContents.fromId(wcId)
@@ -45,7 +48,8 @@ async function checkAccountLogin(accountId: number, wcId: number): Promise<strin
 
 async function checkFacebookWebviewAccounts(
   accounts: AutoAccount[],
-  webviewRegistry: WebviewRegistry
+  webviewRegistry: WebviewRegistry,
+  facebookLogin?: FacebookLoginService
 ): Promise<boolean> {
   const registered = webviewRegistry.listRegistered()
   if (registered.length === 0) return false
@@ -57,11 +61,15 @@ async function checkFacebookWebviewAccounts(
     if (!wcId) continue
 
     try {
-      const newStatus = await checkAccountLogin(accountId, wcId)
-      if (!newStatus) continue
-
       const account = accounts.find(a => a.id === accountId)
-      if (account && account.loginStatus !== newStatus) {
+      if (account?.flatformType === 'facebook' && facebookLogin?.isLoggingIn(accountId)) continue
+      if (account?.flatformType === 'facebook' && account.facebookLoginManaged) {
+        const wc = webContents.fromId(wcId)
+        if (facebookLogin && wc && !wc.isDestroyed()) hasChanges = await facebookLogin.observe(account, wc) || hasChanges
+        continue
+      }
+      const newStatus = await checkAccountLogin(accountId, wcId)
+      if (newStatus && account && account.loginStatus !== newStatus) {
         await accountRepo.updateAccount(accountId, { loginStatus: newStatus })
         hasChanges = true
         console.log(`[AutoCheck] Account ${accountId}: ${account.loginStatus} -> ${newStatus}`)
@@ -183,7 +191,8 @@ export interface AccountPollerController {
 export function startAccountPoller(
   webviewRegistry: WebviewRegistry,
   mainWindow: BrowserWindow,
-  zaloRuntime?: ZaloRuntimeService
+  zaloRuntime?: ZaloRuntimeService,
+  facebookLogin?: FacebookLoginService
 ): AccountPollerController {
   let isRunning = false
   let zaloRuntimeBlocked = false
@@ -194,7 +203,10 @@ export function startAccountPoller(
 
   setInterval(async () => {
     const user = getCurrentUser()
-    if (isRunning || !user) return
+    if (!user) return
+    // Cleanup must not depend on a visible tab or a previous list/observation finishing.
+    facebookLogin?.recoverPending()
+    if (isRunning) return
     isRunning = true
 
     try {
@@ -204,7 +216,7 @@ export function startAccountPoller(
       }
 
       const accounts = await accountRepo.listAccounts()
-      const hasFacebookChanges = await checkFacebookWebviewAccounts(accounts, webviewRegistry)
+      const hasFacebookChanges = await checkFacebookWebviewAccounts(accounts, webviewRegistry, facebookLogin)
       const now = Date.now()
       const canCheckZalo = !getZaloRuntimeRestartRequired() &&
         !isZaloLocalStartupHandoffBlocked()

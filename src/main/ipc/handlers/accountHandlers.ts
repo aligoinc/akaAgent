@@ -5,6 +5,7 @@ import { WebviewRegistry } from '../../playwright/webviewController'
 import { ProxyRuntimeService } from '../../services/proxyRuntimeService'
 import { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import { EmailRuntimeService } from '../../services/emailRuntimeService'
+import type { FacebookLoginService } from '../../services/facebookLoginService'
 import { ZaloServerClient } from '../../services/zaloServerClient'
 import { ZaloChatApiClient } from '../../services/zaloChatApiClient'
 import {
@@ -82,7 +83,8 @@ export function registerAccountHandlers(
   zaloRealtimeRefresh?: ZaloRealtimeRefreshController,
   zaloServerClient?: ZaloServerClient,
   zaloChatApiClient?: ZaloChatApiClient,
-  zaloLocalChatSync?: ZaloRealtimeRefreshController
+  zaloLocalChatSync?: ZaloRealtimeRefreshController,
+  facebookLogin?: FacebookLoginService
 ): AccountZaloOperationController {
   type PreviousZaloAccountStatus = 'chờ xử lý' | 'tạm dừng'
   type LocalZaloClaim = { previousStatus: PreviousZaloAccountStatus; claimToken: string; staffId: number }
@@ -461,6 +463,7 @@ export function registerAccountHandlers(
     if (isBrowserlessAccount(account)) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
+    if (account.flatformType === 'facebook') await facebookLogin?.prepareStartupBrowser(accountId)
     await proxyRuntime.prepareAccountSession(account)
     return { success: true }
   })
@@ -665,6 +668,7 @@ export function registerAccountHandlers(
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
       }
       const url = PLATFORM_URLS[account.flatformType] || PLATFORM_URLS[flatformType] || 'about:blank'
+      if (account.flatformType === 'facebook') facebookLogin?.cancelStartupBrowser(accountId)
       await proxyRuntime.prepareAccountSession(account)
       wc.loadURL(url)
       return { success: true }
@@ -674,11 +678,20 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_CHECK_FB_LOGIN, async (_, accountId: number) => {
-    const webContentsId = webviewRegistry.getWebContentsId(accountId)
-    if (!webContentsId) {
-      return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt chưa được mở' }
-    }
+    let usesAutomaticLogin = false
     try {
+      const account = await supabase.getAccount(accountId)
+      usesAutomaticLogin = account?.facebookLoginManaged === true
+      if (usesAutomaticLogin) {
+        if (facebookLogin) return await facebookLogin.checkAccount(accountId)
+        return { loggedIn: false, status: 'chưa xác minh', reason: 'Chức năng kiểm tra Facebook chưa sẵn sàng.' }
+      }
+      // Preserve the pre-existing manual-account check. Do not route it through
+      // the import service, its journal, or the new Facebook HTTP response parser.
+      const webContentsId = webviewRegistry.getWebContentsId(accountId)
+      if (!webContentsId) {
+        return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt chưa được mở' }
+      }
       const wc = webContents.fromId(webContentsId)
       if (!wc) {
         return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Tab trình duyệt không khả dụng' }
@@ -710,7 +723,7 @@ export function registerAccountHandlers(
         return { loggedIn: false, status: 'chưa đăng nhập', reason: 'Chưa đăng nhập Facebook' }
       }
     } catch (err: any) {
-      return { loggedIn: false, status: 'chưa đăng nhập', reason: err.message }
+      return { loggedIn: false, status: usesAutomaticLogin ? 'chưa xác minh' : 'chưa đăng nhập', reason: err.message }
     }
   })
 

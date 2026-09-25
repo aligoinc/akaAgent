@@ -1,5 +1,6 @@
 import { isTemporaryCleanupError, RuntimeCleanupRetry, waitForRetry } from './runtimeCleanupRetry'
 import type { RuntimeCleanupOutcome, RuntimeCleanupResult } from './runtimeCleanupRetry'
+import { withRequestDeadline } from './requestDeadline'
 
 export interface AccountOperationContext {
   readonly accountId: number
@@ -9,6 +10,8 @@ export interface AccountOperationContext {
   readonly previousStatus: 'chờ xử lý' | 'tạm dừng'
   readonly claimToken: string
   readonly operationName: string
+  /** Present only when DB cleanup can invalidate a claim that has not arrived yet. */
+  readonly facebookClaimGeneration?: number
 }
 
 export interface AccountOperationClaimResult {
@@ -25,6 +28,8 @@ interface AccountOperationRecord {
   phase: 'claiming' | 'active' | 'cleanup' | 'recovery'
   cleanup: RuntimeCleanupRetry
   requestCleanup: (signal: AbortSignal) => Promise<RuntimeCleanupResult>
+  retrySignal?: AbortSignal
+  recoveryWork?: Promise<boolean>
 }
 
 /** One process may host many staff runtimes; account IDs are globally unique. */
@@ -34,35 +39,70 @@ export class AccountOperationRegistry {
 
   has(accountId: number): boolean { return this.records.has(accountId) }
 
+  listRecoverable(staffId: number, operationName: string): AccountOperationContext[] {
+    return [...this.records.values()].filter(record => record.phase === 'recovery' &&
+      record.context.staffId === staffId && record.context.operationName === operationName)
+      .map(record => record.context)
+  }
+
+  /** Reconcile one finished operation without stopping other accounts or replaying its producer. */
+  recoverOperation(context: AccountOperationContext, signal: AbortSignal): Promise<boolean> {
+    const record = this.records.get(context.accountId)
+    if (!record || record.context.claimToken !== context.claimToken || record.context.staffId !== context.staffId ||
+      record.context.platform !== context.platform || record.context.runtimeTarget !== context.runtimeTarget ||
+      record.context.operationName !== context.operationName || record.phase !== 'recovery' ||
+      this.stoppedStaffs.has(context.staffId) || signal.aborted) return Promise.resolve(false)
+    if (record.recoveryWork) return record.recoveryWork
+    const work = withRequestDeadline(AbortSignal.any([signal, record.cleanup.controller.signal]),
+      requestSignal => record.requestCleanup(requestSignal)).then(result => {
+      if (!((result.ok && ['cleaned', 'already_cleaned'].includes(result.reason)) || result.reason === 'not_owner')) return false
+      // A timed-out/old recovery must never remove a replacement account operation.
+      if (this.records.get(context.accountId) !== record) return false
+      this.records.delete(context.accountId)
+      return true
+    }).catch(() => false).finally(() => {
+      if (record.recoveryWork === work) record.recoveryWork = undefined
+    })
+    record.recoveryWork = work
+    return work
+  }
+
   async claim(
     context: AccountOperationContext,
     request: (signal: AbortSignal) => Promise<AccountOperationClaimResult>,
-    requestCleanup: AccountOperationRecord['requestCleanup']
+    requestCleanup: AccountOperationRecord['requestCleanup'],
+    retrySignal?: AbortSignal
   ): Promise<AccountOperationClaimResult> {
     const rejected = (reason: string): AccountOperationClaimResult => ({
       claimed: false, accountId: context.accountId, staffId: context.staffId,
       previousStatus: null, claimToken: null, reason
     })
-    if (this.stoppedStaffs.has(context.staffId)) return rejected('runtime_stopping')
+    if (this.stoppedStaffs.has(context.staffId) || retrySignal?.aborted) return rejected('runtime_stopping')
     if (this.records.has(context.accountId)) return rejected('account_operation_pending')
     const record: AccountOperationRecord = {
       context: Object.freeze({ ...context }), phase: 'claiming',
-      cleanup: new RuntimeCleanupRetry(), requestCleanup
+      cleanup: new RuntimeCleanupRetry(), requestCleanup, retrySignal
     }
     this.records.set(context.accountId, record)
-    const signal = record.cleanup.controller.signal
+    const signal = retrySignal ? AbortSignal.any([record.cleanup.controller.signal, retrySignal]) : record.cleanup.controller.signal
     let waiting = false
     while (!signal.aborted) {
       let result: AccountOperationClaimResult
       try {
-        // Retries retain exactly the same token and previous-status snapshot.
-        // Do not make an in-flight claim look drained by merely aborting HTTP:
-        // SQL may still commit it. Shutdown waits for this request to settle;
-        // its result cannot start a producer once the lifecycle signal aborts.
-        result = await request(new AbortController().signal)
+        // Only the generation-fenced FB protocol can close a claim before its
+        // response arrives. Keep the RAM hold until its DB cleanup confirms;
+        // every other operation still drains the original claim normally.
+        const cancellable = context.platform === 'facebook' && context.operationName === 'facebook.login'
+          && Number.isSafeInteger(context.facebookClaimGeneration) && context.facebookClaimGeneration! >= 0
+        result = cancellable
+          ? await withRequestDeadline(signal, request, 120_000)
+          : await request(new AbortController().signal)
       } catch (error) {
         if (signal.aborted || !isTemporaryCleanupError(error)) {
           record.phase = 'recovery'
+          if (retrySignal?.aborted && !record.cleanup.controller.signal.aborted) {
+            await this.release(context.accountId, context.claimToken, context.staffId)
+          }
           throw error
         }
         if (!waiting) this.report(record, 'claim_waiting', error)
@@ -86,7 +126,12 @@ export class AccountOperationRegistry {
       return result
     }
     record.phase = 'recovery'
-    throw new Error('Account operation stopped; ownership retained for scoped recovery')
+    // The in-flight claim has settled. Try our token once even after a local
+    // deadline; failed cleanup keeps only this account reserved for recovery.
+    if (retrySignal?.aborted && !record.cleanup.controller.signal.aborted) {
+      await this.release(context.accountId, context.claimToken, context.staffId)
+    }
+    throw new Error('Account operation stopped; no producer was started')
   }
 
   async release(accountId: number, claimToken: string, staffId?: number): Promise<RuntimeCleanupOutcome> {
@@ -96,8 +141,14 @@ export class AccountOperationRegistry {
     if (staffId !== undefined && record.context.staffId !== staffId) throw new Error('Account cleanup staff identity mismatch')
     record.phase = 'cleanup'
     const outcome = await record.cleanup.run(
-      () => record.requestCleanup(record.cleanup.controller.signal),
-      (event, error) => this.report(record, event, error)
+      // Facebook's producer has drained. Bound even the first cleanup so a hung
+      // transport reaches recovery; its immutable token still fences late SQL.
+      // Give cleanup its own deadline, including when the login already expired.
+      () => record.context.platform === 'facebook' && record.context.operationName === 'facebook.login'
+        ? withRequestDeadline(record.cleanup.controller.signal, signal => record.requestCleanup(signal))
+        : record.requestCleanup(record.cleanup.controller.signal),
+      (event, error) => this.report(record, event, error),
+      record.retrySignal
     )
     if (outcome === 'cleaned' || outcome === 'not_owner') {
       if (this.records.get(accountId) === record) this.records.delete(accountId)
@@ -129,11 +180,18 @@ export class AccountOperationRegistry {
   async recover(staffId: number): Promise<void> {
     for (const record of this.records.values()) {
       if (record.context.staffId !== staffId) continue
+      // Join in-session reconciliation before lifecycle recovery tries the same token.
+      if (record.recoveryWork) await record.recoveryWork
+      if (this.records.get(record.context.accountId) !== record) continue
       if (record.phase === 'claiming' || record.phase === 'active') {
         throw new Error('Account operation producer has not stopped; recovery deferred')
       }
-      // One attempt under the existing lifecycle recovery policy, with no new timer.
-      const result = await record.requestCleanup(new AbortController().signal)
+      // Lifecycle stop aborted the old controller. Facebook cleanup gets a fresh
+      // bounded attempt; timeout keeps this token for the next scoped recovery.
+      const signal = new AbortController().signal
+      const result = record.context.platform === 'facebook' && record.context.operationName === 'facebook.login'
+        ? await withRequestDeadline(signal, requestSignal => record.requestCleanup(requestSignal))
+        : await record.requestCleanup(signal)
       if (!((result.ok && ['cleaned', 'already_cleaned'].includes(result.reason)) || result.reason === 'not_owner')) {
         throw new Error(`Account operation recovery refused: ${result.reason}`)
       }

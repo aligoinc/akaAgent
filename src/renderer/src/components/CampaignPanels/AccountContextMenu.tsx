@@ -23,6 +23,8 @@ interface AccountContextMenuProps {
   onViewBrowser: (accountId: number) => void
   onReloadPage: (account: AutoAccount) => void
   onCheckLogin: (account: AutoAccount) => void
+  onFacebookRestore: (account: AutoAccount) => void
+  onFacebookCredentials: (account: AutoAccount) => void
   onZaloLogin: (account: AutoAccount) => void
   onCheckZaloSession: (account: AutoAccount) => void
   onLogoutZalo: (account: AutoAccount) => void
@@ -45,6 +47,8 @@ export default function AccountContextMenu({
   onViewBrowser,
   onReloadPage,
   onCheckLogin,
+  onFacebookRestore,
+  onFacebookCredentials,
   onZaloLogin,
   onCheckZaloSession,
   onLogoutZalo,
@@ -152,6 +156,14 @@ export default function AccountContextMenu({
             <span>Kiểm tra đăng nhập</span>
           </button>
         )}
+        {account.flatformType === 'facebook' && <>
+          {!isDisabled && account.facebookLoginManaged && <button className="context-menu-item" onClick={() => handleAction(() => onFacebookRestore(account))}>
+            <RefreshCw size={14}/><span>Đăng nhập lại tự động</span>
+          </button>}
+          <button className="context-menu-item" onClick={() => handleAction(() => onFacebookCredentials(account))}>
+            <Shield size={14}/><span>Thông tin đăng nhập 2FA</span>
+          </button>
+        </>}
         {!isDisabled && isZalo && (
           <>
             <button

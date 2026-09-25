@@ -10,6 +10,8 @@ const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
 const ZALO_QR_TTL_MS = 100_000
 
 import AccountContextMenu from './AccountContextMenu'
+import FacebookImportModal from './FacebookImportModal'
+import FacebookCredentialsModal from './FacebookCredentialsModal'
 import AccountInfoModal from './AccountInfoModal'
 import AccountGroupAssignModal from './AccountGroupAssignModal'
 import AccountGroupManagerModal from './AccountGroupManagerModal'
@@ -171,6 +173,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
   )
   const defaultAccountPlatform = getFirstAllowedPlatform(entitlements)
   const [showForm, setShowForm] = useState(false)
+  const [showFacebookImport, setShowFacebookImport] = useState(false)
+  const [facebookCredentialsAccount, setFacebookCredentialsAccount] = useState<AutoAccount | null>(null)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [showProxyManager, setShowProxyManager] = useState(false)
   const [groupManagerPlatform, setGroupManagerPlatform] = useState('facebook')
@@ -1240,6 +1244,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
 
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={closeAccountForm} disabled={savingAccount} type="button">Huỷ</button>
+              {!editingAccount && formData.flatformType === 'facebook' && <button className="btn btn-secondary" type="button" disabled={savingAccount}
+                onClick={() => { setShowForm(false); setShowFacebookImport(true) }}>Đăng nhập FB tự động với 2FA</button>}
               <button className="btn btn-primary" onClick={handleSubmit} disabled={savingAccount || !formData.name.trim()} type="button">
                 {savingAccount && <Loader2 size={14} className="animate-spin" />}
                 {savingAccount ? 'Đang lưu...' : editingAccount ? 'Cập nhật' : 'Tạo'}
@@ -1374,6 +1380,14 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
           onViewBrowser={handleViewBrowser}
           onReloadPage={handleReloadPage}
           onCheckLogin={handleCheckLogin}
+          onFacebookCredentials={setFacebookCredentialsAccount}
+          onFacebookRestore={async account => {
+            try {
+              await window.electronAPI.facebookLogin.restore(account.id)
+              await loadAccounts()
+              useUiStore.getState().showAlert('Đã xác minh phiên Facebook hiện tại.', 'success')
+            } catch (error) { useUiStore.getState().showAlert(getErrorMessage(error, 'Không đăng nhập lại được Facebook.'), 'error') }
+          }}
           onZaloLogin={handleZaloLogin}
           onCheckZaloSession={handleCheckZaloSession}
           onLogoutZalo={handleLogoutZalo}
@@ -1389,6 +1403,11 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
           onFilterCampaigns={handleFilterCampaigns}
         />
       )}
+
+      {showFacebookImport && <FacebookImportModal accountGroupId={formData.accountGroupId} proxyId={formData.proxyId}
+        onClose={() => { setShowFacebookImport(false); void loadAccounts() }}/>}
+      {facebookCredentialsAccount && <FacebookCredentialsModal account={facebookCredentialsAccount}
+        onClose={() => { setFacebookCredentialsAccount(null); void loadAccounts() }}/>}
 
       {infoAccount && (
         <AccountInfoModal

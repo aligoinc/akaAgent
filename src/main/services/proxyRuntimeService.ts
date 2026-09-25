@@ -110,6 +110,12 @@ export class ProxyRuntimeService {
     return `persist:account_${accountId}`
   }
 
+  /** Main-only credentials for a request on an already prepared partition; no DB read or proxy change. */
+  getSessionProxyAuthentication(ses: Session): ProxyCredential | null {
+    const credential = this.credentialsBySession.get(ses)
+    return credential ? { ...credential } : null
+  }
+
   private ensureLoginHandler(): void {
     if (this.loginHandlerRegistered) return
     this.loginHandlerRegistered = true

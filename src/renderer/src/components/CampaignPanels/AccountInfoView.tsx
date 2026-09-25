@@ -141,6 +141,9 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
             <span>Nền tảng</span>
             <strong>{getAccountPlatformLabel(account)}</strong>
           </div>
+          {account.flatformType === 'facebook' && <div className="account-info-field">
+            <span>UID xác minh gần nhất</span><strong>{account.facebookUid || 'Chưa có'}</strong>
+          </div>}
           {isSmsAccount && (
             <>
               <div className="account-info-field">

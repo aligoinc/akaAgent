@@ -8,6 +8,8 @@ import { SupabaseService } from '../services/supabase'
 import { CampaignScheduler } from '../services/campaignScheduler'
 import { ContactLoader } from '../services/contactLoader'
 import { ProxyRuntimeService } from '../services/proxyRuntimeService'
+import { FacebookLoginService } from '../services/facebookLoginService'
+import { registerFacebookLoginHandlers } from './handlers/facebookLoginHandlers'
 import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
@@ -160,6 +162,8 @@ export function registerIpcHandlers(
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
   const proxyRuntime = new ProxyRuntimeService((id) => supabase.getProxy(id))
+  const facebookLogin = new FacebookLoginService(mainWindow, webviewRegistry, proxyRuntime)
+  registerFacebookLoginHandlers(mainWindow, facebookLogin)
   const zaloServerClient = new ZaloServerClient(mainWindow)
   ipcMain.handle(IPC_EVENTS.ZALO_SERVER_OPERATION_STATE_GET, () => (
     zaloServerClient.getOperationState()
@@ -746,8 +750,9 @@ export function registerIpcHandlers(
     if (!user) return
 
     campaignSupport.stop()
-
+    const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
+    await facebookStopped
     await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
 
     clearSessionExpiryTimer()
@@ -1167,9 +1172,11 @@ export function registerIpcHandlers(
 
     event.preventDefault()
     quitCleanupStarted = true
+    const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     void (async () => {
       try {
+        await facebookStopped
         await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
@@ -1291,9 +1298,12 @@ export function registerIpcHandlers(
         crmWeb.startSession()
         admin.startSession()
         campaignSupport.startSession()
+        facebookLogin.startSession()
       } catch (error) {
+        const facebookStopped = facebookLogin.stop()
         const cleanupUser = getCurrentUser()
         if (cleanupUser) accountOperationRegistry.stop(cleanupUser.staffId)
+        await facebookStopped
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
         contactLoader.stopAll()
@@ -1326,8 +1336,10 @@ export function registerIpcHandlers(
     },
     beforeLogout: async () => {
       campaignSupport.stop()
+      const facebookStopped = facebookLogin.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)
+      await facebookStopped
       await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
@@ -1347,6 +1359,9 @@ export function registerIpcHandlers(
       clearZaloLocalStartupHandoffBlock()
     },
     afterPasswordChange: async ({ newPassword }) => {
+      const facebookStopped = facebookLogin.stop()
+      await facebookStopped
+      facebookLogin.startSession(false)
       chatWeb.credentialsChanged()
       if (!runtimeCredentials) return
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
@@ -1367,6 +1382,10 @@ export function registerIpcHandlers(
   registerAutomationHandlers(mainWindow)
   registerBrowserHandlers(webviewRegistry, pageRegistry, {
     onRegister: async (accountId, webContents, platformType) => {
+      if (platformType === 'facebook') {
+        facebookLogin.watch(accountId)
+        facebookLogin.startupBrowserRegistered(accountId, webContents)
+      }
       // Facebook and other browser platforms must not depend on an extra DB
       // round trip before their initial URL can load. ZaloRuntimeService still
       // verifies the account/platform server-side before attaching Web mode.
@@ -1374,6 +1393,7 @@ export function registerIpcHandlers(
       await zaloRuntime.attachWebSession(accountId, webContents)
     },
     onUnregister: (accountId) => {
+      facebookLogin.cancelStartupBrowser(accountId)
       zaloRuntime.detachWebSession(accountId)
     }
   })
@@ -1421,7 +1441,8 @@ export function registerIpcHandlers(
     zaloRealtimeGroupManager || undefined,
     zaloServerClient,
     zaloChatApiClient,
-    zaloLocalChatSync || undefined
+    zaloLocalChatSync || undefined,
+    facebookLogin
   )
   registerAccountContactHandlers(supabase, contactLoader, zaloServerClient, {
     chatContactLoader,
@@ -1430,5 +1451,5 @@ export function registerIpcHandlers(
   registerV2Handlers(mainWindow, pageRegistry)
 
   // Start account login poller
-  accountPollerController = startAccountPoller(webviewRegistry, mainWindow, zaloRuntime)
+  accountPollerController = startAccountPoller(webviewRegistry, mainWindow, zaloRuntime, facebookLogin)
 }

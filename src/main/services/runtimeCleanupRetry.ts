@@ -31,15 +31,18 @@ export class RuntimeCleanupRetry {
 
   run(
     request: () => Promise<RuntimeCleanupResult>,
-    report: (event: 'waiting' | 'recovered' | 'recovery_required', error?: unknown) => void
+    report: (event: 'waiting' | 'recovered' | 'recovery_required', error?: unknown) => void,
+    retrySignal?: AbortSignal
   ): Promise<RuntimeCleanupOutcome> {
-    return this.completion ??= this.retry(request, report)
+    return this.completion ??= this.retry(request, report, retrySignal)
   }
 
   private async retry(
     request: () => Promise<RuntimeCleanupResult>,
-    report: (event: 'waiting' | 'recovered' | 'recovery_required', error?: unknown) => void
+    report: (event: 'waiting' | 'recovered' | 'recovery_required', error?: unknown) => void,
+    retrySignal?: AbortSignal
   ): Promise<RuntimeCleanupOutcome> {
+    const waitSignal = retrySignal ? AbortSignal.any([this.controller.signal, retrySignal]) : this.controller.signal
     let waiting = false
     const notify = (event: Parameters<typeof report>[0], error?: unknown): void => {
       try { report(event, error) } catch { /* Logging must never own cleanup. */ }
@@ -56,7 +59,7 @@ export class RuntimeCleanupRetry {
         return 'recovery_required'
       } catch (error) {
         if (this.controller.signal.aborted) return 'stopped'
-        if (!isTemporaryCleanupError(error)) {
+        if (retrySignal?.aborted || !isTemporaryCleanupError(error)) {
           notify('recovery_required', error)
           return 'recovery_required'
         }
@@ -64,7 +67,13 @@ export class RuntimeCleanupRetry {
           waiting = true
           notify('waiting', error)
         }
-        await waitForRetry(this.controller.signal)
+        await waitForRetry(waitSignal)
+        // An operation deadline stops retries, not the first token-scoped cleanup.
+        // Keep the uncertain ownership hold; never clear it just because time ran out.
+        if (retrySignal?.aborted) {
+          notify('recovery_required')
+          return 'recovery_required'
+        }
       }
     }
     return 'stopped'
