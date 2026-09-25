@@ -1,0 +1,552 @@
+[
+  {
+    "error_code": "err_zalo_120_message_stranger",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn người lạ (mã 120)",
+    "error_desc": "Zalo hạn chế nhắn người lạ (mã 120)",
+    "zalo_error_codes": [
+      "120"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_mode": "days_at_time",
+    "time_disable_actions": 1440,
+    "disable_action_days": 1,
+    "disable_action_time": "09:45:00",
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn người lạ (mã 120)",
+    "noti_campaign": "Zalo hạn chế nhắn người lạ (mã 120). Hành động tạm khóa; xem thời điểm mở trong thông tin tài khoản.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_120_add_group_member",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế thêm thành viên nhóm (mã 120)",
+    "error_desc": "Zalo hạn chế thêm thành viên nhóm (mã 120)",
+    "zalo_error_codes": [
+      "120"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_mode": "days_at_time",
+    "time_disable_actions": 1440,
+    "disable_action_days": 1,
+    "disable_action_time": "09:45:00",
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế thêm thành viên nhóm (mã 120)",
+    "noti_campaign": "Zalo hạn chế thêm thành viên nhóm (mã 120). Hành động tạm khóa; xem thời điểm mở trong thông tin tài khoản.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_802_message_stranger",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn người lạ (mã 802)",
+    "error_desc": "Zalo hạn chế nhắn người lạ (mã 802)",
+    "zalo_error_codes": [
+      "802"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_mode": "days_at_time",
+    "time_disable_actions": 2880,
+    "disable_action_days": 2,
+    "disable_action_time": "09:45:00",
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn người lạ (mã 802)",
+    "noti_campaign": "Zalo hạn chế nhắn người lạ (mã 802). Hành động tạm khóa; xem thời điểm mở trong thông tin tài khoản.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_802_add_group_member",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế thêm thành viên nhóm (mã 802)",
+    "error_desc": "Zalo hạn chế thêm thành viên nhóm (mã 802)",
+    "zalo_error_codes": [
+      "802"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_mode": "days_at_time",
+    "time_disable_actions": 2880,
+    "disable_action_days": 2,
+    "disable_action_time": "09:45:00",
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế thêm thành viên nhóm (mã 802)",
+    "noti_campaign": "Zalo hạn chế thêm thành viên nhóm (mã 802). Hành động tạm khóa; xem thời điểm mở trong thông tin tài khoản.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_123_message_friend",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "error_desc": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "zalo_error_codes": [
+      "123"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_friend"
+    ],
+    "disable_action_codes": [
+      "zalo_message_friend"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 30,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "noti_campaign": "Tạm khóa nhắn bạn bè 30 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_123_message_stranger",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "error_desc": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "zalo_error_codes": [
+      "123"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_codes": [
+      "zalo_message_stranger"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 30,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "noti_campaign": "Tạm khóa nhắn người lạ 30 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_123_message_group",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "error_desc": "Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "zalo_error_codes": [
+      "123"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 30,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)",
+    "noti_campaign": "Tạm khóa nhắn nhóm 30 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_126_127_message_personal",
+    "error_type": "external zalo",
+    "error_name": "Zalo từ chối tin nhắn cá nhân (mã 126/127)",
+    "error_desc": "Zalo từ chối tin nhắn cá nhân (mã 126/127)",
+    "zalo_error_codes": [
+      "126",
+      "127"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_friend",
+      "zalo_message_stranger"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo từ chối tin nhắn cá nhân (mã 126/127)",
+    "noti_campaign": "Zalo từ chối tin nhắn cá nhân (mã 126/127)",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_126_127_message_group",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế nhắn nhóm (mã 126/127)",
+    "error_desc": "Zalo hạn chế nhắn nhóm (mã 126/127)",
+    "zalo_error_codes": [
+      "126",
+      "127"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 30,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế nhắn nhóm (mã 126/127)",
+    "noti_campaign": "Tạm khóa nhắn nhóm 30 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_126_add_group_member",
+    "error_type": "external zalo",
+    "error_name": "Zalo hạn chế thêm thành viên nhóm (mã 126)",
+    "error_desc": "Zalo hạn chế thêm thành viên nhóm (mã 126)",
+    "zalo_error_codes": [
+      "126"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 30,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo hạn chế thêm thành viên nhóm (mã 126)",
+    "noti_campaign": "Tạm khóa thêm thành viên nhóm 30 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_221_message_group",
+    "error_type": "external zalo",
+    "error_name": "Đạt giới hạn nhắn nhóm (mã 221)",
+    "error_desc": "Đạt giới hạn nhắn nhóm (mã 221)",
+    "zalo_error_codes": [
+      "221"
+    ],
+    "zalo_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_codes": [
+      "zalo_message_group"
+    ],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": 60,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Đạt giới hạn nhắn nhóm (mã 221)",
+    "noti_campaign": "Tạm khóa nhắn nhóm 60 phút.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_223_add_friend_pause",
+    "error_type": "external zalo",
+    "error_name": "Zalo từ chối kết bạn (mã 223)",
+    "error_desc": "Zalo từ chối kết bạn (mã 223)",
+    "zalo_error_codes": [
+      "223"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_friend"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": "tạm dừng",
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo từ chối kết bạn (mã 223)",
+    "noti_campaign": "Chiến dịch tạm dừng do lỗi Zalo 223; kiểm tra và chạy lại thủ công.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_224_add_friend_full",
+    "error_type": "external zalo",
+    "error_name": "Danh bạ Zalo đã đầy (mã 224)",
+    "error_desc": "Danh bạ Zalo đã đầy (mã 224)",
+    "zalo_error_codes": [
+      "224"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_friend"
+    ],
+    "disable_action_codes": [
+      "zalo_add_friend"
+    ],
+    "disable_action_mode": "indefinite",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": "tạm dừng",
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Danh bạ Zalo đã đầy (mã 224)",
+    "noti_campaign": "Danh bạ Zalo đã đầy; xử lý danh bạ, mở khóa kết bạn và chạy lại chiến dịch thủ công.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_215_251_add_friend_rejected",
+    "error_type": "external zalo",
+    "error_name": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+    "error_desc": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+    "zalo_error_codes": [
+      "215",
+      "251"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_friend"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": true,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+    "noti_campaign": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_219_find_phone_invalid",
+    "error_type": "external zalo",
+    "error_name": "Số điện thoại không hợp lệ (mã 219)",
+    "error_desc": "Số điện thoại không hợp lệ (mã 219)",
+    "zalo_error_codes": [
+      "219"
+    ],
+    "zalo_action_codes": [
+      "zalo_find_phone_user"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": true,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Số điện thoại không hợp lệ (mã 219)",
+    "noti_campaign": "Số điện thoại không hợp lệ (mã 219)",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_227_join_group_link_invalid",
+    "error_type": "external zalo",
+    "error_name": "Link nhóm Zalo không hợp lệ (mã 227)",
+    "error_desc": "Link nhóm Zalo không hợp lệ (mã 227)",
+    "zalo_error_codes": [
+      "227"
+    ],
+    "zalo_action_codes": [
+      "zalo_join_group_link"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "thất bại",
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": true,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Link nhóm Zalo không hợp lệ (mã 227)",
+    "noti_campaign": "Link nhóm Zalo không hợp lệ (mã 227)",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_210_target_unavailable",
+    "error_type": "external zalo",
+    "error_name": "Người nhận bị Zalo chặn (mã 210)",
+    "error_desc": "Người nhận bị Zalo chặn (mã 210)",
+    "zalo_error_codes": [
+      "210"
+    ],
+    "zalo_action_codes": [
+      "zalo_find_phone_user",
+      "zalo_add_friend"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": "không tồn tại",
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": null,
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Người nhận bị Zalo chặn (mã 210)",
+    "noti_campaign": "Người nhận bị Zalo chặn (mã 210)",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  },
+  {
+    "error_code": "err_zalo_264_269_add_group_member_pause",
+    "error_type": "external zalo",
+    "error_name": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+    "error_desc": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+    "zalo_error_codes": [
+      "264",
+      "269"
+    ],
+    "zalo_action_codes": [
+      "zalo_add_group_member"
+    ],
+    "disable_action_codes": [],
+    "disable_action_mode": "fixed_minutes",
+    "time_disable_actions": null,
+    "disable_action_days": null,
+    "disable_action_time": null,
+    "detail_status": null,
+    "counts_toward_limit": false,
+    "counts_toward_bad_target": false,
+    "update_status_campaign": "tạm dừng",
+    "update_status_account": null,
+    "update_login_status": null,
+    "count_consecutive_errors": null,
+    "noti_running_process": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+    "noti_campaign": "Chiến dịch tạm dừng; kiểm tra nhóm và cách mời thành viên rồi chạy lại thủ công.",
+    "is_active": true,
+    "is_delete": false,
+    "error_element": null
+  }
+]

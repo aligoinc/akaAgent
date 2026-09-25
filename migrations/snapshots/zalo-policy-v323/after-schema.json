@@ -1,0 +1,74 @@
+{
+  "migration": [
+    {
+      "name": "migration_v322_auto_error_days_at_time",
+      "version": "20260925201346"
+    }
+  ],
+  "captured_at": "2026-09-25T20:17:56.538093+00:00",
+  "constraints": [
+    {
+      "def": "CHECK (((disable_action_mode <> 'days_at_time'::text) OR ((disable_action_days IS NOT NULL) AND (time_disable_actions IS NOT NULL) AND (time_disable_actions > 0) AND ((disable_action_days > 0) OR (disable_action_time IS NOT NULL)))))",
+      "name": "auto_error_days_at_time_config_check"
+    },
+    {
+      "def": "CHECK (((disable_action_days IS NULL) OR (disable_action_days >= 0)))",
+      "name": "auto_error_disable_action_days_check"
+    },
+    {
+      "def": "CHECK ((disable_action_mode = ANY (ARRAY['fixed_minutes'::text, 'end_of_day'::text, 'indefinite'::text, 'days_at_time'::text])))",
+      "name": "auto_error_disable_action_mode_check"
+    },
+    {
+      "def": "CHECK (((disable_action_time IS NULL) OR (disable_action_time < '24:00:00'::time without time zone)))",
+      "name": "auto_error_disable_action_time_check"
+    },
+    {
+      "def": "UNIQUE (error_code)",
+      "name": "auto_error_error_code_key"
+    },
+    {
+      "def": "PRIMARY KEY (id)",
+      "name": "auto_error_pkey"
+    }
+  ],
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "policy_count": 25,
+  "new_mode_count": 0,
+  "checksums_excluding_new_columns": {
+    "1": "eb95b70d1456df26e9cc05902d067655",
+    "2": "b5515e2fd99dc515e5d9fa7327c74c03",
+    "3": "dccd0563fb8d5991e94e541a7e75daf4",
+    "4": "a6a9d19cb9933d185c0cfbe7679899d4",
+    "5": "92a44f4ae4723cc23a763937fdaec913",
+    "6": "903c8de854a445a8c46601199b09c4ea",
+    "7": "df9ebaaae05cd269b84d8b8408f39572",
+    "8": "51b46f5bb6e36969e857c84c9e6cc564",
+    "9": "7f01beb839af2b08420046c548842db6",
+    "10": "c2ef976686a3caf3839f221eca3667ff",
+    "11": "adf2d8ac415c55dc5bd207a9f38abc77",
+    "12": "ac7fed95fefa546869f851bcb9723558",
+    "13": "b8265d20dd6cee5450ecd09c23da2555",
+    "14": "c8a37ce83c2cab9ec3f6d6b2295c05db",
+    "15": "81020b22de85fd737f1475af2c66d0c7",
+    "16": "eebb37948f318257b0b11347066acd47",
+    "17": "91f6fd73356373f246c69b75dda92aa7",
+    "18": "624d7557e78124963f450755d8a358a8",
+    "31": "c6d1a219d468e9b74eeaf352f6ff02c4",
+    "32": "68fc7d2c569b25d6d3009fd1cf85b1bd",
+    "33": "d1513fe9089ef27173a433b67c17589a",
+    "34": "9669698cf58461ce6bd1e1ca7d13bc2d",
+    "35": "5b14a734b59fc31bcb7f089a1fecb8f9",
+    "36": "8345ac02f25659a91b809d6f12b1e538",
+    "41": "06196187289441575509954ab0387999"
+  },
+  "rest_probe": {
+    "status": 200,
+    "selected_columns": [
+      "id",
+      "disable_action_mode",
+      "disable_action_days",
+      "disable_action_time"
+    ]
+  }
+}

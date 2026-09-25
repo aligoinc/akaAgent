@@ -13,6 +13,7 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs'
 import { extname, join } from 'path'
 import { tmpdir } from 'os'
 import { SupabaseService } from './supabase'
+import type { DisableAccountActionContext } from '../data/repositories/accountActionRepository'
 import { CampaignFailureCleanup, CampaignFailureCleanupPayload } from './campaignFailureCleanup'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
@@ -8968,7 +8969,7 @@ export class CampaignScheduler {
         await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
           errorCode: policy.errorCode,
           reason: message,
-          dateEnable: await this.resolvePolicyActionDateEnable(policy)
+          ...await this.resolvePolicyActionDisableContext(policy)
         })
         try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
       }
@@ -9108,12 +9109,17 @@ export class CampaignScheduler {
       .trim()
   }
 
-  private async resolvePolicyActionDateEnable(policy: AutoErrorPolicy): Promise<string | null | undefined> {
-    if (policy.disableActionMode === 'end_of_day') {
-      return (await this.supabase.getRuntimeClock()).nextVietnamMidnight
+  private async resolvePolicyActionDisableContext(
+    policy: AutoErrorPolicy
+  ): Promise<Pick<DisableAccountActionContext, 'dateEnable' | 'daysAtTime'>> {
+    if (policy.disableActionMode === 'days_at_time') {
+      return { daysAtTime: { days: policy.disableActionDays, time: policy.disableActionTime } }
     }
-    if (policy.disableActionMode === 'indefinite') return null
-    return undefined
+    if (policy.disableActionMode === 'end_of_day') {
+      return { dateEnable: (await this.supabase.getRuntimeClock()).nextVietnamMidnight }
+    }
+    if (policy.disableActionMode === 'indefinite') return { dateEnable: null }
+    return {}
   }
 
   /** Build variables object inject vào engine v2. */
@@ -12935,7 +12941,7 @@ export class CampaignScheduler {
   ): string {
     if (!policy) return fallbackLog
 
-    const disableMinutes = policy.timeDisableActions && policy.timeDisableActions > 0
+    const disableMinutes = policy.disableActionMode !== 'days_at_time' && policy.timeDisableActions && policy.timeDisableActions > 0
       ? String(policy.timeDisableActions)
       : undefined
     return this.renderPolicyMessage(policy.notiCampaign || policy.notiRunningProcess, {
@@ -12972,7 +12978,7 @@ export class CampaignScheduler {
         await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
           errorCode: policy.errorCode,
           reason: messages.runningProcess,
-          dateEnable: await this.resolvePolicyActionDateEnable(policy)
+          ...await this.resolvePolicyActionDisableContext(policy)
         })
         try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
         this.throwIfZaloRuntimeStopping(campaign.id)
