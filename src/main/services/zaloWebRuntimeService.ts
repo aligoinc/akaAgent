@@ -1,6 +1,7 @@
 import { createDecipheriv, createHash } from 'node:crypto'
 import { session, type Session, type WebContents } from 'electron'
 import { API } from 'zca-js'
+import { withRequestDeadline } from './requestDeadline'
 import type {
   ContextSession,
   ImageMetadataGetter,
@@ -12,6 +13,9 @@ const GET_LOGIN_INFO_PATH = '/api/login/getlogininfo'
 const GET_SERVER_INFO_PATH = '/api/login/getserverinfo'
 const DEFAULT_CAPTURE_TIMEOUT_MS = 30_000
 const CDP_PROTOCOL_VERSION = '1.3'
+const AUTH_COOKIE_NAMES = ['zpsid', 'zpw_sek']
+
+class BootstrapUnavailableError extends Error {}
 
 type BootstrapRequestKind = 'login-info' | 'server-info'
 
@@ -86,6 +90,13 @@ interface ZaloWebRuntimeEntry {
   apiBuild?: Promise<API>
   verified: boolean
   lastError?: string
+  lastCaptureResetReason?: string
+  armedAt: number
+  recoveryPending: boolean
+  recoveryAttempted: boolean
+  recoveryRunning: boolean
+  checksInProgress: number
+  crashed: boolean
   signal: ChangeSignal
 }
 
@@ -265,6 +276,7 @@ export class ZaloWebRuntimeService {
 
     const existing = this.entries.get(accountId)
     if (existing?.wcId === wc.id) {
+      existing.crashed = wc.isCrashed()
       if (!existing.debuggerReady) await this.armDebugger(existing)
       return
     }
@@ -281,6 +293,12 @@ export class ZaloWebRuntimeService {
     entry.captureVersion = 0
     entry.generationAbortController = new AbortController()
     entry.verified = false
+    entry.armedAt = Date.now()
+    entry.recoveryPending = true
+    entry.recoveryAttempted = false
+    entry.recoveryRunning = false
+    entry.checksInProgress = 0
+    entry.crashed = false
     entry.signal = createChangeSignal()
     entry.messageListener = (_event, method, params) => {
       void this.handleDebuggerMessage(entry, method, params).catch(error => {
@@ -291,6 +309,8 @@ export class ZaloWebRuntimeService {
       if (this.entries.get(accountId) !== entry) return
       entry.debuggerReady = false
       entry.debuggerOwned = false
+      entry.pendingRequests.clear()
+      entry.candidates.clear()
       this.resetCapturedRuntime(entry, `CDP đã ngắt: ${reason || 'không rõ nguyên nhân'}`)
     }
     entry.destroyedListener = () => {
@@ -298,7 +318,10 @@ export class ZaloWebRuntimeService {
     }
     entry.renderProcessGoneListener = () => {
       if (this.entries.get(accountId) === entry) {
+        entry.crashed = true
         entry.debuggerReady = false
+        entry.pendingRequests.clear()
+        entry.candidates.clear()
         this.resetCapturedRuntime(entry, 'Tiến trình Zalo Web đã dừng')
       }
     }
@@ -348,6 +371,7 @@ export class ZaloWebRuntimeService {
     if (!entry) return
     entry.pendingRequests.clear()
     entry.candidates.clear()
+    entry.recoveryAttempted = false
     this.resetCapturedRuntime(entry)
   }
 
@@ -357,15 +381,89 @@ export class ZaloWebRuntimeService {
    * verification can rebuild against the same live Electron partition without
    * forcing the user to reload Zalo Web.
    */
-  invalidateApi(accountId: number): void {
+  invalidateApi(accountId: number, error?: string): void {
     const entry = this.entries.get(accountId)
     if (!entry) return
     this.advanceCaptureGeneration(entry)
     entry.api = undefined
     entry.apiBuild = undefined
     entry.verified = false
-    entry.lastError = undefined
+    entry.lastError = error
+    entry.recoveryPending = true
     this.notifyChange(entry)
+  }
+
+  /** Consumed before a DB claim, so a failed claim cannot become periodic DB polling. */
+  takeRecovery(accountId: number): boolean {
+    const entry = this.entries.get(accountId)
+    if (!entry || entry.wc.isDestroyed() || entry.crashed || entry.recoveryRunning
+      || !entry.recoveryPending || entry.recoveryAttempted || entry.apiBuild
+      || Date.now() - entry.armedAt < this.captureTimeoutMs) return false
+    entry.recoveryAttempted = true
+    entry.recoveryPending = false
+    return true
+  }
+
+  async hasAuthenticationCookies(accountId: number): Promise<boolean | null> {
+    const entry = this.entries.get(accountId)
+    if (!entry || entry.wc.isDestroyed() || entry.crashed) return null
+    const version = entry.captureVersion
+    const cookies = await withRequestDeadline(entry.generationAbortController.signal,
+      () => entry.wc.session.cookies.get({ url: ZALO_CHAT_ORIGIN }), this.captureTimeoutMs)
+    if (this.entries.get(accountId) !== entry || entry.wc.isDestroyed()
+      || entry.captureVersion !== version) return null
+    const names = new Set(cookies.filter(cookie => cookie.value).map(cookie => cookie.name.toLowerCase()))
+    if (AUTH_COOKIE_NAMES.every(name => names.has(name))) return true
+    // A navigation can replace cookies in several steps; wait for a stable page.
+    return entry.wc.isLoadingMainFrame() ? null : false
+  }
+
+  /** Caller must already own the account operation claim. Never called by a campaign. */
+  async recoverSession(accountId: number): Promise<API> {
+    const entry = this.entries.get(accountId)
+    if (!entry || entry.wc.isDestroyed() || entry.crashed) {
+      throw new Error('Hãy mở lại tab Zalo Web trước khi kiểm tra')
+    }
+    if (entry.recoveryRunning) throw new Error('Zalo Web đang phục hồi phiên')
+    entry.recoveryRunning = true
+    entry.recoveryAttempted = true
+    entry.recoveryPending = false
+    const assertCurrent = (): void => {
+      if (this.entries.get(accountId) !== entry || entry.wc.isDestroyed() || entry.crashed) {
+        throw new Error('Tab Zalo Web đã thay đổi trong lúc phục hồi')
+      }
+    }
+    try {
+      if (!entry.debuggerReady) await this.armDebugger(entry)
+      if (!entry.bootstrap && (entry.wc.isLoadingMainFrame()
+        || Date.now() - entry.armedAt < this.captureTimeoutMs)) {
+        try { await this.waitForBootstrap(accountId, entry) }
+        catch (error) { if (!(error instanceof BootstrapUnavailableError)) throw error }
+      }
+      assertCurrent()
+      if (entry.bootstrap) return await this.ensureApi(accountId)
+      const hasCookies = await this.hasAuthenticationCookies(accountId)
+      assertCurrent()
+      if (hasCookies !== true) throw new Error(hasCookies === false
+        ? 'Zalo Web đã đăng xuất' : 'Trang Zalo Web đang tải; hãy thử kiểm tra lại')
+      if (entry.bootstrap) return await this.ensureApi(accountId)
+      const url = new URL(entry.wc.getURL())
+      if (url.origin !== ZALO_CHAT_ORIGIN) throw new Error('Hãy mở trang chat.zalo.me trước khi kiểm tra')
+      if (!entry.debuggerReady) throw new Error('Bộ theo dõi Zalo Web vừa bị ngắt; hãy thử kiểm tra lại')
+      // A single reload per attempt. Re-registering on dom-ready must not reset this budget.
+      console.info('[ZaloWeb] Recovering bootstrap', {
+        accountId, armedAt: entry.armedAt, resetReason: entry.lastCaptureResetReason,
+        capturedKinds: [...entry.candidates.values()].map(candidate => ({
+          loginInfo: !!candidate.loginInfo, serverInfo: !!candidate.serverInfo
+        }))
+      })
+      entry.wc.reload()
+      await this.waitForBootstrap(accountId, entry)
+      assertCurrent()
+      return await this.ensureApi(accountId)
+    } finally {
+      entry.recoveryRunning = false
+    }
   }
 
   clearAll(): void {
@@ -407,6 +505,32 @@ export class ZaloWebRuntimeService {
       && entry.api === api
   }
 
+  captureSessionGuard(accountId: number): () => boolean {
+    const entry = this.entries.get(accountId)
+    const version = entry?.captureVersion
+    return () => this.entries.get(accountId) === entry && entry?.captureVersion === version
+  }
+
+  beginSessionCheck(accountId: number): { cachedApi?: API; finish: (verifiedApi?: API) => void } {
+    const entry = this.entries.get(accountId)
+    const cachedApi = this.hasVerifiedSession(accountId) ? entry?.api : undefined
+    if (entry) entry.checksInProgress += 1
+    let finished = false
+    return {
+      cachedApi,
+      finish: verifiedApi => {
+        if (finished || !entry) return
+        finished = true
+        entry.checksInProgress -= 1
+        if (verifiedApi && this.entries.get(accountId) === entry
+          && this.isCurrentApi(accountId, verifiedApi) && entry.verified) {
+          entry.recoveryPending = false
+          entry.recoveryAttempted = false
+        }
+      }
+    }
+  }
+
   async clearForLogout(accountId: number): Promise<WebContents | null> {
     const wc = this.entries.get(accountId)?.wc || null
     await this.clearPersistentSession(accountId, true)
@@ -441,13 +565,25 @@ export class ZaloWebRuntimeService {
     this.detach(accountId)
   }
 
-  async ensureApi(accountId: number): Promise<API> {
+  async ensureApi(accountId: number, capturedBootstrapVerification = false): Promise<API> {
     const entry = this.entries.get(accountId)
     if (!entry || entry.wc.isDestroyed()) {
       throw new Error('Hãy mở tab Zalo Web trước khi chạy tác vụ')
     }
     if (!entry.debuggerReady) {
       throw new Error('Bộ theo dõi phiên Zalo Web chưa sẵn sàng; hãy tải lại tab Zalo')
+    }
+    if (entry.verified && entry.api) return entry.api
+    if (entry.recoveryAttempted && !entry.recoveryRunning && !capturedBootstrapVerification) {
+      throw new BootstrapUnavailableError('Chưa xác minh được phiên Zalo Web; hãy bấm Kiểm tra đăng nhập để thử lại')
+    }
+    if (!entry.bootstrap) {
+      // Wait before assigning apiBuild: promotion starts verification itself.
+      // Both callers must share that build instead of persisting the same bootstrap twice.
+      await this.waitForBootstrap(accountId, entry)
+    }
+    if (this.entries.get(accountId) !== entry || entry.wc.isDestroyed() || !entry.debuggerReady) {
+      throw new Error('Tab Zalo Web đã thay đổi trong lúc kiểm tra')
     }
     if (entry.verified && entry.api) return entry.api
     if (entry.apiBuild) return entry.apiBuild
@@ -462,19 +598,25 @@ export class ZaloWebRuntimeService {
   }
 
   private async armDebugger(entry: ZaloWebRuntimeEntry): Promise<void> {
-    if (entry.wc.isDestroyed()) throw new Error('Tab Zalo Web không khả dụng')
+    if (entry.wc.isDestroyed() || entry.crashed) throw new Error('Tab Zalo Web không khả dụng')
     if (!entry.wc.debugger.isAttached()) {
       entry.wc.debugger.attach(CDP_PROTOCOL_VERSION)
       entry.debuggerOwned = true
     }
     try {
-      await entry.wc.debugger.sendCommand('Network.enable', {
+      // Network.enable itself cannot be cancelled. Bound its read response;
+      // a newly captured bootstrap must not be mistaken for a detached observer.
+      await withRequestDeadline(new AbortController().signal, () => entry.wc.debugger.sendCommand('Network.enable', {
         maxTotalBufferSize: 10 * 1024 * 1024,
         maxResourceBufferSize: 2 * 1024 * 1024,
         maxPostDataSize: 512 * 1024
-      })
+      }), this.captureTimeoutMs)
+      if (this.entries.get(entry.accountId) !== entry || entry.wc.isDestroyed()
+        || entry.crashed || !entry.wc.debugger.isAttached()) {
+        throw new Error('Bộ theo dõi Zalo Web đã thay đổi trong lúc khởi tạo')
+      }
       entry.debuggerReady = true
-      entry.lastError = undefined
+      entry.armedAt = Date.now()
       this.notifyChange(entry)
     } catch (error) {
       entry.debuggerReady = false
@@ -650,6 +792,7 @@ export class ZaloWebRuntimeService {
     entry.apiBuild = undefined
     entry.verified = false
     entry.lastError = undefined
+    entry.recoveryPending = true
     this.notifyChange(entry)
     void this.verifyPromotedBootstrap(entry, entry.captureVersion)
   }
@@ -679,7 +822,7 @@ export class ZaloWebRuntimeService {
       }
 
       try {
-        const api = await this.ensureApi(entry.accountId)
+        const api = await this.ensureApi(entry.accountId, true)
         if (!this.isCurrentApi(entry.accountId, api) || entry.captureVersion !== captureVersion) return
         return
       } catch (error) {
@@ -713,11 +856,12 @@ export class ZaloWebRuntimeService {
       entry.wc.session,
       assertGenerationCurrent
     )
-    await cookieBridge.refreshSnapshot()
+    await withRequestDeadline(generationSignal, () => cookieBridge.refreshSnapshot(), this.captureTimeoutMs)
 
     const settings = bootstrap.serverInfo.setttings || bootstrap.serverInfo.settings
     if (!settings) throw new Error('Zalo Web bootstrap thiếu settings')
     const callbacks = new Map<string, (data: unknown) => unknown>()
+    const verification: { signal?: AbortSignal } = {}
     const context = {
       API_TYPE: bootstrap.apiType,
       API_VERSION: bootstrap.apiVersion,
@@ -737,7 +881,8 @@ export class ZaloWebRuntimeService {
           entry,
           captureVersion,
           bootstrap,
-          generationSignal
+          generationSignal,
+          verification
         ),
         imageMetadataGetter: this.imageMetadataGetter
       },
@@ -760,6 +905,21 @@ export class ZaloWebRuntimeService {
       bootstrap.loginInfo.zpw_service_map_v3,
       bootstrap.loginInfo.zpw_ws
     )
+    // Bound only the read used to verify login, including response-body parsing.
+    // Do not apply this deadline to campaign uploads or other API operations.
+    const fetchAccountInfo = api.fetchAccountInfo.bind(api)
+    let verificationWork: ReturnType<API['fetchAccountInfo']> | undefined
+    api.fetchAccountInfo = () => {
+      if (verificationWork) return verificationWork
+      const work = withRequestDeadline(generationSignal, async signal => {
+        verification.signal = signal
+        return await fetchAccountInfo()
+      }, this.captureTimeoutMs).finally(() => {
+        if (verificationWork === work) verificationWork = undefined
+      })
+      verificationWork = work
+      return work
+    }
     // Realtime is intentionally outside this phase. Fail loudly if a caller
     // accidentally tries to open zca-js' duplicate WebSocket.
     api.listener.start = (() => {
@@ -799,6 +959,12 @@ export class ZaloWebRuntimeService {
       throw new Error('Phiên Zalo Web đã thay đổi trước khi hoàn tất đồng bộ tài khoản')
     }
     entry.verified = true
+    // An explicit check still has to finish its account read and identity fence.
+    // Only standalone bootstrap verification completes here.
+    if (entry.checksInProgress === 0) {
+      entry.recoveryPending = false
+      entry.recoveryAttempted = false
+    }
     this.notifyChange(entry)
     return api
   }
@@ -807,7 +973,8 @@ export class ZaloWebRuntimeService {
     entry: ZaloWebRuntimeEntry,
     captureVersion: number,
     bootstrap: CapturedBootstrap,
-    generationSignal: AbortSignal
+    generationSignal: AbortSignal,
+    verification: { signal?: AbortSignal }
   ): typeof fetch {
     return (async (
       input: Parameters<typeof fetch>[0],
@@ -830,32 +997,29 @@ export class ZaloWebRuntimeService {
       const body = Buffer.isBuffer(source.body)
         ? new Uint8Array(source.body)
         : source.body
-      const requestAbortController = new AbortController()
-      const abortRequest = (): void => requestAbortController.abort()
       const callerSignal = source.signal || null
-      generationSignal.addEventListener('abort', abortRequest, { once: true })
-      callerSignal?.addEventListener('abort', abortRequest, { once: true })
-      if (generationSignal.aborted || callerSignal?.aborted) abortRequest()
+      const target = input instanceof URL ? input.toString() : input
+      const requestUrl = typeof target === 'string' ? target : target.url
+      const verificationSignal = new URL(requestUrl).pathname === '/api/social/profile/me-v2'
+        ? verification.signal : undefined
+      const signal = AbortSignal.any([
+        generationSignal, ...(callerSignal ? [callerSignal] : []),
+        ...(verificationSignal ? [verificationSignal] : [])
+      ])
+      signal.throwIfAborted()
       const requestInit: RequestInit = {
         ...source,
         headers,
         body,
         credentials: 'include',
-        signal: requestAbortController.signal
+        signal
       }
       delete (requestInit as RequestInit & { agent?: unknown }).agent
-      const target = input instanceof URL ? input.toString() : input
-      try {
-        const response = await entry.wc.session.fetch(target as string | Request, requestInit)
-        // Aborting the underlying request is the primary fence against a stale
-        // Set-Cookie response. Re-check after resolution as well so no caller
-        // can consume an old identity's response if the switch won the race.
-        assertGenerationCurrent()
-        return response
-      } finally {
-        generationSignal.removeEventListener('abort', abortRequest)
-        callerSignal?.removeEventListener('abort', abortRequest)
-      }
+      const response = await entry.wc.session.fetch(target as string | Request, requestInit)
+      // The combined signal stays connected while zca-js consumes the body.
+      assertGenerationCurrent()
+      signal.throwIfAborted()
+      return response
     }) as typeof fetch
   }
 
@@ -865,7 +1029,7 @@ export class ZaloWebRuntimeService {
   ): Promise<CapturedBootstrap> {
     const deadline = Date.now() + this.captureTimeoutMs
     while (true) {
-      if (this.entries.get(accountId) !== entry || entry.wc.isDestroyed()) {
+      if (this.entries.get(accountId) !== entry || entry.wc.isDestroyed() || entry.crashed) {
         throw new Error('Tab Zalo Web đã đóng trong lúc chờ session')
       }
       if (entry.bootstrap) return entry.bootstrap
@@ -873,7 +1037,7 @@ export class ZaloWebRuntimeService {
       const remaining = deadline - Date.now()
       if (remaining <= 0) {
         const suffix = entry.lastError ? `: ${entry.lastError}` : ''
-        throw new Error(`Chưa lấy được session Zalo Web; hãy tải lại tab sau khi đăng nhập${suffix}`)
+        throw new BootstrapUnavailableError(`Chưa lấy được dữ liệu phiên Zalo Web; hãy bấm Kiểm tra đăng nhập để thử lại${suffix}`)
       }
       const signal = entry.signal.promise
       let timer: ReturnType<typeof setTimeout> | undefined
@@ -894,6 +1058,8 @@ export class ZaloWebRuntimeService {
     entry.apiBuild = undefined
     entry.verified = false
     entry.lastError = error
+    entry.lastCaptureResetReason = error
+    entry.recoveryPending = true
     this.notifyChange(entry)
   }
 

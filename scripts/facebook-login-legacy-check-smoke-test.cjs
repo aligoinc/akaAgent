@@ -78,6 +78,9 @@ async function pollingChecks() {
   const { startAccountPoller } = load('src/main/domain/accounts/accountPoller.ts', {
     electron: { webContents: { fromId: id => pages.get(id) } }, '../../../shared/types': { IPC_EVENTS },
     '../../data/currentUser': { getCurrentUser: () => ({ staffId: 1 }) },
+    '../../services/accountOperationRegistry': { accountOperationRegistry: {
+      has: () => assert.fail('Zalo recovery eligibility must not run for Facebook accounts')
+    } },
     '../../data/repositories/accountRepository': { listAccounts: async () => accounts, updateAccount: async (id, value) => {
       writes.push({ id, ...value }); Object.assign(accounts.find(a => a.id === id), value)
     } },
