@@ -25,3 +25,25 @@ npm run build:server
 ```
 
 Smoke mới kiểm tra policy không có detail, log share bị thiếu, dedupe trong batch, giữ nguyên log đường chạy thường, context khi DB append lỗi và lý do khóa đầy đủ. Những smoke còn lại bảo vệ quota/scope, thời gian khóa, các nhánh kết thúc batch và cleanup không gửi lại.
+
+## Rà soát bổ sung: lý do dừng phải còn ở trạng thái cuối
+
+Đợt rà soát sau PR #440 kiểm tra note sau bước kết thúc lượt, thay vì chỉ kiểm tra có lệnh ghi log. Đã sửa các trường hợp:
+
+- Đủ ngưỡng lỗi: `handleCampaignBadTarget` truyền note riêng gồm số data lỗi, ngưỡng và nguyên nhân sang `applyRuntimeErrorPolicy`. Log policy cũ giữ nguyên; kết quả trả về cho batch cũng giữ note đầy đủ. Khi lỗi engine chỉ có `message`, dùng nguyên nhân này thay cho thông báo `Có lỗi xảy ra`; chẩn đoán/safe message vẫn được ưu tiên.
+- Policy trùng với yêu cầu pause: chuyển lý do dừng từ target/batch vào helper hoàn tất pause. Pause thủ công không có policy giữ hành vi cũ; Server vẫn giữ trạng thái/note campaign đã được điều khiển trước đó.
+- Policy 600: bước dừng vì tài khoản đăng xuất giữ phần hướng dẫn đăng nhập lại trong note, đồng thời giữ log đăng xuất hiện có.
+- Khóa có trước lượt chạy: chỉ thêm log `Chưa thể chạy chiến dịch` khi CAS cập nhật note thành công. Cùng lý do không ghi lại ở mỗi nhịp; CAS thất bại không phát log chặn sai cho owner mới.
+
+| Nhánh | Kiểm chứng |
+|---|---|
+| Lỗi 1–4, lỗi thứ 5 | Smoke gọi bộ đếm + áp policy thật, kiểm tra note cuối có số/nguyên nhân và log cũ còn nguyên |
+| Pause sau policy, Desktop/Server | Smoke gọi helper kết thúc lượt thật và kiểm tra note sau cùng; pause thường vẫn như cũ |
+| Page inbox 5 lỗi → chạy lại một lần → 10 lỗi | Smoke giữ quy tắc hiện có, note ngưỡng cuối đầy đủ |
+| Khóa trước khi claim | Kiểm tra CAS thành công/thất bại và số log phát ra |
+| Policy 600 | Kiểm tra note hướng dẫn còn sau account guard, log cũ giữ nguyên |
+| 120/802/223, share, quota, cleanup | Smoke days-at-time, rich-share, empty-share và failure-cleanup hiện có |
+
+Test dùng method runtime thật với adapter cục bộ; không phải chiến dịch Zalo thật. Chat có kiểm chứng xuyên executor → SQL bộ đếm PGlite → scheduler cho cả target và batch. Không sửa lịch maintenance, giới hạn lịch sử hoặc cách nhận log sau reconnect; các ranh giới vòng đời/quyền điều khiển mới vẫn có quyền đổi trạng thái/lý do dừng. Không có migration.
+
+Kết quả local 26/09/2026: hai typecheck PASS; build Desktop/Server PASS; năm smoke ở trên PASS. Đối chiếu AST xác nhận 171 lời gọi log có template trong scheduler giữ nguyên template cũ.
