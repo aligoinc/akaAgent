@@ -104,16 +104,18 @@ export async function listProxies(): Promise<AutoProxy[]> {
   }))
 }
 
-export async function getProxy(id: number): Promise<AutoProxy | null> {
+export async function getProxy(id: number, signal?: AbortSignal): Promise<AutoProxy | null> {
+  signal?.throwIfAborted()
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const query = client()
     .from('auto_proxies')
     .select('*')
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
-    .maybeSingle()
-
+  if (signal) query.abortSignal(signal)
+  const { data, error } = await query.maybeSingle()
+  signal?.throwIfAborted()
   if (error) throw new Error(`Failed to get proxy: ${error.message}`)
   return data ? mapProxyFromDB(data) : null
 }

@@ -56,6 +56,11 @@ export interface AutoAccount {
   id: number
   name: string
   flatformType: string
+  /** Last verified Facebook identity; retained after logout. Not unique. */
+  facebookUid?: string | null
+  facebookLoginManaged?: boolean
+  /** DB fence for cancellable Facebook login claims; never a Facebook UID. */
+  facebookLoginClaimGeneration?: number
   /** Zalo runtime subtype. Always false for non-Zalo accounts. */
   isZaloShowWeb: boolean
   /** Zalo zca-js runtime hosted by akaAgent Server. Always false for Web/non-Zalo accounts. */
