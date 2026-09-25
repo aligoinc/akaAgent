@@ -1259,7 +1259,7 @@ export class CampaignScheduler {
   private async completeCampaignPause(campaign: Campaign): Promise<void> {
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: null })
     this.pauseRequests.delete(campaign.id)
-    await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+    await this.logCampaignProgress(campaign, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
   }
 
   /**
@@ -1285,7 +1285,7 @@ export class CampaignScheduler {
     this.broadcastCampaignUpdate(current)
     if (current.status === 'tạm dừng') {
       this.pauseRequests.delete(campaign.id)
-      await this.logCampaignProgress(campaign.id, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
+      await this.logCampaignProgress(campaign, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
       return
     }
 
@@ -1643,7 +1643,7 @@ export class CampaignScheduler {
     this.broadcastCampaignUpdate(updated)
     if (finalized.reason === 'pending_input_remaining') {
       await this.logCampaignProgress(
-        campaign.id,
+        campaign,
         `⏳ Phát hiện ${finalized.pendingInputCount} data mới đang chờ xử lý; chiến dịch chưa hoàn thành.`
       )
     }
@@ -1721,7 +1721,7 @@ export class CampaignScheduler {
     if (!this.isDataGroupCampaignHardEnded(campaign, now)) return false
     const completed = await this.transitionCampaignToCompleted(campaign, DATA_GROUP_HARD_END_NOTE)
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `⏹ ${DATA_GROUP_HARD_END_NOTE}`)
+      await this.logCampaignProgress(campaign, `⏹ ${DATA_GROUP_HARD_END_NOTE}`)
     }
     return true
   }
@@ -1733,9 +1733,9 @@ export class CampaignScheduler {
     if (campaign.dataTargetSourceMode === 'data_group') {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
       } else {
-        await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" đang chờ data mới từ Nhóm data`)
+        await this.logCampaignProgress(campaign, `⏳ Chiến dịch "${campaign.name}" đang chờ data mới từ Nhóm data`)
       }
       return
     }
@@ -1751,7 +1751,7 @@ export class CampaignScheduler {
       if (now >= endDate) {
         const completed = await this.transitionCampaignToCompleted(campaign)
         if (completed) {
-          await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
+          await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày kết thúc)`)
         }
         return
       }
@@ -1767,7 +1767,7 @@ export class CampaignScheduler {
 
     const completed = await this.transitionCampaignToCompleted(campaign)
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
     }
   }
 
@@ -1811,7 +1811,7 @@ export class CampaignScheduler {
         schedule: nextSchedule.toISOString(),
         note: null
       })
-      await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" tiếp tục chờ data theo thời gian thực từ group Zalo`)
+      await this.logCampaignProgress(campaign, `⏳ Chiến dịch "${campaign.name}" tiếp tục chờ data theo thời gian thực từ group Zalo`)
       return true
     }
 
@@ -1820,7 +1820,7 @@ export class CampaignScheduler {
       'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
     )
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
     }
     return true
   }
@@ -1861,7 +1861,7 @@ export class CampaignScheduler {
     if (!nextSchedule) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không còn khung giờ chạy trong hôm nay)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không còn khung giờ chạy trong hôm nay)`)
       }
       return true
     }
@@ -1870,7 +1870,7 @@ export class CampaignScheduler {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
         await this.logCampaignProgress(
-          campaign.id,
+          campaign,
           `✅ Hoàn thành chiến dịch "${campaign.name}" (khung giờ ${nextSlot} vượt quá giờ dừng trong ngày)`
         )
       }
@@ -1907,7 +1907,7 @@ export class CampaignScheduler {
       })
       if (updated.status === 'chờ xử lý' && updated.schedule &&
         new Date(updated.schedule).getTime() === earliestFutureInputSchedule.getTime()) {
-        await this.logCampaignProgress(campaign.id, `⏳ Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(earliestFutureInputSchedule)}`)
+        await this.logCampaignProgress(campaign, `⏳ Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(earliestFutureInputSchedule)}`)
       }
       return true
     }
@@ -1915,14 +1915,14 @@ export class CampaignScheduler {
     if (details.length > 0 && resettableCount === 0) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
       }
       return true
     }
     if (campaign.actionId === PAGE_POST_ACTION_ID && details.length === 0) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
       }
       return true
     }
@@ -1932,7 +1932,7 @@ export class CampaignScheduler {
     ) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
       }
       return true
     }
@@ -1986,7 +1986,7 @@ export class CampaignScheduler {
       })
     }
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" ở khung giờ ${nextSlot} (${this.formatVietnamDateTime(nextSchedule)})`
     )
     return true
@@ -2026,7 +2026,7 @@ export class CampaignScheduler {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
         await this.logCampaignProgress(
-          campaign.id,
+          campaign,
           `✅ Hoàn thành chiến dịch "${campaign.name}" (không hẹn chạy lại theo giờ qua ngày mới)`
         )
       }
@@ -2037,7 +2037,7 @@ export class CampaignScheduler {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
         await this.logCampaignProgress(
-          campaign.id,
+          campaign,
           `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt chạy lại sau ${hours} giờ vượt quá giờ dừng trong ngày)`
         )
       }
@@ -2050,7 +2050,7 @@ export class CampaignScheduler {
       if (resettableCount === 0) {
         const completed = await this.transitionCampaignToCompleted(campaign)
         if (completed) {
-          await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
+          await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại)`)
         }
         return true
       }
@@ -2063,7 +2063,7 @@ export class CampaignScheduler {
       note: null
     })
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
     )
     return true
@@ -2078,25 +2078,25 @@ export class CampaignScheduler {
     const completed = await this.transitionCampaignToCompleted(campaign, note)
     const suffix = note ? ` (${note})` : ''
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"${suffix}`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"${suffix}`)
     }
   }
 
   private async completeZaloBirthdayWithoutTargets(campaign: Campaign): Promise<void> {
     const message = 'Không có bạn bè sinh nhật hôm nay'
     const completed = await this.transitionCampaignToCompleted(campaign, message)
-    await this.logCampaignProgress(campaign.id, `🎂 ${message}`)
+    await this.logCampaignProgress(campaign, `🎂 ${message}`)
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
     }
   }
 
   private async completeZaloFriendRecommendationWithoutTargets(campaign: Campaign, message: string): Promise<void> {
     const note = message || 'Không lấy được đề xuất Zalo để chạy'
     const completed = await this.transitionCampaignToCompleted(campaign, note)
-    await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+    await this.logCampaignProgress(campaign, `⚠️ ${note}`)
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
     }
   }
 
@@ -2610,7 +2610,7 @@ export class CampaignScheduler {
         : check.context.kind === 'configured_stop'
           ? `⏹ Đã đến giờ dừng ${check.context.cutoffLabel}; đã hoàn tất lượt hiện tại và không mở lượt mới.`
           : '⏹ Đã đến mốc dừng cuối ngày 23:59; đã hoàn tất lượt hiện tại và không mở lượt mới.'
-      await this.logCampaignProgress(campaign.id, message).catch(() => {})
+      await this.logCampaignProgress(campaign, message).catch(() => {})
     }
 
     await this.reconcileMaintenanceAfterSettledRun(account, campaign, resultClock)
@@ -2689,7 +2689,7 @@ export class CampaignScheduler {
       note: null
     })
     const message = `Hẹn chạy tiếp chiến dịch lúc ${this.formatVietnamDateTime(scheduledAt)}`
-    await this.logCampaignProgress(campaign.id, `⏳ ${message}`)
+    await this.logCampaignProgress(campaign, `⏳ ${message}`)
   }
 
   private isZaloRealtimeGroupCampaign(campaign: Campaign): boolean {
@@ -2754,7 +2754,7 @@ export class CampaignScheduler {
         schedule: nextSchedule.toISOString(),
         note: null
       })
-      await this.logCampaignProgress(campaign.id, `⏳ Chiến dịch "${campaign.name}" đang chờ data theo thời gian thực từ group Zalo`)
+      await this.logCampaignProgress(campaign, `⏳ Chiến dịch "${campaign.name}" đang chờ data theo thời gian thực từ group Zalo`)
       return false
     }
 
@@ -2763,7 +2763,7 @@ export class CampaignScheduler {
       'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy'
     )
     if (completed) {
-      await this.logCampaignProgress(campaign.id, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
+      await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (hết ngày nhận data theo thời gian thực)`)
     }
     return false
   }
@@ -3034,7 +3034,7 @@ export class CampaignScheduler {
         return
       }
 
-      await this.logCampaignProgress(campaign.id, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
+      await this.logCampaignProgress(campaign, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       if (campaign.extraSettings?.runAsPage === true) {
         try {
@@ -3044,7 +3044,7 @@ export class CampaignScheduler {
           this.facebookPageIdentities.set(campaign.id, new FacebookCampaignPageIdentity(campaign, workflow))
         } catch (error) {
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: getErrorMessage(error) })
-          await this.logCampaignProgress(campaign.id, `⚠️ ${getErrorMessage(error)}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${getErrorMessage(error)}`)
           await this.releaseRunningAccount(account.id)
           return
         }
@@ -3173,7 +3173,7 @@ export class CampaignScheduler {
       if (details.length === 0) {
         const message = 'Không lấy được bạn bè Zalo nào để gửi tin'
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-        await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+        await this.logCampaignProgress(campaign, `⚠️ ${message}`)
         await this.releaseRunningAccount(account.id)
         return
       }
@@ -3231,7 +3231,7 @@ export class CampaignScheduler {
     if (this.isZaloFriendAutoDataCampaign(campaign) && details.length === 0) {
       const message = 'Chiến dịch đã lấy data bạn bè Zalo một lần nhưng chưa có data để chạy'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${message}`)
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -3278,7 +3278,7 @@ export class CampaignScheduler {
       if (details.length === 0) {
         const message = 'Không lấy được đề xuất bạn bè từ Facebook'
         await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-        await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+        await this.logCampaignProgress(campaign, `⚠️ ${message}`)
         await this.releaseRunningAccount(account.id)
         return
       }
@@ -3288,7 +3288,7 @@ export class CampaignScheduler {
     if (zaloFriendBlocklist?.invalidReason) {
       const note = `Danh sách không gửi tin Zalo không hợp lệ: ${zaloFriendBlocklist.invalidReason}`
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${note}`)
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -3329,7 +3329,7 @@ export class CampaignScheduler {
         const j = Math.floor(Math.random() * (i + 1))
         ;[details[i], details[j]] = [details[j], details[i]]
       }
-      await this.logCampaignProgress(campaign.id, `🔀 Đã xáo trộn danh sách ${details.length} group`)
+      await this.logCampaignProgress(campaign, `🔀 Đã xáo trộn danh sách ${details.length} group`)
     }
 
     const sourcePagePostMode = extra.pagePostMode || 'api'
@@ -3341,7 +3341,7 @@ export class CampaignScheduler {
     const advancedContentError = this.getAdvancedContentConfigError(campaign, !shouldPostWithBackground)
     if (advancedContentError) {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${advancedContentError}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${advancedContentError}`)
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -3472,7 +3472,7 @@ export class CampaignScheduler {
         } catch (err) {
           const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
           await this.releaseClaimedCampaignPreflight(account, campaign, message)
-          await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+          await this.logCampaignProgress(campaign, `⚠️ ${message}`).catch(() => {})
           return
         }
       }
@@ -3530,7 +3530,7 @@ export class CampaignScheduler {
               await this.handleLimitStatus(account, campaign, limitStatus)
             } else {
               await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-              await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
+              await this.logCampaignProgress(campaign, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
             }
             break
           }
@@ -3560,7 +3560,7 @@ export class CampaignScheduler {
         console.error('Rate limit check error:', err)
         const message = `Không thể kiểm tra giới hạn hành động từ DB; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
         await this.releaseClaimedCampaignPreflight(account, campaign, message)
-        await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+        await this.logCampaignProgress(campaign, `⚠️ ${message}`).catch(() => {})
         return
       }
 
@@ -3582,7 +3582,7 @@ export class CampaignScheduler {
           })
         } catch {}
         const targetLabel = detail ? ` cho "${this.getInputDataDisplayName(campaign, detail)}"` : ''
-        await this.logCampaignProgress(campaign.id, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
+        await this.logCampaignProgress(campaign, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
       }
 
       // Run engine v2
@@ -3631,7 +3631,7 @@ export class CampaignScheduler {
           } catch (err) {
             const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
             await this.releaseClaimedCampaignPreflight(account, campaign, message)
-            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+            await this.logCampaignProgress(campaign, `⚠️ ${message}`).catch(() => {})
             return
           }
         }
@@ -3696,10 +3696,10 @@ export class CampaignScheduler {
         try {
           if (detail) {
             const inputDataName = this.getInputDataDisplayName(campaign, detail)
-            await this.logCampaignProgress(campaign.id, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
+            await this.logCampaignProgress(campaign, `▶️ Xử lý "${inputDataName}" trong chiến dịch "${campaign.name}"`)
             if (groupPostApproval.skipPostByKnownApproval) {
               const message = `Bỏ qua đăng bài vào "${inputDataName}" vì group đã biết cần duyệt bài`
-              await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+              await this.logCampaignProgress(campaign, `⚠️ ${message}`)
             }
           }
         } catch (error) {
@@ -3896,7 +3896,7 @@ export class CampaignScheduler {
                   note: this.withZaloMessageOptOutWarnings(null, zaloOptOutContext)
                 })
                 consumedGroupPostInputDataIds.add(detail.id)
-                await this.logCampaignProgress(campaign.id, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
+                await this.logCampaignProgress(campaign, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
               }
             } else if (pauseCancelledRun) {
               await this.supabase.updateCampaignInputData(detail.id, {
@@ -3911,7 +3911,7 @@ export class CampaignScheduler {
                 note: this.withZaloMessageOptOutWarnings(errMsg, zaloOptOutContext)
               })
               consumedGroupPostInputDataIds.add(detail.id)
-              await this.logCampaignProgress(campaign.id, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
+              await this.logCampaignProgress(campaign, `❌ Lỗi "${this.getInputDataDisplayName(campaign, detail)}": ${errMsg}`)
             }
           }
 
@@ -3974,6 +3974,9 @@ export class CampaignScheduler {
                 note: milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
               })
             }
+            await this.logCampaignProgress(campaign, `⏸ Dừng chiến dịch: ${
+              milestoneSummary.pendingNote || latestCampaign?.note || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
+            }`)
             shouldStopAfterTarget = true
           }
 
@@ -4076,11 +4079,11 @@ export class CampaignScheduler {
             }
           }
           if (!pauseAbortTriggered && !runtimeModeAbortTriggered) {
-            await this.logCampaignProgress(campaign.id, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
+            await this.logCampaignProgress(campaign, `❌ Lỗi engine v2 "${campaign.name}": ${errMsg}`)
             while (screenshotProgressLogs.length > 0) {
               const progressLog = screenshotProgressLogs.shift()
               if (!progressLog) continue
-              await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
+              await this.logCampaignProgress(campaign, progressLog.storedMessage, {
                 realtimeMessage: progressLog.realtimeMessage,
                 realtimeAction: progressLog.action
               })
@@ -4165,7 +4168,7 @@ export class CampaignScheduler {
       if (i < targets.length - 1) {
         const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
         if (sleepTime > 0) {
-          await this.logCampaignProgress(campaign.id, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
+          await this.logCampaignProgress(campaign, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
           const sleepResult = await this.sleepBetweenTargets(campaign, sleepTime, account)
           if (sleepResult.status === 'paused') {
             await this.completePauseAtBoundary(account, campaign)
@@ -4223,7 +4226,7 @@ export class CampaignScheduler {
     if (!groupUrl) {
       const note = 'Vui lòng chọn group nhận lời mời trước khi chạy chiến dịch'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${note}`)
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -4231,7 +4234,7 @@ export class CampaignScheduler {
     if (details.length === 0) {
       const note = 'Không có bạn bè cần mời vào group'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${note}`)
       await this.releaseRunningAccount(account.id)
       return
     }
@@ -4458,7 +4461,7 @@ export class CampaignScheduler {
     if (!page) throw new Error('Facebook - Mời vào group cần browser page')
 
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `▶️ Đang mời ${batch.length} bạn bè vào group "${options.groupName}"`
     )
 
@@ -4594,7 +4597,7 @@ export class CampaignScheduler {
       while (!this.failedCampaignRuns.has(campaign.id) && screenshotProgressLogs.length > 0) {
         const progressLog = screenshotProgressLogs.shift()
         if (!progressLog) continue
-        await this.logCampaignProgress(campaign.id, progressLog.storedMessage, {
+        await this.logCampaignProgress(campaign, progressLog.storedMessage, {
           realtimeMessage: progressLog.realtimeMessage,
           realtimeAction: progressLog.action
         })
@@ -4649,7 +4652,7 @@ export class CampaignScheduler {
       })
       const note = message || 'Lỗi mở form mời vào group'
       await this.updateErrorPolicyCampaign(campaign, { status: 'tạm dừng', note })
-      await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi mời vào group: ${note}`)
+      await this.logCampaignProgress(campaign, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi mời vào group: ${note}`)
       return { stop: true }
     })
   }
@@ -4769,21 +4772,21 @@ export class CampaignScheduler {
     }
 
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `📨 Kết quả mời vào group: tổng ${processedCount}, thành công ${successCount}, đã mời ${alreadyInvitedCount}, đã là thành viên ${alreadyMemberCount}, không tồn tại ${notFoundCount}, lỗi ${errorCount}, chờ xử lý lại ${retryPendingCount}`
     )
 
     if (retryPendingCount > 0 && output.submitOk === false) {
       const message = output.error || output.message || submitErrorMessage || 'Lỗi submit lời mời vào group'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: message })
-      await this.logCampaignProgress(campaign.id, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi submit lời mời vào group: ${message}`)
+      await this.logCampaignProgress(campaign, `⏸ Tạm dừng chiến dịch "${campaign.name}" vì lỗi submit lời mời vào group: ${message}`)
       stop = true
     }
 
     if (output.ok === false && errorCount > 0 && !stop) {
       const message = output.error || output.message || 'Lỗi submit lời mời vào group'
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-      await this.logCampaignProgress(campaign.id, `❌ ${message}`)
+      await this.logCampaignProgress(campaign, `❌ ${message}`)
       stop = true
     }
 
@@ -4867,7 +4870,7 @@ export class CampaignScheduler {
         const advancedContentError = this.getAdvancedContentConfigError(campaign, true)
         if (advancedContentError) {
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })
-          await this.logCampaignProgress(campaign.id, `⚠️ ${advancedContentError}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${advancedContentError}`)
           await this.releaseRunningAccount(account.id)
           return
         }
@@ -4880,7 +4883,7 @@ export class CampaignScheduler {
           : baseMessage).trim() && simpleAttachments.length === 0) {
           const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-          await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${note}`)
           await this.releaseRunningAccount(account.id)
           return
         }
@@ -5055,7 +5058,7 @@ export class CampaignScheduler {
           } catch (err) {
             const message = `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(err) || 'Lỗi không xác định'}`
             await this.releaseClaimedCampaignPreflight(account, campaign, message)
-            await this.logCampaignProgress(campaign.id, `⚠️ ${message}`).catch(() => {})
+            await this.logCampaignProgress(campaign, `⚠️ ${message}`).catch(() => {})
             return
           }
         }
@@ -5139,7 +5142,7 @@ export class CampaignScheduler {
           stoppedBeforeCompletion = true
           const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
           await this.updateRunningCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-          await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${note}`)
           break
         }
         if (!await this.beginCampaignRunUnit(
@@ -5304,7 +5307,7 @@ export class CampaignScheduler {
       }
 
       if (zaloFriendBlocklistSkippedCount > 0) {
-        await this.logCampaignProgress(campaign.id, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
+        await this.logCampaignProgress(campaign, `🚫 Đã bỏ qua ${zaloFriendBlocklistSkippedCount} bạn bè Zalo trong danh sách không gửi tin`)
       }
       if (!stoppedBeforeCompletion) {
         if (earliestFutureInputSchedule) {
@@ -5486,6 +5489,7 @@ export class CampaignScheduler {
   ): Promise<ZaloShareMessageBatchResult> {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const claimedDetails = [...batch.map(item => item.detail), ...invalidTargets]
+    const progressLogs = new Set<string>()
     const initialStopReason = this.getZaloRuntimeStopReason(campaign.id)
     if (initialStopReason) {
       await this.settleZaloShareBatchRuntimeStop(claimedDetails, new Set(), initialStopReason)
@@ -5628,7 +5632,7 @@ export class CampaignScheduler {
           { inputData: this.buildZaloShareInputData(detail) },
           { policyHandling }
         )
-        const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail)
+        const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail, progressLogs)
         await this.updateZaloShareInputStatus(detail, actionDetail, optOutContexts.get(detail.id))
         // Validation is now terminal for this claimed input even though no Zalo
         // API call was needed. A later runtime stop must not requeue it.
@@ -5742,7 +5746,7 @@ export class CampaignScheduler {
           )
         }
 
-        const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail)
+        const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs)
         const afterRecordStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterRecordStopReason) {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterRecordStopReason)
@@ -5818,9 +5822,10 @@ export class CampaignScheduler {
       }
 
       await this.logCampaignProgress(
-        campaign.id,
+        campaign,
         `📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${claimedDetails.length}, thành công ${shareSuccessCount}, thất bại ${shareFailCount}`
       )
+      if (stopNote) await this.logCampaignProgress(campaign, `⏸ Kết thúc batch: ${stopNote}`)
 
       return { stopAfterBatch, pauseAfterBatch, stopNote }
     } catch (err) {
@@ -5967,9 +5972,20 @@ export class CampaignScheduler {
     campaign: Campaign,
     detail: CampaignInputData,
     accountId: number,
-    actionDetail: ZaloActionDetailOutput
+    actionDetail: ZaloActionDetailOutput,
+    progressLogs = new Set<string>()
   ): Promise<CampaignDetail | null> {
+    // One progress entry per distinct failure in this batch; identical failures
+    // still retain their individual details without flooding progress/DB writes.
+    const logFailure = async (): Promise<void> => {
+      if (!actionDetail.log || actionDetail.status === 'thành công') return
+      const message = `⚠️ ${this.formatZaloProgressLog(actionDetail)}`
+      if (progressLogs.has(message)) return
+      progressLogs.add(message)
+      await this.logCampaignProgress(campaign, message)
+    }
     if (actionDetail.createDetail === false || !actionDetail.status) {
+      await logFailure()
       return null
     }
 
@@ -5986,6 +6002,7 @@ export class CampaignScheduler {
       shouldCountAction: actionDetail.countsTowardLimit === true
     })
 
+    await logFailure()
     return created
   }
 
@@ -6122,7 +6139,7 @@ export class CampaignScheduler {
   ): Promise<void> {
     for (const warning of warnings) {
       await this.logCampaignProgress(
-        campaign.id,
+        campaign,
         `⚠️ "${this.getInputDataDisplayName(campaign, detail)}": ${warning}`
       ).catch(() => {})
     }
@@ -6160,7 +6177,7 @@ export class CampaignScheduler {
     detail: CampaignInputData
   ): Promise<void> {
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `🚫 Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${ZALO_MESSAGE_OPT_OUT_NOTE}`
     ).catch(() => {})
   }
@@ -6423,7 +6440,7 @@ export class CampaignScheduler {
         .replace(/^Tạm dừng vì\s*/iu, '')
         .replace(/\s+(?:Gửi|Đăng) lại từ \d{2}\/\d{2}\/\d{4}\.?$/iu, '') || 'do giới hạn gửi/đăng lặp.'
       const targetName = this.getRecentDeliveryCooldownTargetName(campaign, detailById.get(inputDataId))
-      await this.logCampaignProgress(campaign.id, `⏸️ Bỏ qua "${targetName}": ${note}`)
+      await this.logCampaignProgress(campaign, `⏸️ Bỏ qua "${targetName}": ${note}`)
     }
   }
 
@@ -6441,7 +6458,7 @@ export class CampaignScheduler {
       dateAction: new Date().toISOString()
     })
     if (options.logProgress !== false) {
-      await this.logCampaignProgress(campaign.id, `🚫 Bỏ qua "${targetName}" vì nằm trong danh sách không gửi tin: ${groupName}`)
+      await this.logCampaignProgress(campaign, `🚫 Bỏ qua "${targetName}" vì nằm trong danh sách không gửi tin: ${groupName}`)
     }
   }
 
@@ -6685,7 +6702,7 @@ export class CampaignScheduler {
   ): Promise<CampaignInputData[] | null> {
     const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
 
-    await this.logCampaignProgress(campaign.id, `ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
+    await this.logCampaignProgress(campaign, `ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
 
     const automationPage = await this.getAutomationPage(account, campaign.id)
     const page = automationPage.page
@@ -6741,7 +6758,7 @@ export class CampaignScheduler {
         }))
       )
 
-      await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
+      await this.logCampaignProgress(campaign, `✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`)
       return await this.supabase.listCampaignInputData(campaign.id)
     } catch (error) {
       this.rememberFailedCampaignRun(account, campaign, error)
@@ -7068,7 +7085,7 @@ export class CampaignScheduler {
         const label = contactType === 'group'
           ? `group ${this.getZaloTargetLabel(target)}`
           : this.getZaloTargetLabel(target)
-        await this.logCampaignProgress(campaign.id, `🏷️ Đã gắn tag akaBiz cho ${label}`)
+        await this.logCampaignProgress(campaign, `🏷️ Đã gắn tag akaBiz cho ${label}`)
       } else {
         console.warn('[CampaignScheduler] No existing contact found for akaBiz tags', {
           accountId: account.id,
@@ -7088,7 +7105,7 @@ export class CampaignScheduler {
         uid: target.uid,
         message
       })
-      await this.logCampaignProgress(campaign.id, `⚠️ Không thể gắn tag akaBiz cho ${this.getZaloTargetLabel(target)}: ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ Không thể gắn tag akaBiz cho ${this.getZaloTargetLabel(target)}: ${message}`)
     }
   }
 
@@ -7230,7 +7247,7 @@ export class CampaignScheduler {
   ): Promise<boolean> {
     const delayMs = this.getZaloCampaignReadDelayMs()
     await this.logCampaignProgress(
-      campaign.id,
+      campaign,
       `⏳ Chờ ${(delayMs / 1000).toFixed(1)} giây trước khi ${operationLabel}...`
     )
     return await this.waitForZaloCampaignReadDelay(account, campaign, delayMs)
@@ -7261,7 +7278,7 @@ export class CampaignScheduler {
 
       const retryDelayMs = ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS[retryIndex]
       await this.logCampaignProgress(
-        campaign.id,
+        campaign,
         `⚠️ Zalo đang giới hạn request khi ${operationLabel}. Tự thử lại sau ${retryDelayMs / 1000} giây (${retryIndex + 1}/${ZALO_CAMPAIGN_READ_429_RETRY_DELAYS_MS.length})...`
       )
       if (!await this.waitForZaloCampaignReadDelay(account, campaign, retryDelayMs)) {
@@ -7280,10 +7297,10 @@ export class CampaignScheduler {
 
     if (mode === ZALO_FRIEND_TARGET_MODE_TAGGED) {
       if (sourceTagIds.length === 0) {
-        await this.logCampaignProgress(campaign.id, '⚠️ Chưa chọn tag nguồn Zalo để lấy danh sách bạn bè')
+        await this.logCampaignProgress(campaign, '⚠️ Chưa chọn tag nguồn Zalo để lấy danh sách bạn bè')
         return []
       }
-      await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách hội thoại trong ${sourceTagIds.length} tag Zalo: ${this.getZaloFriendSourceTagLogLabel(campaign, sourceTagIds)}`)
+      await this.logCampaignProgress(campaign, `🔄 Đang lấy danh sách hội thoại trong ${sourceTagIds.length} tag Zalo: ${this.getZaloFriendSourceTagLogLabel(campaign, sourceTagIds)}`)
       if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách tag Zalo')) return null
       const labelsResult = await this.runZaloCampaignReadWith429Retry(
         account,
@@ -7309,12 +7326,12 @@ export class CampaignScheduler {
             zaloFriendMaterializedCount: 0
           }
         })
-        await this.logCampaignProgress(campaign.id, `⚠️ Các tag Zalo đã chọn chưa có bạn bè nào`)
+        await this.logCampaignProgress(campaign, `⚠️ Các tag Zalo đã chọn chưa có bạn bè nào`)
         return []
       }
     }
 
-    await this.logCampaignProgress(campaign.id, mode === ZALO_FRIEND_TARGET_MODE_TAGGED
+    await this.logCampaignProgress(campaign, mode === ZALO_FRIEND_TARGET_MODE_TAGGED
       ? '🔄 Đang quét danh sách bạn bè Zalo live để lọc theo tag'
       : '🔄 Đang quét toàn bộ danh sách bạn bè Zalo live')
     if (!await this.paceZaloCampaignRead(account, campaign, 'đọc trang 1 danh sách bạn bè Zalo')) return null
@@ -7377,7 +7394,7 @@ export class CampaignScheduler {
     }
     campaign.extraSettings = nextExtraSettings
     await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
-    await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} bạn bè Zalo vào chiến dịch "${campaign.name}"`)
+    await this.logCampaignProgress(campaign, `✅ Đã thêm ${profiles.length} bạn bè Zalo vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
 
@@ -7396,7 +7413,7 @@ export class CampaignScheduler {
     const todayDateKey = this.getVietnamDateKey(businessNow)
     const todayDdMm = this.getVietnamBirthdayKey(businessNow)
 
-    await this.logCampaignProgress(campaign.id, `🔄 Đang quét danh sách bạn bè Zalo live để lọc sinh nhật ${todayDdMm}`)
+    await this.logCampaignProgress(campaign, `🔄 Đang quét danh sách bạn bè Zalo live để lọc sinh nhật ${todayDdMm}`)
     if (!await this.paceZaloCampaignRead(account, campaign, 'đọc trang 1 danh sách bạn bè Zalo')) return null
 
     const profiles: ZaloFriendMaterializedProfile[] = []
@@ -7461,7 +7478,7 @@ export class CampaignScheduler {
       return []
     }
 
-    await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${profiles.length} bạn bè sinh nhật hôm nay vào chiến dịch "${campaign.name}"`)
+    await this.logCampaignProgress(campaign, `✅ Đã thêm ${profiles.length} bạn bè sinh nhật hôm nay vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
 
@@ -7503,7 +7520,7 @@ export class CampaignScheduler {
     const requestedCount = this.normalizeZaloFriendRecommendationCount(
       campaign.extraSettings?.zaloFriendRecommendationCount
     )
-    await this.logCampaignProgress(campaign.id, `🔄 Đang lấy ${requestedCount} đề xuất Zalo`)
+    await this.logCampaignProgress(campaign, `🔄 Đang lấy ${requestedCount} đề xuất Zalo`)
     if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách đề xuất Zalo')) return null
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getFriendRecommendations']>>
@@ -7538,7 +7555,7 @@ export class CampaignScheduler {
     }
 
     if (snapshot.missingUidItems > 0) {
-      await this.logCampaignProgress(campaign.id, `⚠️ Bỏ qua ${snapshot.missingUidItems} đề xuất Zalo thiếu UID`)
+      await this.logCampaignProgress(campaign, `⚠️ Bỏ qua ${snapshot.missingUidItems} đề xuất Zalo thiếu UID`)
     }
 
     if (selectedProfiles.length === 0) {
@@ -7551,7 +7568,7 @@ export class CampaignScheduler {
     }
 
     if (selectedProfiles.length < requestedCount) {
-      await this.logCampaignProgress(campaign.id, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${requestedCount} đề xuất Zalo`)
+      await this.logCampaignProgress(campaign, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${requestedCount} đề xuất Zalo`)
     }
 
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -7569,7 +7586,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloFriendRecommendationMaterialized(campaign, selectedProfiles.length)
-    await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${selectedProfiles.length} đề xuất Zalo vào chiến dịch "${campaign.name}"`)
+    await this.logCampaignProgress(campaign, `✅ Đã thêm ${selectedProfiles.length} đề xuất Zalo vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
 
@@ -7593,7 +7610,7 @@ export class CampaignScheduler {
     const note = message || 'Zalo không có lời mời kết bạn đã gửi để huỷ'
     campaign.note = note
     await this.updateCampaignAndBroadcast(campaign.id, { note })
-    await this.logCampaignProgress(campaign.id, `⚠️ ${note}`)
+    await this.logCampaignProgress(campaign, `⚠️ ${note}`)
     await this.handleCampaignCompletion(campaign)
   }
 
@@ -7624,7 +7641,7 @@ export class CampaignScheduler {
       this.throwIfZaloRuntimeStopping(campaign.id)
     }
 
-    await this.logCampaignProgress(campaign.id, `🔄 Đang lấy danh sách lời mời kết bạn đã gửi từ Zalo để huỷ ${limit} lời mời cũ nhất`)
+    await this.logCampaignProgress(campaign, `🔄 Đang lấy danh sách lời mời kết bạn đã gửi từ Zalo để huỷ ${limit} lời mời cũ nhất`)
     if (!await this.paceZaloCampaignRead(account, campaign, 'đọc danh sách lời mời kết bạn đã gửi')) return null
 
     let snapshot: Awaited<ReturnType<ZaloRuntimeService['getSentFriendRequests']>>
@@ -7649,7 +7666,7 @@ export class CampaignScheduler {
     }
 
     if (snapshot.missingUidItems > 0) {
-      await this.logCampaignProgress(campaign.id, `⚠️ Bỏ qua ${snapshot.missingUidItems} lời mời Zalo thiếu UID`)
+      await this.logCampaignProgress(campaign, `⚠️ Bỏ qua ${snapshot.missingUidItems} lời mời Zalo thiếu UID`)
     }
 
     const selectedProfiles = this.sortZaloSentFriendRequestsOldestFirst(snapshot.profiles).slice(0, limit)
@@ -7660,7 +7677,7 @@ export class CampaignScheduler {
     }
 
     if (selectedProfiles.length < limit) {
-      await this.logCampaignProgress(campaign.id, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${limit} lời mời kết bạn đã gửi`)
+      await this.logCampaignProgress(campaign, `⚠️ Chỉ lấy được ${selectedProfiles.length}/${limit} lời mời kết bạn đã gửi`)
     }
 
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -7680,7 +7697,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
 
     await this.markZaloCancelSentFriendRequestMaterialized(campaign, selectedProfiles.length)
-    await this.logCampaignProgress(campaign.id, `✅ Đã thêm ${selectedProfiles.length} lời mời kết bạn đã gửi vào chiến dịch "${campaign.name}"`)
+    await this.logCampaignProgress(campaign, `✅ Đã thêm ${selectedProfiles.length} lời mời kết bạn đã gửi vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
 
@@ -7947,7 +7964,7 @@ export class CampaignScheduler {
       if (!actionCode || loggedActionCodes.has(actionCode)) continue
       loggedActionCodes.add(actionCode)
       const note = await this.buildLimitPreflightNote(status)
-      await this.logCampaignProgress(campaign.id, `⚠️ Bỏ qua ${this.getLimitActionName(status)} vì đã đạt giới hạn: ${note}`)
+      await this.logCampaignProgress(campaign, `⚠️ Bỏ qua ${this.getLimitActionName(status)} vì đã đạt giới hạn: ${note}`)
     }
   }
 
@@ -8496,7 +8513,7 @@ export class CampaignScheduler {
       }
 
       const label = boundary === 'account' ? 'tài khoản' : 'chiến dịch'
-      await this.logCampaignProgress(campaign.id, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
+      await this.logCampaignProgress(campaign, `⏸ Đã hoàn thành lượt hiện tại và tạm dừng ${label}.`)
       await this.releaseRunningAccount(account.id)
       recordAccountLog({ accountId: account.id, campaignId: campaign.id, eventType: 'campaign_paused',
         message: 'Đã kết thúc lượt hiện tại và dừng thực thi chiến dịch.' })
@@ -8527,7 +8544,7 @@ export class CampaignScheduler {
     if (!this.zaloRuntime) {
       const message = 'Zalo runtime chưa sẵn sàng'
       await this.updateCampaignPreflightNote(campaign, message)
-      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${message}`)
       return false
     }
 
@@ -8553,7 +8570,7 @@ export class CampaignScheduler {
 
     const message = 'Tài khoản Zalo chưa đăng nhập hoặc phiên đăng nhập đã hết hạn'
     await this.updateCampaignPreflightNote(campaign, message)
-    await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+    await this.logCampaignProgress(campaign, `⚠️ ${message}`)
     return false
   }
 
@@ -8566,7 +8583,7 @@ export class CampaignScheduler {
       await this.handleRuntimeError(account, campaign, 'err_logout', undefined, { message: reason })
     } else {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: reason })
-      await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
+      await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
     }
   }
 
@@ -8585,7 +8602,7 @@ export class CampaignScheduler {
     if (limitStatus.isActionDisabled) {
       const note = await this.buildLimitPreflightNote(limitStatus)
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-      await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${note}`)
+      await this.logCampaignProgress(campaign, `⚠️ Tạm dừng "${campaign.name}": ${note}`)
       return
     }
 
@@ -8593,7 +8610,7 @@ export class CampaignScheduler {
       await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
     } else {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
-      await this.logCampaignProgress(campaign.id, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
     }
   }
 
@@ -8947,6 +8964,7 @@ export class CampaignScheduler {
           ? safeUserMessage || 'Có lỗi xảy ra'
           : policyReplacements.message || 'Có lỗi xảy ra'
         await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })
+        await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
         return { triggered: true, message }
       }
 
@@ -8975,7 +8993,7 @@ export class CampaignScheduler {
       }
 
       await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note: message })
-      await this.logCampaignProgress(campaign.id, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
       return { triggered: true, message, policy }
     })
@@ -9062,14 +9080,14 @@ export class CampaignScheduler {
         const message = `Tự chạy lại thêm 1 lần sau ${threshold} lỗi/thất bại liên tiếp: ${thresholdReason}`
         await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })
         await this.logCampaignProgress(
-          campaign.id,
+          campaign,
           `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần; chuyển về chờ xử lý để tự chạy lại thêm 1 lần: ${thresholdReason}`
         )
         return { triggered: true, message, policy, count, threshold }
       }
 
       await this.logCampaignProgress(
-        campaign.id,
+        campaign,
         shouldRetryPageInboxOnce
           ? `⚠️ Lượt tự chạy lại tiếp tục lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
           : `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
@@ -9504,7 +9522,7 @@ export class CampaignScheduler {
             nodeId: step.nodeId
           }
         })
-        await this.logCampaignProgress(campaign.id, `👍 Đã like bài newsfeed của "${targetName}"`)
+        await this.logCampaignProgress(campaign, `👍 Đã like bài newsfeed của "${targetName}"`)
         return
       }
 
@@ -9528,7 +9546,7 @@ export class CampaignScheduler {
           nodeId: step.nodeId
         }
       })
-      await this.logCampaignProgress(campaign.id, `💬 Đã comment bài newsfeed của "${targetName}"`)
+      await this.logCampaignProgress(campaign, `💬 Đã comment bài newsfeed của "${targetName}"`)
     } catch (err) {
       this.loggedNewsfeedMilestoneKeys.delete(key)
       console.error('Failed log newsfeed milestone:', err)
@@ -9574,7 +9592,7 @@ export class CampaignScheduler {
 
       if (actionDetail.createDetail === false || !actionDetail.status) {
         if (actionDetail.log) {
-          await this.logCampaignProgress(campaign.id, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
         }
         continue
       }
@@ -9639,7 +9657,7 @@ export class CampaignScheduler {
       }
 
       if (created.log) {
-        await this.logCampaignProgress(campaign.id, this.formatZaloProgressLog({
+        await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
           ...actionDetail,
           actionName: created.actionName || actionDetail.actionName,
           log: created.log
@@ -9710,7 +9728,7 @@ export class CampaignScheduler {
 
       if (actionDetail.createDetail === false || !actionDetail.status) {
         if (actionDetail.log) {
-          await this.logCampaignProgress(campaign.id, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+          await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
         }
         continue
       }
@@ -9740,7 +9758,7 @@ export class CampaignScheduler {
       }
 
       if (created.log) {
-        await this.logCampaignProgress(campaign.id, this.formatZaloProgressLog({
+        await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
           ...actionDetail,
           actionName: created.actionName || actionDetail.actionName,
           log: created.log
@@ -9818,7 +9836,7 @@ export class CampaignScheduler {
       return nodeMatches && (blockNameMatches || blockIdMatches)
     }
     const flushScreenshotLog = async (log: BlockScreenshotProgressLog) => {
-      await this.logCampaignProgress(campaign.id, log.storedMessage, {
+      await this.logCampaignProgress(campaign, log.storedMessage, {
         realtimeMessage: log.realtimeMessage,
         realtimeAction: log.action
       })
@@ -10044,8 +10062,8 @@ export class CampaignScheduler {
             errorBlock: errorStep?.blockName
           }
         })
-        if (isSuccess) await this.logCampaignProgress(campaign.id, `✅ ${successLog}`)
-        else await this.logCampaignProgress(campaign.id, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
+        if (isSuccess) await this.logCampaignProgress(campaign, `✅ ${successLog}`)
+        else await this.logCampaignProgress(campaign, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
         await flushScreenshotLogsForStep(summaryStep || errorStep)
       } catch (err) { console.error('Failed log find data:', err) }
 
@@ -10192,16 +10210,16 @@ export class CampaignScheduler {
 
           if (isSuccess) {
             if (outcome === 'already_joined') {
-              await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua group "${groupName}" vì đã tham gia từ trước`)
+              await this.logCampaignProgress(campaign, `ℹ️ Bỏ qua group "${groupName}" vì đã tham gia từ trước`)
             } else if (outcome === 'requested') {
-              await this.logCampaignProgress(campaign.id, `✅ Đã gửi yêu cầu tham gia group "${groupName}"`)
+              await this.logCampaignProgress(campaign, `✅ Đã gửi yêu cầu tham gia group "${groupName}"`)
             } else {
-              await this.logCampaignProgress(campaign.id, `✅ Đã tham gia group "${groupName}"`)
+              await this.logCampaignProgress(campaign, `✅ Đã tham gia group "${groupName}"`)
             }
           } else if (status === 'lỗi') {
-            await this.logCampaignProgress(campaign.id, `❌ Lỗi tham gia group "${groupName}": ${errMsg}`)
+            await this.logCampaignProgress(campaign, `❌ Lỗi tham gia group "${groupName}": ${errMsg}`)
           } else {
-            await this.logCampaignProgress(campaign.id, `❌ Tham gia group thất bại "${groupName}": ${errMsg}`)
+            await this.logCampaignProgress(campaign, `❌ Tham gia group thất bại "${groupName}": ${errMsg}`)
           }
           await flushScreenshotLogsForStep(s)
         } catch (err) { console.error('Failed log Facebook join group:', err) }
@@ -10278,14 +10296,14 @@ export class CampaignScheduler {
         })
 
         if (status === 'thành công') {
-          await this.logCampaignProgress(campaign.id, `📝 Đăng bài fanpage thành công vào "${pageName}"`)
-          if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
+          await this.logCampaignProgress(campaign, `📝 Đăng bài fanpage thành công vào "${pageName}"`)
+          if (postUrl) await this.logCampaignProgress(campaign, `🔗 Link bài post: ${postUrl}`)
         } else if (status === 'thất bại' && !isUiMode) {
-          await this.logCampaignProgress(campaign.id, `❌ Facebook API từ chối đăng fanpage "${pageName}": ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Facebook API từ chối đăng fanpage "${pageName}": ${failureMessage}`)
         } else if (status === 'thất bại') {
-          await this.logCampaignProgress(campaign.id, `❌ Đăng fanpage trên giao diện thất bại "${pageName}": ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Đăng fanpage trên giao diện thất bại "${pageName}": ${failureMessage}`)
         } else {
-          await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
         }
         await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log page post:', err) }
@@ -10324,7 +10342,7 @@ export class CampaignScheduler {
               error: failureMessage
             }
           })
-          await this.logCampaignProgress(campaign.id, `❌ Không chuyển được sang fanpage "${pageName}": ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Không chuyển được sang fanpage "${pageName}": ${failureMessage}`)
           await flushScreenshotLogsForStep(switchToPageStep)
         }
       } catch (err) { console.error('Failed log page switch:', err) }
@@ -10441,21 +10459,21 @@ export class CampaignScheduler {
                 note: 'Đăng bài dạng chia sẻ'
               })
               consumedGroupPostInputDataIds?.add(target.id)
-              await this.logCampaignProgress(campaign.id, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
+              await this.logCampaignProgress(campaign, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
             } catch (shareErr) {
               console.error('Failed log group post share target:', shareErr)
             }
           }
-          await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-          await this.logCampaignProgress(campaign.id, pendingApprovalLog)
-          if (postUrl) await this.logCampaignProgress(campaign.id, `🔗 Link bài post: ${postUrl}`)
+          await this.logCampaignProgress(campaign, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+          await this.logCampaignProgress(campaign, pendingApprovalLog)
+          if (postUrl) await this.logCampaignProgress(campaign, `🔗 Link bài post: ${postUrl}`)
           await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
           await flushScreenshotLogsForStep(s)
         } else if (status === 'lỗi') {
-          await this.logCampaignProgress(campaign.id, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
           await flushScreenshotLogsForStep(s)
         } else {
-          await this.logCampaignProgress(campaign.id, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+          await this.logCampaignProgress(campaign, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
           await flushScreenshotLogsForStep(s)
         }
       } catch (err) { console.error('Failed log group post:', err) }
@@ -10490,9 +10508,9 @@ export class CampaignScheduler {
           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
           data: isPending ? { isPending: true } : undefined
         })
-        await this.logCampaignProgress(campaign.id, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
         if (campaign.actionId === 'facebook_group_post') {
-          await this.logCampaignProgress(campaign.id, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
+          await this.logCampaignProgress(campaign, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
         }
         await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log post:', err) }
@@ -10514,7 +10532,7 @@ export class CampaignScheduler {
     if (groupPostCommentAdjustOutput.skippedByGroupMode === true) {
       const reason = String(groupPostCommentAdjustOutput.skipReason || 'Bỏ qua comment vì group không khớp điều kiện comment')
       try {
-        await this.logCampaignProgress(campaign.id, `⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign, `⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
         await flushScreenshotLogsForStep(groupPostCommentAdjustStep)
       } catch (err) { console.error('Failed append group comment skip log:', err) }
     }
@@ -10569,7 +10587,7 @@ export class CampaignScheduler {
               error: errMsg
             }
           })
-          await this.logCampaignProgress(campaign.id, `⚠️ Không comment được ${target}${detail ? ` tại "${inputDataName}"` : ''}: ${errMsg}`)
+          await this.logCampaignProgress(campaign, `⚠️ Không comment được ${target}${detail ? ` tại "${inputDataName}"` : ''}: ${errMsg}`)
           await flushScreenshotLogsForStep(s)
         } catch (err) { console.error('Failed log failed comment:', err) }
         continue
@@ -10590,7 +10608,7 @@ export class CampaignScheduler {
           log: logText,
           data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount }
         })
-        await this.logCampaignProgress(campaign.id, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
         await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log comment:', err) }
     }
@@ -10615,7 +10633,7 @@ export class CampaignScheduler {
             ? `Không tìm thấy bài phù hợp với điều kiện ${enabledConditions} trong ${targetName}`
             : `Không tìm thấy bài nào để kiểm tra điều kiện ${enabledConditions} trong ${targetName}`)
           : `Không tìm thấy bài phù hợp để comment trong ${targetName}`
-        await this.logCampaignProgress(campaign.id, `ℹ️ ${reason}`)
+        await this.logCampaignProgress(campaign, `ℹ️ ${reason}`)
         await flushScreenshotLogsForStep(prepareStep)
       }
     }
@@ -10665,9 +10683,9 @@ export class CampaignScheduler {
           data: failureData,
           shouldCountAction: isPageInboxTargetNotFound ? false : undefined
         })
-        if (status === 'thành công') await this.logCampaignProgress(campaign.id, `💬 ${actionName} thành công đến "${inputDataName}"`)
-        else if (status === 'không tồn tại') await this.logCampaignProgress(campaign.id, `⚠️ Không tìm thấy khách inbox page "${inputDataName}": ${errMsg}`)
-        else await this.logCampaignProgress(campaign.id, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
+        if (status === 'thành công') await this.logCampaignProgress(campaign, `💬 ${actionName} thành công đến "${inputDataName}"`)
+        else if (status === 'không tồn tại') await this.logCampaignProgress(campaign, `⚠️ Không tìm thấy khách inbox page "${inputDataName}": ${errMsg}`)
+        else await this.logCampaignProgress(campaign, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
         await flushScreenshotLogsForStep(s)
       } catch (err) { console.error('Failed log message:', err) }
     }
@@ -10696,7 +10714,7 @@ export class CampaignScheduler {
             log: `Bỏ qua kết bạn với ${inputDataName} (đã là bạn bè hoặc nút bị ẩn)`,
             data: { alreadyFriend: true }
           })
-          await this.logCampaignProgress(campaign.id, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
+          await this.logCampaignProgress(campaign, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
           await flushScreenshotLogsForStep(s)
         } else if (clicked) {
           await createCampaignDetail({
@@ -10708,7 +10726,7 @@ export class CampaignScheduler {
             status: 'thành công',
             log: `Kết bạn thành công với ${inputDataName}`
           })
-          await this.logCampaignProgress(campaign.id, `🤝 Kết bạn thành công với "${inputDataName}"`)
+          await this.logCampaignProgress(campaign, `🤝 Kết bạn thành công với "${inputDataName}"`)
           await flushScreenshotLogsForStep(s)
         } else {
           // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
@@ -10725,7 +10743,7 @@ export class CampaignScheduler {
             log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`,
             data: { error: errMsg }
           })
-          await this.logCampaignProgress(campaign.id, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
+          await this.logCampaignProgress(campaign, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
           await flushScreenshotLogsForStep(s)
         }
       } catch (err) { console.error('Failed log friend:', err) }
@@ -10773,8 +10791,8 @@ export class CampaignScheduler {
           })
         )
 
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${uids.length} UID từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${uids.length} UID sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${uids.length} UID từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
         const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
           targetCampaign.id,
           MESSAGE_UID_ACTION_ID
@@ -10820,8 +10838,8 @@ export class CampaignScheduler {
           }))
         )
 
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${postLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${postLinks.length} link bài post sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${postLinks.length} link bài post từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
         const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
           targetCampaign.id,
           COMMENT_SEEDING_POST_ACTION_ID
@@ -10892,8 +10910,8 @@ export class CampaignScheduler {
             }))
           )
 
-          await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${groups.length} link group Facebook sang ${config.label} "${targetCampaign.name}"`)
-          await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${groups.length} link group Facebook từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+          await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${groups.length} link group Facebook sang ${config.label} "${targetCampaign.name}"`)
+          await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${groups.length} link group Facebook từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
           const reopenedTarget = await this.supabase.reopenCompletedCampaignAfterInputInsert(
             targetCampaign.id,
             config.actionId
@@ -10933,14 +10951,14 @@ export class CampaignScheduler {
 
     if (pushedCount <= 0) {
       await this.logCampaignProgress(
-        sourceCampaign.id,
+        sourceCampaign,
         `ℹ️ ${options.label}: tìm được ${foundCount} nhưng tất cả đã từng tìm được trong chiến dịch này nên không đẩy sang chiến dịch khác.`
       )
       return
     }
 
     await this.logCampaignProgress(
-      sourceCampaign.id,
+      sourceCampaign,
       `ℹ️ ${options.label}: tìm được ${foundCount}, bỏ qua ${foundCount - pushedCount} ${options.label} đã từng tìm được trong chiến dịch này, sẽ đẩy ${pushedCount} ${options.label} mới.`
     )
   }
@@ -10988,7 +11006,7 @@ export class CampaignScheduler {
     } catch (err) {
       console.error('Failed to load data types before pushing find-data results to Data Groups:', err)
       await this.logCampaignProgress(
-        sourceCampaign.id,
+        sourceCampaign,
         `⚠️ Không thể tải danh mục loại dữ liệu để đẩy kết quả sang Nhóm data: ${err instanceof Error ? err.message : String(err)}`
       )
       return
@@ -11122,7 +11140,7 @@ export class CampaignScheduler {
       const dataTypeCategoryItemId = dataTypeIdByCode.get(spec.code)
       if (!dataTypeCategoryItemId) {
         await this.logCampaignProgress(
-          sourceCampaign.id,
+          sourceCampaign,
           `⚠️ Không tìm thấy loại dữ liệu "${spec.code}" nên chưa thể đẩy ${spec.label} sang Nhóm data.`
         )
         continue
@@ -11168,14 +11186,14 @@ export class CampaignScheduler {
           skippedCount > 0 ? `${skippedCount} không hợp lệ/không tương thích` : ''
         ].filter(Boolean).join(' · ')
         await this.logCampaignProgress(
-          sourceCampaign.id,
+          sourceCampaign,
           `✅ Đã đẩy ${spec.rows.length} ${spec.label} sang Nhóm data "${groupName}" (${detailText}).`
         )
       } catch (err) {
         console.error(`Failed to push find-data ${kind} to Data Group ${groupId}:`, err)
         const groupName = String(destination?.groupName || '').trim() || `Nhóm #${groupId}`
         await this.logCampaignProgress(
-          sourceCampaign.id,
+          sourceCampaign,
           `⚠️ Không thể đẩy ${spec.label} sang Nhóm data "${groupName}": ${err instanceof Error ? err.message : String(err)}`
         )
       }
@@ -11655,21 +11673,21 @@ export class CampaignScheduler {
   private async loadAkaBizIntegrationsForCampaign(sourceCampaign: Campaign) {
     const staffId = this.getAkaBizStaffIdForCampaign(sourceCampaign)
     if (!staffId) {
-      await this.logCampaignProgress(sourceCampaign.id, '⚠️ Chưa xác định được nhân viên để tải tích hợp akaBiz.')
+      await this.logCampaignProgress(sourceCampaign, '⚠️ Chưa xác định được nhân viên để tải tích hợp akaBiz.')
       return null
     }
     try {
       return await getAkaBizIntegrationsForStaff(staffId)
     } catch (err: any) {
       console.error('Failed to load akaBiz integrations:', err)
-      await this.logCampaignProgress(sourceCampaign.id, `⚠️ Không thể tải tích hợp akaBiz: ${err?.message || err}`)
+      await this.logCampaignProgress(sourceCampaign, `⚠️ Không thể tải tích hợp akaBiz: ${err?.message || err}`)
       return null
     }
   }
 
   private async logExternalPushWarning(sourceCampaign: Campaign, message: string, err?: unknown): Promise<void> {
     const errMsg = err instanceof Error ? err.message : (err ? String(err) : '')
-    await this.logCampaignProgress(sourceCampaign.id, `⚠️ ${message}${errMsg ? `: ${errMsg}` : ''}`)
+    await this.logCampaignProgress(sourceCampaign, `⚠️ ${message}${errMsg ? `: ${errMsg}` : ''}`)
   }
 
   private formatAkaBizCampaignName(name: string | null | undefined): string {
@@ -11741,7 +11759,7 @@ export class CampaignScheduler {
           if (iContentSms === contentSms.length) iContentSms = 0
         }
 
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found phones to akaBiz Sms campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
@@ -12081,7 +12099,7 @@ export class CampaignScheduler {
 
     if (successCount > 0) {
       this.internalSmsPushedDetailKeys.add(pushKey)
-      await this.logCampaignProgress(sourceCampaign.id, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản Sms`)
+      await this.logCampaignProgress(sourceCampaign, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản Sms`)
     }
   }
 
@@ -12139,7 +12157,7 @@ export class CampaignScheduler {
 
     if (successCount > 0) {
       this.externalSmsPushedDetailKeys.add(pushKey)
-      await this.logCampaignProgress(sourceCampaign.id, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản akaBiz Sms`)
+      await this.logCampaignProgress(sourceCampaign, `✅ Đã kiêm gửi SMS cho ${phone} sang ${successCount} tài khoản akaBiz Sms`)
     }
   }
 
@@ -12174,7 +12192,7 @@ export class CampaignScheduler {
           phone,
           isAutomate: true
         })))
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found phones to akaBiz Zalo Web campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
@@ -12222,8 +12240,8 @@ export class CampaignScheduler {
         )
         if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
 
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang chiến dịch "${targetCampaign.name}"`)
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${phones.length} SĐT từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${phones.length} SĐT sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${phones.length} SĐT từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
       } catch (err) {
         console.error('Failed to push found phones to Zalo phone campaign:', err)
       }
@@ -12259,7 +12277,7 @@ export class CampaignScheduler {
           uid: link,
           isAutomate: true
         })))
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found Zalo group links to akaBiz Zalo Web campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
@@ -12299,8 +12317,8 @@ export class CampaignScheduler {
         )
         if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
 
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang chiến dịch "${targetCampaign.name}"`)
-        await this.logCampaignProgress(targetCampaign.id, `✅ Đã nhận ${links.length} link group Zalo từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${links.length} link group Zalo sang chiến dịch "${targetCampaign.name}"`)
+        await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${links.length} link group Zalo từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
       } catch (err) {
         console.error('Failed to push found Zalo group links to join campaign:', err)
       }
@@ -12339,7 +12357,7 @@ export class CampaignScheduler {
           phone,
           isAutomate: true
         })))
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${phones.length} SĐT sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found phones to akaBiz Desktop campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy SĐT sang ${targetCampaignName}`, err)
@@ -12377,7 +12395,7 @@ export class CampaignScheduler {
           uid: link,
           isAutomate: true
         })))
-        await this.logCampaignProgress(sourceCampaign.id, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${links.length} link group Zalo sang ${targetCampaignName}`)
       } catch (err) {
         console.error('Failed to push found Zalo group links to akaBiz Desktop campaign:', err)
         await this.logExternalPushWarning(sourceCampaign, `Không thể đẩy link group Zalo sang ${targetCampaignName}`, err)
@@ -12419,7 +12437,7 @@ export class CampaignScheduler {
     const targets = await this.resolvePostBumpTargets(campaign)
     if (targets.length === 0) {
       const message = 'Chưa có chiến dịch up tin để nhận link bài post'
-      await this.logCampaignProgress(campaign.id, `⚠️ ${message}`)
+      await this.logCampaignProgress(campaign, `⚠️ ${message}`)
       return
     }
 
@@ -12459,7 +12477,7 @@ export class CampaignScheduler {
     }
 
     const message = `Đã thêm ${count} lượt up tin cho bài post`
-    await this.logCampaignProgress(campaign.id, `✅ ${message}`)
+    await this.logCampaignProgress(campaign, `✅ ${message}`)
   }
 
   private async resolvePostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
@@ -12570,7 +12588,7 @@ export class CampaignScheduler {
       images: []
     })
 
-    await this.logCampaignProgress(created.id, `✅ Đã tạo chiến dịch up tin "${created.name}"`)
+    await this.logCampaignProgress(created, `✅ Đã tạo chiến dịch up tin "${created.name}"`)
     return created
   }
 
@@ -12741,13 +12759,19 @@ export class CampaignScheduler {
   }
 
   private async logCampaignProgress(
-    campaignId: number,
+    campaignOrId: number | Pick<Campaign, 'id' | 'name' | 'accountId' | 'accountName'>,
     message: string,
     options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } = {}
   ): Promise<void> {
+    const campaignId = typeof campaignOrId === 'number' ? campaignOrId : campaignOrId.id
     let realtimeMessage = options.realtimeMessage ?? message
     let realtimeContext: Pick<CampaignLogEntry, 'accountId' | 'accountName' | 'campaignId' | 'campaignName'> = {
-      campaignId
+      campaignId,
+      ...(typeof campaignOrId === 'number' ? {} : {
+        accountId: campaignOrId.accountId,
+        accountName: campaignOrId.accountName,
+        campaignName: campaignOrId.name
+      })
     }
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
@@ -12758,14 +12782,11 @@ export class CampaignScheduler {
         campaignId: updated.id,
         campaignName: updated.name
       }
-      realtimeMessage = formatCampaignLogMessage(realtimeMessage, {
-        accountName: updated.accountName,
-        campaignName: updated.name
-      })
     } catch (err) {
       console.error('Failed append campaign progress log:', err)
     }
     if (options.emitRealtime !== false) {
+      realtimeMessage = formatCampaignLogMessage(realtimeMessage, realtimeContext)
       this.sendLog(realtimeMessage, options.realtimeAction, realtimeContext)
     }
   }
@@ -12977,7 +12998,7 @@ export class CampaignScheduler {
       if (policy.disableActionCodes.length > 0) {
         await this.supabase.disableAccountActions(account.id, policy.disableActionCodes, policy.timeDisableActions, {
           errorCode: policy.errorCode,
-          reason: messages.runningProcess,
+          reason: messages.campaign,
           ...await this.resolvePolicyActionDisableContext(policy)
         })
         try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
@@ -13509,7 +13530,7 @@ export class CampaignScheduler {
       await this.logZaloAiRewriteRunEvent(account, campaign, metadata, 'warning', fallbackLog, {
         error: message
       })
-      await this.logCampaignProgress(campaign.id, `⚠️ ${fallbackLog}`).catch(logErr => {
+      await this.logCampaignProgress(campaign, `⚠️ ${fallbackLog}`).catch(logErr => {
         console.warn('[CampaignScheduler] failed to log Zalo AI rewrite fallback', {
           campaignId: campaign.id,
           accountId: account.id,
@@ -14505,7 +14526,7 @@ export class CampaignScheduler {
         }
         this.throwIfZaloRuntimeStopping(campaign.id)
         if (status === null) {
-          await this.logCampaignProgress(campaign.id, `⚠️ Không xác định được trạng thái bạn bè của ${this.getZaloTargetLabel(target)} sau khi kiểm tra bổ sung; vẫn thực hiện gắn tag/đổi tên theo cấu hình`)
+          await this.logCampaignProgress(campaign, `⚠️ Không xác định được trạng thái bạn bè của ${this.getZaloTargetLabel(target)} sau khi kiểm tra bổ sung; vẫn thực hiện gắn tag/đổi tên theo cấu hình`)
         }
         return status
       })()
@@ -14528,14 +14549,14 @@ export class CampaignScheduler {
     if (!target?.uid) return { ok: true, skipped: true }
     if (campaign.extraSettings?.zaloTagSkipIfFriend === true &&
       await this.resolveZaloAuxiliaryFriendStatus(account, campaign, target, friendshipChecks) === true) {
-      await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
+      await this.logCampaignProgress(campaign, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
       return { ok: true, skipped: true, zaloTarget: target }
     }
     const tagSettings = resolveZaloAccountTagSettings({
       ...campaign.extraSettings, zaloTagId: options.labelId, zaloTagName: options.labelName
     }, account.id)
     if (!tagSettings || (campaign.extraSettings?.zaloTagSettingsByAccountId !== undefined && !tagSettings.zaloTagId)) {
-      await this.logCampaignProgress(campaign.id, `Không thể gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: chưa chọn tag cần gắn cho tài khoản ${account.name || account.id}`)
+      await this.logCampaignProgress(campaign, `Không thể gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: chưa chọn tag cần gắn cho tài khoản ${account.name || account.id}`)
       return { ok: true, skipped: true, zaloTarget: target }
     }
     const labelId = campaign.extraSettings?.zaloTagSettingsByAccountId === undefined ? options.labelId : tagSettings.zaloTagId
@@ -14559,13 +14580,13 @@ export class CampaignScheduler {
         ? tagSettings.zaloTagSkipTagIds
         : []
       if (campaign.extraSettings?.zaloTagSkipIfHasSelectedTags === true && skipLabelIds.length === 0) {
-        await this.logCampaignProgress(campaign.id, `⚠️ Chưa cấu hình tag loại trừ cho tài khoản ${account.name || account.id}; vẫn gắn tag Zalo cho ${this.getZaloTargetLabel(target)} theo cấu hình`)
+        await this.logCampaignProgress(campaign, `⚠️ Chưa cấu hình tag loại trừ cho tài khoản ${account.name || account.id}; vẫn gắn tag Zalo cho ${this.getZaloTargetLabel(target)} theo cấu hình`)
         this.throwIfZaloRuntimeStopping(campaign.id)
       }
       const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId, skipLabelIds)
       if (isZaloLabelSkipResult(label)) {
         this.throwIfZaloRuntimeStopping(campaign.id)
-        await this.logCampaignProgress(campaign.id, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã có tag ${label.matchedLabelNames.join(', ')}`)
+        await this.logCampaignProgress(campaign, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã có tag ${label.matchedLabelNames.join(', ')}`)
         return { ok: true, skipped: true, zaloTarget: target }
       }
       this.throwIfZaloRuntimeStopping(campaign.id)
@@ -14643,7 +14664,7 @@ export class CampaignScheduler {
     if (!target?.uid) return { ok: true, skipped: true }
     if (campaign.extraSettings?.zaloAliasSkipIfFriend === true &&
       await this.resolveZaloAuxiliaryFriendStatus(account, campaign, target, friendshipChecks) === true) {
-      await this.logCampaignProgress(campaign.id, `Bỏ qua đổi tên Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
+      await this.logCampaignProgress(campaign, `Bỏ qua đổi tên Zalo cho ${this.getZaloTargetLabel(target)}: đã là bạn bè`)
       return { ok: true, skipped: true, zaloTarget: target }
     }
     const businessNow = await this.getTemplateBusinessNow(options.alias)
@@ -15646,14 +15667,14 @@ export class CampaignScheduler {
       const message = finalized.accountStatus === 'tạm dừng'
         ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.'
         : '🔄 Đã hoàn thành lượt hiện tại và áp dụng trạng thái mới của tài khoản.'
-      await this.logCampaignProgress(campaign.id, message)
+      await this.logCampaignProgress(campaign, message)
       return
     }
 
     const message = finalized.campaignStatus === 'tạm dừng'
       ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng chiến dịch.'
       : '🔄 Đã hoàn thành lượt hiện tại và áp dụng trạng thái mới của chiến dịch.'
-    await this.logCampaignProgress(campaign.id, message)
+    await this.logCampaignProgress(campaign, message)
   }
 
   private async updateCampaignAndBroadcast(id: number, updates: Partial<Campaign>): Promise<Campaign> {
@@ -15800,7 +15821,7 @@ export class CampaignScheduler {
     await this.restoreFacebookPageIdentity(campaign.id)
     if (!await this.settleActiveCampaignRunUnit(account, campaign, true)) return
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: reason })
-    await this.logCampaignProgress(campaign.id, `⚠️ ${reason}`)
+    await this.logCampaignProgress(campaign, `⚠️ ${reason}`)
     await this.releaseRunningAccount(account.id)
   }
 
@@ -15975,7 +15996,7 @@ export class CampaignScheduler {
       await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note })
     }
     await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note })
-    await this.logCampaignProgress(campaign.id, `❌ Tạm dừng chiến dịch "${campaign.name}": ${note}`)
+    await this.logCampaignProgress(campaign, `❌ Tạm dừng chiến dịch "${campaign.name}": ${note}`)
   }
 
   private cleanupCampaignMediaTempFiles(paths: string[]): void {
