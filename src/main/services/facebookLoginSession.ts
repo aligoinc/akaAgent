@@ -19,6 +19,10 @@ export function cookieFingerprint(cookies: FacebookCookie[]): string {
 export function authFingerprint(cookies: FacebookCookie[]): string {
   return cookieFingerprint(cookies.filter(cookie => cookie.name === 'c_user' || cookie.name === 'xs'))
 }
+/** Include the scope: equal names on different hosts/paths are separate cookies. */
+export function facebookCookieScope(cookie: Pick<FacebookCookie, 'name' | 'domain' | 'path' | 'hostOnly'>): string {
+  return JSON.stringify([cookie.name, cookie.domain.replace(/^\./, ''), cookie.path || '/', !!cookie.hostOnly])
+}
 /** Session changes while a request is in flight invalidate all of its conclusions. */
 export async function inspectFacebookSession(ses: Session, signal: AbortSignal, proxy?: FacebookLoginProxy | null): Promise<FacebookSessionObservation> {
   signal.throwIfAborted()
@@ -45,32 +49,44 @@ export async function loadFacebookHome(wc: WebContents, signal: AbortSignal): Pr
 }
 
 export async function writeFacebookCookies(ses: Session, cookies: FacebookCookie[], signal: AbortSignal,
-  beforeWrite?: (cookie: FacebookCookie) => void): Promise<void> {
+  beforeWrite?: (cookie: FacebookCookie, removed?: boolean) => void): Promise<void> {
+  const isAuth = (cookie: FacebookCookie): boolean => ['c_user', 'xs'].includes(cookie.name)
+  // Validate the complete input before retiring anything in an existing browser.
+  const incoming = cookies.map(source => {
+    const cookie = isAuth(source) ? { ...source, secure: true, httpOnly: source.name === 'xs', sameSite: 'no_restriction' as const } : source
+    if (!isFacebookHost(cookie.domain.replace(/^\./, '')) || !cookie.path.startsWith('/') || /[\r\n\u0000]/.test(cookie.name + cookie.value)) throw new Error('Cookie Facebook không hợp lệ.')
+    return cookie
+  }).filter(cookie => !cookie.expirationDate || cookie.expirationDate > Date.now() / 1000)
+  const detailsFor = (cookie: FacebookCookie): Electron.CookiesSetDetails => ({
+    url: `https://${cookie.domain.replace(/^\./, '')}${cookie.path}`, name: cookie.name, value: cookie.value,
+    ...(cookie.hostOnly ? {} : { domain: cookie.domain }), path: cookie.path,
+    secure: cookie.secure, httpOnly: cookie.httpOnly, expirationDate: cookie.expirationDate, sameSite: cookie.sameSite
+  })
+  const retire = async (cookie: FacebookCookie): Promise<void> => {
+    signal.throwIfAborted()
+    beforeWrite?.(cookie, true)
+    // Expire the exact scope. cookies.remove(url, name) can match another path/domain.
+    await ses.cookies.set({ ...detailsFor(cookie), expirationDate: 1 })
+    signal.throwIfAborted()
+  }
+  signal.throwIfAborted()
+  const previous = await readFacebookCookies(ses)
+  signal.throwIfAborted()
+  const authNames = new Set(incoming.filter(isAuth).map(cookie => cookie.name))
+  const authScopes = new Set(incoming.filter(isAuth).map(facebookCookieScope))
+  for (const cookie of previous) {
+    if (authNames.has(cookie.name) && !authScopes.has(facebookCookieScope(cookie))) await retire(cookie)
+  }
   // Write identity last so an interrupted promotion does not announce a partially copied identity.
-  const ordered = [...cookies].sort((a, b) => Number(a.name === 'c_user') - Number(b.name === 'c_user'))
+  const ordered = [...incoming].sort((a, b) => Number(a.name === 'c_user') - Number(b.name === 'c_user'))
   for (const cookie of ordered) {
     signal.throwIfAborted()
-    const host = cookie.domain.replace(/^\./, '')
-    if (!isFacebookHost(host) || !cookie.path.startsWith('/') || /[\r\n\u0000]/.test(cookie.name + cookie.value)) throw new Error('Cookie Facebook không hợp lệ.')
-    if (cookie.expirationDate && cookie.expirationDate <= Date.now() / 1000) continue
-    const details: Electron.CookiesSetDetails = {
-      url: `https://${host}${cookie.path}`, name: cookie.name, value: cookie.value,
-      ...(cookie.hostOnly ? {} : { domain: cookie.domain }), path: cookie.path,
-      secure: cookie.secure, httpOnly: cookie.httpOnly, expirationDate: cookie.expirationDate, sameSite: cookie.sameSite
-    }
     // Chromium refuses to overwrite an HttpOnly cookie with a script-readable
     // cookie. Retire that exact UID cookie first; never downgrade xs or other secrets.
-    const replaceHttpOnlyUid = cookie.name === 'c_user' && !cookie.httpOnly &&
-      (await ses.cookies.get({ name: 'c_user' })).some(previous => previous.httpOnly &&
-        previous.domain?.replace(/^\./, '') === host && previous.path === cookie.path &&
-        previous.hostOnly === !!cookie.hostOnly)
-    signal.throwIfAborted()
+    const replaceHttpOnlyUid = cookie.name === 'c_user' && previous.find(old => old.httpOnly && facebookCookieScope(old) === facebookCookieScope(cookie))
+    if (replaceHttpOnlyUid) await retire(replaceHttpOnlyUid)
     beforeWrite?.(cookie)
-    if (replaceHttpOnlyUid) {
-      await ses.cookies.set({ ...details, httpOnly: true, expirationDate: 1 })
-      signal.throwIfAborted()
-    }
-    await ses.cookies.set(details)
+    await ses.cookies.set(detailsFor(cookie))
   }
   signal.throwIfAborted()
   await ses.cookies.flushStore()

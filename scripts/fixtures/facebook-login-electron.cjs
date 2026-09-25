@@ -10,11 +10,11 @@ const replacementKey=createPasswordKeyFixture(43)
 app.setPath('userData',process.env.FACEBOOK_SMOKE_DIRECTORY)
 app.on('window-all-closed',()=>{})
 app.whenReady().then(async()=>{
-  const {FacebookLoginSession,inspectFacebookSession,readFacebookCookies,trustedFacebookUrl,loadFacebookHome}=require(process.env.FACEBOOK_SMOKE_BROWSER_BUNDLE)
+  const {FacebookLoginSession,inspectFacebookSession,readFacebookCookies,writeFacebookCookies,trustedFacebookUrl,loadFacebookHome}=require(process.env.FACEBOOK_SMOKE_BROWSER_BUNDLE)
   const uid='100000000001111',secondUid='100000000002222'
   let authMode='otp',verifyMode='cookie',graphMode='success',afterAuthMode='cookie'
   let authRequests=0,verifyRequests=0,graphRequests=0,keyRequests=0,approvalRequests=0,proxyChallenges=0,expectedWindows=0
-  let entered,lateResponse
+  let entered,lateResponse,crossSiteProbe
   const forms=[],requests=[]
   const page=(id,token=true)=>'<html><script type="application/json" data-sjs>'+JSON.stringify({require:[['ScheduledServerJS','handle',null,[{__bbox:{define:[
     ['CurrentUserInitialData',[],{ACCOUNT_ID:id,USER_ID:id},270],
@@ -23,6 +23,12 @@ app.whenReady().then(async()=>{
   ]}}]]]})+'</script></html>'
   const tlsServer=https.createServer({key:fs.readFileSync(path.join(process.env.FACEBOOK_SMOKE_DIRECTORY,'key.pem')),cert:fs.readFileSync(path.join(process.env.FACEBOOK_SMOKE_DIRECTORY,'cert.pem'))},(request,response)=>{
     const target='https://'+request.headers.host+request.url
+    if(target==='https://outside.fixture.test/'){
+      response.setHeader('Content-Type','text/html');response.end('<html><img src="https://www.facebook.com/cookie-probe"></html>');return
+    }
+    if(target==='https://www.facebook.com/cookie-probe'){
+      crossSiteProbe?.(request.headers.cookie||'');response.writeHead(204);response.end();return
+    }
     if(target==='https://graph.facebook.com/pwd_key_fetch'){
       keyRequests++;response.end(JSON.stringify(keyResponse));return
     }
@@ -109,7 +115,7 @@ app.whenReady().then(async()=>{
     if(request.headers['proxy-authorization']!=='Basic '+Buffer.from('fixture-user:fixture-pass').toString('base64')){
       proxyChallenges++;socket.end('HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="fixture"\r\nContent-Length: 0\r\n\r\n');return
     }
-    assert(['www.facebook.com:443','m.facebook.com:443','b-graph.facebook.com:443','graph.facebook.com:443'].includes(request.url))
+    assert(['www.facebook.com:443','m.facebook.com:443','b-graph.facebook.com:443','graph.facebook.com:443','outside.fixture.test:443'].includes(request.url))
     const upstream=tcp.connect(tlsServer.address().port,'127.0.0.1',()=>{socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');if(head.length)upstream.write(head);socket.pipe(upstream);upstream.pipe(socket)})
     for(const stream of [socket,upstream]){sockets.add(stream);stream.on('error',()=>{});stream.on('close',()=>sockets.delete(stream))}
     socket.on('close',()=>upstream.destroy());upstream.on('close',()=>socket.destroy())
@@ -118,6 +124,7 @@ app.whenReady().then(async()=>{
   const proxy={host:'127.0.0.1',port:server.address().port,username:'fixture-user',password:'fixture-pass'}
   const originalRequest=net.request
   const destinations={
+    'https://outside.fixture.test/':'http://outside.fixture.test/',
     'https://b-graph.facebook.com/auth/login':'http://facebook-auth.fixture.test/auth/login',
     'https://graph.facebook.com/pwd_key_fetch':'http://facebook-graph.fixture.test/pwd_key_fetch',
     'https://graph.facebook.com/check_approved_machine':'http://facebook-graph.fixture.test/check_approved_machine',
@@ -144,7 +151,9 @@ app.whenReady().then(async()=>{
   assert.equal(authRequests,2);assert.equal(graphRequests,1);assert(proxyChallenges>0)
   assert.equal(BrowserWindow.getAllWindows().length,0)
   assert.equal((await login.ses.cookies.get({name:'probe_side_effect'})).length,0,'HTTP verification must never write response cookies')
-  assert((await readFacebookCookies(login.ses)).every(c=>c.httpOnly))
+  assert.equal((await login.ses.cookies.get({name:'c_user'}))[0].httpOnly,false)
+  assert.equal((await login.ses.cookies.get({name:'xs'}))[0].httpOnly,true)
+  assert((await readFacebookCookies(login.ses)).every(c=>c.sameSite==='no_restriction'&&c.secure))
   assert(!JSON.stringify(result).includes('fixture-user-token'))
   assert(!login.ses.storagePath);await login.dispose()
   authMode='key-refresh'
@@ -177,6 +186,12 @@ app.whenReady().then(async()=>{
     const fallback=['login','login-redirect'].includes(mode)
     assert.equal(authRequests-before,fallback?1:0,'unexpected password fallback: '+mode)
     assert.equal(graphRequests-beforeGraph,fallback?1:0)
+    if(mode==='cookie'){
+      assert.equal((await s.ses.cookies.get({name:'c_user'}))[0].httpOnly,false,'restore normalizes an old HttpOnly UID cookie')
+      assert.equal((await s.ses.cookies.get({name:'xs'}))[0].httpOnly,true)
+      assert((await readFacebookCookies(s.ses)).every(c=>c.sameSite==='no_restriction'&&c.secure),'restore also normalizes old cookie policies')
+      assert.equal(saved[0].httpOnly,true,'normalization must not mutate the saved input')
+    }
     await s.dispose()
   }
   for(const mode of ['error','hang']){
@@ -243,12 +258,35 @@ app.whenReady().then(async()=>{
   const navigation=loadFacebookHome({loadURL:()=>new Promise(()=>{}),stop:()=>assert.fail('Never stop user navigation')},cancelled.signal)
   cancelled.abort();await assert.rejects(navigation)
 
+  // A real cross-site subresource sends web auth cookies after normalization.
+  // The Lax control proves this checks browser policy, not just stored metadata.
+  for(const laxControl of [true,false]){
+    const browser=await make(),ses=browser.ses
+    await writeFacebookCookies(ses,saved,AbortSignal.timeout(5000))
+    if(laxControl)for(const c of await readFacebookCookies(ses))await ses.cookies.set({url:'https://www.facebook.com/',...c,sameSite:'lax'})
+    const probe=new Promise(resolve=>crossSiteProbe=resolve)
+    const win=new BrowserWindow({show:false,webPreferences:{partition:browser.partition,sandbox:true,nodeIntegration:false,contextIsolation:true}})
+    const proxyLogin=(event,wc,_details,authInfo,callback)=>{
+      if(wc===win.webContents&&authInfo.isProxy&&authInfo.host===proxy.host&&authInfo.port===proxy.port){event.preventDefault();callback(proxy.username,proxy.password)}
+    }
+    app.on('login',proxyLogin)
+    expectedWindows=1;await win.loadURL('https://outside.fixture.test/')
+    const header=await probe
+    assert.equal(header.includes('c_user='+uid),!laxControl);assert.equal(header.includes('xs=saved'),!laxControl)
+    app.removeListener('login',proxyLogin);win.destroy();expectedWindows=0;crossSiteProbe=undefined;await browser.dispose()
+  }
+
   const {FacebookLoginService}=require(process.env.FACEBOOK_SMOKE_SERVICE_BUNDLE)
   const proxyRuntime={getSessionProxyAuthentication:ses=>credentials.get(ses)||null,applyProxyToPartition:configure}
   for(const [index,scenario] of [{},{changeDuringGet:true},{httpFailure:true},{localValid:true},
     {explicit:true,manual:true,localValid:true,previousUid:secondUid},{explicit:true,localValid:true},
     {explicit:true,manual:true,localValid:true,httpFailure:true},{explicit:true,localValid:true,httpFailure:true},
-    {explicit:true,manual:true,localValid:true,databaseFailure:true}].entries()){
+    {explicit:true,manual:true,localValid:true,databaseFailure:true},
+    {explicit:true,manual:true,localValid:true,previousUid:secondUid,duplicateScopes:true},
+    {explicit:true,localValid:true,previousUid:secondUid,duplicateScopes:true},
+    {explicit:true,localValid:true,duplicateScopes:true,httpFailure:true},
+    {explicit:true,localValid:true,duplicateScopes:true,changeDuringCleanup:true},
+    {explicit:true,localValid:true,duplicateScopes:true,cleanupFailure:true}].entries()){
     const id=scenario.databaseFailure?319000099:319000002+index,partition=`persist:account_${id}`
     await configure(partition)
     const ses=session.fromPartition(partition)
@@ -259,6 +297,25 @@ app.whenReady().then(async()=>{
     const readCookieInTest=visible.webContents.executeJavaScript.bind(visible.webContents)
     visible.webContents.executeJavaScript=()=>{throw Error('Session logic must not read DOM')}
     if(scenario.localValid){for(const c of saved)await ses.cookies.set({url:'https://www.facebook.com/',...c,httpOnly:scenario.databaseFailure&&c.name==='c_user'?false:c.httpOnly,value:c.name==='c_user'?(scenario.previousUid||uid):c.value})}
+    const originalCookieSet=ses.cookies.set.bind(ses.cookies)
+    if(scenario.duplicateScopes){
+      for(const c of saved)for(const scope of [{domain:undefined,path:'/'},{domain:'.facebook.com',path:'/messages'}])
+        await originalCookieSet({url:'https://www.facebook.com/',...c,...scope,value:c.name==='c_user'?(scenario.previousUid||uid):c.value})
+      await originalCookieSet({url:'https://www.facebook.com/',domain:'.facebook.com',name:'datr',value:'keep-device',secure:true,httpOnly:true,sameSite:'strict'})
+      await originalCookieSet({url:'https://outside.fixture.test/',name:'c_user',value:'keep-other-site',secure:true})
+      await readCookieInTest('localStorage.setItem("fixture-marker","keep-storage")')
+      let injected=false
+      ses.cookies.set=async details=>{
+        if(!injected&&details.expirationDate===1){
+          injected=true
+          if(scenario.cleanupFailure)throw Error('Fixture cookie cleanup failure')
+          await originalCookieSet(details)
+          if(scenario.changeDuringCleanup)await originalCookieSet({url:'https://www.facebook.com/',domain:'.facebook.com',name:'c_user',value:secondUid,httpOnly:true,secure:true})
+          return
+        }
+        return originalCookieSet(details)
+      }
+    }
     const fixture={user:{staffId:1,organizationId:1},credentials:{username:'fixture'},released:0,revision:scenario.manual?0:1,commits:0,proxy,
       account:{id,staffId:1,proxyId:9,flatformType:'facebook',facebookLoginManaged:!scenario.manual,facebookLoginClaimGeneration:0,isActive:true,status:'tạm dừng',facebookUid:scenario.previousUid||uid,loginStatus:scenario.localValid?'đã đăng nhập':'chưa đăng nhập'},
       async rpc(action,payload){
@@ -279,14 +336,16 @@ app.whenReady().then(async()=>{
     authMode=scenario.httpFailure?'error':scenario.explicit?'otp':'password'
     const loginWork=()=>scenario.explicit?service.login(id,{uid,revision:scenario.manual?0:1,...(scenario.manual?{password:input.password,twoFactorSecret:input.twoFactorSecret}:{})}):service.restore(id)
     if(scenario.databaseFailure)assert((await readCookieInTest('document.cookie')).includes('c_user='))
-    if(scenario.changeDuringGet||scenario.httpFailure||scenario.databaseFailure)await assert.rejects(loginWork(),scenario.databaseFailure?/Đã đăng nhập Facebook, nhưng chưa xác nhận lưu/:undefined)
+    if(scenario.changeDuringGet||scenario.httpFailure||scenario.databaseFailure||scenario.changeDuringCleanup||scenario.cleanupFailure)await assert.rejects(loginWork(),scenario.databaseFailure?/Đã đăng nhập Facebook, nhưng chưa xác nhận lưu/:undefined)
     else{await loginWork();assert.equal(navigations,scenario.explicit||!scenario.localValid?1:0);if(visible.webContents.isLoadingMainFrame())await new Promise(resolve=>visible.webContents.once('did-stop-loading',resolve));assert.equal((await service.checkAccount(id,visible.webContents)).loggedIn,true)}
     assert.equal(fixture.released,1);assert.equal(graphRequests,beforeGraph,'restore never looks up names')
     if(scenario.explicit){
       assert.equal(authRequests-beforeAuth,scenario.httpFailure?1:2,'explicit login uses password/TOTP despite valid local/cloud cookies')
-      assert.equal(fixture.commits,scenario.httpFailure||scenario.databaseFailure?0:1)
-      assert.equal((await ses.cookies.get({name:'xs'}))[0].value,scenario.httpFailure?'saved':'http-session')
-      assert.equal((await ses.cookies.get({name:'c_user'}))[0].value,uid)
+      assert.equal(fixture.commits,scenario.httpFailure||scenario.databaseFailure||scenario.changeDuringCleanup||scenario.cleanupFailure?0:1)
+      if(!scenario.changeDuringCleanup&&!scenario.cleanupFailure){
+        assert.equal((await ses.cookies.get({name:'xs'}))[0].value,scenario.httpFailure?'saved':'http-session')
+        assert.equal((await ses.cookies.get({url:'https://www.facebook.com/',name:'c_user'}))[0].value,uid)
+      }
       if(scenario.httpFailure||scenario.databaseFailure)assert.equal(fixture.account.facebookLoginManaged,!scenario.manual)
       assert(!service.isLoggingIn(id))
     }
@@ -296,7 +355,24 @@ app.whenReady().then(async()=>{
       assert.equal((await ses.cookies.get({name:'xs'}))[0].httpOnly,true)
       assert.equal((await inspectFacebookSession(ses,AbortSignal.timeout(5000),proxy)).state,'authenticated')
     }
+    if(!scenario.changeDuringGet&&!scenario.httpFailure&&!scenario.changeDuringCleanup&&!scenario.cleanupFailure&&(scenario.explicit||!scenario.localValid)){
+      assert((await readCookieInTest('document.cookie')).includes('c_user='+uid),'managed/manual logins and restores expose the public web identity')
+      assert(!(await readCookieInTest('document.cookie')).includes('xs='),'session secret never becomes script-readable')
+    }
     if(scenario.changeDuringGet){assert.equal(authRequests,beforeAuth);assert.equal((await ses.cookies.get({name:'c_user'}))[0].value,secondUid)}
+    if(scenario.duplicateScopes){
+      ses.cookies.set=originalCookieSet
+      const facebook=await readFacebookCookies(ses)
+      if(!scenario.httpFailure&&!scenario.changeDuringCleanup&&!scenario.cleanupFailure){
+        assert.equal(facebook.filter(c=>c.name==='c_user').length,1);assert.equal(facebook.filter(c=>c.name==='xs').length,1)
+        assert((await ses.cookies.get({url:'https://www.facebook.com/messages/'})).filter(c=>c.name==='c_user').every(c=>c.value===uid))
+      }
+      if(scenario.httpFailure||scenario.cleanupFailure)assert.equal(facebook.filter(c=>c.name==='c_user').length,3,'failed authentication or first cleanup must not replace the original session')
+      if(scenario.changeDuringCleanup)assert.equal((await ses.cookies.get({url:'https://www.facebook.com/',name:'c_user'})).find(c=>c.domain==='.facebook.com').value,secondUid,'user session wins during cleanup')
+      assert.equal(facebook.find(c=>c.name==='datr').value,'keep-device');assert.equal(facebook.find(c=>c.name==='datr').sameSite,'strict')
+      assert.equal((await ses.cookies.get({url:'https://outside.fixture.test/',name:'c_user'}))[0].value,'keep-other-site')
+      assert.equal(await readCookieInTest('localStorage.getItem("fixture-marker")'),'keep-storage')
+    }
     assert.equal(BrowserWindow.getAllWindows().length,1,'only the pre-existing user tab may exist')
     await service.stop();visible.destroy();expectedWindows=0
   }
