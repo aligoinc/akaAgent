@@ -439,6 +439,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 ## Common pitfalls
 
 - **Zalo policy days_at_time (v322/v323)**: X/Y đọc từ auto_error; date_enable tính trong accountActionRepository bằng cùng snapshot DB ghi disabled_at. X/Y ưu tiên hơn phút dự phòng 120=1440, 802=2880; 223 chỉ tạm dừng, không khóa kết bạn. Không đổi quota/retry/counter. Schema v322 đã apply; dữ liệu v323 chờ người dùng phát hành runtime. Xem [audit và thứ tự triển khai](docs/ZALO_POLICY_V322_V323_AUDIT.md).
+- **Log policy Zalo**: giữ nguyên nội dung log hiện có, kể cả `✅ Hoàn thành`; chỉ bổ sung nguyên nhân còn thiếu. Share batch ghi mỗi lỗi khác nhau một lần ngoài log tổng hợp, kể cả policy không tạo detail; ghi lý do dừng sau target/batch. Truyền campaign vào `logCampaignProgress` khi có sẵn để fallback giữ account/campaign context nếu append DB lỗi. Khóa mới lưu thông báo campaign đầy đủ vào `disabled_reason`, không backfill khóa cũ. Xem [hướng dẫn](docs/ZALO_POLICY_PROGRESS.md); smoke `node scripts/zalo-policy-progress-smoke-test.cjs`.
 
 - **SMS result reporting**: v318 intentionally allows account B to report SMS results for A after source deletion/reassignment; do not add original-sender/device/history-owner gates. Keep existing history ownership, once-only counters and status ordering; skip deleted-source finalization while fetch/automation still exclude deleted campaigns. See [audit and rollback smoke](docs/SMS_STATUS_V318_AUDIT.md).
 
