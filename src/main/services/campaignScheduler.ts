@@ -1256,8 +1256,8 @@ export class CampaignScheduler {
     return this.pauseRequests.has(campaignId)
   }
 
-  private async completeCampaignPause(campaign: Campaign): Promise<void> {
-    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: null })
+  private async completeCampaignPause(campaign: Campaign, stopNote?: string): Promise<void> {
+    await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: stopNote ?? null })
     this.pauseRequests.delete(campaign.id)
     await this.logCampaignProgress(campaign, `⏸ Chiến dịch "${campaign.name}" đã được tạm dừng.`)
   }
@@ -3588,6 +3588,7 @@ export class CampaignScheduler {
       // Run engine v2
       let shouldStopAfterTarget = false
       let shouldCompletePauseAfterTarget = false
+      let policyStopNote: string | undefined
       const mediaTempPaths: string[] = []
       try {
         // Build variables
@@ -3855,7 +3856,8 @@ export class CampaignScheduler {
                 note: this.withZaloMessageOptOutWarnings(accountStopReason, zaloOptOutContext)
               })
             }
-            await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+            await this.stopCampaignForAccountCondition(account, campaign, accountStopReason,
+              milestoneSummary.stopAfterTarget ? milestoneSummary.pendingNote : undefined)
             shouldStopAfterTarget = true
           }
 
@@ -3968,10 +3970,13 @@ export class CampaignScheduler {
 
           if (milestoneSummary.stopAfterTarget && !runtimeModeStopRequested) {
             const latestCampaign = await this.supabase.getCampaign(campaign.id).catch(() => null)
+            policyStopNote = latestCampaign?.note || milestoneSummary.pendingNote ||
+              'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
             if (!latestCampaign || latestCampaign.status === 'đang chạy') {
+              policyStopNote = milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
               await this.updateCampaignAndBroadcast(campaign.id, {
                 status: 'chờ xử lý',
-                note: milestoneSummary.pendingNote || 'Tài khoản Zalo cần kiểm tra lại trước khi chạy tiếp'
+                note: policyStopNote
               })
             }
             await this.logCampaignProgress(campaign, `⏸ Dừng chiến dịch: ${
@@ -4153,7 +4158,7 @@ export class CampaignScheduler {
       if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
 
       if (shouldCompletePauseAfterTarget) {
-        await this.completePauseAtBoundary(account, campaign)
+        await this.completePauseAtBoundary(account, campaign, policyStopNote)
         return
       }
 
@@ -5219,12 +5224,12 @@ export class CampaignScheduler {
         }
         if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
         if (this.isCampaignPauseRequested(campaign.id)) {
-          await this.completePauseAtBoundary(account, campaign)
+          await this.completePauseAtBoundary(account, campaign, batchResult.stopNote ?? undefined)
           return
         }
         const postBatchControl = await this.getServerZaloBoundaryReason(account, campaign)
         if (postBatchControl.paused) {
-          await this.completePauseAtBoundary(account, campaign)
+          await this.completePauseAtBoundary(account, campaign, batchResult.stopNote ?? undefined)
           return
         }
         if (batchHardStopReason || postBatchControl.hardStopReason) {
@@ -5232,7 +5237,8 @@ export class CampaignScheduler {
           await this.stopCampaignForAccountCondition(
             account,
             campaign,
-            batchHardStopReason || postBatchControl.hardStopReason || 'Trạng thái Zalo Server không còn hợp lệ'
+            batchHardStopReason || postBatchControl.hardStopReason || 'Trạng thái Zalo Server không còn hợp lệ',
+            batchResult.stopNote ?? undefined
           )
           break
         }
@@ -5255,7 +5261,7 @@ export class CampaignScheduler {
             }
           } else {
             if (this.isCampaignPauseRequested(campaign.id)) {
-              await this.completePauseAtBoundary(account, campaign)
+              await this.completePauseAtBoundary(account, campaign, batchResult.stopNote ?? undefined)
               return
             }
             const stopStatus = batchResult.pauseAfterBatch ? 'tạm dừng' : 'chờ xử lý'
@@ -5264,7 +5270,7 @@ export class CampaignScheduler {
               note: batchResult.stopNote || 'Chiến dịch đã dừng sau batch để chờ kiểm tra lại'
             })
             if (this.isCampaignPauseRequested(campaign.id)) {
-              await this.completePauseAtBoundary(account, campaign)
+              await this.completePauseAtBoundary(account, campaign, batchResult.stopNote ?? undefined)
               return
             }
           }
@@ -8484,11 +8490,11 @@ export class CampaignScheduler {
     }
   }
 
-  private async completePauseAtBoundary(account: AutoAccount, campaign: Campaign): Promise<void> {
+  private async completePauseAtBoundary(account: AutoAccount, campaign: Campaign, stopNote?: string): Promise<void> {
     if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
     try {
       if (!this.isServerZaloCampaign(account, campaign)) {
-        await this.completeCampaignPause(campaign)
+        await this.completeCampaignPause(campaign, stopNote)
         await this.releaseRunningAccount(account.id)
         recordAccountLog({ accountId: account.id, campaignId: campaign.id, eventType: 'campaign_paused',
           message: 'Đã kết thúc lượt hiện tại và dừng thực thi chiến dịch.' })
@@ -8503,7 +8509,7 @@ export class CampaignScheduler {
       if (boundary === 'account') {
         const updated = await this.updateCampaignAndBroadcast(campaign.id, {
           status: 'chờ xử lý',
-          note: null
+          note: stopNote ?? null
         })
         // A concurrent campaign pause wins the CAS and must remain paused.
         if (updated.status === 'tạm dừng') boundary = 'campaign'
@@ -8577,12 +8583,14 @@ export class CampaignScheduler {
   private async stopCampaignForAccountCondition(
     account: AutoAccount,
     campaign: Campaign,
-    reason: string
+    reason: string,
+    policyNote?: string
   ): Promise<void> {
     if (reason.includes('đăng xuất')) {
-      await this.handleRuntimeError(account, campaign, 'err_logout', undefined, { message: reason })
+      await this.applyRuntimeErrorPolicy(account, campaign, 'err_logout', undefined,
+        { message: reason }, { campaignNote: policyNote })
     } else {
-      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: reason })
+      await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: policyNote || reason })
       await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${reason}`)
     }
   }
@@ -8631,6 +8639,7 @@ export class CampaignScheduler {
     )
     if (updated) {
       this.broadcastCampaignUpdate(updated)
+      await this.logCampaignProgress(updated, `⚠️ Chưa thể chạy chiến dịch: ${updated.note || note}`)
       return
     }
 
@@ -8940,7 +8949,8 @@ export class CampaignScheduler {
     campaign: Campaign,
     errorCode: string,
     actionCode: string | undefined,
-    replacements: Record<string, string | undefined> = {}
+    replacements: Record<string, string | undefined> = {},
+    options: { campaignNote?: string } = {}
   ): Promise<RuntimeErrorResult> {
     return this.runCampaignErrorPolicy(campaign.id, async () => {
       const policyReplacements: Record<string, string | undefined> = {
@@ -8963,9 +8973,10 @@ export class CampaignScheduler {
         const message = isUndefinedErrorPolicy
           ? safeUserMessage || 'Có lỗi xảy ra'
           : policyReplacements.message || 'Có lỗi xảy ra'
-        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })
+        const note = options.campaignNote || message
+        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note })
         await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
-        return { triggered: true, message }
+        return { triggered: true, message: note }
       }
 
       const configuredMessage = this.renderPolicyMessage(
@@ -8992,10 +9003,13 @@ export class CampaignScheduler {
         try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch {}
       }
 
-      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note: message })
+      // The campaign note carries threshold context; keep the existing policy
+      // progress text and side effects unchanged.
+      const note = options.campaignNote || message
+      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note })
       await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
-      return { triggered: true, message, policy }
+      return { triggered: true, message: note, policy }
     })
   }
 
@@ -9063,6 +9077,8 @@ export class CampaignScheduler {
 
       let thresholdReason = String(
         policyReplacements.thresholdReason ||
+        safeUserMessage ||
+        policyReplacements.message ||
         failureMessage ||
         'Lỗi không xác định'
       ).trim() || 'Lỗi không xác định'
@@ -9093,7 +9109,8 @@ export class CampaignScheduler {
           : `⚠️ Chiến dịch đã lỗi/thất bại liên tiếp ${threshold} lần: ${thresholdReason}`
       )
 
-      const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+      const campaignNote = `Dừng sau ${count} data lỗi/thất bại liên tiếp (ngưỡng ${finalThreshold}): ${thresholdReason}`
+      const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements, { campaignNote })
       return { ...handled, count, threshold }
     })
   }
