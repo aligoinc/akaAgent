@@ -59,6 +59,14 @@ function fixture(replies, options={}) {
 async function run(){
   const direct=fixture([success()]),{cookies}=await direct.run()
   assert.equal(cookies.length,2);assert.equal(cookies[1].httpOnly,true)
+  assert.equal(cookies[0].httpOnly,false,'Facebook web scripts must be able to read the public UID')
+  const mobileFlags=success();mobileFlags.session_cookies[0].httponly=true
+  const converted=await fixture([mobileFlags]).run()
+  assert.equal(converted.cookies.find(c=>c.name==='c_user').httpOnly,false,'mobile cookie flags cannot hide the web identity')
+  assert.equal(converted.cookies.find(c=>c.name==='xs').httpOnly,true,'session secret remains HttpOnly')
+  assert(cookies.every(c=>c.secure&&c.sameSite==='no_restriction'),'web auth cookies must work in cross-site requests over HTTPS')
+  const auxiliary=success();auxiliary.session_cookies.push({name:'datr',value:'fixture-device',httponly:true})
+  assert.equal((await fixture([auxiliary]).run()).cookies.find(c=>c.name==='datr').sameSite,undefined,'do not rewrite unrelated cookie policy')
   assert(!JSON.stringify(cookies).includes('must-not-return-token'))
   assert.equal(direct.calls[0].options.session,direct.session)
   assert.equal(direct.calls[0].options.url,'https://b-graph.facebook.com/auth/login')

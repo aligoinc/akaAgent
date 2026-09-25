@@ -94,3 +94,23 @@ Nhánh đổi khóa chỉ chạy đúng một lần cho `418/2779001` có packag
 Kiểm thử hồi quy bao gồm hai khóa RSA khác nhau và giải mã envelope ở server fixture, giữ device/machine, refresh → OTP → cookie/web verify qua Electron + proxy HTTPS thật, giới hạn một lần/hủy/timeout và không gửi plaintext. Thử thật xác nhận login/2FA/cookie web/name; không kiểm chứng thao tác tạo account/profile vào DB production hoặc chiến dịch.
 
 Các kiểm tra sau sửa đều PASS: `facebook-login-request-smoke-test.cjs`, `facebook-session-request-smoke-test.cjs`, `run-facebook-login-browser-smoke.cjs`, `facebook-login-smoke-test.cjs`, `facebook-login-legacy-check-smoke-test.cjs`, hai typecheck Node/Web, `npm run build` và `git diff --check`. Production build vẫn có cảnh báo Vite dynamic/static import như trước, không có lỗi. Chưa đóng gói lại DMG/EXE. Runner tạm và thư mục userData riêng đã dọn, giữ nguyên file test gốc của user.
+
+## Messenger không tải được sau login 2FA — 26/09/2026
+
+Người dùng đối chiếu trên cùng tài khoản: logout/login thủ công tải được chat, login 2FA tự động lại lỗi. Code `readSessionCookies()` ép `c_user` thành HttpOnly, dù đây là cookie UID công khai. Kiểm tra metadata local thấy phiên tự động có cờ này, các phiên thủ công không có. HTTP bootstrap xác minh đúng UID không kiểm tra được khả năng JavaScript Facebook đọc cookie.
+
+Đã sao chép bộ cookie của phiên lỗi sang một phiên Electron tạm riêng, cùng User-Agent với BrowserPage, mở `/messages/` và chỉ đổi cờ HttpOnly của `c_user` giữa ba lượt. Không nhập lại mật khẩu/OTP, không đọc/tương tác DOM, không ghi DB, không đổi profile đang dùng; giá trị UID và `xs` giữ nguyên trong cả ba lượt.
+
+- HttpOnly bật: sau 8 giây, danh sách chat vẫn ở trạng thái tải.
+- HttpOnly tắt: tải được danh sách chat và hiện hộp nhập PIN khôi phục lịch sử mã hóa.
+- Bật HttpOnly lại: tái hiện đúng lỗi “Không thể tải đoạn chat”.
+
+Đối chiếu này xác nhận thuộc tính cookie gây lỗi Messenger trong phiên đã thử; không cần thay protocol mobile. Chưa nhập PIN hoặc kiểm thử gửi tin nhắn. Bản sửa đặt `c_user` thành script-readable ở kết quả request và ranh giới ghi cookie, kể cả cookie cũ; giữ các cờ của cookie khác, gồm HttpOnly của `xs`. Không thêm BrowserWindow/DOM vào luồng sản phẩm, không thêm polling, migration hay tự dọn storage người dùng. Cookie và profile của runner đã được dọn; không đưa giá trị cookie, UID thật hoặc ảnh hội thoại vào repo.
+
+## Chuẩn hóa SameSite và thay cookie khác scope — 26/09/2026
+
+Review tiếp theo chỉ đọc metadata cookie local: `c_user`/`xs` của phiên 2FA là Lax, hai phiên thủ công là None. Electron mặc định Lax khi không truyền `sameSite`. Fixture HTTPS/proxy local với trang ngoài website tải tài nguyên Facebook xác nhận Lax không gửi hai cookie, còn None gửi được. Đây là khác biệt chính sách đã kiểm chứng, chưa phải bằng chứng về một nguyên nhân khác của lỗi Messenger thật.
+
+Đã chuẩn hóa riêng `c_user`/`xs` thành `Secure + SameSite=None` ở kết quả HTTP login và bước ghi/restore; `c_user` đọc được bằng script, `xs` luôn HttpOnly. Các cookie khác giữ chính sách của chúng. Khi thay phiên đã xác minh vào browser hiện có, helper cho hết hạn chính xác cookie auth cũ khác domain/path/hostOnly thay vì chỉ ghi đè theo tên. Listener đăng ký ghi và xóa theo scope; sự kiện xóa phải khớp giá trị và nguyên nhân `expired-overwrite`, thay đổi phiên ngoài dự kiến vẫn hủy lượt. Không thay check thủ công, không xóa profile/localStorage/IndexedDB và không thêm DB request, pool, timer hoặc DOM vào sản phẩm.
+
+`run-facebook-login-browser-smoke.cjs` kiểm tra cross-site None với đối chứng Lax, chuyển UID trên account manual/managed có cookie host-only `www.facebook.com` và cookie đường dẫn `/messages` cũ, giữ cookie khác/website khác/localStorage, lỗi HTTP trước thay phiên, lỗi thao tác dọn cookie và user đổi UID ngay khi đang dọn. Những nhánh lỗi/hủy đều giải phóng claim và kết thúc lượt; ca thành công chỉ còn một c_user/xs và HTTP verify đúng UID. Các smoke request, service, release, startup, legacy, HTTP verifier và hai typecheck Node/Web đều pass. Không dùng credential thật hoặc mutate DB/profile khách cho các kiểm thử này. Phiên local hợp lệ đã tồn tại vẫn giữ nguyên; bấm login 2FA sau khi chạy bản sửa để nhận chính sách cookie mới.

@@ -8,7 +8,7 @@ async function main(){
   // Match electron-vite's external dependency loading. Bundling node-fetch would
   // hide an ESM-only dependency being required by Electron's CommonJS main process.
   fs.symlinkSync(path.resolve(__dirname,'../node_modules'),path.join(directory,'node_modules'),process.platform==='win32'?'junction':'dir')
-  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(directory,'key.pem'),'-out',path.join(directory,'cert.pem'),'-days','1','-subj','/CN=www.facebook.com','-addext','subjectAltName=DNS:www.facebook.com,DNS:m.facebook.com'],{stdio:'ignore'})
+  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(directory,'key.pem'),'-out',path.join(directory,'cert.pem'),'-days','1','-subj','/CN=www.facebook.com','-addext','subjectAltName=DNS:www.facebook.com,DNS:m.facebook.com,DNS:outside.fixture.test'],{stdio:'ignore'})
   const bundle=path.join(directory,'browser.cjs')
   await build({entryPoints:[path.resolve(__dirname,'../src/main/services/facebookLoginSession.ts')],outfile:bundle,bundle:true,platform:'node',format:'cjs',external:['electron','node-fetch'],logLevel:'warning'})
   const serviceBundle=path.join(directory,'service.cjs')

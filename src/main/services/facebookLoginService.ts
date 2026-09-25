@@ -18,7 +18,7 @@ import { FacebookLoginJournal } from './facebookLoginJournal'
 import { FacebookStartupBrowser } from './facebookStartupBrowser'
 import { accountOperationRegistry, type AccountOperationContext } from './accountOperationRegistry'
 import { withRequestDeadline } from './requestDeadline'
-import { FacebookLoginSession, inspectFacebookSession, loadFacebookHome, readFacebookCookies, authFingerprint, writeFacebookCookies, trustedFacebookUrl } from './facebookLoginSession'
+import { FacebookLoginSession, inspectFacebookSession, loadFacebookHome, readFacebookCookies, authFingerprint, facebookCookieScope, writeFacebookCookies, trustedFacebookUrl } from './facebookLoginSession'
 
 type Created = { accountId: number; state: string; revision: number; skipped?: boolean }
 type SecretResult = { secret: FacebookSecret; revision: number }
@@ -522,6 +522,7 @@ export class FacebookLoginService {
     let detach = (): void => {}
     try {
       const conflict = new AbortController(), expected = new Map<string, string>()
+      const expectedRemovals = new Map<string, string>()
       const attempt = AbortSignal.any([signal, conflict.signal])
       let cookieVersion = 0, protectCookies = !!input
       const cancelForUser = (): void => conflict.abort(new Error('Phiên hoặc thao tác trình duyệt đã thay đổi. Đã dừng tự khôi phục.'))
@@ -531,8 +532,12 @@ export class FacebookLoginService {
         // Compare cookieVersion around the initial HTTP verification. Once logout is
         // verified, protect every await through cloud lookup and our expected writes.
         if (!protectCookies) return
-        if (removed && (cause === 'overwrite' || (cookie.name === 'c_user' && cause === 'expired-overwrite')) && expected.has(cookie.name)) return
-        if (!removed && expected.get(cookie.name) === cookie.value) { expected.delete(cookie.name); return }
+        const scope = facebookCookieScope({ ...cookie, domain: cookie.domain || '', path: cookie.path || '/' })
+        if (removed && cause === 'expired-overwrite' && expectedRemovals.get(scope) === cookie.value) {
+          expectedRemovals.delete(scope); return
+        }
+        if (removed && cause === 'overwrite' && expected.has(scope)) return
+        if (!removed && expected.get(scope) === cookie.value) { expected.delete(scope); return }
         cancelForUser()
       }
       const onNavigate = (_event: Electron.Event, _url: string, _isInPlace: boolean, isMainFrame: boolean): void => { if (isMainFrame) cancelForUser() }
@@ -623,14 +628,11 @@ export class FacebookLoginService {
       if (authFingerprint(await readFacebookCookies(ses)) !== baseline) throw new Error('Người dùng đã thay đổi phiên. Đã dừng tự khôi phục.')
       // Verify the saved credentials were not edited on another app while login was running.
       if ((await this.metadata(accountId)).revision !== stored.revision) throw new Error('Thông tin đăng nhập vừa thay đổi. Hãy thử lại.')
-      const cookies = (await readFacebookCookies(temporary.ses)).map(cookie =>
-        // Keep the legacy document.cookie check usable if enrollment fails after
-        // promotion. c_user is the public UID; xs remains the HttpOnly secret.
-        input && !account.facebookLoginManaged && cookie.name === 'c_user' ? { ...cookie, httpOnly: false } : cookie)
+      const cookies = await readFacebookCookies(temporary.ses)
       assertCurrent()
-      await writeFacebookCookies(ses, cookies, attempt, cookie => {
+      await writeFacebookCookies(ses, cookies, attempt, (cookie, removed) => {
         assertCurrent()
-        if (['c_user','xs'].includes(cookie.name)) expected.set(cookie.name, cookie.value)
+        if (['c_user','xs'].includes(cookie.name)) (removed ? expectedRemovals : expected).set(facebookCookieScope(cookie), cookie.value)
       })
       assertCurrent()
       protectCookies = false // No more writes: verification checks its cookie fingerprint; keep watching user input/navigation.

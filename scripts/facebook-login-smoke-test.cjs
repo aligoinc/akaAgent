@@ -100,9 +100,11 @@ function fixture({loginFail=false,loginName='Fixture',promotionFail=false,finish
       releaseNonZaloAccountRuntimeOperation:async(...args)=>{assert.equal(args[2],'tạm dừng');assert.equal(args[3],'token');calls.push('release');return hooks.release?hooks.release(args,context):true}},
     '../data/repositories/proxyRepository':{getProxy:async(id,signal)=>hooks.getProxy?hooks.getProxy(id,signal,context):null},'./facebookLoginJournal':{FacebookLoginJournal:journalType||FakeJournal},
     './facebookLoginSession':{FacebookLoginSession:FakeSession,trustedFacebookUrl,inspectFacebookSession:inspect,loadFacebookHome:async wc=>wc.loadURL('https://www.facebook.com/'),readFacebookCookies:async s=>s.cookiesData,
+      facebookCookieScope:c=>JSON.stringify([c.name,(c.domain||'').replace(/^\./,''),c.path||'/',!!c.hostOnly]),
       authFingerprint:c=>JSON.stringify(c.filter(x=>['c_user','xs'].includes(x.name))),writeFacebookCookies:async(s,c,signal,beforeWrite)=>{
         calls.push('copy')
-        for(const cookie of c){
+        for(const source of c){
+          const cookie=['c_user','xs'].includes(source.name)?{...source,secure:true,httpOnly:source.name==='xs',sameSite:'no_restriction'}:source
           signal.throwIfAborted();beforeWrite?.(cookie)
           const old=s.cookiesData.find(item=>item.name===cookie.name)
           if(old)s.cookies.emit('changed',{},old,'overwrite',true)

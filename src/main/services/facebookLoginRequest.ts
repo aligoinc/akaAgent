@@ -185,7 +185,10 @@ function readSessionCookies(payload: JsonObject, uid: string): FacebookCookie[] 
     const expirationDate = typeof cookie.expirationDate === 'number' ? cookie.expirationDate : expires
     if (Number.isFinite(expirationDate) && expirationDate <= Date.now() / 1000) throw invalidResponse()
     return { name, value: cookie.value, domain, path, secure: true,
-      httpOnly: name === 'xs' || name === 'c_user' || cookie.httponly === true || cookie.httpOnly === true,
+      // c_user is the public browser identity. Hiding it from Facebook's own
+      // scripts breaks Messenger even when server-side session verification passes.
+      httpOnly: name !== 'c_user' && (name === 'xs' || cookie.httponly === true || cookie.httpOnly === true),
+      ...(['c_user', 'xs'].includes(name) ? { sameSite: 'no_restriction' as const } : {}),
       ...(Number.isFinite(expirationDate) ? { expirationDate } : {}) }
   })
   const identity = cookies.find(cookie => cookie.name === 'c_user'), xs = cookies.find(cookie => cookie.name === 'xs')
