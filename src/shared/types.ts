@@ -433,7 +433,7 @@ export interface AutoAccountActionStatus {
   updatedAt?: string
 }
 
-export type AutoErrorDisableActionMode = 'fixed_minutes' | 'end_of_day' | 'indefinite'
+export type AutoErrorDisableActionMode = 'fixed_minutes' | 'end_of_day' | 'indefinite' | 'days_at_time'
 
 export interface AutoErrorPolicy {
   id: number
@@ -449,6 +449,8 @@ export interface AutoErrorPolicy {
   disableActionCodes: string[]
   timeDisableActions?: number | null
   disableActionMode: AutoErrorDisableActionMode
+  disableActionDays?: number | null
+  disableActionTime?: string | null
   countConsecutiveErrors?: number | null
   zaloErrorCodes: string[]
   /** Empty means the Zalo error policy applies to every action. */

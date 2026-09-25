@@ -169,9 +169,11 @@ export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErro
     updateStatusCampaign: (row.update_status_campaign as string | null) ?? null,
     disableActionCodes: Array.isArray(row.disable_action_codes) ? row.disable_action_codes as string[] : [],
     timeDisableActions: (row.time_disable_actions as number | null) ?? null,
-    disableActionMode: disableActionMode === 'end_of_day' || disableActionMode === 'indefinite'
+    disableActionMode: disableActionMode === 'end_of_day' || disableActionMode === 'indefinite' || disableActionMode === 'days_at_time'
       ? disableActionMode
       : 'fixed_minutes',
+    disableActionDays: (row.disable_action_days as number | null) ?? null,
+    disableActionTime: (row.disable_action_time as string | null) ?? null,
     countConsecutiveErrors: (row.count_consecutive_errors as number | null) ?? null,
     zaloErrorCodes: Array.isArray(row.zalo_error_codes) ? row.zalo_error_codes as string[] : [],
     zaloActionCodes: Array.isArray(row.zalo_action_codes) ? row.zalo_action_codes as string[] : [],

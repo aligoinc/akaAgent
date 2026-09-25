@@ -3,6 +3,7 @@ import { getAccount } from './accountRepository'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAutoAccountActionFromDB, mapAutoAccountActionStatusFromDB } from '../mappers'
 import { requireCurrentUser } from '../currentUser'
+import { resolveDaysAtTimeDateEnable, type DaysAtTimeActionDisable } from '../../../shared/actionDisableTime'
 import {
   canUseAccountActionWithEntitlements,
   canUseAccountPlatformWithEntitlements,
@@ -27,6 +28,7 @@ export interface DisableAccountActionContext {
   errorCode?: string | null
   reason?: string | null
   dateEnable?: string | null
+  daysAtTime?: DaysAtTimeActionDisable
 }
 
 function normalizeRateLimitMinutes(value: unknown): number {
@@ -463,11 +465,16 @@ export async function disableAccountActions(
     getAccountActionStatusSnapshot(accountId, actionCode)
   ))
   const dbNow = snapshots[0].clock.dbNow
-  const dateEnable = context?.dateEnable !== undefined
-    ? context.dateEnable
-    : minutes && minutes > 0
-      ? new Date(new Date(dbNow).getTime() + minutes * 60 * 1000).toISOString()
-      : null
+  if (context?.daysAtTime && context.dateEnable !== undefined) {
+    throw new Error('Không thể cấu hình đồng thời lịch mở khóa và dateEnable')
+  }
+  const dateEnable = context?.daysAtTime
+    ? resolveDaysAtTimeDateEnable(dbNow, context.daysAtTime)
+    : context?.dateEnable !== undefined
+      ? context.dateEnable
+      : minutes && minutes > 0
+        ? new Date(new Date(dbNow).getTime() + minutes * 60 * 1000).toISOString()
+        : null
   const disabledAt = dbNow
 
   for (const actionCode of codes) {
