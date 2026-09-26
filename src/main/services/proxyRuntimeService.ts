@@ -1,4 +1,5 @@
 import { app, session, type Session } from 'electron'
+import { createHash } from 'node:crypto'
 import { AutoAccount, AutoProxy, ProxyProtocol, ProxyTestResult } from '../../shared/types'
 
 type ProxyCredential = {
@@ -28,46 +29,49 @@ export class ProxyRuntimeService {
   private credentialsBySession = new WeakMap<Session, ProxyCredential>()
   private credentialKeysBySession = new WeakMap<Session, string>()
   private credentialsByEndpoint = new Map<string, ProxyCredential>()
+  private proxyStateBySession = new WeakMap<Session, { revision: number; pending: number; applied?: string }>()
   private loginHandlerRegistered = false
 
   constructor(private readonly getProxyById: (id: number) => Promise<AutoProxy | null>) {}
 
-  async prepareAccountSession(account: AutoAccount): Promise<void> {
+  async prepareAccountSession(account: AutoAccount, options: { reuseApplied?: boolean } = {}): Promise<void> {
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
-    await this.applyProxyToPartition(this.getAccountPartition(account.id), proxy)
+    await this.applyProxyToPartition(this.getAccountPartition(account.id), proxy, options)
   }
 
-  async applyProxyToPartition(partition: string, proxy: AutoProxy | Partial<AutoProxy> | null | undefined): Promise<void> {
+  async applyProxyToPartition(partition: string, proxy: AutoProxy | Partial<AutoProxy> | null | undefined,
+    options: { reuseApplied?: boolean } = {}): Promise<void> {
     const ses = session.fromPartition(partition)
-    this.ensureLoginHandler()
-
-    if (!proxy || proxy.isActive === false) {
-      this.deleteSessionCredential(ses)
-      await ses.setProxy({ mode: 'system' })
-      await ses.closeAllConnections()
-      await ses.forceReloadProxyConfig().catch(() => {})
-      return
+    const normalized = proxy && proxy.isActive !== false ? this.normalizeProxy(proxy) : null
+    const key = createHash('sha256').update(JSON.stringify(normalized)).digest('hex')
+    let state = this.proxyStateBySession.get(ses)
+    if (!state) {
+      state = { revision: 0, pending: 0 }
+      this.proxyStateBySession.set(ses, state)
     }
-
-    const normalized = this.normalizeProxy(proxy)
-    if (normalized.username && normalized.password) {
-      const credential = {
-        host: normalized.host,
-        port: normalized.port,
-        username: normalized.username,
-        password: normalized.password
+    if (options.reuseApplied && state.pending === 0 && state.applied === key) return
+    const startedAlone = state.pending === 0, revision = ++state.revision
+    state.pending++
+    state.applied = undefined
+    try {
+      this.ensureLoginHandler()
+      if (normalized?.username && normalized.password) {
+        this.setSessionCredential(ses, {
+          host: normalized.host, port: normalized.port,
+          username: normalized.username, password: normalized.password
+        })
+      } else {
+        this.deleteSessionCredential(ses)
       }
-      this.setSessionCredential(ses, credential)
-    } else {
-      this.deleteSessionCredential(ses)
-    }
-
-    await ses.setProxy({
-      mode: 'fixed_servers',
-      proxyRules: `${normalized.protocol}://${normalized.host}:${normalized.port}`
-    })
-    await ses.closeAllConnections()
-    await ses.forceReloadProxyConfig().catch(() => {})
+      await ses.setProxy(normalized ? {
+        mode: 'fixed_servers', proxyRules: `${normalized.protocol}://${normalized.host}:${normalized.port}`
+      } : { mode: 'system' })
+      await ses.closeAllConnections()
+      const reloaded = await ses.forceReloadProxyConfig().then(() => true, () => false)
+      // Overlapping native writes have no reliable completion order. Leave the
+      // snapshot unknown so the next prepare reapplies; never add a waiting lock.
+      if (reloaded && startedAlone && state.revision === revision) state.applied = key
+    } finally { state.pending-- }
   }
 
   async testProxy(

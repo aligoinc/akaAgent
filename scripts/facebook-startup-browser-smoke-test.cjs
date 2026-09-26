@@ -33,19 +33,21 @@ async function runStartup(){
     if(action==='typing')tab.page.emit('before-input-event',{}, {})
     if(action==='navigation')tab.page.emit('will-navigate',{},'https://www.facebook.com/login/')
     if(action==='reload')await f.service.prepareStartupBrowser(40)
-    if(action==='closed')f.service.cancelStartupBrowser(40)
+    if(action==='closed'){f.service.detachStartupBrowser(40);tab.page.isDestroyed=()=>true}
     if(action==='replaced'){f.mountVisible('logged_out');f.service.startupBrowserRegistered(40,f.service.visible(40))}
+    if(['typing','navigation','reload'].includes(action))tab.finish()
     const stopping=action==='stop'?f.service.stop():null
     await bounded(work);if(stopping)await bounded(stopping)
-    assert.equal(f.loginSecrets.length,action==='loaded'?1:0,action)
-    assert.equal(f.calls.filter(c=>c==='claim').length,action==='loaded'?1:0,action)
-    if(action==='loaded')assert(f.calls.includes('release'))
+    const succeeds=!['stop','timeout'].includes(action)
+    assert.equal(f.loginSecrets.length,succeeds?1:0,action)
+    assert.equal(f.calls.filter(c=>c==='claim').length,succeeds?1:0,action)
+    if(succeeds)assert(f.calls.includes('release'))
     for(const event of ['did-stop-loading','before-input-event','will-navigate','destroyed'])assert.equal(tab.page.listenerCount(event),0,event)
-    tab.finish();await tick();assert.equal(f.loginSecrets.length,action==='loaded'?1:0,'no late retry')
+    tab.finish();await tick();assert.equal(f.loginSecrets.length,succeeds?1:0,'no late retry')
     assert.equal(f.service.startupBrowsers.size,0)
     await f.service.stop()
   }
-  // Startup already owns restore: preparation waits, so mounting cannot cancel it.
+  // Startup already owns restore: viewing can mount before the claim response returns.
   const claimed=deferred(),claimGate=deferred()
   const f=fixture({localState:'logged_out',startupAccounts:[40],hooks:{claim:async()=>{
     claimed.resolve();await claimGate.promise;return{claimed:true,claimToken:'token',staffId:1,previousStatus:'tạm dừng'}
@@ -53,7 +55,8 @@ async function runStartup(){
   f.service.startSession();const work=f.service.startupWork;await bounded(claimed.promise)
   let prepared=false
   const preparation=f.service.prepareStartupBrowser(40).then(()=>{prepared=true})
-  await tick();assert.equal(prepared,false)
+  await tick();assert.equal(prepared,true)
+  const mounted=initialPage(f);mounted.start();mounted.finish()
   claimGate.resolve();await bounded(Promise.all([work,preparation]))
   assert.equal(f.loginSecrets.length,1);assert(f.calls.includes('release'))
   assert.equal(f.service.startupBrowsers.size,0);await f.service.stop()
@@ -79,7 +82,7 @@ async function runStartup(){
   manual.cookieChanged(40,'100000000002222');loadedList.resolve();tab.finish();await bounded(manualWork)
   assert.equal(manual.loginSecrets.length,0);assert.equal(manual.ses('persist:account_40').cookiesData[0].value,'100000000002222')
   await manual.service.stop()
-  console.log('PASS Facebook startup: both preparation orders, blank/initial loading, user input/navigation/close/replacement, timeout/stop, late events, next-account isolation and manual identity preservation')
+  console.log('PASS Facebook startup: non-cancelling browser preparation, blank/initial loading, typing/navigation/reload/close/replacement, timeout/stop, late events, next-account isolation and manual identity preservation')
 }
 runStartup().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>fs.rmSync(directory,{recursive:true,force:true}))
 `

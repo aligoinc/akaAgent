@@ -323,7 +323,11 @@ app.whenReady().then(async()=>{
         if(action==='login'){if(scenario.databaseFailure)throw Error('Fixture DB unavailable');this.commits++;this.account.facebookLoginManaged=true;this.account.facebookUid=payload.secret.uid;assert.equal(payload.secret.cookies.find(c=>c.name==='xs').value,'http-session');return{revision:++this.revision}}
         if(action==='observe'){if(payload.state==='authenticated')this.revision++;this.account.loginStatus=payload.state==='authenticated'?'đã đăng nhập':'chưa đăng nhập';return{revision:this.revision}}
         if(action==='get'){
-          if(scenario.changeDuringGet)await ses.cookies.set({url:'https://www.facebook.com/',domain:'.facebook.com',name:'c_user',value:secondUid,httpOnly:true,secure:true})
+          if(scenario.changeDuringGet){
+            await ses.cookies.set({url:'https://www.facebook.com/',domain:'.facebook.com',name:'xs',value:'user-new',httpOnly:true,secure:true})
+            await ses.cookies.set({url:'https://www.facebook.com/',domain:'.facebook.com',name:'c_user',value:secondUid,httpOnly:true,secure:true})
+            verifyMode='cookie'
+          }
           return{revision:this.revision,secret:scenario.explicit?{...input,cookies:saved}:input}
         }
         throw Error('Unexpected RPC '+action)
@@ -336,8 +340,8 @@ app.whenReady().then(async()=>{
     authMode=scenario.httpFailure?'error':scenario.explicit?'otp':'password'
     const loginWork=()=>scenario.explicit?service.login(id,{uid,revision:scenario.manual?0:1,...(scenario.manual?{password:input.password,twoFactorSecret:input.twoFactorSecret}:{})}):service.restore(id)
     if(scenario.databaseFailure)assert((await readCookieInTest('document.cookie')).includes('c_user='))
-    if(scenario.changeDuringGet||scenario.httpFailure||scenario.databaseFailure||scenario.changeDuringCleanup||scenario.cleanupFailure)await assert.rejects(loginWork(),scenario.databaseFailure?/Đã đăng nhập Facebook, nhưng chưa xác nhận lưu/:undefined)
-    else{await loginWork();assert.equal(navigations,scenario.explicit||!scenario.localValid?1:0);if(visible.webContents.isLoadingMainFrame())await new Promise(resolve=>visible.webContents.once('did-stop-loading',resolve));assert.equal((await service.checkAccount(id,visible.webContents)).loggedIn,true)}
+    if(scenario.httpFailure||scenario.databaseFailure||scenario.changeDuringCleanup||scenario.cleanupFailure)await assert.rejects(loginWork(),scenario.databaseFailure?/Đã đăng nhập Facebook, nhưng chưa xác nhận lưu/:undefined)
+    else{await loginWork();assert.equal(navigations,!scenario.changeDuringGet&&(scenario.explicit||!scenario.localValid)?1:0);if(visible.webContents.isLoadingMainFrame())await new Promise(resolve=>visible.webContents.once('did-stop-loading',resolve));assert.equal((await service.checkAccount(id,visible.webContents)).loggedIn,true)}
     assert.equal(fixture.released,1);assert.equal(graphRequests,beforeGraph,'restore never looks up names')
     if(scenario.explicit){
       assert.equal(authRequests-beforeAuth,scenario.httpFailure?1:2,'explicit login uses password/TOTP despite valid local/cloud cookies')
@@ -421,9 +425,9 @@ app.whenReady().then(async()=>{
     }else{
       pending.resolve();await claimed.promise
       let prepared=false
-      const preparing=service.prepareStartupBrowser(id).then(()=>{prepared=true})
-      await new Promise(resolve=>setTimeout(resolve,20));assert.equal(prepared,false)
-      claimGate.resolve();await work;await preparing;await open()
+      const preparing=service.prepareStartupBrowser(id).then(reuseApplied=>{assert.equal(reuseApplied,true);prepared=true})
+      await preparing;assert.equal(prepared,true)
+      await open();claimGate.resolve();await work
     }
     assert.equal(fixture.claims,1);assert.equal(fixture.released,1)
     assert.equal(authRequests-beforeAuth,1,'exactly one password login')
@@ -432,7 +436,7 @@ app.whenReady().then(async()=>{
     assert.equal(service.startupBrowsers.size,0)
     await service.stop();visible.destroy();expectedWindows=0
   }
-  console.log('PASS Electron startup: renderer-first about:blank/load and restore-first preparation both restore exactly once without DOM')
+  console.log('PASS Electron startup: initial loading and opening browser during restore both preserve the task and restore exactly once without DOM')
   authMode='password'
   for(const success of [true,false]){
     afterAuthMode=success?'cookie':'challenge';const calls=[]

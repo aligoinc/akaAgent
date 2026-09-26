@@ -58,7 +58,7 @@ function fixture({loginFail=false,loginName='Fixture',promotionFail=false,finish
   }
   const makeVisible=state=>Object.assign(new EventEmitter(),{
     session:ses('persist:account_40'),documentState:state,isDestroyed:()=>false,isLoadingMainFrame:()=>false,getURL:()=> 'https://www.facebook.com/',
-    async loadURL(url){calls.push('visible.load');this.emit('did-start-navigation',{},url,false,true);await hooks.visibleLoad?.(context);this.documentState=this.session.cookiesData.some(c=>c.name==='c_user')?'authenticated':'logged_out'}
+    async loadURL(url){calls.push('visible.load');this.emit('did-start-navigation',{},url,false,true);await hooks.visibleLoad?.(context);this.documentState=this.session.cookiesData.some(c=>c.name==='c_user')?'authenticated':'logged_out';this.emit('did-stop-loading')}
   })
   if(visibleState)visible=makeVisible(visibleState)
   const context={calls,rpcCalls,events,loginSecrets:[],ses,cookieChanged,accountFor,get visible(){return visible},mountVisible(state){visible=makeVisible(state)}}
@@ -110,11 +110,12 @@ function fixture({loginFail=false,loginName='Fixture',promotionFail=false,finish
           if(old)s.cookies.emit('changed',{},old,'overwrite',true)
           s.cookiesData=s.cookiesData.filter(item=>item.name!==cookie.name).concat(cookie)
           s.cookies.emit('changed',{},cookie,'explicit',false)
+          await hooks.cookieWritten?.(cookie,context)
         }
         await hooks.copy?.(context);signal.throwIfAborted()
       }}
   },serviceGlobals)
-  const service=new FacebookLoginService({isDestroyed:()=>false,webContents:{send(...args){events.push(structuredClone(args))}}},{getWebContentsId:()=>visible?1:null,listRegistered:()=>[]},{getSessionProxyAuthentication:()=>null,applyProxyToPartition:async(partition,proxy)=>{await hooks.applyProxy?.(partition,proxy,context)}})
+  const service=new FacebookLoginService({isDestroyed:()=>false,webContents:{send(...args){events.push(structuredClone(args))}}},{getWebContentsId:()=>visible?1:null,listRegistered:()=>[]},hooks.proxyRuntime||{getSessionProxyAuthentication:()=>null,applyProxyToPartition:async(partition,proxy)=>{await hooks.applyProxy?.(partition,proxy,context)}})
   context.service=service
   service.startSession(false)
   return{...context,service,logs,secrets,dirty,get account(){return account},setUid(value){currentUid=value}}
@@ -169,26 +170,41 @@ async function run() {
     assert(f.calls.includes('release'));assert(!f.service.isLoggingIn(40))
     await f.service.stop()
   }
-  // A user change during the initial read/claim/proxy wait must cancel explicit login.
+  // A newly authenticated identity is verified and preserved during read/claim/proxy waits.
   for(const phase of ['read','claim','proxy']) {
     const hooks={}
     if(phase==='read')hooks.getAccount=async(id,signal,c)=>c.cookieChanged(40,'100000000002222')
     if(phase==='claim')hooks.claim=async(args,c)=>{c.cookieChanged(40,'100000000002222');return{claimed:true,claimToken:'token',staffId:1,previousStatus:'tạm dừng'}}
     if(phase==='proxy')hooks.applyProxy=async(partition,proxy,c)=>{if(partition==='persist:account_40')c.cookieChanged(40,'100000000002222')}
     const f=fixture({managed:false,hooks})
-    await assert.rejects(f.service.login(40,loginInput),/đã thay đổi/)
+    await assert.rejects(f.service.login(40,loginInput),/Đã giữ phiên/)
     assert.equal(f.ses('persist:account_40').cookiesData.find(c=>c.name==='c_user').value,'100000000002222',phase)
     assert.equal(f.loginSecrets.length,0,phase);assert(!f.calls.includes('copy'),phase)
-    assert.equal(f.calls.includes('release'),phase!=='read',phase)
+    assert(f.calls.includes('release'),phase)
     assert(!f.service.isLoggingIn(40),phase)
     await f.service.stop();assert.equal(f.ses('persist:account_40').cookies.listenerCount('changed'),0,phase)
   }
   for(const change of [c=>c.visible.emit('before-input-event',{},{}),c=>c.visible.emit('did-start-navigation',{},'https://www.facebook.com/',false,true),c=>c.mountVisible('authenticated')]) {
     const f=fixture({managed:false,visibleState:'authenticated',hooks:{claim:async(args,c)=>{change(c);return{claimed:true,claimToken:'token',staffId:1,previousStatus:'tạm dừng'}}}})
-    await assert.rejects(f.service.login(40,loginInput),/đã thay đổi/)
-    assert.equal(f.loginSecrets.length,0);assert(f.calls.includes('release'));assert(!f.service.isLoggingIn(40))
+    await f.service.login(40,loginInput)
+    assert.equal(f.loginSecrets.length,1);assert(f.calls.includes('release'));assert(!f.service.isLoggingIn(40))
     await f.service.stop()
   }
+  const refreshed=fixture({managed:false,hooks:{login:async c=>{
+    const target=c.ses('persist:account_40'),cookie={name:'xs',value:'refreshed',domain:'.facebook.com'}
+    target.cookiesData.push(cookie);target.cookies.emit('changed',{},cookie,'explicit',false)
+  }}})
+  await refreshed.service.login(40,loginInput)
+  assert(refreshed.calls.includes('copy'),'refreshing the original UID does not cancel explicit login')
+  assert.equal(refreshed.secrets.get(40).uid,loginInput.uid)
+  await refreshed.service.stop()
+  const changedDuringCopy=fixture({localState:'logged_out',hooks:{cookieWritten:async(cookie,c)=>{
+    if(cookie.name==='xs')c.cookieChanged(40,'100000000002222')
+  }}})
+  await assert.rejects(changedDuringCopy.service.restore(40),/Phiên đã thay đổi/)
+  assert.equal(changedDuringCopy.ses('persist:account_40').cookiesData.find(c=>c.name==='c_user').value,'100000000002222')
+  assert(changedDuringCopy.calls.includes('release'),'a conflicting write must release the restore claim')
+  await changedDuringCopy.service.stop()
   const failedEnrollment=fixture({managed:false,hooks:{rpc:async action=>{if(action==='login')throw Error('Fixture database offline')}}})
   await assert.rejects(failedEnrollment.service.login(40,loginInput),/Đã đăng nhập Facebook, nhưng chưa xác nhận lưu/)
   assert.equal(failedEnrollment.ses('persist:account_40').cookiesData.find(c=>c.name==='c_user').httpOnly,false)
@@ -204,7 +220,7 @@ async function run() {
   await assert.rejects(missingNewCredentials.service.login(40,{uid:'100000000002222',revision:1}),/Nhập mật khẩu/)
   assert.equal(missingNewCredentials.loginSecrets.length,0,'never inherit credentials across UID')
   const changedDuringExplicit=fixture({managed:false,manualSwitch:true})
-  await assert.rejects(changedDuringExplicit.service.login(40,loginInput),/đã thay đổi/)
+  await assert.rejects(changedDuringExplicit.service.login(40,loginInput),/Đã giữ phiên/)
   assert(!changedDuringExplicit.calls.includes('copy'));assert(!changedDuringExplicit.rpcCalls.some(c=>c.action==='login'))
   const staleExplicit=fixture({managed:true})
   await assert.rejects(staleExplicit.service.login(40,loginInput),/vừa thay đổi/)
@@ -219,7 +235,7 @@ async function run() {
   const unsynced=fixture({localState:'logged_out'});unsynced.dirty.add(40)
   await assert.rejects(unsynced.service.restore(40),/chưa đồng bộ/);assert(!unsynced.calls.includes('get'))
   const switched=fixture({localState:'logged_out',manualSwitch:true})
-  await assert.rejects(switched.service.restore(40));assert(!switched.calls.includes('copy'));assert(switched.calls.includes('release'))
+  await switched.service.restore(40);assert(!switched.calls.includes('copy'));assert(switched.calls.includes('release'))
   const unknown=fixture({localState:'unknown'})
   await assert.rejects(unknown.service.restore(40));assert(!unknown.calls.includes('get'))
   const disabled=fixture({isActive:false})
@@ -228,12 +244,25 @@ async function run() {
   // A real pending RPC boundary: cookie change happens after logout verification,
   // before cloud credentials return. Never take the new UID as the restore baseline.
   const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done});return{promise,resolve}}
+  const reloading=deferred()
+  const reloadDuringLogin=fixture({localState:'logged_out',visibleState:'logged_out',hooks:{login:async c=>{
+    c.visible.isLoadingMainFrame=()=>true
+    c.visible.emit('did-start-navigation',{},'https://www.facebook.com/',false,true)
+    reloading.resolve()
+  }}})
+  const reloadWork=reloadDuringLogin.service.restore(40)
+  await reloading.promise;await new Promise(resolve=>setImmediate(resolve))
+  assert(!reloadDuringLogin.calls.includes('copy'),'wait for an in-flight page load before promoting cookies')
+  reloadDuringLogin.visible.isLoadingMainFrame=()=>false;reloadDuringLogin.visible.emit('did-stop-loading')
+  await reloadWork
+  assert(reloadDuringLogin.calls.includes('copy'));assert(reloadDuringLogin.calls.includes('release'))
+  await reloadDuringLogin.service.stop()
   const getEntered=deferred(),getResponse=deferred()
   const duringGet=fixture({localState:'logged_out',hooks:{rpc:async action=>{if(action==='get'){getEntered.resolve();await getResponse.promise}}}})
-  const restoreRejected=assert.rejects(duringGet.service.restore(40),/đã thay đổi/)
+  const restorePreserved=duringGet.service.restore(40)
   await getEntered.promise
   duringGet.cookieChanged(40,'100000000002222');getResponse.resolve()
-  await restoreRejected
+  await restorePreserved
   assert(!duringGet.calls.includes('login'));assert(!duringGet.calls.includes('copy'))
   assert.equal(duringGet.ses('persist:account_40').cookiesData[0].value,'100000000002222')
   assert(duringGet.calls.includes('release'))
@@ -246,14 +275,14 @@ async function run() {
     context=>context.mountVisible('logged_out')
   ]){
     const f=fixture({localState:'logged_out',visibleState:'logged_out',hooks:{rpc:async(action,_payload,context)=>{if(action==='get')change(context)}}})
-    await assert.rejects(f.service.restore(40),/đã thay đổi/)
-    assert(!f.calls.includes('copy'));assert(!f.calls.includes('visible.load'));assert(f.calls.includes('release'))
+    await f.service.restore(40)
+    assert(f.calls.includes('copy'));assert(f.calls.includes('visible.load'));assert(f.calls.includes('release'))
     await f.service.stop()
   }
   const duringObservation=fixture({localState:'logged_out',hooks:{rpc:async(action,payload,context)=>{
     if(action==='observe'&&payload.state==='logged_out')context.cookieChanged(40,'100000000002222')
   }}})
-  await assert.rejects(duringObservation.service.restore(40),/đã thay đổi/)
+  await duringObservation.service.restore(40)
   assert(!duringObservation.calls.includes('get'));assert(!duringObservation.calls.includes('copy'))
   await duringObservation.service.stop()
 
@@ -273,12 +302,14 @@ async function run() {
   assert.equal(visible.visible.listenerCount('before-input-event'),0)
   await visible.service.stop()
 
+  let changedBeforeRefresh=false
   const beforeRefresh=fixture({localState:'logged_out',visibleState:'logged_out',hooks:{load:async(browser,context)=>{
-    if(browser.partition.startsWith('persist:')&&context.calls.includes('copy')){
+    if(!changedBeforeRefresh&&browser.partition.startsWith('persist:')&&context.calls.includes('copy')){
+      changedBeforeRefresh=true
       context.visible.emit('before-input-event',{},{});context.cookieChanged(40,'100000000002222')
     }
   }}})
-  await assert.rejects(beforeRefresh.service.restore(40),/đã thay đổi/)
+  await beforeRefresh.service.restore(40)
   assert(!beforeRefresh.calls.includes('visible.load'))
   assert.equal(beforeRefresh.ses('persist:account_40').cookiesData[0].value,'100000000002222')
   await beforeRefresh.service.stop()
@@ -355,7 +386,7 @@ async function run() {
   const flush=()=>new Promise(resolve=>setImmediate(resolve))
   for(const phase of ['claim','cleanup'])for(const stopSession of [false,true]){
     const registry=new AccountOperationRegistry(), claims=[], cleanups=[]
-    const f=fixture({startupAccounts:[40,41],operationRegistry:registry,hooks:{
+    const f=fixture({localState:'logged_out',startupAccounts:[40,41],operationRegistry:registry,hooks:{
       claim:async args=>{
         const id=args[0],context={accountId:id,staffId:1,platform:'facebook',runtimeTarget:'desktop',previousStatus:args[2],claimToken:'token',operationName:args[4]}
         return registry.claim(context,async()=>{
@@ -372,6 +403,7 @@ async function run() {
     }})
     f.service.startSession();await flush()
     assert.deepEqual(claims,[40]);assert(f.service.active.has(40))
+    assert(f.calls.includes('browser:persist:account_41'),'another session is checked while account 40 restores')
     if(stopSession){
       await f.service.stop()
       assert.deepEqual(claims,[40]);assert(!f.service.active.size)
@@ -575,6 +607,7 @@ async function run() {
     electron:{webContents:{fromId:()=>null}},
     '../../../shared/types':{IPC_EVENTS:{ACCOUNT_STATUS_UPDATED:'changed'}},
     '../../data/currentUser':{getCurrentUser:()=>({staffId:1})},
+    '../../services/accountOperationRegistry':{accountOperationRegistry:pollRegistry},
     '../../data/repositories/accountRepository':{listAccounts:async()=>{listCalls++;return pollList.promise}},
     '../../data/repositories/zaloRuntimeModeRepository':{getZaloRuntimeRestartRequired:()=>false,isZaloLocalStartupHandoffBlocked:()=>false}
   },{setInterval(callback,ms){assert.equal(ms,30000);tick=callback}})
@@ -610,6 +643,6 @@ async function run() {
   }
   await Promise.all([valid,missing,unsynced,switched,unknown,disabled].map(f=>f.service.stop()))
   await Promise.all([limited.service.stop(),duplicate.service.stop(),manual.service.stop()])
-  console.log('PASS Facebook parser, RFC TOTP, import/cleanup, credential scope, restore claim/release, pending-RPC UID/input/navigation cancellation, visible session refresh + poller exclusion, isolated startup cleanup/discovery, bounded claim/cleanup retries + standalone stop, read timeout/cancellation + late-response fences, in-session recovery/backoff/isolation/manual retry, and manual login with a corrupt/unreadable journal')
+  console.log('PASS Facebook parser, RFC TOTP, import/cleanup, credential scope, restore claim/release, new UID preservation, UI/reload continuity, cookie refresh and promotion conflicts, visible session refresh + poller exclusion, isolated startup cleanup/discovery, bounded claim/cleanup retries + standalone stop, read timeout/cancellation + late-response fences, in-session recovery/backoff/isolation/manual retry, and manual login with a corrupt/unreadable journal')
 }
 run().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>fs.rmSync(directory,{recursive:true,force:true}))
