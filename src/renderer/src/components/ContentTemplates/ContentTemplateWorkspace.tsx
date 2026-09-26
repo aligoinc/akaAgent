@@ -30,7 +30,6 @@ import type {
   ContentTemplate,
   ContentTemplateChannelConfig,
   ContentTemplateChannelName,
-  ContentTemplateContentType,
   ContentTemplateGroup,
   CreateContentTemplateGroupInput,
   CreateContentTemplateInput,
@@ -44,6 +43,8 @@ import {
   sanitizeFormattedContent
 } from '../../../../shared/formattedContent'
 import { useUiStore } from '../../stores/uiStore'
+import { refreshContentTemplateLibrary, useContentTemplateStore } from '../../stores/contentTemplateStore'
+import ContentTemplateLoadNotice from './ContentTemplateLoadNotice'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import { isVideoMediaSource } from '../Media/mediaImage'
 import {
@@ -384,7 +385,6 @@ function GroupManagerDialog({
       }
       reset()
       await onChanged()
-      window.dispatchEvent(new Event('content-templates-updated'))
     } catch (error) {
       showAlert(formatError(error, 'Không thể lưu nhóm nội dung.'), 'error')
     } finally {
@@ -393,7 +393,7 @@ function GroupManagerDialog({
   }
 
   const remove = (group: ContentTemplateGroup) => {
-    if (group.templateCount > 0) {
+    if (group.templateCount !== null && group.templateCount > 0) {
       showAlert('Nhóm đang có mẫu nội dung. Vui lòng chuyển hoặc xoá các mẫu trước.', 'error')
       return
     }
@@ -405,7 +405,6 @@ function GroupManagerDialog({
           await window.electronAPI.deleteContentTemplateGroup(group.id)
           if (form.id === group.id) reset()
           await onChanged()
-          window.dispatchEvent(new Event('content-templates-updated'))
           showAlert('Đã xoá nhóm nội dung.', 'success')
         } catch (error) {
           showAlert(formatError(error, 'Không thể xoá nhóm nội dung.'), 'error')
@@ -426,6 +425,7 @@ function GroupManagerDialog({
           <div><h3>Quản lý nhóm nội dung</h3><p>Sắp xếp mẫu theo nhóm để tìm và sử dụng nhanh hơn.</p></div>
           <button type="button" className="btn-icon" onClick={onClose} title="Đóng"><X size={18} /></button>
         </div>
+        <ContentTemplateLoadNotice />
         <div className="ctw-group-dialog-body">
           <section className="ctw-group-form-card">
             <div className="ctw-section-heading">
@@ -448,8 +448,8 @@ function GroupManagerDialog({
               ) : sortedGroups.map(group => (
                 <article className={`ctw-group-row${group.isActive ? '' : ' inactive'}`} key={group.id}>
                   <div className="ctw-group-order">{group.order}</div>
-                  <div className="ctw-group-row-main"><div className="ctw-group-row-title"><strong>{group.name}</strong>{!group.isActive && <span className="ctw-status-badge inactive">Ngừng hoạt động</span>}</div><p>{group.description || 'Chưa có mô tả'}</p><span>{group.templateCount} mẫu nội dung</span></div>
-                  <div className="ctw-row-actions"><button type="button" className="btn-icon" title="Sửa nhóm" onClick={() => edit(group)} disabled={busy}><Edit3 size={15} /></button><button type="button" className="btn-icon danger" title={group.templateCount > 0 ? 'Nhóm đang có mẫu nội dung' : 'Xoá nhóm'} onClick={() => remove(group)} disabled={busy || group.templateCount > 0}><Trash2 size={15} /></button></div>
+                  <div className="ctw-group-row-main"><div className="ctw-group-row-title"><strong>{group.name}</strong>{!group.isActive && <span className="ctw-status-badge inactive">Ngừng hoạt động</span>}</div><p>{group.description || 'Chưa có mô tả'}</p><span>{group.templateCount === null ? 'Chưa tải số mẫu' : `${group.templateCount} mẫu nội dung`}</span></div>
+                  <div className="ctw-row-actions"><button type="button" className="btn-icon" title="Sửa nhóm" onClick={() => edit(group)} disabled={busy}><Edit3 size={15} /></button><button type="button" className="btn-icon danger" title={(group.templateCount ?? 0) > 0 ? 'Nhóm đang có mẫu nội dung' : 'Xoá nhóm'} onClick={() => remove(group)} disabled={busy || (group.templateCount ?? 0) > 0}><Trash2 size={15} /></button></div>
                 </article>
               ))}
             </div>
@@ -821,11 +821,9 @@ export default function ContentTemplateWorkspace({
   const showConfirm = useUiStore(state => state.showConfirm)
   const preferredChannel = initialChannel && CHANNELS.includes(initialChannel) ? initialChannel : 'sms'
   const [view, setView] = useState<WorkspaceView>('list')
-  const [templates, setTemplates] = useState<ContentTemplate[]>([])
-  const [groups, setGroups] = useState<ContentTemplateGroup[]>([])
-  const [contentTypes, setContentTypes] = useState<ContentTemplateContentType[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const { templates, groups, contentTypes, templatesLoaded, loading: libraryLoading } = useContentTemplateStore()
+  const loading = libraryLoading && !templatesLoaded
+  const refreshing = libraryLoading && templatesLoaded
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [groupFilter, setGroupFilter] = useState<string>('all')
@@ -844,36 +842,12 @@ export default function ContentTemplateWorkspace({
     Record<ContentTemplateChannelName, number>
   >(() => createVariantIndexRecord())
 
-  const loadData = useCallback(async (quiet = false) => {
-    if (!quiet) setLoading(true)
-    else setRefreshing(true)
-    try {
-      const [templateResult, groupResult, typeResult] = await Promise.allSettled([
-        window.electronAPI.listContentTemplates(),
-        window.electronAPI.listContentTemplateGroups(),
-        window.electronAPI.listContentTemplateContentTypes()
-      ])
-      if (templateResult.status === 'rejected') throw templateResult.reason
-      setTemplates(templateResult.value)
-      if (groupResult.status === 'fulfilled') setGroups(groupResult.value)
-      else showAlert(formatError(groupResult.reason, 'Không thể tải nhóm nội dung.'), 'error')
-      if (typeResult.status === 'fulfilled') setContentTypes(typeResult.value)
-    } catch (error) {
-      showAlert(formatError(error, 'Không thể tải mẫu nội dung.'), 'error')
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [showAlert])
+  const loadData = useCallback(async (afterMutation = false) => {
+    await refreshContentTemplateLibrary(afterMutation)
+  }, [])
 
   useEffect(() => {
     if (isActive) void loadData()
-  }, [isActive, loadData])
-
-  useEffect(() => {
-    const handleUpdated = () => { if (isActive) void loadData(true) }
-    window.addEventListener('content-templates-updated', handleUpdated)
-    return () => window.removeEventListener('content-templates-updated', handleUpdated)
   }, [isActive, loadData])
 
   useEffect(() => {
@@ -1091,7 +1065,6 @@ export default function ContentTemplateWorkspace({
       }
       closeEditor()
       await loadData(true)
-      window.dispatchEvent(new Event('content-templates-updated'))
     } catch (error) {
       showAlert(formatError(error, 'Không thể lưu mẫu nội dung.'), 'error')
     } finally {
@@ -1108,7 +1081,6 @@ export default function ContentTemplateWorkspace({
         try {
           await window.electronAPI.deleteContentTemplate(template.id)
           await loadData(true)
-          window.dispatchEvent(new Event('content-templates-updated'))
           showAlert('Đã xoá mẫu nội dung.', 'success')
         } catch (error) {
           showAlert(formatError(error, 'Không thể xoá mẫu nội dung.'), 'error')
@@ -1178,6 +1150,7 @@ export default function ContentTemplateWorkspace({
           </div>
         </header>
 
+        <ContentTemplateLoadNotice />
         <div className="ctw-manager-body">
           <aside className="ctw-manager-groups">
             <div className="ctw-manager-panel-title"><strong>NHÓM MẪU</strong><span>{groups.filter(group => !group.isDelete).length}</span></div>
@@ -1204,14 +1177,14 @@ export default function ContentTemplateWorkspace({
             </select>
             <div className="ctw-manager-group-list">
               <button type="button" className={effectiveGroupFilter === 'all' ? 'active' : ''} aria-pressed={effectiveGroupFilter === 'all'} onClick={() => setGroupFilter('all')}>
-                <MessageSquareText size={15} /><span><strong>Tất cả mẫu</strong><small>Toàn bộ thư viện</small></span><em>{templates.filter(template => channelFilter === 'all' || template.channels[channelFilter]?.enabled).length}</em>
+                <MessageSquareText size={15} /><span><strong>Tất cả mẫu</strong><small>Toàn bộ thư viện</small></span><em>{templatesLoaded ? templates.filter(template => channelFilter === 'all' || template.channels[channelFilter]?.enabled).length : '—'}</em>
               </button>
               <button type="button" className={effectiveGroupFilter === 'ungrouped' ? 'active' : ''} aria-pressed={effectiveGroupFilter === 'ungrouped'} onClick={() => setGroupFilter('ungrouped')}>
-                <FileText size={15} /><span><strong>Chưa phân nhóm</strong><small>Mẫu độc lập</small></span><em>{managerGroupCounts.get('ungrouped') || 0}</em>
+                <FileText size={15} /><span><strong>Chưa phân nhóm</strong><small>Mẫu độc lập</small></span><em>{templatesLoaded ? managerGroupCounts.get('ungrouped') || 0 : '—'}</em>
               </button>
               {managerVisibleGroups.map(group => (
                 <button type="button" key={group.id} className={`${effectiveGroupFilter === String(group.id) ? 'active' : ''}${group.isActive ? '' : ' inactive'}`} aria-pressed={effectiveGroupFilter === String(group.id)} onClick={() => setGroupFilter(String(group.id))}>
-                  <FolderCog size={15} /><span><strong>{group.name}</strong><small>{group.isActive ? 'Đang sử dụng' : 'Ngừng hoạt động'}</small></span><em>{managerGroupCounts.get(group.id) || 0}</em>
+                  <FolderCog size={15} /><span><strong>{group.name}</strong><small>{group.isActive ? 'Đang sử dụng' : 'Ngừng hoạt động'}</small></span><em>{group.templateCount !== null ? managerGroupCounts.get(group.id) || 0 : '—'}</em>
                 </button>
               ))}
             </div>
@@ -1224,10 +1197,10 @@ export default function ContentTemplateWorkspace({
                 <Search size={15} />
                 <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm theo tên hoặc nội dung..." />
               </label>
-              <button type="button" className="btn-icon" title="Tải lại" aria-label="Tải lại mẫu nội dung" onClick={() => void loadData(true)} disabled={refreshing || busy}><RefreshCw size={16} className={refreshing ? 'ctw-spin' : ''} /></button>
+              <button type="button" className="btn-icon" title="Tải lại" aria-label="Tải lại mẫu nội dung" onClick={() => void loadData()} disabled={libraryLoading || busy}><RefreshCw size={16} className={refreshing ? 'ctw-spin' : ''} /></button>
             </div>
             <div className="ctw-manager-listbar">
-              <div><strong>{groupLabel}</strong><span>{managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại</span></div>
+              <div><strong>{groupLabel}</strong><span>{templatesLoaded ? `${managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại` : 'Chưa tải được mẫu nội dung'}</span></div>
               <select value={managerSort} onChange={event => setManagerSort(event.target.value as ManagerSort)} aria-label="Sắp xếp mẫu nội dung">
                 <option value="newest">Mới cập nhật</option>
                 <option value="oldest">Cũ nhất</option>
@@ -1244,7 +1217,7 @@ export default function ContentTemplateWorkspace({
               {loading ? (
                 <div className="ctw-manager-empty"><Loader2 size={30} className="ctw-spin" /><strong>Đang tải mẫu nội dung...</strong></div>
               ) : managerTemplates.length === 0 ? (
-                <div className="ctw-manager-empty"><FileText size={34} /><strong>{templates.length === 0 ? 'Chưa có mẫu nội dung' : 'Không tìm thấy mẫu phù hợp'}</strong><span>Thử thay đổi từ khoá hoặc bộ lọc.</span></div>
+                <div className="ctw-manager-empty"><FileText size={34} /><strong>{!templatesLoaded ? 'Chưa tải được mẫu nội dung' : templates.length === 0 ? 'Chưa có mẫu nội dung' : 'Không tìm thấy mẫu phù hợp'}</strong><span>{templatesLoaded ? 'Thử thay đổi từ khoá hoặc bộ lọc.' : 'Bấm Thử lại để tải dữ liệu.'}</span></div>
               ) : managerListView === 'card' ? (
                 <div className="ctw-manager-card-grid">
                   {managerTemplates.map(template => {

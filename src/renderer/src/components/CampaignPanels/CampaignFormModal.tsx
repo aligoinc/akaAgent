@@ -14,6 +14,8 @@ import { useState, useEffect, useMemo, useRef, useId, type ChangeEvent, type Rea
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { refreshContentTemplateLibrary, useContentTemplateStore } from '../../stores/contentTemplateStore'
+import ContentTemplateLoadNotice from '../ContentTemplates/ContentTemplateLoadNotice'
 import {
   ActionLimitConfig,
   CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES,
@@ -2349,9 +2351,10 @@ export default function CampaignFormModal({
   const [dataGroupTargetPreview, setDataGroupTargetPreview] = useState<DataGroupCampaignTargetPreview[]>([])
   const [dataGroupTargetPreviewStatus, setDataGroupTargetPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [campaignPickerRefreshing, setCampaignPickerRefreshing] = useState(false)
-  const [contentTemplates, setContentTemplates] = useState<ContentTemplate[]>([])
-  const [contentTemplateGroups, setContentTemplateGroups] = useState<ContentTemplateGroup[]>([])
-  const [contentTemplatesLoading, setContentTemplatesLoading] = useState(false)
+  const {
+    templates: contentTemplates, groups: contentTemplateGroups,
+    loading: contentTemplatesLoading, templatesLoaded: contentTemplatesLoaded, groupsLoaded: contentTemplateGroupsLoaded
+  } = useContentTemplateStore()
   const [contentTemplatePicker, setContentTemplatePicker] = useState<ContentTemplatePickerModalState | null>(null)
   const [contentTemplateSaveModal, setContentTemplateSaveModal] = useState<ContentTemplateSaveModalState | null>(null)
   const [previewContentTemplateGroupId, setPreviewContentTemplateGroupId] = useState<number | null>(null)
@@ -2678,14 +2681,14 @@ export default function CampaignFormModal({
     [candidateContentTemplateGroupId, contentTemplateGroups]
   )
   const contentTemplateGroupCandidate = useMemo<ContentTemplateGroupCandidate | null>(() => {
-    if (!candidateContentTemplateGroup || !advancedContentTargetChannel) return null
+    if (!candidateContentTemplateGroup || candidateContentTemplateGroup.templateCount === null || !advancedContentTargetChannel || !contentTemplatesLoaded) return null
     return buildContentTemplateGroupCandidate(
       contentTemplates,
       candidateContentTemplateGroup,
       advancedContentTargetChannel,
       mainMediaSelectionMode
     )
-  }, [advancedContentTargetChannel, candidateContentTemplateGroup, contentTemplates, mainMediaSelectionMode])
+  }, [advancedContentTargetChannel, candidateContentTemplateGroup, contentTemplates, contentTemplatesLoaded, mainMediaSelectionMode])
   const showSavedGroupSnapshotItems = isAdvancedGroupSource &&
     pendingContentTemplateGroupId === null &&
     savedAdvancedContentSource === 'group_snapshot' &&
@@ -4595,24 +4598,7 @@ export default function CampaignFormModal({
     }
   }
 
-  const loadContentTemplates = async () => {
-    if (!window.electronAPI?.listContentTemplates) return
-    setContentTemplatesLoading(true)
-    try {
-      const [rows, groups] = await Promise.all([
-        window.electronAPI.listContentTemplates(),
-        window.electronAPI.listContentTemplateGroups
-          ? window.electronAPI.listContentTemplateGroups()
-          : Promise.resolve([] as ContentTemplateGroup[])
-      ])
-      setContentTemplates(rows)
-      setContentTemplateGroups(groups)
-    } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể tải mẫu nội dung.'), 'error')
-    } finally {
-      setContentTemplatesLoading(false)
-    }
-  }
+  const loadContentTemplates = refreshContentTemplateLibrary
 
   const loadAkaBizContactTags = async () => {
     if (!window.electronAPI?.listAkaBizContactTags) return
@@ -4700,12 +4686,11 @@ export default function CampaignFormModal({
     return () => window.removeEventListener('akabiz-integrations-updated', handleUpdated)
   }, [])
 
+  const contentTemplatesNeeded = isAdvancedGroupSource || contentTemplatePicker !== null ||
+    contentTemplateSaveModal !== null || manualAdvancedTemplatePickerOpen || previewContentTemplateGroupId !== null
   useEffect(() => {
-    void loadContentTemplates()
-    const handleContentTemplatesUpdated = () => void loadContentTemplates()
-    window.addEventListener('content-templates-updated', handleContentTemplatesUpdated)
-    return () => window.removeEventListener('content-templates-updated', handleContentTemplatesUpdated)
-  }, [])
+    if (contentTemplatesNeeded) void loadContentTemplates()
+  }, [contentTemplatesNeeded])
 
   useEffect(() => {
     void loadAkaBizContactTags()
@@ -5008,7 +4993,6 @@ export default function CampaignFormModal({
       sort: 'newest',
       selectedTemplateId: null
     })
-    if (contentTemplates.length === 0) void loadContentTemplates()
   }
 
   const openSaveContentTemplateModal = (target: AiContentTarget) => {
@@ -5490,8 +5474,7 @@ export default function CampaignFormModal({
       try {
         await window.electronAPI.createContentTemplate(payload)
         setContentTemplateSaveModal(null)
-        await loadContentTemplates()
-        window.dispatchEvent(new Event('content-templates-updated'))
+        await loadContentTemplates(true)
         showAlert('Đã lưu mẫu nội dung.', 'success')
       } catch (err) {
         showAlert(formatIpcErrorMessage(err, 'Không thể lưu mẫu nội dung.'), 'error')
@@ -5965,12 +5948,12 @@ export default function CampaignFormModal({
     }
 
     try {
-      const [latestTemplates, latestGroups] = await Promise.all([
-        window.electronAPI.listContentTemplates(),
-        window.electronAPI.listContentTemplateGroups()
-      ])
-      setContentTemplates(latestTemplates)
-      setContentTemplateGroups(latestGroups)
+      const library = await loadContentTemplates(true)
+      if (!library) {
+        showAlert('Chưa tải được nhóm và mẫu mới nhất. Vui lòng thử lại; snapshot đã lưu được giữ nguyên.', 'error')
+        return null
+      }
+      const { templates: latestTemplates, groups: latestGroups } = library
 
       const latestGroup = latestGroups.find(group => group.id === groupId && !group.isDelete)
       if (!latestGroup) {
@@ -13381,7 +13364,6 @@ export default function CampaignFormModal({
       : null
     setManualAdvancedPickedVariants([])
     setManualAdvancedTemplatePickerOpen(true)
-    if (contentTemplates.length === 0) void loadContentTemplates()
   }
 
   const closeManualAdvancedTemplatePicker = () => {
@@ -13530,6 +13512,7 @@ export default function CampaignFormModal({
 
     return (
       <div className="campaign-advanced-content-source">
+        <ContentTemplateLoadNotice />
         <div className="campaign-advanced-source-card">
           <div className="campaign-advanced-source-card-header">
             <span className="campaign-advanced-source-card-icon"><FolderOpen size={17} /></span>
@@ -13633,7 +13616,7 @@ export default function CampaignFormModal({
 
                     {warning && <div className="campaign-advanced-group-warning">{warning}</div>}
                   </div>
-                ) : !contentTemplatesLoading && contentTemplateGroups.length === 0 ? (
+                ) : !contentTemplatesLoading && contentTemplateGroupsLoaded && contentTemplateGroups.length === 0 ? (
                   <div className="campaign-advanced-group-empty">
                     <span>Chưa có nhóm mẫu nào.</span>
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => channel && openContentTemplateManager(channel)} disabled={!onOpenContentTemplates}>
@@ -14416,11 +14399,12 @@ export default function CampaignFormModal({
             <div><span className="modal-title">Chọn từ mẫu nội dung</span><small>Chỉ hiện mẫu có {getContentTemplateChannelLabel(targetChannel)} · mỗi biến thể chọn thành một nội dung nâng cao.</small></div>
             <button type="button" className="btn-icon" onClick={closeManualAdvancedTemplatePicker} aria-label="Đóng danh sách mẫu"><X size={18} /></button>
           </div>
+          <ContentTemplateLoadNotice />
           <div className="campaign-manual-template-picker-body">
-            {contentTemplatesLoading ? (
+            {contentTemplatesLoading && !contentTemplatesLoaded ? (
               <div className="campaign-manual-template-picker-empty"><Loader2 size={20} className="animate-spin" />Đang tải mẫu nội dung...</div>
             ) : compatibleTemplates.length === 0 ? (
-              <div className="campaign-manual-template-picker-empty"><FileText size={26} />Chưa có mẫu phù hợp với chiến dịch này.</div>
+              <div className="campaign-manual-template-picker-empty"><FileText size={26} />{contentTemplatesLoaded ? 'Chưa có mẫu phù hợp với chiến dịch này.' : 'Chưa tải được mẫu nội dung.'}</div>
             ) : compatibleTemplates.map(({ template, resolved }) => {
               const pickedCount = resolved.variants.filter((_, index) => isPicked(template.id, index)).length
               return (
@@ -14928,6 +14912,7 @@ export default function CampaignFormModal({
               <X size={18} />
             </button>
           </div>
+          <ContentTemplateLoadNotice />
           <div className="content-template-picker-body content-template-picker-v2-body">
             <aside className="content-template-picker-v2-groups" aria-label="Nhóm nội dung">
               <div className="content-template-picker-v2-panel-title">
@@ -14965,12 +14950,12 @@ export default function CampaignFormModal({
                 <button type="button" className={contentTemplatePicker.groupId === null ? 'active' : ''} aria-pressed={contentTemplatePicker.groupId === null} onClick={() => selectGroup(null)}>
                   <FolderOpen size={15} />
                   <span><strong>Tất cả mẫu</strong><small>Mẫu phù hợp chiến dịch</small></span>
-                  <em>{groupCompatibleCount(null)}</em>
+                  <em>{contentTemplatesLoaded ? groupCompatibleCount(null) : '—'}</em>
                 </button>
                 <button type="button" className={contentTemplatePicker.groupId === 'ungrouped' ? 'active' : ''} aria-pressed={contentTemplatePicker.groupId === 'ungrouped'} onClick={() => selectGroup('ungrouped')}>
                   <FileText size={15} />
                   <span><strong>Chưa phân nhóm</strong><small>Mẫu chưa gắn nhóm</small></span>
-                  <em>{groupCompatibleCount('ungrouped')}</em>
+                  <em>{contentTemplatesLoaded ? groupCompatibleCount('ungrouped') : '—'}</em>
                 </button>
                 {visibleGroups.map(group => (
                   <button
@@ -14982,7 +14967,7 @@ export default function CampaignFormModal({
                   >
                     <FolderCog size={15} />
                     <span><strong>{group.name}</strong><small>{group.isActive ? (group.description || 'Nhóm mẫu nội dung') : 'Ngừng hoạt động'}</small></span>
-                    <em>{groupCompatibleCount(group.id)}</em>
+                    <em>{group.templateCount !== null ? groupCompatibleCount(group.id) : '—'}</em>
                   </button>
                 ))}
               </div>
@@ -15017,7 +15002,7 @@ export default function CampaignFormModal({
                 </button>
               </div>
               <div className="content-template-picker-v2-listbar">
-                <div><strong>{sortedTemplates.length} mẫu nội dung</strong><span>Đã lọc theo {getContentTemplateChannelLabel(targetChannel)}</span></div>
+                <div><strong>{contentTemplatesLoaded ? `${sortedTemplates.length} mẫu nội dung` : 'Chưa tải được mẫu nội dung'}</strong><span>Đã lọc theo {getContentTemplateChannelLabel(targetChannel)}</span></div>
                 <select
                   value={contentTemplatePicker.sort}
                   onChange={event => setContentTemplatePicker(previous => previous ? {
@@ -15038,11 +15023,11 @@ export default function CampaignFormModal({
                 </div>
               </div>
               <div className={`content-template-picker-v2-results ${contentTemplatePicker.view}`}>
-                {contentTemplatesLoading ? (
+                {contentTemplatesLoading && !contentTemplatesLoaded ? (
                   <div className="content-template-picker-empty">Đang tải mẫu nội dung...</div>
                 ) : sortedTemplates.length === 0 ? (
                   <div className="content-template-picker-empty">
-                    {contentTemplates.length === 0
+                    {!contentTemplatesLoaded ? 'Chưa tải được mẫu nội dung.' : contentTemplates.length === 0
                       ? 'Chưa có mẫu nội dung.'
                       : 'Không có mẫu nội dung phù hợp với chiến dịch và bộ lọc hiện tại.'}
                   </div>
@@ -15167,7 +15152,7 @@ export default function CampaignFormModal({
     const templates = group
       ? contentTemplates.filter(template => template.groupId === group.id && !template.isDelete)
       : []
-    const groupCandidate = group && advancedContentTargetChannel
+    const groupCandidate = group && group.templateCount !== null && advancedContentTargetChannel && contentTemplatesLoaded
       ? buildContentTemplateGroupCandidate(contentTemplates, group, advancedContentTargetChannel, mainMediaSelectionMode)
       : null
     const groupIsInactive = group?.isActive === false
@@ -15214,6 +15199,7 @@ export default function CampaignFormModal({
             <button type="button" className="btn-icon" onClick={closeContentTemplateGroupPreview} title="Đóng" aria-label="Đóng hộp chọn nhóm mẫu"><X size={18} /></button>
           </div>
 
+          <ContentTemplateLoadNotice />
           <div className="campaign-group-picker-v2-body">
             <aside className="content-template-picker-v2-groups campaign-group-picker-v2-groups">
               <div className="content-template-picker-v2-panel-title"><strong>NHÓM MẪU</strong><span>{contentTemplateGroups.filter(item => !item.isDelete).length}</span></div>
@@ -15233,15 +15219,15 @@ export default function CampaignFormModal({
               )}
               <div className="content-template-picker-v2-group-list campaign-group-picker-v2-group-list" role="group" aria-label="Chọn nhóm mẫu cho chiến dịch">
                 {visibleGroups.map(item => {
-                  const candidate = advancedContentTargetChannel
+                  const candidate = item.templateCount !== null && advancedContentTargetChannel && contentTemplatesLoaded
                     ? buildContentTemplateGroupCandidate(contentTemplates, item, advancedContentTargetChannel, mainMediaSelectionMode)
                     : null
                   const active = item.id === previewContentTemplateGroupId
                   return (
                     <button type="button" key={item.id} className={`${active ? 'active' : ''}${item.isActive ? '' : ' inactive'}`} aria-pressed={active} onClick={() => selectGroup(item)}>
                       <span className={`campaign-group-picker-v2-radio${active ? ' active' : ''}`}>{active && <Check size={10} />}</span>
-                      <span><strong>{item.name}</strong><small>{item.isActive ? `${candidate?.compatibleTemplateCount || 0} mẫu phù hợp` : 'Ngừng hoạt động'}</small></span>
-                      <em>{candidate?.compatibleTemplateCount || 0}</em>
+                      <span><strong>{item.name}</strong><small>{item.isActive ? (candidate ? `${candidate.compatibleTemplateCount} mẫu phù hợp` : 'Chưa tải số mẫu') : 'Ngừng hoạt động'}</small></span>
+                      <em>{candidate?.compatibleTemplateCount ?? '—'}</em>
                     </button>
                   )
                 })}
@@ -15331,6 +15317,7 @@ export default function CampaignFormModal({
     return (
       <div className="modal-overlay campaign-picker-modal-overlay" style={{ zIndex: Math.max(3100, (modalZIndex || 3000) + 100) }}>
         <div className="content-template-save-modal">
+          <ContentTemplateLoadNotice />
           <div className="modal-header">
             <span className="modal-title">Lưu mẫu cho {CONTENT_TEMPLATE_TARGET_LABELS[contentTemplateSaveModal.target]}</span>
             <button

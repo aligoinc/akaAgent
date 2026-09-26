@@ -67,6 +67,10 @@ Code/config đang chạy trong `auto_blocks`/`auto_workflows` cũng phải lấy
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC event constants (cả 2 phía import) |
 
+### Kho mẫu nội dung
+
+[contentTemplateStore.ts](src/renderer/src/stores/contentTemplateStore.ts) chia sẻ dữ liệu/request đang tải giữa kho mẫu và form; form chỉ tải khi dùng mẫu/nhóm, mutation làm mới một lượt sau khi request cũ kết thúc, logout/đổi staff bỏ dữ liệu và phản hồi cũ. Repository phân trang theo ID đến trang rỗng, không đếm riêng từng nhóm; `templateCount=null` khi chưa có danh sách mẫu đầy đủ, lỗi mạng giữ dữ liệu cũ và cho thử lại; xóa nhóm vẫn kiểm tra tồn tại mẫu qua server (`limit(1)`). Smoke: `node scripts/content-template-loading-smoke-test.cjs` và `node scripts/run-content-template-loading-ui-smoke.cjs`.
+
 ### Đồng bộ Google Sheet vào nhóm data
 
 Tab **Đồng bộ ngoài** dùng `dataGroupExternalSync` qua main/preload/renderer và RPC tenant; parser/mapper dùng chung Desktop/Edge tại [googleSheetSync.ts](src/shared/googleSheetSync.ts). V297–301 đã apply, Edge `aka-agent-google-sheet-sync` v3 dùng xác thực nội bộ Vault. Cron 66 hiện có kiểm tra nguồn đến hạn mỗi 30 giây, một lease toàn hệ thống; không thêm SQL pool/job. Import chỉ thêm mới, giữ seen ledger khi gỡ data/xóa nguồn; preview không ghi. Xem [hướng dẫn](docs/DATA_GROUP_GOOGLE_SHEET_SYNC.md) và [audit index v301](docs/DATA_GROUP_SHEET_V301_AUDIT.md).

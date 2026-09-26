@@ -1,0 +1,16 @@
+.content-template-load-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, #e4e4e7);
+  border-radius: 8px;
+  background: var(--bg-secondary, #f8fafc);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.content-template-load-notice .btn {
+  flex-shrink: 0;
+}

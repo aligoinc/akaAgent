@@ -521,7 +521,7 @@ export function mapContentTemplateGroupFromDB(row: Record<string, unknown>): Con
     order: Number.isFinite(Number(row.stt)) ? Number(row.stt) : 100,
     isActive: (row.is_active as boolean | null | undefined) ?? true,
     isDelete: (row.is_delete as boolean | null | undefined) ?? false,
-    templateCount: Number.isFinite(Number(row.template_count)) ? Number(row.template_count) : 0,
+    templateCount: null,
     staffId: row.staff_id as number | undefined,
     organizationId: (row.organization_id as number | null | undefined) ?? null,
     createdAt: row.created_at as string | undefined,
