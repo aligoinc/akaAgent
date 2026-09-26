@@ -166,6 +166,8 @@ export interface CampaignSchedulerOptions {
   logSink?: CampaignSchedulerLogSink
   /** App Server lifecycle hook when a live DB claim rejects this runtime owner. */
   onRuntimeOwnershipLost?: () => void
+  /** Local startup work must finish for this account before a campaign can claim it. */
+  isAccountStartupPending?: (account: AutoAccount) => boolean
 }
 
 interface RuntimeErrorResult {
@@ -731,6 +733,7 @@ export class CampaignScheduler {
   private maintenanceCoordinator?: DailyMaintenanceBarrier
   private logSink?: CampaignSchedulerLogSink
   private onRuntimeOwnershipLost?: () => void
+  private isAccountStartupPending?: (account: AutoAccount) => boolean
   private runtimeOwnershipLossReported = false
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
   private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
@@ -760,6 +763,7 @@ export class CampaignScheduler {
     this.maintenanceCoordinator = options.maintenanceCoordinator
     this.logSink = options.logSink
     this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
+    this.isAccountStartupPending = options.isAccountStartupPending
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -1434,7 +1438,8 @@ export class CampaignScheduler {
         }
         if (!this.running) break
 
-        if (accountOperationRegistry.has(account.id) || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
+        if (this.isAccountStartupPending?.(account) || accountOperationRegistry.has(account.id)
+          || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
           continue
         }
 
@@ -1489,7 +1494,8 @@ export class CampaignScheduler {
   }
 
   private startAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): void {
-    if (accountOperationRegistry.has(account.id) || this.activeAccountRuns.has(account.id) || this.hasFailedAccountRun(account.id)) return
+    if (this.isAccountStartupPending?.(account) || accountOperationRegistry.has(account.id)
+      || this.activeAccountRuns.has(account.id) || this.hasFailedAccountRun(account.id)) return
     this.activeAccountRuns.add(account.id)
     const isZaloAccount = String(account.flatformType || '').trim().toLowerCase() === 'zalo'
     if (isZaloAccount) this.activeZaloAccountRuns.add(account.id)
@@ -2853,6 +2859,7 @@ export class CampaignScheduler {
         return
       }
 
+      if (this.isAccountStartupPending?.(account)) return
       const runtimeClaimToken = randomUUID()
       let claimed: Awaited<ReturnType<SupabaseService['claimCampaignRuntimeV2']>>
       let claimRetryLogged = false

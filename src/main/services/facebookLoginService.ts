@@ -24,6 +24,29 @@ type Created = { accountId: number; state: string; revision: number; skipped?: b
 type SecretResult = { secret: FacebookSecret; revision: number }
 const MAX_BACKGROUND_RECOVERY_ATTEMPTS = 5
 type SessionSnapshot = { fingerprint: string; observation: FacebookSessionObservation }
+type StartupRestoreTurn = (signal: AbortSignal) => Promise<() => void>
+/** Serialize only missing-session restoration; cancellation never overtakes its predecessor. */
+function startupRestoreQueue(): StartupRestoreTurn {
+  let tail = Promise.resolve()
+  return async signal => {
+    signal.throwIfAborted()
+    const previous = tail
+    let release!: () => void
+    const finished = new Promise<void>(resolve => { release = resolve })
+    tail = previous.then(() => finished)
+    let onAbort!: () => void
+    try {
+      await Promise.race([previous, new Promise<never>((_, reject) => {
+        onAbort = () => reject(signal.reason)
+        signal.addEventListener('abort', onAbort, { once: true })
+        if (signal.aborted) onAbort()
+      })])
+      signal.throwIfAborted()
+      return release
+    } catch (error) { release(); throw error }
+    finally { signal.removeEventListener('abort', onAbort) }
+  }
+}
 export class FacebookLoginService {
   private journal: FacebookLoginJournal | null = null
   private lifecycle = new AbortController()
@@ -36,9 +59,10 @@ export class FacebookLoginService {
   private startupWork: Promise<void> | null = null
   private startupBrowsers = new Map<number, FacebookStartupBrowser>()
   private startupFinished = new Set<number>()
+  private startupQueued = new Set<number>()
   private recoveryWork: Promise<void> | null = null
   private recoveryBackoff = new Map<number, { token: string; failures: number; nextAt: number; backgroundAttempts: number }>()
-  private active = new Map<number, { abort: AbortController; work: Promise<void> }>()
+  private active = new Map<number, { abort: AbortController; work: Promise<void>; browserReady: Promise<void> }>()
   private observations = new Map<number, Promise<boolean>>()
   private revisions = new Map<number, number>()
   private fingerprints = new Map<number, string>()
@@ -278,50 +302,58 @@ export class FacebookLoginService {
       // No credential-bearing errors in logs; next startup/manual command can retry.
     }).finally(() => {
       this.startupWork = null
-      for (const browser of this.startupBrowsers.values()) browser.dispose()
-      this.startupBrowsers.clear(); this.startupFinished.clear()
+      for (const [id, browser] of this.startupBrowsers) if (!this.active.has(id)) {
+        browser.dispose(); this.startupBrowsers.delete(id)
+      }
+      this.startupFinished.clear(); this.startupQueued.clear()
     })
   }
-  /** Called before the renderer is allowed to mount its initial account tab. */
-  async prepareStartupBrowser(accountId: number): Promise<void> {
-    if (!this.startupWork || this.startupFinished.has(accountId)) return
-    if (this.visible(accountId)) {
-      // Preparing an already mounted tab is an explicit reload, not initial mount.
-      this.cancelStartupBrowser(accountId)
-      return
-    }
-    const guard = this.fence()
+  /** Local scheduler barrier, including discovery, session checks and queued restoration. */
+  isStartupPending(account: AutoAccount): boolean {
+    return !!this.startupWork && !this.lifecycle.signal.aborted
+      && this.activeStaffId === getCurrentUser()?.staffId
+      && account.flatformType === 'facebook' && account.facebookLoginManaged === true
+      && account.isActive && !this.startupFinished.has(account.id)
+  }
+  /** Active login may reuse an identical proxy actually applied by ProxyRuntimeService. */
+  async prepareStartupBrowser(accountId: number): Promise<boolean> {
     const active = this.active.get(accountId)
+    if (!active && (!this.startupWork || this.startupFinished.has(accountId))) return false
+    if (!this.visible(accountId) && !this.startupBrowsers.has(accountId))
+      this.startupBrowsers.set(accountId, new FacebookStartupBrowser())
     if (active) {
-      // Startup won the race. Its producer must finish before a new tab can load.
-      await withRequestDeadline(this.lifecycle.signal, () => active.work.catch(() => {}), 120_000)
+      // Wait only for proxy setup, never the restore queue/login. Re-applying the
+      // same proxy would close connections under the in-flight HTTP request.
+      const guard = this.fence()
+      await withRequestDeadline(this.lifecycle.signal, () => active.browserReady, 120_000)
       guard()
-      return
+      return true
     }
-    // Browser preparation won. Startup will await only this tab's first load,
-    // before claiming the account or reading its saved Facebook credentials.
-    if (!this.startupBrowsers.has(accountId)) this.startupBrowsers.set(accountId, new FacebookStartupBrowser())
+    return false
   }
   startupBrowserRegistered(accountId: number, page: WebContents): void {
     this.startupBrowsers.get(accountId)?.attach(page)
   }
-  cancelStartupBrowser(accountId: number): void {
-    this.startupBrowsers.get(accountId)?.cancel()
+  detachStartupBrowser(accountId: number): void {
+    this.startupBrowsers.get(accountId)?.releasePage()
   }
-  private async restoreAtStartup(accountId: number, signal: AbortSignal): Promise<void> {
+  private async waitForBrowser(accountId: number, signal: AbortSignal): Promise<void> {
+    const page = this.visible(accountId)
+    let browser = this.startupBrowsers.get(accountId)
+    if (!browser && page?.isLoadingMainFrame()) {
+      browser = new FacebookStartupBrowser(); this.startupBrowsers.set(accountId, browser)
+    }
+    if (browser) {
+      if (page) browser.attach(page)
+      await browser.wait(signal)
+    }
+    signal.throwIfAborted()
+  }
+  private async restoreAtStartup(accountId: number, signal: AbortSignal, takeRestoreTurn: StartupRestoreTurn): Promise<void> {
     try {
-      const visible = this.visible(accountId)
-      let browser = this.startupBrowsers.get(accountId)
-      if (!browser && visible?.isLoadingMainFrame()) {
-        browser = new FacebookStartupBrowser()
-        this.startupBrowsers.set(accountId, browser)
-      }
-      if (browser) {
-        if (visible) browser.attach(visible)
-        await browser.wait(signal)
-      }
+      await this.waitForBrowser(accountId, signal)
       signal.throwIfAborted()
-      await this.restore(accountId)
+      await this.runLogin(accountId, undefined, takeRestoreTurn)
     } catch {
       // Failure stays isolated to this account; no background password retry.
     } finally {
@@ -349,12 +381,18 @@ export class FacebookLoginService {
     }
     const pendingAccounts = new Set(this.log.pending(staffId).map(entry => entry.accountId))
     const accounts = await this.read(() => accountRepo.listAccounts(), signal)
+    const queue: number[] = []
     for (const account of accounts) {
       signal.throwIfAborted()
       if (account.flatformType !== 'facebook' || pendingAccounts.has(account.id)) continue
       this.watch(account.id)
-      if (account.facebookLoginManaged && account.isActive && account.status !== 'đang chạy') await this.restoreAtStartup(account.id, signal)
+      if (account.facebookLoginManaged && account.isActive && account.status !== 'đang chạy') queue.push(account.id)
+      else this.startupFinished.add(account.id)
     }
+    // Read-only checks proceed independently. Only definite logout joins the
+    // serial restore queue, whose turn remains held through claim cleanup.
+    const takeRestoreTurn = startupRestoreQueue()
+    await Promise.allSettled(queue.map(accountId => this.restoreAtStartup(accountId, signal, takeRestoreTurn)))
   }
   async stop(): Promise<void> {
     this.lifecycle.abort(); this.batchAbort?.abort(); this.activeStaffId = null; this.previewGeneration++
@@ -431,10 +469,11 @@ export class FacebookLoginService {
       .finally(() => this.observations.delete(account.id))
     this.observations.set(account.id, work); return work
   }
-  private async observeInner(account: AutoAccount, ses: Session, provided?: SessionSnapshot, force = false): Promise<boolean> {
-    const guard = this.fence(), staffId = this.check()
+  private async observeInner(account: AutoAccount, ses: Session, provided?: SessionSnapshot, force = false, signal = this.lifecycle.signal): Promise<boolean> {
+    const lifecycleGuard = this.fence(), staffId = this.check()
+    const guard = (): void => { lifecycleGuard(); signal.throwIfAborted() }
     this.watch(account.id)
-    const snapshot = provided || await this.inspect(account.id, ses, this.lifecycle.signal, force)
+    const snapshot = provided || await this.inspect(account.id, ses, signal, force)
     const { observation } = snapshot
     if (observation.state === 'unknown') return false
     const currentCookies = await readFacebookCookies(ses)
@@ -448,12 +487,13 @@ export class FacebookLoginService {
     if (observation.state === 'authenticated' && account.facebookLoginManaged) this.log.mark(staffId, account.id, true)
     try {
       if (account.facebookLoginManaged && !this.revisions.has(account.id)) {
-        const meta = await this.metadata(account.id); this.revisions.set(account.id, meta.revision)
+        const meta = await this.read(() => facebookRpc<FacebookLoginMetadata>('metadata', { accountId: account.id }), signal)
+        guard(); this.revisions.set(account.id, meta.revision)
       }
       guard()
-      const result = await facebookRpc<{ revision: number }>('observe', {
+      const result = await this.read(() => facebookRpc<{ revision: number }>('observe', {
         accountId: account.id, ...observation, cookies, expectedUid: account.facebookUid ?? null, revision: this.revisions.get(account.id)
-      })
+      }), signal)
       guard()
       if (snapshot.fingerprint !== authFingerprint(await readFacebookCookies(ses))) {
         this.revisions.delete(account.id); return false
@@ -506,91 +546,161 @@ export class FacebookLoginService {
       ...(input.twoFactorSecret !== undefined ? { twoFactorSecret: normalizeTwoFactorSecret(input.twoFactorSecret) } : {}) })
   }
   isLoggingIn(accountId: number): boolean { return this.active.has(accountId) }
-  private async runLogin(accountId: number, input?: FacebookCredentialUpdate): Promise<void> {
+  private async runLogin(accountId: number, input?: FacebookCredentialUpdate, takeRestoreTurn?: StartupRestoreTurn): Promise<void> {
     this.check()
     if (this.active.has(accountId)) throw new Error('Tài khoản đang được đăng nhập lại.')
     const abort = new AbortController()
-    const signal = AbortSignal.any([this.lifecycle.signal, abort.signal, AbortSignal.timeout(120_000)])
-    const work = this.restoreInner(accountId, signal, input).finally(() => this.active.delete(accountId))
-    this.active.set(accountId, { abort, work }); return work
+    const signal = AbortSignal.any([this.lifecycle.signal, abort.signal,
+      ...(!takeRestoreTurn ? [AbortSignal.timeout(120_000)] : [])])
+    let browserPrepared!: () => void
+    const browserReady = new Promise<void>(resolve => { browserPrepared = resolve })
+    const work = this.restoreInner(accountId, signal, input, takeRestoreTurn, browserPrepared).finally(() => {
+      browserPrepared()
+      this.active.delete(accountId)
+      this.startupBrowsers.get(accountId)?.dispose(); this.startupBrowsers.delete(accountId)
+    })
+    this.active.set(accountId, { abort, work, browserReady }); return work
   }
-  private async restoreInner(accountId: number, signal: AbortSignal, input?: FacebookCredentialUpdate): Promise<void> {
+  private async restoreInner(accountId: number, signal: AbortSignal, input?: FacebookCredentialUpdate,
+    takeRestoreTurn?: StartupRestoreTurn, browserPrepared: () => void = () => {}): Promise<void> {
     const staffId = this.check(), guard = this.fence()
-    const ses = session.fromPartition(`persist:account_${accountId}`), visible = this.visible(accountId)
+    const ses = session.fromPartition(`persist:account_${accountId}`)
     let claim: Awaited<ReturnType<typeof accountRepo.claimNonZaloAccountRuntimeOperation>> | undefined
     let local: FacebookLoginSession | null = null, temporary: FacebookLoginSession | null = null
     let detach = (): void => {}
+    let releaseStartupTurn: (() => void) | undefined
     try {
       const conflict = new AbortController(), expected = new Map<string, string>()
       const expectedRemovals = new Map<string, string>()
-      const attempt = AbortSignal.any([signal, conflict.signal])
-      let cookieVersion = 0, protectCookies = !!input
-      const cancelForUser = (): void => conflict.abort(new Error('Phiên hoặc thao tác trình duyệt đã thay đổi. Đã dừng tự khôi phục.'))
+      let attempt = AbortSignal.any([signal, conflict.signal, ...(takeRestoreTurn ? [AbortSignal.timeout(120_000)] : [])])
+      let cookieVersion = 0, promoting = false
       const onCookie = (_event: Electron.Event, cookie: Electron.Cookie, cause: string, removed: boolean): void => {
         if (!['c_user', 'xs'].includes(cookie.name) || !isFacebookHost((cookie.domain || '').replace(/^\./, ''))) return
         cookieVersion++
-        // Compare cookieVersion around the initial HTTP verification. Once logout is
-        // verified, protect every await through cloud lookup and our expected writes.
-        if (!protectCookies) return
+        // Outside the short cookie-copy phase a change invalidates evidence; it
+        // does not cancel login. Reverify the current session before using it.
+        if (!promoting) return
         const scope = facebookCookieScope({ ...cookie, domain: cookie.domain || '', path: cookie.path || '/' })
         if (removed && cause === 'expired-overwrite' && expectedRemovals.get(scope) === cookie.value) {
           expectedRemovals.delete(scope); return
         }
         if (removed && cause === 'overwrite' && expected.has(scope)) return
         if (!removed && expected.get(scope) === cookie.value) { expected.delete(scope); return }
-        cancelForUser()
+        conflict.abort(new Error('Phiên đã thay đổi trong lúc thay cookie. Đã dừng ghi phiên cũ.'))
       }
-      const onNavigate = (_event: Electron.Event, _url: string, _isInPlace: boolean, isMainFrame: boolean): void => { if (isMainFrame) cancelForUser() }
-      const onInput = (): void => cancelForUser()
-      ses.cookies.on('changed', onCookie); visible?.on('did-start-navigation', onNavigate); visible?.on('before-input-event', onInput)
-      detach = () => {
-        ses.cookies.removeListener('changed', onCookie)
-        if (visible && !visible.isDestroyed()) { visible.removeListener('did-start-navigation', onNavigate); visible.removeListener('before-input-event', onInput) }
-      }
-      const assertCurrent = (): void => {
-        guard()
-        // A tab mounted/replaced during an await has not been watched; leave it alone.
-        if (this.visible(accountId) !== visible) cancelForUser()
-        attempt.throwIfAborted()
+      ses.cookies.on('changed', onCookie)
+      detach = () => ses.cookies.removeListener('changed', onCookie)
+      const assertCurrent = (): void => { guard(); attempt.throwIfAborted() }
+      let observed: (SessionSnapshot & { cookieVersion: number; pageVersion: number | undefined; page: WebContents | null }) | undefined
+      const currentSnapshot = async (force = false): Promise<SessionSnapshot> => {
+        while (true) {
+          assertCurrent()
+          await this.waitForBrowser(accountId, attempt)
+          const page = this.visible(accountId)
+          if (page) this.watchPage(accountId, page)
+          const version = cookieVersion, pageVersion = this.pageVersions.get(accountId)
+          const fingerprint = authFingerprint(await readFacebookCookies(ses))
+          assertCurrent()
+          if (!force && observed?.fingerprint === fingerprint && observed.cookieVersion === version
+            && observed.page === page && observed.pageVersion === pageVersion) return observed
+          const observation = await local!.observe(this.proxyRuntime.getSessionProxyAuthentication(ses))
+          assertCurrent()
+          if (version !== cookieVersion || page !== this.visible(accountId)
+            || pageVersion !== this.pageVersions.get(accountId) || page?.isLoadingMainFrame()) continue
+          observed = { fingerprint, observation, cookieVersion: version, pageVersion, page }
+          return observed
+        }
       }
       const syncVisible = async (): Promise<void> => {
+        await this.waitForBrowser(accountId, attempt)
         assertCurrent()
-        if (!visible) return
-        // No more cookie injection follows this navigation. Keep input cancellation, but
-        // do not treat our own loadURL as a user navigating away from the login page.
-        visible.removeListener('did-start-navigation', onNavigate)
-        await loadFacebookHome(visible, attempt)
+        const page = this.visible(accountId)
+        if (!page || page.isCrashed?.() || !trustedFacebookUrl(page.getURL())) return
+        try { await loadFacebookHome(page, attempt) }
+        catch (error) { if (this.visible(accountId) === page && !page.isDestroyed()) throw error }
         assertCurrent()
       }
-      // Install these listeners before any read, recovery or claim can yield. Explicit
-      // login must not accept a user-changed session as a new baseline after waiting.
+      const initialCookies = await readFacebookCookies(ses)
+      const initialUid = initialCookies.find(cookie => cookie.name === 'c_user')?.value
+      // Install the cookie listener before reads so a new manually logged-in
+      // identity can never be mistaken for permission to overwrite that session.
       const held = accountOperationRegistry.listRecoverable(staffId, 'facebook.login')
         .find(context => context.accountId === accountId && context.platform === 'facebook' && context.runtimeTarget === 'desktop')
       if (held && !await this.recoverHeldOperation(held, signal)) throw new Error('Chưa giải phóng được lượt cũ. Bạn có thể bấm đăng nhập lại hoặc mở lại app khi kết nối ổn định.')
       assertCurrent()
-      const account = await this.read(readSignal => accountRepo.getAccount(accountId, readSignal), attempt)
+      let account = await this.read(readSignal => accountRepo.getAccount(accountId, readSignal), attempt)
       assertCurrent()
       if (!account || account.flatformType !== 'facebook' || (!input && !account.facebookLoginManaged) || !account.isActive || account.status === 'đang chạy') throw new Error('Tài khoản đang bận, đã tắt hoặc không hỗ trợ tự khôi phục.')
+      const prepareLocal = async (): Promise<void> => {
+        local = new FacebookLoginSession(attempt, `persist:account_${accountId}`)
+        if (!this.visible(accountId)) await this.applyProxy(local.partition, account!.proxyId, attempt)
+        browserPrepared()
+        assertCurrent()
+      }
+      const useCurrentSession = async (): Promise<boolean> => {
+        while (true) {
+          const snapshot = await currentSnapshot()
+          const version = observed!.cookieVersion
+          const { observation } = snapshot
+          if (observation.state === 'authenticated') {
+            // Explicit login may replace its original identity, but never a new
+            // identity the user established after clicking the login button.
+            if (input && observation.uid === initialUid) return false
+            if (await this.observeInner(account!, ses, snapshot, false, attempt)) this.changed()
+            assertCurrent()
+            if (version !== cookieVersion) continue
+            if (input) throw new Error('Đã giữ phiên Facebook mới trong trình duyệt; lượt đăng nhập 2FA không thay phiên đó.')
+            return true
+          }
+          if (observation.state !== 'logged_out') throw new Error('Facebook cần xác minh hoặc chưa xác định được phiên. Hãy kiểm tra trình duyệt.')
+          if (!input && await this.observeInner(account!, ses, snapshot, false, attempt)) this.changed()
+          assertCurrent()
+          if (version !== cookieVersion) continue
+          if (!input && this.log.dirty(staffId, accountId)) throw new Error('Phiên đã được thay đổi thủ công nhưng chưa đồng bộ. Hãy đăng nhập thủ công hoặc cập nhật thông tin đăng nhập.')
+          return false
+        }
+      }
+      if (takeRestoreTurn) {
+        if (accountOperationRegistry.has(accountId)) throw new Error('Tài khoản đang bận.')
+        await withRequestDeadline(attempt, async () => { await this.observations.get(accountId) }, 120_000)
+        await prepareLocal()
+        if (await useCurrentSession()) return
+        const proxyId = account.proxyId
+        // Waiting for another account has no login deadline and owns no DB token.
+        this.startupQueued.add(accountId)
+        try { releaseStartupTurn = await takeRestoreTurn(signal) }
+        finally { this.startupQueued.delete(accountId) }
+        attempt = AbortSignal.any([signal, conflict.signal, AbortSignal.timeout(120_000)])
+        assertCurrent()
+        account = await this.read(readSignal => accountRepo.getAccount(accountId, readSignal), attempt)
+        assertCurrent()
+        if (!account || account.flatformType !== 'facebook' || !account.facebookLoginManaged || !account.isActive
+          || account.status === 'đang chạy' || accountOperationRegistry.has(accountId))
+          throw new Error('Thông tin hoặc trạng thái tài khoản đã thay đổi.')
+        local = new FacebookLoginSession(attempt, `persist:account_${accountId}`)
+        if (account.proxyId !== proxyId) {
+          await this.applyProxy(local.partition, account.proxyId, attempt)
+          observed = undefined
+        }
+        if (await useCurrentSession()) return
+      }
       const previousStatus = account.status === 'tạm dừng' ? 'tạm dừng' : 'chờ xử lý'
       // The DB generation closes even a request that arrives after cancellation.
       // Keep the account reserved until cleanup confirms that fence.
-      claim = await accountRepo.claimNonZaloAccountRuntimeOperation(accountId, 'facebook', previousStatus, false, 'facebook.login', signal, account.facebookLoginClaimGeneration)
+      claim = await accountRepo.claimNonZaloAccountRuntimeOperation(accountId, 'facebook', previousStatus, false, 'facebook.login', takeRestoreTurn ? attempt : signal, account.facebookLoginClaimGeneration)
       if (!claim.claimed || !claim.claimToken || !claim.previousStatus) throw new Error('Tài khoản đang bận. Hãy thử lại sau.')
       assertCurrent(); this.changed(); this.watch(accountId)
-      if (visible) this.watchPage(accountId, visible)
       // Drain an observation that started before restoration took ownership. The poller
       // skips this account until finally/release, so an older check cannot undo success.
       await this.observations.get(accountId)
       assertCurrent()
-      if (visible?.isLoadingMainFrame()) throw new Error('Trình duyệt đang tải. Tự khôi phục đã dừng để giữ thao tác của bạn.')
-      local = new FacebookLoginSession(attempt, `persist:account_${accountId}`)
-      const localProxy = visible ? this.proxyRuntime.getSessionProxyAuthentication(ses) : await this.applyProxy(local.partition, account.proxyId, attempt)
+      if (!local) await prepareLocal()
       assertCurrent()
       // Explicit login is allowed with any existing session. Keep it untouched while
       // authenticating in memory; only background restoration requires definite logout.
-      const baseline = authFingerprint(await readFacebookCookies(ses))
       let stored: SecretResult
       if (input) {
+        if (cookieVersion > 0 && await useCurrentSession()) return
         const meta = await this.metadata(accountId)
         assertCurrent()
         if (meta.revision !== input.revision) throw new Error('Thông tin đăng nhập vừa thay đổi. Hãy mở lại form.')
@@ -604,40 +714,39 @@ export class FacebookLoginService {
           ...(input.twoFactorSecret !== undefined ? { twoFactorSecret: input.twoFactorSecret } : {}) }
         if (!stored.secret.password || !stored.secret.twoFactorSecret) throw new Error('Nhập mật khẩu và khóa 2FA cho UID cần đăng nhập.')
       } else {
-        const observedVersion = cookieVersion
-        const observation = await local.observe(localProxy)
-        assertCurrent()
-        if (cookieVersion !== observedVersion) { cancelForUser(); assertCurrent() }
-        const observedSnapshot = { fingerprint: baseline, observation }
-        if (observation.state === 'authenticated') {
-          await this.observeInner(account, ses, observedSnapshot); this.changed(); return
-        }
-        protectCookies = true
-        if (observation.state !== 'unknown' && await this.observeInner(account, ses, observedSnapshot)) this.changed()
-        assertCurrent()
-        if (observation.state !== 'logged_out') throw new Error('Facebook cần xác minh hoặc chưa xác định được phiên. Hãy kiểm tra trình duyệt.')
-        if (this.log.dirty(staffId, accountId)) throw new Error('Phiên đã được thay đổi thủ công nhưng chưa đồng bộ. Hãy đăng nhập thủ công hoặc cập nhật thông tin đăng nhập.')
+        if (await useCurrentSession()) return
         stored = await this.read(() => facebookRpc<SecretResult>('get', { accountId }), attempt)
       }
       assertCurrent()
       temporary = new FacebookLoginSession(attempt)
       const proxy = await this.applyProxy(temporary.partition, account.proxyId, attempt)
       assertCurrent()
+      if ((!input || cookieVersion > 0) && await useCurrentSession()) return
       await temporary.login(stored.secret, proxy)
       assertCurrent()
-      if (authFingerprint(await readFacebookCookies(ses)) !== baseline) throw new Error('Người dùng đã thay đổi phiên. Đã dừng tự khôi phục.')
+      const currentAccount = await this.read(readSignal => accountRepo.getAccount(accountId, readSignal), attempt)
+      if (!currentAccount || !currentAccount.isActive || (!input && !currentAccount.facebookLoginManaged))
+        throw new Error('Tài khoản đã tắt, bị xóa hoặc không còn dùng đăng nhập tự động.')
       // Verify the saved credentials were not edited on another app while login was running.
       if ((await this.metadata(accountId)).revision !== stored.revision) throw new Error('Thông tin đăng nhập vừa thay đổi. Hãy thử lại.')
       const cookies = await readFacebookCookies(temporary.ses)
       assertCurrent()
+      // Revalidate only invalidated evidence. Opening/typing/navigation alone is
+      // never permission to cancel or replace a newly authenticated local session.
+      while (true) {
+        await this.waitForBrowser(accountId, attempt)
+        assertCurrent()
+        if ((!input || cookieVersion > 0) && await useCurrentSession()) return
+        if ((observed?.cookieVersion ?? 0) === cookieVersion && !this.visible(accountId)?.isLoadingMainFrame()) break
+      }
+      promoting = true
       await writeFacebookCookies(ses, cookies, attempt, (cookie, removed) => {
         assertCurrent()
         if (['c_user','xs'].includes(cookie.name)) (removed ? expectedRemovals : expected).set(facebookCookieScope(cookie), cookie.value)
       })
       assertCurrent()
-      protectCookies = false // No more writes: verification checks its cookie fingerprint; keep watching user input/navigation.
-      const promotedFingerprint = authFingerprint(await readFacebookCookies(ses))
-      const promoted = await local.observe(localProxy)
+      promoting = false
+      const { fingerprint: promotedFingerprint, observation: promoted } = await currentSnapshot(true)
       assertCurrent()
       if (promoted.state !== 'authenticated') throw new Error('Chưa xác minh được phiên khôi phục. Hãy mở trình duyệt kiểm tra.')
       if (input) {
@@ -660,7 +769,7 @@ export class FacebookLoginService {
         await syncVisible()
         return
       }
-      await syncVisible()
+      if (promoted.uid === stored.secret.uid) await syncVisible()
       // Any authenticated UID wins, including a user switching identities during verification.
       this.revisions.set(accountId, stored.revision)
       await this.observeInner(account, ses, { fingerprint: promotedFingerprint, observation: promoted })
@@ -674,7 +783,10 @@ export class FacebookLoginService {
           this.changed()
           if (!released) throw new Error('Chưa giải phóng được tài khoản sau đăng nhập. App sẽ tự kiểm tra lại; bạn có thể bấm đăng nhập lại khi kết nối ổn định.')
         }
-      } finally { await temporary?.dispose(); await local?.dispose() }
+      } finally {
+        try { await temporary?.dispose(); await local?.dispose() }
+        finally { releaseStartupTurn?.() }
+      }
     }
   }
   async checkAccount(accountId: number, page?: WebContents): Promise<{ loggedIn: boolean; status: string; reason?: string }> {

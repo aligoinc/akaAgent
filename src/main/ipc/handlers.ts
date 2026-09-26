@@ -309,7 +309,8 @@ export function registerIpcHandlers(
     proxyRuntime,
     zaloRuntime,
     emailRuntime,
-    { runtimeTarget: 'desktop', maintenanceCoordinator: dailyMaintenance }
+    { runtimeTarget: 'desktop', maintenanceCoordinator: dailyMaintenance,
+      isAccountStartupPending: account => facebookLogin.isStartupPending(account) }
   )
   const automationProcessor = new AutomationProcessor({
     runtimeTarget: 'desktop',
@@ -1293,12 +1294,12 @@ export function registerIpcHandlers(
         accountPollerController?.resetZaloClaims()
         startZaloRemoteClients(user, username, password)
         syncZaloBackgroundForCurrentUser('login')
+        facebookLogin.startSession()
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
         crmWeb.startSession()
         admin.startSession()
         campaignSupport.startSession()
-        facebookLogin.startSession()
       } catch (error) {
         const facebookStopped = facebookLogin.stop()
         const cleanupUser = getCurrentUser()
@@ -1393,7 +1394,7 @@ export function registerIpcHandlers(
       await zaloRuntime.attachWebSession(accountId, webContents)
     },
     onUnregister: (accountId) => {
-      facebookLogin.cancelStartupBrowser(accountId)
+      facebookLogin.detachStartupBrowser(accountId)
       zaloRuntime.detachWebSession(accountId)
     }
   })

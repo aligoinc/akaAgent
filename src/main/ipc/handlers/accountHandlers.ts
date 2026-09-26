@@ -463,8 +463,9 @@ export function registerAccountHandlers(
     if (isBrowserlessAccount(account)) {
       return { success: false, reason: BROWSERLESS_ACCOUNT_REASON }
     }
-    if (account.flatformType === 'facebook') await facebookLogin?.prepareStartupBrowser(accountId)
-    await proxyRuntime.prepareAccountSession(account)
+    const reuseApplied = account.flatformType === 'facebook'
+      ? await facebookLogin?.prepareStartupBrowser(accountId) ?? false : false
+    await proxyRuntime.prepareAccountSession(account, { reuseApplied })
     return { success: true }
   })
 
@@ -669,8 +670,9 @@ export function registerAccountHandlers(
         return { success: false, reason: 'Tab trình duyệt không khả dụng' }
       }
       const url = PLATFORM_URLS[account.flatformType] || PLATFORM_URLS[flatformType] || 'about:blank'
-      if (account.flatformType === 'facebook') facebookLogin?.cancelStartupBrowser(accountId)
-      await proxyRuntime.prepareAccountSession(account)
+      const reuseApplied = account.flatformType === 'facebook'
+        ? await facebookLogin?.prepareStartupBrowser(accountId) ?? false : false
+      await proxyRuntime.prepareAccountSession(account, { reuseApplied })
       wc.loadURL(url)
       return { success: true }
     } catch (err: any) {
