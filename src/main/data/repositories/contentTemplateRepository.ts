@@ -361,7 +361,18 @@ function isSupportedChannelName(value: unknown): value is ContentTemplateChannel
   return typeof value === 'string' && SUPPORTED_CHANNEL_NAMES.includes(value as ContentTemplateChannelName)
 }
 
-async function loadContentTypeMaps(): Promise<ContentTypeMaps> {
+let contentTypeMapsRequest: Promise<ContentTypeMaps> | null = null
+
+function loadContentTypeMaps(): Promise<ContentTypeMaps> {
+  // The library requests templates and channel metadata together. Share only
+  // the pending read, so later refreshes still see server-side channel changes.
+  if (!contentTypeMapsRequest) {
+    contentTypeMapsRequest = fetchContentTypeMaps().finally(() => { contentTypeMapsRequest = null })
+  }
+  return contentTypeMapsRequest
+}
+
+async function fetchContentTypeMaps(): Promise<ContentTypeMaps> {
   const { data, error } = await client()
     .from('aka_crm_status')
     .select('id, name, description, stt_by_type, is_active')
@@ -407,19 +418,44 @@ export async function listContentTemplateContentTypes(): Promise<ContentTemplate
 
 export async function listContentTemplates(): Promise<ContentTemplate[]> {
   const user = requireCurrentUser()
-  const [{ data, error }, maps] = await Promise.all([
-    client()
-      .from('auto_content_templates')
-      .select('id, name, group_id, channels, channel_image_urls, is_delete, staff_id, organization_id, created_at, updated_at, content_group:auto_content_groups(name)')
-      .eq('staff_id', user.staffId)
-      .eq('is_delete', false)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false }),
+  const [rowsResult, mapsResult] = await Promise.allSettled([
+    listAllStaffRows('auto_content_templates',
+      'id, name, group_id, channels, channel_image_urls, is_delete, staff_id, organization_id, created_at, updated_at, content_group:auto_content_groups(name)',
+      user.staffId, 'Không thể tải mẫu nội dung'),
     loadContentTypeMaps()
   ])
 
-  if (error) throw formatContentTemplateError(error, 'Không thể tải mẫu nội dung')
-  return (data || []).map(row => mapContentTemplateFromV2DB(row, maps))
+  if (rowsResult.status === 'rejected') throw rowsResult.reason
+  if (mapsResult.status === 'rejected') throw mapsResult.reason
+  const data = rowsResult.value
+  const maps = mapsResult.value
+  return data.map(row => mapContentTemplateFromV2DB(row, maps)).sort((a, b) =>
+    (Date.parse(b.createdAt || '') || 0) - (Date.parse(a.createdAt || '') || 0) || b.id - a.id
+  )
+}
+
+async function listAllStaffRows(
+  table: 'auto_content_templates' | 'auto_content_groups',
+  columns: string,
+  staffId: number,
+  errorLabel: string
+): Promise<Record<string, unknown>[]> {
+  const rows: Record<string, unknown>[] = []
+  let lastId = 0
+  while (true) {
+    const { data, error } = await client().from(table).select(columns)
+      .eq('staff_id', staffId).eq('is_delete', false)
+      .gt('id', lastId).order('id', { ascending: true }).limit(500)
+    if (error) throw formatContentTemplateError(error, errorLabel)
+    const page = (data || []) as unknown as Record<string, unknown>[]
+    // Do not infer completion from page length: PostgREST may impose a smaller
+    // row cap. Only publish a complete list, never a partially fetched count.
+    if (page.length === 0) return rows
+    const nextId = normalizeId(page[page.length - 1].id)
+    if (!nextId || nextId <= lastId) throw new Error(`${errorLabel}: Phân trang không hợp lệ.`)
+    rows.push(...page)
+    lastId = nextId
+  }
 }
 
 export async function createContentTemplate(template: CreateContentTemplateInput): Promise<ContentTemplate> {
@@ -529,33 +565,25 @@ export async function deleteContentTemplate(id: number): Promise<void> {
   if (!data) throw new Error('Không tìm thấy mẫu nội dung.')
 }
 
-async function countActiveTemplatesInGroup(groupId: number, staffId: number): Promise<number> {
-  const { count, error } = await client()
+async function hasActiveTemplatesInGroup(groupId: number, staffId: number): Promise<boolean> {
+  const { data, error } = await client()
     .from('auto_content_templates')
-    .select('id', { count: 'exact', head: true })
+    .select('id')
     .eq('group_id', groupId)
     .eq('staff_id', staffId)
     .eq('is_delete', false)
+    .limit(1)
 
-  if (error) throw formatContentTemplateError(error, 'Không thể đếm mẫu nội dung trong nhóm')
-  return count || 0
+  if (error) throw formatContentTemplateError(error, 'Không thể kiểm tra mẫu nội dung trong nhóm')
+  return (data || []).length > 0
 }
 
 export async function listContentTemplateGroups(): Promise<ContentTemplateGroup[]> {
   const user = requireCurrentUser()
-  const { data, error } = await client()
-    .from('auto_content_groups')
-    .select('*')
-    .eq('staff_id', user.staffId)
-    .eq('is_delete', false)
-    .order('stt', { ascending: true })
-    .order('name', { ascending: true })
-    .order('id', { ascending: true })
-
-  if (error) throw formatContentTemplateError(error, 'Không thể tải nhóm nội dung')
-  const groups = (data || []).map(row => mapContentTemplateGroupFromDB(row))
-  const counts = await Promise.all(groups.map(group => countActiveTemplatesInGroup(group.id, user.staffId)))
-  return groups.map((group, index) => ({ ...group, templateCount: counts[index] }))
+  const data = await listAllStaffRows('auto_content_groups', '*', user.staffId, 'Không thể tải nhóm nội dung')
+  return data.map(row => mapContentTemplateGroupFromDB(row)).sort((a, b) =>
+    a.order - b.order || a.name.localeCompare(b.name, 'vi') || a.id - b.id
+  )
 }
 
 export async function createContentTemplateGroup(input: CreateContentTemplateGroupInput): Promise<ContentTemplateGroup> {
@@ -614,10 +642,7 @@ export async function updateContentTemplateGroup(
     throw formatContentTemplateError(error, 'Không thể cập nhật nhóm nội dung', 'Tên nhóm nội dung này đã tồn tại.')
   }
   if (!data) throw new Error('Không tìm thấy nhóm nội dung.')
-  return {
-    ...mapContentTemplateGroupFromDB(data),
-    templateCount: await countActiveTemplatesInGroup(groupId, user.staffId)
-  }
+  return mapContentTemplateGroupFromDB(data)
 }
 
 export async function deleteContentTemplateGroup(id: number): Promise<void> {
@@ -625,8 +650,7 @@ export async function deleteContentTemplateGroup(id: number): Promise<void> {
   const groupId = normalizeId(id)
   if (!groupId) throw new Error('Nhóm nội dung không hợp lệ.')
 
-  const templateCount = await countActiveTemplatesInGroup(groupId, user.staffId)
-  if (templateCount > 0) {
+  if (await hasActiveTemplatesInGroup(groupId, user.staffId)) {
     throw new Error('Không thể xoá nhóm khi vẫn còn mẫu nội dung trong nhóm.')
   }
 

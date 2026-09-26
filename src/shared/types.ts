@@ -2651,7 +2651,8 @@ export interface ContentTemplateGroup {
   order: number
   isActive: boolean
   isDelete: boolean
-  templateCount: number
+  /** Derived from the complete template list in the renderer; null until it is available. */
+  templateCount: number | null
   staffId?: number
   organizationId?: number | null
   createdAt?: string
