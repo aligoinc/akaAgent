@@ -1,4 +1,5 @@
-export type CampaignAssistantMode = 'ask' | 'campaign_support'
+export type CampaignAssistantMode = 'ask' | 'campaign_support' | 'campaign_support_dsh'
+export type CampaignSupportVariant = 'standard' | 'dsh'
 export interface CampaignAssistantOpenRequest {
   campaignId: number
   mode: CampaignAssistantMode
@@ -64,6 +65,7 @@ export interface CampaignSupportTurn {
   controlNeedsRefresh?: boolean
 }
 export interface CampaignSupportConversation extends CampaignSupportOwner {
+  variant: CampaignSupportVariant
   id: string
   campaignId: number
   revision: number
@@ -72,18 +74,21 @@ export interface CampaignSupportConversation extends CampaignSupportOwner {
   pendingStartRequestId?: string
 }
 export interface CampaignSupportSendRequest {
+  variant?: CampaignSupportVariant
   campaignId: number
   conversationKey: string
   question: string
   images: CampaignSupportImage[]
 }
 export interface CampaignSupportControlRequest {
+  variant?: CampaignSupportVariant
   campaignId: number
   conversationKey: string
   requestId: string
   action: CampaignSupportControl
 }
 export interface CampaignSupportImageRequest {
+  variant?: CampaignSupportVariant
   campaignId: number
   conversationKey: string
   requestId: string

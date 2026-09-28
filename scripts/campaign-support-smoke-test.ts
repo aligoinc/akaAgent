@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import { CampaignSupportService, CAMPAIGN_SUPPORT_BASE, parseCampaignSupportRun, validateCampaignSupportImages } from '../src/main/services/campaignSupportService'
+import { CampaignSupportService, CAMPAIGN_SUPPORT_BASES, parseCampaignSupportRun, validateCampaignSupportImages } from '../src/main/services/campaignSupportService'
 import { CAMPAIGN_SUPPORT_QUESTION, isCampaignSupportTurnBusy, type CampaignSupportConversation,
-  type CampaignSupportOwner, type CampaignSupportStatus } from '../src/shared/campaignSupport'
+  type CampaignSupportOwner, type CampaignSupportStatus, type CampaignSupportVariant } from '../src/shared/campaignSupport'
 import { png, webp } from './campaign-support-image-fixtures'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -13,16 +13,18 @@ async function until(check: () => boolean, label: string) {
   const deadline = Date.now() + 4000
   while (!check()) { if (Date.now() > deadline) throw new Error(`Timeout: ${label}`); await delay(5) }
 }
-function run(status: CampaignSupportStatus, conversationId = randomUUID(), turnId = randomUUID()) {
+function buildRun(status: CampaignSupportStatus, conversationId = randomUUID(), turnId = randomUUID(), variant: CampaignSupportVariant = 'standard') {
   return { conversationId, turnId, status, answer: status === 'completed' ? 'Chiến dịch chưa đến lịch chạy.' : '',
     progress: { state: status, stage: 'diagnosis', attempts: 1, reason: status === 'needs_input' ? 'Gửi thêm ảnh lỗi.' : null,
       nextAttemptAt: null, startedAt: null, updatedAt: new Date().toISOString() },
-    statusUrl: `/api/public/agents/campaign-support/runs/${conversationId}/${turnId}` }
+    statusUrl: `${new URL(CAMPAIGN_SUPPORT_BASES[variant]).pathname}/runs/${conversationId}/${turnId}` }
 }
-const response = (data: ReturnType<typeof run>, status = 200, headers?: Record<string, string>) =>
+const response = (data: ReturnType<typeof buildRun>, status = 200, headers?: Record<string, string>) =>
   new Response(JSON.stringify({ success: true, data }), { status, headers })
 
-async function main() {
+async function main(variant: CampaignSupportVariant) {
+  const run = (status: CampaignSupportStatus, conversationId?: string, turnId?: string) => buildRun(status, conversationId, turnId, variant)
+  console.log(`Testing campaign support variant: ${variant}`)
   const directory = await mkdtemp(join(tmpdir(), 'akaagent-support-tests-'))
   const services: CampaignSupportService[] = []
   let index = 0
@@ -33,17 +35,17 @@ async function main() {
     const folder = path ?? join(directory, String(++index))
     let accessAllowed = true
     let authorizationCount = 0
-    const service = new CampaignSupportService({ directory: folder, pollIntervalMs, timeoutMs: 80,
+    const service = new CampaignSupportService({ variant, directory: folder, pollIntervalMs, timeoutMs: 80,
       getOwner: () => owner,
       authorizeCampaign: async (id, expectedOwner) => {
         authorizationCount++
         assert.deepEqual(expectedOwner, owner)
         if (!accessAllowed || id !== 17) throw new Error('Không có quyền truy cập.')
       },
-      onUpdate: state => states.push(state),
+      onUpdate: state => { assert.equal(state.variant, variant); states.push(state) },
       fetch: (async (input, init = {}) => {
         const url = String(input)
-        assert(url.startsWith(CAMPAIGN_SUPPORT_BASE + '/'))
+        assert(url.startsWith(CAMPAIGN_SUPPORT_BASES[variant] + '/'))
         assert.equal(init.redirect, 'error')
         assert.equal(init.credentials, 'omit')
         assert(!JSON.stringify(init.headers ?? {}).includes('Authorization'))
@@ -550,9 +552,18 @@ async function main() {
       await delay(35)
       assert.equal(malformed.calls.length, 1)
       malformed.service.stop()
-      assert.throws(() => parseCampaignSupportRun({ ...run('completed'), answer: '' }))
-      assert.throws(() => parseCampaignSupportRun({ ...run('working'), progress: { state: 'completed' } }))
-      console.log('PASS permanent HTTP errors, malformed response and status URL fail closed')
+      assert.throws(() => parseCampaignSupportRun({ ...run('completed'), answer: '' }, variant))
+      assert.throws(() => parseCampaignSupportRun({ ...run('working'), progress: { state: 'completed' } }, variant))
+      const otherVariant = variant === 'standard' ? 'dsh' : 'standard'
+      assert.throws(() => parseCampaignSupportRun(buildRun('working', undefined, undefined, otherVariant), variant), /không thuộc/)
+      assert.equal(parseCampaignSupportRun(run('completed'), variant).status, 'completed')
+      const wrongAgent = fixture(async () => response(buildRun('working', undefined, undefined, otherVariant)))
+      await wrongAgent.service.open(17)
+      await until(() => !!wrongAgent.latest()?.turns[0]?.error, 'reject other agent status URL')
+      await delay(35)
+      assert.equal(wrongAgent.calls.length, 1, 'never poll or send controls to the other agent')
+      wrongAgent.service.stop()
+      console.log('PASS permanent HTTP errors, malformed response and cross-agent status URL fail closed')
     }
     {
       for (const restart of [false, true]) {
@@ -655,7 +666,30 @@ async function main() {
       assert.equal(isCampaignSupportTurnBusy({ ...opened.turns[0], result: run('working'), error: 'Conflict', retryable: false }), true)
       console.log('PASS text/image limits, MIME, animated PNG and no new run on invalid input')
     }
-    console.log('Campaign support smoke: OK (no production API or DB calls)')
+    {
+      const f = fixture(async () => response(run('completed')))
+      const opened = await f.service.open(17)
+      await until(() => f.latest()?.turns[0]?.result?.status === 'completed', 'storage variant setup')
+      f.service.stop()
+      const file = join(f.folder, '1_7/17/current.json')
+      const saved = JSON.parse(await readFile(file, 'utf8'))
+      delete saved.variant
+      await writeFile(file, JSON.stringify(saved))
+      const legacy = fixture(async () => { throw new Error('Must not submit restored history') }, f.folder)
+      if (variant === 'standard') {
+        const restored = await legacy.service.open(17)
+        assert.equal(restored.id, opened.id)
+        assert.equal(restored.variant, 'standard')
+      } else await assert.rejects(legacy.service.open(17), /Không đọc được hội thoại/)
+      legacy.service.stop()
+      saved.variant = variant === 'standard' ? 'dsh' : 'standard'
+      await writeFile(file, JSON.stringify(saved))
+      const wrong = fixture(async () => { throw new Error('Must not send other agent history') }, f.folder)
+      await assert.rejects(wrong.service.open(17), /Không đọc được hội thoại/)
+      wrong.service.stop()
+      console.log('PASS legacy standard storage compatibility and wrong-agent storage rejection')
+    }
+    console.log(`Campaign support ${variant} smoke: OK (no production API or DB calls)` )
   } finally { services.forEach(service => service.stop()); await rm(directory, { recursive: true, force: true }) }
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+main('standard').then(() => main('dsh')).catch(error => { console.error(error); process.exitCode = 1 })

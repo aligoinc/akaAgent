@@ -241,8 +241,9 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
           )}
         </div>
       ) : (
-        assistantMode === 'campaign_support'
-          ? <CampaignSupportTab key={assistantCampaignId} campaign={assistantCampaign} startRequestId={assistantSelection?.requestId} />
+        assistantMode === 'campaign_support' || assistantMode === 'campaign_support_dsh'
+          ? <CampaignSupportTab key={`${assistantMode}:${assistantCampaignId}`} campaign={assistantCampaign} startRequestId={assistantSelection?.requestId}
+              variant={assistantMode === 'campaign_support_dsh' ? 'dsh' : 'standard'} />
           : <CampaignAssistantTab key={assistantCampaignId} campaign={assistantCampaign} />
       )}
     </div>

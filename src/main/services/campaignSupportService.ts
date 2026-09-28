@@ -7,11 +7,15 @@ import {
   CAMPAIGN_SUPPORT_TOTAL_IMAGE_BYTES, isCampaignSupportRunning, isCampaignSupportTurnBusy,
   type CampaignSupportConversation, type CampaignSupportControlRequest, type CampaignSupportImage,
   type CampaignSupportImageRequest, type CampaignSupportOwner, type CampaignSupportRun,
-  type CampaignSupportSendRequest, type CampaignSupportStatus, type CampaignSupportTurn
+  type CampaignSupportSendRequest, type CampaignSupportStatus, type CampaignSupportTurn, type CampaignSupportVariant
 } from '../../shared/campaignSupport'
 import { writeAtomicLocalFile } from './atomicLocalFile'
 
 export const CAMPAIGN_SUPPORT_BASE = 'https://aka10000.fly.dev/api/public/agents/campaign-support'
+export const CAMPAIGN_SUPPORT_BASES: Record<CampaignSupportVariant, string> = {
+  standard: CAMPAIGN_SUPPORT_BASE,
+  dsh: 'https://aka10000.fly.dev/api/public/agents/campaign-support-dsh'
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const STATUSES: CampaignSupportStatus[] = ['queued', 'working', 'waiting_dependency', 'completed', 'needs_input', 'cancelled']
 const positiveId = (id: number) => Number.isSafeInteger(id) && id > 0
@@ -44,6 +48,7 @@ interface Entry {
   queued: boolean
 }
 interface Options {
+  variant?: CampaignSupportVariant
   directory: string
   getOwner: () => CampaignSupportOwner | null
   authorizeCampaign: (campaignId: number, owner: CampaignSupportOwner) => Promise<void>
@@ -103,7 +108,8 @@ export function validateCampaignSupportImages(value: unknown): CampaignSupportIm
   })
 }
 
-export function parseCampaignSupportRun(value: unknown): CampaignSupportRun {
+export function parseCampaignSupportRun(value: unknown, variant: CampaignSupportVariant = 'standard'): CampaignSupportRun {
+  const base = CAMPAIGN_SUPPORT_BASES[variant]
   const data = value as CampaignSupportRun | undefined
   if (!data || !UUID.test(data.conversationId) || !UUID.test(data.turnId) || !STATUSES.includes(data.status)
     || !data.progress || data.progress.state !== data.status || typeof data.statusUrl !== 'string'
@@ -111,9 +117,9 @@ export function parseCampaignSupportRun(value: unknown): CampaignSupportRun {
     || (data.status === 'completed' && !data.answer?.trim())) {
     throw new SupportError('Máy chủ trả về kết quả chẩn đoán không hợp lệ.')
   }
-  const expected = new URL(`${CAMPAIGN_SUPPORT_BASE}/runs/${data.conversationId}/${data.turnId}`)
+  const expected = new URL(`${base}/runs/${data.conversationId}/${data.turnId}`)
   let url: URL
-  try { url = new URL(data.statusUrl, `${CAMPAIGN_SUPPORT_BASE}/`) } catch { throw new SupportError('Địa chỉ tiến độ không hợp lệ.') }
+  try { url = new URL(data.statusUrl, `${base}/`) } catch { throw new SupportError('Địa chỉ tiến độ không hợp lệ.') }
   if (url.href !== expected.href) throw new SupportError('Địa chỉ tiến độ không thuộc lượt chẩn đoán này.')
   const text = (v: unknown) => typeof v === 'string' ? v : null
   return {
@@ -134,7 +140,11 @@ export class CampaignSupportService {
   private epoch = 0
   private stopped = false
   private pollMs: number
-  constructor(private readonly options: Options) { this.pollMs = options.pollIntervalMs ?? 2000 }
+  private readonly variant: CampaignSupportVariant
+  constructor(private readonly options: Options) {
+    this.pollMs = options.pollIntervalMs ?? 2000
+    this.variant = options.variant ?? 'standard'
+  }
 
   startSession(): void { this.stopped = false }
   stop(): void {
@@ -184,16 +194,17 @@ export class CampaignSupportService {
       let entry = this.entries.get(key)
       if (!entry) {
         entry = { key, owner: { ...owner }, campaignId, epoch, failures: 0, queued: false,
-          state: { ...owner, campaignId, id: randomUUID(), revision: 0, turns: [] } }
+          state: { ...owner, variant: this.variant, campaignId, id: randomUUID(), revision: 0, turns: [] } }
         try {
           const saved = JSON.parse(await readFile(join(this.directory(entry), 'current.json'), 'utf8'))
           if (saved.version !== 1 || !sameOwner(saved, owner) || saved.campaignId !== campaignId || !UUID.test(saved.id)
+            || (saved.variant ?? 'standard') !== this.variant
             || !Number.isSafeInteger(saved.revision) || !Array.isArray(saved.turns)
             || (saved.pendingStartRequestId !== undefined && !UUID.test(saved.pendingStartRequestId))) throw new Error('Invalid storage')
           for (const turn of saved.turns as CampaignSupportTurn[]) {
             if (!UUID.test(turn.requestId) || typeof turn.question !== 'string' || !Array.isArray(turn.images)
               || ![null, 'cancel', 'resume'].includes(turn.controlPending)) throw new Error('Invalid turn')
-            if (turn.result) turn.result = parseCampaignSupportRun(turn.result)
+            if (turn.result) turn.result = parseCampaignSupportRun(turn.result, this.variant)
           }
           const pending = (saved.turns as CampaignSupportTurn[]).at(-1)
           if (pending?.result && pending.controlPending) {
@@ -202,7 +213,8 @@ export class CampaignSupportService {
             pending.error = 'Đang kiểm tra lại trạng thái lượt phân tích đã lưu.'
             pending.retryable = true
           }
-          entry.state = saved
+          // Existing campaign-support files predate the variant field and remain standard conversations.
+          entry.state = { ...saved, variant: this.variant }
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new SupportError('Không đọc được hội thoại đã lưu trên máy.')
         }
@@ -223,7 +235,7 @@ export class CampaignSupportService {
     if (!question.trim() && !cleanImages.length) throw new SupportError('Nhập câu hỏi hoặc thêm ảnh trước khi gửi.')
     const oldId = entry.state.id
     const next: CampaignSupportConversation = fresh
-      ? { ...entry.owner, campaignId: entry.campaignId, id: randomUUID(), revision: entry.state.revision, turns: [] }
+      ? { ...entry.owner, variant: this.variant, campaignId: entry.campaignId, id: randomUUID(), revision: entry.state.revision, turns: [] }
       : structuredClone(entry.state)
     const conversationId = next.turns.find(turn => turn.result)?.result?.conversationId
     const body: RespondBody = {
@@ -302,7 +314,7 @@ export class CampaignSupportService {
       this.checkKey(entry, conversationKey)
       if (entry.state.pendingStartRequestId || isCampaignSupportTurnBusy(entry.state.turns.at(-1))) throw new SupportError('Dừng lượt phân tích hiện tại trước khi tạo mới.')
       const oldId = entry.state.id
-      await this.save(entry, { ...entry.owner, campaignId: entry.campaignId,
+      await this.save(entry, { ...entry.owner, variant: this.variant, campaignId: entry.campaignId,
         id: randomUUID(), revision: entry.state.revision, turns: [] })
       entry.failures = 0
       this.schedule(entry, 0)
@@ -422,7 +434,7 @@ export class CampaignSupportService {
       // A lost control response may already have committed. Read the known run before replaying the command.
       const checkingControl = turn.result && turn.controlPending && turn.controlNeedsRefresh
       const control = turn.result && !checkingControl && turn.controlPending
-      const url = turn.result ? turn.result.statusUrl : `${CAMPAIGN_SUPPORT_BASE}/respond`
+      const url = turn.result ? turn.result.statusUrl : `${CAMPAIGN_SUPPORT_BASES[this.variant]}/respond`
       const body = control ? JSON.stringify({ action: control })
         : !turn.result ? JSON.stringify(await this.readRequest(entry, turn.requestId)) : undefined
       this.assertLive(entry)
@@ -445,7 +457,7 @@ export class CampaignSupportService {
         throw new SupportError(typeof data?.error?.message === 'string' ? data.error.message.slice(0, 1000)
           : 'Không thể nhận kết quả từ máy chủ chẩn đoán.', response.status === 429 || response.status >= 500, safeRetryMs)
       }
-      const result = parseCampaignSupportRun(data.data)
+      const result = parseCampaignSupportRun(data.data, this.variant)
       const existingConversation = entry.state.turns.find(t => t.result)?.result?.conversationId
       if ((existingConversation && result.conversationId !== existingConversation)
         || (turn.result && result.turnId !== turn.result.turnId)) throw new SupportError('Kết quả không khớp hội thoại hiện tại.')

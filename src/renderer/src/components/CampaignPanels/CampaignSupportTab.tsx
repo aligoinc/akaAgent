@@ -5,7 +5,7 @@ import {
   CAMPAIGN_SUPPORT_IMAGE_BYTES, CAMPAIGN_SUPPORT_IMAGE_TYPES, CAMPAIGN_SUPPORT_MAX_IMAGES, CAMPAIGN_SUPPORT_MAX_IMAGE_NAME,
   CAMPAIGN_SUPPORT_MAX_QUESTION, CAMPAIGN_SUPPORT_TOTAL_IMAGE_BYTES,
   isCampaignSupportTurnBusy, type CampaignSupportConversation, type CampaignSupportImage,
-  type CampaignSupportStatus, type CampaignSupportTurn
+  type CampaignSupportStatus, type CampaignSupportTurn, type CampaignSupportVariant
 } from '../../../../shared/campaignSupport'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -23,9 +23,10 @@ const readImage = (file: File): Promise<string> => new Promise((resolve, reject)
   reader.readAsDataURL(file)
 })
 
-export default function CampaignSupportTab({ campaign, startRequestId }: {
+export default function CampaignSupportTab({ campaign, startRequestId, variant = 'standard' }: {
   campaign: { id: number; name: string } | null
   startRequestId?: string
+  variant?: CampaignSupportVariant
 }) {
   const owner = useAuthStore(state => state.user)
   const campaignId = campaign?.id
@@ -52,9 +53,9 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
     setImages([])
   }, [])
   const accept = useCallback((value: CampaignSupportConversation) => {
-    if (value.campaignId !== campaignId || value.organizationId !== owner?.organizationId || value.staffId !== owner?.staffId) return
+    if (value.variant !== variant || value.campaignId !== campaignId || value.organizationId !== owner?.organizationId || value.staffId !== owner?.staffId) return
     setConversation(current => !current || value.revision >= current.revision ? value : current)
-  }, [campaignId, owner?.organizationId, owner?.staffId])
+  }, [campaignId, variant, owner?.organizationId, owner?.staffId])
 
   useEffect(() => {
     const generation = ++epoch.current
@@ -64,13 +65,13 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
     const unsubscribe = window.electronAPI.onCampaignSupportUpdated(value => {
       if (epoch.current === generation) accept(value)
     })
-    window.electronAPI.openCampaignSupport(campaignId, startRequestId).then(value => {
+    window.electronAPI.openCampaignSupport(campaignId, startRequestId, variant).then(value => {
       if (epoch.current === generation) accept(value)
     }).catch(error => {
       if (epoch.current === generation) setError(errorMessage(error))
     }).finally(() => { if (epoch.current === generation) setLoading(false) })
     return () => { epoch.current++; unsubscribe() }
-  }, [campaignId, startRequestId, owner?.organizationId, owner?.staffId, accept, clearImages, reload])
+  }, [campaignId, startRequestId, variant, owner?.organizationId, owner?.staffId, accept, clearImages, reload])
   useEffect(() => () => { imageRef.current.forEach(image => URL.revokeObjectURL(image.preview)) }, [])
   useEffect(() => {
     if (messages.current) messages.current.scrollTop = messages.current.scrollHeight
@@ -106,7 +107,7 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
   }, [loading, conversation?.id])
   const send = () => {
     if (!conversation || !campaignId || !canSend || (!question.trim() && !images.length)) return
-    void command(() => window.electronAPI.sendCampaignSupport({ campaignId, conversationKey: conversation.id,
+    void command(() => window.electronAPI.sendCampaignSupport({ variant, campaignId, conversationKey: conversation.id,
       question, images: images.map(({ name, mimeType, dataBase64 }) => ({ name, mimeType, dataBase64 })) }),
     () => { setQuestion(''); clearImages() })
   }
@@ -148,13 +149,13 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
     const generation = epoch.current
     const key = conversation.id
     try {
-      const url = await window.electronAPI.readCampaignSupportImage({ campaignId, conversationKey: key, requestId: turn.requestId, index })
+      const url = await window.electronAPI.readCampaignSupportImage({ variant, campaignId, conversationKey: key, requestId: turn.requestId, index })
       if (generation === epoch.current) setPreview({ url, name: turn.images[index].name })
     } catch (error) { if (generation === epoch.current) setError(errorMessage(error)) }
   }
   const control = (action: 'cancel' | 'resume') => {
     if (!campaignId || !conversation || !last) return
-    void command(() => window.electronAPI.controlCampaignSupport({ campaignId, conversationKey: conversation.id, requestId: last.requestId, action }))
+    void command(() => window.electronAPI.controlCampaignSupport({ variant, campaignId, conversationKey: conversation.id, requestId: last.requestId, action }))
   }
 
   if (!campaign || !owner) return <div className="assistant-empty">Chọn một chiến dịch để kiểm tra nguyên nhân.</div>
@@ -164,7 +165,7 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
       <button type="button" className="assistant-reset-btn" disabled={!conversation || loading || pending || busy || adding}
         onClick={() => {
           if (!conversation) return
-          void command(() => window.electronAPI.resetCampaignSupport(campaign.id, conversation.id), () => {
+          void command(() => window.electronAPI.resetCampaignSupport(campaign.id, conversation.id, variant), () => {
             epoch.current++
             setQuestion(''); clearImages(); setPreview(null)
             // Resubscribe with a new generation so late image reads cannot reopen the old conversation.
@@ -205,7 +206,7 @@ export default function CampaignSupportTab({ campaign, startRequestId }: {
       <AlertTriangle size={15} /><span>{error || last?.error}</span>
       {!conversation && !loading && <button type="button" className="assistant-reset-btn" onClick={() => setReload(value => value + 1)}><RefreshCw size={13} />Thử lại</button>}
       {conversation && last?.retryable && <button type="button" className="assistant-reset-btn" disabled={pending}
-        onClick={() => void command(() => window.electronAPI.retryCampaignSupport(campaign.id, conversation.id))}><RefreshCw size={13} />Thử lại</button>}
+        onClick={() => void command(() => window.electronAPI.retryCampaignSupport(campaign.id, conversation.id, variant))}><RefreshCw size={13} />Thử lại</button>}
     </div>}
     <div className="campaign-support-composer">
       {images.length > 0 && <div className="campaign-support-images">

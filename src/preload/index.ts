@@ -6,7 +6,7 @@ import { staffManagementAPI } from './staffManagementBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
-  type CampaignSupportControlRequest, type CampaignSupportImageRequest } from '../shared/campaignSupport'
+  type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
   type CompleteCampaignDraftRequest } from '../shared/campaignDrafts'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
@@ -147,16 +147,16 @@ const electronAPI = {
   chatCampaignAssistant: (request: CampaignAssistantChatRequest): Promise<CampaignAssistantChatResponse> =>
     ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CHAT, request),
 
-  openCampaignSupport: (campaignId: number, startRequestId?: string): Promise<CampaignSupportConversation> =>
-    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId),
+  openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),
   sendCampaignSupport: (request: CampaignSupportSendRequest): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.send, request),
   controlCampaignSupport: (request: CampaignSupportControlRequest): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.control, request),
-  retryCampaignSupport: (campaignId: number, key: string): Promise<CampaignSupportConversation> =>
-    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.retry, campaignId, key),
-  resetCampaignSupport: (campaignId: number, key: string): Promise<CampaignSupportConversation> =>
-    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.reset, campaignId, key),
+  retryCampaignSupport: (campaignId: number, key: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.retry, campaignId, key, variant),
+  resetCampaignSupport: (campaignId: number, key: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
+    ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.reset, campaignId, key, variant),
   readCampaignSupportImage: (request: CampaignSupportImageRequest): Promise<string> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.image, request),
   onCampaignSupportUpdated: (callback: (state: CampaignSupportConversation) => void): (() => void) => {
