@@ -16,6 +16,7 @@ import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
 import { IPC_EVENTS } from '../../shared/types'
+import { getStartupUpdatePromptMaxVersion } from '../data/repositories/systemSettingsRepository'
 
 interface PlatformUpdateConfig {
   versionUrl: string
@@ -45,6 +46,7 @@ const MAC_INTEL_UPDATE_CONFIG: PlatformUpdateConfig = {
 
 export interface UpdateCheckResult {
   hasUpdate: boolean
+  promptOnStartup: boolean
   localVersion: string
   remoteVersion: string
   error?: string
@@ -151,12 +153,30 @@ async function fetchText(url: string): Promise<string> {
   })
 }
 
-export async function checkForUpdate(): Promise<UpdateCheckResult> {
+async function shouldPromptOnStartup(localVersion: string): Promise<boolean> {
+  try {
+    const maxVersion = await getStartupUpdatePromptMaxVersion()
+    if (maxVersion === undefined) return false
+    // The admin settings editor saves a cleared value as an empty string.
+    if (maxVersion === null || maxVersion.trim() === '') return true
+    const version = maxVersion.trim()
+    if (!/^\d+\.\d+\.\d+$/.test(version)
+      || !version.split('.').every(part => Number.isSafeInteger(Number(part)))) return false
+    return compareVersions(localVersion, version) <= 0
+  } catch {
+    // A settings outage must not prevent login or hide a detected update.
+    console.warn('Không thể tải cấu hình thông báo cập nhật; chỉ hiển thị nút cập nhật.')
+    return false
+  }
+}
+
+export async function checkForUpdate(isStartupCheck = false): Promise<UpdateCheckResult> {
   const localVersion = getLocalVersion()
   const config = getUpdateConfig()
   if (!config) {
     return {
       hasUpdate: false,
+      promptOnStartup: false,
       localVersion,
       remoteVersion: '',
       error: `Auto-update chưa hỗ trợ nền tảng ${process.platform}`
@@ -166,16 +186,19 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   try {
     const remoteVersion = normalizeVersion(await fetchText(config.versionUrl))
     if (!remoteVersion) {
-      return { hasUpdate: false, localVersion, remoteVersion: '', error: 'Không đọc được phiên bản từ server' }
+      return { hasUpdate: false, promptOnStartup: false, localVersion, remoteVersion: '', error: 'Không đọc được phiên bản từ server' }
     }
+    const hasUpdate = compareVersions(remoteVersion, localVersion) > 0
     return {
-      hasUpdate: compareVersions(remoteVersion, localVersion) > 0,
+      hasUpdate,
+      promptOnStartup: isStartupCheck && hasUpdate ? await shouldPromptOnStartup(localVersion) : false,
       localVersion,
       remoteVersion
     }
   } catch (err) {
     return {
       hasUpdate: false,
+      promptOnStartup: false,
       localVersion,
       remoteVersion: '',
       error: err instanceof Error ? err.message : String(err)
