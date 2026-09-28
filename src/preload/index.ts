@@ -929,12 +929,13 @@ const electronAPI = {
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_GET_VERSION),
 
-  checkForUpdate: (): Promise<{
+  checkForUpdate: (isStartupCheck = false): Promise<{
     hasUpdate: boolean
+    promptOnStartup: boolean
     localVersion: string
     remoteVersion: string
     error?: string
-  }> => ipcRenderer.invoke(IPC_EVENTS.UPDATE_CHECK),
+  }> => ipcRenderer.invoke(IPC_EVENTS.UPDATE_CHECK, isStartupCheck),
 
   downloadAndInstallUpdate: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.UPDATE_DOWNLOAD_INSTALL),

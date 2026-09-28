@@ -7,8 +7,8 @@ export function registerUpdateHandlers(mainWindow: BrowserWindow): void {
     return getLocalVersion()
   })
 
-  ipcMain.handle(IPC_EVENTS.UPDATE_CHECK, async () => {
-    return checkForUpdate()
+  ipcMain.handle(IPC_EVENTS.UPDATE_CHECK, async (_event, isStartupCheck?: boolean) => {
+    return checkForUpdate(isStartupCheck === true)
   })
 
   ipcMain.handle(IPC_EVENTS.UPDATE_DOWNLOAD_INSTALL, async () => {

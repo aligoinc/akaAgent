@@ -44,12 +44,6 @@ interface UpdateInfo {
 type UpdateCheckSource = 'startup' | 'manual' | 'periodic'
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
-const SILENT_STARTUP_UPDATE_MIN_VERSION = 6
-
-function requiresLegacyStartupUpdatePrompt(version: string): boolean {
-  const majorVersion = Number.parseInt(version.split('.')[0] || '', 10)
-  return Number.isFinite(majorVersion) && majorVersion < SILENT_STARTUP_UPDATE_MIN_VERSION
-}
 
 export default function App() {
   const {
@@ -216,12 +210,12 @@ export default function App() {
 
     setCheckingUpdate(true)
     try {
-      const res = await window.electronAPI.checkForUpdate()
+      const res = await window.electronAPI.checkForUpdate(source === 'startup')
       setLocalVersion(res.localVersion)
       if (res.hasUpdate) {
         setAvailableUpdate({ localVersion: res.localVersion, remoteVersion: res.remoteVersion })
         const requiresStartupPrompt = source === 'startup'
-          && requiresLegacyStartupUpdatePrompt(res.localVersion)
+          && res.promptOnStartup === true
         if (manual || requiresStartupPrompt) setShowUpdateModal(true)
         return requiresStartupPrompt
       }
@@ -250,15 +244,14 @@ export default function App() {
     }
   }, [])
 
-  // Modern versions check silently at startup. Versions below 6.0.0 retain the
-  // legacy prompt-before-auth flow so very old clients still surface upgrades.
+  // The public system setting controls the startup prompt before auth bootstrap.
   useEffect(() => {
     if (startupUpdateCheckStarted.current) return
     startupUpdateCheckStarted.current = true
 
     void (async () => {
-      const openedLegacyUpdatePrompt = await handleCheckForUpdate('startup')
-      if (!openedLegacyUpdatePrompt) startAuthBootstrap()
+      const openedUpdatePrompt = await handleCheckForUpdate('startup')
+      if (!openedUpdatePrompt) startAuthBootstrap()
     })()
   }, [handleCheckForUpdate, startAuthBootstrap])
 
