@@ -15,6 +15,7 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
   const { logs, addLog, clearLogs, campaigns, accounts } = useCampaignStore()
   const [activeTab, setActiveTab] = useState<LogPanelTab>('progress')
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [assistantCampaignSnapshot, setAssistantCampaignSnapshot] = useState<{ id: number; name: string } | null>(null)
   const [assistantSelection, setAssistantSelection] = useState<CampaignAssistantOpenRequest | null>(null)
   const assistantCampaignId = assistantSelection?.campaignId ?? null
   const assistantMode = assistantSelection?.mode ?? 'ask'
@@ -35,11 +36,16 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
     setActiveTab('assistant')
   }, [assistantOpenRequest])
 
+  useEffect(() => {
+    const current = campaigns.find(row => row.id === assistantCampaignId)
+    if (current) setAssistantCampaignSnapshot({ id: current.id, name: current.name })
+  }, [assistantCampaignId, campaigns])
+
   const assistantCampaign = useMemo(
     () => assistantCampaignId
-      ? campaigns.find(campaign => campaign.id === assistantCampaignId) || null
+      ? campaigns.find(campaign => campaign.id === assistantCampaignId) || (assistantCampaignSnapshot?.id === assistantCampaignId ? assistantCampaignSnapshot : null)
       : null,
-    [assistantCampaignId, campaigns]
+    [assistantCampaignId, campaigns, assistantCampaignSnapshot]
   )
 
   const accountOptions = useMemo(() => {

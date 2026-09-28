@@ -1,3 +1,4 @@
+import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
@@ -682,15 +683,12 @@ const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
 const DETAIL_DOCK_MIN_HEIGHT = 220
 const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
 const DETAIL_DOCK_MAX_HEIGHT_RESERVE = 16
-const LOCAL_CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 10_000
-const SERVER_CAMPAIGN_LIST_REFRESH_INTERVAL_MS = 30_000
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
 const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
 const canResumeCampaign = (status: string) => status === 'tạm dừng'
 const canDeleteCampaign = (status: string) => status !== 'đang chạy'
-const isAppWindowVisible = () => document.visibilityState === 'visible'
 
 const formatIpcErrorMessage = (err: unknown, fallback: string): string => {
   const message = err instanceof Error
@@ -1676,6 +1674,8 @@ function AddInputDataToCampaignModal({
     try {
       await onLoadCampaigns()
       setLoaded(true)
+    } catch (error) {
+      useUiStore.getState().showAlert(formatIpcErrorMessage(error, 'Không thể tải danh sách chiến dịch.'), 'error')
     } finally {
       setLoading(false)
     }
@@ -2506,7 +2506,7 @@ function AddDataToCurrentCampaignModal({
 
 export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
   const {
-    accounts, campaigns, campaignActions,
+    accounts, campaigns, campaignActions, campaignPage, campaignPageError, campaignPageResultKey, campaignSourcesRevision, campaignCatalog, loadCampaignCatalog, configureCampaignPage, setCampaignPageActive,
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
     campaignInputData, campaignInputDataTotal, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
@@ -2520,8 +2520,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
     loadCampaignInputData, refreshCampaignInputData, loadCampaignDetails, loadCampaignDetailPage, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
+  const campaignSourceScope = useAuthStore(s => s.user ? `${s.user.organizationId}:${s.user.staffId}` : null)
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
-  const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
   const entitlements = useAuthStore(s => s.user?.entitlements)
   const canManageCampaignActions = isAdminAkabiz
   const canViewAllFindDataLogs = isAdminAkabiz
@@ -2547,6 +2547,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
   const [accountInfoAccountId, setAccountInfoAccountId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [campaignPageNumber, setCampaignPageNumber] = useState(1)
+  const [selectionLoading, setSelectionLoading] = useState(false)
+  const [allSelection, setAllSelection] = useState<{ key: string; total: number } | null>(null)
+  const selectionRequest = useRef(0)
+  const [debouncedCampaignSearch, setDebouncedCampaignSearch] = useState('')
+
   const [selectedInputDataIds, setSelectedInputDataIds] = useState<Set<number>>(new Set())
   const [bulkActionLoading, setBulkActionLoading] = useState(false)
   const [inputDataActionLoading, setInputDataActionLoading] = useState(false)
@@ -2587,10 +2593,26 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [dateFrom, setDateFrom] = useState(defaultTimeRange.fromDate)
   const [dateTo, setDateTo] = useState(defaultTimeRange.toDate)
   const [campaignNameSearch, setCampaignNameSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedCampaignSearch(campaignNameSearch), 300)
+    return () => clearTimeout(timer)
+  }, [campaignNameSearch])
+
   const [statusFilters, setStatusFilters] = useState<string[]>([])
   const [accountFilters, setAccountFilters] = useState<string[]>([])
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
+  const pageFilters = useMemo<DesktopCampaignFilters>(() => ({
+    ...(debouncedCampaignSearch.trim() ? { search: debouncedCampaignSearch.trim() } : {}),
+    ...(timePreset !== 'all' && dateFrom ? { dateFrom } : {}),
+    ...(timePreset !== 'all' && dateTo ? { dateTo } : {}),
+    ...(statusFilters.length ? { statuses: statusFilters } : {}),
+    ...(accountFilters.length ? { accountIds: accountFilters.map(Number) } : {}),
+    ...(filterAccountId ? { filterAccountId } : {}),
+    ...(platformFilters.length ? { platforms: platformFilters } : {}),
+    ...(actionFilters.length ? { actionIds: actionFilters } : {})
+  }), [debouncedCampaignSearch, timePreset, dateFrom, dateTo, statusFilters, accountFilters, filterAccountId, platformFilters, actionFilters])
+  const pageFilterKey = JSON.stringify(pageFilters)
   const [inputDataFilters, setInputDataFilters] = useState<DetailFilterState>(() => createDefaultDetailFilters())
   const [inputDataOriginFilter, setInputDataOriginFilter] = useState<CampaignInputOriginFilter>('all')
   const [inputDataSearch, setInputDataSearch] = useState('')
@@ -2624,6 +2646,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         platform: account.flatformType
       })
     })
+    ;(campaignPage?.extraAccounts || []).forEach(account => {
+      const value = String(account.id)
+      if (!optionMap.has(value)) optionMap.set(value, { value, label: account.name || `ID: ${account.id}`, platform: '' })
+    })
     campaigns.forEach(campaign => {
       const value = String(campaign.accountId)
       if (!optionMap.has(value)) {
@@ -2648,7 +2674,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       if (!optionMap.has(String(id))) optionMap.set(String(id), { value: String(id), label: `ID: ${id}`, platform: '' })
     }))
     return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
-  }, [accounts, campaigns, campaignDrafts.items])
+  }, [accounts, campaigns, campaignPage, campaignDrafts.items])
   const workAreaRef = useRef<HTMLDivElement>(null)
   const detailDockRef = useRef<HTMLDivElement>(null)
   const findDataLogTableWrapRef = useRef<HTMLDivElement>(null)
@@ -2739,7 +2765,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
     if (navigationLoadRequestedRef.current !== request.requestId) {
       navigationLoadRequestedRef.current = request.requestId
-      void Promise.resolve(loadCampaigns()).finally(() => {
+      setSelectedCampaignId(request.campaignId ?? null)
+      const query = useCampaignStore.getState().campaignPageQuery
+      if (query) configureCampaignPage({ ...query, selectedId: request.campaignId })
+      void Promise.resolve(loadCampaigns({ silent: true, passive: true })).finally(() => {
         setNavigationLoadCompletedRequestId(request.requestId)
       })
     }
@@ -2748,6 +2777,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     dataGroupCampaignRequest,
     loadCampaignConfig,
     loadCampaigns,
+    configureCampaignPage,
+    setSelectedCampaignId,
     navigationLoadCompletedRequestId,
     onDataGroupCampaignRequestHandled,
     showAlert
@@ -2760,62 +2791,17 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     setDetailDockOpen(true)
   }, [accountInfoOpenRequest?.accountId, accountInfoOpenRequest?.requestId])
 
+  useEffect(() => { void loadCampaignActions() }, [loadCampaignActions])
   useEffect(() => {
-    loadCampaignActions()
-    loadAccounts()
-  }, [loadCampaignActions, loadAccounts])
-
+    setCampaignPageActive(isActive && !bulkActionLoading)
+    return () => setCampaignPageActive(false)
+  }, [isActive, bulkActionLoading, setCampaignPageActive])
   useEffect(() => {
-    if (!isActive) return
-
-    let isDisposed = false
-    let refreshInFlight = false
-
-    const markInitialCampaignLoadSettled = () => {
-      if (initialCampaignLoadSettledRef.current || isDisposed) return
+    if (campaignPage || campaignPageError) {
       initialCampaignLoadSettledRef.current = true
       setShowInitialCampaignLoading(false)
     }
-
-    const refreshCampaignsIfVisible = async () => {
-      if (isDisposed || refreshInFlight) return
-      if (!isAppWindowVisible()) {
-        markInitialCampaignLoadSettled()
-        return
-      }
-
-      refreshInFlight = true
-      try {
-        await loadCampaigns(hasZaloServerAccounts ? { silent: true } : undefined)
-      } finally {
-        refreshInFlight = false
-        markInitialCampaignLoadSettled()
-      }
-    }
-
-    void refreshCampaignsIfVisible()
-
-    const intervalId = window.setInterval(() => {
-      void refreshCampaignsIfVisible()
-    }, hasZaloServerAccounts
-      ? SERVER_CAMPAIGN_LIST_REFRESH_INTERVAL_MS
-      : LOCAL_CAMPAIGN_LIST_REFRESH_INTERVAL_MS)
-
-    const handleVisibilityChange = () => {
-      if (isAppWindowVisible()) {
-        void refreshCampaignsIfVisible()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    if (hasZaloServerAccounts) window.addEventListener('focus', refreshCampaignsIfVisible)
-
-    return () => {
-      isDisposed = true
-      window.clearInterval(intervalId)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (hasZaloServerAccounts) window.removeEventListener('focus', refreshCampaignsIfVisible)
-    }
-  }, [hasZaloServerAccounts, isActive, loadCampaigns])
+  }, [campaignPage, campaignPageError])
 
   useEffect(() => {
     setDataGroupSourceStatuses(prev => {
@@ -3267,13 +3253,16 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     })
   }, [openCampaignActionMenuId])
 
-  // Clear bulk selection when any list filter changes.
-  useEffect(() => {
+  // Fence pending selections as soon as either the entered or applied filters change.
+  useLayoutEffect(() => {
+    selectionRequest.current++
+    setSelectionLoading(false)
+    setAllSelection(null)
     setSelectedIds(new Set())
     setOpenCampaignActionMenuId(null)
     setCampaignActionMenuPosition(null)
     campaignActionMenuAnchorRef.current = null
-  }, [filterAccountId, timePreset, dateFrom, dateTo, campaignNameSearch, statusFilters, accountFilters, platformFilters, actionFilters])
+  }, [pageFilterKey, campaignNameSearch, campaignSourceScope])
 
   useEffect(() => {
     const allowedPlatforms = new Set(campaignPlatformOptions.map(option => option.value))
@@ -3448,25 +3437,54 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
+  const readSelection = async (ids?: number[], allFilters = false): Promise<DesktopCampaignSelection[] | null> => {
+    if (campaignSelectionBlocked || selectionLoading || bulkActionLoading) return null
+    const request = ++selectionRequest.current
+    const filters = allFilters ? {} : pageFilters
+    setSelectionLoading(true)
+    const rows: DesktopCampaignSelection[] = []
+    try {
+      if (ids) {
+        for (let start = 0; start < ids.length; start += 500) {
+          const batch = await window.electronAPI.getDesktopCampaignSelection({ filters, ids: ids.slice(start, start + 500) })
+          if (request !== selectionRequest.current) return null
+          rows.push(...batch)
+        }
+      } else {
+        let afterId = 0
+        while (true) {
+          const batch = await window.electronAPI.getDesktopCampaignSelection({ filters, afterId })
+          if (request !== selectionRequest.current) return null
+          if (!batch.length) break
+          if (batch[batch.length - 1].id <= afterId) throw new Error('Lựa chọn chiến dịch không hợp lệ.')
+          rows.push(...batch)
+          afterId = batch[batch.length - 1].id
+          if (batch.length < 500) break
+        }
+      }
+      return rows
+    } catch (error) {
+      if (request === selectionRequest.current) showAlert(formatIpcErrorMessage(error, 'Không thể đọc lựa chọn chiến dịch.'), 'error')
+      return null
+    } finally {
+      if (request === selectionRequest.current) setSelectionLoading(false)
+    }
+  }
+  const cancelSelectionRead = () => { selectionRequest.current++; setSelectionLoading(false); setAllSelection(null) }
   const toggleSelectOne = (id: number) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
+    if (campaignSelectionBlocked || selectionLoading || bulkActionLoading) return
+    cancelSelectionRead()
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next })
   }
-
-  const toggleSelectAll = () => {
-    setSelectedIds(prev => {
-      const allFilteredSelected = filteredCampaigns.length > 0 && filteredCampaigns.every(c => prev.has(c.id))
-      const next = new Set(prev)
-      filteredCampaigns.forEach(c => {
-        if (allFilteredSelected) next.delete(c.id)
-        else next.add(c.id)
-      })
-      return next
-    })
+  const toggleSelectAll = async () => {
+    const rows = await readSelection()
+    if (!rows) return
+    const all = rows.length > 0 && rows.every(row => selectedIds.has(row.id))
+    setSelectedIds(prev => { const next = new Set(prev); rows.forEach(row => all ? next.delete(row.id) : next.add(row.id)); return next })
+    setAllSelection(all ? null : { key: pageFilterKey, total: rows.length })
   }
+  useEffect(() => () => { selectionRequest.current++ }, [])
+  useEffect(() => { if (selectedIds.size === 0) setAllSelection(null) }, [selectedIds])
 
   const handleTimePresetChange = (value: CampaignTimePreset) => {
     if (value === 'custom') {
@@ -3527,8 +3545,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }
 
   const handleBulkPause = async () => {
-    const eligible = filteredCampaigns
-      .filter(c => selectedIds.has(c.id))
+    const rows = await readSelection(Array.from(selectedIds))
+    if (!rows) return
+    const eligible = rows
       .filter(c => canPauseCampaign(c.status))
       .map(c => c.id)
     if (eligible.length === 0) {
@@ -3547,8 +3566,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }
 
   const handleBulkResume = async () => {
-    const eligible = filteredCampaigns
-      .filter(c => selectedIds.has(c.id) && canResumeCampaign(c.status))
+    const rows = await readSelection(Array.from(selectedIds))
+    if (!rows) return
+    const eligible = rows
+      .filter(c => canResumeCampaign(c.status))
       .map(c => c.id)
     if (eligible.length === 0) {
       showAlert('Không có chiến dịch nào có thể tiếp tục. Chỉ có thể tiếp tục chiến dịch "tạm dừng".', 'info')
@@ -3565,23 +3586,20 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
-  const handleBulkDelete = () => {
-    const allIds = Array.from(selectedIds)
-    const blockedRunningCount = allIds.filter(id => {
-      const campaign = campaigns.find(item => item.id === id)
-      return campaign && !canDeleteCampaign(campaign.status)
-    }).length
-    const ids = allIds.filter(id => {
-      const campaign = campaigns.find(item => item.id === id)
-      return !campaign || canDeleteCampaign(campaign.status)
-    })
+  const handleBulkDelete = async () => {
+    const rows = await readSelection(Array.from(selectedIds), true)
+    if (!rows) return
+    const blockedRunningCount = rows.filter(row => !canDeleteCampaign(row.status)).length
+    const ids = rows.filter(row => canDeleteCampaign(row.status)).map(row => row.id)
     if (ids.length === 0) {
       showAlert('Không có chiến dịch nào có thể xoá. Chiến dịch đang chạy không được xoá.', 'info')
       return
     }
+    const request = selectionRequest.current
     useUiStore.getState().showConfirm(
       `Xoá ${ids.length} chiến dịch đã chọn${blockedRunningCount > 0 ? `, bỏ qua ${blockedRunningCount} chiến dịch đang chạy` : ''}?`,
       async () => {
+        if (request !== selectionRequest.current) return
         setBulkActionLoading(true)
         try {
           await bulkDeleteCampaigns(ids)
@@ -4075,21 +4093,39 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
     return Array.from(optionMap.values())
   }, [actionDetailFilters.status, campaignDetailPageItems])
-  const linkedFindDataSourceCampaignIds = useMemo(() => {
-    if (!selectedCampaignSummary) return []
-    return uniqueNumbers(
-      campaigns
-        .filter(source => FIND_DATA_ACTION_IDS.has(source.actionId))
-        .filter(source => FIND_DATA_TARGET_FIELDS.some(field =>
-          toNumberList(source.relationSettings?.[field]).includes(selectedCampaignSummary.id)
-        ))
-        .map(source => source.id)
-    )
-  }, [campaigns, selectedCampaignSummary])
+  const [linkedFindDataSourceCampaignIds, setLinkedFindDataSourceCampaignIds] = useState<number[]>([])
+  const campaignSourcesRead = useRef<Promise<number[]> | null>(null)
+  useEffect(() => { setLinkedFindDataSourceCampaignIds([]) }, [selectedCampaignId, campaignSourceScope])
+  useEffect(() => {
+    let disposed = false
+    if (selectedCampaignId && campaignSourceScope) void (async () => {
+      // Serialize refreshes; only the latest selection/revision may start a follow-up.
+      await campaignSourcesRead.current?.catch(() => undefined)
+      if (disposed) return
+      const operation = window.electronAPI.getDesktopCampaignSources(selectedCampaignId)
+      campaignSourcesRead.current = operation
+      try {
+        const ids = await operation
+        if (!disposed) setLinkedFindDataSourceCampaignIds(ids)
+      } catch (error) {
+        if (!disposed) console.error('Failed to load campaign sources:', error)
+      } finally {
+        if (campaignSourcesRead.current === operation) campaignSourcesRead.current = null
+      }
+    })()
+    return () => { disposed = true }
+  }, [selectedCampaignId, campaignSourceScope, campaignSourcesRevision])
   const linkedFindDataTargetCampaignIds = useMemo(() => {
     if (!selectedCampaign || !FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)) return []
     return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.relationSettings?.[field])))
   }, [selectedCampaign])
+  const relationCatalogKey = `${selectedCampaignId}:${campaignSourcesRevision}:${linkedFindDataSourceCampaignIds.join(',')}:${linkedFindDataTargetCampaignIds.join(',')}`
+  useEffect(() => {
+    if (detailTab === 'info' && (linkedFindDataSourceCampaignIds.length || linkedFindDataTargetCampaignIds.length)) {
+      void loadCampaignCatalog().catch(error => console.error('Failed to load campaign references:', error))
+    }
+  }, [detailTab, relationCatalogKey, loadCampaignCatalog])
+  const infoCampaigns = useMemo(() => Array.from(new Map([...campaignCatalog, ...campaigns].map(row => [row.id, row])).values()), [campaignCatalog, campaigns])
   const runLogEntries = useMemo(
     () => parseCampaignRunLog(selectedCampaignLog?.log || ''),
     [selectedCampaignLog?.log]
@@ -5201,6 +5237,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         platform: normalizeCampaignPlatform(action.flatformType) || inferCampaignPlatformFromActionId(action.id)
       })
     })
+    ;(campaignPage?.actionOptions || []).forEach(action => {
+      if (!optionMap.has(action.id)) optionMap.set(action.id, { value: action.id, label: action.name, platform: action.platform })
+    })
     campaigns.forEach(campaign => {
       if (!optionMap.has(campaign.actionId)) {
         const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
@@ -5219,70 +5258,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       })
     })
     return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
-  }, [campaignActions, campaigns, campaignDrafts.items, actionById, accountById])
+  }, [campaignActions, campaigns, campaignPage, campaignDrafts.items, actionById, accountById])
 
-  // Filter campaigns by account and the local list filters.
   const filteredCampaigns = useMemo(() => {
-    const dateStart = parseDateInputBoundary(dateFrom, 'start')
-    const dateEnd = parseCampaignListDateToBoundary(dateTo)
-    const hasDateFilter = timePreset !== 'all' && (!!dateStart || !!dateEnd)
-    const searchQuery = normalizeFilterText(campaignNameSearch)
-
-    return campaigns.filter(campaign => {
-      if (
-        filterAccountId
-        && campaign.accountId !== filterAccountId
-        && campaign.secondaryAccountId !== filterAccountId
-      ) return false
-
-      if (searchQuery && !normalizeFilterText(campaign.name).includes(searchQuery)) return false
-
-      if (hasDateFilter) {
-        if (!campaign.schedule) return false
-        const scheduleDate = new Date(campaign.schedule)
-        if (Number.isNaN(scheduleDate.getTime())) return false
-        if (dateStart && scheduleDate < dateStart) return false
-        if (dateEnd && scheduleDate > dateEnd) return false
-      }
-
-      if (statusFilters.length > 0 && !statusFilters.includes(campaign.status)) return false
-
-      if (
-        accountFilters.length > 0
-        && !accountFilters.includes(String(campaign.accountId))
-        && (!campaign.secondaryAccountId || !accountFilters.includes(String(campaign.secondaryAccountId)))
-      ) return false
-
-      if (platformFilters.length > 0) {
-        const actionPlatform = normalizeCampaignPlatform(actionById.get(campaign.actionId)?.flatformType)
-        const accountPlatform = normalizeCampaignPlatform(accountById.get(campaign.accountId)?.flatformType)
-        const campaignPlatform = actionPlatform || accountPlatform || inferCampaignPlatformFromActionId(campaign.actionId)
-        if (!platformFilters.includes(campaignPlatform)) return false
-      }
-
-      if (actionFilters.length > 0 && !actionFilters.includes(campaign.actionId)) return false
-
-      return true
-    }).sort(compareCampaignListOrder)
-  }, [
-    campaigns,
-    filterAccountId,
-    dateFrom,
-    dateTo,
-    timePreset,
-    campaignNameSearch,
-    statusFilters,
-    accountFilters,
-    platformFilters,
-    actionFilters,
-    actionById,
-    accountById
-  ])
-
-  const selectedFilteredCount = useMemo(
-    () => filteredCampaigns.reduce((count, campaign) => count + (selectedIds.has(campaign.id) ? 1 : 0), 0),
-    [filteredCampaigns, selectedIds]
-  )
+    const pageIds = new Set(campaignPage?.items.map(row => row.id) || [])
+    return campaigns.filter(row => pageIds.has(row.id)).sort(compareCampaignListOrder)
+  }, [campaigns, campaignPage])
 
   const filteredCampaignDrafts = useMemo(() => {
     if (statusFilters.length > 0 && !statusFilters.includes('draft')) return []
@@ -5311,6 +5292,23 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }, [campaignDrafts.items, filterAccountId, campaignNameSearch, timePreset, dateFrom, dateTo,
     statusFilters, accountFilters, platformFilters, actionFilters, actionById, accountById])
 
+  const previousPageFilters = useRef(pageFilterKey)
+  const draftAnchors = JSON.stringify(filteredCampaignDrafts.map(({ id, schedule }) => ({ id, schedule })))
+  useEffect(() => {
+    const changed = previousPageFilters.current !== pageFilterKey
+    previousPageFilters.current = pageFilterKey
+    const page = changed ? 1 : campaignPageNumber
+    if (changed) setCampaignPageNumber(1)
+    configureCampaignPage({ filters: JSON.parse(pageFilterKey), page, selectedId: selectedCampaignId, drafts: JSON.parse(draftAnchors) })
+  }, [pageFilterKey, campaignPageNumber, selectedCampaignId, draftAnchors, configureCampaignPage])
+  useEffect(() => {
+    if (campaignPage && campaignPage.page !== campaignPageNumber && !useCampaignStore.getState().campaignPageDirty) setCampaignPageNumber(campaignPage.page)
+  }, [campaignPage])
+  const allFilteredSelected = !!campaignPage && campaignPage.campaignTotal > 0 && (
+    (allSelection?.key === pageFilterKey && allSelection.total === campaignPage.campaignTotal)
+    || (campaignPage.campaignTotal === filteredCampaigns.length && filteredCampaigns.every(row => selectedIds.has(row.id)))
+  )
+
   const filterAccountCampaign = filterAccountId
     ? campaigns.find(campaign => (
       campaign.accountId === filterAccountId || campaign.secondaryAccountId === filterAccountId
@@ -5328,20 +5326,26 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     ? 'Chưa có chiến dịch'
     : 'Không có chiến dịch phù hợp bộ lọc'
 
-  const showCampaignTableLoading = showInitialCampaignLoading || showManualCampaignLoading
+  const campaignQueryPending = campaignPageResultKey !== JSON.stringify({ filters: pageFilters, page: campaignPageNumber, selectedId: selectedCampaignId, drafts: JSON.parse(draftAnchors) })
+  const showCampaignTableLoading = !campaignPageError && (showInitialCampaignLoading || showManualCampaignLoading || campaignQueryPending)
+  const campaignSelectionBlocked = showCampaignTableLoading || !!campaignPageError || campaignNameSearch.trim() !== debouncedCampaignSearch.trim()
   const campaignTableRows = useMemo(() => {
-    const rows: CampaignTableRow[] = [
-      ...(showCampaignTableLoading ? [] : filteredCampaigns).map(item => ({ kind: 'campaign' as const, item })),
-      ...filteredCampaignDrafts.map(item => ({ kind: 'draft' as const, item }))
-    ]
-    return rows.sort((a, b) => compareCampaignListOrder(getCampaignTableSortItem(a), getCampaignTableSortItem(b)))
-  }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading])
+    if (showCampaignTableLoading || campaignPageError) return []
+    const rows = new Map<string, CampaignTableRow>([
+      ...filteredCampaigns.map(item => [`campaign:${item.id}`, { kind: 'campaign' as const, item }] as const),
+      ...filteredCampaignDrafts.map(item => [`draft:${item.id}`, { kind: 'draft' as const, item }] as const)
+    ])
+    return (campaignPage?.order || []).flatMap(key => {
+      const row = rows.get(`${key.kind}:${key.id}`)
+      return row ? [row] : []
+    })
+  }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading, campaignPage, campaignPageError])
   const campaignRangeLabel = getCampaignRangeLabel(timePreset, dateFrom, dateTo)
 
   const handleReloadCampaigns = () => {
     campaignDrafts.refresh()
     setShowManualCampaignLoading(true)
-    loadCampaigns().finally(() => setShowManualCampaignLoading(false))
+    loadCampaigns({ refreshSources: true }).finally(() => setShowManualCampaignLoading(false))
   }
 
   const renderDetailSort = (target: 'inputDataSort' | 'actionsSort') => {
@@ -5944,16 +5948,16 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           <div className="campaign-bulk-action-bar">
             <span>Đã chọn <strong>{selectedIds.size}</strong> chiến dịch</span>
             <div className="bulk-action-buttons">
-              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkResume} title="Tiếp tục các chiến dịch đang tạm dừng">
+              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading || selectionLoading || campaignSelectionBlocked} onClick={handleBulkResume} title="Tiếp tục các chiến dịch đang tạm dừng">
                 <Play size={12} /> Tiếp tục
               </button>
-              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading} onClick={handleBulkPause} title="Tạm dừng các chiến dịch đang chạy/chờ">
+              <button className="btn btn-secondary btn-sm" disabled={bulkActionLoading || selectionLoading || campaignSelectionBlocked} onClick={handleBulkPause} title="Tạm dừng các chiến dịch đang chạy/chờ">
                 <Pause size={12} /> Tạm dừng
               </button>
-              <button className="btn btn-danger btn-sm" disabled={bulkActionLoading} onClick={handleBulkDelete} title="Xoá các chiến dịch đã chọn">
+              <button className="btn btn-danger btn-sm" disabled={bulkActionLoading || selectionLoading || campaignSelectionBlocked} onClick={handleBulkDelete} title="Xoá các chiến dịch đã chọn">
                 <Trash2 size={12} /> Xoá
               </button>
-              <button className="btn-icon" onClick={() => setSelectedIds(new Set())} title="Bỏ chọn tất cả">
+              <button className="btn-icon" onClick={() => { cancelSelectionRead(); setSelectedIds(new Set()) }} title="Bỏ chọn tất cả">
                 <X size={12} />
               </button>
             </div>
@@ -6022,10 +6026,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
         {showAddInputDataModal && (
           <AddInputDataToCampaignModal
-            campaigns={campaigns}
+            campaigns={campaignCatalog}
             campaignActions={campaignActions}
             selectedCount={selectedInputDataIds.size}
-            onLoadCampaigns={loadCampaigns}
+            onLoadCampaigns={loadCampaignCatalog}
             onSubmit={handleAddInputDataToCampaignSubmit}
             onClose={() => setShowAddInputDataModal(false)}
           />
@@ -6062,7 +6066,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       <div className="campaign-work-area" ref={workAreaRef}>
         {/* Campaign Table */}
         <div className="campaign-panel-content campaign-table-scroll" style={{ flex: 1, minHeight: 0 }}>
-          {!showCampaignTableLoading && !campaignDrafts.loading && !campaignDrafts.error
+          {campaignPageError ? (<div className="campaign-table-loading-row" role="alert"><span>{campaignPageError}</span><button className="btn btn-secondary btn-sm" onClick={handleReloadCampaigns}>Thử lại</button></div>) : !showCampaignTableLoading && !campaignDrafts.loading && !campaignDrafts.error
             && filteredCampaigns.length === 0 && filteredCampaignDrafts.length === 0 ? (
             <div className="empty-state"><div className="empty-state-text">{emptyCampaignText}</div></div>
           ) : (
@@ -6073,9 +6077,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     className="campaign-list-select-checkbox"
                     aria-label="Chọn tất cả chiến dịch"
                     type="checkbox"
-                    checked={!showCampaignTableLoading && filteredCampaigns.length > 0 && selectedFilteredCount === filteredCampaigns.length}
-                    disabled={showCampaignTableLoading || filteredCampaigns.length === 0}
-                    ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedFilteredCount > 0 && selectedFilteredCount < filteredCampaigns.length }}
+                    checked={!showCampaignTableLoading && allFilteredSelected}
+                    disabled={campaignSelectionBlocked || selectionLoading || bulkActionLoading || filteredCampaigns.length === 0}
+                    ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedIds.size > 0 && !allFilteredSelected }}
                     onChange={toggleSelectAll}
                   />
                   <span>Chiến dịch</span>
@@ -6179,6 +6183,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                           aria-label={`Chọn chiến dịch ${campaign.name}`}
                           type="checkbox"
                           checked={selectedIds.has(campaign.id)}
+                          disabled={campaignSelectionBlocked || selectionLoading || bulkActionLoading}
                           onChange={() => toggleSelectOne(campaign.id)}
                         />
                       </div>
@@ -6525,6 +6530,15 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           )}
         </div>
 
+        <div className="campaign-list-pager" aria-label="Phân trang chiến dịch">
+          <span>{campaignPage?.total ?? 0} chiến dịch / bản nháp{selectedIds.size > 0 ? ` · Đã chọn ${selectedIds.size}` : ''}{selectionLoading ? ' · Đang đọc lựa chọn...' : ''}</span>
+          <div>
+            <button className="btn btn-secondary btn-sm" aria-label="Trang chiến dịch trước" disabled={showCampaignTableLoading || campaignPageNumber <= 1 || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page - 1)}>Trước</button>
+            <span> {campaignPageNumber}/{Math.max(1, Math.ceil((campaignPage?.total || 0) / 100))} </span>
+            <button className="btn btn-secondary btn-sm" aria-label="Trang chiến dịch sau" disabled={showCampaignTableLoading || !!campaignPageError || campaignPageNumber >= Math.ceil((campaignPage?.total || 0) / 100) || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page + 1)}>Sau</button>
+          </div>
+        </div>
+
         {/* Bottom Detail Dock */}
         <div
           className={`campaign-detail-dock ${detailDockOpen ? 'is-open' : 'is-collapsed'}`}
@@ -6692,7 +6706,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     campaign={selectedCampaignConfig}
                     account={selectedCampaignAccount}
                     action={selectedCampaignAction}
-                    campaigns={campaigns}
+                    campaigns={infoCampaigns}
                     accounts={accounts}
                   />
                 ) : (

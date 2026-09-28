@@ -23996,7 +23996,8 @@ body.theme-light :is(
   gap: 12px;
 }
 
-.campaign-input-data-pager {
+.campaign-input-data-pager,
+.campaign-list-pager {
   min-height: 38px;
   display: flex;
   align-items: center;
@@ -24008,7 +24009,8 @@ body.theme-light :is(
   font-size: 11px;
 }
 
-.campaign-input-data-pager > div {
+.campaign-input-data-pager > div,
+.campaign-list-pager > div {
   display: flex;
   align-items: center;
   gap: 6px;

@@ -46,6 +46,7 @@ import { registerContentTemplateHandlers } from './handlers/contentTemplateHandl
 import { registerMediaHandlers } from './handlers/mediaHandlers'
 import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHandlers'
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
+import { registerDesktopUiHandlers } from './handlers/desktopUiHandlers'
 import { registerAppNotificationHandlers } from './handlers/appNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutCustomerHandlers'
@@ -1378,6 +1379,7 @@ export function registerIpcHandlers(
   registerMediaHandlers(supabase)
   registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
+  registerDesktopUiHandlers()
   registerAppNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerAutomationHandlers(mainWindow)

@@ -1821,6 +1821,79 @@ export async function listCampaignSummaries(): Promise<CampaignListItem[]> {
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
+export async function listCampaignSummariesForPage(ids: number[]): Promise<CampaignListItem[]> {
+  if (ids.length === 0) return []
+  if (ids.length > 101) throw new Error('Campaign page exceeds 101 IDs')
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select(CAMPAIGN_LIST_ITEM_SELECT)
+    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
+    .eq('is_delete', false)
+    .in('id', ids)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(`Failed to list campaign summaries: ${error.message}`)
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const zaloCapabilities = loadCurrentUserZaloAccountCapabilities()
+  const visibleRows = (data || []).filter(row => {
+    const account = (row as Record<string, any>).primary_account || {}
+    if (String(account.flatform_type || '').trim().toLowerCase() !== 'zalo') return true
+    if (account.is_zalo_show_web === true) return zaloCapabilities.web
+    return account.is_zalo_server === true ? zaloCapabilities.server : zaloCapabilities.qr
+  })
+  const campaigns = filterCampaignsByEntitlements(
+    visibleRows.map(row => mapCampaignListItemFromDB(row as unknown as Record<string, unknown>)),
+    entitlements
+  )
+  const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
+    campaigns,
+    u.staffId,
+    u.organizationId
+  )
+  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(
+    campaignsWithSecondaryAccountNames
+  )
+  return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
+}
+
+export async function listDesktopCampaignCatalog(): Promise<CampaignListItem[]> {
+  const u = requireCurrentUser()
+  const data: Record<string, unknown>[] = []
+  let afterId = 0
+  while (true) {
+    const { data: rows, error } = await client().from('auto_campaigns').select(CAMPAIGN_LIST_ITEM_SELECT)
+      .eq('staff_id', u.staffId).eq('organization_id', u.organizationId).eq('is_delete', false)
+      .gt('id', afterId).order('id', { ascending: true }).limit(1000)
+    if (error) throw new Error(`Failed to load campaign choices: ${error.message}`)
+    if (!rows?.length) break
+    data.push(...rows as unknown as Record<string, unknown>[])
+    afterId = Number((rows[rows.length - 1] as unknown as { id: number }).id)
+  }
+  const entitlements = await loadCurrentUserEffectiveEntitlements()
+  const zaloCapabilities = loadCurrentUserZaloAccountCapabilities()
+  const visibleRows = (data || []).filter(row => {
+    const account = (row as Record<string, any>).primary_account || {}
+    if (String(account.flatform_type || '').trim().toLowerCase() !== 'zalo') return true
+    if (account.is_zalo_show_web === true) return zaloCapabilities.web
+    return account.is_zalo_server === true ? zaloCapabilities.server : zaloCapabilities.qr
+  })
+  const campaigns = filterCampaignsByEntitlements(
+    visibleRows.map(row => mapCampaignListItemFromDB(row as unknown as Record<string, unknown>)),
+    entitlements
+  )
+  const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
+    campaigns,
+    u.staffId,
+    u.organizationId
+  )
+  const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(
+    campaignsWithSecondaryAccountNames
+  )
+  return campaignsWithDataGroupSources
+}
+
 export async function listCampaigns(): Promise<Campaign[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()

@@ -1,3 +1,4 @@
+import type { DesktopCampaignPage, DesktopCampaignPageQuery } from '../../../shared/desktopUiReads'
 import { create } from 'zustand'
 import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignLogSnapshot, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 import { useAuthStore } from './authStore'
@@ -6,7 +7,7 @@ interface CampaignStore {
   // Accounts
   accounts: AutoAccount[]
   loadingAccounts: boolean
-  loadAccounts: (options?: { silent?: boolean }) => Promise<void>
+  loadAccounts: (options?: { silent?: boolean; invalidate?: boolean }) => Promise<void>
   createAccount: (data: Partial<AutoAccount>) => Promise<AutoAccount>
   updateAccount: (id: number, updates: Partial<AutoAccount>) => Promise<AutoAccount>
   deleteAccount: (id: number) => Promise<void>
@@ -32,10 +33,25 @@ interface CampaignStore {
   updateCampaignAction: (id: string, updates: Partial<CampaignAction>) => Promise<void>
   deleteCampaignAction: (id: string) => Promise<void>
 
+  accountCatalogVersion?: string
+  accountsReadAt: number
+  campaignsReadAt: number
+  campaignPage: DesktopCampaignPage | null
+  campaignPageQuery: DesktopCampaignPageQuery | null
+  campaignPageError: string
+  campaignPageActive: boolean
+  campaignPageDirty: boolean
+  campaignPageDueAt: number
+  campaignPageResultKey: string
+  campaignSourcesRevision: number
+  configureCampaignPage: (query: DesktopCampaignPageQuery) => void
+  setCampaignPageActive: (active: boolean) => void
+  campaignCatalog: CampaignListItem[]
+  loadCampaignCatalog: () => Promise<void>
   // Campaigns
   campaigns: CampaignListItem[]
   loadingCampaigns: boolean
-  loadCampaigns: (options?: { silent?: boolean }) => Promise<void>
+  loadCampaigns: (options?: { silent?: boolean; passive?: boolean; refreshSources?: boolean }) => Promise<void>
   campaignConfigs: Record<number, CampaignConfig>
   campaignLogs: Record<number, CampaignLogSnapshot>
   loadingCampaignConfigIds: Record<number, true>
@@ -169,9 +185,15 @@ const mergeLoadedAccountsPreservingNewest = (current: AutoAccount[], loaded: Aut
     if (!existing) return account
     const existingTime = Date.parse(existing.updatedAt || '')
     const incomingTime = Date.parse(account.updatedAt || '')
-    return Number.isFinite(existingTime) && Number.isFinite(incomingTime) && incomingTime < existingTime
-      ? existing
-      : account
+    if (!Number.isFinite(existingTime) || !Number.isFinite(incomingTime) || incomingTime >= existingTime) return account
+    // A metadata/group/profile change has its own catalog version. Keep that
+    // metadata even when a newer status update arrived during the request.
+    const result = { ...account }
+    const runtimeKeys = ['status', 'loginStatus', 'updatedAt', 'mobileDeviceLastSeenAt', 'mobileDeviceInfo',
+      'facebookLoginClaimGeneration', 'hasZaloSession', 'zaloSessionUpdatedAt', 'zaloSessionLastVerifiedAt',
+      'zaloSessionLastError', 'hasEmailSession', 'emailSessionUpdatedAt', 'emailSessionLastVerifiedAt', 'emailSessionLastError'] as const
+    for (const key of runtimeKeys) (result as any)[key] = existing[key]
+    return result
   })
 }
 
@@ -179,13 +201,19 @@ interface SessionListLoadState {
   operation: Promise<void>
   trailingRequested: boolean
 }
+let accountMutationRevision = 0
 const accountListLoads = new Map<string, SessionListLoadState>()
 const campaignListLoads = new Map<string, SessionListLoadState>()
 const campaignConfigLoadsInFlight = new Map<number, Promise<CampaignConfig | null>>()
 const campaignLogLoadsInFlight = new Map<number, Promise<CampaignLogSnapshot | null>>()
 const campaignConfigInvalidationVersions = new Map<number, number>()
 const campaignLogInvalidationVersions = new Map<number, number>()
-let campaignSummaryRefreshTimer: ReturnType<typeof setTimeout> | null = null
+const offPageCampaignSignals = new Map<number, string>()
+let campaignPageRevision = 0
+// Publish source invalidations only after the existing page refresh settles.
+// Passive polling and runtime status updates never invalidate source links.
+let campaignSourcesInvalidationVersion = 0
+const campaignCatalogLoads = new Map<string, Promise<void>>()
 const pendingCampaignLogInvalidationIds = new Set<number>()
 let campaignLogInvalidationTimer: ReturnType<typeof setTimeout> | null = null
 let campaignDetailPageRequestVersion = 0
@@ -201,6 +229,8 @@ const getStoreAuthScopeKey = (): string | null => {
 export const useCampaignStore = create<CampaignStore>((set, get) => ({
   // =========== ACCOUNTS ===========
   accounts: [],
+  accountCatalogVersion: undefined,
+  accountsReadAt: 0,
   loadingAccounts: false,
   accountGroups: [],
   loadingAccountGroups: false,
@@ -215,7 +245,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const loadKey = `${requestEpoch}:${authScope}`
     const existingLoad = accountListLoads.get(loadKey)
     if (existingLoad) {
-      existingLoad.trailingRequested = true
+      existingLoad.trailingRequested ||= options?.invalidate !== false
       return existingLoad.operation
     }
     const silent = options?.silent === true
@@ -228,15 +258,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       let firstRequest = true
       do {
         loadState.trailingRequested = false
+        const revision = accountMutationRevision
         try {
-          const accounts = await window.electronAPI.listAccounts()
+          const snapshot = await window.electronAPI.getDesktopAccountSnapshot(get().accountCatalogVersion)
+          if (revision !== accountMutationRevision) { loadState.trailingRequested = true; continue }
+          const catalog = snapshot.catalog ?? get().accounts
+          const states = new Map(snapshot.states.map(row => [row.id, row]))
+          const accounts = catalog.filter(row => states.has(row.id)).map(row => ({ ...row, ...states.get(row.id)! }))
           if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) break
-          set(state => ({ accounts: mergeLoadedAccountsPreservingNewest(state.accounts, accounts) }))
+          set(state => ({ accounts: mergeLoadedAccountsPreservingNewest(state.accounts, accounts), accountCatalogVersion: snapshot.version, accountsReadAt: Date.now() }))
         } catch (err) {
           if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) {
             console.error('Failed to load accounts:', err)
           }
         } finally {
+          if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) set({ accountsReadAt: Date.now() })
           if (
             firstRequest &&
             !silent &&
@@ -264,13 +300,14 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   createAccount: async (data) => {
     if (!window.electronAPI) throw new Error('API not available')
     const account = await window.electronAPI.createAccount(data)
-    await get().loadAccounts()
+    await get().loadAccounts({ invalidate: true })
     return account
   },
 
   updateAccount: async (id, updates) => {
     if (!window.electronAPI) throw new Error('API not available')
     const account = await window.electronAPI.updateAccount(id, updates)
+    accountMutationRevision++
     set(state => {
       const index = state.accounts.findIndex(item => item.id === account.id)
       if (index < 0) return { accounts: [account, ...state.accounts] }
@@ -287,7 +324,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   deleteAccount: async (id) => {
     if (!window.electronAPI) return
     await window.electronAPI.deleteAccount(id)
-    await get().loadAccounts()
+    await get().loadAccounts({ invalidate: true })
   },
 
   loadAccountGroups: async (flatformType) => {
@@ -323,14 +360,14 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!window.electronAPI) return
     await window.electronAPI.updateAccountGroup(id, updates)
     await get().loadAccountGroups()
-    await get().loadAccounts()
+    await get().loadAccounts({ invalidate: true })
   },
 
   deleteAccountGroup: async (id) => {
     if (!window.electronAPI) return
     await window.electronAPI.deleteAccountGroup(id)
     await get().loadAccountGroups()
-    await get().loadAccounts()
+    await get().loadAccounts({ invalidate: true })
   },
 
   loadProxies: async () => {
@@ -366,7 +403,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!window.electronAPI) return
     await window.electronAPI.updateProxy(id, updates)
     await get().loadProxies()
-    await get().loadAccounts()
+    await get().loadAccounts({ invalidate: true })
   },
 
   deleteProxy: async (id) => {
@@ -443,15 +480,58 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   loadingCampaignConfigIds: {},
   loadingCampaignLogIds: {},
 
+  campaignsReadAt: 0,
+  campaignPage: null,
+  campaignPageQuery: null,
+  campaignPageError: '',
+  campaignPageActive: false,
+  campaignPageDirty: false,
+  campaignPageDueAt: 0,
+  campaignPageResultKey: '',
+  campaignSourcesRevision: 0,
+  campaignCatalog: [],
+  configureCampaignPage: (query) => {
+    const state = get()
+    const previous = state.campaignPageQuery
+    const key = JSON.stringify(query)
+    if (key === JSON.stringify(previous)) return
+    // Opening a row already loaded needs its config, not another progress read
+    // for the entire page. The next scheduled read includes this pinned ID.
+    if (previous && state.campaignPage && state.campaignPageResultKey === JSON.stringify(previous)
+      && JSON.stringify({ ...previous, selectedId: query.selectedId }) === key
+      && (!query.selectedId || state.campaigns.some(row => row.id === query.selectedId))) {
+      set({ campaignPageQuery: query, campaignPageResultKey: key })
+      return
+    }
+    campaignPageRevision++
+    set({ campaignPageQuery: query, campaignPageDirty: true, campaignPageDueAt: Date.now() })
+    if (state.campaignPageActive && document.visibilityState === 'visible') void get().loadCampaigns({ silent: true })
+  },
+  setCampaignPageActive: (active) => { set({ campaignPageActive: active }) },
+  loadCampaignCatalog: () => {
+    const epoch = storeSessionEpoch
+    const scope = getStoreAuthScopeKey()
+    if (!scope) return Promise.resolve()
+    const key = `${epoch}:${scope}`
+    const pending = campaignCatalogLoads.get(key)
+    if (pending) return pending
+    const operation = window.electronAPI.listDesktopCampaignCatalog().then(catalog => {
+      if (epoch === storeSessionEpoch && scope === getStoreAuthScopeKey()) set({ campaignCatalog: catalog })
+    }).finally(() => { if (campaignCatalogLoads.get(key) === operation) campaignCatalogLoads.delete(key) })
+    campaignCatalogLoads.set(key, operation)
+    return operation
+  },
   loadCampaigns: (options) => {
     if (!window.electronAPI) return Promise.resolve()
+    if (!get().campaignPageQuery) return Promise.resolve()
     const authScope = getStoreAuthScopeKey()
     if (!authScope) return Promise.resolve()
     const requestEpoch = storeSessionEpoch
     const loadKey = `${requestEpoch}:${authScope}`
+    if (options?.refreshSources) campaignSourcesInvalidationVersion++
     const existingLoad = campaignListLoads.get(loadKey)
     if (existingLoad) {
-      existingLoad.trailingRequested = true
+      existingLoad.trailingRequested ||= options?.passive !== true
       return existingLoad.operation
     }
     const silent = options?.silent === true
@@ -464,8 +544,14 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       let firstRequest = true
       do {
         loadState.trailingRequested = false
+        const revision = campaignPageRevision
+        const sourcesRevision = campaignSourcesInvalidationVersion
         try {
-          const loaded = await window.electronAPI.listCampaignSummaries()
+          const query = get().campaignPageQuery!
+          const queryKey = JSON.stringify(query)
+          const page = await window.electronAPI.getDesktopCampaignPage(query)
+          if (JSON.stringify(get().campaignPageQuery) !== queryKey) { loadState.trailingRequested = true; continue }
+          const loaded = [...page.items, ...(page.selected && !page.items.some(row => row.id === page.selected!.id) ? [page.selected] : [])]
           if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) break
           set(state => {
             const campaigns = mergeLoadedCampaignsPreservingNewest(state.campaigns, loaded)
@@ -488,13 +574,15 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
               }
             }
 
-            return { campaigns, campaignConfigs, campaignLogs }
+            return { campaigns, campaignConfigs, campaignLogs, campaignPage: page, campaignPageResultKey: queryKey, campaignSourcesRevision: sourcesRevision, campaignPageError: '', campaignsReadAt: Date.now() }
           })
         } catch (err) {
           if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) {
+            set({ campaignPageError: err instanceof Error ? err.message : 'Không thể tải chiến dịch.' })
             console.error('Failed to load campaign summaries:', err)
           }
         } finally {
+          if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) set({ campaignsReadAt: Date.now(), ...(revision === campaignPageRevision ? { campaignPageDirty: false, campaignPageDueAt: 0 } : {}) })
           if (
             firstRequest &&
             !silent &&
@@ -674,6 +762,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   createCampaign: async (data, options) => {
     if (!window.electronAPI) throw new Error('API not available')
     const campaign = await window.electronAPI.createCampaign(data)
+    campaignSourcesInvalidationVersion++
     if (options?.refresh !== false) await get().loadCampaigns()
     return campaign
   },
@@ -681,6 +770,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   updateCampaign: async (id, updates, options) => {
     if (!window.electronAPI) return
     await window.electronAPI.updateCampaign(id, updates)
+    if ('extraSettings' in updates || 'actionId' in updates) campaignSourcesInvalidationVersion++
     set(state => {
       const campaignConfigs = { ...state.campaignConfigs }
       const campaignLogs = { ...state.campaignLogs }
@@ -694,6 +784,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   deleteCampaign: async (id) => {
     if (!window.electronAPI) return
     await window.electronAPI.deleteCampaign(id)
+    campaignSourcesInvalidationVersion++
     set(state => {
       const campaignConfigs = { ...state.campaignConfigs }
       const campaignLogs = { ...state.campaignLogs }
@@ -707,6 +798,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   cloneCampaign: async (id) => {
     if (!window.electronAPI) throw new Error('API not available')
     const cloned = await window.electronAPI.cloneCampaign(id)
+    campaignSourcesInvalidationVersion++
     await get().loadCampaigns()
     return cloned
   },
@@ -747,6 +839,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!window.electronAPI || ids.length === 0) return
     const api = window.electronAPI
     await Promise.all(ids.map(id => api.deleteCampaign(id)))
+    campaignSourcesInvalidationVersion++
     set(state => {
       const campaignConfigs = { ...state.campaignConfigs }
       const campaignLogs = { ...state.campaignLogs }
@@ -760,9 +853,14 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   },
 
   upsertCampaign: (signal) => {
+    const schedulePage = () => {
+      campaignPageRevision++
+      set(state => ({ campaignPageDirty: true, campaignPageDueAt: state.campaignPageDueAt || Date.now() + 300 }))
+    }
     const id = Number(signal.id)
     if (Number.isSafeInteger(id) && id > 0) {
       if (signal.invalidateConfig === true) {
+        campaignSourcesInvalidationVersion++
         campaignConfigInvalidationVersions.set(
           id,
           (campaignConfigInvalidationVersions.get(id) || 0) + 1
@@ -777,6 +875,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
       const existing = get().campaigns.find(campaign => campaign.id === id)
       if (existing) {
+        offPageCampaignSignals.delete(id)
+        const stateChanged = signal.invalidateConfig === true || (['status', 'note', 'schedule', 'lastRunAt'] as const)
+          .some(key => key in signal && (signal[key] ?? null) !== (existing[key] ?? null))
         const incomingUpdatedAt = typeof signal.updatedAt === 'string' ? signal.updatedAt : undefined
         const incomingTime = Date.parse(incomingUpdatedAt || '')
         const existingTime = Date.parse(existing.updatedAt || '')
@@ -829,14 +930,21 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
             }, 2_000)
           }
         }
+        if (stateChanged) schedulePage()
         return
       }
+      // A log append may repeat the same status for a campaign outside the
+      // current page. Remember only small state signatures, never its payload.
+      const stateFields = ['status', 'note', 'schedule', 'lastRunAt'] as const
+      if (stateFields.some(key => key in signal) && signal.invalidateConfig !== true) {
+        const key = JSON.stringify(stateFields.map(field => [field, field in signal, signal[field] ?? null]))
+        if (offPageCampaignSignals.get(id) === key) return
+        offPageCampaignSignals.delete(id)
+        offPageCampaignSignals.set(id, key)
+        if (offPageCampaignSignals.size > 1000) offPageCampaignSignals.delete(offPageCampaignSignals.keys().next().value!)
+      }
     }
-    if (campaignSummaryRefreshTimer) return
-    campaignSummaryRefreshTimer = setTimeout(() => {
-      campaignSummaryRefreshTimer = null
-      void get().loadCampaigns({ silent: true })
-    }, 400)
+    schedulePage()
   },
 
   resetCampaignSession: () => {
@@ -848,15 +956,29 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     campaignConfigInvalidationVersions.clear()
     campaignLogInvalidationVersions.clear()
     pendingCampaignLogInvalidationIds.clear()
-    if (campaignSummaryRefreshTimer) clearTimeout(campaignSummaryRefreshTimer)
     if (campaignLogInvalidationTimer) clearTimeout(campaignLogInvalidationTimer)
-    campaignSummaryRefreshTimer = null
+    campaignPageRevision++
+    campaignSourcesInvalidationVersion = 0
+    offPageCampaignSignals.clear()
+    campaignCatalogLoads.clear()
     campaignLogInvalidationTimer = null
     campaignDetailPageRequestVersion += 1
     campaignInputDataRequestVersion += 1
     activeCampaignInputDataQuery = null
     set({
       accounts: [],
+      accountCatalogVersion: undefined,
+      accountsReadAt: 0,
+      campaignsReadAt: 0,
+      campaignPage: null,
+      campaignPageQuery: null,
+      campaignPageError: '',
+      campaignPageActive: false,
+      campaignPageDirty: false,
+      campaignPageDueAt: 0,
+      campaignPageResultKey: '',
+      campaignSourcesRevision: 0,
+      campaignCatalog: [],
       loadingAccounts: false,
       accountGroups: [],
       loadingAccountGroups: false,

@@ -1,3 +1,4 @@
+import { useDesktopUiPolling } from './hooks/useDesktopUiPolling'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import TopBar, { type AppPage } from './components/TopBar/TopBar'
 import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
@@ -131,10 +132,10 @@ export default function App() {
   const [showUpdateModal, setShowUpdateModal] = useState(false)
   const authBootstrapStarted = useRef(false)
   const startupUpdateCheckStarted = useRef(false)
-  const accountRealtimeRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const runtimePlatform = window.electronAPI?.platform || 'unknown'
   const platformClass = `platform-${runtimePlatform}`
   const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
+  useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, activePage === 'campaigns', hasZaloServerAccounts)
 
   useEffect(() => {
     const handleDataGroupCampaignNavigation = (event: Event) => {
@@ -305,45 +306,6 @@ export default function App() {
     })
     setActivePage('browsers')
   }, [])
-
-  // Listen for auto-check login status updates from main process
-  useEffect(() => {
-    if (!window.electronAPI?.onAccountStatusUpdated) return
-    const unsubscribe = window.electronAPI.onAccountStatusUpdated(() => {
-      if (accountRealtimeRefreshTimer.current) clearTimeout(accountRealtimeRefreshTimer.current)
-      accountRealtimeRefreshTimer.current = setTimeout(() => {
-        accountRealtimeRefreshTimer.current = null
-        void loadAccounts({ silent: true })
-      }, 300)
-    })
-    return () => {
-      unsubscribe()
-      if (accountRealtimeRefreshTimer.current) clearTimeout(accountRealtimeRefreshTimer.current)
-      accountRealtimeRefreshTimer.current = null
-    }
-  }, [loadAccounts])
-
-  useEffect(() => {
-    if (!hasZaloServerAccounts || activePage !== 'campaigns') return
-
-    const refresh = () => {
-      if (document.visibilityState !== 'visible') return
-      void loadAccounts({ silent: true })
-    }
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') refresh()
-    }
-
-    refresh()
-    const timer = setInterval(refresh, user?.isChatSync ? 5_000 : 30_000)
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
-      clearInterval(timer)
-      window.removeEventListener('focus', refresh)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [activePage, hasZaloServerAccounts, loadAccounts, user?.isChatSync, user?.organizationId])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {

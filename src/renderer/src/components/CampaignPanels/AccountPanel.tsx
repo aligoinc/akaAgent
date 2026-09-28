@@ -140,7 +140,7 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
 export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo }: AccountPanelProps) {
   const {
     accounts,
-    campaigns,
+    campaignPage,
     accountGroups,
     proxies,
     loadAccounts,
@@ -213,7 +213,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
   } | null>(null)
 
   useEffect(() => {
-    loadAccounts()
+    loadAccounts({ invalidate: false })
     loadAccountGroups()
     loadProxies()
   }, [loadAccounts, loadAccountGroups, loadProxies])
@@ -525,14 +525,13 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
 
   const runningCampaignNamesByAccountId = useMemo(() => {
     const namesByAccountId = new Map<number, string[]>()
-    campaigns.forEach(campaign => {
-      if (campaign.isDelete || campaign.status !== 'đang chạy') return
+    ;(campaignPage?.runningCampaigns || []).forEach(campaign => {
       const names = namesByAccountId.get(campaign.accountId) || []
       if (!names.includes(campaign.name)) names.push(campaign.name)
       namesByAccountId.set(campaign.accountId, names)
     })
     return namesByAccountId
-  }, [campaigns])
+  }, [campaignPage])
 
   const handleAccountTypeChange = (value: string) => {
     const nextPlatform = value === 'zalo_qr' || value === 'zalo_web' || value === 'zalo_server'

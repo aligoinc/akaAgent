@@ -37,6 +37,8 @@ const handlers: Record<string, any> = {
   listAutomationExecutions: () => ({ items: [], total: 0, pageSize: 100 }),
   getCampaignConfig: (id: number) => campaigns.find(row => row.id === id),
   getCampaignRelationSummaries: () => [],
+  getDesktopCampaignSources: () => [],
+  getDesktopCampaignPage: (query: any) => ({ items: campaigns, selected: campaigns.find(row => row.id === query.selectedId) || null, order: campaigns.map(row => ({ kind: 'campaign', id: String(row.id) })), total: 2, campaignTotal: 2, page: 1, pageSize: 100, actionOptions: [] }),
   listCampaignInputDataPage: async (query: any) => {
     const result = pageRows(inputs, query)
     if (state.hold === query.sort) await new Promise(resolve => { state.release = resolve })
@@ -60,7 +62,7 @@ useCampaignStore.setState({ campaigns: campaigns as any, campaignConfigs: Object
   accounts: [{ id: 41, name: 'Sort account', flatformType: 'facebook', isActive: true, isDelete: false,
     staffId: 41, organizationId: 1, loginStatus: 'đã đăng nhập', status: 'chờ xử lý' }] as any,
   campaignActions: [{ id: 'facebook_message_uid', name: 'Nhắn tin UID', flatformType: 'facebook', isActive: true, isDelete: false }] as any,
-  loadCampaigns: async () => {}, loadAccounts: async () => {}, loadAccountGroups: async () => {}, loadCampaignActions: async () => {}
+  loadAccounts: async () => {}, loadAccountGroups: async () => {}, loadCampaignActions: async () => {}
 })
 useUiStore.setState({ showAlert: (message, type) => {
   state.alerts.push({ message, type })

@@ -1,3 +1,4 @@
+import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
@@ -470,6 +471,13 @@ const electronAPI = {
 
   saveEmailNotificationSettings: (settings: Partial<EmailNotificationSettings>): Promise<EmailNotificationSettings> =>
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
+
+  getDesktopPollingSettings: (): Promise<DesktopPollingSettings> => ipcRenderer.invoke(DESKTOP_UI_IPC.settings),
+  getDesktopCampaignPage: (query: DesktopCampaignPageQuery): Promise<DesktopCampaignPage> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignPage, query),
+  getDesktopCampaignSelection: (query: DesktopCampaignSelectionQuery): Promise<DesktopCampaignSelection[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignSelection, query),
+  getDesktopAccountSnapshot: (version?: string): Promise<DesktopAccountSnapshot> => ipcRenderer.invoke(DESKTOP_UI_IPC.accountSnapshot, version),
+  getDesktopCampaignSources: (id: number): Promise<number[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignSources, id),
+  listDesktopCampaignCatalog: (): Promise<CampaignListItem[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignCatalog),
 
   // App Notifications
   getLoginScreenContent: (): Promise<LoginScreenContent> =>

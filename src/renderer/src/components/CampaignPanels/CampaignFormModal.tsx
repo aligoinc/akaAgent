@@ -1742,7 +1742,7 @@ export default function CampaignFormModal({
   const restoredDraftAction = (draftPayload?.values.formData as { actionId?: string } | undefined)?.actionId
 
   const {
-    accounts, accountGroups, campaignActions, campaigns, loadAccountGroups, loadCampaigns,
+    accounts, accountGroups, campaignActions, campaignCatalog: campaigns, loadAccountGroups, loadCampaigns, loadCampaignCatalog,
     createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
@@ -4138,10 +4138,8 @@ export default function CampaignFormModal({
   }, [formData.actionId])
 
   useEffect(() => {
-    if (campaigns.length === 0) {
-      void loadCampaigns()
-    }
-  }, [campaigns.length, loadCampaigns])
+    void loadCampaignCatalog().catch(console.error)
+  }, [loadCampaignCatalog])
 
   useEffect(() => {
     void loadAccountGroups()
@@ -11204,8 +11202,10 @@ export default function CampaignFormModal({
       if (campaignPickerModal.source.type === 'external') {
         await loadExternalCampaigns(campaignPickerModal.source.kind)
       } else {
-        await loadCampaigns()
+        await loadCampaignCatalog()
       }
+    } catch (error) {
+      showAlert(formatIpcErrorMessage(error, 'Không thể tải danh sách chiến dịch.'), 'error')
     } finally {
       setCampaignPickerRefreshing(false)
     }
@@ -17404,7 +17404,7 @@ export default function CampaignFormModal({
           submitLabel="Sửa"
           onClose={() => {
             setEditingSourceCampaign(null)
-            void loadCampaigns()
+            void loadCampaignCatalog().catch(error => showAlert(formatIpcErrorMessage(error, 'Không thể tải danh sách chiến dịch.'), 'error'))
           }}
         />
       )}
