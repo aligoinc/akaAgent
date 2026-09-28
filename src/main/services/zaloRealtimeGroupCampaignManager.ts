@@ -15,6 +15,8 @@ type TriggerType = 'join' | 'leave' | 'interact'
 
 interface RealtimeCampaignConfig {
   campaign: Campaign
+  /** UI notification baseline only; never replace the configuration used to receive data. */
+  lastReceivedState?: Pick<CampaignSummaryRefreshSignal, 'status' | 'note' | 'schedule' | 'lastRunAt'>
   accountId: number
   groupIds: Set<string>
   groupNamesById: Map<string, string>
@@ -482,7 +484,8 @@ export class ZaloRealtimeGroupCampaignManager {
       if (!this.isActiveGeneration(generation)) return
       if (result.inserted) {
         const updated = await this.supabase.getCampaign(item.campaign.id)
-        if (updated) this.broadcastCampaign(updated)
+        if (!this.isActiveGeneration(generation)) return
+        if (updated) this.broadcastReceivedCampaign(item, updated)
       }
     } catch (err) {
       const message = this.getErrorMessage(err)
@@ -504,6 +507,26 @@ export class ZaloRealtimeGroupCampaignManager {
 
   private isActiveGeneration(generation: number): boolean {
     return this.running && this.generation === generation
+  }
+
+  private broadcastReceivedCampaign(item: RealtimeCampaignConfig, campaign: Campaign): void {
+    if (this.runtimeTarget === 'server') {
+      const previous = item.lastReceivedState || item.campaign
+      const current = {
+        status: campaign.status,
+        note: campaign.note ?? null,
+        schedule: campaign.schedule ?? null,
+        lastRunAt: campaign.lastRunAt ?? null
+      }
+      item.lastReceivedState = current
+      // New inputs and log timestamps alone are covered by UI polling. Keep
+      // notifications for transitions, including a changed next run schedule.
+      if (previous.status === current.status &&
+        (previous.note ?? null) === current.note &&
+        (previous.schedule ?? null) === current.schedule &&
+        (previous.lastRunAt ?? null) === current.lastRunAt) return
+    }
+    this.broadcastCampaign(campaign)
   }
 
   private trackOperation<T>(operation: Promise<T>): Promise<T> {
@@ -534,7 +557,9 @@ export class ZaloRealtimeGroupCampaignManager {
 
     try {
       const updated = await this.supabase.appendCampaignLog(item.campaign.id, log)
-      this.broadcastCampaign(updated)
+      // Do not invalidate Server clients just for appending receipt history.
+      // Input insertion and logout notes publish their own notifications above.
+      if (this.runtimeTarget !== 'server') this.broadcastCampaign(updated)
     } catch (err) {
       console.warn('[ZaloRealtimeGroupCampaignManager] Failed to log group event receive history', {
         campaignId: item.campaign.id,
