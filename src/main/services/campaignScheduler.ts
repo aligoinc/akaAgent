@@ -12807,7 +12807,9 @@ export class CampaignScheduler {
     }
     try {
       const updated = await this.supabase.appendCampaignLog(campaignId, message)
-      this.broadcastCampaignUpdate(updated)
+      // Server state notifications belong to committed runtime transitions.
+      // Progress logs must not make every Web client reload its campaign page.
+      if (this.runtimeTarget !== 'server') this.broadcastCampaignUpdate(updated)
       realtimeContext = {
         accountId: updated.accountId,
         accountName: updated.accountName,
