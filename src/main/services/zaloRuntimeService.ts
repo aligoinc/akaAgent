@@ -1,3 +1,4 @@
+import { CampaignLabelContext } from '../../shared/campaignSendExclusion'
 import { findZaloExcludedLabels, type ZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountWarning } from './accountLogService'
 import { promises as fs } from 'node:fs'
@@ -432,6 +433,7 @@ export class ZaloRuntimeService {
   private activeWarmSessionOperations = new Set<Promise<void>>()
   private warmSessionClaimsAbandoned = false
   private cacheVersion = 0
+  private campaignLabelSessions = new WeakMap<CampaignLabelContext, { accountId: number; checkActive: (api?: API) => void }>()
   private readonly webRuntime: ZaloWebRuntimeService
 
   constructor(
@@ -2202,15 +2204,43 @@ export class ZaloRuntimeService {
     return api.undoFriendRequest(uid)
   }
 
-  async applyLabelToUser(accountId: number, uid: string, labelId: number | string, skipLabelIds: string[] = []): Promise<LabelData | ZaloLabelSkipResult> {
+  createCampaignLabelContext(accountId: number): CampaignLabelContext {
+    const generation = this.cacheVersion
+    const accountGeneration = this.getAccountCacheVersion(accountId)
+    const webSessionActive = this.webRuntime.captureSessionGuard(accountId)
+    let boundApi: API | undefined
+    let invalidated = false
+    const checkActive = (api?: API) => {
+      if (invalidated || generation !== this.cacheVersion || accountGeneration !== this.getAccountCacheVersion(accountId) || !webSessionActive() ||
+        (boundApi && ((api && api !== boundApi) ||
+          (this.apiCache.get(accountId)?.api !== boundApi && !this.webRuntime.isCurrentApi(accountId, boundApi))))) {
+        invalidated = true
+        throw new Error('Phiên tag Zalo đã thay đổi; hãy thử lại trong lượt mới.')
+      }
+    }
+    const context = new CampaignLabelContext(async () => {
+      const api = await this.ensureApi(accountId)
+      boundApi = api
+      checkActive(api)
+      return api.getLabels()
+    }, checkActive)
+    this.campaignLabelSessions.set(context, { accountId, checkActive })
+    return context
+  }
+
+  async applyLabelToUser(accountId: number, uid: string, labelId: number | string, skipLabelIds: string[] = [], labelContext?: CampaignLabelContext): Promise<LabelData | ZaloLabelSkipResult> {
     const api = await this.ensureApi(accountId)
     const targetUid = String(uid || '').trim()
     if (!targetUid) throw new Error('UID Zalo không hợp lệ')
     const id = Number(labelId)
     if (!Number.isFinite(id) || id <= 0) throw new Error('Tag Zalo không hợp lệ')
-    const response = await api.getLabels()
-    const labels = Array.isArray(response?.labelData) ? response.labelData : []
-    const skipped = findZaloExcludedLabels(labels, targetUid, skipLabelIds)
+    const context = labelContext ?? this.createCampaignLabelContext(accountId)
+    const response = await context.current()
+    const labels = structuredClone(response.labelData) as unknown as LabelData[]
+    const skipped = findZaloExcludedLabels((await context.initial()).labelData, targetUid, skipLabelIds)
+    const session = this.campaignLabelSessions.get(context)
+    if (!session || session.accountId !== accountId) throw new Error('Context tag Zalo không thuộc tài khoản hiện tại.')
+    session.checkActive(api)
     if (skipped) return skipped
     const label = labels.find(item => Number(item.id) === id)
     if (!label) throw new Error('Tag Zalo không tồn tại')
@@ -2239,7 +2269,9 @@ export class ZaloRuntimeService {
     }
 
     if (changed) {
-      await api.updateLabels({ labelData: labels, version: response.version })
+      const updated = await api.updateLabels({ labelData: labels, version: response.version })
+      session.checkActive(api)
+      context.commit(updated)
     }
     return label
   }

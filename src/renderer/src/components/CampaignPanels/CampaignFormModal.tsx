@@ -1,3 +1,5 @@
+import CampaignSendExclusions from './CampaignSendExclusions'
+import { supportsSendExclusion, validateExclusionGroup, type SendExclusionsByAccount } from '../../../../shared/campaignSendExclusion'
 import ZaloCampaignTagSettings from './ZaloCampaignTagSettings'
 import './ZaloAuxiliaryActions.css'
 import ZaloTagMultiSelector from './ZaloTagMultiSelector'
@@ -2384,6 +2386,17 @@ export default function CampaignFormModal({
       return ownerId ? { [String(ownerId)]: normalizeZaloAccountTagSettings(source) } : {}
     }
   )
+  const [zaloSendExclusionsByAccountId, setZaloSendExclusionsByAccountId] = useCampaignDraftField<SendExclusionsByAccount>(
+    draftPayload, draftValuesRef, 'zaloSendExclusionsByAccountId', () => {
+      const source = (draftPayload?.values.formData as Record<string, unknown> | undefined) ?? campaign?.extraSettings ?? {}
+      if (source.zaloSendExclusionsByAccountId) return structuredClone(source.zaloSendExclusionsByAccountId as SendExclusionsByAccount)
+      const ownerId = campaign?.accountId ?? formData.accountIds[0]
+      return ownerId && source.zaloFriendBlocklistEnabled && source.zaloFriendBlocklistId
+        ? {[String(ownerId)]: {groupId: null, blocklistIds: [Number(source.zaloFriendBlocklistId)]}} : {}
+    }
+  )
+  const [exclusionEditing, setExclusionEditing] = useState(false)
+  const canUseSendExclusions = supportsSendExclusion(formData.actionId, formData)
   const zaloTagAccountIds = Array.from(new Set([
     ...formData.accountIds,
     ...(formData.secondaryAccountId !== null ? [formData.secondaryAccountId] : [])
@@ -4278,7 +4291,7 @@ export default function CampaignFormModal({
   ])
 
   useEffect(() => {
-    if (generalSettingsOpen) return
+    if (generalSettingsOpen || canUseSendExclusions) return
     if (!isZaloMessageFriendCampaign || formData.accountIds.length === 0) {
       setZaloFriendBlocklists([])
       setZaloFriendBlocklistsLoading(false)
@@ -4332,6 +4345,7 @@ export default function CampaignFormModal({
     isZaloMessageFriendCampaign,
     formData.accountIds.join(','),
     generalSettingsOpen,
+    canUseSendExclusions,
     zaloFriendBlocklistsRevision
   ])
 
@@ -6479,6 +6493,7 @@ export default function CampaignFormModal({
             enableZaloTag: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) ? formData.enableZaloTag : false,
             zaloTagId: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? tagSettings.zaloTagId : null,
             zaloTagName: (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign) && formData.enableZaloTag ? tagSettings.zaloTagName : '',
+            zaloSendExclusionsByAccountId: canUseSendExclusions ? Object.fromEntries(campaignTagAccounts.map(id => [String(id), zaloSendExclusionsByAccountId[String(id)] ?? {groupId: null, blocklistIds: []}])) : undefined,
             zaloTagSettingsByAccountId: supportsZaloAuxiliaryActions ? pickZaloAccountTagSettings(zaloTagSettingsByAccountId, campaignTagAccounts) : undefined,
             zaloTagSkipIfFriend: supportsZaloAuxiliaryActions && formData.zaloTagSkipIfFriend,
             zaloTagSkipIfHasSelectedTags: supportsZaloAuxiliaryActions && formData.zaloTagSkipIfHasSelectedTags,
@@ -6517,9 +6532,9 @@ export default function CampaignFormModal({
             zaloFriendMaterializedCount: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
               ? (campaign?.extraSettings?.zaloFriendMaterializedCount ?? 0)
               : 0,
-            zaloFriendBlocklistEnabled: isZaloMessageFriendCampaign ? formData.zaloFriendBlocklistEnabled : false,
-            zaloFriendBlocklistId: isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled ? formData.zaloFriendBlocklistId : null,
-            zaloFriendBlocklistName: isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled
+            zaloFriendBlocklistEnabled: !canUseSendExclusions && isZaloMessageFriendCampaign ? formData.zaloFriendBlocklistEnabled : false,
+            zaloFriendBlocklistId: !canUseSendExclusions && isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled ? formData.zaloFriendBlocklistId : null,
+            zaloFriendBlocklistName: !canUseSendExclusions && isZaloMessageFriendCampaign && formData.zaloFriendBlocklistEnabled
               ? (selectedZaloFriendBlocklist?.name || formData.zaloFriendBlocklistName || '')
               : '',
             zaloBirthdayDataMaterializedDate: isZaloMessageBirthdayCampaign && !cloneFromId
@@ -6662,8 +6677,23 @@ export default function CampaignFormModal({
   }
 
   const handleSave = async () => {
-    if (generalSettingsOpen) return
+    if (generalSettingsOpen || exclusionEditing) return
     if (savingCampaign) return
+    if (canUseSendExclusions) {
+      try {
+        for (const id of zaloTagAccountIds) {
+          const selection = zaloSendExclusionsByAccountId[String(id)]
+          if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
+          const page = await window.electronAPI.listSendExclusionGroups(id)
+          if (selection.groupId) {
+            const group = page.groups.find(g => g.id === selection.groupId)
+            if (!group) throw new Error('Nhóm loại trừ không còn tồn tại. Hãy chọn lại.')
+            validateExclusionGroup(page.catalog, group)
+          }
+          if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
+        }
+      } catch (error) { showAlert(error instanceof Error ? error.message : 'Không thể xác minh loại trừ gửi.', 'error'); return }
+    }
     if (supportsAkaBizContactTags && formData.enableAkaBizTag && (akaBizContactTagsLoading || akaBizContactTagsError)) {
       showAlert(akaBizContactTagsLoading ? 'Tag akaBiz đang tải. Vui lòng chờ tải xong.' : 'Vui lòng tải lại tag akaBiz trước khi lưu chiến dịch.', 'error')
       return
@@ -6868,11 +6898,11 @@ export default function CampaignFormModal({
         showAlert('Vui lòng chọn tag nguồn Zalo để lấy danh sách bạn bè.', 'error')
         return
       }
-      if (formData.zaloFriendBlocklistEnabled && (zaloFriendBlocklistsLoading || zaloFriendBlocklistsError)) {
+      if (!canUseSendExclusions && formData.zaloFriendBlocklistEnabled && (zaloFriendBlocklistsLoading || zaloFriendBlocklistsError)) {
         showAlert(zaloFriendBlocklistsLoading ? 'Danh sách không gửi tin đang tải. Vui lòng chờ tải xong.' : 'Vui lòng tải lại danh sách không gửi tin trước khi lưu chiến dịch.', 'error')
         return
       }
-      if (formData.zaloFriendBlocklistEnabled && !selectedZaloFriendBlocklist) {
+      if (!canUseSendExclusions && formData.zaloFriendBlocklistEnabled && !selectedZaloFriendBlocklist) {
         showAlert('Vui lòng chọn danh sách không gửi tin Zalo.', 'error')
         return
       }
@@ -10471,7 +10501,7 @@ export default function CampaignFormModal({
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 
-      {renderZaloFriendBlocklistOption()}
+      {!canUseSendExclusions && renderZaloFriendBlocklistOption()}
       {formData.zaloFriendBlocklistEnabled && zaloFriendBlocklistsError && <div className="schedule-hint" role="alert">{zaloFriendBlocklistsError} <button type="button" className="btn btn-secondary" onClick={() => setZaloFriendBlocklistsRevision(value => value + 1)}>Tải lại danh sách</button></div>}
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
@@ -16610,6 +16640,12 @@ export default function CampaignFormModal({
               </div>
             )}
 
+            {canUseSendExclusions && <CampaignSendExclusions
+              accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
+              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId}
+              onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
+              onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
+            />}
             {/* Nội dung */}
             {showContentSection && <div
               className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}

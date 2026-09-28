@@ -1,3 +1,4 @@
+import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
@@ -22,6 +23,8 @@ export type ElectronAPI = typeof electronAPI
 
 
 const electronAPI = {
+  listSendExclusionGroups: (accountId: number): Promise<SendExclusionPage> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.page, accountId),
+  saveSendExclusionGroup: (group: SaveSendExclusionGroup): Promise<SendExclusionGroup> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.save, group),
   facebookLogin: {
     preview: (input: FacebookImportInput): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.preview, input),
     start: (id: string): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.start, id),

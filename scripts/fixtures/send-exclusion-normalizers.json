@@ -1,0 +1,15 @@
+[
+  {
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_phone(p text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE PARALLEL SAFE\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  d text;\nbegin\n  if p is null then\n    return null;\n  end if;\n  d := regexp_replace(p, '[^0-9]', '', 'g');\n  if d = '' then\n    return '';\n  end if;\n  if d like '0084%' and length(d) >= 13 then\n    d := '0' || substr(d, 5);\n  elsif d like '84%' and length(d) >= 11 then\n    d := '0' || substr(d, 3);\n  end if;\n  if length(d) = 9 and left(d, 1) in ('3','5','7','8','9') then\n    d := '0' || d;\n  end if;\n  if length(d) = 11 and left(d, 1) = '0' then\n    d := case left(d, 4)\n      when '0162' then '032' when '0163' then '033' when '0164' then '034' when '0165' then '035'\n      when '0166' then '036' when '0167' then '037' when '0168' then '038' when '0169' then '039'\n      when '0120' then '070' when '0121' then '079' when '0122' then '077' when '0126' then '076'\n      when '0128' then '078' when '0123' then '083' when '0124' then '084' when '0125' then '085'\n      when '0127' then '081' when '0129' then '082' when '0186' then '056' when '0188' then '058'\n      when '0199' then '059'\n      else left(d, 4)\n    end || substr(d, 5);\n  end if;\n  return d;\nend;\n$function$\n"
+  },
+  {
+    "checksum": "b3ad52bceed9a68a6648956fbc622629",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_normalize_phone(p_value text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE PARALLEL SAFE STRICT\n SET search_path TO 'pg_catalog'\nAS $function$\n  select case\n    when public.normalize_phone(p_value) ~ '^0[35789][0-9]{8}$' then public.normalize_phone(p_value)\n    else ''\n  end;\n$function$\n",
+    "signature": "aka_agent_internal_normalize_phone(text)"
+  },
+  {
+    "checksum": "d063c95ebfedc16eeabe4dabf73a211d",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_normalize_facebook_identity(p_value text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE STRICT\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_raw text := btrim(p_value);\n  v_clean text;\n  v_id text;\nBEGIN\n  IF v_raw = '' THEN RETURN ''; END IF;\n  -- Numeric IDs are already canonical.\n  IF v_raw ~ '^[0-9]+$' THEN RETURN v_raw; END IF;\n  -- profile.php?id=... must be extracted before query removal.\n  v_id := substring(lower(v_raw) FROM '[?&]id=([0-9]+)');\n  IF v_id IS NOT NULL THEN RETURN v_id; END IF;\n  v_clean := regexp_replace(v_raw, '^(https?://)?((www|m|mbasic)\\.)?facebook\\.com/', '', 'i');\n  v_clean := regexp_replace(v_clean, '[?#].*$', '');\n  v_clean := regexp_replace(v_clean, '/+$', '');\n  v_clean := regexp_replace(v_clean, '^(groups|people|pages)/', '', 'i');\n  IF v_clean ~ '/' THEN\n    -- /people/name/123 and /pages/name/123 use the final numeric component.\n    v_id := substring(v_clean FROM '([0-9]+)$');\n    IF v_id IS NOT NULL THEN RETURN v_id; END IF;\n    v_clean := split_part(v_clean, '/', 1);\n  END IF;\n  RETURN lower(v_clean);\nEND;\n$function$\n",
+    "signature": "aka_agent_internal_normalize_facebook_identity(text)"
+  }
+]

@@ -1,0 +1,404 @@
+{
+  "groups": [
+    {
+      "id": 1,
+      "name": "Đã sửa",
+      "rules": [
+        {
+          "value": "friend",
+          "fieldId": 1,
+          "isEnabled": true,
+          "sortOrder": 0,
+          "operatorId": 1
+        }
+      ],
+      "revision": 2,
+      "accountId": 100,
+      "matchMode": "or",
+      "requestId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    },
+    {
+      "id": 4,
+      "name": "Giới tính nữ",
+      "rules": [
+        {
+          "value": 1,
+          "fieldId": 5,
+          "isEnabled": true,
+          "sortOrder": 0,
+          "operatorId": 1
+        }
+      ],
+      "revision": 1,
+      "accountId": 100,
+      "matchMode": "and",
+      "requestId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    }
+  ],
+  "catalog": {
+    "fields": [
+      {
+        "id": 1,
+        "code": "zalo_friend_status",
+        "name": "Trạng thái bạn bè",
+        "dataType": "enum",
+        "isActive": true,
+        "sortOrder": 10,
+        "sourceKey": "zalo_friendship",
+        "sourceConfig": {
+          "path": [
+            "status"
+          ]
+        },
+        "optionsConfig": {},
+        "optionsSource": "friend_status"
+      },
+      {
+        "id": 2,
+        "code": "zalo_tag",
+        "name": "Tag Zalo",
+        "dataType": "set",
+        "isActive": true,
+        "sortOrder": 20,
+        "sourceKey": "zalo_labels",
+        "sourceConfig": {
+          "path": [
+            "ids"
+          ]
+        },
+        "optionsConfig": {},
+        "optionsSource": "zalo_labels"
+      },
+      {
+        "id": 3,
+        "code": "akabiz_tag",
+        "name": "Tag akaBiz",
+        "dataType": "set",
+        "isActive": true,
+        "sortOrder": 30,
+        "sourceKey": "akabiz_contact",
+        "sourceConfig": {
+          "path": [
+            "ids"
+          ]
+        },
+        "optionsConfig": {},
+        "optionsSource": "akabiz_tags"
+      },
+      {
+        "id": 4,
+        "code": "recent_delivery",
+        "name": "Đã gửi tin trong",
+        "dataType": "number",
+        "isActive": true,
+        "sortOrder": 40,
+        "sourceKey": "campaign_delivery",
+        "sourceConfig": {
+          "path": [
+            "daysSince"
+          ]
+        },
+        "optionsConfig": {
+          "operatorPlacement": "afterValue"
+        },
+        "optionsSource": "none"
+      },
+      {
+        "id": 5,
+        "code": "fixture_gender",
+        "name": "Giới tính",
+        "dataType": "enum",
+        "isActive": true,
+        "sortOrder": 50,
+        "sourceKey": "zalo_profile",
+        "sourceConfig": {
+          "path": [
+            "gender"
+          ]
+        },
+        "optionsConfig": {},
+        "optionsSource": "static"
+      }
+    ],
+    "options": [
+      {
+        "code": "male",
+        "label": "Nam",
+        "value": 0,
+        "fieldId": 5,
+        "isActive": true,
+        "sortOrder": 0
+      },
+      {
+        "code": "female",
+        "label": "Nữ",
+        "value": 1,
+        "fieldId": 5,
+        "isActive": true,
+        "sortOrder": 0
+      }
+    ],
+    "operators": [
+      {
+        "id": 1,
+        "code": "equals",
+        "name": "bằng",
+        "isActive": true,
+        "sortOrder": 10,
+        "evaluatorKey": "equals"
+      },
+      {
+        "id": 2,
+        "code": "not_equals",
+        "name": "không bằng",
+        "isActive": true,
+        "sortOrder": 20,
+        "evaluatorKey": "not_equals"
+      },
+      {
+        "id": 3,
+        "code": "contains",
+        "name": "chứa",
+        "isActive": true,
+        "sortOrder": 30,
+        "evaluatorKey": "contains_any"
+      },
+      {
+        "id": 4,
+        "code": "not_contains",
+        "name": "không chứa",
+        "isActive": true,
+        "sortOrder": 40,
+        "evaluatorKey": "contains_none"
+      },
+      {
+        "id": 5,
+        "code": "within_days",
+        "name": "ngày gần nhất",
+        "isActive": true,
+        "sortOrder": 50,
+        "evaluatorKey": "lt"
+      },
+      {
+        "id": 6,
+        "code": "text_contains",
+        "name": "chứa",
+        "isActive": true,
+        "sortOrder": 60,
+        "evaluatorKey": "text_contains"
+      },
+      {
+        "id": 7,
+        "code": "text_not_contains",
+        "name": "không chứa",
+        "isActive": true,
+        "sortOrder": 70,
+        "evaluatorKey": "text_not_contains"
+      },
+      {
+        "id": 8,
+        "code": "starts_with",
+        "name": "bắt đầu là",
+        "isActive": true,
+        "sortOrder": 80,
+        "evaluatorKey": "text_starts_with"
+      },
+      {
+        "id": 9,
+        "code": "not_starts_with",
+        "name": "không bắt đầu là",
+        "isActive": true,
+        "sortOrder": 90,
+        "evaluatorKey": "text_not_starts_with"
+      },
+      {
+        "id": 10,
+        "code": "lt",
+        "name": "nhỏ hơn",
+        "isActive": true,
+        "sortOrder": 100,
+        "evaluatorKey": "lt"
+      },
+      {
+        "id": 11,
+        "code": "lte",
+        "name": "nhỏ hơn hoặc bằng",
+        "isActive": true,
+        "sortOrder": 110,
+        "evaluatorKey": "lte"
+      },
+      {
+        "id": 12,
+        "code": "gt",
+        "name": "lớn hơn",
+        "isActive": true,
+        "sortOrder": 120,
+        "evaluatorKey": "gt"
+      },
+      {
+        "id": 13,
+        "code": "gte",
+        "name": "lớn hơn hoặc bằng",
+        "isActive": true,
+        "sortOrder": 130,
+        "evaluatorKey": "gte"
+      }
+    ],
+    "fieldOperators": [
+      {
+        "fieldId": 1,
+        "maxValues": 1,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 1,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 1,
+        "maxValues": 1,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 2,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 2,
+        "maxValues": 100,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 3,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 3,
+        "maxValues": 100,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 3,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 2,
+        "maxValues": 100,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 4,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 3,
+        "maxValues": 100,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 4,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 4,
+        "maxValues": 1,
+        "minValues": 1,
+        "valueType": "number",
+        "operatorId": 5,
+        "validationConfig": {
+          "max": 3650,
+          "min": 1,
+          "integer": true
+        }
+      },
+      {
+        "fieldId": 5,
+        "maxValues": 1,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 1,
+        "validationConfig": {}
+      },
+      {
+        "fieldId": 5,
+        "maxValues": 1,
+        "minValues": 1,
+        "valueType": "enum",
+        "operatorId": 2,
+        "validationConfig": {}
+      }
+    ]
+  },
+  "options": [
+    {
+      "code": "friend",
+      "label": "Bạn bè",
+      "value": "friend",
+      "fieldId": 1,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "request_sent",
+      "label": "Gửi lời mời kết bạn",
+      "value": "request_sent",
+      "fieldId": 1,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "stranger",
+      "label": "Người lạ",
+      "value": "stranger",
+      "fieldId": 1,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "request_received",
+      "label": "Nhận kết bạn",
+      "value": "request_received",
+      "fieldId": 1,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "8",
+      "label": "Khách mới",
+      "value": "8",
+      "fieldId": 2,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "7",
+      "label": "VIP",
+      "value": "7",
+      "fieldId": 2,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "male",
+      "label": "Nam",
+      "value": 0,
+      "fieldId": 5,
+      "isActive": true,
+      "sortOrder": 0
+    },
+    {
+      "code": "female",
+      "label": "Nữ",
+      "value": 1,
+      "fieldId": 5,
+      "isActive": true,
+      "sortOrder": 0
+    }
+  ],
+  "blocklists": [
+    {
+      "id": 9,
+      "name": "B",
+      "count": 0
+    },
+    {
+      "id": 4,
+      "name": "VIP",
+      "count": 1005
+    }
+  ]
+}
