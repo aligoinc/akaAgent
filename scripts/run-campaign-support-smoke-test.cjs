@@ -11,10 +11,11 @@ try {
   const result = spawnSync(process.execPath, [output], { stdio: 'inherit' })
   if (result.error) throw result.error
   process.exitCode = result.status ?? 1
-  if (process.exitCode === 0) {
-    const access = spawnSync(process.execPath, [join(__dirname, 'run-campaign-support-access-smoke-test.cjs')], { stdio: 'inherit' })
-    if (access.error) throw access.error
-    process.exitCode = access.status ?? 1
+  for (const script of ['run-campaign-support-access-smoke-test.cjs', 'run-campaign-support-routing-smoke-test.cjs']) {
+    if (process.exitCode !== 0) break
+    const result = spawnSync(process.execPath, [join(__dirname, script)], { stdio: 'inherit' })
+    if (result.error) throw result.error
+    process.exitCode = result.status ?? 1
   }
   if (process.exitCode === 0) {
     const imageOutput = join(directory, 'images.cjs')

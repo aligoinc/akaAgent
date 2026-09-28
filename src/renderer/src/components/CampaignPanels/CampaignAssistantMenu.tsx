@@ -55,6 +55,7 @@ export default function CampaignAssistantMenu({ onSelect }: { onSelect: (mode: C
       onClick={event => event.stopPropagation()}>
       <button type="button" role="menuitem" onClick={() => select('ask')}><MessageCircleQuestion size={15} />Hỏi AI</button>
       <button type="button" role="menuitem" onClick={() => select('campaign_support')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION}</button>
+      <button type="button" role="menuitem" onClick={() => select('campaign_support_dsh')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION} (2)</button>
     </div>, document.body)}
   </>
 }
