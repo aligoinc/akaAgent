@@ -1,6 +1,6 @@
 # Desktop UI read deltas (v328)
 
-Status on 2026-09-28: implemented and tested; **v328 has not been applied** and this Desktop build has not been published. Apply the canonical [v328 migration](../migrations/migration_v328_desktop_ui_read_deltas.sql) before running/releasing this code. V327 is already applied; do not reapply it or duplicate its history. Older Desktop versions remain compatible with v328.
+Status on 2026-09-28: implemented, tested and **v328 applied** to production `akachat` (`cgjbsmqtfhqvttudyjzq`) with history `20260928153718 / migration_v328_desktop_ui_read_deltas`. PR #449 is merged; this task has not published a Desktop build. The canonical [v328 migration](../migrations/migration_v328_desktop_ui_read_deltas.sql) and v327 are already applied; do not reapply them or duplicate their history on release. Older Desktop versions remain compatible with v328.
 
 ## Scope and recurring load
 
@@ -53,7 +53,21 @@ Unchanged live functions include:
 
 In particular, the log writer's row lock, retention, concurrent append and monotonic `updated_at` protections are untouched. Web RPCs and runtime repositories are not replaced. Schema reload is included because v328 introduces new callable API metadata.
 
-Live validation compiled v328 on the linked schema, checked target hashes/attributes and executed the reader under actual `service_role`, all inside a transaction ending with **ROLLBACK**. After rollback the page retained its source checksum and both new functions were absent. **No production migration/history/settings change was committed.** Local audit captures are in `/tmp/aka-desktop-ui-deltas`.
+Pre-apply live validation compiled v328 on the linked schema, checked target hashes/attributes and executed the reader under actual `service_role`, all inside a transaction ending with **ROLLBACK**. After rollback the page retained its source checksum and both new functions were absent. Local audit captures are in `/tmp/aka-desktop-ui-deltas`.
+
+## Production apply — 2026-09-28
+
+Applied only the canonical v328 SQL through the existing linked Management API (`supabase db query --linked`), with its exact SQL and history row committed in the same transaction. No schema/history preparation DDL, unrelated migration, setting seed or connection-budget change was included.
+
+- History: `20260928153718 / migration_v328_desktop_ui_read_deltas` (one statement).
+- Canonical file SHA-256: `71e5a164a48d4802d3f48365d06c412fb40bce4d33b6f97cab87fae04ad926ef`.
+- Stored history SQL MD5: `1dce9f325ec24d4313e5760f16021ade`, matching the canonical file exactly.
+- Immediate preflight confirmed the captured page, identity and log-writer definitions/attributes were unchanged. The page still matched v327, with no DB-only patch to preserve beyond that captured definition; both new signatures and v328 history were absent.
+- All three target definition hashes, owners, security modes, volatility, function settings and ACLs matched the audit above after commit. The account snapshot, identity helper and log writer retained their recorded checksums; identity/writer attributes and the page execute ACL were preserved.
+- The pre-apply rollback test and post-apply read-only rollback smoke passed: synthetic records proved runtime fields do not change the configuration version while content edits do; a bounded existing campaign read verified page/config version agreement, exclusion of log from config, unchanged log response and exact delta reconstruction. Wrong staff/organization, absent capabilities and missing/invalid credentials were rejected; the private helper remained inaccessible to `anon`. No campaign rows were written, sequences allocated or campaigns/messages started by these checks.
+- Schema reload was included for the new callable RPC. Both page and detail HTTP routes resolved through PostgREST and returned the expected `automation_auth_required` error for missing credentials, with no schema-cache error.
+
+The production apply is complete. Desktop publication and synchronization of the main local checkout were not part of this step. V327/v328 must not be applied again during release.
 
 ## Verification
 
