@@ -77,6 +77,12 @@ Code/config đang chạy trong `auto_blocks`/`auto_workflows` cũng phải lấy
 | Renderer (React) | [src/renderer/src](src/renderer/src) | UI, Zustand stores, xyflow canvas, Monaco editor |
 | Shared | [src/shared](src/shared) | Types + IPC event constants (cả 2 phía import) |
 
+### Loại trừ gửi Zalo
+
+Danh mục điều kiện/toán tử lấy từ DB; UI và runtime dùng metadata cùng adapter/evaluator hỗ trợ trong [campaignSendExclusion.ts](src/shared/campaignSendExclusion.ts). Mỗi account chọn nhóm/danh sách riêng; snapshot giữ suốt lượt, đọc nguồn theo nhu cầu, thiếu dữ liệu thì tạm dừng bằng CAS. Kiểm tra/gắn tag dùng chung context RAM với một `getLabels` mỗi input/batch; giữ opt-out/cooldown độc lập và quota tìm SĐT đã thực hiện. Xem [hướng dẫn](docs/CAMPAIGN_SEND_EXCLUSIONS.md).
+
+V330 đã apply trên akachat với history `20260928172551 / migration_v330_campaign_send_exclusions`; không apply lại khi phát hành. Chat runtime/worker đã deploy; bộ cài Desktop/legacy Zalo Server 7.8.0 đã build local. [Audit DB](docs/CAMPAIGN_SEND_EXCLUSIONS_V330_AUDIT.md) và các smoke `send-exclusion-*` kiểm tra metadata động, tenant/CAS, request tag và vòng đời runtime.
+
 ### Kho mẫu nội dung
 
 [contentTemplateStore.ts](src/renderer/src/stores/contentTemplateStore.ts) chia sẻ dữ liệu/request đang tải giữa kho mẫu và form; form chỉ tải khi dùng mẫu/nhóm, mutation làm mới một lượt sau khi request cũ kết thúc, logout/đổi staff bỏ dữ liệu và phản hồi cũ. Repository phân trang theo ID đến trang rỗng, không đếm riêng từng nhóm; `templateCount=null` khi chưa có danh sách mẫu đầy đủ, lỗi mạng giữ dữ liệu cũ và cho thử lại; xóa nhóm vẫn kiểm tra tồn tại mẫu qua server (`limit(1)`). Smoke: `node scripts/content-template-loading-smoke-test.cjs` và `node scripts/run-content-template-loading-ui-smoke.cjs`.
@@ -454,6 +460,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Log loại trừ SĐT**: workflow nhận bản sao input, nên giữ lý do đã xác nhận trong context và ghi sau detail/quota tìm SĐT; không lấy note cũ hoặc mặc định thành opt-out. CAS không đổi row thì không ghi log loại trừ; xem `scripts/campaign-failure-cleanup-smoke-test.cjs`.
 
 - **Zalo policy days_at_time (v322/v323)**: X/Y đọc từ auto_error; date_enable tính trong accountActionRepository bằng cùng snapshot DB ghi disabled_at. X/Y ưu tiên hơn phút dự phòng 120=1440, 802=2880; 223 chỉ tạm dừng, không khóa kết bạn. Không đổi quota/retry/counter. Schema v322 đã apply; dữ liệu v323 chờ người dùng phát hành runtime. Xem [audit và thứ tự triển khai](docs/ZALO_POLICY_V322_V323_AUDIT.md).
 - **Log policy Zalo**: giữ nguyên nội dung log hiện có, kể cả `✅ Hoàn thành`; chỉ bổ sung nguyên nhân còn thiếu. Share batch ghi mỗi lỗi khác nhau một lần ngoài log tổng hợp, kể cả policy không tạo detail; ghi lý do dừng sau target/batch. Truyền campaign vào `logCampaignProgress` khi có sẵn để fallback giữ account/campaign context nếu append DB lỗi. Khóa mới lưu thông báo campaign đầy đủ vào `disabled_reason`, không backfill khóa cũ. Xem [hướng dẫn](docs/ZALO_POLICY_PROGRESS.md); smoke `node scripts/zalo-policy-progress-smoke-test.cjs`. Note dừng theo ngưỡng phải giữ số lỗi/nguyên nhân qua apply policy và hoàn tất pause; chuyển stopNote chỉ khi có kết quả lỗi của lượt này, giữ hành vi pause thường. Preclaim chỉ log khi CAS ghi note thành công; giữ hướng dẫn policy 600 qua account guard.

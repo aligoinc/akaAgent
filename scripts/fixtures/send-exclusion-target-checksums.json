@@ -1,0 +1,147 @@
+[
+  {
+    "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+    "checksum": "7e9107c0957684230afa2b86e40f2e2c",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres",
+      "aka_agent_chat_api=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)",
+    "checksum": "841a8fc8da0bca527508e71dcdc6b8fa",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "proacl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres",
+      "aka_agent_chat_api=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)",
+    "checksum": "58d02e6696fa3f89cda13cea288df876",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_send_exclusion_catalog()",
+    "checksum": "58e8c4293fb9df3dcf151da68f0a905a",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_send_exclusion_group(bigint)",
+    "checksum": "734e372494451945ab65747d2034c9f4",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_send_exclusion_options(bigint,bigint,bigint)",
+    "checksum": "38629c04d67ae120858bf6e6b4180c7a",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_validate_send_exclusion_rules(jsonb,bigint,bigint,bigint)",
+    "checksum": "6a3fdb6d9c0fdb7b8b510fd91623f2d0",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_internal_validate_send_exclusion_selection(jsonb,bigint,bigint,bigint)",
+    "checksum": "9d67e428e24d30d3ca3e67d830768a08",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)",
+    "checksum": "7f163f902b82a72f8f850e432050a7e6",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "proacl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres"
+    ]
+  },
+  {
+    "signature": "auto_guard_send_exclusion_definition()",
+    "checksum": "e3b1f757bd152fd70ce0312eebedbf4a",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  },
+  {
+    "signature": "auto_validate_campaign_send_exclusion()",
+    "checksum": "8dd9a7ee0baafd762154de59cb2bd953",
+    "prosecdef": true,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": [
+      "postgres=X/postgres"
+    ]
+  }
+]

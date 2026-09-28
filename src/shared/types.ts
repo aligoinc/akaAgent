@@ -1,3 +1,4 @@
+import type { SendExclusionsByAccount } from './campaignSendExclusion'
 import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
 import type { ZaloTagSettingsByAccountId } from './zaloAuxiliaryActions'
 
@@ -540,6 +541,7 @@ export interface FindDataTargetDataGroup {
 }
 
 export interface CampaignExtraSettings {
+  zaloSendExclusionsByAccountId?: SendExclusionsByAccount
   runAsPage?: boolean             // Facebook: một Page quản lý cho toàn bộ lượt chạy
   runAsPageUid?: string
   runAsPageName?: string

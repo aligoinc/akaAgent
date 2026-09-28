@@ -47,7 +47,7 @@ function load(relative, overrides = {}) {
   return exports
 }
 const cleanupModule = load('src/main/services/campaignFailureCleanup.ts', { './runtimeCleanupRetry': load('src/main/services/runtimeCleanupRetry.ts') })
-const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { './campaignFailureCleanup': cleanupModule, './accountOperationRegistry': { accountOperationRegistry: { has: () => false } } })
+const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { './campaignFailureCleanup': cleanupModule, './accountOperationRegistry': { accountOperationRegistry: { has: () => false } }, '../../shared/campaignSendExclusion': load('src/shared/campaignSendExclusion.ts') })
 const parent = '10000000-0000-4000-8000-000000000001'
 const unit = '20000000-0000-4000-8000-000000000001'
 const temporary = () => Object.assign(new Error('schema cache unavailable'), { code: 'PGRST002' })
@@ -293,7 +293,162 @@ async function verifyNestedPauseFailureHandoff() {
   assert.equal(batch.scheduler.failedCampaignRuns.size, 0)
 }
 
+async function verifyPhoneExclusionLogReason() {
+  const page = require('./fixtures/send-exclusion-ui-page.json')
+  const group = { ...page.groups.find(g => g.name === 'Giới tính nữ'), name: 'gđ bb' }
+  const optOutNote = 'Bỏ qua vì người nhận đã từ chối nhận tin nhắn Zalo'
+  for (const runtime of ['desktop', 'server']) {
+    for (const kind of ['and', 'or', 'blocklist', 'unknown', 'cas-miss', 'opt-out', 'prepare-opt-out']) {
+      const f = fixture(runtime), logs = [], details = [], pauses = [], order = []
+      f.account.flatformType = 'zalo'
+      f.campaign.actionId = 'zalo_message_phone'
+      f.campaign.extraSettings = { enableMessage: true, zaloOptOutLinkEnabled: kind === 'prepare-opt-out' }
+      const input = { id: 10, phone: '0703576704', uid: '', name: '', status: 'đang chạy', note: optOutNote }
+      // buildVariablesV2 passes a separate object without note/status to the workflow.
+      // The milestone writer still receives the original input with a stale note.
+      const workflowInput = { id: input.id, phone: input.phone, uid: input.uid, name: input.name }
+      const target = { uid: 'u1', phone: input.phone, globalId: 'global1', displayName: 'Fixture', raw: kind === 'unknown' ? {} : { gender: 1 } }
+      const context = { blocked: false, target: null, warnings: [], linkId: null }
+      f.scheduler.zaloMessageOptOutContexts.set(f.scheduler.zaloMessageOptOutContextKey(f.campaign.id, input.id), context)
+      if (!['opt-out', 'prepare-opt-out'].includes(kind)) {
+        f.scheduler.sendExclusionRuns.set(f.campaign.id, {
+          catalog: page.catalog,
+          group: kind === 'blocklist' ? null : { ...group, matchMode: kind === 'or' ? 'or' : 'and' },
+          blocklistUids: kind === 'blocklist' ? [target.uid] : []
+        })
+      }
+      Object.assign(f.scheduler, {
+        zaloRuntime: { findUserByPhone: async () => { order.push('lookup'); return { user: target, attempts: [] } } },
+        throwIfZaloRuntimeStopping() {},
+        normalizeZaloTarget: () => target,
+        upsertZaloFoundUserContact: async () => {},
+        applyAkaBizTagsToZaloTarget: async () => { throw new Error('Blocked input must not perform auxiliary actions') },
+        sendExclusionRpc: async (_a, _c, operation, payload) => {
+          assert.equal(operation, 'pause'); assert.equal(payload.expectedStatus, 'đang chạy')
+          pauses.push(payload.note); order.push('pause'); return { changed: kind !== 'cas-miss' }
+        },
+        logCampaignProgress: async (_campaign, text) => { logs.push(text); order.push(text.startsWith('🚫') ? 'skip-log' : 'lookup-log') },
+        pushZaloDetailToExternalSmsIfNeeded: async () => {},
+        createZaloErrorDetail: async (_a, _c, error) => { throw error }
+      })
+      f.db.checkZaloMessageOptOut = async () => ({ isOptedOut: kind === 'opt-out' })
+      f.db.prepareZaloMessageOptOut = async () => ({ isOptedOut: kind === 'prepare-opt-out', id: null })
+      f.db.updateCampaignInputData = async (_id, patch) => { if (patch.status) { pauses.push(patch.note); order.push('pause') } }
+      f.db.createCampaignDetail = async detail => { details.push(detail); order.push('detail'); return { id: 1, ...detail } }
+      const result = await f.scheduler.zaloFindPhoneUser(f.account, f.campaign, { phone: input.phone, inputData: workflowInput })
+      assert.equal(result.zaloTarget, null, `${runtime}/${kind}: no sending or auxiliaries`)
+      assert.equal(result.detail.optOutBlocked, true)
+      assert.equal(logs.length, 0, 'skip log waits for lookup detail/quota')
+      assert.equal(input.note, optOutNote, 'original object deliberately keeps the stale note')
+      const summary = await f.scheduler.logZaloMessagePhoneMilestones(f.campaign, input, f.account.id, [{ blockName: 'zalo_find_phone_user', output: result }])
+      assert.equal(summary.optOutBlocked, true)
+      assert.equal(details.length, 1)
+      assert.equal(details[0].actionCode, 'zalo_find_phone_user')
+      assert.equal(details[0].shouldCountAction, true)
+      const skipLogs = logs.filter(text => text.startsWith('🚫'))
+      if (kind === 'cas-miss') {
+        assert.equal(skipLogs.length, 0, 'a lost CAS cannot report the stale opt-out reason')
+        assert.equal(context.blockedNote, undefined)
+      } else {
+        const expected = kind === 'and' ? 'Thỏa điều kiện loại trừ của nhóm “gđ bb”.'
+          : kind === 'or' ? 'Thỏa điều kiện loại trừ của nhóm “gđ bb”: Giới tính.'
+          : kind === 'blocklist' ? 'Thuộc danh sách Zalo ID loại trừ.'
+          : kind === 'unknown' ? 'Chưa đủ dữ liệu để kiểm tra nhóm “gđ bb”.' : optOutNote
+        assert.equal(pauses[0], expected)
+        assert.equal(context.blockedNote, expected)
+        assert.deepEqual(skipLogs, [`🚫 Bỏ qua "${input.phone}": ${expected}`], `${runtime}/${kind}`)
+        assert.deepEqual(order, ['lookup', 'pause', 'detail', 'lookup-log', 'skip-log'])
+      }
+    }
+  }
+  console.log('PASS: Desktop/Server deferred phone log preserves AND/OR/list/unknown/real opt-out reasons across input copies; CAS misses stay silent; lookup quota/log precedes skip')
+}
+
+async function verifyPhoneExclusionFailure() {
+  for (const runtime of ['desktop', 'server']) {
+    for (const committed of [false, true]) {
+      const f = fixture(runtime), order = [], detailWrites = [], inputWrites = []
+      f.account.flatformType = 'zalo'
+      f.campaign.actionId = 'zalo_message_phone'
+      f.campaign.extraSettings.enableMessage = true
+      const input = { id: 10, phone: '0900000000', uid: '', name: 'Fixture', status: 'chờ xử lý' }
+      const target = { uid: 'u1', phone: input.phone, globalId: 'global1', displayName: 'Resolved', raw: {} }
+      let persistedInputStatus = input.status, lookups = 0, auxiliaryCalls = 0
+      Object.assign(f.scheduler, {
+        executeCampaignV2: CampaignScheduler.prototype.executeCampaignV2.bind(f.scheduler),
+        isFormattedContentCampaign: () => false,
+        getAdvancedContentConfigError: () => null,
+        finalizeDataGroupCampaignAtHardEnd: async () => false,
+        resolveGroupPostApprovalForTarget: async () => ({ skipPostByKnownApproval: false }),
+        checkActionDisabled: async () => null,
+        checkActionLimitsForContinuation: async () => ({ runnableActionDescriptors: [], skippedLimitStatuses: [] }),
+        resolveGroupPostShareQuotaCapacity: async () => 0,
+        buildGroupPostShareTargets: async () => [],
+        buildVariablesV2: async () => ({}),
+        beginCampaignRunUnit: async () => {
+          f.lease([input.id]); persistedInputStatus = 'đang chạy'
+          f.scheduler.sendExclusionRuns.set(f.campaign.id, { catalog: {}, group: null, blocklistUids: [target.uid] })
+          return true
+        },
+        zaloRuntime: { findUserByPhone: async () => { lookups++; order.push('lookup'); return { user: target, attempts: [] } } },
+        normalizeZaloTarget: () => target,
+        upsertZaloFoundUserContact: async () => {},
+        applyAkaBizTagsToZaloTarget: async () => { auxiliaryCalls++ },
+        sendExclusionRpc: async (_a, _c, operation, payload) => {
+          assert.equal(operation, 'pause'); assert.equal(payload.expectedStatus, 'đang chạy')
+          order.push('pause')
+          if (committed) persistedInputStatus = 'tạm dừng'
+          throw temporary()
+        },
+        getZaloErrorMessage: error => error.message,
+        logCampaignProgress: async () => {},
+        // Quota is asserted through the real milestone writer below.
+        pushZaloDetailToExternalSmsIfNeeded: async () => {},
+        updateCampaignAndBroadcast: async () => { throw new Error('Unexpected generic campaign update') }
+      })
+      f.db.listCampaignInputData = async () => [input]
+      f.db.checkZaloMessageOptOut = async () => ({ isOptedOut: false })
+      f.db.updateCampaignInputData = async (_id, patch) => { inputWrites.push(patch); if (patch.status) persistedInputStatus = patch.status }
+      f.db.createCampaignDetail = async data => { order.push('detail'); detailWrites.push(data); return { id: 1, ...data } }
+      f.db.cleanupFailedCampaignRuntime = async payload => {
+        order.push('cleanup'); f.stats.cleanup++
+        assert.equal(payload.campaignStatus, 'tạm dừng')
+        assert.match(payload.note, /loại trừ gửi sau khi tìm SĐT/)
+        assert.deepEqual(Array.from(payload.unstartedInputDataIds), [])
+        assert.equal(persistedInputStatus, committed ? 'tạm dừng' : 'đang chạy', 'no generic completion/requeue before token-CAS cleanup')
+        f.campaign.status = payload.campaignStatus
+        return { ok: true, reason: 'cleaned' }
+      }
+      f.scheduler.engineV2.run = async () => {
+        const result = await f.scheduler.zaloFindPhoneUser(f.account, f.campaign, { phone: input.phone, inputData: input })
+        assert.equal(result.ok, true)
+        assert.equal(result.zaloTarget, null, 'workflow receives no target for send/auxiliary actions')
+        assert.equal(result.detail.status, 'thành công')
+        assert.equal(result.detail.countsTowardLimit, true)
+        assert.equal(result.detail.optOutBlocked, true)
+        return { status: 'completed', steps: [{ blockName: 'zalo_find_phone_user', output: result }] }
+      }
+      await f.scheduler.executeCampaign(f.account, f.campaign)
+      assert.equal(lookups, 1)
+      assert.equal(auxiliaryCalls, 0)
+      assert.equal(detailWrites.length, 1)
+      assert.equal(detailWrites[0].actionCode, 'zalo_find_phone_user')
+      assert.equal(detailWrites[0].status, 'thành công')
+      assert.equal(detailWrites[0].shouldCountAction, true)
+      assert.equal(inputWrites.filter(write => write.status).length, 0, 'lost pause response cannot be overwritten')
+      assert.equal(f.stats.policy, 0, 'DB exclusion failure is not a phone/Zalo error')
+      assert.equal(f.stats.settle, 0, 'failed unit is released only through cleanup')
+      assert.equal(f.stats.cleanup, 1)
+      assert.equal(f.campaign.status, 'tạm dừng')
+      assert.deepEqual(order, ['lookup', 'pause', 'detail', 'cleanup'])
+    }
+  }
+  console.log('PASS: Desktop/Server phone exclusion RPC failure/lost response keeps successful lookup quota, skips actions and generic input writes, pauses through token-CAS cleanup')
+}
+
 async function run() {
+  await verifyPhoneExclusionLogReason()
+  await verifyPhoneExclusionFailure()
   await verifyNestedPauseFailureHandoff()
   await verifyExecutorPauseBranches()
   for (const target of ['desktop', 'server']) {

@@ -1,3 +1,4 @@
+import { registerSendExclusionHandlers } from './handlers/campaignSendExclusionHandlers'
 import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
@@ -156,6 +157,7 @@ export function registerIpcHandlers(
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
   registerStaffManagementHandlers(mainWindow)
+  registerSendExclusionHandlers(mainWindow)
   registerDataGroupExternalSyncHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)

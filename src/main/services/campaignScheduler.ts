@@ -1,3 +1,5 @@
+import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
+import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
@@ -130,9 +132,18 @@ interface DeliveryCooldownBatchResult {
 
 interface ZaloMessageOptOutRuntimeContext {
   blocked: boolean
+  blockedNote?: string
   target: ZaloResolvedTarget | null
   warnings: string[]
   linkId: string | null
+  sendExclusionError?: ZaloSendExclusionError
+}
+
+class ZaloSendExclusionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ZaloSendExclusionError'
+  }
 }
 
 type ZaloCampaignReadResult<T> =
@@ -740,6 +751,9 @@ export class CampaignScheduler {
   private failedCampaignRuns = new Map<number, FailedCampaignRun>()
   private attemptedRunErrorPolicies = new Set<number>()
   private failedRunErrorPolicies = new Map<number, unknown>()
+  private sendExclusionProfileErrors = new WeakMap<ZaloResolvedTarget, unknown>()
+  private sendExclusionRuns = new Map<number, SendExclusionSnapshot>()
+  private sendExclusionLabels = new Map<number, CampaignLabelContext>()
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
 
@@ -2951,6 +2965,17 @@ export class CampaignScheduler {
       )
       this.campaignRunBoundaries.set(campaign.id, runBoundary)
 
+      try {
+        if (supportsSendExclusion(campaign.actionId, campaign.extraSettings) && hasSendExclusions(campaign.extraSettings ?? {}, account.id)) {
+          const snapshot = await this.sendExclusionRpc<SendExclusionSnapshot>(account, campaign, 'snapshot')
+          if (snapshot.group) validateExclusionGroup(snapshot.catalog, snapshot.group)
+          this.sendExclusionRuns.set(campaign.id, snapshot)
+        }
+      } catch (error) {
+        await this.updateCampaignAndBroadcast(campaign.id, {status: 'tạm dừng', note: `Không thể tải cấu hình loại trừ: ${getErrorMessage(error)}`})
+        await this.releaseRunningAccount(account.id)
+        return
+      }
       await this.broadcastClaimedRuntimeState(campaign.id)
 
       const initialBoundaryCheck = this.checkCampaignRunBoundaryWithClock(runBoundary, claimedClock)
@@ -3070,10 +3095,11 @@ export class CampaignScheduler {
       await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       if (err instanceof CampaignRunUnitOwnershipLostError) return
       failedRun = this.rememberFailedCampaignRun(account, campaign, err, ownedClaimToken)
+      if (err instanceof ZaloSendExclusionError) failedRun.payload.campaignStatus = 'tạm dừng'
       // All nested producers/resources have unwound. Policy is attempted once;
       // its status writes are deferred into the same token-checked transaction.
       try {
-        if (!failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
+        if (!(err instanceof ZaloSendExclusionError) && !failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
           if (this.isNewsfeedDailyCampaign(campaign)) {
             this.attemptedRunErrorPolicies.add(campaign.id)
             // Unknown aggregate progress is paused by cleanup, never replayed.
@@ -3094,6 +3120,8 @@ export class CampaignScheduler {
       }
       await this.cleanupFailedCampaignRun(failedRun)
     } finally {
+      this.sendExclusionRuns.delete(campaign.id)
+      this.sendExclusionLabels.delete(campaign.id)
       await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       const unitSettled = failedRun ? !this.failedCampaignRuns.has(campaign.id) : runtimeClaimed
         ? await this.settleActiveCampaignRunUnit(account, campaign).catch(error => {
@@ -3836,6 +3864,10 @@ export class CampaignScheduler {
             consumedGroupPostInputDataIds
           )
 
+          // Persist the successful lookup/quota first, then hand the failed
+          // exclusion gate to token-checked cleanup without rewriting its input.
+          if (zaloOptOutContext?.sendExclusionError) throw zaloOptOutContext.sendExclusionError
+
           if (this.isServerZaloCampaign(account, campaign)) {
             const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
             if (this.isServerZaloBoundaryRequested(
@@ -4016,6 +4048,9 @@ export class CampaignScheduler {
             }
           }
         } catch (err: any) {
+          // A pause RPC may have committed despite a lost response. Generic
+          // target error handling must not overwrite that paused row or retry it.
+          if (zaloOptOutContext?.sendExclusionError) throw zaloOptOutContext.sendExclusionError
           // Identity cleanup cannot rewrite a finished target or contribute to
           // bad-target counters/quota. Only the run cleanup pauses the owner.
           if (pageIdentity?.restoreError) throw err
@@ -4133,6 +4168,7 @@ export class CampaignScheduler {
       } finally {
         this.cleanupCampaignMediaTempFiles(mediaTempPaths)
         if (detail) {
+          this.sendExclusionLabels.delete(campaign.id)
           this.zaloMessageOptOutContexts.delete(
             this.zaloMessageOptOutContextKey(campaign.id, detail.id)
           )
@@ -5052,10 +5088,11 @@ export class CampaignScheduler {
           batchCandidates.push(detail)
         }
 
+        this.sendExclusionLabels.delete(campaign.id)
         const optOutContexts = new Map<number, ZaloMessageOptOutRuntimeContext>()
         const optOutAllowedCandidates: CampaignInputData[] = []
         for (const candidate of batchCandidates) {
-          const context = await this.preflightZaloMessageOptOut(account, campaign, candidate)
+          const context = await this.preflightZaloMessageOptOut(account, campaign, candidate, true)
           optOutContexts.set(candidate.id, context)
           if (!context.blocked) optOutAllowedCandidates.push(candidate)
         }
@@ -5233,6 +5270,7 @@ export class CampaignScheduler {
             optOutContexts
           )
         } finally {
+          this.sendExclusionLabels.delete(campaign.id)
           if (batchControlGuard) clearInterval(batchControlGuard)
         }
         if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
@@ -6074,6 +6112,7 @@ export class CampaignScheduler {
     campaign: Campaign
   ): Promise<ZaloFriendBlocklistContext | null> {
     if (
+      campaign.extraSettings?.zaloSendExclusionsByAccountId !== undefined ||
       campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID ||
       campaign.extraSettings?.zaloFriendBlocklistEnabled !== true
     ) {
@@ -6183,29 +6222,102 @@ export class CampaignScheduler {
     }
     detail.status = 'tạm dừng'
     detail.note = ZALO_MESSAGE_OPT_OUT_NOTE
-    // Campaign theo SĐT chỉ biết có opt-out sau khi bước Tìm SĐT đã hoàn tất.
-    // Detail/quota của bước lookup vẫn phải được ghi nhận; hoãn riêng progress
-    // log opt-out để milestone Tìm SĐT xuất hiện trước, đúng thứ tự thực thi.
-    if (!(inputClaimed && campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID)) {
-      await this.logZaloMessageOptOutBlocked(campaign, detail)
-    }
+    await this.logZaloMessageOptOutBlocked(campaign, detail, ZALO_MESSAGE_OPT_OUT_NOTE, inputClaimed)
   }
 
   private async logZaloMessageOptOutBlocked(
     campaign: Campaign,
-    detail: CampaignInputData
+    detail: CampaignInputData,
+    note: string,
+    inputClaimed = false
   ): Promise<void> {
+    if (inputClaimed && campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID) {
+      // The workflow uses an input copy. Keep the confirmed reason in the
+      // shared context so the lookup milestone logs it after its detail/quota.
+      const context = this.zaloMessageOptOutContexts.get(
+        this.zaloMessageOptOutContextKey(campaign.id, detail.id)
+      )
+      if (context) context.blockedNote = note
+      return
+    }
     await this.logCampaignProgress(
       campaign,
-      `🚫 Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${ZALO_MESSAGE_OPT_OUT_NOTE}`
+      `🚫 Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${note}`
     ).catch(() => {})
+  }
+
+  private sendExclusionRpc<T>(account: AutoAccount, campaign: Campaign, operation: 'snapshot' | 'facts' | 'pause', payload: Record<string, unknown> = {}): Promise<T> {
+    const token = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
+    if (!token) throw new Error('Lượt chạy loại trừ không còn hợp lệ.')
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    return callSendExclusionRuntime<T>(campaign.id, account.id, Number(campaign.staffId ?? account.staffId ?? getCurrentUser()?.staffId), token, operation, payload)
+  }
+
+  private getSendExclusionLabels(account: AutoAccount, campaign: Campaign): CampaignLabelContext {
+    let context = this.sendExclusionLabels.get(campaign.id)
+    if (!context) {
+      if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
+      context = this.zaloRuntime.createCampaignLabelContext(account.id)
+      this.sendExclusionLabels.set(campaign.id, context)
+    }
+    return context
+  }
+
+  private async gateSendExclusion(account: AutoAccount, campaign: Campaign, detail: CampaignInputData, target: ZaloResolvedTarget | null, claimed: boolean): Promise<boolean> {
+    const snapshot = this.sendExclusionRuns.get(campaign.id)
+    if (!snapshot) return false
+    const uid = String(target?.uid || detail.uid || '').trim()
+    let stopReads = false
+    let decision = await evaluateSendExclusion(snapshot, uid, async source => {
+      if (stopReads) return null
+      if (source === 'zalo_labels') return uid ? this.getSendExclusionLabels(account, campaign).ids(uid) : null
+      if (source === 'zalo_friendship') {
+        const known = readFriendship(target?.raw)
+        if (known) return known
+        if (!uid || !this.zaloRuntime) return null
+        const status = await this.zaloRuntime.getFriendRequestStatus(account.id, uid)
+        const resolved = readFriendship(status.raw)
+        if (target && resolved) target.raw = {...target.raw, profile: {...zaloProfileFacts(target.raw), ...status.raw, isFr: resolved.status === 'friend' ? 1 : 0}}
+        return resolved
+      }
+      if (source === 'zalo_profile') {
+        if (target && this.sendExclusionProfileErrors.has(target)) throw this.sendExclusionProfileErrors.get(target)
+        return zaloProfileFacts(target?.raw ?? (uid ? (await this.zaloRuntime?.getUserProfile(account.id, uid))?.raw : null))
+      }
+      if (source === 'akabiz_contact' || source === 'campaign_delivery') {
+        const data = await this.sendExclusionRpc<ExclusionFacts>(account, campaign, 'facts', {
+          inputId: detail.id, uid,
+          ...(source === 'akabiz_contact' ? {tags: true} : {days: Math.max(1, ...snapshot.group!.rules.filter(r => r.isEnabled && ruleDefinition(snapshot.catalog, r).field.sourceKey === source).map(r => Number(r.value)))})
+        })
+        return data[source]
+      }
+      return null
+    }, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
+      if (!source.startsWith('zalo_')) return
+      const policy = await this.getZaloPolicyByErrorCode(this.getZaloErrorCode(error))
+      const note = `Không thể kiểm tra loại trừ: ${this.getZaloErrorMessage(error)}`
+      const result = await this.applyZaloPolicySideEffects(account, campaign, policy, {runningProcess: note, campaign: note})
+      stopReads ||= result.stopAfterTarget
+    })
+    if (stopReads) decision = {decision: 'unknown', note: 'Nguồn Zalo đang bị giới hạn hoặc phiên đã thay đổi.'}
+    if (decision.decision === 'allowed') return false
+    const note = decision.note
+    const result = await this.sendExclusionRpc<{changed: boolean}>(account, campaign, 'pause', {inputId: detail.id, expectedStatus: claimed ? 'đang chạy' : 'chờ xử lý', note})
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    if (result.changed) {
+      detail.status = 'tạm dừng'; detail.note = note
+      await this.logZaloMessageOptOutBlocked(campaign, detail, note, claimed)
+    }
+    return true
   }
 
   private async preflightZaloMessageOptOut(
     account: AutoAccount,
     campaign: Campaign,
-    detail: CampaignInputData
+    detail: CampaignInputData,
+    sharedBatch = false
   ): Promise<ZaloMessageOptOutRuntimeContext> {
+    if (!sharedBatch) this.sendExclusionLabels.delete(campaign.id)
     const context: ZaloMessageOptOutRuntimeContext = {
       blocked: false,
       target: null,
@@ -6277,6 +6389,8 @@ export class CampaignScheduler {
     }
 
     await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings)
+    context.blocked = await this.gateSendExclusion(account, campaign, detail, context.target, false)
+    if (context.blocked && !sharedBatch) this.sendExclusionLabels.delete(campaign.id)
     return context
   }
 
@@ -6329,6 +6443,16 @@ export class CampaignScheduler {
     }
 
     await this.recordZaloMessageOptOutWarnings(campaign, detail, context.warnings, [], 'đang chạy')
+    try {
+      context.blocked = await this.gateSendExclusion(account, campaign, detail, target, true)
+    } catch (error) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      context.blocked = true
+      context.sendExclusionError = new ZaloSendExclusionError(
+        `Không thể hoàn tất loại trừ gửi sau khi tìm SĐT: ${this.getZaloErrorMessage(error)}`
+      )
+    }
+    if (context.blocked) return context
     const prepared = await this.prepareZaloMessageOptOutLink(account, campaign, detail, context, true)
     Object.assign(context, prepared)
     return context
@@ -9802,8 +9926,8 @@ export class CampaignScheduler {
           this.zaloMessageOptOutContextKey(campaign.id, detail.id)
         )
         await this.logZaloMessageOptOutWarnings(campaign, detail, optOutContext?.warnings || [])
-        if (actionDetail.optOutBlocked) {
-          await this.logZaloMessageOptOutBlocked(campaign, detail)
+        if (actionDetail.optOutBlocked && optOutContext?.blockedNote && !optOutContext.sendExclusionError) {
+          await this.logZaloMessageOptOutBlocked(campaign, detail, optOutContext.blockedNote)
         }
       }
     }
@@ -12913,6 +13037,7 @@ export class CampaignScheduler {
       const profile = await this.zaloRuntime.getUserProfile(account.id, target.uid)
       return this.mergeZaloFriendProfileTarget(target, profile)
     } catch (err) {
+      this.sendExclusionProfileErrors.set(target, err)
       console.warn('[CampaignScheduler] Failed to get Zalo friend profile before message send:', {
         accountId: account.id,
         targetUid: target.uid,
@@ -14619,7 +14744,7 @@ export class CampaignScheduler {
         await this.logCampaignProgress(campaign, `⚠️ Chưa cấu hình tag loại trừ cho tài khoản ${account.name || account.id}; vẫn gắn tag Zalo cho ${this.getZaloTargetLabel(target)} theo cấu hình`)
         this.throwIfZaloRuntimeStopping(campaign.id)
       }
-      const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId, skipLabelIds)
+      const label = await this.zaloRuntime.applyLabelToUser(account.id, target.uid, labelId, skipLabelIds, this.getSendExclusionLabels(account, campaign))
       if (isZaloLabelSkipResult(label)) {
         this.throwIfZaloRuntimeStopping(campaign.id)
         await this.logCampaignProgress(campaign, `Bỏ qua gắn tag Zalo cho ${this.getZaloTargetLabel(target)}: đã có tag ${label.matchedLabelNames.join(', ')}`)

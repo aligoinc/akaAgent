@@ -7,13 +7,14 @@ const root = path.resolve(__dirname, '..')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
 const contract = {}
 new Function('exports', compile(fs.readFileSync(path.join(root, 'src/shared/zaloAuxiliaryActions.ts'), 'utf8')))(contract)
+new Function('exports', compile(fs.readFileSync(path.join(root, 'src/shared/campaignSendExclusion.ts'), 'utf8')))(contract)
 function harness(file, className, names) {
   const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true)
   const klass = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === className)
   const methods = names.map(name => klass.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name).getText(source))
   return new Function(...Object.keys(contract), compile(`class Harness { ${methods.join('\n')} }`) + '; return Harness')(...Object.values(contract))
 }
-const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', ['applyLabelToUser'])
+const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', ['getAccountCacheVersion', 'createCampaignLabelContext', 'applyLabelToUser'])
 const Scheduler = harness('src/main/services/campaignScheduler.ts', 'CampaignScheduler', ['resolveZaloAuxiliaryFriendStatus', 'zaloApplyContactTag', 'zaloChangeContactAlias', 'createBlockRuntimeHelpers', 'runZaloCampaignHelper'])
 const labels = () => [{ id: 7, text: 'Mới', conversations: [] }, { id: 8, text: 'VIP', conversations: ['u1', 'u2'] }, { id: 9, text: 'Cũ', conversations: ['u3'] }]
 async function main() {
@@ -23,7 +24,9 @@ async function main() {
   for (const exclusions of [['9', '8'], ['9'], []]) {
     let reads = 0; const writes = []; const original = labels()
     const runtime = new Runtime()
-    runtime.ensureApi = async () => ({ getLabels: async () => { reads++; return { labelData: original, version: 13 } }, updateLabels: async value => writes.push(value) })
+    const api = { getLabels: async () => { reads++; return { labelData: original, version: 13 } }, updateLabels: async value => { writes.push(value); return {...value,version:value.version+1} } }
+    Object.assign(runtime, {cacheVersion:0,accountCacheVersions:new Map(),campaignLabelSessions:new WeakMap(),apiCache:new Map([[1,{api}]]),webRuntime:{isCurrentApi:()=>false,captureSessionGuard:()=>()=>true}})
+    runtime.ensureApi = async () => api
     const result = await runtime.applyLabelToUser(1, 'u1', 7, exclusions)
     assert.equal(reads, 1)
     if (exclusions.includes('8')) {
@@ -39,7 +42,7 @@ async function main() {
     Object.assign(scheduler, {
       zaloRuntime: { getFriendRequestStatus: async () => { reads++; return { isFriend: false, raw: {} } }, applyLabelToUser: async (...args) => { calls.push(['tag', ...args]); return { id: 7, text: 'Mới' } }, changeUserAlias: async () => calls.push(['alias']) },
       supabase: { appendZaloTagsToExistingContacts: async () => calls.push(['mirror']) },
-      throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
+      getSendExclusionLabels: () => undefined, throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
       logCampaignProgress: async (_id, log) => logs.push(log), getTemplateBusinessNow: async () => undefined,
       renderZaloTemplate: text => text, createZaloSuccessDetail: data => data
     })
@@ -79,7 +82,7 @@ async function main() {
           changeUserAlias: async () => calls.push('alias')
         },
         supabase: { appendZaloTagsToExistingContacts: async () => calls.push('mirror') },
-        throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
+        getSendExclusionLabels: () => undefined, throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
         logCampaignProgress: async (_id, log) => logs.push(log), getTemplateBusinessNow: async () => undefined,
         renderZaloTemplate: text => text, createZaloSuccessDetail: data => data
       })
@@ -125,7 +128,7 @@ async function main() {
     Object.assign(scheduler, {
       zaloRuntime: { applyLabelToUser: async (...args) => { calls.push(args); return { text: 'Tag' } } },
       supabase: { appendZaloTagsToExistingContacts: async (...args) => calls.push(['mirror', ...args]) },
-      throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
+      getSendExclusionLabels: () => undefined, throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
       logCampaignProgress: async (_id, log) => logs.push(log), createZaloSuccessDetail: data => data
     })
     const result = await scheduler.zaloApplyContactTag({ id: accountId }, { id: 1, accountId: 1, extraSettings: {
@@ -135,7 +138,7 @@ async function main() {
       assert.equal(result.skipped, true); assert.equal(result.detail, undefined)
       assert.equal(calls.length, 0); assert.match(logs[0], /chưa chọn tag cần gắn/)
     } else {
-      assert.deepEqual(calls[0], [accountId, 'u1', settings[accountId].zaloTagId, settings[accountId].zaloTagSkipTagIds])
+      assert.deepEqual(calls[0], [accountId, 'u1', settings[accountId].zaloTagId, settings[accountId].zaloTagSkipTagIds, undefined])
       assert.equal(calls[1][1], accountId)
     }
   }
@@ -152,7 +155,7 @@ async function main() {
             getFriendRequestStatus: async () => { throw new Error('Missing friend conditions must not request friendship') }
           },
           supabase: { appendZaloTagsToExistingContacts: async (...args) => calls.push(['mirror', ...args]) },
-          throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
+          getSendExclusionLabels: () => undefined, throwIfZaloRuntimeStopping: () => {}, getZaloTargetLabel: target => target.uid,
           logCampaignProgress: async (_id, log) => logs.push(log), createZaloSuccessDetail: data => data,
           getTemplateBusinessNow: async () => undefined, renderZaloTemplate: text => text
         })
@@ -166,7 +169,7 @@ async function main() {
         const tag = await helpers.zaloApplyContactTag({ enabled: true, target, labelId: 7 })
         const alias = await helpers.zaloChangeContactAlias({ enabled: true, target, alias: 'Tên mới' })
         assert.equal(tag.skipped, undefined); assert.equal(alias.skipped, undefined)
-        assert.deepEqual(calls[0], ['tag', 2, 'u1', '17', []])
+        assert.deepEqual(calls[0], ['tag', 2, 'u1', '17', [], undefined])
         assert.deepEqual(calls.map(call => call[0]), ['tag', 'mirror', 'alias'])
         assert.equal(logs.length, enabled ? 1 : 0)
         if (enabled) assert.match(logs[0], /Chưa cấu hình tag loại trừ.*vẫn gắn tag/)

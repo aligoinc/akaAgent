@@ -1,3 +1,4 @@
+import exclusionPage from './fixtures/send-exclusion-ui-page.json'
 // Real Desktop form/settings with isolated IPC fixtures; never connects to production.
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -24,6 +25,10 @@ const resetData = () => {
 resetData()
 const handlers: Record<string, any> = {
   platform: 'darwin', fileExists: () => true,
+  listSendExclusionGroups: (accountId: number) => ({...exclusionPage,
+    groups: exclusionPage.groups.map(g => ({...g, id:g.id + accountId * 100, accountId})),
+    blocklists: state.groups.filter((g: any) => g.accountId === accountId).map((g: any) => ({...g,count:g.contactCount}))}),
+  saveSendExclusionGroup: (group: any) => ({...group,id:group.id ?? 1199,revision:group.revision+1}),
   listZaloLabels: (accountId: number) => {
     if (state.failZaloLabels) throw new Error('Fixture: Zalo tags offline')
     if (state.holdLabels === accountId) return new Promise(resolve => state.pendingLabels.push(() => resolve(labelsFor(accountId))))
