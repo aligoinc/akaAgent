@@ -2,6 +2,8 @@
 
 Status: implemented and tested. Migration v327 was **applied** to production `cgjbsmqtfhqvttudyjzq` on 2026-09-28 with history `20260928141133 / migration_v327_desktop_ui_reads`. The Desktop build has **not** been published.
 
+Follow-up [v328 UI read deltas](DESKTOP_UI_READ_DELTAS.md) adds selected config fingerprints, visible-tab log deltas and event deduplication. That migration is **not applied yet** and is required before running the updated Desktop code; the v327 apply record below remains unchanged.
+
 ## Settings
 
 Two independent rows in `auto_system_settings`, both seeded to `30` without replacing an existing value:

@@ -16,11 +16,33 @@ const account: any = { id: 41, name: 'Account', flatformType: 'zalo', isZaloServ
 const state: any = { calls: [], errors: [], hold: null, release: null, failPage: false, hidden: false, catalogVersion: 'a'.repeat(32), catalogName: 'Account', settings: { campaigns: 30, accounts: 30 } }
 Object.defineProperty(document, 'visibilityState', { get: () => state.hidden ? 'hidden' : 'visible', configurable: true })
 let accountEvent = () => {}
+const listeners: Record<string, Set<(payload: any) => void>> = {}
+const listen = (key: string) => (callback: (payload: any) => void) => {
+  (listeners[key] ||= new Set()).add(callback)
+  return () => { listeners[key].delete(callback) }
+}
 const matches = (row: any, filters: any) => (!filters.search || row.name.toLowerCase().includes(filters.search.toLowerCase())) && (!filters.statuses || filters.statuses.includes(row.status))
+const pageSummary = (row: any) => {
+  const { content, extraSettings, images, log, readVersion, ...summary } = row
+  return { ...summary, relationSettings: { emailCheckLinkClicks: row.relationSettings.emailCheckLinkClicks === true } }
+}
 const handlers: Record<string, any> = {
   platform: 'darwin', listCampaignDrafts: () => ({ items: [], total: 0 }),
   listAutomations: () => ({ items: [], total: 0, pageSize: 100 }), listAutomationExecutions: () => ({ items: [], total: 0, pageSize: 100 }),
-  getCampaignConfig: (id: number) => rows.find(row => row.id === id), getDesktopCampaignSources: async (id: number) => {
+  getCampaignConfig: (id: number) => rows.find(row => row.id === id),
+  getDesktopCampaignConfig: async (id: number) => {
+    const row = rows.find(row => row.id === id)
+    const result = row ? { ...row, readVersion: row.readVersion || 'a'.repeat(32) } : null
+    if (state.hold === 'config') await new Promise(resolve => { state.release = resolve })
+    return result
+  },
+  getDesktopCampaignLog: async (id: number) => {
+    const result = { id, log: state.log || 'history', updatedAt: now }
+    if (state.hold === 'log') await new Promise(resolve => { state.release = resolve })
+    return result
+  },
+  onCampaignLog: listen('log'), onCampaignLogUpdated: listen('logUpdated'), onCampaignStatusUpdated: listen('status'), getDesktopCampaignSources: async (id: number) => {
+    if (state.failSources) throw new Error('Fixture source read error')
     const result = [...(state.sources?.[id] || [])]
     if (state.hold === 'sources') await new Promise(resolve => { state.release = resolve })
     return result
@@ -30,8 +52,9 @@ const handlers: Record<string, any> = {
     if (state.failPage) throw new Error('Fixture page error')
     const filtered = rows.filter(row => matches(row, query.filters))
     const page = Math.min(query.page, Math.max(1, Math.ceil(filtered.length / 100)))
-    const items = filtered.slice((page - 1) * 100, page * 100).map(row => ({ ...row }))
-    const result = { items, selected: rows.find(row => row.id === query.selectedId) || null, order: items.map(row => ({ kind: 'campaign', id: String(row.id) })), total: filtered.length, campaignTotal: filtered.length, page, pageSize: 100, actionOptions: [] }
+    const items = filtered.slice((page - 1) * 100, page * 100).map(pageSummary)
+    const selected = rows.find(row => row.id === query.selectedId)
+    const result = { configVersion: selected ? { id: selected.id, version: selected.readVersion || 'a'.repeat(32) } : null, items, selected: selected ? pageSummary(selected) : null, order: items.map(row => ({ kind: 'campaign', id: String(row.id) })), total: filtered.length, campaignTotal: filtered.length, page, pageSize: 100, actionOptions: [] }
     if (state.hold === 'campaign') await new Promise(resolve => { state.release = resolve })
     return result
   },
@@ -47,7 +70,7 @@ const handlers: Record<string, any> = {
   },
   updateCampaign: (id: number, updates: any) => { const row = rows.find(row => row.id === id); Object.assign(row, updates); return { ...row } },
   updateAccount: (id: number, updates: any) => { Object.assign(account, updates); state.catalogName = account.name; state.catalogVersion = 'b'.repeat(32); return { ...account } },
-  listDesktopCampaignCatalog: () => rows,
+  listDesktopCampaignCatalog: () => rows.map(row => ({ ...row, relationSettings: { ...row.relationSettings } })),
   bulkUpdateCampaignStatus: (ids: number[], status: string) => { rows.forEach(row => { if (ids.includes(row.id)) row.status = status }); return { updatedCount: ids.length } },
   onAccountStatusUpdated: (callback: () => void) => { accountEvent = callback; return () => { accountEvent = () => {} } }
 }
@@ -61,7 +84,7 @@ window.addEventListener('unhandledrejection', event => state.errors.push(String(
 useAuthStore.setState({ user: { staffId: 41, organizationId: 1, entitlements: normalizeEntitlements({ zalo: true }), zaloAccountCapabilities: { qr: false, web: false, server: true } } as any })
 useCampaignStore.setState({ accounts: [account], campaignActions: [{ id: 'zalo_message_phone', name: 'Nhắn tin', flatformType: 'zalo', isActive: true, isDelete: false }] as any, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { if (type === 'error') state.errors.push(message) } })
-;(window as any).desktopSmoke = { state, store: useCampaignStore, ui: useUiStore, polling: useDesktopPollingStore, rows, accountEvent: () => accountEvent() }
+;(window as any).desktopSmoke = { state, store: useCampaignStore, ui: useUiStore, polling: useDesktopPollingStore, rows, emit: (key: string, payload: any) => listeners[key]?.forEach(fn => fn(payload)), accountEvent: () => accountEvent() }
 function App() {
   const user = useAuthStore(state => state.user)
   useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, true, true)

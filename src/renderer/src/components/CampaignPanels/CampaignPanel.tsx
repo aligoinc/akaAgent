@@ -1,3 +1,4 @@
+import { useCampaignRunLog } from '../../hooks/useCampaignRunLog'
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -2514,7 +2515,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     emailCampaignLinkTrackings, emailCampaignLinkTrackingCampaignId, loadingEmailCampaignLinkTrackings,
     campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
-    loadCampaigns, loadCampaignConfig, loadCampaignLog, loadCampaignActions, loadAccounts,
+    loadCampaigns, loadCampaignConfig, loadCampaignActions, loadAccounts,
     updateCampaign, deleteCampaign,
     bulkUpdateCampaignStatus, bulkDeleteCampaigns,
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
@@ -2844,24 +2845,18 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }, [zaloLoginAccount?.id, loadAccounts, loadCampaigns, showAlert])
 
   useEffect(() => {
-    if (!selectedCampaignId || (detailTab !== 'info' && detailTab !== 'contentPreview')) return
+    if (!isActive || !detailDockOpen || !selectedCampaignId || (detailTab !== 'info' && detailTab !== 'contentPreview')) return
     if (selectedCampaignConfig) return
     void loadCampaignConfig(selectedCampaignId).catch(err => {
       console.error('Failed to load selected campaign config:', err)
     })
-  }, [detailTab, loadCampaignConfig, selectedCampaignConfig, selectedCampaignId])
+  }, [isActive, detailDockOpen, detailTab, loadCampaignConfig, selectedCampaignConfig, selectedCampaignId])
 
   useEffect(() => {
     if (detailTab === 'contentPreview' && !supportsContentPreview) setDetailTab('info')
   }, [detailTab, supportsContentPreview])
 
-  useEffect(() => {
-    if (!selectedCampaignId || detailTab !== 'runLog') return
-    if (selectedCampaignLog) return
-    void loadCampaignLog(selectedCampaignId).catch(err => {
-      console.error('Failed to load selected campaign log:', err)
-    })
-  }, [detailTab, loadCampaignLog, selectedCampaignId, selectedCampaignLog])
+  useCampaignRunLog(selectedCampaignId, isActive && detailDockOpen && detailTab === 'runLog')
 
   // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
@@ -4093,9 +4088,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
     return Array.from(optionMap.values())
   }, [actionDetailFilters.status, campaignDetailPageItems])
-  const [linkedFindDataSourceCampaignIds, setLinkedFindDataSourceCampaignIds] = useState<number[]>([])
+  const [campaignSourceSnapshot, setCampaignSourceSnapshot] = useState<{
+    campaignId: number; scope: string; ids: number[]
+  } | null>(null)
+  const currentSourceSnapshot = campaignSourceSnapshot?.campaignId === selectedCampaignId
+    && campaignSourceSnapshot?.scope === campaignSourceScope ? campaignSourceSnapshot : undefined
+  const linkedFindDataSourceCampaignIds = useMemo(() => currentSourceSnapshot?.ids ?? [], [currentSourceSnapshot])
   const campaignSourcesRead = useRef<Promise<number[]> | null>(null)
-  useEffect(() => { setLinkedFindDataSourceCampaignIds([]) }, [selectedCampaignId, campaignSourceScope])
   useEffect(() => {
     let disposed = false
     if (selectedCampaignId && campaignSourceScope) void (async () => {
@@ -4106,7 +4105,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       campaignSourcesRead.current = operation
       try {
         const ids = await operation
-        if (!disposed) setLinkedFindDataSourceCampaignIds(ids)
+        if (!disposed) setCampaignSourceSnapshot({ campaignId: selectedCampaignId, scope: campaignSourceScope, ids })
       } catch (error) {
         if (!disposed) console.error('Failed to load campaign sources:', error)
       } finally {
@@ -4117,15 +4116,26 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }, [selectedCampaignId, campaignSourceScope, campaignSourcesRevision])
   const linkedFindDataTargetCampaignIds = useMemo(() => {
     if (!selectedCampaign || !FIND_DATA_ACTION_IDS.has(selectedCampaign.actionId)) return []
-    return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaign.relationSettings?.[field])))
-  }, [selectedCampaign])
+    return uniqueNumbers(FIND_DATA_TARGET_FIELDS.flatMap(field => toNumberList(selectedCampaignConfig?.extraSettings?.[field])))
+  }, [selectedCampaign, selectedCampaignConfig])
   const relationCatalogKey = `${selectedCampaignId}:${campaignSourcesRevision}:${linkedFindDataSourceCampaignIds.join(',')}:${linkedFindDataTargetCampaignIds.join(',')}`
   useEffect(() => {
     if (detailTab === 'info' && (linkedFindDataSourceCampaignIds.length || linkedFindDataTargetCampaignIds.length)) {
       void loadCampaignCatalog().catch(error => console.error('Failed to load campaign references:', error))
     }
   }, [detailTab, relationCatalogKey, loadCampaignCatalog])
-  const infoCampaigns = useMemo(() => Array.from(new Map([...campaignCatalog, ...campaigns].map(row => [row.id, row])).values()), [campaignCatalog, campaigns])
+  const infoCampaigns = useMemo(() => {
+    const byId = new Map(campaignCatalog.map(row => [row.id, row]))
+    for (const campaign of campaigns) {
+      const catalogRow = byId.get(campaign.id)
+      // Page summaries omit relation IDs; retain the on-demand catalog's links
+      // while using the current page's names, state and progress.
+      byId.set(campaign.id, catalogRow
+        ? { ...catalogRow, ...campaign, relationSettings: catalogRow.relationSettings }
+        : campaign)
+    }
+    return Array.from(byId.values())
+  }, [campaignCatalog, campaigns])
   const runLogEntries = useMemo(
     () => parseCampaignRunLog(selectedCampaignLog?.log || ''),
     [selectedCampaignLog?.log]
@@ -6707,6 +6717,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     account={selectedCampaignAccount}
                     action={selectedCampaignAction}
                     campaigns={infoCampaigns}
+                    linkedSourceCampaignIds={currentSourceSnapshot?.ids}
                     accounts={accounts}
                   />
                 ) : (

@@ -10,5 +10,7 @@ export function registerDesktopUiHandlers(): void {
   ipcMain.handle(DESKTOP_UI_IPC.campaignSelection, (_, query) => reads.getDesktopCampaignSelection(query))
   ipcMain.handle(DESKTOP_UI_IPC.accountSnapshot, (_, version) => reads.getDesktopAccountSnapshot(version))
   ipcMain.handle(DESKTOP_UI_IPC.campaignSources, (_, id) => reads.getDesktopCampaignSources(id))
+  ipcMain.handle(DESKTOP_UI_IPC.campaignConfig, (_, id) => reads.getDesktopCampaignConfig(id))
+  ipcMain.handle(DESKTOP_UI_IPC.campaignLog, (_, id) => reads.getDesktopCampaignLog(id))
   ipcMain.handle(DESKTOP_UI_IPC.campaignCatalog, () => listDesktopCampaignCatalog())
 }

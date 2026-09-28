@@ -1,0 +1,65 @@
+BEGIN;
+DO $test$
+DECLARE
+ a jsonb := '{"zalo":true,"server":true,"qr":true,"web":true,"sms":true,"facebookCore":true,"facebookFanpage":true,"email":true}';
+ r jsonb; c jsonb; v text; old_log text; new_log text; rebuilt text; cursor jsonb;
+BEGIN
+ r:=aka_agent_desktop_campaign_page(7,9,'fixture','fixture',a,'{}',1,'[]',1);
+ v:=r->'configVersion'->>'version';
+ PERFORM fixture_assert(length(v)=32,'page returns selected config version');
+ c:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'config');
+ PERFORM fixture_assert(c->>'version'=v AND c->'row' ? 'content' AND NOT c->'row' ? 'log','config and page version agree, no log in config');
+ UPDATE auto_campaigns SET status='hoàn thành',note='runtime note',log='a',schedule=now(),updated_at=now(),last_run_at=now() WHERE id=1;
+ r:=aka_agent_desktop_campaign_page(7,9,'fixture','fixture',a,'{}',1,'[]',1);
+ PERFORM fixture_assert(r->'configVersion'->>'version'=v,'runtime status/schedule/log do not invalidate content');
+ UPDATE auto_campaigns SET content='external edit' WHERE id=1;
+ r:=aka_agent_desktop_campaign_page(7,9,'fixture','fixture',a,'{}',1,'[]',1);
+ PERFORM fixture_assert(r->'configVersion'->>'version'<>v,'external content edit changes version');
+ v:=r->'configVersion'->>'version';
+ UPDATE auto_campaigns SET extra_settings='{"unknownFutureKey":true}',images='["image"]' WHERE id=1;
+ c:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'config');
+ PERFORM fixture_assert(c->>'version'<>v,'all settings and images participate in config version');
+ PERFORM fixture_assert(aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,3006,'config') IS NULL,'other staff denied');
+ PERFORM fixture_assert(aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,3005,'log') IS NULL,'wrong account owner denied');
+ PERFORM fixture_assert(aka_agent_desktop_campaign_detail(7,9,'fixture','fixture','{"zalo":true,"server":true}',3003,'log') IS NULL,'local subtype denied');
+ old_log:=repeat('Nội dung nhiều dòng '||chr(128512)||E'\n',6000)||'UNIQUE LAST ENTRY';
+ UPDATE auto_campaigns SET log=old_log WHERE id=1;
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log');
+ PERFORM fixture_assert(r->>'mode'='replace' AND r->>'log'=old_log,'first load complete unicode snapshot');
+ cursor:=jsonb_build_object('version',md5(old_log),'length',char_length(old_log),'tail',right(old_log,1024));
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log',cursor);
+ PERFORM fixture_assert(r->>'mode'='unchanged' AND octet_length(r::text)<200,'unchanged log does not transfer history');
+ new_log:=old_log||E'\nNew entry '||chr(128512);
+ UPDATE auto_campaigns SET log=new_log WHERE id=1;
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log',cursor);
+ rebuilt:=(r->>'prefix')||right(old_log,(r->>'keepChars')::integer)||(r->>'append');
+ PERFORM fixture_assert(r->>'mode'='delta' AND rebuilt=new_log AND md5(rebuilt)=r->>'version','append delta reconstructs exact unicode text');
+ PERFORM fixture_assert(octet_length(r::text)<2000,'small append bounded payload');
+ new_log:='[Earlier history omitted]'||E'\n'||substr(old_log,3001)||E'\nNext entry';
+ UPDATE auto_campaigns SET log=new_log WHERE id=1;
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log',cursor);
+ rebuilt:=(r->>'prefix')||right(old_log,(r->>'keepChars')::integer)||(r->>'append');
+ PERFORM fixture_assert(r->>'mode'='delta' AND rebuilt=new_log,'rolling prefix truncation retains correct history');
+ PERFORM fixture_assert(octet_length(r::text)<2000,'rolling tail does not refetch full log');
+ UPDATE auto_campaigns SET log='replaced entirely' WHERE id=1;
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log',cursor);
+ PERFORM fixture_assert(r->>'mode'='replace' AND r->>'log'='replaced entirely','replace falls back to full snapshot');
+ UPDATE auto_campaigns SET log=NULL WHERE id=1;
+ r:=aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log',cursor);
+ PERFORM fixture_assert(r->>'mode'='replace' AND r->>'log'='','cleared history replaces old history');
+ BEGIN
+  PERFORM aka_agent_desktop_campaign_detail(7,9,'fixture','wrong',a,1,'log');
+  RAISE EXCEPTION 'accepted invalid auth';
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'automation_auth_invalid' THEN RAISE; END IF; END;
+ BEGIN
+  PERFORM aka_agent_desktop_campaign_detail(7,9,'fixture','fixture',a,1,'log','{"tail":123}');
+  RAISE EXCEPTION 'accepted invalid cursor';
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'Invalid campaign log cursor' THEN RAISE; END IF; END;
+END $test$;
+SET LOCAL ROLE anon;
+SELECT fixture_assert(aka_agent_desktop_campaign_detail(7,9,'fixture','fixture','{"zalo":true,"server":true}',2,'config')->'row'->>'id'='2','anon RPC can use private helper through definer');
+RESET ROLE;
+SET LOCAL ROLE service_role;
+SELECT fixture_assert(aka_agent_desktop_campaign_detail(7,9,'fixture','fixture','{"zalo":true,"server":true}',2,'log') IS NOT NULL,'service role execute grant');
+RESET ROLE;
+ROLLBACK;

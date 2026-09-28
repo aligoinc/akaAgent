@@ -1,8 +1,10 @@
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { loadCurrentUserEffectiveEntitlements, loadCurrentUserZaloAccountCapabilities } from './entitlementRepository'
-import { mapAccountFromDB } from '../mappers'
-import { listCampaignSummariesForPage } from './campaignRepository'
+import { mapAccountFromDB, mapCampaignConfigFromDB } from '../mappers'
+import type { CampaignConfig, CampaignLogSnapshot } from '../../../shared/types'
+import { logCursor, reconstructLog, type LogDelta } from '../campaignLogDelta'
+import { listCampaignSummariesForPage, attachCampaignSecondaryAccountNames, attachCampaignDataGroupSourceSummaries } from './campaignRepository'
 import {
   DEFAULT_DESKTOP_POLLING, DESKTOP_POLL_KEYS, parseDesktopPollSeconds,
   type DesktopAccountSnapshot, type DesktopCampaignPage, type DesktopCampaignPageQuery,
@@ -60,10 +62,10 @@ export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery): P
   if (error) throw new Error(`Không thể tải trang chiến dịch: ${error.message}`)
   const result = data as Omit<DesktopCampaignPage, 'items' | 'selected'> & { ids: number[]; selectedId: number | null }
   const ids = [...new Set([...result.ids, ...(result.selectedId ? [result.selectedId] : [])])]
-  const rows = await listCampaignSummariesForPage(ids)
+  const rows = await listCampaignSummariesForPage(ids, result.extraAccounts)
   const byId = new Map(rows.map(row => [row.id, row]))
   return {
-    page: result.page, pageSize: 100, total: result.total, campaignTotal: result.campaignTotal, order: result.order, actionOptions: result.actionOptions, runningCampaigns: result.runningCampaigns, extraAccounts: result.extraAccounts,
+    configVersion: result.configVersion, page: result.page, pageSize: 100, total: result.total, campaignTotal: result.campaignTotal, order: result.order, actionOptions: result.actionOptions, runningCampaigns: result.runningCampaigns, extraAccounts: result.extraAccounts,
     items: result.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
     selected: result.selectedId ? byId.get(result.selectedId) ?? null : null
   }
@@ -121,4 +123,52 @@ export async function getDesktopCampaignSources(id: number): Promise<number[]> {
     ids.push(...data.map(row => Number(row.id)))
     afterId = ids[ids.length - 1]
   }
+}
+
+function validateCampaignId(id: number): void {
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('ID chiến dịch không hợp lệ.')
+}
+
+export async function getDesktopCampaignConfig(id: number): Promise<CampaignConfig | null> {
+  validateCampaignId(id)
+  const context = await scope()
+  const { data, error } = await getSupabaseClient().rpc('aka_agent_desktop_campaign_detail', {
+    ...context, p_campaign_id: id, p_part: 'config'
+  }).abortSignal(AbortSignal.timeout(60_000))
+  if (error) throw new Error(`Không thể tải cấu hình chiến dịch: ${error.message}`)
+  if (!data) return null
+  const config = { ...mapCampaignConfigFromDB(data.row), readVersion: data.version }
+  const rows = await attachCampaignSecondaryAccountNames([config], context.p_staff_id, context.p_organization_id)
+  return (await attachCampaignDataGroupSourceSummaries(rows))[0]
+}
+
+// Three bounded log tails, no timers/connections. Every read still authenticates
+// and scopes in the RPC before a cached tail can contribute to the response.
+const desktopLogCache = new Map<string, CampaignLogSnapshot>()
+export async function getDesktopCampaignLog(id: number): Promise<CampaignLogSnapshot | null> {
+  validateCampaignId(id)
+  const context = await scope()
+  const key = `${context.p_organization_id}:${context.p_staff_id}:${id}`
+  const previous = desktopLogCache.get(key)
+  const read = async (cursor: ReturnType<typeof logCursor> | null) => {
+    const { data, error } = await getSupabaseClient().rpc('aka_agent_desktop_campaign_detail', {
+      ...context, p_campaign_id: id, p_part: 'log', p_cursor: cursor
+    }).abortSignal(AbortSignal.timeout(60_000))
+    if (error) throw new Error(`Không thể tải lịch sử chiến dịch: ${error.message}`)
+    return data as LogDelta | null
+  }
+  let delta = await read(previous ? logCursor(previous.log) : null)
+  if (!delta) { desktopLogCache.delete(key); return null }
+  let log = reconstructLog(previous?.log, delta)
+  if (log === null) {
+    // A repeated anchor/replacement must never silently corrupt the history.
+    delta = await read(null)
+    if (!delta) { desktopLogCache.delete(key); return null }
+    log = reconstructLog(undefined, delta)
+  }
+  if (log === null) throw new Error('Không xác minh được lịch sử chiến dịch. Vui lòng tải lại.')
+  const snapshot = { id, log, updatedAt: delta.updatedAt }
+  desktopLogCache.delete(key); desktopLogCache.set(key, snapshot)
+  while (desktopLogCache.size > 3) desktopLogCache.delete(desktopLogCache.keys().next().value!)
+  return snapshot
 }

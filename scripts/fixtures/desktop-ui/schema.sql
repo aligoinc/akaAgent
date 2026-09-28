@@ -116,3 +116,10 @@ INSERT INTO auto_account_action_status VALUES(1,true,NULL),(2,true,now()-interva
 CREATE INDEX ON auto_campaigns(staff_id,organization_id,id) WHERE is_delete=false;
 CREATE INDEX ON auto_accounts(staff_id,organization_id,id) WHERE is_delete=false;
 ANALYZE;
+
+-- Columns read only by the v328 detail/version RPCs.
+ALTER TABLE auto_campaigns ADD original_schedule timestamptz, ADD schedule_type text, ADD schedule_end_date date,
+ ADD daily_stop_time text, ADD schedule_days text, ADD schedule_week_days text, ADD continue_next_day boolean,
+ ADD refresh_data boolean, ADD images jsonb, ADD note text, ADD updated_at timestamptz DEFAULT now(),
+ ADD completed_at timestamptz, ADD data_target_source_mode text, ADD data_group_id bigint,
+ ADD provisioning_state text, ADD creation_bundle_id uuid, ADD creation_bundle_child_index integer;

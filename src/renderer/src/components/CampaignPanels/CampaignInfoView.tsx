@@ -23,6 +23,8 @@ interface CampaignInfoViewProps {
   account: AutoAccount | null
   action?: CampaignAction
   campaigns: CampaignListItem[]
+  /** Successful source read for this campaign; [] is authoritative, undefined uses the catalog. */
+  linkedSourceCampaignIds?: number[]
   accounts: AutoAccount[]
 }
 
@@ -328,8 +330,13 @@ const getFindDataSourceLabels = (extra: CampaignExtraSettings): string[] => {
 
 const findLinkedSourceCampaigns = (
   campaign: CampaignConfig,
-  campaigns: CampaignListItem[]
+  campaigns: CampaignListItem[],
+  confirmedSourceIds?: number[]
 ): CampaignListItem[] => {
+  if (confirmedSourceIds !== undefined) {
+    const ids = new Set(confirmedSourceIds)
+    return campaigns.filter(source => ids.has(source.id))
+  }
   const targetFields: (keyof CampaignRelationSettings)[] = campaign.actionId === 'facebook_message_uid'
     ? ['findUidTargetCampaignIds']
     : campaign.actionId === 'facebook_comment_seeding_post'
@@ -379,7 +386,7 @@ const renderSection = (title: string, rows: InfoRow[]) => {
   )
 }
 
-export default function CampaignInfoView({ campaign, account, action, campaigns, accounts }: CampaignInfoViewProps) {
+export default function CampaignInfoView({ campaign, account, action, campaigns, linkedSourceCampaignIds, accounts }: CampaignInfoViewProps) {
   const [dataGroupDisplay, setDataGroupDisplay] = useState<{ name: string; sourceStatus: string } | null>(null)
   const [dataGroupStats, setDataGroupStats] = useState<DataGroupLatestIngestStats | null>(null)
   const secondaryAccountName = campaign.secondaryAccountName
@@ -519,7 +526,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       : 'Không có nội dung nâng cao'
     : ''
   const scheduleType = campaign.scheduleType || 'daily'
-  const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns)
+  const linkedSourceCampaigns = findLinkedSourceCampaigns(campaign, campaigns, linkedSourceCampaignIds)
   const rawEnabledActionCodes = extra.actionLimits?.enabledActionCodes
   const enabledActionCodes = getStringList(rawEnabledActionCodes)
   const defaultActionCodes = getStringList(action?.limitCheckActionCodes)
