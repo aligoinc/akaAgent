@@ -29,6 +29,7 @@ export interface DesktopCampaignPageQuery {
   drafts?: Array<{ id: string; schedule: string }>
 }
 export interface DesktopCampaignPage {
+  configVersion?: { id: number; version: string } | null
   items: CampaignListItem[]
   selected: CampaignListItem | null
   order: Array<{ kind: 'campaign' | 'draft'; id: string }>
@@ -58,5 +59,7 @@ export const DESKTOP_UI_IPC = {
   campaignCatalog: 'desktop-ui:campaign-catalog',
   campaignSelection: 'desktop-ui:campaign-selection',
   campaignSources: 'desktop-ui:campaign-sources',
+  campaignConfig: 'desktop-ui:campaign-config',
+  campaignLog: 'desktop-ui:campaign-log',
   accountSnapshot: 'desktop-ui:account-snapshot'
 } as const

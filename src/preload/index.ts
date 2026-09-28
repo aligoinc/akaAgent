@@ -472,6 +472,13 @@ const electronAPI = {
   saveEmailNotificationSettings: (settings: Partial<EmailNotificationSettings>): Promise<EmailNotificationSettings> =>
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
 
+  getDesktopCampaignConfig: (id: number): Promise<CampaignConfig | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignConfig, id),
+  getDesktopCampaignLog: (id: number): Promise<CampaignLogSnapshot | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignLog, id),
+  onCampaignLogUpdated: (callback: (payload: { id: number }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: { id: number }) => callback(payload)
+    ipcRenderer.on(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
+  },
   getDesktopPollingSettings: (): Promise<DesktopPollingSettings> => ipcRenderer.invoke(DESKTOP_UI_IPC.settings),
   getDesktopCampaignPage: (query: DesktopCampaignPageQuery): Promise<DesktopCampaignPage> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignPage, query),
   getDesktopCampaignSelection: (query: DesktopCampaignSelectionQuery): Promise<DesktopCampaignSelection[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignSelection, query),

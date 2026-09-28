@@ -1,3 +1,4 @@
+import { zaloServerUiSnapshotKey } from '../../shared/zaloServerUiSnapshot'
 import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
 import WebSocket from 'ws'
@@ -90,6 +91,7 @@ export class ZaloServerClient {
   private operationSnapshots = new Map<string, ZaloServerOperationSnapshot>()
   private pendingOperations = new Map<string, PendingOperation>()
   private lastSequence = 0
+  private uiSnapshotKey: string | null = null
   private serverStartedAt: string | null = null
   private generation = 0
   private inboundMessageChain: Promise<void> = Promise.resolve()
@@ -185,6 +187,7 @@ export class ZaloServerClient {
     this.authenticated = false
     this.lastSequence = 0
     this.serverStartedAt = null
+    this.uiSnapshotKey = null
     this.inboundMessageChain = Promise.resolve()
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.reconnectTimer = null
@@ -540,6 +543,7 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'hello') {
+      this.uiSnapshotKey = zaloServerUiSnapshotKey(message.snapshot, this.user?.staffId, this.user?.organizationId)
       this.updateRuntimeStartedAt(message.snapshot)
       const serverRestarted = !!this.serverStartedAt && this.serverStartedAt !== message.snapshot.startedAt
       if (serverRestarted) this.lastSequence = 0
@@ -573,7 +577,11 @@ export class ZaloServerClient {
     }
     if (message.type === 'snapshot') {
       this.updateRuntimeStartedAt(message.snapshot)
-      this.scheduleDatabaseSnapshotRefresh(socket, generation)
+      const key = zaloServerUiSnapshotKey(message.snapshot, this.user?.staffId, this.user?.organizationId)
+      if (key !== this.uiSnapshotKey) {
+        this.uiSnapshotKey = key
+        this.scheduleDatabaseSnapshotRefresh(socket, generation)
+      }
     }
   }
 

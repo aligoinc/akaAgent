@@ -190,6 +190,10 @@ const CAMPAIGN_LIST_ITEM_SELECT = [
   'find_facebook_group_join_target_campaign_ids:extra_settings->findFacebookGroupJoinTargetCampaignIds',
   CAMPAIGN_RELATIONS
 ].join(', ')
+// Relation flags/target arrays belong to the on-demand config/catalog, not every page refresh.
+const CAMPAIGN_PAGE_ITEM_SELECT = CAMPAIGN_LIST_ITEM_SELECT.split(', ')
+  .filter(field => !field.includes(':extra_settings->') || field.startsWith('email_check_link_clicks:'))
+  .join(', ')
 const CAMPAIGN_ACTION_STATUS_SELECT =
   `*, auto_campaign_actions(name, is_active, is_delete), ${CAMPAIGN_PRIMARY_ACCOUNT_RELATION}`
 const CAMPAIGN_ZALO_REALTIME_SELECT =
@@ -1118,7 +1122,7 @@ function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
 
 // =========== CAMPAIGNS ===========
 
-async function attachCampaignSecondaryAccountNames<T extends {
+export async function attachCampaignSecondaryAccountNames<T extends {
   secondaryAccountId?: number | null
   secondaryAccountName?: string
 }>(
@@ -1767,7 +1771,7 @@ async function loadCampaignDataGroupSourceSummaries(
   return summaries
 }
 
-async function attachCampaignDataGroupSourceSummaries<T extends Pick<Campaign, 'id'> & Partial<Pick<Campaign,
+export async function attachCampaignDataGroupSourceSummaries<T extends Pick<Campaign, 'id'> & Partial<Pick<Campaign,
   'dataTargetSourceMode' | 'dataGroupId' | 'dataGroupName' | 'dataGroupIsDelete' |
   'dataGroupSourceStatus' | 'dataGroupSourceGroupId' | 'dataGroupSourceStopReason' | 'dataGroupSourceUpdatedAt'
 >>>(campaigns: T[]): Promise<T[]> {
@@ -1821,13 +1825,13 @@ export async function listCampaignSummaries(): Promise<CampaignListItem[]> {
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
-export async function listCampaignSummariesForPage(ids: number[]): Promise<CampaignListItem[]> {
+export async function listCampaignSummariesForPage(ids: number[], extraAccounts: Array<{ id: number; name: string }> = []): Promise<CampaignListItem[]> {
   if (ids.length === 0) return []
   if (ids.length > 101) throw new Error('Campaign page exceeds 101 IDs')
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_campaigns')
-    .select(CAMPAIGN_LIST_ITEM_SELECT)
+    .select(CAMPAIGN_PAGE_ITEM_SELECT)
     .eq('staff_id', u.staffId)
     .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
@@ -1847,11 +1851,12 @@ export async function listCampaignSummariesForPage(ids: number[]): Promise<Campa
     visibleRows.map(row => mapCampaignListItemFromDB(row as unknown as Record<string, unknown>)),
     entitlements
   )
-  const campaignsWithSecondaryAccountNames = await attachCampaignSecondaryAccountNames(
-    campaigns,
-    u.staffId,
-    u.organizationId
-  )
+  // The page RPC already returned these tenant-scoped names.
+  const secondaryNames = new Map(extraAccounts.map(account => [account.id, account.name]))
+  const campaignsWithSecondaryAccountNames = campaigns.map(campaign => ({
+    ...campaign,
+    secondaryAccountName: campaign.secondaryAccountId ? secondaryNames.get(campaign.secondaryAccountId) : undefined
+  }))
   const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(
     campaignsWithSecondaryAccountNames
   )

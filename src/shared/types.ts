@@ -798,7 +798,7 @@ export interface Campaign {
  * The potentially large append-only log is deliberately loaded through
  * `getCampaignLog` instead of travelling with the configuration payload.
  */
-export type CampaignConfig = Omit<Campaign, 'log'>
+export type CampaignConfig = Omit<Campaign, 'log'> & { /** UI read version, independent of runtime/log updatedAt. */ readVersion?: string }
 
 /** Mutable campaign fields exposed to runtime/UI callers; logs append atomically. */
 export type CampaignUpdate = Omit<Partial<Campaign>, 'log'>
@@ -3208,6 +3208,7 @@ export const IPC_EVENTS = {
 
   // Campaign Log (real-time)
   CAMPAIGN_LOG: 'campaign:log',
+  CAMPAIGN_LOG_UPDATED: 'campaign:log-updated',
 
   // Campaign Status (real-time: main → renderer whenever a campaign row changes)
   CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated',

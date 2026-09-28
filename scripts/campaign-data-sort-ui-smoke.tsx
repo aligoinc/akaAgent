@@ -36,6 +36,7 @@ const handlers: Record<string, any> = {
   listAutomations: () => ({ items: [], total: 0, pageSize: 100 }),
   listAutomationExecutions: () => ({ items: [], total: 0, pageSize: 100 }),
   getCampaignConfig: (id: number) => campaigns.find(row => row.id === id),
+  getDesktopCampaignConfig: (id: number) => campaigns.find(row => row.id === id),
   getCampaignRelationSummaries: () => [],
   getDesktopCampaignSources: () => [],
   getDesktopCampaignPage: (query: any) => ({ items: campaigns, selected: campaigns.find(row => row.id === query.selectedId) || null, order: campaigns.map(row => ({ kind: 'campaign', id: String(row.id) })), total: 2, campaignTotal: 2, page: 1, pageSize: 100, actionOptions: [] }),

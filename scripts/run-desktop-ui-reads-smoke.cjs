@@ -227,6 +227,189 @@ async function main() {
     await page.clock.runFor(301)
     assert.equal(await count('getDesktopCampaignPage'), unknownBefore + 1)
     console.log('PASS repeated off-page log/status signals do not cause repeated list reads')
+    await page.getByText('Campaign 101', { exact: true }).first().click()
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignConfigs[101]?.readVersion === 'a'.repeat(32))
+    const configBefore = await count('getDesktopCampaignConfig')
+    await store(async () => {
+      window.desktopSmoke.rows[100].updatedAt = '2098-01-01T00:00:00Z'
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true })
+    })
+    await settled()
+    assert.equal(await count('getDesktopCampaignConfig'), configBefore, 'runtime/log timestamp must not refetch full config')
+    await store(async () => {
+      Object.assign(window.desktopSmoke.rows[100], { readVersion: 'b'.repeat(32), content: 'External configuration edit' })
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true })
+    })
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignConfigs[101]?.content === 'External configuration edit')
+    assert.equal(await count('getDesktopCampaignConfig'), configBefore + 1)
+    await store(() => {
+      window.desktopSmoke.state.hold = 'config'
+      window.desktopSmoke.store.getState().upsertCampaign({ id: 101, invalidateConfig: true })
+    })
+    await page.waitForFunction(() => !!window.desktopSmoke.state.release)
+    await store(async () => {
+      Object.assign(window.desktopSmoke.rows[100], { readVersion: 'c'.repeat(32), content: 'Newer configuration edit' })
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true })
+      window.desktopSmoke.state.hold = null
+      window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null
+    })
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignConfigs[101]?.content === 'Newer configuration edit')
+    assert.equal(await count('getDesktopCampaignConfig'), configBefore + 3, 'pending old config retries after newer page version')
+    await store(() => {
+      window.desktopSmoke.state.hold = 'config'
+      window.desktopSmoke.store.getState().upsertCampaign({ id: 101, invalidateConfig: true })
+    })
+    await page.waitForFunction(() => !!window.desktopSmoke.state.release)
+    await store(() => {
+      window.desktopSmoke.store.getState().upsertCampaign({ id: 101, status: 'hoàn thành', updatedAt: '2099-02-01T00:00:00Z' })
+      window.desktopSmoke.state.hold = null
+      window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null
+    })
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignConfigs[101]?.status === 'hoàn thành')
+    assert.equal(await count('getDesktopCampaignConfig'), configBefore + 4, 'runtime change during config read is merged without another config fetch')
+    await page.clock.runFor(301)
+    await settled()
+    console.log('PASS log-only updatedAt preserves config; external edits refresh and obsolete config responses are fenced')
+
+    await page.getByRole('button', { name: /^Lịch sử gần đây/ }).click()
+    await page.clock.runFor(1)
+    await page.waitForFunction(() => !!window.desktopSmoke.store.getState().campaignLogs[101])
+    const logsBefore = await count('getDesktopCampaignLog')
+    const pagesBeforeLogs = await count('getDesktopCampaignPage')
+    await store(() => {
+      window.desktopSmoke.state.log = 'Newest history'
+      for (let i = 0; i < 15; i++) {
+        window.desktopSmoke.emit('logUpdated', { id: 101 })
+        window.desktopSmoke.emit('log', { campaignId: 101 })
+      }
+    })
+    await page.clock.runFor(2001)
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignLogs[101]?.log === 'Newest history')
+    assert.equal(await count('getDesktopCampaignLog'), logsBefore + 1)
+    assert.equal(await count('getDesktopCampaignPage'), pagesBeforeLogs, 'log events do not reload campaign page')
+    await store(() => { window.desktopSmoke.state.hold = 'log'; window.desktopSmoke.emit('logUpdated', { id: 101 }) })
+    await page.clock.runFor(2001)
+    await page.waitForFunction(() => !!window.desktopSmoke.state.release)
+    await store(() => {
+      window.desktopSmoke.state.log = 'Log arriving during pending read'
+      window.desktopSmoke.emit('logUpdated', { id: 101 })
+      window.desktopSmoke.state.hold = null
+      window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null
+    })
+    await page.clock.runFor(2001)
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignLogs[101]?.log === 'Log arriving during pending read')
+    assert.equal(await count('getDesktopCampaignLog'), logsBefore + 3, 'one follow-up for a pending log read')
+    await store(() => { window.desktopSmoke.state.hidden = true; document.dispatchEvent(new Event('visibilitychange')); window.desktopSmoke.emit('logUpdated', { id: 101 }) })
+    await page.clock.runFor(3000)
+    assert.equal(await count('getDesktopCampaignLog'), logsBefore + 3)
+    await store(() => { window.desktopSmoke.state.hidden = false; document.dispatchEvent(new Event('visibilitychange')) })
+    await page.clock.runFor(1)
+    await page.waitForFunction(count => window.desktopSmoke.state.calls.filter(c => c.method === 'getDesktopCampaignLog').length === count, logsBefore + 4)
+    await page.waitForFunction(() => !window.desktopSmoke.store.getState().loadingCampaignLogIds[101])
+    await store(() => { window.desktopSmoke.state.hold = 'log'; window.desktopSmoke.emit('logUpdated', { id: 101 }) })
+    await page.clock.runFor(2001)
+    await page.waitForFunction(() => !!window.desktopSmoke.state.release)
+    await page.getByRole('button', { name: 'Thông tin', exact: true }).click()
+    await page.getByRole('button', { name: /^Lịch sử gần đây/ }).click()
+    await page.clock.runFor(1)
+    assert.equal(await count('getDesktopCampaignLog'), logsBefore + 5, 'reopening waits for the pending read even with a cached log')
+    await store(() => {
+      window.desktopSmoke.state.log = 'Fresh history after reopening'
+      window.desktopSmoke.state.hold = null
+      window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null
+    })
+    await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignLogs[101]?.log === 'Fresh history after reopening')
+    assert.equal(await count('getDesktopCampaignLog'), logsBefore + 6, 'reopening gets a fresh read after the older request settles')
+    await page.getByRole('button', { name: 'Thông tin', exact: true }).click()
+    const afterClose = await count('getDesktopCampaignLog')
+    await store(() => window.desktopSmoke.emit('logUpdated', { id: 101 }))
+    await page.clock.runFor(3000)
+    assert.equal(await count('getDesktopCampaignLog'), afterClose, 'inactive log tab never reads history')
+    assert.deepEqual(await store(() => window.desktopSmoke.state.errors), [])
+    console.log('PASS visible log tab only, burst coalescing, pending-event follow-up, hidden pause, visible resync and pending-read reopen')
+
+    // Real page summaries omit relation IDs; only the on-demand catalog has them.
+    await store(async () => {
+      for (const id of [102, 999]) Object.assign(window.desktopSmoke.rows[id - 1], {
+        actionId: 'facebook_find_data_group', relationSettings: { findPhoneZaloMessagePhoneTargetCampaignIds: [101] }
+      })
+      window.desktopSmoke.state.sources = { 101: [102, 999] }
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    const linkedSources = page.locator('.campaign-info-row').filter({ hasText: 'Nguồn tìm data liên kết' })
+    await linkedSources.getByText('Campaign 102 (#102)', { exact: true }).waitFor()
+    await linkedSources.getByText('Campaign 999 (#999)', { exact: true }).waitFor()
+    assert.equal(await store(() => window.desktopSmoke.store.getState().campaigns.some(row => row.id === 102)), true)
+    assert.equal(await store(() => window.desktopSmoke.store.getState().campaigns.some(row => row.id === 999)), false)
+    const catalogReads = await count('listDesktopCampaignCatalog')
+    await store(async () => {
+      Object.assign(window.desktopSmoke.rows[101], { name: 'Renamed source', status: 'đang chạy' })
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, passive: true })
+    })
+    await settled()
+    await linkedSources.getByText('Renamed source (#102)', { exact: true }).waitFor()
+    await linkedSources.getByText('Campaign 999 (#999)', { exact: true }).waitFor()
+    assert.equal(await count('listDesktopCampaignCatalog'), catalogReads, 'passive refresh preserves links without another catalog query')
+    await linkedSources.screenshot({ path: '/tmp/aka-desktop-ui-deltas/linked-sources.png' })
+    await store(async () => {
+      window.desktopSmoke.rows[101].relationSettings = {}
+      window.desktopSmoke.state.sources = { 101: [999] }
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    await linkedSources.getByText('Renamed source (#102)', { exact: true }).waitFor({ state: 'hidden' })
+    await linkedSources.getByText('Campaign 999 (#999)', { exact: true }).waitFor()
+    await page.getByRole('button', { name: /^Lịch sử gần đây/ }).click()
+    const catalogBeforeHiddenUnlink = await count('listDesktopCampaignCatalog')
+    await store(async () => {
+      window.desktopSmoke.rows[998].relationSettings = {}
+      window.desktopSmoke.state.sources = { 101: [] }
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    await page.getByRole('button', { name: 'Chiến dịch tìm data (1)', exact: true }).waitFor({ state: 'hidden' })
+    await page.getByRole('button', { name: 'Thông tin', exact: true }).click()
+    await linkedSources.waitFor({ state: 'hidden' })
+    await page.getByTitle('Làm mới', { exact: true }).click()
+    await settled()
+    await linkedSources.waitFor({ state: 'hidden' })
+    assert.equal(await count('listDesktopCampaignCatalog'), catalogBeforeHiddenUnlink, 'confirmed empty sources hide stale links without refetching the catalog')
+
+    await store(async () => {
+      window.desktopSmoke.rows[101].relationSettings = { findPhoneZaloMessagePhoneTargetCampaignIds: [101] }
+      window.desktopSmoke.rows[998].relationSettings = { findPhoneZaloMessagePhoneTargetCampaignIds: [103] }
+      window.desktopSmoke.state.sources = { 101: [102], 103: [999] }
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    await linkedSources.getByText('Renamed source (#102)', { exact: true }).waitFor()
+    const sourceReadsBeforeFailure = await count('getDesktopCampaignSources')
+    await store(async () => {
+      window.desktopSmoke.state.failSources = true
+      window.desktopSmoke.rows[101].relationSettings = {}
+      window.desktopSmoke.state.sources[101] = []
+      await window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    await page.waitForFunction(count => window.desktopSmoke.state.calls.filter(c => c.method === 'getDesktopCampaignSources').length > count, sourceReadsBeforeFailure)
+    await linkedSources.getByText('Renamed source (#102)', { exact: true }).waitFor()
+    await store(() => {
+      window.desktopSmoke.state.failSources = false
+      window.desktopSmoke.state.hold = 'sources'
+      void window.desktopSmoke.store.getState().loadCampaigns({ silent: true, refreshSources: true })
+    })
+    await page.waitForFunction(() => !!window.desktopSmoke.state.release)
+    await page.getByText('Campaign 103', { exact: true }).first().click()
+    await page.waitForFunction(() => !!window.desktopSmoke.store.getState().campaignConfigs[103])
+    await linkedSources.getByText('Renamed source (#102)', { exact: true }).waitFor({ state: 'hidden' })
+    await store(() => {
+      window.desktopSmoke.state.hold = null
+      window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null
+    })
+    await page.getByRole('button', { name: 'Chiến dịch tìm data (1)', exact: true }).waitFor()
+    await linkedSources.getByText('Campaign 999 (#999)', { exact: true }).waitFor()
+    await page.getByText('Campaign 101', { exact: true }).first().click()
+    await page.getByRole('button', { name: 'Chiến dịch tìm data (1)', exact: true }).waitFor({ state: 'hidden' })
+    await linkedSources.waitFor({ state: 'hidden' })
+    assert.deepEqual(await store(() => window.desktopSmoke.state.errors), [])
+    console.log('PASS linked sources retain names without catalog polling; empty reads clear hidden-tab links; failures preserve links and obsolete selection responses are ignored')
+
   } finally { if (app) await app.close(); rmSync(directory, { recursive: true, force: true }) }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

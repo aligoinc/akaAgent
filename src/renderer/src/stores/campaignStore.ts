@@ -150,7 +150,7 @@ const getCampaignUpdatedAtTime = (campaign: Pick<CampaignListItem, 'updatedAt'>)
   return Number.isFinite(time) ? time : null
 }
 
-const isIncomingCampaignOlder = (existing: CampaignListItem, incoming: CampaignListItem): boolean => {
+const isIncomingCampaignOlder = (existing: Pick<CampaignListItem, 'updatedAt'>, incoming: Pick<CampaignListItem, 'updatedAt'>): boolean => {
   const existingTime = getCampaignUpdatedAtTime(existing)
   const incomingTime = getCampaignUpdatedAtTime(incoming)
   if (existingTime === null || incomingTime === null) return false
@@ -166,16 +166,6 @@ const mergeCampaignPreservingNewest = (existing: CampaignListItem | undefined, i
 const mergeLoadedCampaignsPreservingNewest = (current: CampaignListItem[], loaded: CampaignListItem[]): CampaignListItem[] => {
   const currentById = new Map(current.map(campaign => [campaign.id, campaign]))
   return loaded.map(campaign => mergeCampaignPreservingNewest(currentById.get(campaign.id), campaign))
-}
-
-const isSnapshotOlderThanSummary = (
-  snapshot: Pick<CampaignConfig | CampaignLogSnapshot, 'updatedAt'> | undefined,
-  summary: Pick<CampaignListItem, 'updatedAt'>
-): boolean => {
-  if (!snapshot) return false
-  const snapshotTime = Date.parse(snapshot.updatedAt || '')
-  const summaryTime = Date.parse(summary.updatedAt || '')
-  return Number.isFinite(snapshotTime) && Number.isFinite(summaryTime) && snapshotTime < summaryTime
 }
 
 const mergeLoadedAccountsPreservingNewest = (current: AutoAccount[], loaded: AutoAccount[]): AutoAccount[] => {
@@ -207,15 +197,13 @@ const campaignListLoads = new Map<string, SessionListLoadState>()
 const campaignConfigLoadsInFlight = new Map<number, Promise<CampaignConfig | null>>()
 const campaignLogLoadsInFlight = new Map<number, Promise<CampaignLogSnapshot | null>>()
 const campaignConfigInvalidationVersions = new Map<number, number>()
-const campaignLogInvalidationVersions = new Map<number, number>()
+const campaignConfigReadVersions = new Map<number, string>()
 const offPageCampaignSignals = new Map<number, string>()
 let campaignPageRevision = 0
 // Publish source invalidations only after the existing page refresh settles.
 // Passive polling and runtime status updates never invalidate source links.
 let campaignSourcesInvalidationVersion = 0
 const campaignCatalogLoads = new Map<string, Promise<void>>()
-const pendingCampaignLogInvalidationIds = new Set<number>()
-let campaignLogInvalidationTimer: ReturnType<typeof setTimeout> | null = null
 let campaignDetailPageRequestVersion = 0
 let campaignInputDataRequestVersion = 0
 let activeCampaignInputDataQuery: CampaignInputDataPageQuery | null = null
@@ -553,6 +541,12 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
           if (JSON.stringify(get().campaignPageQuery) !== queryKey) { loadState.trailingRequested = true; continue }
           const loaded = [...page.items, ...(page.selected && !page.items.some(row => row.id === page.selected!.id) ? [page.selected] : [])]
           if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) break
+          if (page.configVersion && campaignConfigReadVersions.get(page.configVersion.id) !== page.configVersion.version) {
+            const { id, version } = page.configVersion
+            campaignConfigReadVersions.delete(id); campaignConfigReadVersions.set(id, version)
+            campaignConfigInvalidationVersions.set(id, (campaignConfigInvalidationVersions.get(id) || 0) + 1)
+            while (campaignConfigReadVersions.size > 64) campaignConfigReadVersions.delete(campaignConfigReadVersions.keys().next().value!)
+          }
           set(state => {
             const campaigns = mergeLoadedCampaignsPreservingNewest(state.campaigns, loaded)
             const liveIds = new Set(campaigns.map(campaign => campaign.id))
@@ -562,14 +556,16 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
             for (const [idText, config] of Object.entries(campaignConfigs)) {
               const id = Number(idText)
               const summary = campaigns.find(campaign => campaign.id === id)
-              if (!liveIds.has(id) || (summary && isSnapshotOlderThanSummary(config, summary))) {
+              if (!liveIds.has(id) || (page.configVersion?.id === id && config.readVersion !== page.configVersion.version)) {
                 delete campaignConfigs[id]
+              } else if (summary) {
+                // Runtime fields stay live without invalidating content/settings/images.
+                campaignConfigs[id] = { ...config, ...summary }
               }
             }
-            for (const [idText, log] of Object.entries(campaignLogs)) {
+            for (const idText of Object.keys(campaignLogs)) {
               const id = Number(idText)
-              const summary = campaigns.find(campaign => campaign.id === id)
-              if (!liveIds.has(id) || (summary && isSnapshotOlderThanSummary(log, summary))) {
+              if (!liveIds.has(id)) {
                 delete campaignLogs[id]
               }
             }
@@ -613,8 +609,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     if (!authScope) return Promise.resolve(null)
     const requestEpoch = storeSessionEpoch
     const cached = get().campaignConfigs[id]
-    const summary = get().campaigns.find(campaign => campaign.id === id)
-    if (cached && options?.force !== true && (!summary || !isSnapshotOlderThanSummary(cached, summary))) {
+    if (cached && options?.force !== true) {
       return Promise.resolve(cached)
     }
     const inFlight = campaignConfigLoadsInFlight.get(id)
@@ -631,31 +626,22 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       loadingCampaignConfigIds: { ...state.loadingCampaignConfigIds, [id]: true }
     }))
     const fetchLatestConfig = async (): Promise<CampaignConfig | null> => {
-      let staleRetriesRemaining = 1
       while (true) {
         const requestInvalidationVersion = campaignConfigInvalidationVersions.get(id) || 0
-        const config = await window.electronAPI.getCampaignConfig(id)
+        let config = await window.electronAPI.getDesktopCampaignConfig(id)
         if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) return null
 
         // A runtime update may change a non-summary configuration field while
         // this request is in flight. Retry before committing so an old response
         // cannot repopulate the cache after it was invalidated.
         if ((campaignConfigInvalidationVersions.get(id) || 0) !== requestInvalidationVersion) {
-          staleRetriesRemaining = 1
           continue
         }
 
-        const latestSummary = get().campaigns.find(campaign => campaign.id === id)
-        if (
-          config &&
-          latestSummary &&
-          isSnapshotOlderThanSummary(config, latestSummary) &&
-          staleRetriesRemaining > 0
-        ) {
-          staleRetriesRemaining -= 1
-          continue
-        }
-
+        // State events can land during this read without changing configVersion.
+        // Keep those runtime fields without fetching the same config again.
+        const summary = get().campaigns.find(campaign => campaign.id === id)
+        if (config && summary && isIncomingCampaignOlder(summary, config)) config = { ...config, ...summary }
         set(state => {
           const campaignConfigs = { ...state.campaignConfigs }
           if (config) {
@@ -688,73 +674,29 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const authScope = getStoreAuthScopeKey()
     if (!authScope) return Promise.resolve(null)
     const requestEpoch = storeSessionEpoch
-    const requestInvalidationVersion = campaignLogInvalidationVersions.get(id) || 0
+    const pending = campaignLogLoadsInFlight.get(id)
+    if (pending) return pending
     const cached = get().campaignLogs[id]
-    const summary = get().campaigns.find(campaign => campaign.id === id)
-    if (cached && options?.force !== true && (!summary || !isSnapshotOlderThanSummary(cached, summary))) {
-      return Promise.resolve(cached)
-    }
-    const inFlight = campaignLogLoadsInFlight.get(id)
-    if (inFlight) {
-      if (options?.force !== true) return inFlight
-      return inFlight.catch(() => null).then(() => (
-        storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope
-          ? get().loadCampaignLog(id, { force: true })
-          : null
-      ))
-    }
-
-    set(state => ({
-      loadingCampaignLogIds: { ...state.loadingCampaignLogIds, [id]: true }
-    }))
-    const fetchLatestLog = async (staleRetriesRemaining: number): Promise<CampaignLogSnapshot | null> => {
-      const log = await window.electronAPI.getCampaignLog(id)
+    if (cached && options?.force !== true) return Promise.resolve(cached)
+    set(state => ({ loadingCampaignLogIds: { ...state.loadingCampaignLogIds, [id]: true } }))
+    const operation = window.electronAPI.getDesktopCampaignLog(id).then(log => {
       if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) return null
-      const latestSummary = get().campaigns.find(campaign => campaign.id === id)
-      if (
-        log &&
-        latestSummary &&
-        isSnapshotOlderThanSummary(log, latestSummary) &&
-        staleRetriesRemaining > 0
-      ) {
-        return fetchLatestLog(staleRetriesRemaining - 1)
-      }
+      set(state => {
+        const campaignLogs = { ...state.campaignLogs }
+        if (log) { campaignLogs[id] = log; pruneCampaignSnapshotCache(campaignLogs, id, CAMPAIGN_LOG_CACHE_LIMIT) }
+        else delete campaignLogs[id]
+        return { campaignLogs }
+      })
       return log
-    }
-    const operation = fetchLatestLog(1)
-      .then(log => {
-        if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) return null
-        if ((campaignLogInvalidationVersions.get(id) || 0) !== requestInvalidationVersion) {
-          // Wait until this operation's finally block removes the in-flight
-          // entry; recursively awaiting it here would create a promise cycle.
-          setTimeout(() => {
-            if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) {
-              void get().loadCampaignLog(id, { force: true })
-            }
-          }, 0)
-          return null
-        }
-        set(state => {
-          const campaignLogs = { ...state.campaignLogs }
-          if (log) {
-            campaignLogs[id] = log
-            pruneCampaignSnapshotCache(campaignLogs, id, CAMPAIGN_LOG_CACHE_LIMIT)
-          } else {
-            delete campaignLogs[id]
-          }
-          return { campaignLogs }
-        })
-        return log
+    }).finally(() => {
+      if (campaignLogLoadsInFlight.get(id) !== operation) return
+      campaignLogLoadsInFlight.delete(id)
+      if (storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope) set(state => {
+        const loadingCampaignLogIds = { ...state.loadingCampaignLogIds }
+        delete loadingCampaignLogIds[id]
+        return { loadingCampaignLogIds }
       })
-      .finally(() => {
-        if (campaignLogLoadsInFlight.get(id) !== operation) return
-        campaignLogLoadsInFlight.delete(id)
-        set(state => {
-          const loadingCampaignLogIds = { ...state.loadingCampaignLogIds }
-          delete loadingCampaignLogIds[id]
-          return { loadingCampaignLogIds }
-        })
-      })
+    })
     campaignLogLoadsInFlight.set(id, operation)
     return operation
   },
@@ -909,26 +851,6 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
                 : campaign)
             }
           })
-          // Queue invalidation even while a log read is in flight. Otherwise a
-          // signal that lands just before the snapshot is cached can leave the
-          // active Run Log tab stale until the next periodic list refresh.
-          campaignLogInvalidationVersions.set(
-            id,
-            (campaignLogInvalidationVersions.get(id) || 0) + 1
-          )
-          pendingCampaignLogInvalidationIds.add(id)
-          if (!campaignLogInvalidationTimer) {
-            campaignLogInvalidationTimer = setTimeout(() => {
-              campaignLogInvalidationTimer = null
-              const invalidatedIds = Array.from(pendingCampaignLogInvalidationIds)
-              pendingCampaignLogInvalidationIds.clear()
-              set(state => {
-                const campaignLogs = { ...state.campaignLogs }
-                invalidatedIds.forEach(invalidatedId => delete campaignLogs[invalidatedId])
-                return { campaignLogs }
-              })
-            }, 2_000)
-          }
         }
         if (stateChanged) schedulePage()
         return
@@ -954,14 +876,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     campaignConfigLoadsInFlight.clear()
     campaignLogLoadsInFlight.clear()
     campaignConfigInvalidationVersions.clear()
-    campaignLogInvalidationVersions.clear()
-    pendingCampaignLogInvalidationIds.clear()
-    if (campaignLogInvalidationTimer) clearTimeout(campaignLogInvalidationTimer)
+    campaignConfigReadVersions.clear()
     campaignPageRevision++
     campaignSourcesInvalidationVersion = 0
     offPageCampaignSignals.clear()
     campaignCatalogLoads.clear()
-    campaignLogInvalidationTimer = null
     campaignDetailPageRequestVersion += 1
     campaignInputDataRequestVersion += 1
     activeCampaignInputDataQuery = null
