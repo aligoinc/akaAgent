@@ -22,6 +22,8 @@ Zalo Server tiếp nhận session mới chưa xác minh qua discovery 60 giây, 
 
 ## Bắt buộc dùng skill cho RPC migration
 
+Web/PWA device limit v331 đã apply `20260929063252 / web_device_limits_v331` và deploy WebApp ngày 29/09/2026; không apply lại. Canonical [SQL](migrations/migration_v331_web_device_limits.sql) adds atomic per-staff admission on entry/login only, revisioned default 3 and grouped revoke, preserving live auth/expiry RPCs and native/Desktop behavior. Existing singleton only, no connection increase/polling; see [audit](docs/WEB_DEVICE_LIMITS_V331.md).
+
 Mọi task tạo, sửa, review hoặc apply SQL có `CREATE OR REPLACE FUNCTION`, `DROP/ALTER FUNCTION` hay thay đổi RPC **bắt buộc** dùng skill [`safe-supabase-rpc-migration`](.agents/skills/safe-supabase-rpc-migration/SKILL.md) trước khi dựng body SQL. Không được lấy body từ migration cũ trước khi đã đọc đúng signature đang chạy bằng `pg_get_functiondef()` và thêm preflight checksum fail-closed.
 
 Migration mới theo quy ước repo: `migrations/migration_v<N>_<mo_ta>.sql`; kiểm tra số phiên bản mới nhất trước khi chọn N và không để lại bản timestamp trùng nội dung trong `supabase/migrations`.

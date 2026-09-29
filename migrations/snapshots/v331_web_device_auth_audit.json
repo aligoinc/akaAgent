@@ -1,0 +1,73 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-09-29",
+  "columns": [
+    {
+      "name": "id",
+      "type": "uuid"
+    },
+    {
+      "name": "staff_id",
+      "type": "bigint"
+    },
+    {
+      "name": "organization_id",
+      "type": "bigint"
+    },
+    {
+      "name": "token_hash",
+      "type": "text"
+    },
+    {
+      "name": "client_type",
+      "type": "text"
+    },
+    {
+      "name": "user_agent",
+      "type": "text"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "last_seen_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "expires_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "revoked_at",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "functions": [
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "7995d6e92b16eb17b44995e14aae1b87",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_authenticate_control_session(text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_authenticate_control_session(p_token_hash text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_session public.auto_control_sessions%ROWTYPE;\n  v_staff public.org_staff%ROWTYPE;\n  v_organization public.org_organization%ROWTYPE;\n  v_zalo_package public.org_organization_product%ROWTYPE;\n  v_sms_package public.org_organization_product%ROWTYPE;\n  v_zalo_capabilities record;\n  v_zalo_qr_enabled boolean := false;\n  v_zalo_web_enabled boolean := false;\n  v_zalo_server_enabled boolean := false;\n  v_sms_enabled boolean := false;\n  v_now timestamptz := now();\n  v_vietnam_day_start timestamptz := (\n    date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh')\n      AT TIME ZONE 'Asia/Ho_Chi_Minh'\n  );\nBEGIN\n  SELECT session.* INTO v_session\n  FROM public.auto_control_sessions AS session\n  WHERE session.token_hash = p_token_hash\n    AND session.revoked_at IS NULL\n    AND session.expires_at > v_now\n  LIMIT 1;\n  IF v_session.id IS NULL THEN RETURN jsonb_build_object('status', 'invalid_session'); END IF;\n\n  SELECT staff.* INTO v_staff\n  FROM public.org_staff AS staff\n  WHERE staff.id = v_session.staff_id\n  LIMIT 1;\n  IF v_staff.id IS NULL\n    OR v_staff.is_active IS DISTINCT FROM true\n    OR v_staff.organization_id IS DISTINCT FROM v_session.organization_id\n  THEN\n    UPDATE public.auto_control_sessions SET revoked_at = v_now\n    WHERE id = v_session.id AND revoked_at IS NULL;\n    RETURN jsonb_build_object('status', 'invalid_staff');\n  END IF;\n\n  SELECT organization.* INTO v_organization\n  FROM public.org_organization AS organization\n  WHERE organization.id = v_staff.organization_id\n  LIMIT 1;\n  IF v_organization.id IS NULL THEN\n    UPDATE public.auto_control_sessions SET revoked_at = v_now\n    WHERE id = v_session.id AND revoked_at IS NULL;\n    RETURN jsonb_build_object('status', 'invalid_organization');\n  END IF;\n\n  -- Reuse Desktop's live staff/org expiry rule, before product entitlement checks.\n  -- Keep the existing failure status so older Control API clients still revoke safely.\n  IF NOT public.aka_agent_staff_time_allowed(v_staff.id) THEN\n    UPDATE public.auto_control_sessions SET revoked_at = v_now\n    WHERE id = v_session.id AND revoked_at IS NULL;\n    RETURN jsonb_build_object('status', 'invalid_staff');\n  END IF;\n\n  SELECT * INTO v_zalo_capabilities\n  FROM public.resolve_organization_zalo_account_capabilities(v_staff.organization_id);\n  IF v_zalo_capabilities.entitlement_id IS NOT NULL THEN\n    SELECT entitlement.* INTO v_zalo_package\n    FROM public.org_organization_product AS entitlement\n    WHERE entitlement.id = v_zalo_capabilities.entitlement_id;\n  END IF;\n\n  SELECT entitlement.* INTO v_sms_package\n  FROM public.org_organization_product AS entitlement\n  WHERE entitlement.organization_id = v_staff.organization_id\n    AND entitlement.is_deleted = false\n    AND entitlement.product_id = 17\n    AND entitlement.expiration_date >= v_vietnam_day_start\n  ORDER BY entitlement.created_at DESC NULLS LAST, entitlement.id DESC\n  LIMIT 1;\n\n  v_zalo_qr_enabled := COALESCE(v_zalo_capabilities.qr_enabled, false);\n  v_zalo_web_enabled := COALESCE(v_zalo_capabilities.web_enabled, false);\n  v_zalo_server_enabled := v_zalo_qr_enabled\n    AND COALESCE(v_zalo_capabilities.server_enabled, false);\n  v_sms_enabled := v_sms_package.id IS NOT NULL;\n\n  IF NOT v_zalo_server_enabled AND NOT v_sms_enabled THEN\n    UPDATE public.auto_control_sessions SET revoked_at = v_now\n    WHERE id = v_session.id AND revoked_at IS NULL;\n    RETURN jsonb_build_object('status', 'capability_unavailable');\n  END IF;\n  IF v_session.last_seen_at <= v_now - interval '5 minutes' THEN\n    UPDATE public.auto_control_sessions SET last_seen_at = v_now\n    WHERE id = v_session.id AND revoked_at IS NULL;\n  END IF;\n\n  RETURN jsonb_build_object(\n    'status', 'authenticated',\n    'session', jsonb_build_object(\n      'id', v_session.id, 'staff_id', v_session.staff_id,\n      'organization_id', v_session.organization_id,\n      'client_type', v_session.client_type, 'user_agent', v_session.user_agent,\n      'created_at', v_session.created_at, 'last_seen_at', v_session.last_seen_at,\n      'expires_at', v_session.expires_at, 'revoked_at', v_session.revoked_at\n    ),\n    'staff', jsonb_build_object(\n      'id', v_staff.id, 'organization_id', v_staff.organization_id,\n      'name', v_staff.name, 'username', v_staff.username,\n      'phone', v_staff.phone, 'email', v_staff.email,\n      'is_active', v_staff.is_active, 'is_zalo_server', v_zalo_server_enabled\n    ),\n    'organization', jsonb_build_object('id', v_organization.id, 'name', v_organization.name),\n    'capabilities', jsonb_build_object(\n      'zalo_qr', v_zalo_qr_enabled,\n      'zalo_web', v_zalo_web_enabled,\n      'zalo_server', v_zalo_server_enabled,\n      'sms', v_sms_enabled\n    ),\n    'zalo_account_capabilities', jsonb_build_object(\n      'qr', v_zalo_qr_enabled,\n      'web', v_zalo_web_enabled,\n      'server', v_zalo_server_enabled,\n      'revision', v_zalo_capabilities.capability_revision\n    ),\n    'zalo_package', CASE WHEN v_zalo_package.id IS NULL THEN NULL ELSE jsonb_build_object(\n      'id', v_zalo_package.id,\n      'product_id', v_zalo_package.product_id,\n      'product_package_id', v_zalo_package.product_package_id,\n      'product_name', v_zalo_package.product_name,\n      'package_name', v_zalo_package.package_name,\n      'max_accounts', v_zalo_capabilities.max_accounts,\n      'max_staff', v_zalo_package.max_staff,\n      'max_sends_per_day', v_zalo_capabilities.max_sends_per_day,\n      'expiration_date', v_zalo_package.expiration_date,\n      'created_at', v_zalo_package.created_at,\n      'capability_revision', v_zalo_capabilities.capability_revision\n    ) END,\n    'sms_package', CASE WHEN v_sms_package.id IS NULL THEN NULL ELSE jsonb_build_object(\n      'id', v_sms_package.id,\n      'product_id', v_sms_package.product_id,\n      'product_package_id', v_sms_package.product_package_id,\n      'product_name', v_sms_package.product_name,\n      'package_name', v_sms_package.package_name,\n      'max_accounts', v_sms_package.max_accounts,\n      'max_staff', v_sms_package.max_staff,\n      'max_sends_per_day', v_sms_package.max_sends_per_day,\n      'expiration_date', v_sms_package.expiration_date,\n      'created_at', v_sms_package.created_at\n    ) END\n  );\nEND;\n$function$\n",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,=X/postgres}",
+      "checksum": "a294e60011edd8d42e90ac2f74ce744c",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_staff_time_allowed(bigint)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_staff_time_allowed(p_staff_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT coalesce((SELECT s.is_active AND s.deleted_at IS NULL AND\n    (NOT o.use_staff_expiration OR s.expiration_date IS NULL OR\n      timezone('Asia/Ho_Chi_Minh',s.expiration_date)::date >= timezone('Asia/Ho_Chi_Minh',now())::date)\n    FROM public.org_staff s JOIN public.org_organization o ON o.id=s.organization_id WHERE s.id=p_staff_id),false);\n$function$\n",
+      "provolatile": "s"
+    }
+  ],
+  "dependencies": null
+}
