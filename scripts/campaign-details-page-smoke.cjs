@@ -13,6 +13,8 @@ async function main() {
     `, resolveDir: resolve(__dirname, '..') }, outfile: output, bundle: true, platform: 'node', format: 'cjs', target: 'node20',
       external: ['electron', 'better-sqlite3'], logLevel: 'warning',
       plugins: [{ name: 'detail-page-db', setup(plugin) {
+        plugin.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'detail-page-electron' }))
+        plugin.onLoad({ filter: /.*/, namespace: 'detail-page-electron' }, () => ({ contents: `export const app = { getPath: () => { throw new Error('Read-only page must not access journal') } };` }))
         plugin.onResolve({ filter: /\/supabaseClient$/ }, () => ({ path: 'db', namespace: 'detail-page' }))
         plugin.onLoad({ filter: /.*/, namespace: 'detail-page' }, () => ({ contents: `
           export const getSupabaseClient = () => globalThis.detailPageDb;
@@ -29,7 +31,7 @@ async function main() {
     globalThis.detailPageDb = {
       async rpc(name, args) {
         calls.push({ name, args })
-        if (name === 'aka_agent_list_campaign_details_page') return response
+        if (name === 'aka_agent_list_campaign_details_page_v2') return response
         assert.equal(name, 'aka_agent_list_campaign_detail_automation_triggers')
         assert.deepEqual(args.p_campaign_detail_ids, [32, 31])
         return { data: [{ source_campaign_detail_id: 32, automation_detail_id: 4, automation_id: 3, automation_name: 'Fixture automation' }], error: null }
@@ -53,7 +55,7 @@ async function main() {
     assert.equal(result.items[0].triggeredAutomations[0].automationName, 'Fixture automation')
     assert.deepEqual(calls[0].args, { p_staff_id: 7, p_organization_id: 9, p_campaign_id: 17,
       p_search: 'Tên x', p_status: 'lỗi', p_date_from: '2026-01-01T00:00:00.000Z', p_date_to: '2026-01-03T00:00:00.000Z',
-      p_offset: 100, p_limit: 100, p_sort: 'created_asc', p_auth_username: 'fixture-user', p_auth_password: 'fixture-password' })
+      p_engagement_filter: null, p_offset: 100, p_limit: 100, p_sort: 'created_asc', p_auth_username: 'fixture-user', p_auth_password: 'fixture-password' })
     response = { data: { items: [], total: 251 }, error: null }
     calls.length = 0
     assert.deepEqual(await load({ campaignId: 17, offset: 900 }), { items: [], total: 251 })

@@ -1,0 +1,84 @@
+{
+  "verifiedAt": "2026-10-02T14:37:54.607809+00:00",
+  "scope": "Third review: two confirmed lifecycle fixes; local only. No production query/mutation/deployment, real Zalo traffic or connection/pool/process/replica increase.",
+  "migration": "migration_v339_zalo_campaign_engagement.sql",
+  "migrationChanged": false,
+  "migrationSha256": "9dcd175d7f4c794c3f21430d9395b665d5cc06ffbde1e34b2f4974da40bae390",
+  "rpcDefinitionsChanged": false,
+  "localTarget": "local-target.json",
+  "fixes": [
+    "Chat acknowledgement and waiting_config promotion fence against immutable runtime-envelope occurred_at copied to normalized children; preserve source-event timestamp for watch matching.",
+    "Desktop accepted login/bootstrap/password update and Server owner attach resume journal without new traffic; use existing shared writer/timer for initial config/auth retry, idle stop and owner fencing."
+  ],
+  "checks": {
+    "desktopNodeTypecheck": "PASS",
+    "desktopRendererTypecheck": "PASS",
+    "desktopBuild": "PASS",
+    "legacyServerBuild": "PASS",
+    "desktopCoreAndRepositoryBoundary": "PASS",
+    "desktopLifecycle": "PASS: no-traffic restart, paged recovery, ambiguous commit, timestamp preservation, config/auth retry, empty/disabled stop, multiple explicit Server owners, logout/detach/replacement and late journal write fencing, capacity/revision regressions",
+    "desktopAuthLifecycle": {
+      "checks": 133,
+      "status": "PASS"
+    },
+    "accountOperationCleanup": {
+      "checks": 41,
+      "status": "PASS"
+    },
+    "chatBuildTypecheck": "PASS",
+    "chatFocusedIntegration": {
+      "files": 1,
+      "tests": 24,
+      "status": "PASS"
+    },
+    "chatFullSuite": {
+      "files": 93,
+      "tests": 1429,
+      "status": "PASS"
+    },
+    "privatePostgresRollback": "PASS: real roles, deadline, revision, ownership, idempotency, pagination, operation lookup, status/quota invariants",
+    "privatePostgresConcurrency": "PASS: registration versus acknowledgement and waiting_config promotion, both commit orders",
+    "schedulerOptOutAndShareSmokes": "PASS",
+    "web": "No edits this round; previous Web checks retained separately.",
+    "diffCheck": "PASS",
+    "sharedContractCopies": "IDENTICAL"
+  },
+  "pipelineBenchmarkGeneratedAt": "2026-10-02T14:34:15.902Z",
+  "pipelineBenchmark": "pipeline-benchmark.json",
+  "pipelineSummary": [
+    {
+      "pipeline": "desktop-coordinator-and-atomic-journal",
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "p95UpdateMs": 272.37,
+      "maxBacklog": 181,
+      "remaining": 0,
+      "databaseCpuMs": 1850
+    },
+    {
+      "pipeline": "chat-inbox-acknowledgement-baseline",
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "p95UpdateMs": null,
+      "maxBacklog": 0,
+      "remaining": 0,
+      "databaseCpuMs": 780
+    },
+    {
+      "pipeline": "chat-inbox-with-engagement",
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "p95UpdateMs": 195.58,
+      "maxBacklog": 95,
+      "remaining": 0,
+      "databaseCpuMs": 4520
+    }
+  ],
+  "limits": "Short isolated local benchmark; excludes production network/pool contention and the rest of Chat projection/UI. Prior hot-recipient stress limit and staging rollout gates remain."
+}

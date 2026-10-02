@@ -1,0 +1,486 @@
+{
+  "columns": [
+    {
+      "column": "flatform_type",
+      "default": "'facebook'::text",
+      "table": "auto_accounts",
+      "type": "text"
+    },
+    {
+      "column": "is_delete",
+      "default": "false",
+      "table": "auto_accounts",
+      "type": "boolean"
+    },
+    {
+      "column": "staff_id",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "bigint"
+    },
+    {
+      "column": "organization_id",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "bigint"
+    },
+    {
+      "column": "account_group_id",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "bigint"
+    },
+    {
+      "column": "zalo_account_id",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "bigint"
+    },
+    {
+      "column": "zalo_session",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "jsonb"
+    },
+    {
+      "column": "zalo_session_updated_at",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "zalo_session_last_verified_at",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "zalo_session_last_error",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "text"
+    },
+    {
+      "column": "is_zalo_show_web",
+      "default": "false",
+      "table": "auto_accounts",
+      "type": "boolean"
+    },
+    {
+      "column": "runtime_operation_claim_token",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "uuid"
+    },
+    {
+      "column": "is_zalo_server",
+      "default": null,
+      "table": "auto_accounts",
+      "type": "boolean"
+    },
+    {
+      "column": "facebook_login_claim_generation",
+      "default": "0",
+      "table": "auto_accounts",
+      "type": "bigint"
+    },
+    {
+      "column": "account_id",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "bigint"
+    },
+    {
+      "column": "is_delete",
+      "default": "false",
+      "table": "auto_campaigns",
+      "type": "boolean"
+    },
+    {
+      "column": "schedule_type",
+      "default": "'daily'::text",
+      "table": "auto_campaigns",
+      "type": "text"
+    },
+    {
+      "column": "staff_id",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "bigint"
+    },
+    {
+      "column": "organization_id",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "bigint"
+    },
+    {
+      "column": "secondary_account_id",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "bigint"
+    },
+    {
+      "column": "runtime_claim_token",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "uuid"
+    },
+    {
+      "column": "runtime_claim_target",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "text"
+    },
+    {
+      "column": "runtime_claim_vietnam_date",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "date"
+    },
+    {
+      "column": "runtime_claimed_at",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "runtime_unit_token",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "uuid"
+    },
+    {
+      "column": "runtime_unit_vietnam_date",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "date"
+    },
+    {
+      "column": "runtime_unit_claimed_at",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "runtime_unit_input_data_ids",
+      "default": null,
+      "table": "auto_campaigns",
+      "type": "ARRAY"
+    },
+    {
+      "column": "id",
+      "default": null,
+      "table": "auto_system_settings",
+      "type": "bigint"
+    },
+    {
+      "column": "key",
+      "default": null,
+      "table": "auto_system_settings",
+      "type": "text"
+    },
+    {
+      "column": "value",
+      "default": null,
+      "table": "auto_system_settings",
+      "type": "text"
+    },
+    {
+      "column": "description",
+      "default": null,
+      "table": "auto_system_settings",
+      "type": "text"
+    },
+    {
+      "column": "is_secret",
+      "default": "false",
+      "table": "auto_system_settings",
+      "type": "boolean"
+    },
+    {
+      "column": "is_active",
+      "default": "true",
+      "table": "auto_system_settings",
+      "type": "boolean"
+    },
+    {
+      "column": "created_at",
+      "default": "now()",
+      "table": "auto_system_settings",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "updated_at",
+      "default": "now()",
+      "table": "auto_system_settings",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "organization_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "chat_zalo_account_organization_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "source_event_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "source_event_index",
+      "default": "0",
+      "table": "chat_zalo_runtime_event",
+      "type": "integer"
+    },
+    {
+      "column": "source_event_item_count",
+      "default": "1",
+      "table": "chat_zalo_runtime_event",
+      "type": "integer"
+    },
+    {
+      "column": "runtime_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "runtime_type",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "runtime_generation",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "runtime_connection_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "uuid"
+    },
+    {
+      "column": "runtime_connection_started_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "runtime_receive_index",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "sequence",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "bigint"
+    },
+    {
+      "column": "adapter_name",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "adapter_version",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "event_type",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "sync_source",
+      "default": "'live'::text",
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "partition_key",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "conversation_type",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "conversation_zalo_id",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "occurred_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "payload_fingerprint",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "payload",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "jsonb"
+    },
+    {
+      "column": "attempt_count",
+      "default": "0",
+      "table": "chat_zalo_runtime_event",
+      "type": "integer"
+    },
+    {
+      "column": "next_attempt_at",
+      "default": "now()",
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "claim_token",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "uuid"
+    },
+    {
+      "column": "claimed_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "claim_expires_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "processed_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "failed_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "last_error_code",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "last_error_message",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "created_at",
+      "default": "now()",
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "updated_at",
+      "default": "now()",
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "normalized_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    },
+    {
+      "column": "normalized_item_count",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "integer"
+    },
+    {
+      "column": "last_error_stage",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "text"
+    },
+    {
+      "column": "last_error_at",
+      "default": null,
+      "table": "chat_zalo_runtime_event",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "functions": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "checksum": "5a9a503db72b965eb644739f5f60905d",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "volatility": "s"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "checksum": "9652783556c25109e6250375da031fa3",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_campaign_details_page(p_staff_id bigint, p_organization_id bigint, p_campaign_id bigint, p_search text, p_status text, p_date_from timestamp with time zone, p_date_to timestamp with time zone, p_offset integer, p_limit integer, p_sort text, p_auth_username text, p_auth_password text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE\n  v_sort text := COALESCE(p_sort, 'created_desc');\n  v_search text := NULLIF(btrim(left(p_search, 200)), '');\n  v_status text := NULLIF(btrim(left(p_status, 120)), '');\n  v_where text := 'd.campaign_id = $1 AND d.is_delete = false';\n  v_direction text;\n  v_result jsonb;\nBEGIN\n  -- Same credential + campaign ownership guard as the live detail provenance RPC.\n  PERFORM public.auto_assert_automation_identity(\n    p_staff_id, p_organization_id, p_auth_username, p_auth_password\n  );\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0\n    OR COALESCE(p_offset, 0) < 0 OR COALESCE(p_limit, 100) NOT BETWEEN 1 AND 500 THEN\n    RAISE EXCEPTION 'invalid_campaign_details_page';\n  END IF;\n  IF v_sort NOT IN ('created_asc', 'created_desc') THEN\n    RAISE EXCEPTION 'invalid_campaign_details_sort';\n  END IF;\n  IF p_date_from IS NOT NULL AND p_date_to IS NOT NULL AND p_date_from > p_date_to THEN\n    RAISE EXCEPTION 'invalid_campaign_details_date_range';\n  END IF;\n  IF NOT EXISTS (\n    SELECT 1 FROM public.auto_campaigns AS campaign\n    WHERE campaign.id = p_campaign_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign.organization_id = p_organization_id\n  ) THEN\n    RAISE EXCEPTION 'campaign_not_found';\n  END IF;\n\n  -- Only fixed SQL fragments are concatenated. All user values are bound.\n  -- Omitting inactive predicates avoids generic OR plans scanning wide rows.\n  IF v_status IS NOT NULL THEN v_where := v_where || ' AND d.status = $2'; END IF;\n  IF p_date_from IS NOT NULL THEN v_where := v_where || ' AND d.created_at >= $3'; END IF;\n  IF p_date_to IS NOT NULL THEN v_where := v_where || ' AND d.created_at <= $4'; END IF;\n  IF v_search IS NOT NULL THEN\n    v_where := v_where || ' AND (d.action_name ILIKE $5 OR d.action_code ILIKE $5\n      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5)';\n  END IF;\n  v_direction := CASE WHEN v_sort = 'created_asc' THEN 'ASC' ELSE 'DESC' END;\n\n  -- Both keys are NOT NULL in the live schema (checked by preflight). Default\n  -- NULL placement is therefore equivalent to NULLS LAST for both directions,\n  -- and allows one index to support forward and backward index-only scans.\n  -- MATERIALIZED limits the narrow ID set before any full-row payload lookup.\n  -- Count, page IDs and payload are read by one statement / MVCC snapshot;\n  -- count remains available even when the requested page has no items.\n  EXECUTE format($query$\n    WITH page_ids AS MATERIALIZED (\n      SELECT d.id, d.created_at\n      FROM public.auto_campaign_details AS d\n      WHERE %1$s\n      ORDER BY d.created_at %2$s, d.id %2$s\n      LIMIT $6 OFFSET $7\n    )\n    SELECT jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg(to_jsonb(detail) ORDER BY page.created_at %2$s, page.id %2$s)\n        FROM page_ids AS page\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\n      ), '[]'::jsonb),\n      'total', (SELECT count(*) FROM public.auto_campaign_details AS d WHERE %1$s)\n    )\n  $query$, v_where, v_direction)\n  INTO v_result\n  USING p_campaign_id, v_status, p_date_from, p_date_to,\n    '%' || v_search || '%', COALESCE(p_limit,100), COALESCE(p_offset,0);\n  RETURN v_result;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "volatility": "s"
+    }
+  ],
+  "settingsTriggers": [
+    "CREATE TRIGGER auto_control_web_device_policy_changed AFTER INSERT OR DELETE OR UPDATE ON public.auto_system_settings FOR EACH ROW EXECUTE FUNCTION aka_agent_control_web_device_policy_changed()"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-10-02T15:53:59.052616+00:00",
+  "scope": "Best-effort RAM admission before event-driven engagement database work; local only",
+  "migration": "migration_v339_zalo_campaign_engagement.sql",
+  "migrationSha256": "049db73bee27c31b8cff26c1d26676d2704d0316d52a11f6b188b6594c186dd6",
+  "productionApplied": false,
+  "liveProject": "cgjbsmqtfhqvttudyjzq",
+  "liveSource": "admission-live-source.json",
+  "target": "local-target.json",
+  "catalogTargetChecksum": "0bdce96014857158991a7c0ce78e81ca",
+  "checks": {
+    "desktopDroppedEvents": 30000,
+    "desktopUnrelatedConfigReads": 0,
+    "desktopUnrelatedRpcCalls": 0,
+    "desktopUnrelatedJournalWrites": 0,
+    "chatDroppedEvents": 20000,
+    "chatUnrelatedEngagementQueries": 0,
+    "chatNormalAckQueries": 1,
+    "chatFocusedTests": 197,
+    "chatFullSuite": {
+      "files": 93,
+      "tests": 1434
+    },
+    "catalogPagination": "500 + 51 rows",
+    "realRoleRollback": "PASS",
+    "concurrentAckAndRegistration": "PASS",
+    "catalogIndexPlan": "catalog-plan.json",
+    "desktopCoreLifecycleNonblocking": "PASS",
+    "desktopTypechecks": "PASS both",
+    "desktopAndServerBuild": "PASS",
+    "chatBuild": "PASS",
+    "webControlApiBuild": "PASS",
+    "sharedCopies": "IDENTICAL",
+    "diffCheck": "PASS"
+  },
+  "limits": "Cold/evicted/other-process metadata may miss marks. Startup/revision catalog warm-up and registrations still use DB. No per-unknown-event lookup. No new connection budget. Historical pipeline measurements were not rerun."
+}

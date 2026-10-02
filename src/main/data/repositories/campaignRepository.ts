@@ -1,3 +1,4 @@
+import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
 import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
 import {
   AccountActionLimitStatus,
@@ -6151,7 +6152,8 @@ export async function listCampaignDetailsPage(
   const auth = requireCurrentUserCredentials()
   // The RPC validates campaign ownership, pages over narrow index keys, then
   // reads full rows only for that page. Count and items share one DB snapshot.
-  const { data, error } = await client().rpc('aka_agent_list_campaign_details_page', {
+  const { data, error } = await client().rpc('aka_agent_list_campaign_details_page_v2', {
+    p_engagement_filter: query.engagementFilter || null,
     p_staff_id: staffId,
     p_organization_id: organizationId,
     p_campaign_id: campaignId,
@@ -6263,21 +6265,31 @@ export async function createCampaignDetail(action: CreateCampaignDetailInput): P
     status: action.status || 'thành công',
     error_code: action.errorCode ?? null,
     log: action.log || null,
-    data: action.data || null,
+    data: action.data?.zaloEngagementSource ? { ...action.data, zaloEngagementPending: true } : action.data || null,
     post_url: action.postUrl || null
   }
   if (action.shouldCountAction !== undefined) {
     payload.counts_toward_limit = action.shouldCountAction
   }
 
-  const { data, error } = await client()
+  // Only this boundary makes the INSERT outcome uncertain on transport failure.
+  stageCampaignEngagementSource(action.data?.zaloEngagementSource, action.campaignId, true)
+  const { data, error } = await Promise.resolve(client()
     .from('auto_campaign_details')
     .insert(payload)
     .select()
-    .single()
+    .single())
+    .catch(error => {
+      failCampaignEngagementDetail(action.data?.zaloEngagementSource, error)
+      throw error
+    })
 
-  if (error) throw new Error(`Failed to create campaign detail: ${error.message}`)
+  if (error) {
+    failCampaignEngagementDetail(action.data?.zaloEngagementSource, error)
+    throw new Error(`Failed to create campaign detail: ${error.message}`)
+  }
   const detail = mapCampaignDetailFromDB(data)
+  recordCampaignEngagementDetail(detail.id, detail.data?.zaloEngagementSource)
   const shouldCountAction = detail.accountId && detail.actionCode && (
     action.shouldCountAction !== undefined
       ? action.shouldCountAction

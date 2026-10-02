@@ -1,0 +1,44 @@
+{
+  "verifiedAt": "2026-10-02T15:27:19.314925+00:00",
+  "scope": "User-approved best-effort tracking; campaign flow takes priority over mark completeness. Local only.",
+  "migration": "migration_v339_zalo_campaign_engagement.sql",
+  "migrationChanged": false,
+  "rpcDefinitionsChanged": false,
+  "migrationSha256": "9dcd175d7f4c794c3f21430d9395b665d5cc06ffbde1e34b2f4974da40bae390",
+  "changes": [
+    "Cached configuration only on send/ACK paths; refresh in background.",
+    "RAM source staging with asynchronous ordered journal, no producer waiters; owner admission without disk wait and generation-fenced RPC completion.",
+    "Background listener preparation with per-instance deduplication and 60-second failure cooldown.",
+    "Chat ACK uses recipient try-lock and skips optional metadata under contention."
+  ],
+  "checks": {
+    "desktopNodeTypecheck": "PASS",
+    "desktopRendererTypecheck": "PASS",
+    "desktopBuild": "PASS",
+    "legacyServerBuild": "PASS",
+    "nonblockingFaultInjection": "PASS: stalled config/restore/write, rejected disk, detail/counter completion, Server admission, late completion without resend, listener timeout/cooldown",
+    "coreRepositoryLifecycle": "PASS",
+    "shareAndOptOut": "PASS",
+    "authLifecycle": {
+      "status": "PASS",
+      "checks": 133
+    },
+    "chatBuild": "PASS",
+    "chatFocused": {
+      "status": "PASS",
+      "files": 2,
+      "tests": 193
+    },
+    "chatFullSuite": {
+      "status": "PASS",
+      "files": 93,
+      "tests": 1430
+    },
+    "privatePostgresRollback": "PASS",
+    "privatePostgresConcurrency": "PASS: real ACK completes while competing tracking lock is held; subsequent event resumes tracking; retained metadata and config promotion in both commit orders",
+    "webControlApiBuild": "PASS",
+    "sharedContractCopies": "IDENTICAL",
+    "diffCheck": "PASS"
+  },
+  "limits": "No production changes, deployment, real Zalo traffic or application connection-budget increase. Tracking may miss events under failure, contention or cold configuration. Existing benchmark results are historical; no new load claim."
+}

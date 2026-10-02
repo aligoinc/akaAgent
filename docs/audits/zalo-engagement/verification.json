@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-02",
+  "productionChanged": false,
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "migration": "migrations/migration_v339_zalo_campaign_engagement.sql",
+  "migrationSha256": "932e1db307d8ccfff78b8594868cb66c7db3f225aa467c808ba53f56280fd1fd",
+  "sharedContractSha256": "99fb027eb3c183f84f72908c66d5a495ab4272acd8be597ae09bf767b4037735",
+  "checks": {
+    "mainNodeTypecheck": "pass",
+    "mainRendererTypecheck": "pass",
+    "desktopBuild": "pass",
+    "legacyServerBuild": "pass",
+    "chatBuildTypecheck": "pass",
+    "chatFullTests": {
+      "files": 93,
+      "passed": 1410
+    },
+    "chatIntegrationAfterFinalSql": {
+      "passed": 5
+    },
+    "webBuildTypecheck": "pass",
+    "webFullTestsFinal": {
+      "passed": 1544,
+      "failed": 1,
+      "failedTest": "CampaignFormPage progress chunk render-count: expected 38, got 39",
+      "rerunFilePassed": 104,
+      "formOrTestModified": false
+    },
+    "desktopUi": "pass: real Electron fixture, 1600/850 px, HTTP blocked, full 200 filtered Excel rows",
+    "webUi": "3 passed: Chromium Desktop, Android Chromium, iPhone WebKit, 1440/850/390 px, full 996 filtered Excel rows",
+    "sql": "private PostgreSQL 16 canonical migration, rollback assertions with actual roles, concurrent transaction race smoke pass",
+    "lifecycle": "restart/timestamp/revision-microseconds/auth-await-fence/server-password-rotation/10k-restoration-cap pass",
+    "regressions": "campaign-details-page, rich Share, opt-out pass"
+  },
+  "limitations": [
+    "No live Zalo sends or additional checking API.",
+    "No production apply/deploy/enable.",
+    "Isolated benchmark uses one connection and short cases, no production pool or full Chat projection contention.",
+    "Hot-recipient and 2000 eps/100% relevant stress cases accumulate backlog.",
+    "Existing Web render-count test failed once in full run; isolated file rerun passed, cause not established."
+  ]
+}

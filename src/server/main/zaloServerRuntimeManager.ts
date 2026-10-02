@@ -1,3 +1,4 @@
+import { attachServerCampaignEngagementOwner } from '../../main/services/zaloCampaignEngagement'
 import { accountOperationRegistry } from '../../main/services/accountOperationRegistry'
 import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
@@ -54,6 +55,7 @@ interface ServerAccountClaim {
 }
 
 interface StaffRuntime {
+  detachEngagementOwner?: () => void
   user: ZaloServerRuntimeUser
   state: ZaloServerRuntimeState
   startedAt: string | null
@@ -867,6 +869,7 @@ export class ZaloServerRuntimeManager {
           }
         }
 
+        runtime.detachEngagementOwner = attachServerCampaignEngagementOwner(user.staffId, user.organizationId)
         const eventWindow = this.createEventWindow(runtime)
         const webviewRegistry = new WebviewRegistry()
         const proxyRuntime = new ProxyRuntimeService(id => supabase.getProxy(id))
@@ -1064,6 +1067,8 @@ export class ZaloServerRuntimeManager {
       runtime.gracefulCapabilityLoss = false
       runtime.acceptsCleanupCommands = false
     }
+    runtime.detachEngagementOwner?.()
+    runtime.detachEngagementOwner = undefined
     runtime.state = 'stopping'
     accountOperationRegistry.stop(staffId)
     this.notifySnapshot()

@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-10-02T14:34:15.902Z",
+  "scope": "One isolated PostgreSQL connection. Desktop uses real coordinator/journal and in-process HTTP-shaped adapter; Chat uses real inbox acknowledgement plus engagement worker. Excludes network latency and the rest of Chat projection/UI; pool wait is this isolated single-slot harness, not production. Same 5000 events/500 eps/10% relevance. Seed inserts are outside timing.",
+  "results": [
+    {
+      "pipeline": "desktop-coordinator-and-atomic-journal",
+      "events": 5000,
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "elapsedMs": 14977,
+      "databaseCpuMs": 1850,
+      "requests": 103,
+      "maxBacklog": 181,
+      "remaining": 0,
+      "p95UpdateMs": 272.37,
+      "metrics": {
+        "received": 5000,
+        "filtered": 4500,
+        "coalesced": 0,
+        "updated": 1000,
+        "retry": 0,
+        "overflow": 0,
+        "rpcMs": 2480,
+        "journalErrors": 0,
+        "backlog": 0,
+        "oldestAgeMs": 0
+      },
+      "rssMiB": 101
+    },
+    {
+      "pipeline": "chat-inbox-acknowledgement-baseline",
+      "events": 5000,
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "elapsedMs": 10099,
+      "databaseCpuMs": 780,
+      "maxBacklog": 0,
+      "remaining": 0,
+      "p95ProjectionAckMs": 0.46,
+      "p95PoolWaitMs": 0,
+      "p95UpdateMs": null,
+      "metrics": {
+        "received": 0,
+        "filtered": 0,
+        "updated": 0,
+        "retry": 0,
+        "rpcMs": 0,
+        "backlog": 0,
+        "oldestAgeMs": 0
+      },
+      "rssMiB": 109
+    },
+    {
+      "pipeline": "chat-inbox-with-engagement",
+      "events": 5000,
+      "rate": 500,
+      "relevance": 10,
+      "accounts": 5000,
+      "watches": 1000000,
+      "elapsedMs": 14920,
+      "databaseCpuMs": 4520,
+      "maxBacklog": 95,
+      "remaining": 0,
+      "p95ProjectionAckMs": 1.43,
+      "p95PoolWaitMs": 0.77,
+      "p95UpdateMs": 195.58,
+      "metrics": {
+        "received": 5000,
+        "filtered": 4500,
+        "updated": 1000,
+        "retry": 0,
+        "rpcMs": 2643,
+        "backlog": 6,
+        "oldestAgeMs": 270.144
+      },
+      "rssMiB": 147
+    }
+  ]
+}

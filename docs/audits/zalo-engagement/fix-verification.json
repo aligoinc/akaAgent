@@ -1,0 +1,38 @@
+{
+  "scope": "Local review fixes only. No production migration, deployment, or real Zalo event.",
+  "migration": "migration_v339_zalo_campaign_engagement.sql",
+  "migrationSha256": "00fd6384676e4f18cbadc62a0dad958564d67a9787b61bd505578b1c15d2ddab",
+  "checks": {
+    "desktopNodeTypecheck": "PASS",
+    "desktopRendererTypecheck": "PASS",
+    "desktopBuild": "PASS",
+    "legacyServerBuild": "PASS",
+    "desktopCoreSmoke": "PASS",
+    "desktopLifecycleRegression": "PASS: 701 source recovery, failed page, full-queue hold replacement, settings outage, restart, revision microseconds",
+    "chatBuildTypecheck": "PASS",
+    "chatFullSuiteBeforeFinalLockDeadlineHardening": {
+      "files": 93,
+      "tests": 1418,
+      "status": "PASS"
+    },
+    "chatFinalFocusedSuite": {
+      "files": 3,
+      "tests": 234,
+      "engagementIntegrationTests": 14,
+      "status": "PASS"
+    },
+    "webAllTypecheck": "PASS",
+    "webControlApiBuild": "PASS",
+    "webControlApiTests": {
+      "files": 4,
+      "tests": 15,
+      "status": "PASS"
+    },
+    "privatePostgresRollback": "PASS: tenant/roles, immutable deadlines, engagement, paged bounded recovery",
+    "privatePostgresConcurrency": "PASS: registration versus acknowledgement and config promotion, both commit orders",
+    "sharedContractCopies": "IDENTICAL",
+    "diffCheck": "PASS"
+  },
+  "pipelineBenchmarkGeneratedAt": "2026-10-02T13:44:32.560Z",
+  "pipelineBenchmark": "pipeline-benchmark.json"
+}

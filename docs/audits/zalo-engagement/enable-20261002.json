@@ -1,0 +1,67 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedByUser": true,
+  "before": [
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.batch_size",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "100"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.enabled",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "false"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.flush_interval_seconds",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "5"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.tracking_window_hours",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "48"
+    }
+  ],
+  "after": [
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.batch_size",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "100"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.enabled",
+      "revision": "2026-10-02 16:40:20.806571+00",
+      "value": "true"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.flush_interval_seconds",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "5"
+    },
+    {
+      "is_active": true,
+      "is_secret": false,
+      "key": "zalo.campaign_engagement.tracking_window_hours",
+      "revision": "2026-10-02 16:26:02.117234+00",
+      "value": "48"
+    }
+  ],
+  "schemaChanged": false,
+  "schemaReloaded": false,
+  "deploymentRestarted": false
+}

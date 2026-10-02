@@ -1,3 +1,4 @@
+import { engagementDisplay, engagementApplicable, type EngagementFilter } from '../../../../shared/zaloCampaignEngagement'
 import { useCampaignRunLog } from '../../hooks/useCampaignRunLog'
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
@@ -110,6 +111,7 @@ interface CampaignFilterOption {
 }
 
 interface DetailFilterState {
+  engagementFilter?: EngagementFilter
   timePreset: DetailTimePreset
   dateFrom: string
   dateTo: string
@@ -2891,6 +2893,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
         sort: actionDetailSort,
         search: debouncedActionDetailSearch.trim() || undefined,
         status: actionDetailFilters.status,
+        engagementFilter: actionDetailFilters.engagementFilter,
         dateFrom: dateStart?.toISOString() || null,
         dateTo: dateEnd?.toISOString() || null,
         offset: (actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE,
@@ -2949,6 +2952,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     actionDetailFilters.dateFrom,
     actionDetailFilters.dateTo,
     actionDetailFilters.status,
+    actionDetailFilters.engagementFilter,
     actionDetailFilters.timePreset,
     actionDetailPage,
     actionDetailSort
@@ -2978,7 +2982,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
   useEffect(() => {
     setActionDetailPage(1)
-  }, [debouncedActionDetailSearch, actionDetailFilters.dateFrom, actionDetailFilters.dateTo, actionDetailFilters.status, actionDetailFilters.timePreset, selectedCampaignId])
+  }, [debouncedActionDetailSearch, actionDetailFilters.dateFrom, actionDetailFilters.dateTo, actionDetailFilters.status, actionDetailFilters.engagementFilter, actionDetailFilters.timePreset, selectedCampaignId])
 
   useEffect(() => {
     const pageCount = Math.max(1, Math.ceil(campaignInputDataTotal / CAMPAIGN_INPUT_DATA_PAGE_SIZE))
@@ -4534,6 +4538,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       sort: actionDetailSort,
       search: debouncedActionDetailSearch.trim() || undefined,
       status: actionDetailFilters.status,
+        engagementFilter: actionDetailFilters.engagementFilter,
       dateFrom: dateStart?.toISOString() || null,
       dateTo: dateEnd?.toISOString() || null,
       offset,
@@ -4629,7 +4634,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           'Trạng thái': detail.status,
           'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
           'Chi tiết': detail.log || '',
-          'Link bài viết': detail.postUrl || ''
+          'Link bài viết': detail.postUrl || '',
+          ...(selectedCampaignAccount?.flatformType === 'zalo' ? {
+            'Đã xem lúc': detail.zaloEngagement?.seen_at || '',
+          'Đã phản hồi lúc': detail.zaloEngagement?.responded_at || '',
+            'Đã thả cảm xúc lúc': detail.zaloEngagement?.reacted_at || '',
+            'Đã kết bạn lúc': detail.zaloEngagement?.friended_at || '',
+            'Theo dõi đến': detail.zaloEngagement?.tracking_until || ''
+          } : {})
         }
       })
       const sheet = utils.json_to_sheet(rows)
@@ -7006,6 +7018,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                         actionDetailStatusOptions,
                         value => setActionDetailFilters(prev => ({ ...prev, status: value }))
                       )}
+                      {selectedCampaignAccount?.flatformType === 'zalo' && <label className="report-dropdown-field detail-filter-dropdown-field" style={{ width: 180 }}>
+                        <span>Tương tác Zalo</span>
+                        <select className="report-filter-button detail-filter-button" aria-label="Tương tác Zalo" value={actionDetailFilters.engagementFilter || 'all'} onChange={event => setActionDetailFilters(prev => ({ ...prev, engagementFilter: event.target.value as EngagementFilter }))}>
+                          <option value="all">Tất cả</option><option value="seen">Đã xem</option><option value="responded">Đã phản hồi</option><option value="reacted">Đã thả cảm xúc</option><option value="friended">Đã kết bạn</option><option value="none">Chưa ghi nhận</option>
+                        </select>
+                      </label>}
                       <label className="campaign-input-data-search">
                         <Search size={14} />
                         <input
@@ -7044,7 +7062,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : campaignDetailPageTotal === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
-                      {actionDetailFilters.status || actionDetailFilters.timePreset !== 'all' || debouncedActionDetailSearch.trim()
+                      {actionDetailFilters.status || actionDetailFilters.timePreset !== 'all' || (actionDetailFilters.engagementFilter && actionDetailFilters.engagementFilter !== 'all') || debouncedActionDetailSearch.trim()
                         ? 'Không có kết quả chạy phù hợp bộ lọc'
                         : 'Chưa có hành động nào được ghi nhận'}
                     </div>
@@ -7083,6 +7101,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                             ))}
                             <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Hành động</th>
                             <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                            {selectedCampaignAccount?.flatformType === 'zalo' && <th style={{ minWidth: 210 }}>Tương tác Zalo</th>}
                             <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
                             <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                           </tr>
@@ -7146,6 +7165,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                                   {statusLabel}
                                 </span>
                               </td>
+                              {selectedCampaignAccount?.flatformType === 'zalo' && <td style={{ whiteSpace: 'pre-line', minWidth: 210 }} title={a.zaloEngagement ? `Theo dõi đến ${formatDisplayDateTime(a.zaloEngagement.tracking_until)}` : undefined}>
+                                {engagementDisplay(a.zaloEngagement, a.zaloEngagementApplicable ?? (engagementApplicable(a.actionCode) && a.status === 'thành công' && !selectedCampaignAccount.isZaloShowWeb))}
+                              </td>}
                               {isSelectedVoiceCallCampaign && (
                                 <>
                                   <td className="campaign-detail-sms-content-cell" title={voiceDetail?.content || '-'}>

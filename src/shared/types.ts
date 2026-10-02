@@ -1,3 +1,4 @@
+import type { ZaloEngagement, EngagementFilter } from './zaloCampaignEngagement'
 import type { SendExclusionsByAccount } from './campaignSendExclusion'
 import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
 import type { ZaloTagSettingsByAccountId } from './zaloAuxiliaryActions'
@@ -1180,6 +1181,8 @@ export interface AddCampaignInputDataRowsResult {
 export type CampaignDetailStatus = string
 
 export interface CampaignDetail {
+  zaloEngagementApplicable?: boolean
+  zaloEngagement?: ZaloEngagement | null
   id: number
   inputDataId?: number | null
   inputData?: {
@@ -1212,6 +1215,7 @@ export interface CampaignDetailAutomationTrigger {
 }
 
 export interface CampaignDetailPageQuery {
+  engagementFilter?: EngagementFilter
   campaignId: number
   sort?: CampaignDetailSort
   search?: string

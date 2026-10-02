@@ -1,0 +1,63 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "v339",
+  "history": "20261002162601 / migration_v339_zalo_campaign_engagement",
+  "migrationSha256": "4d048c2a3c7ba644d4f2d63a5cf10fcb7e61857c5a19406eecef72043624d262",
+  "enabled": false,
+  "sqlLocalRollback": "PASS",
+  "sqlLiveRollbackGuards": "PASS",
+  "sqlLiveV1V2Compatibility": "PASS",
+  "chatTests": 1434,
+  "chatFinalIntegrationTests": 29,
+  "webTests": 1545,
+  "productionAssetBrowserFixtures": 3,
+  "syntheticIngressEvents": 1000,
+  "chatProductionJsHashesMatched": 126,
+  "rpcHttpProbe": "PASS: expected owner/campaign guards, four public signatures",
+  "machineConfigChanged": [
+    "image"
+  ],
+  "workerPoolMaxUnchanged": 10,
+  "chatMachineCount": 3,
+  "webMachineCount": 1,
+  "workerLastInterval": {
+    "event": "zalo_runtime_inbox_worker_stats",
+    "intervalStartedAt": "2026-10-02T16:35:49.572Z",
+    "intervalEndedAt": "2026-10-02T16:36:49.616Z",
+    "normalize": {
+      "claimed": 50,
+      "completed": 50,
+      "failed": 0,
+      "claimLost": 0,
+      "rejected": 0,
+      "infrastructureErrors": 0
+    },
+    "project": {
+      "claimed": 539,
+      "completed": 539,
+      "failed": 0,
+      "claimLost": 0,
+      "rejected": 0,
+      "infrastructureErrors": 0
+    },
+    "cleanup": {
+      "runs": 29,
+      "deleted": 11,
+      "infrastructureErrors": 0
+    },
+    "backlog": {
+      "rawPending": 0,
+      "projectPending": 0,
+      "retryScheduled": 0
+    }
+  },
+  "webHashes": {
+    "api": "992df6a0c21553bdf73faeeca3f446bf112dfbeda46ac4bbece052267164e309",
+    "html": "a1eac3bbde39a480507960f93d838dae5b2be2e57734decebe4eb2f9f7da9ed4",
+    "asset": "/assets/index-BaUeWQSz.js",
+    "assetHash": "cdccb2b0156c689554be7730970f5682c10605f5d08e3cb0a0961e488aa29d16"
+  },
+  "desktopReleased": false,
+  "legacyServerReleased": false,
+  "realZaloTestActions": 0
+}

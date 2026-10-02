@@ -1,0 +1,231 @@
+{
+  "captured_at": "2026-10-02T16:32:13.215004+00:00",
+  "chat_roles": [
+    "aka_agent_chat_api"
+  ],
+  "database": "postgres",
+  "functions": [
+    {
+      "acl": [
+        "postgres=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "md5": "0bdce96014857158991a7c0ce78e81ca",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "md5": "cf7e83d7ec5562bbe4f6ec4d09abe4f6",
+      "owner": "postgres",
+      "securityDefiner": false,
+      "signature": "aka_agent_campaign_engagement_revision()",
+      "volatility": "v"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "md5": "9652783556c25109e6250375da031fa3",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "volatility": "s"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "md5": "7b7407f8102f56591435b9bc092c7b34",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "volatility": "s"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres",
+        "aka_agent_chat_api=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "md5": "2546cd89f6ffe8118cd818dd12b467e5",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_read_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres",
+        "aka_agent_chat_api=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "md5": "c64228d384c787cce3da3417ccaeca53",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_record_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres",
+        "aka_agent_chat_api=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "md5": "0be97926b6629fd1f821726f2eca71c5",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "aka_agent_register_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "md5": "5a9a503db72b965eb644739f5f60905d",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "volatility": "s"
+    }
+  ],
+  "history": [
+    {
+      "name": "add_engagement_scoring_columns_message_gom",
+      "version": "20260202060744"
+    },
+    {
+      "name": "migration_v339_zalo_campaign_engagement",
+      "version": "20261002162601"
+    }
+  ],
+  "indexes": [
+    {
+      "definition": "CREATE INDEX auto_campaign_engagement_target ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, target_zalo_uid, sent_at DESC) INCLUDE (tracking_until, action_type)",
+      "name": "auto_campaign_engagement_target",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX auto_campaign_engagement_deadline ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, tracking_until, campaign_detail_id)",
+      "name": "auto_campaign_engagement_deadline",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX auto_campaign_engagement_catalog ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, tracking_until, campaign_detail_id)",
+      "name": "auto_campaign_engagement_catalog",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX auto_campaign_engagement_source ON public.auto_campaign_details USING btree (id) WHERE (((data ->> 'zaloEngagementPending'::text) = 'true'::text) AND (is_delete = false))",
+      "name": "auto_campaign_engagement_source",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX auto_campaign_engagement_operation ON public.auto_campaign_details USING btree (campaign_id, account_id, ((data #>> '{zaloEngagementSource,operationId}'::text[]))) WHERE ((data #>> '{zaloEngagementSource,operationId}'::text[]) IS NOT NULL)",
+      "name": "auto_campaign_engagement_operation",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX chat_runtime_engagement_pending ON public.chat_zalo_runtime_event USING btree (engagement_next_attempt_at, id) WHERE (engagement_state = ANY (ARRAY['waiting_config'::text, 'pending'::text]))",
+      "name": "chat_runtime_engagement_pending",
+      "ready": true,
+      "valid": true
+    },
+    {
+      "definition": "CREATE INDEX chat_runtime_engagement_reconcile ON public.chat_zalo_runtime_event USING btree (organization_id, chat_zalo_account_organization_id, engagement_account_uid, engagement_target_uid, engagement_occurred_at) WHERE (engagement_payload IS NOT NULL)",
+      "name": "chat_runtime_engagement_reconcile",
+      "ready": true,
+      "valid": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "zalo.campaign_engagement.enabled",
+      "updated_at": "2026-10-02T16:26:02.117234+00:00",
+      "value": "false"
+    },
+    {
+      "key": "zalo.campaign_engagement.flush_interval_seconds",
+      "updated_at": "2026-10-02T16:26:02.117234+00:00",
+      "value": "5"
+    },
+    {
+      "key": "zalo.campaign_engagement.batch_size",
+      "updated_at": "2026-10-02T16:26:02.117234+00:00",
+      "value": "100"
+    },
+    {
+      "key": "zalo.campaign_engagement.tracking_window_hours",
+      "updated_at": "2026-10-02T16:26:02.117234+00:00",
+      "value": "48"
+    }
+  ],
+  "tables": [
+    {
+      "bytes": 40960,
+      "estimated_rows": -1,
+      "name": "auto_campaign_detail_zalo_engagement"
+    },
+    {
+      "bytes": 6195953664,
+      "estimated_rows": 3649320,
+      "name": "auto_campaign_details"
+    },
+    {
+      "bytes": 5786918912,
+      "estimated_rows": 1776770,
+      "name": "chat_zalo_runtime_event"
+    }
+  ]
+}

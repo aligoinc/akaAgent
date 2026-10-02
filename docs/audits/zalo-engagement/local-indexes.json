@@ -1,0 +1,30 @@
+[
+  {
+    "name": "auto_campaign_engagement_catalog",
+    "definition": "CREATE INDEX auto_campaign_engagement_catalog ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, tracking_until, campaign_detail_id)"
+  },
+  {
+    "name": "auto_campaign_engagement_deadline",
+    "definition": "CREATE INDEX auto_campaign_engagement_deadline ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, tracking_until, campaign_detail_id)"
+  },
+  {
+    "name": "auto_campaign_engagement_operation",
+    "definition": "CREATE INDEX auto_campaign_engagement_operation ON public.auto_campaign_details USING btree (campaign_id, account_id, ((data #>> '{zaloEngagementSource,operationId}'::text[]))) WHERE ((data #>> '{zaloEngagementSource,operationId}'::text[]) IS NOT NULL)"
+  },
+  {
+    "name": "auto_campaign_engagement_source",
+    "definition": "CREATE INDEX auto_campaign_engagement_source ON public.auto_campaign_details USING btree (id) WHERE (((data ->> 'zaloEngagementPending'::text) = 'true'::text) AND (is_delete = false))"
+  },
+  {
+    "name": "auto_campaign_engagement_target",
+    "definition": "CREATE INDEX auto_campaign_engagement_target ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, target_zalo_uid, sent_at DESC) INCLUDE (tracking_until, action_type)"
+  },
+  {
+    "name": "chat_runtime_engagement_pending",
+    "definition": "CREATE INDEX chat_runtime_engagement_pending ON public.chat_zalo_runtime_event USING btree (engagement_next_attempt_at, id) WHERE (engagement_state = ANY (ARRAY['waiting_config'::text, 'pending'::text]))"
+  },
+  {
+    "name": "chat_runtime_engagement_reconcile",
+    "definition": "CREATE INDEX chat_runtime_engagement_reconcile ON public.chat_zalo_runtime_event USING btree (organization_id, chat_zalo_account_organization_id, engagement_account_uid, engagement_target_uid, engagement_occurred_at) WHERE (engagement_payload IS NOT NULL)"
+  }
+]

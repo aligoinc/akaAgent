@@ -1,0 +1,100 @@
+[
+  {
+    "signature": "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+    "checksum": "0bdce96014857158991a7c0ce78e81ca",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "acl": [
+      "postgres=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ]
+  },
+  {
+    "signature": "aka_agent_campaign_engagement_revision()",
+    "checksum": "cf7e83d7ec5562bbe4f6ec4d09abe4f6",
+    "owner": "postgres",
+    "securityDefiner": false,
+    "volatility": "v",
+    "acl": [
+      "postgres=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public"
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+    "checksum": "7b7407f8102f56591435b9bc092c7b34",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "s",
+    "acl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=60s"
+    ]
+  },
+  {
+    "signature": "aka_agent_read_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+    "checksum": "2546cd89f6ffe8118cd818dd12b467e5",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "acl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres",
+      "aka_agent_chat_api=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ]
+  },
+  {
+    "signature": "aka_agent_record_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+    "checksum": "c64228d384c787cce3da3417ccaeca53",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "acl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres",
+      "aka_agent_chat_api=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ]
+  },
+  {
+    "signature": "aka_agent_register_campaign_engagement(bigint,bigint,text,jsonb,text,text)",
+    "checksum": "0be97926b6629fd1f821726f2eca71c5",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "acl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres",
+      "aka_agent_chat_api=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ]
+  }
+]
