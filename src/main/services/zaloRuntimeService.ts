@@ -1,3 +1,4 @@
+import { receiveCampaignEngagement, campaignEngagementEnabled } from './zaloCampaignEngagement'
 import { CampaignLabelContext } from '../../shared/campaignSendExclusion'
 import { findZaloExcludedLabels, type ZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountWarning } from './accountLogService'
@@ -113,6 +114,7 @@ type ImageDimensions = {
 }
 
 export interface ZaloForwardMessageTargetResult {
+  engagementMapped?: boolean
   threadId: string
   ok: boolean
   raw?: Record<string, unknown>
@@ -427,6 +429,7 @@ export class ZaloRuntimeService {
   private apiLoginInflight = new Map<number, Promise<API>>()
   private verifyInflight = new Map<number, Promise<VerifiedZaloSession>>()
   private listenerStates = new Map<number, ZaloListenerState>()
+  private engagementListenerAttempts = new WeakMap<API, { pending: boolean; retryAt: number }>()
   private realtimeListenerSubscribers = new Map<number, Set<ZaloRealtimeListenerHandlers>>()
   private loginQrSubscribers = new Set<(event: ZaloLoginQrEvent) => unknown>()
   private accountCacheVersions = new Map<number, number>()
@@ -566,6 +569,10 @@ export class ZaloRuntimeService {
     } finally {
       if (timeout) clearTimeout(timeout)
     }
+  }
+
+  getCachedOwnUid(accountId: number): string | undefined {
+    return this.apiCache.get(accountId)?.api.getOwnId() || undefined
   }
 
   async ensureApi(accountId: number): Promise<API> {
@@ -1979,6 +1986,7 @@ export class ZaloRuntimeService {
     message: ZaloOutgoingText
   ): Promise<ZaloForwardMessageResult> {
     const api = await this.ensureApi(accountId)
+    if (type === ThreadType.User) this.warmCampaignEngagementListener(accountId, api)
     const safeThreadIds = threadIds.map(item => String(item || '').trim()).filter(Boolean)
     const text = (typeof message === 'string' ? message : message.msg).trim()
     if (safeThreadIds.length === 0) throw new ZaloApiError('Missing thread IDs')
@@ -2157,7 +2165,8 @@ export class ZaloRuntimeService {
         return {
           threadId: normalizedThreadId,
           ok: true,
-          raw: successRow
+          raw: successRow,
+          engagementMapped: true
         }
       }
       if (allSucceededByCount) {
@@ -2196,6 +2205,7 @@ export class ZaloRuntimeService {
 
   async sendFriendRequestToUser(accountId: number, uid: string, message: string): Promise<unknown> {
     const api = await this.ensureApi(accountId)
+    this.warmCampaignEngagementListener(accountId, api)
     return api.sendFriendRequest(String(message || ''), uid)
   }
 
@@ -2453,6 +2463,24 @@ export class ZaloRuntimeService {
     return this.accountCacheVersions.get(accountId) ?? 0
   }
 
+  private warmCampaignEngagementListener(accountId: number, api: API): void {
+    if (this.apiCache.get(accountId)?.api !== api || !campaignEngagementEnabled()) return
+    const state=this.listenerStates.get(accountId)
+    if (state?.api===api && state.ready && state.status==='running') return
+    const previous=this.engagementListenerAttempts.get(api)
+    if (previous?.pending || (previous && Date.now()<previous.retryAt)) return
+    const attempt={ pending:true,retryAt:0 }
+    this.engagementListenerAttempts.set(api,attempt)
+    // A listener for optional tracking cannot hold the outgoing action. Existing
+    // media/upload waits still use ensureZaloListenerReady directly.
+    void Promise.resolve().then(async () => {
+      if (this.apiCache.get(accountId)?.api===api && campaignEngagementEnabled()) await this.ensureZaloListenerReady(accountId,api)
+    }).catch(() => {
+      attempt.retryAt=Date.now()+60_000
+      console.warn('[ZaloEngagement] Shared listener unavailable', { accountId })
+    }).finally(() => { attempt.pending=false })
+  }
+
   private async ensureZaloListenerReady(
     accountId: number,
     api: API,
@@ -2554,6 +2582,19 @@ export class ZaloRuntimeService {
     invoke: (handlers: ZaloRealtimeListenerHandlers) => unknown,
     context: string
   ): void {
+    const state = this.listenerStates.get(accountId)
+    if (state) {
+      const ownUid = String(state.api.getOwnId() || '') // cached SDK identity; no Zalo request
+      const receive = (type: string, value: unknown): void => receiveCampaignEngagement(type, value, accountId, ownUid)
+      try { invoke({
+        message: value => receive('message', value), reaction: value => receive('reaction', value),
+        friendEvent: value => receive('friend_event', value),
+        seenMessages: value => receive('seen_messages', value),
+        deliveredMessages: value => receive('delivered_messages', value),
+        oldMessages: (values, type) => { for (const value of (Array.isArray(values) ? values : [])) receive('message', { ...value, type }) },
+        oldReactions: (values, isGroup) => { for (const value of (Array.isArray(values) ? values : [])) receive('reaction', { ...value, isGroup }) }
+      }) } catch { console.warn('[ZaloEngagement] Event metadata unavailable', { accountId }) }
+    }
     const subscribers = this.realtimeListenerSubscribers.get(accountId)
     if (!subscribers || subscribers.size === 0) return
 

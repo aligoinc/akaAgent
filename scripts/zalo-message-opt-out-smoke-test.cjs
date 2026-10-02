@@ -96,8 +96,8 @@ async function main() {
   const runtimeNames = ['zaloSendPhoneMessage', 'zaloSendFriendMessage', 'dispatchZaloMessage', 'getZaloOutgoingMessageText']
   const runtimeMethods = runtimeNames.map(name => scheduler.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name).getText(source)).join('\n')
   const runtimeCode = ts.transpileModule(`class RuntimeHarness { ${runtimeMethods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  const RuntimeHarness = new Function('buildMessageOptOutSource', 'ZALO_MESSAGE_SEND_MODE_SHARE', 'ZaloPartialSendError', runtimeCode + '; return RuntimeHarness')(
-    sourceHelpers.buildMessageOptOutSource, 'share', class extends Error {})
+  const RuntimeHarness = new Function('buildMessageOptOutSource', 'ZALO_MESSAGE_SEND_MODE_SHARE', 'ZaloPartialSendError', 'beginCampaignEngagementSend', 'abandonCampaignEngagementSend', 'makeEngagementSource', 'stageCampaignEngagementSource', runtimeCode + '; return RuntimeHarness')(
+    sourceHelpers.buildMessageOptOutSource, 'share', class extends Error {}, () => ({revision:'',sentAt:''}), () => {}, () => undefined, async () => {})
   const target = { uid: 'u1', globalId: 'global-1', displayName: 'Lan', raw: { profileAvatar: 'https://example.com/lan.png' } }
   for (const method of ['zaloSendPhoneMessage', 'zaloSendFriendMessage']) {
     for (const enabled of [true, false]) {

@@ -1,0 +1,18 @@
+{
+  "liveConfig": {
+    "enabled": true,
+    "revision": "2026-10-02T16:40:20.806571+00:00",
+    "flushIntervalSeconds": 5,
+    "batchSize": 100,
+    "trackingWindowHours": 48
+  },
+  "compiledFilesMatched": [
+    "apps/system-worker/dist/main.js",
+    "packages/database/dist/index.js",
+    "packages/database/dist/campaignEngagementRepository.js",
+    "packages/database/dist/campaignEngagementConfig.js"
+  ],
+  "machineCount": 3,
+  "onlyWorkerImageChanged": true,
+  "workerPool": 10
+}

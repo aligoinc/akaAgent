@@ -6,6 +6,7 @@ import { getCurrentUser, getCurrentUserCredentials, setCurrentUser, setCurrentUs
 import { getLocalLoginStore } from '../../services/localLoginService'
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
 import { devicePresence } from '../../services/devicePresenceService'
+import { resumeDesktopCampaignEngagement } from '../../services/zaloCampaignEngagement'
 
 export interface AuthLoginContext { user: AuthUser; username: string; password: string; automatic: boolean }
 interface AuthLifecycleHooks {
@@ -69,6 +70,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         assertCurrent()
         loginState.warningMessage = [loginState.warningMessage, syncStartup()].filter(Boolean).join('\n') || null
         try { devicePresence.start(credentials) } catch { console.warn('[DevicePresence] Không khởi động được trạng thái phiên.') }
+        resumeDesktopCampaignEngagement()
         return { status: 'authenticated', user, loginState }
       } catch (error) {
         // A cancelled login may already have started services in afterLogin.
@@ -168,6 +170,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
     const result = await changePassword(user, oldPassword, newPassword)
     const credentials = { username: user.username, password: newPassword }
     setCurrentUserCredentials(credentials)
+    resumeDesktopCampaignEngagement()
     const loginState = await store.saveAuthenticated(credentials)
     devicePresence.updateCredentials(credentials)
     await hooks.afterPasswordChange?.({ oldPassword, newPassword })

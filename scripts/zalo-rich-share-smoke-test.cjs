@@ -34,14 +34,14 @@ async function main() {
   const { convertHtmlToZaloMessage } = load('src/main/services/zaloFormattedContent.ts')
   const { buildZaloForwardMessageInfo } = load('src/shared/zaloForwardMessage.ts')
   const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', [
-    'forwardMessageToUsers', 'forwardMessageToGroups', 'forwardMessage', 'forwardMessageRaw', 'normalizeForwardMessageResult'
-  ], { ...zca, buildZaloForwardMessageInfo, ZALO_MESSAGE_SEND_TIMEOUT_MS: 90000,
+    'warmCampaignEngagementListener', 'forwardMessageToUsers', 'forwardMessageToGroups', 'forwardMessage', 'forwardMessageRaw', 'normalizeForwardMessageResult'
+  ], { campaignEngagementEnabled: () => false, ...zca, buildZaloForwardMessageInfo, ZALO_MESSAGE_SEND_TIMEOUT_MS: 90000,
     normalizeRecord: value => value && typeof value === 'object' ? value : {} })
   const Scheduler = harness('src/main/services/campaignScheduler.ts', 'CampaignScheduler', [
     'shouldUseZaloShareMessageBatch', 'isFormattedContentCampaign', 'getZaloShareMessageForBatch',
     'getZaloOutgoingMessageText', 'processZaloShareMessageBatch', 'findZaloForwardTargetResult',
     'executeZaloShareMessageBatchCampaign'
-  ], { ...html, ...spin, convertHtmlToZaloMessage, isRecentDeliveryCooldownEnabled: () => false,
+  ], { stageCampaignEngagementSource: async () => {}, beginCampaignEngagementSend: () => ({revision:'',sentAt:''}), abandonCampaignEngagementSend: () => {}, ...html, ...spin, convertHtmlToZaloMessage, isRecentDeliveryCooldownEnabled: () => false,
     ZALO_MESSAGE_SEND_MODE_SHARE: 'share', ZALO_MESSAGE_FRIEND_ACTION_ID: 'zalo_message_friend', ZALO_MESSAGE_GROUP_ACTION_ID: 'zalo_message_group',
     callAiUsing: () => { throw new Error('Rich share must not call AI') } })
   for (const isGroup of [false, true]) {
@@ -57,7 +57,7 @@ async function main() {
         }
       } }) }
     }
-    const runtime = Object.assign(new Runtime(), { ensureApi: async () => api, withTimeout: async promise => promise })
+    const runtime = Object.assign(new Runtime(), { apiCache: new Map(), ensureApi: async () => api, withTimeout: async promise => promise })
     const scheduler = Object.assign(new Scheduler(), {
       zaloRuntime: runtime, renderSpinContent: value => spin.renderContentSpin(value, { rng: () => 0 }),
       getZaloRuntimeStopReason: () => null, markCampaignRunUnitStarted: () => {},
@@ -116,7 +116,7 @@ async function main() {
             let claims = 0, completions = 0, releases = 0, cleanups = 0
             const before = calls.length, mediaBefore = mediaSends
             const execution = Object.assign(new Scheduler(), scheduler, {
-              running: true, isServerZaloCampaign: () => server,
+              sendExclusionLabels: new Map(), running: true, isServerZaloCampaign: () => server,
               getZaloShareMessageActionDescriptor: () => ({ code: value.actionId }),
               shouldUseAdvancedContent: () => advanced, getAdvancedContentConfigError: () => null,
               getRawCampaignContentForIndex: () => content, resolveCampaignMediaForIndex: async () => attachments,

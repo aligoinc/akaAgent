@@ -572,6 +572,8 @@ export function mapMediaGroupFromDB(row: Record<string, unknown>): MediaGroup {
 
 export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignDetail {
   return {
+    zaloEngagementApplicable: row.zalo_engagement_applicable as boolean | undefined,
+    zaloEngagement: row.zalo_engagement as CampaignDetail['zaloEngagement'],
     id: row.id as number,
     inputDataId: (row.input_data_id as number | null) ?? null,
     campaignId: row.campaign_id as number,

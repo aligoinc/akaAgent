@@ -253,7 +253,7 @@ async function recoveryGate(): Promise<void> {
 async function handlers(root: string): Promise<void> {
   const source = await readFile('src/main/ipc/handlers/authHandlers.ts', 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const scenario of ['disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate', 'plaintext-local-restart',
+  for (const scenario of ['password-change', 'disk-failure', 'startup-failure', 'policy', 'late-options', 'late-username', 'failed-password', 'remembered-mismatch', 'no-legacy', 'bootstrap-logout', 'cancel-during-save', 'preferences-only-restart', 'preferences-only-no-candidate', 'plaintext-local-restart',
     'recover-remember-off', 'recover-remember-on', 'recover-enable-remember', 'recover-ambiguous', 'recover-late-options', 'recover-late-username', 'recover-logout', 'recover-mismatch', 'recover-policy-cancel', 'recover-policy-accept', 'recover-forget', 'recover-corrupt-file']) {
     let unblockSave!: () => void
     let startedSave!: () => void
@@ -272,7 +272,7 @@ async function handlers(root: string): Promise<void> {
     const recovery = new Promise<void>(resolve => { finishRecovery = resolve })
     let recoveryCalls = 0
     const routes = new Map<string, (...args: any[]) => any>()
-    let current: any = null; let processCredentials: any = null; let logins = 0; let presence = 0; let cleanup = 0
+    let current: any = null; let processCredentials: any = null; let logins = 0; let presence = 0; let cleanup = 0; let engagementResumes = 0
     const user = { staffId: 1, organizationId: 1, username: credentials.username, isChatSync: false }
     const exports: any = {}
     runInNewContext(code, { exports, console, require: (name: string) => {
@@ -280,7 +280,9 @@ async function handlers(root: string): Promise<void> {
       if (name === 'node:crypto') return { randomUUID: () => 'dummy-session' }
       if (name.endsWith('/types')) return { IPC_EVENTS }
       if (name.endsWith('localLoginService')) return { getLocalLoginStore: () => store }
+      if (name.endsWith('zaloCampaignEngagement')) return { resumeDesktopCampaignEngagement: () => { assert(current); assert(processCredentials); engagementResumes++ } }
       if (name.endsWith('authRepository')) return {
+        changePassword: async () => ({ success: true }),
         loadLegacyLoginCandidate: () => {
           legacyCalls++
           assert.notEqual(scenario, 'plaintext-local-restart', 'existing plaintext local file cannot trigger DB credential lookup')
@@ -303,12 +305,17 @@ async function handlers(root: string): Promise<void> {
         getCurrentUser: () => current, setCurrentUser: (value: any) => { current = value },
         getCurrentUserCredentials: () => processCredentials, setCurrentUserCredentials: (value: any) => { processCredentials = value }
       }
-      if (name.endsWith('devicePresenceService')) return { devicePresence: { start: () => { presence++ }, stop: () => {} } }
+      if (name.endsWith('devicePresenceService')) return { devicePresence: { start: () => { presence++ }, stop: () => {}, updateCredentials: () => {} } }
       return {}
     } })
     exports.registerAuthHandlers({ beforeLogout: () => { cleanup++ } })
     const call = (key: string, ...args: any[]) => routes.get(key)!(null, ...args)
-    if (scenario === 'plaintext-local-restart') {
+    if (scenario === 'password-change') {
+      const result = await call(IPC_EVENTS.AUTH_LOGIN, credentials.username, credentials.password, options)
+      assert.equal(result.status, 'authenticated'); assert.equal(engagementResumes, 1)
+      await call(IPC_EVENTS.AUTH_CHANGE_PASSWORD, credentials.password, 'changed-secret')
+      assert.equal(engagementResumes, 2); assert.equal(processCredentials.password, 'changed-secret'); checks++
+    } else if (scenario === 'plaintext-local-restart') {
       const file = join(root, scenario+'.json')
       await writeFile(file, JSON.stringify({ version: 3, options, credentials, requiresManualLogin: false }))
       const boot = await call(IPC_EVENTS.AUTH_BOOTSTRAP)
@@ -458,6 +465,7 @@ async function handlers(root: string): Promise<void> {
         await assert.rejects(call(IPC_EVENTS.AUTH_ACCEPT_POLICY_AND_LOGIN)); checks++
       }
     }
+    assert.equal(engagementResumes, presence + (scenario === 'password-change' ? 1 : 0), 'only accepted login/bootstrap or password change resumes engagement'); checks++
   }
 }
 async function bindingConfirmation(): Promise<void> {

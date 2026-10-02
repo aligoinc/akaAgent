@@ -12,6 +12,10 @@ Connection là tài nguyên có giới hạn, dùng chung giữa các service v�
 - Với `auto_account_logs`, giữ request HTTP nền hiện tại; không mở connection SQL riêng cho mỗi log và không chiếm pool nghiệp vụ để ghi log.
 - Quy tắc yêu cầu thảo luận dành cho việc thêm nguồn/tăng ngân sách connection; query thông thường, checkout/release hoặc reconnect trong cơ chế và giới hạn đã được chấp thuận không cần xin lại từng lần.
 
+Theo dõi tương tác Zalo campaign là **best effort**: chấp nhận mất dấu; không chờ config/journal/listener/khóa engagement trên luồng gửi, detail, quota hoặc lifecycle chiến dịch. Không retry gửi vì engagement; giữ giới hạn tài nguyên và công tắc riêng. Lọc account/UID/người nhận bằng RAM trước queue/DB; cache miss bỏ dấu, không tra DB theo tin. Catalog nạp nền theo lô lúc vào phiên/revision và từ đăng ký thành công. Desktop/Server hủy nguồn nếu dừng trước INSERT; phục hồi INSERT chưa rõ kết quả có hạn cố định 5 phút, retry/restart không gia hạn, hết hạn bỏ nguồn và replay chỉ phụ thuộc nguồn đó. Hạn này không thay deadline DB của lượt đã đăng ký. Xem [cơ chế và kiểm chứng](docs/ZALO_CAMPAIGN_ENGAGEMENT.md). V339 đã apply `20261002162601 / migration_v339_zalo_campaign_engagement` trên akachat; Chat worker/runtime và WebApp/API đã deploy 02/10/2026; người dùng đã yêu cầu bật `enabled=true` lúc 23:40 giờ Việt Nam, Desktop/legacy Server chưa phát hành. Không apply lại; [audit triển khai](docs/ZALO_CAMPAIGN_ENGAGEMENT_DEPLOY_20261002.md).
+
+V341 đã apply `20261002174744 / migration_v341_zalo_engagement_chat_registration` và Chat worker đã deploy hotfix 03/10/2026: đọc bốn setting public qua HTTP cache chung, dọn pending trong RPC đăng ký; không cấp thêm SELECT settings/UPDATE detail cho SQL worker. Không apply lại v339/v341. Desktop/legacy Server 7.9.0 đã build local, chưa phát hành. Xem [audit hotfix quyền](docs/ZALO_CAMPAIGN_ENGAGEMENT_CONFIG_FIX_20261003.md).
+
 ## Chuyển SQL Account akaBiz
 
 API ở repo akaBizApi gọi `akabiz_migrate_sql_account_v1(jsonb)` qua service_role ([v285](migrations/migration_v285_akabiz_sql_account_migration.sql)); `org_organization.sql_account_id` là dấu hoàn tất (không có ràng buộc unique), nhiều org có thể cùng phone/customer. Trigger quota chỉ cho import backend bỏ kiểm tra active/expiry/quota trong ngữ cảnh org của RPC; các guard runtime/claim khác giữ nguyên, không đặt `sql_staff_id` cho nhân viên khách. Shop SQL chưa có UID vẫn được tạo với `zalo_account_id=NULL`, trạng thái chưa đăng nhập; response có `skipped_products` cho quyền SQL ngoài phạm vi.
@@ -473,6 +477,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Tương tác Zalo**: kiểm thử Chat bằng SQL role thực `aka_agent_chat_api`, không chỉ DB owner/JWT claim. Engagement phải bỏ qua khi lỗi hoặc tranh chấp, không chặn gửi/detail/quota. UI chỉ hiện dấu có timestamp; không hiện nhãn không áp dụng/không theo dõi/chưa ghi nhận khi ô chưa có dấu. Không dựng nguồn hồi tố hoặc gửi lại để bù dấu bị mất.
 
 - **Giới hạn tài khoản chạy**: kiểm tra giới hạn hành động giờ/ngày trước claim; nếu bị chặn thì giữ `chờ xử lý`, ghi note bằng CAS và bỏ ghi/log khi nội dung không đổi. Chỉ ghi lý do hết chỗ sau khi claim trả `concurrency_limit_reached`. Phạm vi hỗ trợ một Desktop đang đăng nhập cho mỗi nhân viên; không mở rộng recovery để xử lý cố tình dùng nhiều máy.
 

@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-10-02T14:49:00Z",
+  "scope": "Fourth review: filter inactive owner scopes from Desktop/legacy Server retry scheduling. Local only; no production query/mutation/deployment or real Zalo traffic.",
+  "migrationChanged": false,
+  "migrationSha256": "9dcd175d7f4c794c3f21430d9395b665d5cc06ffbde1e34b2f4974da40bae390",
+  "rpcDefinitionsChanged": false,
+  "connectionBudgetChanged": false,
+  "regression": {
+    "before": "FAIL as expected: one inactive owner item shortens the active retry timer from 4000 ms to 1 ms.",
+    "after": "PASS with inactive backlogs of 1 and 100: correct deadline/batch fullness, no empty 1 ms ticks, RPC owner isolation, inactive journal preserved, timer stops after active work drains, old journal resumes at owning login."
+  },
+  "checks": {
+    "node scripts/zalo-campaign-engagement-lifecycle-smoke.cjs": "PASS",
+    "node scripts/zalo-campaign-engagement-smoke-test.cjs": "PASS",
+    "npx tsc --noEmit -p tsconfig.node.json": "PASS",
+    "npx tsc --noEmit -p tsconfig.web.json": "PASS",
+    "npm run build": "PASS: out/main, out/preload, out/renderer",
+    "npm run build:server": "PASS: out-server/main, out-server/preload, out-server/renderer",
+    "git diff --check": "PASS"
+  },
+  "unchangedChecks": "Chat/Web suites, SQL smoke and benchmarks were not rerun for this coordinator-only change. Earlier results remain historical; rollout gates and stress limits remain in force."
+}

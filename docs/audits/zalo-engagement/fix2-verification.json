@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-10-02T14:12:47.559992+00:00",
+  "scope": "Second review fixes, local only; no production mutation, deployment or real Zalo traffic.",
+  "migration": "migration_v339_zalo_campaign_engagement.sql",
+  "migrationSha256": "9dcd175d7f4c794c3f21430d9395b665d5cc06ffbde1e34b2f4974da40bae390",
+  "liveSource": "fix2-live-source.json",
+  "localTarget": "local-target.json",
+  "checks": {
+    "desktopNodeTypecheck": "PASS",
+    "desktopRendererTypecheck": "PASS (renderer unchanged in this fix)",
+    "desktopBuild": "PASS",
+    "legacyServerBuild": "PASS",
+    "desktopCoreAndRepositoryBoundary": "PASS",
+    "desktopLifecycle": "PASS: independent operations; early event first pass and replay; ambiguous INSERT/40003 lookup, missing result and restart; confirmed SQL rejection; paged recovery, config, revision and capacity regressions",
+    "chatBuildTypecheck": "PASS",
+    "chatFullSuite": {
+      "files": 93,
+      "tests": 1422,
+      "status": "PASS"
+    },
+    "chatFinalIntegrationAfterWakeFloorHardening": {
+      "files": 1,
+      "tests": 17,
+      "status": "PASS"
+    },
+    "privatePostgresRollback": "PASS: operation lookup found/missing/invalid, tenant/UID/deleted rows, idempotency and existing assertions",
+    "privatePostgresConcurrency": "PASS: registration versus acknowledgement and config promotion in both commit orders",
+    "schedulerOptOutAndShareSmokes": "PASS",
+    "web": "No edits this round; previous verification retained in fix-verification.json",
+    "diffCheck": "PASS",
+    "sharedContractCopies": "IDENTICAL"
+  },
+  "pipelineBenchmarkGeneratedAt": "2026-10-02T14:11:03.800Z",
+  "pipelineBenchmark": "pipeline-benchmark.json",
+  "operationLookupPlan": "operation-lookup-plan.json",
+  "operationLookupBatchMs": 15.845792000000074
+}
