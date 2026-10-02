@@ -2543,6 +2543,29 @@ export async function updateClaimedZaloServerCampaign(
   return current
 }
 
+/** A delayed pause hint may only annotate the still-running, original claim. */
+export async function updateRunningDesktopCampaignPauseNote(
+  id: number,
+  expectedRuntimeClaimToken: string,
+  note: string
+): Promise<Campaign | null> {
+  if (!expectedRuntimeClaimToken.trim()) return null
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update({ note, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'đang chạy')
+    .eq('runtime_claim_token', expectedRuntimeClaimToken)
+    .eq('is_delete', false)
+    .select(CAMPAIGN_SELECT)
+    .maybeSingle()
+
+  if (error) throw new Error(`Failed to update running Desktop pause note: ${error.message}`)
+  return data ? mapCampaignFromDB(data) : null
+}
+
 /**
  * Desktop scheduler boundary writes must not overwrite a newer client status.
  * Only the still-running row may move to the scheduler's requested stop state;

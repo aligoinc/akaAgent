@@ -472,6 +472,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Ghi chú chờ tạm dừng đến muộn**: chụp runtime token trước abort/DB await; [updateRunningDesktopCampaignPauseNote](src/main/data/repositories/campaignRepository.ts) chỉ ghi note khi đúng staff, còn `đang chạy` và đúng token. Không dùng `updateCampaign` không điều kiện cho note này; phản hồi sau cleanup/resume phải đọc trạng thái mới. Smoke: `node scripts/campaign-pause-note-smoke-test.cjs`.
+
 - **Log loại trừ SĐT**: workflow nhận bản sao input, nên giữ lý do đã xác nhận trong context và ghi sau detail/quota tìm SĐT; không lấy note cũ hoặc mặc định thành opt-out. CAS không đổi row thì không ghi log loại trừ; xem `scripts/campaign-failure-cleanup-smoke-test.cjs`.
 
 - **Zalo policy days_at_time (v322/v323)**: X/Y đọc từ auto_error; date_enable tính trong accountActionRepository bằng cùng snapshot DB ghi disabled_at. X/Y ưu tiên hơn phút dự phòng 120=1440, 802=2880; 223 chỉ tạm dừng, không khóa kết bạn. Không đổi quota/retry/counter. Schema v322 đã apply; dữ liệu v323 chờ người dùng phát hành runtime. Xem [audit và thứ tự triển khai](docs/ZALO_POLICY_V322_V323_AUDIT.md).
