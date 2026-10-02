@@ -230,6 +230,8 @@ Convention quan trọng (xem memory `campaign_conventions.md`):
 
 ### Campaign system
 
+**Giới hạn tài khoản chạy v340** đã apply `20261002103201 / migration_v340_browser_run_limits`; không apply lại khi phát hành Desktop. Cài đặt chung lưu hai giới hạn nullable theo staff cho Facebook/Zalo trình duyệt; legacy/v2 claim dùng chung admission transaction, giữ chỗ khi nghỉ/lướt hoặc còn unit, hết chỗ chờ tick 30s và ghi note CAS, không thêm pool/timer. Xem [audit và smoke](docs/BROWSER_RUN_LIMITS.md).
+
 Facebook nghỉ/lướt phụ chỉ cho đăng group, comment group/page/profile và nhắn tin/kết bạn UID: giữ cùng runtime claim theo luồng `đang chạy → giới hạn giờ → lướt/nghỉ → chờ xử lý`, không chạy preclaim/giới hạn ngày/partial còn chạy được. V337 đã apply `20261002075841 / migration_v337_facebook_rest_browse`, không apply lại; lỗi phụ không vào policy/quota, timeout hủy trang tạm, exit CAS giữ pause/token; xem [hướng dẫn và kiểm thử](docs/FACEBOOK_REST_BROWSE.md).
 
 Nhịp lướt phụ v338 đã apply `20261002085737 / migration_v338_facebook_rest_browse_pacing`: chỉ đổi `fb_rest_browse_feed` (MD5 code `1dd3d71d643031445cd720e36b9c6974`), không apply lại v337/v338. Cuộn mượt, đọc bài 4–8s, ảnh/đọc thêm 3–6s, thông báo 3–5s; có thể chỉ đọc mà không mở ảnh/nội dung. Giữ đúng post qua khoảng chờ, bỏ thao tác khi post biến mất/hủy và giữ deadline tổng; không thay nhịp workflow chiến dịch chính, PageController, scheduler hay block nghỉ. Verify live dùng `node scripts/facebook-rest-browse-pacing-migration.cjs verify`.
@@ -471,6 +473,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Giới hạn tài khoản chạy**: kiểm tra giới hạn hành động giờ/ngày trước claim; nếu bị chặn thì giữ `chờ xử lý`, ghi note bằng CAS và bỏ ghi/log khi nội dung không đổi. Chỉ ghi lý do hết chỗ sau khi claim trả `concurrency_limit_reached`. Phạm vi hỗ trợ một Desktop đang đăng nhập cho mỗi nhân viên; không mở rộng recovery để xử lý cố tình dùng nhiều máy.
 
 - **Ghi chú chờ tạm dừng đến muộn**: chụp runtime token trước abort/DB await; [updateRunningDesktopCampaignPauseNote](src/main/data/repositories/campaignRepository.ts) chỉ ghi note khi đúng staff, còn `đang chạy` và đúng token. Không dùng `updateCampaign` không điều kiện cho note này; phản hồi sau cleanup/resume phải đọc trạng thái mới. Smoke: `node scripts/campaign-pause-note-smoke-test.cjs`.
 

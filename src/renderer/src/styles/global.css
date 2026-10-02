@@ -26003,3 +26003,12 @@ body.theme-light .detail-dock-resize-handle {
     min-width: 0;
   }
 }
+
+.browser-run-limits-settings { max-width: 680px; }
+.browser-run-limits-settings h3 { margin: 0 0 12px; }
+.browser-run-limits-settings p { line-height: 1.55; margin: 12px 0; }
+.browser-run-limits-settings fieldset { border: 0; padding: 0; margin: 24px 0 12px; min-width: 0; display: grid; gap: 10px; }
+.browser-run-limits-settings label { font-weight: 500; }
+.browser-run-limits-settings input { width: 100%; max-width: 260px; box-sizing: border-box; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--border-default); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); }
+.browser-run-limits-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.browser-run-limits-error { color: var(--accent-error); }

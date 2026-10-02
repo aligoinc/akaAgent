@@ -1,3 +1,4 @@
+import { browserRunLimitWaitNote } from '../../shared/browserRunLimits'
 import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
@@ -1579,7 +1580,8 @@ export class CampaignScheduler {
         continue
       }
       if (!this.running) break
-      await this.executeCampaign(account, currentCampaign)
+      const outcome = await this.executeCampaign(account, currentCampaign)
+      if (outcome === 'concurrency_wait') break
       if (this.boundaryStoppedAccountQueues.delete(account.id) || this.hasFailedAccountRun(account.id)) break
     }
   }
@@ -2876,7 +2878,7 @@ export class CampaignScheduler {
   private async executeCampaign(
     account: AutoAccount,
     campaign: Campaign
-  ): Promise<void> {
+  ): Promise<'concurrency_wait' | void> {
     let runtimeClaimed = false
     let ownedClaimToken: string | null = null
     let failedRun: FailedCampaignRun | undefined
@@ -2958,6 +2960,11 @@ export class CampaignScheduler {
         break
       }
       if (!claimed.ok) {
+        if (claimed.reason === 'concurrency_limit_reached') {
+          const note = browserRunLimitWaitNote(account)
+          if (note && campaign.note !== note) await this.updateUnclaimedCampaignPreflightNote(campaign, note)
+          return 'concurrency_wait'
+        }
         if (claimed.reason === 'daily_drain_due' || claimed.reason === 'vietnam_day_changed') {
           this.boundaryStoppedAccountQueues.add(account.id)
         }

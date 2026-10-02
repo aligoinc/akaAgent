@@ -1,0 +1,48 @@
+[
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "79f9f689e1e87631ca8a704a7ffff9b4",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=10s",
+      "lock_timeout=5s"
+    ],
+    "prosecdef": true,
+    "signature": "aka_agent_browser_run_limits(bigint,bigint,text,text,text,jsonb)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "checksum": "3e7288046c6d08a25fef71468c8e03c9",
+    "proconfig": [
+      "search_path=public"
+    ],
+    "prosecdef": false,
+    "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "checksum": "0fdbb44da58b3ef82bdd85224922c428",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "prosecdef": false,
+    "signature": "aka_agent_claim_campaign_runtime_v2(bigint,bigint,bigint,text,uuid)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "d629c23b56764f78d0e754bd524727d6",
+    "proconfig": [
+      "search_path=public"
+    ],
+    "prosecdef": false,
+    "signature": "claim_campaign_runtime(bigint,bigint,bigint,text)",
+    "provolatile": "v"
+  }
+]
