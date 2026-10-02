@@ -1,0 +1,61 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "capturedOn": "2026-10-02",
+  "functions": [
+    {
+      "signature": "aka_agent_control_web_device_claim(bigint,bigint,uuid,uuid,text,text,text,timestamp with time zone)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_claim(p_staff_id bigint, p_organization_id bigint, p_session_id uuid, p_device_id uuid, p_token_hash text, p_client_type text, p_user_agent text, p_expires_at timestamp with time zone)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\n SET lock_timeout TO '3s'\n SET statement_timeout TO '8s'\nAS $function$\nDECLARE\n  v_policy public.auto_control_web_device_policy%ROWTYPE;\n  v_session public.auto_control_sessions%ROWTYPE;\n  v_device uuid;\n  v_used integer;\n  v_existing boolean;\n  v_now timestamptz := clock_timestamp();\nBEGIN\n  -- Shared policy lock permits unrelated staff to enter concurrently and serializes\n  -- an effective setting change with admission. Staff lock covers count + write.\n  SELECT * INTO STRICT v_policy FROM public.auto_control_web_device_policy WHERE singleton FOR SHARE;\n  PERFORM 1 FROM public.org_staff WHERE id=p_staff_id AND organization_id=p_organization_id\n    AND is_active IS TRUE AND is_policy_accepted IS TRUE FOR UPDATE;\n  IF NOT FOUND OR NOT public.aka_agent_staff_time_allowed(p_staff_id) THEN\n    RETURN jsonb_build_object('status','invalid_staff');\n  END IF;\n  v_now := clock_timestamp();\n  IF p_session_id IS NOT NULL THEN\n    SELECT * INTO v_session FROM public.auto_control_sessions\n    WHERE id=p_session_id AND staff_id=p_staff_id AND organization_id=p_organization_id\n      AND revoked_at IS NULL AND expires_at>v_now AND client_type IN ('web','pwa') FOR UPDATE;\n    IF NOT FOUND THEN RETURN jsonb_build_object('status','invalid_session'); END IF;\n  ELSIF p_client_type IS NULL OR p_client_type NOT IN ('web','pwa')\n    OR p_token_hash IS NULL OR p_token_hash !~ '^[0-9a-f]{64}$'\n    OR p_expires_at IS NULL OR p_expires_at<=v_now THEN\n    RAISE EXCEPTION 'invalid web session input';\n  END IF;\n  -- A second tab with no device cookie recovers the same committed identity.\n  v_device := coalesce(v_session.web_device_id,p_device_id,gen_random_uuid());\n  SELECT count(DISTINCT web_device_id),coalesce(bool_or(web_device_id=v_device),false)\n    INTO v_used,v_existing FROM public.auto_control_sessions\n  WHERE staff_id=p_staff_id AND organization_id=p_organization_id\n    AND client_type IN ('web','pwa') AND revoked_at IS NULL AND expires_at>v_now\n    AND web_device_revision=v_policy.revision;\n  IF NOT v_existing AND v_used>=v_policy.max_devices THEN\n    -- Commit the rejected restoration's revocation before the API returns 409.\n    -- Existing pages on other devices remain valid until their own next entry.\n    IF p_session_id IS NOT NULL THEN\n      UPDATE public.auto_control_sessions SET revoked_at=v_now\n      WHERE staff_id=p_staff_id AND organization_id=p_organization_id AND client_type IN ('web','pwa')\n        AND revoked_at IS NULL AND (id=p_session_id OR web_device_id=v_device);\n    END IF;\n    RETURN jsonb_build_object('status','limit_reached','limit',v_policy.max_devices,'used',v_used);\n  END IF;\n  IF p_session_id IS NULL THEN\n    UPDATE public.auto_control_sessions SET revoked_at=v_now\n    WHERE staff_id=p_staff_id AND organization_id=p_organization_id AND web_device_id=v_device\n      AND client_type IN ('web','pwa') AND revoked_at IS NULL;\n    INSERT INTO public.auto_control_sessions(staff_id,organization_id,token_hash,client_type,user_agent,\n      expires_at,web_device_id,web_device_revision,web_device_registered_at)\n    VALUES(p_staff_id,p_organization_id,p_token_hash,p_client_type,left(p_user_agent,1000),\n      p_expires_at,v_device,v_policy.revision,v_now) RETURNING * INTO v_session;\n  ELSE\n    UPDATE public.auto_control_sessions SET web_device_id=v_device,web_device_revision=v_policy.revision,\n      web_device_registered_at=CASE WHEN web_device_revision=v_policy.revision THEN web_device_registered_at ELSE v_now END\n    WHERE id=p_session_id RETURNING * INTO v_session;\n  END IF;\n  RETURN jsonb_build_object('status','admitted','deviceId',v_device,\n    'quota',jsonb_build_object('limit',v_policy.max_devices,'used',v_used+CASE WHEN v_existing THEN 0 ELSE 1 END),\n    'session',to_jsonb(v_session)-'token_hash'-'web_device_id'-'web_device_revision'-'web_device_registered_at');\nEND;\n$function$\n",
+      "definition_md5": "fbd5933e5fc7c4a600e523ad4572772c",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=8s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_control_web_device_overview(bigint,bigint,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_overview(p_staff_id bigint, p_organization_id bigint, p_session_id uuid)\n RETURNS jsonb\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '8s'\nAS $function$\n  WITH policy AS (SELECT * FROM public.auto_control_web_device_policy WHERE singleton),\n  active AS (\n    SELECT s.*,CASE WHEN s.client_type IN ('web','pwa') AND s.web_device_id IS NOT NULL\n      THEN 'device:'||s.web_device_id::text ELSE 'session:'||s.id::text END AS device_group\n    FROM public.auto_control_sessions s\n    WHERE s.staff_id=p_staff_id AND s.organization_id=p_organization_id\n      AND s.revoked_at IS NULL AND s.expires_at>now()\n  ), grouped AS (\n    SELECT DISTINCT ON (device_group) *,bool_or(id=p_session_id) OVER (PARTITION BY device_group) AS current_device,\n      bool_or(web_device_revision=(SELECT revision FROM policy)) OVER (PARTITION BY device_group) AS counted,\n      count(*) OVER (PARTITION BY device_group) AS session_count\n    FROM active ORDER BY device_group,(id=p_session_id) DESC,last_seen_at DESC,id\n  )\n  SELECT jsonb_build_object('quota',jsonb_build_object('limit',(SELECT max_devices FROM policy),\n    'used',(SELECT count(DISTINCT web_device_id) FROM active\n      WHERE client_type IN ('web','pwa') AND web_device_revision=(SELECT revision FROM policy))),\n    'items',coalesce((SELECT jsonb_agg(jsonb_build_object(\n      'id',id,'clientType',client_type,'userAgent',coalesce(user_agent,'Thiết bị không xác định'),\n      'createdAt',created_at,'lastSeenAt',last_seen_at,'expiresAt',expires_at,'current',current_device,\n      'sessionCount',session_count,'registrationState',CASE WHEN client_type='native' THEN 'not_applicable'\n        WHEN counted THEN 'registered' ELSE 'pending' END) ORDER BY current_device DESC,last_seen_at DESC,id)\n      FROM grouped),'[]'::jsonb));\n$function$\n",
+      "definition_md5": "93faf6dab8bd9da786eb737a1a847cab",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=8s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_control_web_device_release(bigint,bigint,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_release(p_staff_id bigint, p_organization_id bigint, p_session_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\n SET lock_timeout TO '3s'\n SET statement_timeout TO '8s'\nAS $function$\nDECLARE v_device uuid;\nBEGIN\n  -- Same staff lock as claim/revoke: release and admission serialize per staff.\n  PERFORM 1 FROM public.org_staff WHERE id=p_staff_id AND organization_id=p_organization_id\n    AND is_active IS TRUE AND is_policy_accepted IS TRUE FOR UPDATE;\n  IF NOT FOUND THEN RETURN false; END IF;\n  SELECT web_device_id INTO v_device FROM public.auto_control_sessions\n  WHERE id=p_session_id AND staff_id=p_staff_id AND organization_id=p_organization_id\n    AND client_type IN ('web','pwa') AND web_device_id IS NOT NULL\n    AND revoked_at IS NULL AND expires_at>clock_timestamp();\n  IF NOT FOUND THEN RETURN false; END IF;\n  -- Retain device identity, tokens, expiry and every authentication field.\n  -- Clear the whole browser group so an older parallel session cannot hold its slot.\n  UPDATE public.auto_control_sessions SET web_device_revision=NULL,web_device_registered_at=NULL\n  WHERE staff_id=p_staff_id AND organization_id=p_organization_id AND web_device_id=v_device\n    AND client_type IN ('web','pwa') AND revoked_at IS NULL\n    AND (web_device_revision IS NOT NULL OR web_device_registered_at IS NOT NULL);\n  RETURN true;\nEND;\n$function$\n",
+      "definition_md5": "c45333bae7d4fb4ea29bafa8c69eaa5d",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=8s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_control_web_device_revoke(bigint,bigint,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_revoke(p_staff_id bigint, p_organization_id bigint, p_session_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\n SET lock_timeout TO '3s'\n SET statement_timeout TO '8s'\nAS $function$\nDECLARE v_session public.auto_control_sessions%ROWTYPE;\nBEGIN\n  PERFORM 1 FROM public.org_staff WHERE id=p_staff_id AND organization_id=p_organization_id FOR UPDATE;\n  IF NOT FOUND THEN RETURN false; END IF;\n  SELECT * INTO v_session FROM public.auto_control_sessions WHERE id=p_session_id\n    AND staff_id=p_staff_id AND organization_id=p_organization_id AND revoked_at IS NULL;\n  IF NOT FOUND THEN RETURN false; END IF;\n  UPDATE public.auto_control_sessions SET revoked_at=clock_timestamp()\n  WHERE staff_id=p_staff_id AND organization_id=p_organization_id AND revoked_at IS NULL\n    AND (id=p_session_id OR (v_session.client_type IN ('web','pwa') AND client_type IN ('web','pwa')\n      AND web_device_id=v_session.web_device_id));\n  RETURN true;\nEND;\n$function$\n",
+      "definition_md5": "2eed26df527dd2ca0106da507ba73a8f",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=8s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  ]
+}
