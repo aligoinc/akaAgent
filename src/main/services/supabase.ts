@@ -189,6 +189,9 @@ export class SupabaseService {
   updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note' | 'schedule'>, expectedRuntimeClaimToken?: string) {
     return campaignRepo.updateRunningDesktopCampaign(id, updates, expectedRuntimeClaimToken)
   }
+  updateRunningDesktopCampaignPauseNote(id: number, expectedRuntimeClaimToken: string, note: string) {
+    return campaignRepo.updateRunningDesktopCampaignPauseNote(id, expectedRuntimeClaimToken, note)
+  }
   reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {
     return campaignRepo.reopenCompletedCampaignAfterInputInsert(id, expectedActionId)
   }

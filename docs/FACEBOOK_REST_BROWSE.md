@@ -38,6 +38,7 @@ VM của workflow phụ có ngân sách đồng bộ 10 giây, các workflow kh�
 Timeout/abort đóng trang tạm và chặn mọi thao tác đến muộn, không chỉ bỏ chờ Promise.
 Guard chỉ tồn tại trong chu kỳ, đọc account/campaign và clock dùng HTTP client/cached DB clock hiện có theo nhịp 5 giây; không có pool, connection SQL, worker hay polling khi tính năng không chạy.
 Pause/stop/logout/cutoff hủy phần phụ; trạng thái kết thúc dùng CAS đang-chạy + runtime token để không ghi đè lệnh pause hoặc owner mới.
+Ghi chú “Đang chờ tạm dừng” cũng dùng CAS với token chụp trước khi hủy: chỉ ghi trên cùng lượt còn đang chạy. Nếu dừng xong trước lần đọc đầu thì trả trạng thái đã dừng; nếu phản hồi ghi chú đến sau cleanup/resume thì đọc trạng thái mới, không phát lại ghi chú cũ. Bản sửa nằm trong Desktop, không cần migration mới.
 Thời gian giới hạn giờ vẫn lấy từ cơ chế hiện hữu, không cộng thêm thời gian lướt vào quota window.
 
 ## Migration / phát hành
@@ -66,6 +67,7 @@ Tại thời điểm apply v337: workflow ID `314`, checksum `928b31ea49f7802cf2
 ## Kiểm chứng
 
 - `node scripts/facebook-rest-browse-smoke-test.cjs`: fake clock; runner và vòng lặp scheduler thật, timeout/mạng treo/late callback, pause/stop/logout/cutoff, chia thời gian, scope, preclaim race, quota ngày/giờ/partial, hết data, CAS pause/token mới.
+- `node scripts/campaign-pause-note-smoke-test.cjs`: scheduler/repository thật với DB giả, ghi chú/response đến muộn, pause nhanh, snapshot cũ, resume sang token mới, thiếu ownership, chờ release và guard staff/xóa/status.
 - `node scripts/run-facebook-rest-browse-ui-smoke.cjs`: form thật + IPC giả, lưu/sửa/nhân bản/nháp, validation, sáng/tối 1550/780px; chạy block v338 trong Electron DOM fixture với clock giả, kiểm tra nhịp đọc/xem, cuộn mượt, bỏ qua ảnh/mở rộng, đúng ngân sách, hủy khi đang đọc, post bị thay thế và lỗi tải/selector. Chặn toàn bộ HTTP ra ngoài; `--blocks-only` chỉ chạy phần block.
 - Smoke danh tính Page và campaign failure cleanup; hai typecheck và `npm run build`.
 

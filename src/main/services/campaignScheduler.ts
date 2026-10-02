@@ -1165,6 +1165,9 @@ export class CampaignScheduler {
     // Latch synchronously before the first desktop DB await. Otherwise a batch
     // boundary can observe no pause, yield to this request's initial read, and
     // publish "chờ xử lý" after the user already clicked pause.
+    // Capture before abort: auxiliary cleanup can finish while the first read
+    // or pause-note write is still in flight. Never annotate a replacement run.
+    const pauseRuntimeClaimToken = this.campaignRunBoundaries.get(campaignId)?.runtimeClaimToken
     this.pauseRequests.add(campaignId)
     if (this.activeFacebookRestBrowses.has(campaignId)) this.activeV2Aborts.get(campaignId)?.abort()
     let campaign: Campaign | null
@@ -1177,6 +1180,11 @@ export class CampaignScheduler {
     if (!campaign) {
       this.pauseRequests.delete(campaignId)
       throw new Error('Không tìm thấy chiến dịch.')
+    }
+    if (campaign.status === 'tạm dừng') {
+      this.pauseRequests.delete(campaignId)
+      this.broadcastCampaignUpdate(campaign)
+      return campaign
     }
 
     const failed = this.failedCampaignRuns.get(campaignId)
@@ -1214,12 +1222,12 @@ export class CampaignScheduler {
       if (transition.reason === 'runtime_busy' || transition.reason === 'unit_lease_busy') {
         const latest = await this.supabase.getCampaign(campaignId)
         if (latest?.status === 'đang chạy') {
-          return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+          return await this.markCampaignPausePending(campaignId, pauseRuntimeClaimToken)
         }
         if (latest?.status === 'chờ xử lý') {
           // The scheduler has settled the batch but has not released its runtime
           // claim yet. Keep the latch so its final release completes the pause.
-          return await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+          return await this.markCampaignPausePending(campaignId, pauseRuntimeClaimToken)
         }
         if (latest?.status === 'tạm dừng') {
           this.pauseRequests.delete(campaignId)
@@ -1231,7 +1239,7 @@ export class CampaignScheduler {
     }
 
     if (campaign.status === 'đang chạy') {
-      const updated = await this.updateCampaignAndBroadcast(campaignId, { note: CAMPAIGN_PAUSE_PENDING_NOTE })
+      const updated = await this.markCampaignPausePending(campaignId, pauseRuntimeClaimToken)
       if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
         const abort = this.activeV2Aborts.get(campaignId)
         if (abort && !abort.signal.aborted) abort.abort()
@@ -1276,6 +1284,25 @@ export class CampaignScheduler {
 
   private isCampaignPauseRequested(campaignId: number): boolean {
     return this.pauseRequests.has(campaignId)
+  }
+
+  private async markCampaignPausePending(campaignId: number, runtimeClaimToken?: string): Promise<Campaign> {
+    const updated = runtimeClaimToken
+      ? await this.supabase.updateRunningDesktopCampaignPauseNote(campaignId, runtimeClaimToken, CAMPAIGN_PAUSE_PENDING_NOTE)
+      : null
+    // A successful write can also have a delayed response after cleanup/resume.
+    // Publish the current state instead of replaying that obsolete pause hint.
+    if (updated && this.isCampaignPauseRequested(campaignId) &&
+      this.campaignRunBoundaries.get(campaignId)?.runtimeClaimToken === runtimeClaimToken) {
+      recordAccountLog({ accountId: updated.accountId, campaignId, eventType: 'campaign_pause_requested',
+        message: 'Đã nhận yêu cầu tạm dừng; đang chờ lượt hiện tại kết thúc.' })
+      this.broadcastCampaignUpdate(updated)
+      return updated
+    }
+    const current = await this.supabase.getCampaign(campaignId)
+    if (!current) throw new Error('Không tìm thấy chiến dịch sau khi yêu cầu tạm dừng.')
+    this.broadcastCampaignUpdate(current)
+    return current
   }
 
   private async completeCampaignPause(campaign: Campaign, stopNote?: string): Promise<void> {
