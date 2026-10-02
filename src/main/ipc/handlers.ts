@@ -51,6 +51,7 @@ import { registerDesktopUiHandlers } from './handlers/desktopUiHandlers'
 import { registerAppNotificationHandlers } from './handlers/appNotificationHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutCustomerHandlers'
+import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -161,6 +162,7 @@ export function registerIpcHandlers(
   registerDataGroupExternalSyncHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)
+  registerBrowserRunLimitsHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()

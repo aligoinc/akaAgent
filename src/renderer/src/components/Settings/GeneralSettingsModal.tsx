@@ -13,8 +13,9 @@ import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 import MessageOptOutCustomersSettings from './MessageOptOutCustomersSettings'
+import BrowserRunLimitsSettings from './BrowserRunLimitsSettings'
 
-export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers'
+export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers' | 'browserRunLimits'
 export interface GeneralSettingsOpenOptions {
   initialAccountId?: number
   onClose?: () => void
@@ -124,7 +125,8 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
   const [emailSettingsLoading, setEmailSettingsLoading] = useState(true)
   const [emailSettingsBusy, setEmailSettingsBusy] = useState(false)
   const [blocklistBusy, setBlocklistBusy] = useState(false)
-  const mutationPending = blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
+  const [browserRunLimitsBusy, setBrowserRunLimitsBusy] = useState(false)
+  const mutationPending = browserRunLimitsBusy || blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -621,6 +623,13 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
         <div className="general-settings-body">
           <aside className="general-settings-sidebar" inert={mutationPending || undefined}>
             <button
+              className={`general-settings-nav-item ${activeMenu === 'browserRunLimits' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('browserRunLimits')}
+            >
+              <Monitor size={15} />
+              <span>Giới hạn tài khoản chạy</span>
+            </button>
+            <button
               className={`general-settings-nav-item ${activeMenu === 'chatSync' ? 'active' : ''}`}
               onClick={() => setActiveMenu('chatSync')}
             >
@@ -665,7 +674,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
           </aside>
 
           <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : activeMenu === 'messageOptOutCustomers' ? 'message-opt-out-content' : ''}`}>
-            {activeMenu === 'messageOptOutCustomers' ? <MessageOptOutCustomersSettings key={`${user?.organizationId}:${user?.staffId}`} /> : activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
+            {activeMenu === 'browserRunLimits' ? <BrowserRunLimitsSettings key={`${user?.organizationId}:${user?.staffId}`} onBusyChange={setBrowserRunLimitsBusy} /> : activeMenu === 'messageOptOutCustomers' ? <MessageOptOutCustomersSettings key={`${user?.organizationId}:${user?.staffId}`} /> : activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
               <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
             ) : (
               <div className="akabiz-integration-grid">
