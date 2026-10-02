@@ -5,7 +5,9 @@ import { recordAccountLog, recordAccountState, recordCampaignState, clearAccount
 import { accountOperationRegistry } from './accountOperationRegistry'
 import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
-import { getWorkflow } from '../data/repositories/workflowV2Repository'
+import { getWorkflow, getWorkflowByName } from '../data/repositories/workflowV2Repository'
+import { FACEBOOK_REST_BROWSE_WORKFLOW, facebookRestBrowseSettings, facebookRestBrowseTarget, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../shared/facebookRestBrowse'
+import { runFacebookRestBrowse } from './facebookRestBrowse'
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
 import { buildMessageOptOutSource } from '../../shared/messageOptOutSource'
 import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
@@ -715,6 +717,7 @@ export class CampaignScheduler {
   private activeZaloAccountRuns = new Set<number>()
   private externalAccountRuns = new Map<number, string>()
   private activeV2Aborts = new Map<number, AbortController>()
+  private activeFacebookRestBrowses = new Set<number>()
   private facebookPageIdentities = new Map<number, FacebookCampaignPageIdentity>()
   private facebookPageRestoreFailures = new Set<number>()
   private activeZaloCampaignRuns = new Set<number>()
@@ -1163,6 +1166,7 @@ export class CampaignScheduler {
     // boundary can observe no pause, yield to this request's initial read, and
     // publish "chờ xử lý" after the user already clicked pause.
     this.pauseRequests.add(campaignId)
+    if (this.activeFacebookRestBrowses.has(campaignId)) this.activeV2Aborts.get(campaignId)?.abort()
     let campaign: Campaign | null
     try {
       campaign = await this.supabase.getCampaign(campaignId)
@@ -3411,6 +3415,7 @@ export class CampaignScheduler {
     // A new campaign execution must reopen Inbox once, including resume after
     // waiting/pausing. Later customer workflows reuse the freshly opened page.
     let pageInboxOpenedForRun = false
+    let lastProcessedFacebookTarget: CampaignInputData | null = null
 
     for (let i = 0; i < targets.length; i++) {
       // A graceful Server capability drain owns only the target/batch that
@@ -3590,7 +3595,10 @@ export class CampaignScheduler {
           if (this.isServerZaloCampaign(account, campaign) && !this.running) return
           if (limitResult.limitStatus) {
             stoppedBeforeCompletion = true
-            await this.handleLimitStatus(account, campaign, limitResult.limitStatus)
+            if (await this.browseFacebookBeforeHourlyWait(account, campaign, limitResult.limitStatus, lastProcessedFacebookTarget)) return
+            await this.handleLimitStatus(account, campaign, limitResult.limitStatus,
+              supportsFacebookRestBrowse(campaign.actionId) && campaign.extraSettings?.facebookRestBrowse?.enabled === true &&
+              limitResult.limitStatus.errorCode === LIMIT_IN_HOUR_ERROR_CODE)
             break
           }
           quotaTargetActionDescriptors = limitResult.runnableActionDescriptors
@@ -4205,6 +4213,8 @@ export class CampaignScheduler {
       // recorded. Settle before pause/stop/sleep/finalization so unused leased
       // candidates return to pending while the campaign is still running.
       if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
+
+      if (supportsFacebookRestBrowse(campaign.actionId) && detail) lastProcessedFacebookTarget = detail
 
       if (shouldCompletePauseAfterTarget) {
         await this.completePauseAtBoundary(account, campaign, policyStopNote)
@@ -8734,10 +8744,96 @@ export class CampaignScheduler {
     }
   }
 
+  /** Returns true only when lifecycle control supersedes the hourly wait. */
+  private async browseFacebookBeforeHourlyWait(
+    account: AutoAccount,
+    campaign: Campaign,
+    limitStatus: AccountActionLimitStatus,
+    lastTarget: CampaignInputData | null
+  ): Promise<boolean> {
+    const settings = facebookRestBrowseSettings(campaign.extraSettings?.facebookRestBrowse)
+    if (!lastTarget || account.flatformType !== 'facebook' || !supportsFacebookRestBrowse(campaign.actionId) ||
+      limitStatus.errorCode !== LIMIT_IN_HOUR_ERROR_CODE || limitStatus.isActionDisabled || limitStatus.isDailyLimit ||
+      !settings.enabled || validateFacebookRestBrowse(settings)) return false
+
+    const abort = new AbortController()
+    this.activeFacebookRestBrowses.add(campaign.id)
+    this.activeV2Aborts.set(campaign.id, abort)
+    let accountStopReason: string | null = null
+    let campaignControlChanged = false
+    const isCancelled = () => !this.running || this.isCampaignPauseRequested(campaign.id)
+    try {
+      await runFacebookRestBrowse({
+        settings,
+        targetUrl: facebookRestBrowseTarget(campaign.actionId, lastTarget.uid),
+        signal: abort.signal,
+        isCancelled,
+        checkControl: async () => {
+          const [boundary, accountReason, current] = await Promise.all([
+            this.checkCampaignRunBoundary(campaign.id),
+            this.getAccountRunBlockReason(account.id, 'đang chạy'),
+            this.supabase.getCampaign(campaign.id)
+          ])
+          // Late read responses may not change any state after cancellation.
+          if (abort.signal.aborted || isCancelled()) return { allowed: false, remainingMs: 0 }
+          accountStopReason = accountReason
+          campaignControlChanged = !current || current.status !== 'đang chạy' || current.isDelete === true
+          const remainingMs = boundary?.clock
+            ? boundary.context.cutoffAtMs - new Date(boundary.clock.dbNow).getTime()
+            : 0
+          return { allowed: !accountReason && !campaignControlChanged && !boundary?.reached && remainingMs > 0, remainingMs }
+        },
+        loadWorkflow: () => getWorkflowByName(FACEBOOK_REST_BROWSE_WORKFLOW),
+        createPage: () => this.backgroundPages.createTemporary(account.id, 'facebook'),
+        runWorkflow: (workflow, variables, page, signal, onStarted) => this.engineV2.run(workflow, variables, page, {
+          campaignId: campaign.id, accountId: account.id, organizationId: campaign.organizationId,
+          persist: false, signal, blockTimeoutMs: 10_000,
+          onStepProgress: step => { if (step.status === 'running') onStarted() },
+          onLog: entry => {
+            if (!signal.aborted) void this.logCampaignProgress(campaign, entry.line).catch(() => {})
+          }
+        }),
+        log: message => { void this.logCampaignProgress(campaign, message).catch(() => {}) },
+        preview: page => {
+          if (page) {
+            this.setBackgroundPreviewOverride(account.id, campaign.id, page, 'Nghỉ và lướt Facebook')
+            this.startBackgroundPreview(account.id, campaign.id, page)
+          } else {
+            this.stopBackgroundPreview(account.id, campaign.id)
+          }
+        }
+      })
+    } catch {
+      // This optional child must never enter campaign error policy/counters.
+    } finally {
+      abort.abort()
+      this.activeFacebookRestBrowses.delete(campaign.id)
+      if (this.activeV2Aborts.get(campaign.id) === abort) this.activeV2Aborts.delete(campaign.id)
+    }
+
+    if (!this.running) return true
+    if (this.isCampaignPauseRequested(campaign.id)) {
+      await this.completePauseAtBoundary(account, campaign)
+      return true
+    }
+    if (campaignControlChanged) {
+      await this.releaseRunningAccount(account.id)
+      return true
+    }
+    if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) return true
+    if (accountStopReason) {
+      await this.stopCampaignForAccountCondition(account, campaign, accountStopReason)
+      await this.releaseRunningAccount(account.id)
+      return true
+    }
+    return false
+  }
+
   private async handleLimitStatus(
     account: AutoAccount,
     campaign: Campaign,
-    limitStatus: AccountActionLimitStatus
+    limitStatus: AccountActionLimitStatus,
+    guardRunning = false
   ): Promise<void> {
     const actionName = this.getLimitActionName(limitStatus)
     const replacements = this.buildLimitReplacements(limitStatus)
@@ -8754,7 +8850,11 @@ export class CampaignScheduler {
     }
 
     if (limitStatus.errorCode) {
-      await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
+      if (guardRunning) {
+        await this.applyRuntimeErrorPolicy(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements, { guardRunning: true })
+      } else {
+        await this.handleRuntimeError(account, campaign, limitStatus.errorCode, limitStatus.actionCode, replacements)
+      }
     } else {
       await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })
       await this.logCampaignProgress(campaign, `⚠️ Tạm dừng "${campaign.name}": ${message}`)
@@ -9053,11 +9153,24 @@ export class CampaignScheduler {
     }
   }
 
-  private async updateErrorPolicyCampaign(campaign: Campaign, updates: Partial<Campaign>): Promise<void> {
+  private async updateErrorPolicyCampaign(campaign: Campaign, updates: Partial<Campaign>, guardRunning = false): Promise<void> {
     const failed = this.failedCampaignRuns.get(campaign.id)
     if (failed) {
       if (updates.status) failed.payload.campaignStatus = updates.status
       if (updates.note) failed.payload.note = updates.note
+      return
+    }
+    if (guardRunning) {
+      const token = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
+      if (!token) return
+      if (this.isCampaignPauseRequested(campaign.id)) {
+        const account = await this.supabase.getAccount(campaign.accountId)
+        if (account) await this.completePauseAtBoundary(account, campaign)
+        return
+      }
+      await this.restoreFacebookPageIdentity(campaign.id)
+      const updated = await this.supabase.updateRunningDesktopCampaign(campaign.id, updates, token)
+      this.broadcastCampaignUpdate(updated)
       return
     }
     await this.updateCampaignAndBroadcast(campaign.id, updates)
@@ -9089,7 +9202,7 @@ export class CampaignScheduler {
     errorCode: string,
     actionCode: string | undefined,
     replacements: Record<string, string | undefined> = {},
-    options: { campaignNote?: string } = {}
+    options: { campaignNote?: string; guardRunning?: boolean } = {}
   ): Promise<RuntimeErrorResult> {
     return this.runCampaignErrorPolicy(campaign.id, async () => {
       const policyReplacements: Record<string, string | undefined> = {
@@ -9113,7 +9226,7 @@ export class CampaignScheduler {
           ? safeUserMessage || 'Có lỗi xảy ra'
           : policyReplacements.message || 'Có lỗi xảy ra'
         const note = options.campaignNote || message
-        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note })
+        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note }, options.guardRunning)
         await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
         return { triggered: true, message: note }
       }
@@ -9145,7 +9258,7 @@ export class CampaignScheduler {
       // The campaign note carries threshold context; keep the existing policy
       // progress text and side effects unchanged.
       const note = options.campaignNote || message
-      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note })
+      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note }, options.guardRunning)
       await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
       return { triggered: true, message: note, policy }

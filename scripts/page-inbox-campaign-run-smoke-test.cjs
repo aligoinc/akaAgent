@@ -11,10 +11,15 @@ const source = ts.createSourceFile(schedulerPath, readFileSync(schedulerPath, 'u
 const schedulerClass = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
 const targetLoop = schedulerClass?.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === 'executeCampaignV2')
 assert.ok(targetLoop, 'exercise the real campaign execution method')
+const restBrowseModule = { exports: {} }
+new Function('exports', ts.transpileModule(readFileSync(resolve(__dirname, '../src/shared/facebookRestBrowse.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+}).outputText)(restBrowseModule.exports)
 const globals = {
   AbortController, setInterval, clearInterval,
   ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
-  isRecentDeliveryCooldownEnabled: () => false
+  isRecentDeliveryCooldownEnabled: () => false,
+  supportsFacebookRestBrowse: restBrowseModule.exports.supportsFacebookRestBrowse
 }
 for (const statement of source.statements) {
   if (!ts.isVariableStatement(statement)) continue
@@ -72,7 +77,8 @@ function fixture(options = {}) {
     'markCampaignRunUnitStarted'
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
-    activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(),
+    running: true, activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(),
+    sendExclusionLabels: new Map(),
     facebookPageIdentities: new Map(),
     attemptedRunErrorPolicies: new Set(),
     zaloMessageOptOutContexts: new Map(), pauseRequests: new Set(),

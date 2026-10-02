@@ -541,6 +541,7 @@ export interface FindDataTargetDataGroup {
 }
 
 export interface CampaignExtraSettings {
+  facebookRestBrowse?: import('./facebookRestBrowse').FacebookRestBrowseSettings
   zaloSendExclusionsByAccountId?: SendExclusionsByAccount
   runAsPage?: boolean             // Facebook: một Page quản lý cho toàn bộ lượt chạy
   runAsPageUid?: string

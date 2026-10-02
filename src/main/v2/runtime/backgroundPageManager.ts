@@ -110,6 +110,7 @@ export class BackgroundPageManager {
       } catch {}
     }
 
+    win.webContents.on('render-process-gone', destroy)
     return { page, destroy }
   }
 
