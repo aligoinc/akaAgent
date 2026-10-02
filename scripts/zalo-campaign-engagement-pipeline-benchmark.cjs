@@ -17,7 +17,7 @@ module.exports=async function pipelineBenchmark(client){
  await clear();const directory=fs.mkdtempSync(path.join(os.tmpdir(),'engagement-bench-journal-'));let active=true,requests=0
  const credentials={username:'owner',password:'password'},user={staffId:1,organizationId:1}
  const transport={from:()=>({select:()=>({in:()=>({abortSignal:async()=>({data:(await client.query("SELECT key,value,updated_at::text,is_active,is_secret FROM auto_system_settings WHERE key LIKE 'zalo.campaign_engagement.%'")).rows})})})}),rpc:(name,args)=>({abortSignal:async()=>{requests++;return{data:(await client.query(`SELECT ${name}($1,$2,$3,$4::jsonb,$5,$6) result`,[args.p_staff_id,args.p_organization_id,args.p_revision,JSON.stringify(args.p_items),args.p_auth_username,args.p_auth_password])).rows[0].result}}})}
- const desktop=load('src/main/services/zaloCampaignEngagement.ts',{electron:{app:{getPath:()=>directory}},'../data/currentUser':{getCurrentUser:()=>active?user:null,getCurrentUserCredentials:()=>active?credentials:null},'../data/supabaseClient':{getSupabaseClient:()=>transport},'../../shared/zaloCampaignEngagement':shared})
+ const desktop=load('src/main/services/zaloCampaignEngagement.ts',{electron:{app:{getPath:()=>directory}},'../data/currentUser':{getCurrentUser:()=>active?user:null,getCurrentUserCredentials:()=>active?credentials:null},'../data/supabaseClient':{getSupabaseClient:()=>transport},'../data/repositories/runtimeClockRepository':{peekDatabaseRuntimeClock:()=>({dbNow:new Date(Date.now()).toISOString()})},'../../shared/zaloCampaignEngagement':shared})
  desktop.resumeDesktopCampaignEngagement() // Production login warms metadata independently of messages.
  let start=performance.now(),dbStart=cpu(),maxBacklog=0
  try{

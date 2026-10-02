@@ -16,6 +16,8 @@ Theo dõi tương tác Zalo campaign là **best effort**: chấp nhận mất d�
 
 V341 đã apply `20261002174744 / migration_v341_zalo_engagement_chat_registration` và Chat worker đã deploy hotfix 03/10/2026: đọc bốn setting public qua HTTP cache chung, dọn pending trong RPC đăng ký; không cấp thêm SELECT settings/UPDATE detail cho SQL worker. Không apply lại v339/v341. Desktop/legacy Server 7.9.0 đã build local, chưa phát hành. Xem [audit hotfix quyền](docs/ZALO_CAMPAIGN_ENGAGEMENT_CONFIG_FIX_20261003.md).
 
+Engagement Desktop/legacy Server dùng `peekDatabaseRuntimeClock()` chỉ đọc cache cho `sent_at` và thời điểm nhận dự phòng; cache giờ lạnh/hết hạn thì bỏ dấu mới, không gọi thêm RPC hay chờ luồng gửi. Timer gom/retry vẫn dùng giờ local. Giữ account ID khi detail commit chuyển hold thành đăng ký và ưu tiên mục sẵn sàng trước catalog/recovery nền. Khi cache setting hết hạn, sự kiện đã khớp RAM với revision gần nhất đang bật vào `waiting_config`; writer xác minh lại enabled/revision/thời điểm nhận trước khi ghi. Bốn bộ cài 7.9.0 đã build lại local ngày 03/10/2026, chưa phát hành; Chat Sync đã deploy bản sửa cache lúc 02:02 Việt Nam. Xem [bản sửa và kiểm chứng](docs/ZALO_CAMPAIGN_ENGAGEMENT_CLOCK_QUEUE_FIX_20261003.md).
+
 ## Chuyển SQL Account akaBiz
 
 API ở repo akaBizApi gọi `akabiz_migrate_sql_account_v1(jsonb)` qua service_role ([v285](migrations/migration_v285_akabiz_sql_account_migration.sql)); `org_organization.sql_account_id` là dấu hoàn tất (không có ràng buộc unique), nhiều org có thể cùng phone/customer. Trigger quota chỉ cho import backend bỏ kiểm tra active/expiry/quota trong ngữ cảnh org của RPC; các guard runtime/claim khác giữ nguyên, không đặt `sql_staff_id` cho nhân viên khách. Shop SQL chưa có UID vẫn được tạo với `zalo_account_id=NULL`, trạng thái chưa đăng nhập; response có `skipped_products` cho quyền SQL ngoài phạm vi.
@@ -479,6 +481,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 ## Common pitfalls
 
 - **Tương tác Zalo**: kiểm thử Chat bằng SQL role thực `aka_agent_chat_api`, không chỉ DB owner/JWT claim. Engagement phải bỏ qua khi lỗi hoặc tranh chấp, không chặn gửi/detail/quota. UI chỉ hiện dấu có timestamp; không hiện nhãn không áp dụng/không theo dõi/chưa ghi nhận khi ô chưa có dấu. Không dựng nguồn hồi tố hoặc gửi lại để bù dấu bị mất.
+- **Clock/cache tương tác**: không trộn epoch DB với deadline timer local hoặc dùng giờ VPS để xét timestamp Zalo. Sự kiện đầu sau cache 60 giây hết hạn phải được giữ có giới hạn nếu đã khớp RAM và biết revision bật; cold/disabled vẫn bỏ. Kiểm thử seen → im lặng 3 phút → reply, lệch giờ máy và tắt/bật khi chờ; không để catalog nhiều owner trì hoãn việc đã sẵn sàng.
 
 - **Giới hạn tài khoản chạy**: kiểm tra giới hạn hành động giờ/ngày trước claim; nếu bị chặn thì giữ `chờ xử lý`, ghi note bằng CAS và bỏ ghi/log khi nội dung không đổi. Chỉ ghi lý do hết chỗ sau khi claim trả `concurrency_limit_reached`. Phạm vi hỗ trợ một Desktop đang đăng nhập cho mỗi nhân viên; không mở rộng recovery để xử lý cố tình dùng nhiều máy.
 
