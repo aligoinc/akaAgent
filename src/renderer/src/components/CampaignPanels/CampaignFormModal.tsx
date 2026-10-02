@@ -1,4 +1,6 @@
 import CampaignSendExclusions from './CampaignSendExclusions'
+import FacebookRestBrowseSettings from './FacebookRestBrowseSettings'
+import { facebookRestBrowseSettings, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../../../shared/facebookRestBrowse'
 import { supportsSendExclusion, validateExclusionGroup, type SendExclusionsByAccount } from '../../../../shared/campaignSendExclusion'
 import ZaloCampaignTagSettings from './ZaloCampaignTagSettings'
 import './ZaloAuxiliaryActions.css'
@@ -1965,6 +1967,7 @@ export default function CampaignFormModal({
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
     postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
     newsfeedTimeMinutes: campaign?.extraSettings?.newsfeedTimeMinutes ?? 20,
+    facebookRestBrowse: facebookRestBrowseSettings(campaign?.extraSettings?.facebookRestBrowse),
     newsfeedLikeKind: campaign?.extraSettings?.newsfeedLikeKind || '',
     newsfeedLikeLimit: campaign?.extraSettings?.newsfeedLikeLimit ?? 10,
     newsfeedCommentKind: campaign?.extraSettings?.newsfeedCommentKind || '',
@@ -3441,6 +3444,7 @@ export default function CampaignFormModal({
   })
   const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 ||
     isCommentSeedingFeedCampaign
+  const canUseFacebookRestBrowse = supportsFacebookRestBrowse(formData.actionId)
   const recentDeliveryCooldownPrompt = isFacebookGroupPostCampaign
     ? 'Không đăng bài vào những group có bài đăng trước đó cách số ngày là:'
     : isPagePostCampaign
@@ -3480,12 +3484,16 @@ export default function CampaignFormModal({
     }
     if (step.id === 'limits') {
       if (!showLimitsSection) return []
-      return [{
+      const visibleLimitStep = {
         ...step,
         fields: step.fields.some(field => field.key === 'postsPerTarget')
           ? [...visibleLimitFields, { key: 'postsPerTarget', label: 'Số bài cần comment trên mỗi group/page/profile' }]
           : visibleLimitFields
-      }]
+      }
+      return [visibleLimitStep, ...(canUseFacebookRestBrowse ? [{
+        id: 'facebookRestBrowse', title: 'Facebook: Kiêm nghỉ và lướt Facebook',
+        fields: [{ key: 'facebookRestBrowse', label: 'Nghỉ và lướt khi đạt giới hạn giờ' }]
+      }] : [])]
     }
     if (step.id === 'deliveryCooldown') {
       if (!canUseRecentDeliveryCooldown) return []
@@ -6372,6 +6380,7 @@ export default function CampaignFormModal({
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
           content: contentForSave,
           extraSettings: {
+            facebookRestBrowse: canUseFacebookRestBrowse ? { ...formData.facebookRestBrowse } : undefined,
             runAsPage: runsAsPage,
             runAsPageUid: runsAsPage ? formData.runAsPageUid : '',
             runAsPageName: runsAsPage ? formData.runAsPageName : '',
@@ -6947,6 +6956,10 @@ export default function CampaignFormModal({
       if (!validateCommentMediaPool('Media comment', formData.commentImageOption, formData.commentImages)) return
       if (!validateSelectedImages('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
     }
+    if (canUseFacebookRestBrowse) {
+      const error = validateFacebookRestBrowse(formData.facebookRestBrowse)
+      if (error) { showAlert(error, 'error'); return }
+    }
     if (isNewsfeedInteractionCampaign) {
       const timeMinutes = Math.floor(Number(formData.newsfeedTimeMinutes))
       const likeLimit = Math.floor(Number(formData.newsfeedLikeLimit))
@@ -7479,6 +7492,12 @@ export default function CampaignFormModal({
         newCampaignItemsToValidate.push(...preparedDraft.items)
       }
       await assertCampaignSaveItemsWithinInputLimit(newCampaignItemsToValidate)
+      for (const item of newCampaignItemsToValidate) {
+        if (supportsFacebookRestBrowse(item.campaignPayload.actionId || '')) {
+          const error = validateFacebookRestBrowse(facebookRestBrowseSettings(item.campaignPayload.extraSettings?.facebookRestBrowse))
+          if (error) throw new Error(error)
+        }
+      }
       updateSaveProgress(5, 'Đã kiểm tra giới hạn data.')
       const savedDraftForCreation = persistentDraft ? await persistCurrentDraft() : null
       const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
@@ -17074,6 +17093,22 @@ export default function CampaignFormModal({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {canUseFacebookRestBrowse && (
+              <div className="stepper-section" ref={el => { sectionRefs.current['facebookRestBrowse'] = el }}>
+                <div className="stepper-section-header" onClick={() => toggleSection('facebookRestBrowse')}>
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('facebookRestBrowse')}</span>
+                    <span className="stepper-section-title">Facebook: Kiêm nghỉ và lướt Facebook</span>
+                  </div>
+                  {collapsedSections['facebookRestBrowse'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['facebookRestBrowse'] && <div className="stepper-section-body">
+                  <FacebookRestBrowseSettings value={formData.facebookRestBrowse}
+                    onChange={value => setFormData(previous => ({ ...previous, facebookRestBrowse: value }))} />
+                </div>}
               </div>
             )}
 

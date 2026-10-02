@@ -27,6 +27,8 @@ export interface RunContext {
   onBlockScreenshot?: (request: BlockScreenshotCaptureRequest, page: PageController) => Promise<void>
   /** Có persist run + run_steps vào DB không. Test runs có thể skip. */
   persist?: boolean
+  /** Optional synchronous VM budget for bounded auxiliary workflows. */
+  blockTimeoutMs?: number
 }
 
 export interface BlockScreenshotCaptureRequest {
@@ -302,7 +304,7 @@ export class WorkflowEngineV2 {
         }
         const code = node.codeOverride ?? block.code
         result = await this.executor.execute(
-          { code, blockName: block.name },
+          { code, blockName: block.name, timeoutMs: ctx.blockTimeoutMs },
           {
             input, page, vars: variables, signal,
             runtimeHelpers: ctx.runtimeHelpers,
