@@ -39,7 +39,7 @@ async function main(){
   const client={from:()=>({select:()=>({in:()=>({abortSignal:async()=>{configReads++;return{data:settings,error:null}}})})}),rpc:(name,args)=>({abortSignal:async()=>{calls.push({name,args});if(rpcFail)return{error:Error('offline')};return{data:{enabled:settings[0].value==='true',items:name.includes('register')?[watch]:[],pending:[],updated:1}}}})}
   class Clock extends Date{constructor(...args){super(...(args.length?args:[now]))}static now(){return now}}
   const coordinator=load(path.resolve('src/main/services/zaloCampaignEngagement.ts'),{
-   electron:{app:{getPath:()=>dir}},'../data/currentUser':{getCurrentUser:()=>user,getCurrentUserCredentials:()=>credentials},'../data/supabaseClient':{getSupabaseClient:()=>client},'../../shared/zaloCampaignEngagement':api
+   electron:{app:{getPath:()=>dir}},'../data/currentUser':{getCurrentUser:()=>user,getCurrentUserCredentials:()=>credentials},'../data/supabaseClient':{getSupabaseClient:()=>client},'../data/repositories/runtimeClockRepository':{peekDatabaseRuntimeClock:()=>({dbNow:new Date(now).toISOString()})},'../../shared/zaloCampaignEngagement':api
   },{Date:Clock,setTimeout:(fn,ms)=>{const timer={fn,at:now+ms,unref(){}};timers.push(timer);return timer},clearTimeout:t=>{timers=timers.filter(v=>v!==t)}})
   const settle=async()=>{for(let i=0;i<15;i++) await new Promise(r=>setTimeout(r,5))}
   const tick=async(ms)=>{now+=ms;const due=timers.filter(t=>t.at<=now);timers=timers.filter(t=>t.at>now);for(const t of due)t.fn();await settle()}
@@ -57,6 +57,8 @@ async function main(){
   assert.ok(calls.find(c=>c.name==='aka_agent_record_campaign_engagement'))
   const journal=fs.readFileSync(path.join(dir,'campaign-engagement/1-1.json'),'utf8')
   assert.ok(!journal.includes('password-secret')&&!journal.includes('owner-secret')&&!journal.includes('content'))
+  // Complete the two bounded startup metadata turns before asserting idle.
+  await tick(5000);await tick(5000)
   const before=calls.length;await tick(10000);assert.equal(calls.length,before,'idle must not call RPC')
   const initialReads=configReads,initialCalls=calls.length,initialStat=fs.statSync(path.join(dir,'campaign-engagement/1-1.json')).mtimeMs
   for(let i=0;i<10000;i++) {

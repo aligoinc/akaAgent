@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { getCurrentUser, getCurrentUserCredentials, type ProcessAuthCredentials } from '../data/currentUser'
 import { getSupabaseClient } from '../data/supabaseClient'
+import { peekDatabaseRuntimeClock } from '../data/repositories/runtimeClockRepository'
 import { ENGAGEMENT_KEYS, EngagementConfigCache, EngagementWatchCache, normalizeEngagementEvent,
   type EngagementConfig, type EngagementEvent, type EngagementWatch, type ZaloEngagementSource } from '../../shared/zaloCampaignEngagement'
 
@@ -15,11 +16,11 @@ const config = new EngagementConfigCache(async () => {
   if (error) throw error
   return data || []
 })
-type Registration = { detailId: string; source: ZaloEngagementSource }
+type Registration = { detailId: string; source: ZaloEngagementSource; accountId?: string }
 type Hold = { accountId: string; accountZaloUid: string; targetZaloUid: string }
 type Recovery = Hold & { campaignId: string; source: ZaloEngagementSource; detailInsertStarted?: boolean }
 type OperationResult = { operationId: string; status: 'found' | 'missing' | 'invalid'; detailId?: string; source?: ZaloEngagementSource }
-interface Item { id: string; revision: string; at: number; retry: number; next: number; mode: 'register' | 'record' | 'recover' | 'hold' | 'waiting_config'; payload: Registration | EngagementEvent | Hold | Recovery; waitingFor?: string[]; delivered?: boolean; recoveryExpiresAt?: number }
+interface Item { id: string; revision: string; at: number; receivedAt?: string; retry: number; next: number; mode: 'register' | 'record' | 'recover' | 'hold' | 'waiting_config'; payload: Registration | EngagementEvent | Hold | Recovery; waitingFor?: string[]; delivered?: boolean; recoveryExpiresAt?: number }
 type CatalogCursor = { from: string; until: string; id: string }
 interface Scope {
   catalogRevision: string; catalogPending: boolean; catalogCursor?: CatalogCursor
@@ -162,8 +163,8 @@ function schedule(delay: number, _full=false): void {
   timerAt=at
   timer=setTimeout(() => { timer=undefined; timerAt=0; void flush() },Math.max(1,delay)); timer.unref()
 }
-function enqueue(scope: Scope, revision: string, mode: Item['mode'], payload: Item['payload'], itemId=randomUUID(), at=Date.now()): boolean {
-  const item: Item={ id:itemId,revision,at,retry:0,next:0,mode,payload }
+function enqueue(scope: Scope, revision: string, mode: Item['mode'], payload: Item['payload'], itemId=randomUUID(), at=Date.now(), receivedAt?: string): boolean {
+  const item: Item={ id:itemId,revision,at,...(receivedAt ? {receivedAt} : {}),retry:0,next:0,mode,payload }
   if (mode==='record' || mode==='waiting_config') item.waitingFor=dependencies(scope,payload as EngagementEvent)
   if (scope.keys.has(itemKey(item))) { engagementMetrics.coalesced++; return true }
   const operationId=mode==='register' ? (payload as Registration).source.operationId : undefined
@@ -282,7 +283,8 @@ async function flush(): Promise<void> {
         // Reception time is millisecond precision. Do not round a later DB
         // microsecond revision down into the same millisecond and revive old work.
         const revisionAt=Date.parse(settings.revision)
-        const beforeReception=revisionAt<i.at || (revisionAt===i.at && !/[1-9]/.test(settings.revision.match(/\.\d{3}(\d*)/)?.[1] || ''))
+        const receivedAt=i.receivedAt ? Date.parse(i.receivedAt) : i.at // Old journal compatibility.
+        const beforeReception=revisionAt<receivedAt || (revisionAt===receivedAt && !/[1-9]/.test(settings.revision.match(/\.\d{3}(\d*)/)?.[1] || ''))
         if (!settings.enabled || (i.revision && i.revision!==settings.revision) || !beforeReception) return false
         i.mode='record'; i.revision=settings.revision
         return true
@@ -292,17 +294,17 @@ async function flush(): Promise<void> {
     if (!settings.enabled || !available.length) return
     canContinue=true; nextSettings=settings; configFailures=0
     for (const scope of available) if (scope.catalogRevision!==settings.revision) { scope.catalogRevision=settings.revision; scope.catalogPending=true; scope.catalogCursor=undefined }
-    const scope=available.slice(cursor).concat(available.slice(0,cursor)).find(s=>s.recovery || s.catalogPending || s.items.some(i=>i.mode!=='hold' && i.next<=Date.now() && !held(s,i)))
+    const ordered=available.slice(cursor).concat(available.slice(0,cursor))
+    // Startup can have hundreds of owners awaiting metadata. Their catalog and
+    // recovery sweeps must not take a turn ahead of a ready registration/event.
+    // Keep round-robin fairness between owners with work and one global writer.
+    const foreground=ordered.find(s=>s.items.some(i=>i.mode!=='hold' && i.next<=Date.now() && !held(s,i)))
+    const scope=foreground || ordered.find(s=>s.recovery || s.catalogPending)
     if (!scope) return
     cursor=(available.indexOf(scope)+1)%available.length
-    if (scope.catalogPending) {
-      const result=await request(scope,settings,'read',[{catalog:scope.catalogCursor || {}}])
-      if (!result.enabled) return
-      scope.catalogCursor=result.catalogCursor
-      scope.catalogPending=result.catalogDone===false && watches.size<watches.maxEntries && !watches.saturated
-      // One catalog page per turn; keep draining existing source/event work too.
-    }
-    if (scope.recovery) {
+    // At most one background page in an idle turn. A recovered source may be
+    // registered below in the same turn; incoming foreground work wins the next.
+    if (!foreground && scope.recovery) {
       const result=await request(scope,settings,'read',scope.recoveryCursor ? [{ recovery:scope.recoveryCursor }] : [])
       if (!result.enabled) return
       let overflow=false
@@ -319,6 +321,11 @@ async function flush(): Promise<void> {
         scope.items=scope.items.filter(i=>!scope.recoveringAfterRestart.has(i.id)); scope.recoveringAfterRestart.clear()
       }
       refresh(scope); await persist(scope,true)
+    } else if (!foreground && scope.catalogPending) {
+      const result=await request(scope,settings,'read',[{catalog:scope.catalogCursor || {}}])
+      if (!result.enabled) return
+      scope.catalogCursor=result.catalogCursor
+      scope.catalogPending=result.catalogDone===false && watches.size<watches.maxEntries && !watches.saturated
     }
     expireRecoveries(scope)
     const accountKey=(item: Item): string => item.mode==='register'
@@ -401,15 +408,16 @@ async function flush(): Promise<void> {
   }
 }
 export function beginCampaignEngagementSend(account: { id:number; zaloUid?:string|null; isZaloShowWeb?:boolean|null }, targetUid: string): EngagementSendContext {
-  const empty={ revision:'',sentAt:new Date().toISOString() }, ownerCurrent=captureOwner()
+  const empty={ revision:'',sentAt:'' }, ownerCurrent=captureOwner()
   if (account.isZaloShowWeb || !account.zaloUid) return empty
   try {
     const cfg=config.currentOrRefresh(); if (!cfg?.enabled) return empty
+    const clock=peekDatabaseRuntimeClock(); if (!clock) return empty
     if (!ownerCurrent()) return empty
     const scope=getScope(); if (!scope) return empty
     const operationId=randomUUID()
     if (!enqueue(scope,cfg.revision,'hold',{ accountId:String(account.id),accountZaloUid:account.zaloUid,targetZaloUid:targetUid },operationId)) return empty
-    return { revision:cfg.revision,sentAt:new Date().toISOString(),accountZaloUid:account.zaloUid,operationId }
+    return { revision:cfg.revision,sentAt:clock.dbNow,accountZaloUid:account.zaloUid,operationId }
   } catch { return empty }
 }
 export function abandonCampaignEngagementSend(operationId?: string): void {
@@ -469,12 +477,21 @@ export function recordCampaignEngagementDetail(detailId: number, source: unknown
   if (!metadata?.revision) return
   const scope=metadata.operationId ? [...scopes.values()].find(s=>s.items.some(item=>item.id===metadata.operationId)) : getScope()
   if (!scope?.active()) return // Source remains pending in DB for the original owner.
+  const operation=scope.items.find(item=>item.id===metadata.operationId && (item.mode==='hold' || item.mode==='recover'))
+  const accountId=operation ? (operation.payload as Hold).accountId : undefined
   const recover=(): void => { engagementMetrics.retry++; scope.recovery=true; scope.recoveryCursor=undefined; abandonCampaignEngagementSend(metadata.operationId); schedule(1000) }
-  try { if (!enqueue(scope,metadata.revision,'register',{ detailId:String(detailId),source:metadata })) recover() }
+  try { if (!enqueue(scope,metadata.revision,'register',{ detailId:String(detailId),source:metadata,...(accountId ? {accountId} : {}) })) recover() }
   catch { recover() }
 }
 function pendingSendMatches(scope: Scope, accountId: number, ownUid: string, targetUid?: string): boolean {
   return scope.items.some(item => {
+    if (item.mode==='register') {
+      // The committed source is still in RAM while registration awaits its
+      // batch. Preserve the same exact-account admission as its original hold.
+      const pending=item.payload as Registration
+      return pending.accountId===String(accountId) && pending.source.accountZaloUid===ownUid &&
+        (targetUid===undefined || pending.source.targetZaloUid===targetUid)
+    }
     if (item.mode!=='hold' && item.mode!=='recover') return false
     if (recoveryExpired(item)) return false
     const source=item.payload as Hold
@@ -483,18 +500,36 @@ function pendingSendMatches(scope: Scope, accountId: number, ownUid: string, tar
   })
 }
 export function receiveCampaignEngagement(type: string, payload: unknown, accountId: number, ownUid: string): void {
-  const receivedAt=new Date().toISOString(), ownerCurrent=captureOwner(); engagementMetrics.received++
+  const queuedAt=Date.now(), ownerCurrent=captureOwner(); engagementMetrics.received++
   const user=getCurrentUser(), scope=user ? scopes.get(`${user.organizationId}-${user.staffId}`) : undefined
   if (!scope?.active() || !ownerCurrent()) { engagementMetrics.filtered++; return }
   if (!watches.hasAccount(accountId,ownUid) && !pendingSendMatches(scope,accountId,ownUid)) { engagementMetrics.filtered++; return }
+  // Source timestamps from Zalo and fallback receipt times must use the same
+  // epoch as sentAt. The host wall clock may be wrong; a cold clock drops only
+  // optional tracking and never starts an extra request from this callback.
+  const clock=peekDatabaseRuntimeClock()
+  if (!clock) { engagementMetrics.filtered++; return }
+  const receivedAt=clock.dbNow
   // Unknown/evicted metadata is deliberately dropped: no journal, wake or DB lookup.
   // A local send hold covers the short interval before its successful registration.
   const events=normalizeEngagementEvent(type,payload,String(accountId),ownUid,receivedAt).filter(event=>
     watches.mayMatch(event) || pendingSendMatches(scope,accountId,ownUid,event.targetZaloUid))
   if (!events.length) { engagementMetrics.filtered++; return }
   const value=config.currentOrRefresh()
-  if (!value?.enabled || Date.parse(value.revision)>Date.parse(receivedAt)) return
-  for (const event of events) enqueue(scope,value.revision,'record',event,randomUUID(),Date.parse(receivedAt))
+  if (!value) {
+    // A quiet recipient's first reply often triggers the lazy config refresh.
+    // Keep only already-admitted metadata in the existing bounded queue, fenced
+    // to the last enabled revision. The background writer must revalidate it;
+    // this neither trusts stale config to write nor waits in a listener/send.
+    const previous=config.lastKnown()
+    if (previous?.enabled) for (const event of events) {
+      enqueue(scope,previous.revision,'waiting_config',event,randomUUID(),queuedAt,receivedAt)
+    }
+    return
+  }
+  if (!value.enabled || Date.parse(value.revision)>Date.parse(receivedAt)) return
+  // Queue timers still use their own local time domain, not the DB epoch.
+  for (const event of events) enqueue(scope,value.revision,'record',event,randomUUID(),queuedAt)
 }
 
 /** Legacy Server has autonomous staff runtimes, not a Desktop login. Its existing

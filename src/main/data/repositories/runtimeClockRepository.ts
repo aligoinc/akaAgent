@@ -116,6 +116,11 @@ async function loadDatabaseRuntimeClock(): Promise<LoadedDatabaseRuntimeClock> {
   }
 }
 
+/** Cache-only view for optional work. Never starts or waits for a DB request. */
+export function peekDatabaseRuntimeClock(): DatabaseRuntimeClock | null {
+  return clockAnchor && snapshotFromAnchor(clockAnchor, performance.now())
+}
+
 /**
  * Returns an authoritative DB-synchronized clock. A successful RPC establishes
  * an epoch anchor; subsequent callers advance it with Node's monotonic clock.
@@ -123,7 +128,7 @@ async function loadDatabaseRuntimeClock(): Promise<LoadedDatabaseRuntimeClock> {
  * day boundary. Concurrent refreshes share one in-flight RPC.
  */
 export function getDatabaseRuntimeClock(): Promise<DatabaseRuntimeClock> {
-  const cached = clockAnchor && snapshotFromAnchor(clockAnchor, performance.now())
+  const cached = peekDatabaseRuntimeClock()
   if (cached) return Promise.resolve(cached)
   if (inFlightClock) return inFlightClock
 

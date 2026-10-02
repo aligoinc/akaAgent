@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript')
-const load=(file,mocks={},globals={})=>{const module={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8')+(file.includes('services/zaloCampaignEngagement')?'\nexport const testIdle=()=>!writing && staging===0 && [...scopes.values()].every(s=>!s.saving);export const testAdmittedEvent=(target,watch)=>{const owner=captureOwner();void config.get().then(()=>{if(!owner())return;getScope();watches.put({...watch,campaign_detail_id:"resident-"+target,target_zalo_uid:target});receiveCampaignEngagement("message",{type:0,isSelf:false,data:{uidFrom:target,idTo:"own"}},1,"own")}).catch(()=>undefined)};':''),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require:key=>Object.hasOwn(mocks,key)?mocks[key]:require(key),console,Buffer,AbortSignal,Date,setTimeout,clearTimeout,...globals},{filename:file});return module.exports}
+const load=(file,mocks={},globals={})=>{const module={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8')+(file.includes('services/zaloCampaignEngagement')?'\nexport const testBackground=()=>[...scopes.values()].some(s=>s.active()&&(s.recovery||s.catalogPending));export const testIdle=()=>!writing && staging===0 && [...scopes.values()].every(s=>!s.saving);export const testAdmittedEvent=(target,watch)=>{const owner=captureOwner();void config.get().then(()=>{if(!owner())return;getScope();watches.put({...watch,campaign_detail_id:"resident-"+target,target_zalo_uid:target});receiveCampaignEngagement("message",{type:0,isSelf:false,data:{uidFrom:target,idTo:"own"}},1,"own")}).catch(()=>undefined)};':''),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module,exports:module.exports,require:key=>Object.hasOwn(mocks,key)?mocks[key]:require(key),console,Buffer,AbortSignal,Date,setTimeout,clearTimeout,...globals},{filename:file});return module.exports}
 const shared=load('src/shared/zaloCampaignEngagement.ts'),revision='2026-10-02T00:00:00Z'
 const settle=async()=>{for(let i=0;i<20;i++)await new Promise(resolve=>setTimeout(resolve,3))}
 function harness(directory){
@@ -10,8 +10,8 @@ function harness(directory){
  class Cache extends shared.EngagementConfigCache{constructor(read){super(read,()=>now)}}
  const ownerQuery={eq(){return this},abortSignal(){return this},async maybeSingle(){ownerReads++;return ownerRead?ownerRead():{data:{username:'owner',password:serverPassword}}}}
  const client={from:table=>({select:()=>table==='org_staff'?ownerQuery:{in:()=>({abortSignal:async()=>settingsRead?settingsRead():{data:settings}})}}),rpc:(name,args)=>({abortSignal:async()=>{calls.push({name,args});if(fail)return{error:Error('offline')};if(args.p_auth_password!==serverPassword)return{error:Error('automation_auth_invalid')};if(rpcData)return rpcData(name,args);return{data:{enabled:Date.parse(args.p_revision)===Date.parse(settings[0].updated_at)&&settings[0].value==='true',items:name.includes('read')&&args.p_items.length?[watch]:[],pending:[],updated:1}}}})}
- const api=load('src/main/services/zaloCampaignEngagement.ts',{electron:{app:{getPath:()=>directory}},'../data/currentUser':{getCurrentUser:()=>user,getCurrentUserCredentials:()=>credentials},'../data/supabaseClient':{getSupabaseClient:()=>client},'../../shared/zaloCampaignEngagement':{...shared,EngagementConfigCache:Cache}},{Date:Clock,setTimeout:(fn,ms)=>{const t={fn,at:now+ms,unref(){}};timers.push(t);return t},clearTimeout:t=>{timers=timers.filter(v=>v!==t)}})
- return {api,calls,settings,watch,warm:async()=>{api.campaignEngagementEnabled();await settle()},rpc:fn=>{rpcData=fn},now:()=>now,jump:ms=>{now+=ms},ownerReads:()=>ownerReads,timers:()=>timers.length,timerRuns:()=>timerRuns,nextDelay:()=>timers.length?Math.min(...timers.map(t=>t.at-now)):null,login:(staffId,organizationId)=>{user={staffId,organizationId};credentials={username:'owner',password:serverPassword}},ownerRead:fn=>{ownerRead=fn},rotatePassword:()=>{serverPassword='rotated-secret'},resume:()=>api.resumeDesktopCampaignEngagement(),fail:value=>{fail=value},read:value=>{settingsRead=value},logout:()=>{user={staffId:2,organizationId:2};credentials={username:'new-owner',password:'new-secret'}},event:(target='target')=>api.testAdmittedEvent(target,watch),tick:async ms=>{now+=ms;const due=timers.filter(t=>t.at<=now);timers=timers.filter(t=>t.at>now);for(const t of due){timerRuns++;t.fn()};await settle();for(let i=0;!api.testIdle()&&i<1000;i++)await new Promise(r=>setTimeout(r,3));assert(api.testIdle(),'coordinator should finish one bounded tick')},journal:(key='1-1')=>JSON.parse(fs.readFileSync(path.join(directory,'campaign-engagement',key+'.json'),'utf8'))}
+ const api=load('src/main/services/zaloCampaignEngagement.ts',{electron:{app:{getPath:()=>directory}},'../data/currentUser':{getCurrentUser:()=>user,getCurrentUserCredentials:()=>credentials},'../data/supabaseClient':{getSupabaseClient:()=>client},'../data/repositories/runtimeClockRepository':{peekDatabaseRuntimeClock:()=>({dbNow:new Date(now).toISOString()})},'../../shared/zaloCampaignEngagement':{...shared,EngagementConfigCache:Cache}},{Date:Clock,setTimeout:(fn,ms)=>{const t={fn,at:now+ms,unref(){}};timers.push(t);return t},clearTimeout:t=>{timers=timers.filter(v=>v!==t)}})
+ return {api,calls,settings,watch,finishStartup:async function(){for(let i=0;api.testBackground()&&i<20;i++)await this.tick(5000);assert(!api.testBackground(),'bounded background sweep should finish');},warm:async()=>{api.campaignEngagementEnabled();await settle()},rpc:fn=>{rpcData=fn},now:()=>now,jump:ms=>{now+=ms},ownerReads:()=>ownerReads,timers:()=>timers.length,timerRuns:()=>timerRuns,nextDelay:()=>timers.length?Math.min(...timers.map(t=>t.at-now)):null,login:(staffId,organizationId)=>{user={staffId,organizationId};credentials={username:'owner',password:serverPassword}},ownerRead:fn=>{ownerRead=fn},rotatePassword:()=>{serverPassword='rotated-secret'},resume:()=>api.resumeDesktopCampaignEngagement(),fail:value=>{fail=value},read:value=>{settingsRead=value},logout:()=>{user={staffId:2,organizationId:2};credentials={username:'new-owner',password:'new-secret'}},event:(target='target')=>api.testAdmittedEvent(target,watch),tick:async ms=>{now+=ms;const due=timers.filter(t=>t.at<=now);timers=timers.filter(t=>t.at>now);for(const t of due){timerRuns++;t.fn()};await settle();for(let i=0;!api.testIdle()&&i<1000;i++)await new Promise(r=>setTimeout(r,3));assert(api.testIdle(),'coordinator should finish one bounded tick')},journal:(key='1-1')=>JSON.parse(fs.readFileSync(path.join(directory,'campaign-engagement',key+'.json'),'utf8'))}
 }
 async function inactiveOwnerRetry(root,backlog){
  const h=harness(path.join(root,'inactive-owner-'+backlog))
@@ -36,18 +36,21 @@ async function inactiveOwnerRetry(root,backlog){
  assert.deepEqual(h.journal(),originalJournal,'inactive owner journal remains unchanged')
  h.rpc(undefined);await h.tick(h.nextDelay())
  assert.equal(h.journal('2-2').length,0,'active owner resumes at its deadline and drains')
- assert.equal(h.timers(),0,'inactive backlog alone must not keep the timer alive')
+ await h.finishStartup();assert.equal(h.timers(),0,'inactive backlog alone must not keep the timer alive')
  h.login(1,1);h.resume();await settle();await h.tick(1)
  assert.equal(h.journal().length,0,'the original owner can resume its preserved journal on login')
- assert.equal(h.timers(),0)
+ await h.finishStartup();assert.equal(h.timers(),0)
 }
 async function recoveryBudget(root){
+ // These cases isolate source expiry/cancellation after startup metadata is warm.
+ // Foreground no longer performs both background sweeps as a side effect.
+ const prepared=async name=>{const h=harness(path.join(root,name));h.rpc(missing);await h.warm();h.resume();await settle();await h.tick(1);await h.tick(5000);return h;};
  const sourceFor=context=>({version:1,revision:context.revision,operationId:context.operationId,accountZaloUid:'own',targetZaloUid:'target',actionType:'message',sentAt:context.sentAt,messageIds:['m']});
  const incoming=h=>h.api.receiveCampaignEngagement('message',{type:0,isSelf:false,data:{uidFrom:'target',idTo:'own'}},1,'own');
  const missing=(_name,args)=>({data:{enabled:true,items:[],pending:[],catalogDone:true,recoveryDone:true,updated:0,
   operations:args.p_items.filter(i=>i.operation).map(i=>({operationId:i.operation.operationId,status:'missing'}))}});
 
- const cancelled=harness(path.join(root,'cancelled-before-insert'));await cancelled.warm();cancelled.rpc(missing);
+ const cancelled=await prepared('cancelled-before-insert');cancelled.rpc(missing);
  const cancelledSend=cancelled.api.beginCampaignEngagementSend({id:1,zaloUid:'own'},'target');
  cancelled.api.stageCampaignEngagementSource(sourceFor(cancelledSend),1);incoming(cancelled);
  cancelled.api.abandonCampaignEngagementSend(cancelledSend.operationId);await settle();await cancelled.tick(5000);
@@ -55,7 +58,7 @@ async function recoveryBudget(root){
  const cancelledReads=cancelled.calls.length;incoming(cancelled);await cancelled.tick(60000);
  assert.equal(cancelled.calls.length,cancelledReads,'cancelled sources cannot admit future messages or retry');
 
- const shared=harness(path.join(root,'recovery-independent-sends'));await shared.warm();shared.rpc(missing);
+ const shared=await prepared('recovery-independent-sends');shared.rpc(missing);
  const older=shared.api.beginCampaignEngagementSend({id:1,zaloUid:'own'},'target');shared.api.stageCampaignEngagementSource(sourceFor(older),1,true);
  await settle();await shared.tick(240000);await shared.warm();
  const newer=shared.api.beginCampaignEngagementSend({id:1,zaloUid:'own'},'target');shared.api.stageCampaignEngagementSource(sourceFor(newer),1,true);
@@ -63,7 +66,7 @@ async function recoveryBudget(root){
  const retained=shared.journal();assert(!retained.some(i=>i.id===older.operationId));assert(retained.some(i=>i.id===newer.operationId));
  assert(retained.some(i=>i.mode==='record'&&i.waitingFor.includes(newer.operationId)&&!i.waitingFor.includes(older.operationId)),'expiring one operation preserves the other operation and its replay');
 
- const directory=path.join(root,'recovery-budget'),h=harness(directory);await h.warm();h.rpc(missing);
+ const directory=path.join(root,'recovery-budget'),h=await prepared('recovery-budget');h.rpc(missing);
  const context=h.api.beginCampaignEngagementSend({id:1,zaloUid:'own'},'target'),source=sourceFor(context);
  h.api.stageCampaignEngagementSource(source,1,true);h.api.abandonCampaignEngagementSend(context.operationId);
  incoming(h);await settle();await h.tick(5000);await h.tick(5000);
@@ -88,10 +91,10 @@ async function recoveryBudget(root){
   const restarted=harness(restartDirectory);restarted.rpc(missing);restarted.jump(31*24*60*60*1000);restarted.resume();await settle();await restarted.tick(1);
   assert.equal(restarted.journal().length,0,'restart prunes expired source/replay without resetting its age');
   assert(!restarted.calls.some(call=>call.name.includes('record')||call.args.p_items.some(i=>i.operation||i.kind)),'startup may warm catalog but never probes the expired operation/event');
-  const count=restarted.calls.length;incoming(restarted);await restarted.tick(60000);assert.equal(restarted.calls.length,count);assert.equal(restarted.timers(),0);
+  await restarted.tick(5000);const count=restarted.calls.length;incoming(restarted);await restarted.tick(60000);assert.equal(restarted.calls.length,count);assert.equal(restarted.timers(),0);
  }
 
- const late=harness(path.join(root,'late-recovery-result'));await late.warm();
+ const late=await prepared('late-recovery-result');
  const lateSend=late.api.beginCampaignEngagementSend({id:1,zaloUid:'own'},'target'),lateSource=sourceFor(lateSend);
  late.api.stageCampaignEngagementSource(lateSource,1,true);await settle();let finish;
  late.rpc((name,args)=>args.p_items[0]?.operation?new Promise(resolve=>{finish=resolve}):missing(name,args));
@@ -111,14 +114,14 @@ async function main(){
   const b=harness(path.join(root,'restart'));b.resume();await settle();await b.tick(5000);await b.tick(5000)
   assert(b.calls.some(call=>call.name.includes('record')&&call.args.p_items.some(item=>item.occurredAt===timestamp&&item.targetZaloUid==='target')),'restart replays metadata with original timestamp')
   assert(b.calls.every(call=>/^aka_agent_(read|record|register)_campaign_engagement$/.test(call.name)))
-  assert.equal(b.journal().length,0);const drainedCalls=b.calls.length;await b.tick(120000)
+  assert.equal(b.journal().length,0);await b.finishStartup();const drainedCalls=b.calls.length;await b.tick(120000)
   assert.equal(b.calls.length,drainedCalls);assert.equal(b.timers(),0,'no empty polling after journal drains')
   const serverDir=path.join(root,'server-restart');fs.mkdirSync(path.join(serverDir,'campaign-engagement'),{recursive:true})
   // Recreate the interrupted producer's snapshot (the Desktop consumer drained its copy).
   fs.writeFileSync(path.join(serverDir,'campaign-engagement/1-1.json'),JSON.stringify([{id:'server-pending',revision,at:Date.parse(timestamp),retry:0,next:0,mode:'record',payload:{accountId:'1',accountZaloUid:'own',targetZaloUid:'target',kind:'message',occurredAt:timestamp,messageIds:[]}}]))
   const serverResume=harness(serverDir);await serverResume.api.attachServerCampaignEngagementOwner(1,1);await settle();await serverResume.tick(5000)
   assert.equal(serverResume.ownerReads(),1);assert(serverResume.calls.some(c=>c.name.includes('record')),'Server attach alone resumes persisted work')
-  assert.equal(serverResume.journal().length,0);await serverResume.tick(120000);assert.equal(serverResume.timers(),0)
+  assert.equal(serverResume.journal().length,0);await serverResume.finishStartup();await serverResume.tick(120000);assert.equal(serverResume.timers(),0)
   const startupCfg=harness(path.join(root,'startup-config-retry'));startupCfg.read(async()=>{throw Error('config unavailable')});startupCfg.resume();await settle();await startupCfg.tick(5000)
   assert.equal(startupCfg.calls.length,0);startupCfg.read(undefined);await startupCfg.tick(60001)
   assert(startupCfg.calls.some(c=>c.name.includes('read')),'login recovery retries configuration without new traffic');await startupCfg.tick(60000);assert.equal(startupCfg.timers(),0)
@@ -143,7 +146,7 @@ async function main(){
   assert.equal(serverReplace.ownerReads(),1);assert(serverReplace.calls.some(c=>c.name.includes('read')),'old detach cannot erase new owner');detachNew();await settle()
   const multi=harness(path.join(root,'multi-owner-startup'));multi.logout()
   await multi.api.attachServerCampaignEngagementOwner(1,1);await multi.api.attachServerCampaignEngagementOwner(3,4);await settle();await multi.tick(5000);await multi.tick(5000)
-  assert.deepEqual([...new Set(multi.calls.map(c=>JSON.stringify([c.args.p_staff_id,c.args.p_organization_id])))].map(JSON.parse).sort(),[[1,1],[3,4]],'startup writes use explicit Server owner, never timer or Desktop auth context');await multi.tick(60000);assert.equal(multi.timers(),0)
+  assert.deepEqual([...new Set(multi.calls.map(c=>JSON.stringify([c.args.p_staff_id,c.args.p_organization_id])))].map(JSON.parse).sort(),[[1,1],[3,4]],'startup writes use explicit Server owner, never timer or Desktop auth context');await multi.finishStartup();await multi.tick(60000);assert.equal(multi.timers(),0)
   const pendingDir=path.join(root,'replacement-in-flight'),pending=harness(pendingDir)
   const detachPending=await pending.api.attachServerCampaignEngagementOwner(1,1);await settle();let finishPending
   pending.rpc(()=>new Promise(resolve=>{finishPending=resolve}));const pendingTick=pending.tick(5000);await settle()
@@ -171,8 +174,8 @@ async function main(){
   assert.equal(server.ownerReads(),2,'server refreshes credentials only after auth rejection')
   assert.equal(server.calls.at(-1).args.p_auth_password,'rotated-secret')
   assert(!JSON.stringify(server.journal()).includes('secret'),'journal never stores credentials');detach();await settle()
-  // New events during a cold/config outage are intentionally dropped. Persisted
-  // waiting_config rows from older runtimes still replay with their first time.
+  // Without any previously enabled config, cold events are still dropped.
+  // Persisted legacy waiting_config rows replay with their first time.
   const cfgDir=path.join(root,'config-outage'),cfg=harness(cfgDir)
   cfg.read(async()=>{throw Error('settings unavailable')});cfg.event();await settle();await cfg.tick(5000)
   assert.equal(cfg.calls.length,0);assert(!fs.existsSync(path.join(cfgDir,'campaign-engagement/1-1.json')))
@@ -262,6 +265,7 @@ async function main(){
   for(let i=0;i<3;i++)await rejected.tick(5000)
   rejected.api.failCampaignEngagementDetail(rejectedSource,{code:'23503',message:'foreign key rejected'});await settle()
   assert.equal(rejected.journal().length,0)
+  await rejected.finishStartup()
   const countBefore=rejected.calls.length;await rejected.tick(60000)
   assert.equal(rejected.calls.length,countBefore,'rejected detail requires neither a new INSERT nor a Zalo retry')
   console.log('PASS: Desktop login/Server attach recovery without traffic, startup config/auth retry, disabled/idle stop, logout/detach/replacement fencing')
