@@ -15,6 +15,7 @@ function functions(file, names, globals = {}, text = read(file)) {
   return new Function(...Object.keys(globals), compile(code) + ';return {' + names.join(',') + '}')(...Object.values(globals))
 }
 function schedulerMethods(names, globals) {
+  globals = { CAMPAIGN_MEDIA_TIMEOUT_CODE: 'campaign_media_timeout', ...globals }
   const file = 'src/main/services/campaignScheduler.ts'
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true)
   const c = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'CampaignScheduler')
