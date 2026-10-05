@@ -72,6 +72,7 @@ function fixture({ actionId = 'zalo_message_friend', server = false, rich = fals
   } }), () => ({ staffId: 830 }), async () => campaign,
   value => ({ ...value, schedule: value.schedule?.replace('Z', '+00:00') }), '*')
   const scheduler = Object.assign(new Scheduler(), {
+    sendExclusionLabels: new Map(),
     running: true, zaloRuntime: { forwardMessageToUsers: forbid, forwardMessageToGroups: forbid },
     runtimeTarget: server ? 'server' : 'desktop',
     claimedServerZaloCampaignIds: new Set(server ? [1] : []),

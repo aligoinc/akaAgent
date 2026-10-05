@@ -1,3 +1,4 @@
+import { CAMPAIGN_MEDIA_TIMEOUT_CODE } from './campaignMediaExecution'
 import { stageCampaignEngagementSource, beginCampaignEngagementSend, abandonCampaignEngagementSend, type EngagementSendContext } from './zaloCampaignEngagement'
 import { browserRunLimitWaitNote } from '../../shared/browserRunLimits'
 import { makeEngagementSource } from '../../shared/zaloCampaignEngagement'
@@ -372,6 +373,7 @@ interface ZaloPartialSendMetadata {
   mediaResponse?: unknown
   contentResponse?: unknown
   error: string
+  mediaTimeout?: boolean
 }
 
 type ZaloRuntimeStopReason = 'handoff' | 'shutdown'
@@ -5606,6 +5608,12 @@ export class CampaignScheduler {
     if (!isGroup) for (const item of batch) engagementByInput.set(item.detail.id, beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, item.threadId))
     const mediaResponses = new Map<number, unknown>()
     const startedInputDataIds = new Set<number>()
+    const recordedMediaTimeouts = new Set<number>()
+    let mediaSuccessSinceTimeout = false
+    let stopAfterBatch = false
+    let stopNote: string | null = null
+    let shareSuccessCount = 0
+    let shareFailCount = 0
 
     try {
       if (attachments.length > 0) {
@@ -5624,8 +5632,8 @@ export class CampaignScheduler {
             const engagement=engagementByInput.get(item.detail.id)
             if (engagement) engagement.sentAt=new Date().toISOString()
             response = isGroup
-              ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments)
-              : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments)
+              ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments, true)
+              : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments, true)
           } catch (err) {
             sendError = err
           }
@@ -5641,8 +5649,37 @@ export class CampaignScheduler {
 
           if (sendError) {
             mediaFailures.set(item.detail.id, sendError)
+            const code = this.getZaloErrorCode(sendError)
+            if (code === CAMPAIGN_MEDIA_TIMEOUT_CODE || code === 'command_result_unknown') {
+              if (mediaSuccessSinceTimeout) {
+                await this.resetCampaignBadTargetCount(campaign, true)
+                mediaSuccessSinceTimeout = false
+              }
+              const actionDetail = await this.createZaloErrorDetail(account, campaign, sendError,
+                actionDescriptor.code, actionDescriptor.name,
+                { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' })
+              const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs)
+              await this.updateZaloShareInputStatus(item.detail, actionDetail, optOutContexts.get(item.detail.id))
+              recordedMediaTimeouts.add(item.detail.id)
+              shareFailCount += 1
+              const status = this.normalizeZaloDetailStatus(created?.status || actionDetail.status)
+              if (actionDetail.countsTowardBadTarget !== false && (status === 'thất bại' || status === 'lỗi')) {
+                const handled = await this.handleCampaignBadTarget(account, campaign, item.detail.id,
+                  'err_undefined', actionDescriptor.code, { message: actionDetail.log, thresholdReason: actionDetail.log })
+                if (handled.triggered) {
+                  stopAfterBatch = true
+                  stopNote = handled.message
+                }
+              }
+              if (actionDetail.stopAfterTarget) {
+                stopAfterBatch = true
+                stopNote ??= actionDetail.pendingNote || actionDetail.log || null
+              }
+              if (stopAfterBatch) break
+            }
           } else {
             mediaResponses.set(item.detail.id, response)
+            mediaSuccessSinceTimeout = true
           }
 
           const afterMediaDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
@@ -5653,10 +5690,28 @@ export class CampaignScheduler {
         }
       }
 
+      if (recordedMediaTimeouts.size > 0 && mediaSuccessSinceTimeout) {
+        await this.resetCampaignBadTargetCount(campaign, true)
+      }
+      // Keep the stop already applied at the media boundary separate from
+      // policies selected during summary. Earlier failures still need details,
+      // but must not apply another policy or overwrite that stop/count/reason.
+      const stoppedDuringMedia = stopAfterBatch
+      const processedBatch = stopAfterBatch ? batch.filter(item => startedInputDataIds.has(item.detail.id)) : batch
+      const processedInvalidTargets = stopAfterBatch ? [] : invalidTargets
+      if (stopAfterBatch) {
+        for (const detail of claimedDetails) {
+          if (!startedInputDataIds.has(detail.id)) {
+            await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý' })
+          }
+        }
+      }
       let forwardResult: ZaloForwardMessageResult | null = null
       let forwardError: unknown = null
-      const textBatch = batch.filter(item => !mediaFailures.has(item.detail.id))
-      if (trimmedMessage && textBatch.length > 0) {
+      const textBatch = processedBatch.filter(item => !mediaFailures.has(item.detail.id))
+      if (trimmedMessage && textBatch.length > 0 && stopAfterBatch) {
+        forwardError = new Error('Chiến dịch đã dừng theo policy khi gửi media; chưa chia sẻ phần nội dung.')
+      } else if (trimmedMessage && textBatch.length > 0) {
         const beforeForwardStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeForwardStopReason) {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeForwardStopReason)
@@ -5681,25 +5736,22 @@ export class CampaignScheduler {
         }
       }
 
-      let stopAfterBatch = false
-      let stopNote: string | null = null
-      let shareSuccessCount = 0
-      let shareFailCount = 0
       const badTargetFailures: ZaloShareMessageBadTargetFailure[] = []
-      const batchHasSuccessfulTarget = batch.some(item => {
+      const batchHasSuccessfulTarget = processedBatch.some(item => {
         if (mediaFailures.has(item.detail.id)) return false
         if (mediaResponses.has(item.detail.id)) return true
         if (!trimmedMessage) return true
         return this.findZaloForwardTargetResult(forwardResult, item.threadId)?.ok === true
       })
-      const batchPolicyInputDataId = batchHasSuccessfulTarget
+      const batchPolicyInputDataId = batchHasSuccessfulTarget || stoppedDuringMedia
         ? null
         : await this.selectZaloForwardBatchPolicyInputDataId(
           campaign.id,
           actionDescriptor.code,
           [
-            ...invalidTargets.map(detail => ({ inputDataId: detail.id, errorCode: '114' })),
-            ...batch.flatMap(item => {
+            ...processedInvalidTargets.map(detail => ({ inputDataId: detail.id, errorCode: '114' })),
+            ...processedBatch.flatMap(item => {
+              if (recordedMediaTimeouts.has(item.detail.id)) return []
               const mediaFailure = mediaFailures.get(item.detail.id)
               if (mediaFailure) {
                 return [{ inputDataId: item.detail.id, errorCode: this.getZaloErrorCode(mediaFailure) }]
@@ -5715,11 +5767,11 @@ export class CampaignScheduler {
           ]
         )
 
-      const invalidTargetPolicy = invalidTargets.length > 0
+      const invalidTargetPolicy = processedInvalidTargets.length > 0
         ? await this.supabase.getZaloErrorPolicyByCode('114', actionDescriptor.code)
         : null
       const invalidTargetMessage = isGroup ? 'ID group Zalo không hợp lệ' : 'UID bạn bè Zalo không hợp lệ'
-      for (const detail of invalidTargets) {
+      for (const detail of processedInvalidTargets) {
         const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeDetailStopReason) {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeDetailStopReason)
@@ -5765,7 +5817,8 @@ export class CampaignScheduler {
         }
       }
 
-      for (const item of batch) {
+      for (const item of processedBatch) {
+        if (recordedMediaTimeouts.has(item.detail.id)) continue
         const beforeDetailStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (beforeDetailStopReason) {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, beforeDetailStopReason)
@@ -5881,7 +5934,7 @@ export class CampaignScheduler {
         const createdStatus = created?.status || actionDetail.status
         if (createdStatus === 'thành công') {
           shareSuccessCount += 1
-          await this.resetCampaignBadTargetCount(campaign)
+          if (recordedMediaTimeouts.size === 0) await this.resetCampaignBadTargetCount(campaign)
         } else {
           shareFailCount += 1
           const normalizedFailureStatus = this.normalizeZaloDetailStatus(createdStatus)
@@ -5898,11 +5951,13 @@ export class CampaignScheduler {
         }
       }
 
-      // A mixed batch proves the account can still deliver. Its failed targets
-      // are terminal target-only outcomes and must never consume the campaign's
+      // Terminal media timeouts were already handled in send order above.
+      // For remaining failures, a mixed batch proves the account can deliver.
+      // Failed targets are target-only outcomes and do not consume the campaign's
       // consecutive bad-target threshold. Only a batch with zero successes may
-      // advance the shared err_undefined threshold, matching Chat API/App Server.
-      if (!batchHasSuccessfulTarget) {
+      // advance the shared err_undefined threshold. Preserve legacy counting
+      // after ordinary batch policies; only an earlier media stop suppresses it.
+      if (!batchHasSuccessfulTarget && !stoppedDuringMedia) {
         for (const failure of badTargetFailures) {
           const handled = await this.handleCampaignBadTarget(
             account,
@@ -5924,7 +5979,8 @@ export class CampaignScheduler {
       }
 
       let pauseAfterBatch = false
-      if (!batchHasSuccessfulTarget && !stopAfterBatch) {
+      if (!batchHasSuccessfulTarget && !stopAfterBatch &&
+          (processedInvalidTargets.length > 0 || processedBatch.some(item => !recordedMediaTimeouts.has(item.detail.id)))) {
         stopAfterBatch = true
         pauseAfterBatch = true
         stopNote = `Toàn bộ ${claimedDetails.length} target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra`
@@ -9413,7 +9469,11 @@ export class CampaignScheduler {
     })
   }
 
-  private async resetCampaignBadTargetCount(campaign: Campaign): Promise<void> {
+  private async resetCampaignBadTargetCount(campaign: Campaign, requireSuccess = false): Promise<void> {
+    if (requireSuccess) {
+      await this.runCampaignErrorPolicy(campaign.id, () => this.supabase.resetCampaignBadTargetCount(campaign.id))
+      return
+    }
     try {
       await this.supabase.resetCampaignBadTargetCount(campaign.id)
     } catch (err) {
@@ -13480,6 +13540,8 @@ export class CampaignScheduler {
       this.throwIfZaloRuntimeStopping(campaign.id)
       const rawMessage = this.getZaloErrorMessage(err)
       const zaloCode = this.getZaloErrorCode(err)
+      const mediaTimeout = zaloCode === CAMPAIGN_MEDIA_TIMEOUT_CODE
+      const unknownDelivery = zaloCode === 'command_result_unknown'
       const policy = await this.getZaloPolicyByErrorCode(zaloCode, actionCode)
       this.throwIfZaloRuntimeStopping(campaign.id)
       const log = this.renderZaloPolicyLog(policy, rawMessage, {
@@ -13529,9 +13591,11 @@ export class CampaignScheduler {
         countsTowardBadTarget: policyHandling === 'target-only'
           ? false
           : this.shouldCountZaloActionTowardBadTarget(actionCode, policy),
-        resetInputToPending: !detailStatus,
+        resetInputToPending: !detailStatus && !mediaTimeout && !unknownDelivery,
+        preventInputRetry: mediaTimeout || unknownDelivery,
+        stopRemainingActions: mediaTimeout || unknownDelivery,
         pendingNote,
-        stopAfterTarget: sideEffects.stopAfterTarget,
+        stopAfterTarget: sideEffects.stopAfterTarget || unknownDelivery,
         data: {
           ...data,
           error: rawMessage || undefined,
@@ -14197,8 +14261,8 @@ export class CampaignScheduler {
     const isFormatted = typeof message !== 'string'
     const send = (outgoing: ZaloOutgoingText, files: string[]): Promise<ZaloMessageSendResult> => (
       isGroup
-        ? this.zaloRuntime!.sendMessageToGroup(accountId, threadId, outgoing, files)
-        : this.zaloRuntime!.sendMessageToUser(accountId, threadId, outgoing, files)
+        ? this.zaloRuntime!.sendMessageToGroup(accountId, threadId, outgoing, files, true)
+        : this.zaloRuntime!.sendMessageToUser(accountId, threadId, outgoing, files, true)
     )
 
     if (safeAttachments.length >= 2) {
@@ -14268,7 +14332,8 @@ export class CampaignScheduler {
       sequence: err.response.sequence === 'content_then_media' ? 'content_then_media' : 'media_then_content',
       mediaResponse: err.response.mediaResponse,
       contentResponse: err.response.contentResponse,
-      error: this.getZaloErrorMessage(err.causeError)
+      error: this.getZaloErrorMessage(err.causeError),
+      mediaTimeout: this.getZaloErrorCode(err.causeError) === CAMPAIGN_MEDIA_TIMEOUT_CODE
     })
   }
 
@@ -14284,9 +14349,9 @@ export class CampaignScheduler {
       ...detail,
       createDetail: true,
       status: 'thất bại',
-      log,
+      log: partialSend.mediaTimeout ? `${log}. ${partialSend.error}` : log,
       countsTowardLimit: true,
-      countsTowardBadTarget: false,
+      countsTowardBadTarget: partialSend.mediaTimeout ? detail.countsTowardBadTarget : false,
       resetInputToPending: false,
       preventInputRetry: true,
       pendingNote: undefined,
@@ -15064,6 +15129,14 @@ export class CampaignScheduler {
     mainPage: PageController | null
   ): BlockRuntimeHelpers {
     let sequenceNo = 0
+    let stoppedTarget: ZaloActionHelperResult | null = null
+    const runZaloAction = (operation: () => Promise<ZaloActionHelperResult>): Promise<ZaloActionHelperResult> =>
+      this.runZaloCampaignHelper(campaign.id, async () => {
+        if (stoppedTarget) return { ok: true, skipped: true, zaloTarget: stoppedTarget.zaloTarget }
+        const result = await operation()
+        if (result.detail?.stopRemainingActions) stoppedTarget = result
+        return result
+      })
     // This helper instance belongs to one input/run; never reuse friendship across inputs.
     const auxiliaryFriendshipChecks = new Map<string, Promise<boolean | null>>()
     const normalizeEvent = (
@@ -15148,20 +15221,20 @@ export class CampaignScheduler {
         blockId: metadata.blockId,
         blockName: metadata.blockName
       }),
-      zaloFindPhoneUser: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloFindPhoneUser(account, campaign, options)),
-      zaloResolveGroupMemberTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveGroupMemberTarget(account, campaign, options)),
-      zaloResolveAddGroupMemberTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveAddGroupMemberTarget(account, campaign, options)),
-      zaloResolveRemarketingCustomerTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveRemarketingCustomerTarget(account, campaign, options)),
-      zaloResolveFriendRecommendationTarget: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloResolveFriendRecommendationTarget(account, campaign, options)),
-      zaloSendPhoneMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendPhoneMessage(account, campaign, options, metadata)),
-      zaloSendFriendMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendFriendMessage(account, campaign, options, metadata)),
-      zaloSendGroupMessage: (options, metadata) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendGroupMessage(account, campaign, options, metadata)),
-      zaloAddGroupMember: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloAddGroupMember(account, campaign, options)),
-      zaloJoinGroupLink: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloJoinGroupLink(account, campaign, options)),
-      zaloSendPhoneFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloSendPhoneFriendRequest(account, campaign, options)),
-      zaloCancelSentFriendRequest: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloCancelSentFriendRequest(account, campaign, options)),
-      zaloApplyContactTag: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloApplyContactTag(account, campaign, options, auxiliaryFriendshipChecks)),
-      zaloChangeContactAlias: (options) => this.runZaloCampaignHelper(campaign.id, () => this.zaloChangeContactAlias(account, campaign, options, auxiliaryFriendshipChecks)),
+      zaloFindPhoneUser: (options) => runZaloAction(() => this.zaloFindPhoneUser(account, campaign, options)),
+      zaloResolveGroupMemberTarget: (options) => runZaloAction(() => this.zaloResolveGroupMemberTarget(account, campaign, options)),
+      zaloResolveAddGroupMemberTarget: (options) => runZaloAction(() => this.zaloResolveAddGroupMemberTarget(account, campaign, options)),
+      zaloResolveRemarketingCustomerTarget: (options) => runZaloAction(() => this.zaloResolveRemarketingCustomerTarget(account, campaign, options)),
+      zaloResolveFriendRecommendationTarget: (options) => runZaloAction(() => this.zaloResolveFriendRecommendationTarget(account, campaign, options)),
+      zaloSendPhoneMessage: (options, metadata) => runZaloAction(() => this.zaloSendPhoneMessage(account, campaign, options, metadata)),
+      zaloSendFriendMessage: (options, metadata) => runZaloAction(() => this.zaloSendFriendMessage(account, campaign, options, metadata)),
+      zaloSendGroupMessage: (options, metadata) => runZaloAction(() => this.zaloSendGroupMessage(account, campaign, options, metadata)),
+      zaloAddGroupMember: (options) => runZaloAction(() => this.zaloAddGroupMember(account, campaign, options)),
+      zaloJoinGroupLink: (options) => runZaloAction(() => this.zaloJoinGroupLink(account, campaign, options)),
+      zaloSendPhoneFriendRequest: (options) => runZaloAction(() => this.zaloSendPhoneFriendRequest(account, campaign, options)),
+      zaloCancelSentFriendRequest: (options) => runZaloAction(() => this.zaloCancelSentFriendRequest(account, campaign, options)),
+      zaloApplyContactTag: (options) => runZaloAction(() => this.zaloApplyContactTag(account, campaign, options, auxiliaryFriendshipChecks)),
+      zaloChangeContactAlias: (options) => runZaloAction(() => this.zaloChangeContactAlias(account, campaign, options, auxiliaryFriendshipChecks)),
       emailSendMessage: (options) => this.emailSendMessage(account, campaign, options)
     }
   }

@@ -1,3 +1,4 @@
+import { CampaignMediaExecution } from './campaignMediaExecution'
 import { receiveCampaignEngagement, campaignEngagementEnabled } from './zaloCampaignEngagement'
 import { CampaignLabelContext } from '../../shared/campaignSendExclusion'
 import { findZaloExcludedLabels, type ZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
@@ -426,6 +427,7 @@ const ZALO_PHONE_SEARCH_ACTION_CODE = 'zalo_find_phone_user'
 export class ZaloRuntimeService {
   private activeQrLogins = new Map<number, ActiveQrLogin>()
   private apiCache = new Map<number, CachedZaloApi>()
+  private campaignMediaExecutions = new WeakMap<API, CampaignMediaExecution>()
   private apiLoginInflight = new Map<number, Promise<API>>()
   private verifyInflight = new Map<number, Promise<VerifiedZaloSession>>()
   private listenerStates = new Map<number, ZaloListenerState>()
@@ -591,7 +593,7 @@ export class ZaloRuntimeService {
     if (cached && this.isCachedApiFresh(cached, entry.account)) {
       return cached.api
     }
-    if (cached) this.apiCache.delete(accountId)
+    if (cached) this.clearQrAccountRuntimeCache(accountId)
 
     const inflight = this.apiLoginInflight.get(accountId)
     if (inflight) return inflight
@@ -859,6 +861,8 @@ export class ZaloRuntimeService {
   }
 
   private clearQrAccountRuntimeCache(accountId: number): void {
+    const api = this.apiCache.get(accountId)?.api
+    if (api) this.campaignMediaExecutions.get(api)?.stop()
     this.stopZaloListener(accountId)
     this.apiCache.delete(accountId)
     this.apiLoginInflight.delete(accountId)
@@ -871,6 +875,7 @@ export class ZaloRuntimeService {
       try { active.abort?.() } catch {}
     }
     if (!options.preserveActiveQrLogins) this.activeQrLogins.clear()
+    for (const { api } of this.apiCache.values()) this.campaignMediaExecutions.get(api)?.stop()
     this.stopAllZaloListeners()
     this.realtimeListenerSubscribers.clear()
     this.apiCache.clear()
@@ -1721,18 +1726,20 @@ export class ZaloRuntimeService {
     accountId: number,
     uid: string,
     message: ZaloOutgoingText,
-    attachments: string[] = []
+    attachments: string[] = [],
+    campaignMedia = false
   ): Promise<ZaloMessageSendResult> {
-    return this.sendMessage(accountId, uid, ThreadType.User, message, attachments)
+    return this.sendMessage(accountId, uid, ThreadType.User, message, attachments, campaignMedia)
   }
 
   async sendMessageToGroup(
     accountId: number,
     groupId: string,
     message: ZaloOutgoingText,
-    attachments: string[] = []
+    attachments: string[] = [],
+    campaignMedia = false
   ): Promise<ZaloMessageSendResult> {
-    return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments)
+    return this.sendMessage(accountId, groupId, ThreadType.Group, message, attachments, campaignMedia)
   }
 
   async addMemberToGroup(
@@ -1917,7 +1924,8 @@ export class ZaloRuntimeService {
     threadId: string,
     type: ThreadType,
     message: ZaloOutgoingText,
-    attachments: string[] = []
+    attachments: string[] = [],
+    campaignMedia = false
   ): Promise<ZaloMessageSendResult> {
     const api = await this.ensureApi(accountId)
     const safeAttachments = attachments.map(item => String(item || '').trim()).filter(Boolean) as AttachmentSource[]
@@ -1950,6 +1958,9 @@ export class ZaloRuntimeService {
       )
     }
 
+    const execution = campaignMedia && safeAttachments.length > 0
+      ? this.getCampaignMediaExecution(api)
+      : null
     const listenerPromise = this.ensureZaloListenerReady(accountId, api, {
       refreshIfOlderThanMs: needsUploadCallback ? ZALO_LISTENER_REFRESH_AFTER_MS : undefined
     })
@@ -1968,6 +1979,13 @@ export class ZaloRuntimeService {
     const timeoutMs = needsUploadCallback
       ? ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS
       : ZALO_MESSAGE_SEND_TIMEOUT_MS
+    if (execution) {
+      // zca-js request helpers retain ctx, and read its polyfill on each request.
+      // Retain node-fetch/proxy options for proxy accounts; no global fetch swap.
+      // A session may have been invalidated while account/listener preparation awaited.
+      if (this.apiCache.get(accountId)?.api !== api) execution.stop()
+      return execution.run(() => api.sendMessage(payload, threadId, type), timeoutMs)
+    }
     const targetLabel = type === ThreadType.Group ? 'group' : 'người dùng'
     return this.withTimeout(
       api.sendMessage(payload, threadId, type),
@@ -1977,6 +1995,18 @@ export class ZaloRuntimeService {
         if (needsUploadCallback) this.invalidateAccount(accountId)
       }
     )
+  }
+
+  private getCampaignMediaExecution(api: API): CampaignMediaExecution {
+    let execution = this.campaignMediaExecutions.get(api)
+    if (!execution) {
+      const context = api.getContext()
+      execution = new CampaignMediaExecution(context.options.polyfill as typeof fetch)
+      context.options.polyfill = execution.fetch as typeof context.options.polyfill
+      execution.trackUploadCallbacks(context.uploadCallbacks)
+      this.campaignMediaExecutions.set(api, execution)
+    }
+    return execution
   }
 
   private async forwardMessage(
@@ -2437,6 +2467,8 @@ export class ZaloRuntimeService {
   }
 
   private cacheApi(account: AutoAccount, api: API, lastError: string | null = null): void {
+    const previous = this.apiCache.get(account.id)?.api
+    if (previous && previous !== api) this.campaignMediaExecutions.get(previous)?.stop()
     this.apiCache.set(account.id, {
       accountId: account.id,
       api,

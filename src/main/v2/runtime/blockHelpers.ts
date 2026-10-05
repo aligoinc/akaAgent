@@ -131,8 +131,10 @@ export interface ZaloActionDetailOutput {
   resetInputToPending?: boolean
   /** An irreversible send completed during this run. */
   deliveryCommitted?: boolean
-  /** An irreversible send succeeded in this run, so the input must not be retried. */
+  /** A send succeeded or has an uncertain terminal result; never replay this input. */
   preventInputRetry?: boolean
+  /** Close this input after a fenced/uncertain media result, without replaying it. */
+  stopRemainingActions?: boolean
   pendingNote?: string
   stopAfterTarget?: boolean
   /** Target đã được tìm thấy nhưng bị gate từ chối nhận tin chặn. */
