@@ -16,6 +16,8 @@ new Function('exports', ts.transpileModule(readFileSync(resolve(__dirname, '../s
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText)(restBrowseModule.exports)
 const globals = {
+  getWorkflow: async () => ({ defaultVariables: {} }),
+  MOBILE_MANAGED_SMS_ACTION_IDS: new Set(['sms_send', 'voice_call']),
   AbortController, setInterval, clearInterval,
   ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
   isRecentDeliveryCooldownEnabled: () => false,
@@ -77,6 +79,7 @@ function fixture(options = {}) {
     'markCampaignRunUnitStarted'
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
+    campaignContentPreparationRuns: new Set(), campaignContentMediaPaths: new Map(),
     running: true, activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(),
     sendExclusionLabels: new Map(),
     facebookPageIdentities: new Map(),

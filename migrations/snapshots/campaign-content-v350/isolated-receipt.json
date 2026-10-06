@@ -1,0 +1,12 @@
+{
+  "signature": "public.aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+  "md5": "006a6da075ede4e9c6b07194422f65c9",
+  "owner": "postgres",
+  "security_definer": true,
+  "volatility": "v",
+  "config": [
+    "search_path=pg_catalog, public"
+  ],
+  "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+  "validation": "PGlite transaction rolled back; production unchanged"
+}

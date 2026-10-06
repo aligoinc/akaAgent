@@ -119,6 +119,10 @@ async function main() {
               sendExclusionLabels: new Map(), running: true, isServerZaloCampaign: () => server,
               getZaloShareMessageActionDescriptor: () => ({ code: value.actionId }),
               shouldUseAdvancedContent: () => advanced, getAdvancedContentConfigError: () => null,
+              prepareSelectedCampaignContent: async (_account,_campaign,_action,_input,prepare) => {
+                assert.equal(claims,1,'content preparation runs inside the claimed unit')
+                return prepare({content,media:attachments},0)
+              },
               getRawCampaignContentForIndex: () => content, resolveCampaignMediaForIndex: async () => attachments,
               stopCampaignAtRunBoundaryIfNeeded: async () => false, finalizeDataGroupCampaignAtHardEnd: async () => false,
               requiresDataGroupHardEndCheck: () => false, getServerZaloBoundaryReason: async () => ({ paused: false }),
@@ -139,7 +143,7 @@ async function main() {
             assert.equal(releases, 1); assert.equal(cleanups, 1)
             if (scenario === 'all-empty') {
               assert.equal(calls.length, before); assert.equal(mediaSends, mediaBefore)
-              assert.equal(claims, 0); assert.equal(completions, 0)
+              assert.equal(claims, 1); assert.equal(completions, 0)
               assert.equal(recorded.length, 0); assert.equal(updates.length, 0)
               assert.ok(details.every(detail => detail.status === 'chờ xử lý'))
               assert.deepEqual(campaignUpdates, [{ status: 'chờ xử lý', note: 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo' }])

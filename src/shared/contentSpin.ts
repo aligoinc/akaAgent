@@ -14,7 +14,7 @@ const ESCAPABLE_CHARS = new Set(['{', '}', '|', '\\'])
 const MAX_RENDER_DEPTH = 50
 
 const isEscapedSpecial = (value: string, index: number): boolean => (
-  value[index] === '\\' && index + 1 < value.length && ESCAPABLE_CHARS.has(value[index + 1])
+  value[index] === '\\' && index + 1 < value.length && ESCAPABLE_CHARS.has(value[index + 1]!)
 )
 
 function findTemplateTokenEnd(value: string, hashIndex: number): number | null {
