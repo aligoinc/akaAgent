@@ -8,11 +8,17 @@ const bridge: ZaloServerAdminBridge = {
   clearLogs: () => ipcRenderer.invoke(ZALO_SERVER_IPC.CLEAR_LOGS),
 
   onRuntimeEvent: (listener) => {
-    const handler = (_event: IpcRendererEvent, payload: ZaloServerRuntimeEvent): void => {
-      listener(payload)
+    const handler = (_event: IpcRendererEvent, payload: ZaloServerRuntimeEvent | ZaloServerRuntimeEvent[]): void => {
+      for (const event of Array.isArray(payload) ? payload : [payload]) listener(event)
     }
     ipcRenderer.on(ZALO_SERVER_IPC.RUNTIME_EVENT, handler)
     return () => ipcRenderer.removeListener(ZALO_SERVER_IPC.RUNTIME_EVENT, handler)
+  },
+
+  onVisibilityUpdated: (listener) => {
+    const handler = (_event: IpcRendererEvent, visible: boolean): void => listener(visible)
+    ipcRenderer.on(ZALO_SERVER_IPC.VISIBILITY_UPDATED, handler)
+    return () => ipcRenderer.removeListener(ZALO_SERVER_IPC.VISIBILITY_UPDATED, handler)
   },
 
   onSnapshotUpdated: (listener) => {
