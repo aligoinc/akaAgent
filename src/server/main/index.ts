@@ -15,6 +15,7 @@ import { installServerFileLogger, type ServerFileLogger } from './serverFileLogg
 import { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerGateway } from './zaloServerGateway'
 import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
+import { ZaloServerAdminUpdates } from './zaloServerAdminUpdates'
 
 // This process hosts the legacy Zalo Server runtime, including startup recovery.
 setAccountLogSource('zalo_server')
@@ -23,6 +24,10 @@ let mainWindow: BrowserWindow | null = null
 let gateway: ZaloServerGateway | null = null
 let runtimeManager: ZaloServerRuntimeManager | null = null
 let serverFileLogger: ServerFileLogger | null = null
+const adminUpdates = new ZaloServerAdminUpdates(
+  () => mainWindow,
+  includeEvents => runtimeManager?.getSnapshot(undefined, includeEvents)
+)
 let clientCountSnapshotTimer: ReturnType<typeof setTimeout> | null = null
 let shutdownStarted = false
 let shutdownComplete = false
@@ -34,10 +39,7 @@ function scheduleClientCountSnapshot(): void {
     clientCountSnapshotTimer = null
     if (shutdownStarted) return
     gateway?.broadcastSnapshot()
-    const window = mainWindow
-    if (window && !window.isDestroyed()) {
-      window.webContents.send(ZALO_SERVER_IPC.SNAPSHOT_UPDATED, runtimeManager?.getSnapshot())
-    }
+    adminUpdates.requestSnapshot()
   }, 250)
 }
 
@@ -81,6 +83,11 @@ function createWindow(): BrowserWindow {
     }
   })
   window.once('ready-to-show', () => window.show())
+  const syncAdminVisibility = (): void => adminUpdates.visibilityChanged()
+  window.on('show', syncAdminVisibility)
+  window.on('hide', syncAdminVisibility)
+  window.on('minimize', syncAdminVisibility)
+  window.on('restore', syncAdminVisibility)
   window.webContents.setWindowOpenHandler(details => {
     void shell.openExternal(details.url)
     return { action: 'deny' }
@@ -107,7 +114,8 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 async function startServer(): Promise<void> {
   const ownershipStore = new ServerRuntimeOwnershipStore(join(serverDataPath, 'runtime-ownership.json'))
   runtimeManager = new ZaloServerRuntimeManager({
-    adminWindow: () => mainWindow,
+    publishAdminEvent: event => adminUpdates.pushEvent(event),
+    notifyAdminSnapshot: () => adminUpdates.requestSnapshot(),
     publishEvent: event => gateway?.publish(event),
     publishLiveEvent: event => gateway?.publishLive(event),
     publishControlEvent: event => gateway?.publishControl(event),
@@ -150,13 +158,17 @@ async function startServer(): Promise<void> {
     onClientCountChanged: scheduleClientCountSnapshot
   })
 
-  ipcMain.handle(ZALO_SERVER_IPC.GET_SNAPSHOT, () => runtimeManager!.getSnapshot())
+  ipcMain.handle(ZALO_SERVER_IPC.GET_SNAPSHOT, () => {
+    adminUpdates.visibilityChanged(true)
+    return runtimeManager!.getSnapshot()
+  })
   ipcMain.handle(ZALO_SERVER_IPC.CLEAR_LOGS, () => {
     // All stores are synchronous so no runtime event can be inserted halfway
     // through the flush. Clear disk first so a file permission failure leaves
     // the visible/in-memory history intact instead of reporting false success.
     serverFileLogger?.clear()
     const clearedThroughSequence = runtimeManager!.clearLogs()
+    adminUpdates.clearThrough(clearedThroughSequence)
     gateway?.clearEventBuffers()
     return { clearedThroughSequence }
   })
@@ -167,6 +179,7 @@ async function startServer(): Promise<void> {
 async function shutdown(): Promise<void> {
   if (shutdownStarted) return
   shutdownStarted = true
+  adminUpdates.dispose()
   if (clientCountSnapshotTimer) {
     clearTimeout(clientCountSnapshotTimer)
     clientCountSnapshotTimer = null
@@ -215,9 +228,7 @@ if (gotSingleInstanceLock) {
       console.log('[akaAgent Zalo Server] Listening on 127.0.0.1:8787')
     } catch (error) {
       console.error('[akaAgent Zalo Server] Startup failed:', error)
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(ZALO_SERVER_IPC.SNAPSHOT_UPDATED, runtimeManager?.getSnapshot())
-      }
+      adminUpdates.requestSnapshot()
     }
   })
 

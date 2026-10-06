@@ -4,7 +4,6 @@ import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { IPC_EVENTS, type AuthUser, type AutoAccountContact, type CampaignSummaryRefreshSignal, type ZaloLabelOption } from '../../shared/types'
 import {
-  ZALO_SERVER_IPC,
   ZALO_SERVER_OPERATION_UPDATED_CHANNEL,
   type ZaloServerCommandName,
   type ZaloServerDesktopHandoffReadyResponse,
@@ -82,7 +81,8 @@ interface CleanupRuntimeGuard {
 }
 
 export interface ZaloServerRuntimeManagerOptions {
-  adminWindow(): BrowserWindow | null
+  publishAdminEvent?(event: ZaloServerRuntimeEvent): void
+  notifyAdminSnapshot?(): void
   publishEvent(event: ZaloServerRuntimeEvent): void
   publishLiveEvent(event: ZaloServerRuntimeEvent): void
   publishControlEvent(event: ZaloServerRuntimeEvent): void
@@ -715,12 +715,14 @@ export class ZaloServerRuntimeManager {
     }
   }
 
-  getSnapshot(staffId?: number): ZaloServerSnapshot {
+  getSnapshot(staffId?: number, includeEvents = true): ZaloServerSnapshot {
     const staffs = Array.from(this.runtimes.values())
       .filter(runtime => staffId === undefined || runtime.user.staffId === staffId)
       .map(runtime => this.mapStaffSnapshot(runtime))
       .sort((left, right) => left.staffId - right.staffId)
-    const recentEvents = this.recentEvents.filter(event => staffId === undefined || event.staffId === staffId)
+    const recentEvents = includeEvents
+      ? this.recentEvents.filter(event => staffId === undefined || event.staffId === staffId)
+      : []
     return {
       state: this.state,
       startedAt: this.startedAt,
@@ -1443,12 +1445,7 @@ export class ZaloServerRuntimeManager {
     } else {
       this.options.publishEvent(event)
     }
-    const adminWindow = this.options.adminWindow()
-    try {
-      if (adminWindow && !adminWindow.isDestroyed()) {
-        adminWindow.webContents.send(ZALO_SERVER_IPC.RUNTIME_EVENT, event)
-      }
-    } catch {}
+    this.options.publishAdminEvent?.(event)
   }
 
   private emitLiveState(user: AuthUser, channel: string, payload: unknown): void {
@@ -1469,12 +1466,7 @@ export class ZaloServerRuntimeManager {
 
   private flushSnapshot(): void {
     this.options.broadcastSnapshot()
-    const adminWindow = this.options.adminWindow()
-    try {
-      if (adminWindow && !adminWindow.isDestroyed()) {
-        adminWindow.webContents.send(ZALO_SERVER_IPC.SNAPSHOT_UPDATED, this.getSnapshot())
-      }
-    } catch {}
+    this.options.notifyAdminSnapshot?.()
   }
 
   private mapStaffSnapshot(runtime: StaffRuntime): ZaloServerStaffSnapshot {

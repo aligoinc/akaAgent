@@ -7,7 +7,9 @@ export const ZALO_SERVER_OPERATION_UPDATED_CHANNEL = 'zalo-server:operation-upda
 export const ZALO_SERVER_IPC = {
   GET_SNAPSHOT: 'zalo-server:get-snapshot',
   CLEAR_LOGS: 'zalo-server:clear-logs',
+  // Local admin IPC accepts event batches; gateway/WSS event envelopes are unchanged.
   RUNTIME_EVENT: 'zalo-server:runtime-event',
+  VISIBILITY_UPDATED: 'zalo-server:visibility-updated',
   SNAPSHOT_UPDATED: 'zalo-server:snapshot-updated'
 } as const
 

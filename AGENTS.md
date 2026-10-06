@@ -482,6 +482,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Zalo Server admin UI**: local IPC batches every 250 ms, stops while hidden/minimized and resyncs the bounded 1,000-event history on restore. Keep gateway/runtime delivery independent; reuse DOM rows and preserve the clear-log sequence fence. Offline smoke/benchmark: `node scripts/zalo-server-admin-ui-smoke.cjs --compare-base`.
+
 - **Fanpage content rotation (legacy)**: với workflow chưa chuyển V351, không chọn biến thể theo index Page mỗi lượt vì một Page luôn có index `0`; khi ghi `sourceLinkIndex`, phải giữ `campaign.extraSettings` mới nhất trong lượt để không ghi đè `contentRotationIndex` vừa tăng ([campaignScheduler.ts](src/main/services/campaignScheduler.ts:3667)).
 - **Tương tác Zalo**: kiểm thử Chat bằng SQL role thực `aka_agent_chat_api`, không chỉ DB owner/JWT claim. Engagement phải bỏ qua khi lỗi hoặc tranh chấp, không chặn gửi/detail/quota. UI chỉ hiện dấu có timestamp; không hiện nhãn không áp dụng/không theo dõi/chưa ghi nhận khi ô chưa có dấu. Không dựng nguồn hồi tố hoặc gửi lại để bù dấu bị mất.
 - **Clock/cache tương tác**: không trộn epoch DB với deadline timer local hoặc dùng giờ VPS để xét timestamp Zalo. Sự kiện đầu sau cache 60 giây hết hạn phải được giữ có giới hạn nếu đã khớp RAM và biết revision bật; cold/disabled vẫn bỏ. Kiểm thử seen → im lặng 3 phút → reply, lệch giờ máy và tắt/bật khi chờ; không để catalog nhiều owner trì hoãn việc đã sẵn sàng.

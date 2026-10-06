@@ -10,6 +10,7 @@ interface ZaloServerAdminBridge {
   getSnapshot(): Promise<ZaloServerSnapshot>
   clearLogs(): Promise<ZaloServerClearLogsResult>
   onRuntimeEvent(listener: (event: ZaloServerRuntimeEvent) => void): () => void
+  onVisibilityUpdated(listener: (visible: boolean) => void): () => void
   onSnapshotUpdated(listener: (snapshot?: ZaloServerSnapshot) => void): () => void
 }
 
@@ -20,6 +21,7 @@ declare global {
 }
 
 const MAX_LOG_LINES = 1_000
+const RENDER_INTERVAL_MS = 100
 const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 const ACCOUNT_STATUS_UPDATED_CHANNEL = 'account:status-updated'
 const CAMPAIGN_STATUS_UPDATED_CHANNEL = 'campaign:status-updated'
@@ -76,8 +78,70 @@ const lastUpdated = requiredElement<HTMLElement>('last-updated')
 
 let snapshot: ZaloServerSnapshot | null = null
 let runtimeEvents: ZaloServerRuntimeEvent[] = []
-let hydratedRecentEvents = false
 let snapshotRequest: Promise<void> | null = null
+let clearedThroughSequence = 0
+let adminVisible = true
+let renderTimer: ReturnType<typeof setTimeout> | undefined
+let snapshotDirty = false
+let logsDirty = false
+let followTail = false
+const pendingEvents = new Map<string, ZaloServerRuntimeEvent>()
+const staffById = new Map<number, ZaloServerStaffSnapshot>()
+const staffRows = new Map<number, { signature: string; row: HTMLTableRowElement }>()
+const logRows = new Map<string, { event: ZaloServerRuntimeEvent; row: HTMLDivElement; staff: HTMLSpanElement }>()
+const optionSignatures = new WeakMap<HTMLSelectElement, string>()
+
+function scheduleRender(): void {
+  if (renderTimer || !adminVisible || document.hidden) return
+  renderTimer = setTimeout(flushRender, RENDER_INTERVAL_MS)
+}
+
+function queueEvent(event: ZaloServerRuntimeEvent): void {
+  if (event.sequence <= clearedThroughSequence || !isVisibleAdminLogEvent(event)) return
+  pendingEvents.set(eventKey(event), event)
+  if (pendingEvents.size > MAX_LOG_LINES) pendingEvents.delete(pendingEvents.keys().next().value!)
+  logsDirty = true
+  followTail = true
+  scheduleRender()
+}
+
+function flushRender(): void {
+  renderTimer = undefined
+  if (!adminVisible || document.hidden) return
+  if (pendingEvents.size) {
+    runtimeEvents = mergeEvents(runtimeEvents, Array.from(pendingEvents.values()))
+    pendingEvents.clear()
+  }
+  if (snapshotDirty) renderSnapshot()
+  if (snapshotDirty || logsDirty) {
+    renderFilterOptions()
+    renderLogs(followTail)
+    lastUpdated.textContent = `Cập nhật ${dateTimeFormatter.format(new Date())}`
+  }
+  snapshotDirty = false
+  logsDirty = false
+  followTail = false
+}
+
+function visibilityChanged(): void {
+  if (!adminVisible || document.hidden) {
+    if (renderTimer) clearTimeout(renderTimer)
+    renderTimer = undefined
+  } else if (snapshotDirty || logsDirty) {
+    scheduleRender()
+  }
+}
+
+/** Keep unchanged nodes (and the user's scroll/selection) instead of replacing the list. */
+function reconcileRows(parent: HTMLElement, rows: HTMLElement[]): void {
+  const wanted = new Set<Node>(rows)
+  for (const child of Array.from(parent.childNodes)) if (!wanted.has(child)) child.remove()
+  let cursor = parent.firstChild
+  for (const row of rows) {
+    if (row !== cursor) parent.insertBefore(row, cursor)
+    cursor = row.nextSibling
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
@@ -208,7 +272,8 @@ function createIdentityCell(primary: string, secondary: string): HTMLTableCellEl
 }
 
 function renderStaffTable(staffs: ZaloServerStaffSnapshot[]): void {
-  staffTableBody.replaceChildren()
+  const ids = new Set(staffs.map(staff => staff.staffId))
+  for (const id of Array.from(staffRows.keys())) if (!ids.has(id)) staffRows.delete(id)
 
   if (staffs.length === 0) {
     const row = document.createElement('tr')
@@ -217,12 +282,18 @@ function renderStaffTable(staffs: ZaloServerStaffSnapshot[]): void {
     cell.colSpan = 5
     cell.textContent = 'Chưa có runtime nhân viên nào.'
     row.append(cell)
-    staffTableBody.append(row)
+    reconcileRows(staffTableBody, [row])
     return
   }
 
-  const fragment = document.createDocumentFragment()
+  const rows: HTMLTableRowElement[] = []
   for (const staff of [...staffs].sort((left, right) => left.staffId - right.staffId)) {
+    const signature = JSON.stringify(staff)
+    const cached = staffRows.get(staff.staffId)
+    if (cached?.signature === signature) {
+      rows.push(cached.row)
+      continue
+    }
     const row = document.createElement('tr')
     row.append(
       createIdentityCell(staff.staffName || `Staff #${staff.staffId}`, `ID ${staff.staffId}`),
@@ -254,9 +325,10 @@ function renderStaffTable(staffs: ZaloServerStaffSnapshot[]): void {
     errorCell.append(error)
 
     row.append(stateCell, startedCell, errorCell)
-    fragment.append(row)
+    rows.push(row)
+    staffRows.set(staff.staffId, { signature, row })
   }
-  staffTableBody.append(fragment)
+  reconcileRows(staffTableBody, rows)
 }
 
 function renderSnapshot(): void {
@@ -287,15 +359,13 @@ function renderSnapshot(): void {
 }
 
 function staffLabel(staffId: number): string {
-  const staff = snapshot?.staffs.find((item) => item.staffId === staffId)
+  const staff = staffById.get(staffId)
   return staff?.staffName ? `${staff.staffName} (#${staffId})` : `Staff #${staffId}`
 }
 
 function organizationLabel(event: ZaloServerRuntimeEvent): string {
-  const staff = snapshot?.staffs.find(
-    (item) => item.staffId === event.staffId && item.organizationId === event.organizationId
-  )
-  return staff?.organizationName || `Organization #${event.organizationId}`
+  const staff = staffById.get(event.staffId)
+  return (staff?.organizationId === event.organizationId && staff.organizationName) || `Organization #${event.organizationId}`
 }
 
 function replaceSelectOptions(
@@ -303,6 +373,9 @@ function replaceSelectOptions(
   allLabel: string,
   options: Array<{ value: string; label: string }>
 ): void {
+  const signature = JSON.stringify(options)
+  if (optionSignatures.get(select) === signature) return
+  optionSignatures.set(select, signature)
   const selectedValue = select.value
   const fragment = document.createDocumentFragment()
   const allOption = document.createElement('option')
@@ -395,18 +468,27 @@ function renderLogs(scrollToLatest = false): void {
   const shouldFollowTail = scrollToLatest && distanceFromBottom < 48
   const visibleEvents = filteredEvents()
   logCount.textContent = `${visibleEvents.length} / ${runtimeEvents.length} dòng`
-  logList.replaceChildren()
+  const retainedKeys = new Set(runtimeEvents.map(eventKey))
+  for (const key of Array.from(logRows.keys())) if (!retainedKeys.has(key)) logRows.delete(key)
 
   if (visibleEvents.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'log-empty'
     empty.textContent = runtimeEvents.length === 0 ? 'Chưa có log runtime.' : 'Không có log phù hợp bộ lọc.'
-    logList.append(empty)
+    reconcileRows(logList, [empty])
     return
   }
 
-  const fragment = document.createDocumentFragment()
+  const rows: HTMLDivElement[] = []
   for (const event of visibleEvents) {
+    const key = eventKey(event)
+    const cached = logRows.get(key)
+    const staffTitle = `${staffLabel(event.staffId)} · ${organizationLabel(event)}`
+    if (cached?.event === event) {
+      if (cached.staff.title !== staffTitle) cached.staff.title = staffTitle
+      rows.push(cached.row)
+      continue
+    }
     const row = document.createElement('div')
     row.className = 'log-row'
 
@@ -417,7 +499,7 @@ function renderLogs(scrollToLatest = false): void {
     const staff = document.createElement('span')
     staff.className = 'log-staff'
     staff.textContent = `Staff #${event.staffId}`
-    staff.title = `${staffLabel(event.staffId)} · ${organizationLabel(event)}`
+    staff.title = staffTitle
 
     const channel = document.createElement('span')
     channel.className = 'log-channel'
@@ -429,22 +511,28 @@ function renderLogs(scrollToLatest = false): void {
     message.textContent = stringifyPayload(event.payload)
 
     row.append(time, staff, channel, message)
-    fragment.append(row)
+    rows.push(row)
+    logRows.set(key, { event, row, staff })
   }
-  logList.append(fragment)
+  // Keep the first visible row anchored when older retained rows are evicted.
+  const viewportTop = logList.getBoundingClientRect().top
+  const anchor = shouldFollowTail ? undefined : Array.from(logList.children).find(child =>
+    child.getBoundingClientRect().bottom > viewportTop)
+  const anchorTop = anchor ? anchor.getBoundingClientRect().top : 0
+  reconcileRows(logList, rows)
 
   if (shouldFollowTail) logList.scrollTop = logList.scrollHeight
+  else if (anchor?.isConnected) logList.scrollTop += anchor.getBoundingClientRect().top - anchorTop
 }
 
 function applySnapshot(nextSnapshot: ZaloServerSnapshot): void {
   snapshot = nextSnapshot
-  if (!hydratedRecentEvents) {
-    runtimeEvents = mergeEvents(nextSnapshot.recentEvents, runtimeEvents)
-    hydratedRecentEvents = true
-  }
-  renderSnapshot()
-  renderFilterOptions()
-  renderLogs(true)
+  staffById.clear()
+  for (const staff of nextSnapshot.staffs) staffById.set(staff.staffId, staff)
+  for (const event of nextSnapshot.recentEvents) queueEvent(event)
+  snapshotDirty = true
+  followTail = true
+  scheduleRender()
 }
 
 function handleSnapshotError(error: unknown): void {
@@ -477,9 +565,15 @@ function refreshSnapshot(): Promise<void> {
   return snapshotRequest
 }
 
-filterStaff.addEventListener('change', () => renderLogs(false))
-filterChannel.addEventListener('change', () => renderLogs(false))
-filterText.addEventListener('input', () => renderLogs(false))
+function filterChanged(): void {
+  logsDirty = true
+  followTail = false
+  scheduleRender()
+}
+filterStaff.addEventListener('change', filterChanged)
+filterChannel.addEventListener('change', filterChanged)
+filterText.addEventListener('input', filterChanged)
+document.addEventListener('visibilitychange', visibilityChanged)
 clearLogsButton.addEventListener('click', () => {
   const bridge = window.zaloServerAdmin
   if (!bridge || clearLogsButton.disabled) return
@@ -492,12 +586,15 @@ clearLogsButton.addEventListener('click', () => {
       if (!isClearLogsResult(result)) throw new Error('Kết quả xóa log không hợp lệ')
       // Preserve any event emitted after the synchronous main-process flush,
       // even if its IPC delivery races the clear request response.
-      runtimeEvents = runtimeEvents.filter(event => event.sequence > result.clearedThroughSequence)
-      hydratedRecentEvents = true
+      clearedThroughSequence = Math.max(clearedThroughSequence, result.clearedThroughSequence)
+      runtimeEvents = runtimeEvents.filter(event => event.sequence > clearedThroughSequence)
+      for (const [key, event] of Array.from(pendingEvents)) {
+        if (event.sequence <= clearedThroughSequence) pendingEvents.delete(key)
+      }
       if (snapshot) snapshot = { ...snapshot, recentEvents: [] }
-      renderFilterOptions()
-      renderLogs(false)
-      lastUpdated.textContent = `Cập nhật ${dateTimeFormatter.format(new Date())}`
+      logsDirty = true
+      followTail = false
+      scheduleRender()
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
@@ -512,10 +609,11 @@ clearLogsButton.addEventListener('click', () => {
 const bridge = window.zaloServerAdmin
 const unsubscribeRuntime = bridge?.onRuntimeEvent((event) => {
   if (!isRuntimeEvent(event)) return
-  runtimeEvents = mergeEvents(runtimeEvents, [event])
-  renderFilterOptions()
-  renderLogs(true)
-  lastUpdated.textContent = `Cập nhật ${dateTimeFormatter.format(new Date())}`
+  queueEvent(event)
+})
+const unsubscribeVisibility = bridge?.onVisibilityUpdated(visible => {
+  adminVisible = visible
+  visibilityChanged()
 })
 const unsubscribeSnapshot = bridge?.onSnapshotUpdated((nextSnapshot) => {
   if (isSnapshot(nextSnapshot)) {
@@ -528,6 +626,9 @@ const unsubscribeSnapshot = bridge?.onSnapshotUpdated((nextSnapshot) => {
 window.addEventListener('beforeunload', () => {
   unsubscribeRuntime?.()
   unsubscribeSnapshot?.()
+  unsubscribeVisibility?.()
+  if (renderTimer) clearTimeout(renderTimer)
+  document.removeEventListener('visibilitychange', visibilityChanged)
 })
 
 void refreshSnapshot()
