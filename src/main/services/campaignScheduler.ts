@@ -3664,9 +3664,10 @@ export class CampaignScheduler {
         currentSourceLink = sourceLinks[sourceIdx]
         sourceLinkRotationIndex = (sourceIdx + 1) % sourceLinks.length
         try {
-          await this.updateCampaignAndBroadcast(campaign.id, {
-            extraSettings: { ...extra, sourceLinkIndex: sourceLinkRotationIndex }
+          const updated = await this.updateCampaignAndBroadcast(campaign.id, {
+            extraSettings: { ...campaign.extraSettings, sourceLinkIndex: sourceLinkRotationIndex }
           })
+          campaign.extraSettings = updated.extraSettings
         } catch {}
         const targetLabel = detail ? ` cho "${this.getInputDataDisplayName(campaign, detail)}"` : ''
         await this.logCampaignProgress(campaign, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
@@ -3895,7 +3896,16 @@ export class CampaignScheduler {
             this.throwIfZaloRuntimeStopping(campaign.id)
           }
 
-          if (result.status === 'completed' && contentRotation.count > 1) {
+          // Page API can finish normally with ok=false. Consume a variant only
+          // after publishing, including when a later identity restore fails.
+          const contentWasPublished = campaign.actionId === PAGE_POST_ACTION_ID
+            ? result.steps.some(step => (
+                step.blockName === 'fb_page_post_api' || step.blockName === 'fb_post_current_identity_ui'
+              ) && step.status === 'success' && (
+                step.output?.ok === true || step.output?.posted === true
+              ))
+            : result.status === 'completed'
+          if (contentWasPublished && contentRotation.count > 1) {
             await this.advanceCampaignContentRotation(campaign, contentRotation)
           }
 
@@ -15944,7 +15954,9 @@ export class CampaignScheduler {
     campaign: Campaign,
     fallbackIndex: number
   ): { index: number; count: number } {
-    if (campaign.actionId !== 'facebook_timeline_post') {
+    // Page targets start at index zero again on each scheduled execution.
+    // Persist their content/media cursor just like no-input timeline posts.
+    if (campaign.actionId !== 'facebook_timeline_post' && campaign.actionId !== PAGE_POST_ACTION_ID) {
       return { index: fallbackIndex, count: 0 }
     }
 
@@ -15964,7 +15976,10 @@ export class CampaignScheduler {
     campaign: Campaign,
     rotation: { index: number; count: number }
   ): Promise<void> {
-    if (campaign.actionId !== 'facebook_timeline_post' || rotation.count <= 1) return
+    if (
+      (campaign.actionId !== 'facebook_timeline_post' && campaign.actionId !== PAGE_POST_ACTION_ID) ||
+      rotation.count <= 1
+    ) return
 
     const latestCampaign = await this.supabase.getCampaign(campaign.id)
     if (!latestCampaign) throw new Error('Không tìm thấy chiến dịch để cập nhật lượt nội dung kế tiếp')
