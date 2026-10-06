@@ -31,7 +31,7 @@ const methods = names.map(name => {
   assert.ok(method, name)
   return method.getText(source)
 }).join('\n')
-const globals = { ...core, ...html, convertHtmlToZaloMessage, ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(['zalo_message_friend']), ZALO_MESSAGE_SEND_MODE_SHARE: 'share', splitSharedContentVariants: spin.splitContentVariants }
+const globals = { ...load('src/shared/campaignContentTemplate.ts'), ...core, ...html, convertHtmlToZaloMessage, ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(['zalo_message_friend']), ZALO_MESSAGE_SEND_MODE_SHARE: 'share', splitSharedContentVariants: spin.splitContentVariants }
 const compiled = ts.transpileModule(`class Harness { ${methods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
 const Harness = new Function(...Object.keys(globals), compiled + '; return Harness')(...Object.values(globals))
 const id = core.STOP_MESSAGES_PREVIEW_ID
@@ -105,7 +105,7 @@ async function main() {
       let fail = false
       Object.assign(instance, {
         zaloRuntime: { sendMessageToUser: async () => { if (fail) throw new Error('send failed'); return {} } },
-        buildZaloOutgoingMessage: async () => 'Hello',
+        prepareZaloOutgoingContent: async () => ({ content: 'Hello', media: [] }),
         throwIfZaloRuntimeStopping: () => {},
         createZaloSuccessDetail: data => ({ status: 'thành công', ...data }),
         createZaloErrorDetail: async () => ({ status: 'thất bại' }),

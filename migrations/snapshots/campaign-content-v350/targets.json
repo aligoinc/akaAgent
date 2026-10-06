@@ -1,0 +1,58 @@
+{
+  "fb_type_post_content": {
+    "id": 28,
+    "code_md5": "d6c5e9a59ac466b0ba8101bf3f74d4a2"
+  },
+  "fb_share_post": {
+    "id": 36,
+    "code_md5": "af28116b9ea41a4fc8f4ddead1b6af1f"
+  },
+  "fb_post_reels": {
+    "id": 37,
+    "code_md5": "0a417bced486afa5f7300e2af1536d9d"
+  },
+  "fb_page_post_api": {
+    "id": 2669,
+    "code_md5": "21136df214634903530caa9d40c3eefb"
+  },
+  "fb_post_current_identity_ui": {
+    "id": 2672,
+    "code_md5": "3d30466006b64af753e98002d9282446"
+  },
+  "fb_send_page_inbox_message": {
+    "id": 2679,
+    "code_md5": "86217720edd3c1c04495c7c061d26bea"
+  },
+  "fb_send_message": {
+    "id": 38,
+    "code_md5": "3a7f999972550721bf67b25744363b9f"
+  },
+  "fb_comment_at_position": {
+    "id": 34,
+    "code_md5": "fc6ee121a75d2ecd8885278d8999fb0e"
+  },
+  "fb_comment_current_post": {
+    "id": 2616,
+    "code_md5": "30514089c396f36a63c038b7736a174b"
+  },
+  "fb_prepare_post_link_comment_iteration": {
+    "id": 2614,
+    "code_md5": "8ecbc8b429a48ae1af25085f4742a7fa"
+  },
+  "fb_newsfeed_check_comment": {
+    "id": 2706,
+    "code_md5": "9105a60844ad6defe21c828ef004c795"
+  },
+  "fb_scrape_post": {
+    "id": 35,
+    "code_md5": "e65666791c6edd4dfe9fc6bcecb49ada"
+  },
+  "fb_rewrite_source_content_ai": {
+    "id": 2674,
+    "code_md5": "f0715301148a3638b583784c2724c3a0"
+  },
+  "fb_compose_source_manual_content": {
+    "id": 2824,
+    "code_md5": "ea4f24997390f946082cd12936fe24c9"
+  }
+}

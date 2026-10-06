@@ -1,3 +1,9 @@
+import { takeCampaignContentIndex } from '../data/repositories/campaignContentRepository'
+import type { CampaignContentVariant, PreparedCampaignContent } from '../../shared/campaignContentPreparation'
+import { plainTextToFormattedContent } from '../../shared/formattedContent'
+import type { CampaignContentPreparationOptions } from '../v2/runtime/blockHelpers'
+import { prepareCampaignContent } from '../../shared/campaignContentPreparation'
+import { renderCampaignTemplateText } from '../../shared/campaignContentTemplate'
 import { CAMPAIGN_MEDIA_TIMEOUT_CODE } from './campaignMediaExecution'
 import { stageCampaignEngagementSource, beginCampaignEngagementSend, abandonCampaignEngagementSend, type EngagementSendContext } from './zaloCampaignEngagement'
 import { browserRunLimitWaitNote } from '../../shared/browserRunLimits'
@@ -755,6 +761,8 @@ export class CampaignScheduler {
   private isAccountStartupPending?: (account: AutoAccount) => boolean
   private runtimeOwnershipLossReported = false
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
+  private campaignContentPreparationRuns = new Set<number>()
+  private campaignContentMediaPaths = new Map<number, string[]>()
   private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
   private failedCampaignRuns = new Map<number, FailedCampaignRun>()
   private attemptedRunErrorPolicies = new Set<number>()
@@ -3194,6 +3202,8 @@ export class CampaignScheduler {
       this.clearZaloSmsPushKeysForCampaign(campaign.id)
       this.facebookPageIdentities.delete(campaign.id)
       this.facebookPageRestoreFailures.delete(campaign.id)
+      this.campaignContentPreparationRuns.delete(campaign.id)
+      this.campaignContentMediaPaths.delete(campaign.id)
       if (!this.running && this.facebookPageIdentities.size === 0) this.backgroundPages.destroyAll()
     }
   }
@@ -3214,6 +3224,10 @@ export class CampaignScheduler {
     executableActionDescriptors: CampaignActionDescriptor[],
     quotaActionDescriptors: CampaignActionDescriptor[]
   ): Promise<void> {
+    const contentWorkflow = MOBILE_MANAGED_SMS_ACTION_IDS.has(campaign.actionId) ? null : await getWorkflow(workflowId)
+    if (contentWorkflow?.defaultVariables.campaignContentPreparationVersion === 1) {
+      this.campaignContentPreparationRuns.add(campaign.id)
+    }
     // Determine details: if campaign actionId has details (group_post, message_friend, etc.)
     let details = await this.supabase.listCampaignInputData(campaign.id)
     const extra = campaign.extraSettings || {}
@@ -3845,7 +3859,7 @@ export class CampaignScheduler {
         const pageIdentity = this.facebookPageIdentities.get(campaign.id)
         if (pageIdentity) { pageIdentity.page = page; pageIdentity.targetStarted = false }
         try {
-          const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page)
+          const runtimeHelpers = this.createBlockRuntimeHelpers(account, campaign, detail, page, mediaTempPaths)
           if (!pageIdentity) this.markCampaignRunUnitStarted(campaign.id)
           const result = await this.engineV2.run(pageIdentity?.workflow || workflowId, variables, page, {
             organizationId: campaign.organizationId ?? account.organizationId ?? null,
@@ -3905,7 +3919,7 @@ export class CampaignScheduler {
                 step.output?.ok === true || step.output?.posted === true
               ))
             : result.status === 'completed'
-          if (contentWasPublished && contentRotation.count > 1) {
+          if (!this.campaignContentPreparationRuns.has(campaign.id) && contentWasPublished && contentRotation.count > 1) {
             await this.advanceCampaignContentRotation(campaign, contentRotation)
           }
 
@@ -4974,7 +4988,6 @@ export class CampaignScheduler {
       const actionDescriptor = this.getZaloShareMessageActionDescriptor(campaign, executableActionDescriptors)
       const shouldCheckQuota = quotaActionDescriptors.some(action => action.code === actionDescriptor.code)
       const usesAdvancedContent = this.shouldUseAdvancedContent(campaign)
-      let simpleAttachments: string[] | null = null
 
       // With no inputs, skip content/media work and fall through to the normal
       // finalizer below. It rechecks raced data, source state and user control.
@@ -4988,11 +5001,9 @@ export class CampaignScheduler {
         }
       } else if (details.length > 0) {
         const baseMessage = this.getRawCampaignContentForIndex(campaign, 0)
-        simpleAttachments = await this.resolveCampaignMediaForIndex(campaign, 0, false, mediaTempPaths)
-        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         if (!(this.isFormattedContentCampaign(campaign)
           ? this.getZaloOutgoingMessageText(convertHtmlToZaloMessage(baseMessage))
-          : baseMessage).trim() && simpleAttachments.length === 0) {
+          : baseMessage).trim() && !(extra.imageOption !== 'none' && (campaign.images || []).some(item => this.hasDeclaredMediaSource(item)))) {
           const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
           await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
           await this.logCampaignProgress(campaign, `⚠️ ${note}`)
@@ -5029,7 +5040,6 @@ export class CampaignScheduler {
       let stoppedBeforeCompletion = false
       let earliestFutureInputSchedule: Date | null = null
       let index = 0
-      let batchIndex = 0
 
       while (index < details.length) {
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
@@ -5215,48 +5225,10 @@ export class CampaignScheduler {
 
         if (batch.length === 0 && invalidBatchTargets.length === 0) continue
 
-        let batchAttachments: string[] = []
-        let message: ZaloOutgoingText = ''
-        if (batch.length > 0) {
-          const rawBatchMessage = this.getRawCampaignContentForIndex(campaign, batchIndex)
-          batchAttachments = usesAdvancedContent
-            ? await this.resolveCampaignMediaForIndex(campaign, batchIndex, false, mediaTempPaths)
-            : (simpleAttachments || [])
-          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-          batchIndex += 1
-          message = await this.getZaloShareMessageForBatch(account, campaign, rawBatchMessage, batchAttachments.length > 0)
-          if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        }
-        const contentStopReason = this.getZaloRuntimeStopReason(campaign.id)
-        if (contentStopReason) {
-          if (this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
-          stoppedBeforeCompletion = true
-          await this.updateCampaignAndBroadcast(campaign.id, {
-            status: 'chờ xử lý',
-            note: this.getZaloRuntimeCampaignStopNote(contentStopReason)
-          })
-          break
-        }
-
-        // Media resolution/AI rewrite may cross hard end. No target in this
-        // batch has reached a Zalo send API yet, so finalize before reserving it.
+        // Allocate only after this batch owns its unit. Media/AI run after the RPC commits.
         if (await this.finalizeDataGroupCampaignAtHardEnd(campaign)) {
           await this.releaseRunningAccount(account.id)
           return
-        }
-        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
-        if (batch.length > 0 && !this.getZaloOutgoingMessageText(message).trim() && batchAttachments.length === 0) {
-          // The fallback also rendered empty: no branch can supply text.
-          // Leave inputs unclaimed rather than recording an unsent batch.
-          if (this.isCampaignPauseRequested(campaign.id)) {
-            await this.completePauseAtBoundary(account, campaign)
-            return
-          }
-          stoppedBeforeCompletion = true
-          const note = 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo'
-          await this.updateRunningCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })
-          await this.logCampaignProgress(campaign, `⚠️ ${note}`)
-          break
         }
         if (!await this.beginCampaignRunUnit(
           account,
@@ -5311,13 +5283,27 @@ export class CampaignScheduler {
               .finally(() => { batchControlCheckInFlight = false })
           }, 5000)
         }
+        let requeueEmptyBatch = false
         let batchResult: ZaloShareMessageBatchResult = {
           stopAfterBatch: false,
           pauseAfterBatch: false,
           stopNote: null
         }
         try {
-          batchResult = await this.processZaloShareMessageBatch(
+          const prepared = batch.length > 0 ? await this.prepareSelectedCampaignContent(
+            account, campaign, actionDescriptor.code, null, async variant => ({
+              content: await this.getZaloShareMessageForBatch(account, campaign, variant.content, variant.media.length > 0),
+              media: variant.media
+            }), 'main', mediaTempPaths
+          ) : { content: '' as ZaloOutgoingText, media: [] as string[] }
+          const message = prepared.content
+          const batchAttachments = prepared.media
+          if (batch.length > 0 && !this.getZaloOutgoingMessageText(message).trim() && batchAttachments.length === 0) {
+            requeueEmptyBatch = true
+            batchResult = { stopAfterBatch: true, pauseAfterBatch: false,
+              stopNote: 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo' }
+            await this.logCampaignProgress(campaign, `⚠️ ${batchResult.stopNote}`)
+          } else batchResult = await this.processZaloShareMessageBatch(
             account,
             campaign,
             batch,
@@ -5331,7 +5317,7 @@ export class CampaignScheduler {
           this.sendExclusionLabels.delete(campaign.id)
           if (batchControlGuard) clearInterval(batchControlGuard)
         }
-        if (!await this.settleActiveCampaignRunUnit(account, campaign)) return
+        if (!await this.settleActiveCampaignRunUnit(account, campaign, requeueEmptyBatch ? true : undefined)) return
         if (this.isCampaignPauseRequested(campaign.id)) {
           await this.completePauseAtBoundary(account, campaign, batchResult.stopNote ?? undefined)
           return
@@ -9541,6 +9527,8 @@ export class CampaignScheduler {
     skippedLimitActionCodes: Set<string> = new Set()
   ): Promise<Record<string, unknown>> {
     const extra = campaign.extraSettings || {}
+    const deferredContent = this.campaignContentPreparationRuns.has(campaign.id)
+    if (deferredContent) this.campaignContentMediaPaths.set(campaign.id, mediaTempPaths)
     const formattedContentEnabled = this.isFormattedContentCampaign(campaign)
     const isActionSkippedByLimit = (actionCode: string) => skippedLimitActionCodes.has(actionCode)
     const skipMessageByLimit = this.shouldSkipMessageByLimit(campaign, skippedLimitActionCodes)
@@ -9583,7 +9571,7 @@ export class CampaignScheduler {
     const selectedAdvancedContentItem = this.shouldUseAdvancedContent(campaign)
       ? selectAdvancedContentItem(campaign.extraSettings, detailIndex)
       : null
-    const selectedRawPostContent = useAdvancedCommentContent
+    const selectedRawPostContent = deferredContent || useAdvancedCommentContent
       ? ''
       : this.getRawCampaignContentForIndex(campaign, detailIndex)
     const selectedPostContent = campaign.actionId === FACEBOOK_JOIN_GROUP_ACTION_ID
@@ -9599,7 +9587,7 @@ export class CampaignScheduler {
       (this.campaignUsesMessageMedia(campaign) && skipMessageByLimit) ||
       (campaign.actionId === GROUP_POST_ACTION_ID && groupPostApproval?.skipPostByKnownApproval === true)
     const postAsReels = campaign.actionId === 'facebook_timeline_post' && !postWithBackground && extra.postAsReels === true
-    const validPostImages = skipMainMediaForThisRun || postWithBackground || useAdvancedCommentContent
+    const validPostImages = deferredContent || skipMainMediaForThisRun || postWithBackground || useAdvancedCommentContent
       ? []
       : await this.resolveCampaignMediaForIndex(
           campaign,
@@ -9608,7 +9596,7 @@ export class CampaignScheduler {
           mediaTempPaths,
           postAsReels ? 1 : undefined
         )
-    if (postAsReels && (validPostImages.length !== 1 || !isVideoMediaSource('', validPostImages[0]))) {
+    if (!deferredContent && postAsReels && (validPostImages.length !== 1 || !isVideoMediaSource('', validPostImages[0]))) {
       throw new Error('Đăng Reels cần đúng 1 video hợp lệ cho mỗi lượt chạy')
     }
     if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'api' && validPostImages.some(media => !isImageMediaSource('', media))) {
@@ -9626,7 +9614,12 @@ export class CampaignScheduler {
     let commentImageBatches: string[][]
     let commentImageOption: 'none' | 'all' | 'random'
 
-    if (useAdvancedCommentContent) {
+    if (deferredContent) {
+      // Iteration scaffolding only. The consuming comment block allocates after its gates.
+      commentVariants = Array.from({ length: commentBatchCount }, () => '')
+      commentImageBatches = Array.from({ length: commentBatchCount }, () => [])
+      commentImageOption = 'none'
+    } else if (useAdvancedCommentContent) {
       // Keep rotation deterministic across both axes: all slots of target 0,
       // then all slots of target 1, and so on. Only the saved campaign
       // snapshot participates; source template/group metadata is never read.
@@ -13747,58 +13740,28 @@ export class CampaignScheduler {
     businessNow?: Date,
     optOut?: { linkId: string | null; enabled: boolean; state: StopMessagesRenderState }
   ): string {
-    const raw = this.renderSpinContent(template)
-    if (!raw) return ''
-    const formatDate = (format: string, offsetDays = 0): string => {
-      if (!businessNow) {
-        throw new Error('DB runtime clock is required for relative date template tokens')
-      }
-      const date = new Date(businessNow.getTime() + offsetDays * 24 * 60 * 60 * 1000)
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(date)
-      const dateMap = Object.fromEntries(parts.map(part => [part.type, part.value])) as Record<string, string>
-      return String(format || 'DD/MM/YYYY')
-        .replace(/DD/g, dateMap.day || '')
-        .replace(/MM/g, dateMap.month || '')
-        .replace(/YYYY/g, dateMap.year || '')
-        .replace(/YY/g, (dateMap.year || '').slice(-2))
-    }
+    return renderCampaignTemplateText(template, inputData, target, businessNow, {
+      spin: text => this.renderSpinContent(text),
+      phone: (...values) => this.firstNormalizedVietnamMobilePhone(...values),
+      ...(optOut ? { afterSpin: (text: string) => replaceStopMessagesLink(text, optOut.linkId, optOut.enabled, optOut.state) } : {})
+    })
+  }
 
-    const input = inputData || {}
-    const getInput = (key: string): string => String(input[key] ?? '').trim()
-    const renderPhone = (): string => this.firstNormalizedVietnamMobilePhone(target?.phone, input.phone)
-    const renderSex = (body: string): string => {
-      const [male = '', female = '', unknown = ''] = String(body || '').split('-')
-      const gender = target?.gender
-      const normalized = String(gender ?? '').toLocaleLowerCase('vi-VN')
-      if (gender === 0 || normalized === '0' || normalized === 'male' || normalized === 'nam') return male
-      if (gender === 1 || normalized === '1' || normalized === 'female' || normalized === 'nữ' || normalized === 'nu') return female
-      return unknown || male || female
+  private async prepareZaloOutgoingContent(
+    account: AutoAccount, campaign: Campaign, actionCode: string,
+    options: ZaloSendPhoneMessageOptions | ZaloSendDirectMessageOptions,
+    target: ZaloResolvedTarget, metadata?: BlockRuntimeMetadata
+  ): Promise<{ content: ZaloOutgoingText; media: string[] }> {
+    if (!this.campaignContentPreparationRuns.has(campaign.id)) {
+      return { content: await this.buildZaloOutgoingMessage(account, campaign, options.message, options.inputData, target, metadata),
+        media: (options.attachments || []).map(item => String(item || '').trim()).filter(Boolean) }
     }
-
-    const rendered = (optOut ? replaceStopMessagesLink(raw, optOut.linkId, optOut.enabled, optOut.state) : raw)
-      .replace(/#\{(TODAY|TOMORROW|YESTERDAY)\(([^}]*)\)\}/g, (_, token, fmt) => {
-        const offsetDays = token === 'TOMORROW' ? 1 : token === 'YESTERDAY' ? -1 : 0
-        return formatDate(String(fmt || 'DD/MM/YYYY'), offsetDays)
-      })
-      .replace(/#\{SEX\{([^}]*)\}\}/g, (_, body) => renderSex(String(body || '')))
-      .replace(/#\{FULL_NAME\}/g, target?.displayName || '')
-      .replace(/#\{ORIGINAL_NAME\}/g, target?.originalName || '')
-      .replace(/#\{INPUT_FULLNAME\}/g, getInput('name'))
-      .replace(/#\{UID\}/g, getInput('uid'))
-      .replace(/#\{PHONE\}/g, renderPhone())
-      .replace(/#\{MOBILE\}/g, renderPhone())
-      .replace(/#\{EMAIL\}/g, getInput('email'))
-      .replace(/#\{INFO1\}/g, getInput('info1'))
-      .replace(/#\{INFO2\}/g, getInput('info2'))
-      .replace(/#\{INFO3\}/g, getInput('info3'))
-      .replace(/#\{INFO4\}/g, getInput('info4'))
-      .replace(/#\{INFO5\}/g, getInput('info5'))
-    return rendered
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    return this.prepareSelectedCampaignContent(account, campaign, actionCode,
+      Number(metadata?.campaignInputDataId ?? options.inputData?.id) || null, async variant => ({
+        content: await this.buildZaloOutgoingMessage(account, campaign, variant.content, options.inputData, target, metadata),
+        media: variant.media
+      }))
   }
 
   private async buildZaloOutgoingMessage(
@@ -14383,17 +14346,9 @@ export class CampaignScheduler {
     if (!this.zaloRuntime) throw new Error('Zalo runtime chưa sẵn sàng')
     const target = options.target
     if (!target?.uid) return { ok: true, skipped: true }
-    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
-      .map(item => String(item || '').trim())
-      .filter(Boolean)
-    const message = await this.buildZaloOutgoingMessage(
-      account,
-      campaign,
-      options.message,
-      options.inputData,
-      target,
-      metadata
-    )
+    const preparedContent = await this.prepareZaloOutgoingContent(account, campaign, 'zalo_message_stranger', options, target, metadata)
+    const attachments = preparedContent.media
+    const message = preparedContent.content
     const actionCode = 'zalo_message_stranger'
     const actionName = 'Nhắn tin người lạ'
 
@@ -14472,17 +14427,9 @@ export class CampaignScheduler {
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
-    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
-      .map(item => String(item || '').trim())
-      .filter(Boolean)
-    const message = await this.buildZaloOutgoingMessage(
-      account,
-      campaign,
-      options.message,
-      options.inputData,
-      target,
-      metadata
-    )
+    const preparedContent = await this.prepareZaloOutgoingContent(account, campaign, 'zalo_message_friend', options, target, metadata)
+    const attachments = preparedContent.media
+    const message = preparedContent.content
 
     const engagement = beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, target.uid)
     const engagementGeneration = engagement.revision
@@ -14551,17 +14498,9 @@ export class CampaignScheduler {
     }
 
     const target = this.normalizeZaloTargetFromInputData(groupId, options.targetName, options.inputData, { type: 'group' }, false)
-    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
-      .map(item => String(item || '').trim())
-      .filter(Boolean)
-    const message = await this.buildZaloOutgoingMessage(
-      account,
-      campaign,
-      options.message,
-      options.inputData,
-      target,
-      metadata
-    )
+    const preparedContent = await this.prepareZaloOutgoingContent(account, campaign, 'zalo_message_group', options, target, metadata)
+    const attachments = preparedContent.media
+    const message = preparedContent.content
 
     try {
       const response = await this.dispatchZaloMessage(account.id, groupId, true, message, attachments)
@@ -14806,14 +14745,13 @@ export class CampaignScheduler {
     if (!target?.uid) return { ok: true, skipped: true }
     const actionCode = 'zalo_add_friend'
     const actionName = 'Kết bạn'
-    const businessNow = await this.getTemplateBusinessNow(options.message)
-    const message = this.renderZaloTemplate(
-      options.message,
-      options.inputData,
-      target,
-      false,
-      businessNow
+    const prepareMessage = async (raw: string): Promise<string> => this.renderZaloTemplate(
+      raw, options.inputData, target, false, await this.getTemplateBusinessNow(raw)
     ).slice(0, 150)
+    const message = this.campaignContentPreparationRuns.has(campaign.id)
+      ? (await this.prepareSelectedCampaignContent(account, campaign, actionCode, Number(options.inputData?.id) || null,
+          async variant => ({ content: await prepareMessage(variant.content), media: [] }), 'friend_request')).content
+      : await prepareMessage(String(options.message || ''))
 
     const engagement = beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, target.uid)
     const engagementGeneration = engagement.revision
@@ -15136,7 +15074,8 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     detail: CampaignInputData | null,
-    mainPage: PageController | null
+    mainPage: PageController | null,
+    mediaTempPaths: string[] = []
   ): BlockRuntimeHelpers {
     let sequenceNo = 0
     let stoppedTarget: ZaloActionHelperResult | null = null
@@ -15204,6 +15143,10 @@ export class CampaignScheduler {
     }
 
     return {
+      ...(this.campaignContentPreparationRuns.has(campaign.id) ? {
+        prepareCampaignContent: (options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata) =>
+          this.prepareFacebookCampaignContent(account, campaign, detail, mainPage, options, metadata, mediaTempPaths)
+      } : {}),
       checkGroupPendingContent: (options) => {
         if (!mainPage) {
           return Promise.resolve({
@@ -15273,25 +15216,6 @@ export class CampaignScheduler {
       }
     }
 
-    const businessNow = await this.getTemplateBusinessNow(options.subject, options.body)
-    const subject = this.renderZaloTemplate(
-      options.subject,
-      options.inputData,
-      undefined,
-      false,
-      businessNow
-    ).trim()
-    const renderedBody = this.renderZaloTemplate(
-      options.body,
-      options.inputData,
-      undefined,
-      false,
-      businessNow
-    )
-    const attachments = (Array.isArray(options.attachments) ? options.attachments : [])
-      .map(item => String(item || '').trim())
-      .filter(Boolean)
-
     const recipientCheck: EmailRecipientCheckResult = await this.emailRuntime
       .checkRecipientExists(account.id, to)
       .catch(err => ({
@@ -15311,7 +15235,7 @@ export class CampaignScheduler {
           log: `Email không tồn tại ${to}`,
           data: {
             to,
-            subject,
+            subject: String(options.subject || ''),
             recipientCheck: {
               status: recipientCheck.status,
               reason: recipientCheck.reason || null,
@@ -15324,8 +15248,20 @@ export class CampaignScheduler {
       }
     }
 
+    const prepareEmail = async (variant: CampaignContentVariant<string>) => {
+      const businessNow = await this.getTemplateBusinessNow(variant.subject, variant.content)
+      const subject = this.renderZaloTemplate(variant.subject, options.inputData, undefined, false, businessNow).trim()
+      const renderedBody = this.renderZaloTemplate(variant.content, options.inputData, undefined, false, businessNow)
+      return { subject, content: await this.rewriteEmailPlainTextBodyForRun(account, campaign, options, renderedBody), media: variant.media }
+    }
+    const prepared = this.campaignContentPreparationRuns.has(campaign.id)
+      ? await this.prepareSelectedCampaignContent(account, campaign, actionCode, Number(options.inputData?.id) || null, prepareEmail)
+      : await prepareEmail({ content: String(options.body || ''), subject: String(options.subject || ''),
+          media: (options.attachments || []).map(item => String(item || '').trim()).filter(Boolean) })
+    const subject = prepared.subject || ''
+    const body = prepared.content
+    const attachments = prepared.media
     try {
-      const body = await this.rewriteEmailPlainTextBodyForRun(account, campaign, options, renderedBody)
       const result = await this.emailRuntime.sendEmail(account.id, {
         to,
         subject,
@@ -15930,6 +15866,126 @@ export class CampaignScheduler {
     return allowMediaOnly
       ? `Nội dung nâng cao số ${invalidIndex + 1} đang rỗng. Vui lòng nhập nội dung hoặc chọn media.`
       : `Nội dung nâng cao số ${invalidIndex + 1} chưa có nội dung.`
+  }
+
+  private async prepareSelectedCampaignContent<C>(
+    account: AutoAccount, campaign: Campaign, actionCode: string, inputDataId: number | null,
+    prepare: (variant: CampaignContentVariant<string>, index: number) => Promise<Omit<PreparedCampaignContent<string, C>, 'variantIndex'>>,
+    kind: CampaignContentPreparationOptions['kind'] = 'main', mediaTempPaths: string[] = this.campaignContentMediaPaths.get(campaign.id) || []
+  ): Promise<PreparedCampaignContent<string, C>> {
+    const extra = campaign.extraSettings || {}
+    const advanced = kind === 'comment' ? this.shouldUseAdvancedCommentContent(campaign)
+      : kind === 'main' && this.shouldUseAdvancedContent(campaign)
+    const raw = kind === 'comment' ? extra.commentContent : kind === 'newsfeed_comment'
+      ? extra.newsfeedCommentContent : kind === 'friend_request' ? extra.friendRequestMessage : campaign.content
+    const variants = kind === 'main' && this.isFormattedContentCampaign(campaign)
+      ? splitFormattedContentVariants(raw) : splitSharedContentVariants(raw, { trim: false }).filter(text => text.trim())
+    const count = advanced ? getAdvancedContentItems(extra).length : variants.length
+    const signal = this.activeV2Aborts.get(campaign.id)?.signal
+    return prepareCampaignContent({
+      variantCount: count,
+      signal,
+      takeIndex: variantCount => {
+        const runtimeClaimToken = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
+        const runtimeUnitToken = this.activeCampaignRunUnits.get(campaign.id)?.runtimeUnitToken
+        if (!runtimeClaimToken || !runtimeUnitToken) throw new Error('Thiếu quyền sở hữu lượt để lấy nội dung chiến dịch')
+        return takeCampaignContentIndex({ campaignId: campaign.id, accountId: account.id,
+          runtimeTarget: this.runtimeTarget, runtimeClaimToken, runtimeUnitToken, inputDataId, actionCode, variantCount })
+      },
+      variant: async index => {
+        const item = advanced ? selectAdvancedContentItem(extra, index) : null
+        const postWithBackground = !this.isFormattedContentCampaign(campaign) && extra.postWithBackground === true &&
+          (campaign.actionId === 'facebook_timeline_post' || campaign.actionId === GROUP_POST_ACTION_ID ||
+            (campaign.actionId === PAGE_POST_ACTION_ID && extra.pagePostMode === 'ui'))
+        let media: string[] = []
+        if (kind === 'main') {
+          media = await this.resolveCampaignMediaForIndex(campaign, index, postWithBackground, mediaTempPaths,
+            extra.postAsReels === true ? 1 : undefined)
+        } else if (kind === 'comment') {
+          media = advanced ? await this.resolveAdvancedCommentMedia(item, mediaTempPaths)
+            : await this.resolveAdvancedCommentMedia({ id: 'comment', content: '', mediaItems: extra.commentImages || [],
+              mediaOption: extra.commentImageOption || 'none', randomMediaCount: 1 }, mediaTempPaths)
+        }
+        if (campaign.actionId.startsWith('facebook_') && media.some(path => !isImageOrVideoMediaSource('', path))) {
+          throw new Error('Media Facebook chỉ hỗ trợ ảnh hoặc video')
+        }
+        if (kind === 'main' && campaign.actionId === PAGE_POST_ACTION_ID && (extra.pagePostMode || 'api') === 'api' &&
+          media.some(path => !isImageMediaSource('', path))) throw new Error('Đăng fanpage bằng API hiện chỉ hỗ trợ ảnh')
+        if (kind === 'main' && campaign.actionId === 'facebook_timeline_post' && extra.postAsReels === true &&
+          !postWithBackground && (media.length !== 1 || !isVideoMediaSource('', media[0]))) {
+          throw new Error('Đăng Reels cần đúng 1 video hợp lệ cho mỗi lượt chạy')
+        }
+        return { content: item?.content ?? variants[index] ?? '', media,
+          subject: campaign.actionId === EMAIL_SEND_ACTION_ID
+            ? String(item?.emailSubject ?? (advanced && extra.advancedContentSource === 'group_snapshot' ? '' : extra.emailSubject || ''))
+            : undefined }
+      },
+      prepare
+    })
+  }
+
+  private async prepareFacebookCampaignContent(
+    account: AutoAccount, campaign: Campaign, detail: CampaignInputData | null, page: PageController | null,
+    options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata, mediaTempPaths: string[]
+  ): Promise<PreparedCampaignContent<string>> {
+    const kind = options.kind || 'main'
+    const actionCode = options.actionCode || (kind === 'comment' || kind === 'newsfeed_comment' ? 'fb_comment'
+      : this.getPostActionCode(campaign) || this.getMessageActionCode(campaign))
+    return this.prepareSelectedCampaignContent(account, campaign, actionCode, detail?.id ?? null, async variant => {
+      const signal = this.activeV2Aborts.get(campaign.id)?.signal
+      const extra = campaign.extraSettings || {}
+      const formatted = kind === 'main' && this.isFormattedContentCampaign(campaign)
+      const ai = async (code: string, content: string, question = content): Promise<string> => {
+        try {
+          const result = await callAiUsing(code, { content, question, source: 'aka_agent' }, {
+            ...metadata, campaignId: campaign.id, accountId: account.id,
+            organizationId: campaign.organizationId ?? account.organizationId ?? null
+          })
+          signal?.throwIfAborted()
+          if (!result.ok || !result.content?.trim()) throw new Error(result.error || 'AI trả về nội dung rỗng')
+          return result.content.trim()
+        } catch (error) {
+          signal?.throwIfAborted()
+          await this.logCampaignProgress(campaign, `⚠️ AI viết lại nội dung lỗi, dùng nội dung gốc: ${getErrorMessage(error)}`).catch(() => {})
+          return content
+        }
+      }
+      let source = String(options.sourceText || '')
+      if (source && extra.copyContentFromSource === true && extra.rewriteSourceContentWithAI === true && extra.sourceContentAiPrompt) {
+        const prompt = String(extra.sourceContentAiPrompt)
+        source = await ai('fb_rewrite_source_content_ai', source,
+          /\[content\]/i.test(prompt) ? prompt.replace(/\[content\]/gi, source) : `${prompt}\nNội dung: ${source}`)
+      }
+      let name = String(options.recipientName || detail?.name || '').trim()
+      if (!name && options.resolveFullNameFromPage && page && /#\{\s*FULL_NAME\s*\}/i.test(variant.content)) {
+        const xpath = "//*[contains(@class,'xxymvpz x1dyh7pn')]"
+        if (await page.waitForSelector(xpath, { timeout: 3000 }).catch(() => false)) name = String(await page.getText(xpath).catch(() => '')).trim()
+      }
+      const render = (text: string): string => this.renderSpinContent(text)
+        .replace(/#\{\s*FULL_NAME\s*\}/gi, () => name)
+        .replace(/#\{\s*(TODAY|TOMORROW|YESTERDAY)\s*(?:\(\s*(DD\/MM\/YYYY|MM\/DD\/YYYY)\s*\))?\s*\}/gi,
+          (_match, key, format) => {
+            const date = new Date()
+            date.setDate(date.getDate() + (String(key).toUpperCase() === 'TOMORROW' ? 1 : String(key).toUpperCase() === 'YESTERDAY' ? -1 : 0))
+            const dd = String(date.getDate()).padStart(2, '0'), mm = String(date.getMonth() + 1).padStart(2, '0')
+            return String(format).toUpperCase() === 'MM/DD/YYYY' ? `${mm}/${dd}/${date.getFullYear()}` : `${dd}/${mm}/${date.getFullYear()}`
+          })
+      const combined = source ? (formatted
+        ? [plainTextToFormattedContent(source), variant.content].filter(Boolean).join('<p><br></p>')
+        : [source, variant.content].filter(Boolean).join('\n\n')) : variant.content
+      let content = formatted ? transformFormattedContentText(combined, render) : render(combined)
+      const rewriteEnabled = kind === 'comment'
+        ? extra.rewriteCommentContentEachRun === true
+        : extra.rewriteContentEachRun === true
+      if (kind === 'newsfeed_comment' && extra.newsfeedCommentUseAI === true) {
+        const prompt = content.replace(/\[post\]/gi, options.postContent || '').replace(/\[name_post\]/gi, options.postName || '')
+          || `Viết một bình luận ngắn, tự nhiên cho bài viết sau:\n${options.postContent || ''}`
+        content = await ai('fb_newsfeed_check_comment', content, prompt)
+      } else if (!formatted && rewriteEnabled && content.trim() && options.rewriteCode) {
+        content = await ai(options.rewriteCode, content)
+      }
+      return { content, media: [...variant.media, ...(options.sourceMedia || [])], subject: variant.subject }
+    }, kind, mediaTempPaths)
   }
 
   private getRawCampaignContentForIndex(campaign: Campaign, index: number): string {

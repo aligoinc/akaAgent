@@ -30,6 +30,8 @@ const methods = methodNames.map(name => {
   return method.getText(source)
 }).join('\n')
 const globals = {
+  MOBILE_MANAGED_SMS_ACTION_IDS: new Set(['sms_send', 'voice_call']),
+  getWorkflow: async () => ({ defaultVariables: {} }),
   ...advanced, ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
   isRecentDeliveryCooldownEnabled: (_action, extra) => extra.recentDeliveryCooldownEnabled === true,
   supportsFacebookRestBrowse: () => false,
@@ -79,6 +81,7 @@ function fixture(options = {}) {
     'startBackgroundPreview', 'stopBackgroundPreview', 'markCampaignRunUnitStarted', 'logRecentDeliveryCooldownPauses'
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
+    campaignContentPreparationRuns: new Set(), campaignContentMediaPaths: new Map(),
     running: true, activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(), sendExclusionLabels: new Map(),
     facebookPageIdentities: new Map(), attemptedRunErrorPolicies: new Set(), zaloMessageOptOutContexts: new Map(), pauseRequests: new Set(),
     splitContentVariants: spin.splitContentVariants,

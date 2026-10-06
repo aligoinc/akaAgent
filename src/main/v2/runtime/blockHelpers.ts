@@ -1,8 +1,22 @@
 import { resolveXpathByName } from '../../data/repositories/elementV2Repository'
 import { renderContentSpin, splitContentVariants } from '../../../shared/contentSpin'
 import type { CampaignRunEventInput } from '../../../shared/types'
+import type { PreparedCampaignContent } from '../../../shared/campaignContentPreparation'
+
+export interface CampaignContentPreparationOptions {
+  actionCode?: string
+  kind?: 'main' | 'comment' | 'newsfeed_comment' | 'friend_request'
+  rewriteCode?: string
+  recipientName?: string
+  resolveFullNameFromPage?: boolean
+  sourceText?: string
+  sourceMedia?: string[]
+  postContent?: string
+  postName?: string
+}
 
 export interface BlockHelpers {
+  prepareCampaignContent?(options?: CampaignContentPreparationOptions): Promise<PreparedCampaignContent<string>>
   /** Pause execution. Throws khi signal aborted. */
   sleep(ms: number, signal?: AbortSignal): Promise<void>
   /** Append a line vào run log (capture cho UI realtime + run history) */
@@ -86,6 +100,7 @@ export interface BlockRuntimeMetadata {
 }
 
 export interface BlockRuntimeHelpers {
+  prepareCampaignContent?: (options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata) => Promise<PreparedCampaignContent<string>>
   checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
   logRunEvents?: (events: CampaignRunEventInput[], metadata: BlockRuntimeMetadata) => Promise<unknown>
@@ -444,6 +459,10 @@ export function createBlockHelpers(
       if (!runtimeHelpers.emailSendMessage) throw new Error('Runtime hiện tại không hỗ trợ Email API')
       return runtimeHelpers.emailSendMessage(options, runtimeMetadata)
     }
+  }
+
+  if (runtimeHelpers.prepareCampaignContent) {
+    baseHelpers.prepareCampaignContent = options => runtimeHelpers.prepareCampaignContent!(options || {}, runtimeMetadata)
   }
 
   if (runtimeHelpers.logRunEvent) {
