@@ -1,0 +1,35 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "signature": "public.aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])",
+  "source_checksum": "0116ee4872248f3286cdc727866add13",
+  "target_checksum": "65cd07b8ae16017794e56977c2f76aff",
+  "sql_md5": "99a02aef6ec2e25026b937545ac39d98",
+  "preserved_functions": [
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "5c8e5a68ee2b52e240d01386e05b90b6",
+      "owner": "postgres",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "signature": "aka_agent_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text,text,text)"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "checksum": "abafd33b61827378f82e5f47bc93db18",
+      "owner": "postgres",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": false,
+      "provolatile": "v",
+      "signature": "aka_agent_internal_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text)"
+    }
+  ],
+  "migration_version": "20261007031753",
+  "migration_name": "migration_v354_zalo_server_deleted_tags"
+}

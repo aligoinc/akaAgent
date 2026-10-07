@@ -1,0 +1,7 @@
+{
+  "rpc_status": 400,
+  "rpc_guard": "server_campaign_tag_claim_required",
+  "rest_status": 200,
+  "reload": "existing DDL trigger; no manual NOTIFY",
+  "real_campaign_writes": false
+}

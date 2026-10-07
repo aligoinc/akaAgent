@@ -1,0 +1,6 @@
+{
+  "rpc_status": 400,
+  "rpc_code": "P0001",
+  "rpc_message": "server_campaign_tag_claim_required",
+  "read_status": 200
+}

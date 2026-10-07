@@ -1,0 +1,18 @@
+{
+  "command": "npm run build:server:win",
+  "exit_code": 0,
+  "version": "8.1.1",
+  "migration": "v353",
+  "files": [
+    {
+      "path": "dist-server/akaAgent-Zalo-Server-Setup-8.1.1.exe",
+      "bytes": 107019601,
+      "sha256": "4d893be4bc96bdb75af3f3b39a2149e5a4bd9a9f4373088e8f541255639ef062"
+    },
+    {
+      "path": "dist-server/win-unpacked/resources/app.asar",
+      "bytes": 167302615,
+      "sha256": "fc8b52c72099ab7ce5b563cfbf266103c57dce2aec32449393824ba3659b7c45"
+    }
+  ]
+}
