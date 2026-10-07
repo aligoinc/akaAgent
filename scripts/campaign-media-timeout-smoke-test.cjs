@@ -9,6 +9,15 @@ const { pathToFileURL } = require('node:url')
 const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
 const flush = () => new Promise(resolve => setImmediate(resolve))
+async function waitForUploadCallback(ctx) {
+  // SDK attachment setup reads real files. A fixed number of setImmediate
+  // turns can finish before filesystem I/O under concurrent typecheck/build.
+  const deadline = Date.now() + 5000
+  while (!ctx.uploadCallbacks.size && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  assert.equal(ctx.uploadCallbacks.size, 1, 'SDK must register the fixture upload callback')
+}
 function fakeClock() {
   let now = 0
   const tasks = new Set()
@@ -92,7 +101,7 @@ async function runtimeCases(zca) {
       const send = () => type === 'user' ? runtime.sendMessageToUser(1, 'recipient', '', [video], true)
         : runtime.sendMessageToGroup(1, 'recipient', '', [video], true)
       const failed = assert.rejects(send(), error => error.code === media.CAMPAIGN_MEDIA_TIMEOUT_CODE)
-      for (let i = 0; i < 100 && !ctx.uploadCallbacks.size; i++) await flush()
+      await waitForUploadCallback(ctx)
       assert.equal(ctx.uploadCallbacks.size, 1)
       const late = ctx.uploadCallbacks.get('1')
       assert.equal(requests.length, 1)
@@ -103,14 +112,14 @@ async function runtimeCases(zca) {
       await late({ fileId: '1', fileUrl: 'https://file.test/file1' }); await flush()
       assert.equal(requests.length, 1, 'late file_done must not deliver')
       const next = send()
-      for (let i = 0; i < 100 && !ctx.uploadCallbacks.size; i++) await flush()
+      await waitForUploadCallback(ctx)
       await ctx.uploadCallbacks.get('2')({ fileId: '2', fileUrl: 'https://file.test/file2' })
       assert.ok((await next).attachment.length)
       assert.equal(requests.length, 3)
       assert.equal(clock.tasks.size, 0)
       // Active invalidation fences SDK continuation and reports uncertainty.
       const cancelled = assert.rejects(send(), error => error.code === 'command_result_unknown')
-      for (let i = 0; i < 100 && !ctx.uploadCallbacks.size; i++) await flush()
+      await waitForUploadCallback(ctx)
       runtime.invalidateAccount(1); await cancelled
       assert.equal(ctx.uploadCallbacks.size, 0)
       assert.equal(clock.tasks.size, 0)
@@ -402,4 +411,5 @@ async function main() {
   await sharePolicyStopCases(Scheduler)
   console.log('PASS: Desktop/Server media deadlines, real SDK late file_done fence, proxy transport, next send, invalidation, share thresholds/order/policy/DB failures, 20 share stop-policy regressions, normal downstream skip and partial rich text')
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { schedulerClass, fixture, timeout, media }
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })
