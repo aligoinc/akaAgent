@@ -492,6 +492,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 - **Zalo Server admin UI**: local IPC batches every 250 ms, stops while hidden/minimized and resyncs the bounded 1,000-event history on restore. Keep gateway/runtime delivery independent; reuse DOM rows and preserve the clear-log sequence fence. Offline smoke/benchmark: `node scripts/zalo-server-admin-ui-smoke.cjs --compare-base`.
 
+- **Media async context**: dùng một `AsyncLocalStorage` chung, map scope theo owner trong từng chuỗi gọi; không tạo ALS theo API/session hay disable/xóa scope đã hủy vì continuation muộn sẽ lọt về fetch không có guard. Smoke: `node scripts/campaign-media-context-smoke-test.cjs`.
+
 - **Fanpage content rotation (legacy)**: với workflow chưa chuyển V351, không chọn biến thể theo index Page mỗi lượt vì một Page luôn có index `0`; khi ghi `sourceLinkIndex`, phải giữ `campaign.extraSettings` mới nhất trong lượt để không ghi đè `contentRotationIndex` vừa tăng ([campaignScheduler.ts](src/main/services/campaignScheduler.ts:3667)).
 - **Tương tác Zalo**: kiểm thử Chat bằng SQL role thực `aka_agent_chat_api`, không chỉ DB owner/JWT claim. Engagement phải bỏ qua khi lỗi hoặc tranh chấp, không chặn gửi/detail/quota. UI chỉ hiện dấu có timestamp; không hiện nhãn không áp dụng/không theo dõi/chưa ghi nhận khi ô chưa có dấu. Không dựng nguồn hồi tố hoặc gửi lại để bù dấu bị mất.
 - **Clock/cache tương tác**: không trộn epoch DB với deadline timer local hoặc dùng giờ VPS để xét timestamp Zalo. Sự kiện đầu sau cache 60 giây hết hạn phải được giữ có giới hạn nếu đã khớp RAM và biết revision bật; cold/disabled vẫn bỏ. Kiểm thử seen → im lặng 3 phút → reply, lệch giờ máy và tắt/bật khi chờ; không để catalog nhiều owner trì hoãn việc đã sẵn sàng.
@@ -635,6 +637,8 @@ chỉ ghi các lỗi trước đó, không áp policy/đếm thêm làm ghi đè
 dừng. Policy dừng được chọn ở tổng kết batch thường vẫn giữ cách đếm cũ.
 Reset trước đếm phải được xác nhận; lỗi DB bàn giao
 cleanup với token cũ. Session bị thay/hủy khi đang gửi trả unknown, không retry.
+Ngữ cảnh media dùng chung một ALS; mỗi owner/lượt gửi vẫn có scope và abort riêng.
+Callback chỉ phục hồi scope của owner đó, giữ các owner khác tại lúc gọi callback.
 Smoke offline: `node scripts/campaign-media-timeout-smoke-test.cjs`; xem
 [phạm vi và kiểm chứng](docs/CAMPAIGN_MEDIA_TIMEOUT.md). Không migration, pool,
 worker hay connection mới; không gửi Zalo thật trong test. Chưa phát hành installer.
