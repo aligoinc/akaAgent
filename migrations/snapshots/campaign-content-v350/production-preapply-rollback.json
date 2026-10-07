@@ -1,0 +1,6 @@
+[
+  {
+    "fixtures_absent": true,
+    "result": "PASS: 3 rounds, reorder/skip, action/global/batch, singleton, ownership/unit, reset, server pause, seed/modulo, config, locks and runtime EXECUTE grants; all fixtures rolled back"
+  }
+]
