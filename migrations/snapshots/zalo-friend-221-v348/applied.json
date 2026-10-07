@@ -1,0 +1,10 @@
+{
+  "applied_at": "2026-10-06T02:03:27.757Z",
+  "migration_sha256": "b7e042ffeb50b2163bf60cff8c4fac7687df8a71e6af0ef8ff71b3d0d02d6a4c",
+  "history": [
+    {
+      "name": "migration_v348_zalo_friend_221_hour_limit",
+      "version": "20261006020326"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+[
+  {
+    "result": "PASS stale checksum rejection, apply, unchanged existing rows, guarded rollback; no persistent writes"
+  }
+]
