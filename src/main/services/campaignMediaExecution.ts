@@ -7,6 +7,10 @@ interface MediaExecution {
   cleanup: Set<() => void>;
 }
 
+// One async hook for all API sessions. A store contains only owners nested in
+// this call chain, not a global registry of sessions or concurrent sends.
+const currentExecutions = new AsyncLocalStorage<ReadonlyMap<symbol, MediaExecution>>();
+
 export class CampaignMediaTimeoutError extends Error {
   public readonly code = CAMPAIGN_MEDIA_TIMEOUT_CODE;
 
@@ -31,14 +35,27 @@ function closedError(): Error {
  * SDK utils.request reads ctx.options.polyfill for every request. Never replace global fetch.
  */
 export class CampaignMediaExecution {
-  private readonly current = new AsyncLocalStorage<MediaExecution>();
+  private readonly scopeKey = Symbol("campaignMediaExecution");
   private readonly active = new Set<MediaExecution>();
   private stopped = false;
 
   public constructor(private readonly fetcher: typeof fetch = globalThis.fetch) {}
 
+  private currentScope(): MediaExecution | undefined {
+    return currentExecutions.getStore()?.get(this.scopeKey);
+  }
+
+  private runInScope<T>(scope: MediaExecution, operation: () => T): T {
+    const inherited = currentExecutions.getStore();
+    if (inherited?.get(this.scopeKey) === scope) return operation();
+    // Copy on entry so parallel/nested sends cannot overwrite each other's scope.
+    const scopes = new Map(inherited);
+    scopes.set(this.scopeKey, scope);
+    return currentExecutions.run(scopes, operation);
+  }
+
   public readonly fetch: typeof fetch = async (input, init) => {
-    const scope = this.current.getStore();
+    const scope = this.currentScope();
     if (!scope) return this.fetcher(input, init);
     scope.controller.signal.throwIfAborted();
     const previousSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
@@ -52,7 +69,7 @@ export class CampaignMediaExecution {
   public trackUploadCallbacks(callbacks: Map<string, UploadCallback>): void {
     const originalSet = callbacks.set.bind(callbacks);
     callbacks.set = (key, callback) => {
-      const scope = this.current.getStore();
+      const scope = this.currentScope();
       if (!scope) return originalSet(key, callback);
       if (scope.controller.signal.aborted) return callbacks;
       const cleanup = () => {
@@ -62,7 +79,8 @@ export class CampaignMediaExecution {
       const guarded: UploadCallback = (data) => {
         cleanup();
         if (scope.controller.signal.aborted) return;
-        return this.current.run(scope, () => callback(data));
+        // Restore only this owner's scope, preserving other owners at invocation.
+        return this.runInScope(scope, () => callback(data));
       };
       scope.cleanup.add(cleanup);
       // Scoped entries live only until completion/deadline, without the SDK's
@@ -83,13 +101,15 @@ export class CampaignMediaExecution {
       onAbort = () => reject(scope.controller.signal.reason);
       scope.controller.signal.addEventListener("abort", onAbort, { once: true });
     });
-    return this.current.run(scope, async () => {
+    return this.runInScope(scope, async () => {
       try {
         return await Promise.race([Promise.resolve().then(operation), cancelled]);
       } finally {
         clearTimeout(timeout);
         scope.controller.signal.removeEventListener("abort", onAbort);
         // Also close siblings after an ordinary Promise.all rejection.
+        // Keep the aborted context on late continuations; clearing/disabling the
+        // shared storage would let them fall back to the unscoped transport.
         scope.controller.abort(closedError());
         for (const cleanup of [...scope.cleanup]) cleanup();
         this.active.delete(scope);

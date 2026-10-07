@@ -45,6 +45,43 @@ không retry input đó và dừng campaign. Lifecycle shutdown/handoff vẫn ư
 đường dừng hiện có. Không tạo connection, SQL pool, worker, timer polling hoặc
 migration; giữ nguyên RPC claim/settle/cleanup và policy đang cấu hình.
 
+## Giới hạn chi phí ngữ cảnh media — 06/10/2026
+
+`CampaignMediaExecution` dùng một `AsyncLocalStorage` ở cấp module cho mọi phiên
+API. Store là map bất biến theo quy ước, khóa symbol riêng cho từng owner; chỉ
+chứa owner lồng nhau trong chuỗi gọi hiện tại. Vào scope tạo bản sao map, không
+ghi đè map của lượt gửi khác hoặc lưu toàn bộ phiên vào registry toàn cục.
+Mỗi lần gửi vẫn có AbortController, deadline, cleanup riêng; các lượt đồng thời
+trên cùng phiên cũng tách biệt. Fetch chỉ lấy scope thuộc owner của nó.
+
+Callback upload chỉ giữ scope của owner đã đăng ký và phục hồi scope đó vào
+ngữ cảnh tại lúc callback được gọi. Không phục hồi cả map đăng ký vì có thể
+đưa scope của owner khác đã đóng trở lại. Khi hoàn thành/hủy, vẫn giữ dấu abort
+trên continuation muộn; không disable ALS chung hay xóa scope khiến fetch rơi
+về nhánh không có guard. Store hết tham chiếu được GC thu hồi bình thường.
+
+Smoke `node scripts/campaign-media-context-smoke-test.cjs` chạy trên Node đi kèm
+Electron, kiểm tra gửi đồng thời khác/cùng phiên, hủy/timeout độc lập, request
+muộn, scope lồng nhau, callback chuyển ngữ cảnh, manual fetch và ngữ cảnh staff.
+Probe chạy mỗi cấu hình trong process mới để đo số slot `kResourceStore` trên
+Promise sau khi kích hoạt và dừng nhiều phiên. Không dùng ngưỡng thời gian để
+quyết định PASS/FAIL; slot media phải luôn bằng một trên Node 20 của Electron 33.
+
+So sánh offline bằng
+`node scripts/campaign-media-context-smoke-test.cjs --compare-base 04a78b86`:
+
+| Phiên đã kích hoạt | Slot cũ / mới | 15.000 await, cũ / mới (ms) |
+| --- | --- | --- |
+| 1 | 1 / 1 | 1,96 / 3,15 |
+| 180 | 180 / 1 | 226,78 / 2,14 |
+| 360 | 360 / 1 | 463,85 / 2,25 |
+
+Đo trên Node 20.18.3, median ba lượt sau warm-up; số slot sau stop giữ cùng giá
+trị trên từng bản. Đây là phép đo riêng chi phí Promise với media context đã
+kích hoạt, không có mạng/DB. Chưa đo mức giảm CPU hoặc độ trễ tổng thể trên VPS
+sau sửa; cần cài bản mới và so sánh tải tương đương. Bản sửa dùng chung cho
+Desktop và App Zalo Server, không thay Chat Sync.
+
 ## Kiểm chứng và phát hành
 
 `node scripts/campaign-media-timeout-smoke-test.cjs` dùng SDK zca-js đang cài
