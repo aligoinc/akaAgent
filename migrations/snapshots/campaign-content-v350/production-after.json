@@ -1,0 +1,376 @@
+{
+  "blocks": [
+    {
+      "checksum": "edeb5484c87b90cd0d7b79d76a2bde96",
+      "code_md5": "d6c5e9a59ac466b0ba8101bf3f74d4a2",
+      "id": 28,
+      "name": "fb_type_post_content"
+    },
+    {
+      "checksum": "4eecc59a07193d89ae78c510044b0695",
+      "code_md5": "fc6ee121a75d2ecd8885278d8999fb0e",
+      "id": 34,
+      "name": "fb_comment_at_position"
+    },
+    {
+      "checksum": "a57206347462b8bdb6a34c5f91f7d909",
+      "code_md5": "e65666791c6edd4dfe9fc6bcecb49ada",
+      "id": 35,
+      "name": "fb_scrape_post"
+    },
+    {
+      "checksum": "beaa5d6766d9da4d9f439533e2bbd4f8",
+      "code_md5": "af28116b9ea41a4fc8f4ddead1b6af1f",
+      "id": 36,
+      "name": "fb_share_post"
+    },
+    {
+      "checksum": "0e79504a3a0073b0f04bb32aa9a45c04",
+      "code_md5": "0a417bced486afa5f7300e2af1536d9d",
+      "id": 37,
+      "name": "fb_post_reels"
+    },
+    {
+      "checksum": "38df49d6c12e3c7ac4754b015e3a1f05",
+      "code_md5": "3a7f999972550721bf67b25744363b9f",
+      "id": 38,
+      "name": "fb_send_message"
+    },
+    {
+      "checksum": "1d6caa1aa7cb0ba0e892ee4e3df5c0eb",
+      "code_md5": "8ecbc8b429a48ae1af25085f4742a7fa",
+      "id": 2614,
+      "name": "fb_prepare_post_link_comment_iteration"
+    },
+    {
+      "checksum": "173eabee3991e97dcdbd6853b683fcc4",
+      "code_md5": "30514089c396f36a63c038b7736a174b",
+      "id": 2616,
+      "name": "fb_comment_current_post"
+    },
+    {
+      "checksum": "e3deee72b60dcf83b1dcab8b1cbc9e01",
+      "code_md5": "21136df214634903530caa9d40c3eefb",
+      "id": 2669,
+      "name": "fb_page_post_api"
+    },
+    {
+      "checksum": "f22c557b706f4f45672a9ef80084edcc",
+      "code_md5": "3d30466006b64af753e98002d9282446",
+      "id": 2672,
+      "name": "fb_post_current_identity_ui"
+    },
+    {
+      "checksum": "5b92666b6010af21d32741327a8380ab",
+      "code_md5": "f0715301148a3638b583784c2724c3a0",
+      "id": 2674,
+      "name": "fb_rewrite_source_content_ai"
+    },
+    {
+      "checksum": "7ccc10bcfc97ee437ec7464946069fe1",
+      "code_md5": "86217720edd3c1c04495c7c061d26bea",
+      "id": 2679,
+      "name": "fb_send_page_inbox_message"
+    },
+    {
+      "checksum": "3829d9b7f9ccfc6dd40a4b49a334eed9",
+      "code_md5": "9105a60844ad6defe21c828ef004c795",
+      "id": 2706,
+      "name": "fb_newsfeed_check_comment"
+    },
+    {
+      "checksum": "808d47ed234d2e86c2cdf712a4ef6200",
+      "code_md5": "ea4f24997390f946082cd12936fe24c9",
+      "id": 2824,
+      "name": "fb_compose_source_manual_content"
+    }
+  ],
+  "captured_at": "2026-10-06 10:14:52.743082+00",
+  "columns": [
+    {
+      "column": "content_rotation_indexes",
+      "default": "'{}'::jsonb",
+      "nullable": "NO",
+      "table": "auto_campaign_input_data",
+      "type": "jsonb"
+    },
+    {
+      "column": "content_rotation_indexes",
+      "default": "'{}'::jsonb",
+      "nullable": "NO",
+      "table": "auto_campaigns",
+      "type": "jsonb"
+    }
+  ],
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "6c656e83c8b38ccea75bcc8f7d81ffed",
+      "config": [
+        "search_path=public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_canonical_campaign_input_payload()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_action text;\n  v_has_phone boolean;\n  v_target_changed boolean;\nBEGIN\n  IF OLD.canonical_target_key IS NULL THEN\n    RETURN NEW;\n  END IF;\n\n  -- Information is editable in both direct and data_group campaigns; the\n  -- delivery target and ledger references are not. No alias cleanup is needed.\n  IF NEW.campaign_id IS DISTINCT FROM OLD.campaign_id\n    OR NEW.input_id IS DISTINCT FROM OLD.input_id\n    OR NEW.canonical_target_key IS DISTINCT FROM OLD.canonical_target_key\n    OR NEW.auto_automation_detail_id IS DISTINCT FROM OLD.auto_automation_detail_id\n    OR NEW.is_delete IS DISTINCT FROM OLD.is_delete\n  THEN\n    RAISE EXCEPTION 'canonical_campaign_input_payload_immutable';\n  END IF;\n\n  -- Status, name, notes, carrier, info1..5, content and scheduling changes\n  -- require no campaign lookup. Only possible target changes need the action.\n  IF NEW.phone IS NOT DISTINCT FROM OLD.phone\n    AND NEW.uid IS NOT DISTINCT FROM OLD.uid\n    AND NEW.email IS NOT DISTINCT FROM OLD.email\n  THEN\n    RETURN NEW;\n  END IF;\n\n  SELECT campaign.action_id INTO v_action\n  FROM public.auto_campaigns AS campaign WHERE campaign.id = OLD.campaign_id;\n\n  IF v_action IN ('zalo_message_phone', 'sms_send', 'voice_call', 'zalo_add_group_member') THEN\n    v_has_phone := COALESCE(public.normalize_phone(OLD.phone) ~ '^0[35789][0-9]{8}$', false);\n    IF v_action = 'zalo_add_group_member' AND NOT v_has_phone THEN\n      -- Adding a valid phone would switch this UID-based row to another route.\n      v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid\n        OR COALESCE(public.normalize_phone(NEW.phone) ~ '^0[35789][0-9]{8}$', false);\n    ELSE\n      v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n        OR (NOT v_has_phone AND NEW.uid IS DISTINCT FROM OLD.uid)\n        OR (v_action = 'zalo_add_group_member' AND NULLIF(btrim(OLD.uid), '') IS NOT NULL\n          AND NEW.uid IS DISTINCT FROM OLD.uid);\n    END IF;\n  ELSIF v_action = 'email_send' THEN\n    v_target_changed := NEW.email IS DISTINCT FROM OLD.email;\n  ELSIF v_action LIKE 'facebook_%' OR v_action LIKE 'zalo_%' THEN\n    v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid;\n  ELSE\n    -- Unknown/legacy actions keep all potential target fields protected.\n    v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n      OR NEW.uid IS DISTINCT FROM OLD.uid OR NEW.email IS DISTINCT FROM OLD.email;\n  END IF;\n\n  IF v_target_changed THEN\n    RAISE EXCEPTION 'canonical_campaign_input_target_immutable';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": false,
+      "signature": "aka_agent_guard_canonical_campaign_input_payload()",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "74c082aacb1de27a8cedff2e824f219f",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0 THEN\n    RAISE EXCEPTION 'campaign_input_serialization_id_invalid';\n  END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended(\n    'aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0\n  ));\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "aka_agent_lock_campaign_input_serialization(bigint)",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "006a6da075ede4e9c6b07194422f65c9",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_take_campaign_content_index(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_runtime_claim_token uuid, p_runtime_unit_token uuid, p_input_data_id bigint, p_action_code text, p_variant_count integer)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_org bigint;\n  v_campaign public.auto_campaigns%ROWTYPE;\n  v_input public.auto_campaign_input_data%ROWTYPE;\n  v_raw text;\n  v_index integer;\n  v_first boolean;\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0 OR p_account_id IS NULL OR p_account_id <= 0\n    OR p_staff_id IS NULL OR p_staff_id <= 0 OR p_runtime_target IS NULL\n    OR p_runtime_target NOT IN ('desktop','server')\n    OR p_runtime_claim_token IS NULL OR p_runtime_unit_token IS NULL\n    OR p_action_code IS NULL OR btrim(p_action_code) = '' OR length(p_action_code) > 128\n    OR p_variant_count IS NULL OR p_variant_count < 1\n    OR (p_input_data_id IS NOT NULL AND p_input_data_id <= 0) THEN\n    RAISE EXCEPTION 'campaign_content_invalid_arguments';\n  END IF;\n\n  SELECT organization_id INTO v_org FROM public.org_staff\n  WHERE id=p_staff_id AND is_active IS TRUE FOR SHARE;\n  IF v_org IS NULL THEN RAISE EXCEPTION 'campaign_content_not_owner'; END IF;\n\n  -- Same lock order as unit claim: staff -> entitlement -> serialization -> input -> campaign/account.\n  PERFORM pg_advisory_xact_lock_shared(hashtextextended('aka-agent-zalo-runtime-entitlement-mutation',0));\n  PERFORM public.aka_agent_lock_campaign_input_serialization(p_campaign_id);\n  IF p_input_data_id IS NOT NULL THEN\n    SELECT * INTO v_input FROM public.auto_campaign_input_data\n    WHERE id=p_input_data_id AND campaign_id=p_campaign_id\n      AND NOT COALESCE(is_delete,false) AND status='đang chạy' FOR UPDATE;\n    IF NOT FOUND THEN RAISE EXCEPTION 'campaign_content_input_not_owned'; END IF;\n  END IF;\n\n  SELECT c.* INTO v_campaign FROM public.auto_campaigns c\n  JOIN public.auto_accounts a ON a.id=c.account_id AND a.staff_id=c.staff_id\n  WHERE c.id=p_campaign_id AND c.account_id=p_account_id AND c.staff_id=p_staff_id\n    AND (c.organization_id IS NULL OR c.organization_id=v_org)\n    AND (a.organization_id IS NULL OR a.organization_id=v_org)\n    AND NOT COALESCE(c.is_delete,false) AND NOT COALESCE(a.is_delete,false)\n    AND a.is_active IS TRUE AND a.login_status='đã đăng nhập'\n    -- Server pause drains the already-claimed unit before releasing ownership.\n    AND (p_runtime_target='server' OR (c.status='đang chạy' AND a.status='đang chạy'))\n    AND c.runtime_claim_token=p_runtime_claim_token AND c.runtime_claim_target=p_runtime_target\n    AND c.runtime_unit_token=p_runtime_unit_token AND c.runtime_unit_claimed_at IS NOT NULL\n  FOR UPDATE OF c,a;\n  IF NOT FOUND THEN RAISE EXCEPTION 'campaign_content_not_owner'; END IF;\n  IF p_input_data_id IS NOT NULL AND NOT COALESCE(p_input_data_id=ANY(v_campaign.runtime_unit_input_data_ids),false) THEN\n    RAISE EXCEPTION 'campaign_content_input_not_in_unit';\n  END IF;\n  IF p_variant_count=1 THEN RETURN 0; END IF;\n\n  v_first := p_input_data_id IS NULL OR NOT (v_input.content_rotation_indexes ? p_action_code);\n  IF v_first THEN\n    v_raw := v_campaign.content_rotation_indexes->>p_action_code;\n    IF v_raw IS NULL AND v_campaign.action_id IN ('facebook_timeline_post','facebook_page_post')\n      AND p_action_code IN ('fb_post_my_profile','fb_post_page') THEN\n      v_raw := v_campaign.extra_settings->>'contentRotationIndex';\n    END IF;\n  ELSE\n    v_raw := v_input.content_rotation_indexes->>p_action_code;\n  END IF;\n  -- Modulo the current snapshot size; changing templates does not clear state.\n  v_index := CASE WHEN v_raw ~ '^[0-9]{1,16}$'\n    THEN mod(v_raw::numeric,p_variant_count)::integer ELSE 0 END;\n  IF v_first THEN\n    UPDATE public.auto_campaigns SET content_rotation_indexes=jsonb_set(\n      content_rotation_indexes,ARRAY[p_action_code],to_jsonb((v_index+1)%p_variant_count),true)\n    WHERE id=p_campaign_id;\n  END IF;\n  IF p_input_data_id IS NOT NULL THEN\n    UPDATE public.auto_campaign_input_data SET content_rotation_indexes=jsonb_set(\n      content_rotation_indexes,ARRAY[p_action_code],to_jsonb((v_index+1)%p_variant_count),true)\n    WHERE id=p_input_data_id;\n  END IF;\n  RETURN v_index;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+      "volatility": "v"
+    }
+  ],
+  "history": [
+    {
+      "name": "migration_v350_campaign_content_rotation",
+      "statement_md5": "e4d05f93b11c024b0c710ee86f9f946d",
+      "version": "20261006101341"
+    },
+    {
+      "name": "migration_v351_campaign_content_blocks",
+      "statement_md5": "3d712a04a5ee21cb500b2439cd5be505",
+      "version": "20261006101435"
+    }
+  ],
+  "history_columns": [
+    {
+      "column": "version",
+      "default": null,
+      "nullable": "NO",
+      "type": "text"
+    },
+    {
+      "column": "statements",
+      "default": null,
+      "nullable": "YES",
+      "type": "ARRAY"
+    },
+    {
+      "column": "name",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "created_by",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "idempotency_key",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "rollback",
+      "default": null,
+      "nullable": "YES",
+      "type": "ARRAY"
+    }
+  ],
+  "server_version": "17.6",
+  "workflows": [
+    {
+      "checksum": "28793068acef6aef183577fbf793d041",
+      "id": 1,
+      "version": "1"
+    },
+    {
+      "checksum": "0fbd2ac5e961e483edca8fde2c15063a",
+      "id": 2,
+      "version": "1"
+    },
+    {
+      "checksum": "b498b966b6071dc090f3edaac16ef96f",
+      "id": 3,
+      "version": "1"
+    },
+    {
+      "checksum": "ee418358ccbc11b31f0a1dffa46bbf00",
+      "id": 157,
+      "version": "1"
+    },
+    {
+      "checksum": "409e791bbcd9de01f4d748a5dcb67683",
+      "id": 207,
+      "version": "1"
+    },
+    {
+      "checksum": "557a2918855aadd40281fdcf5b661e05",
+      "id": 208,
+      "version": "1"
+    },
+    {
+      "checksum": "36a6e60b7b3da2a926f8567653edc8d3",
+      "id": 226,
+      "version": "1"
+    },
+    {
+      "checksum": "c519ca67ef8154bd08d27b88dfa26d00",
+      "id": 227,
+      "version": "1"
+    },
+    {
+      "checksum": "3390c6d5f185b76fa7da0344a47ef5b2",
+      "id": 238,
+      "version": "1"
+    },
+    {
+      "checksum": "409e791bbcd9de01f4d748a5dcb67683",
+      "id": 244,
+      "version": "1"
+    },
+    {
+      "checksum": "ee418358ccbc11b31f0a1dffa46bbf00",
+      "id": 245,
+      "version": "1"
+    },
+    {
+      "checksum": "557a2918855aadd40281fdcf5b661e05",
+      "id": 248,
+      "version": "1"
+    },
+    {
+      "checksum": "b498b966b6071dc090f3edaac16ef96f",
+      "id": 249,
+      "version": "1"
+    },
+    {
+      "checksum": "36a6e60b7b3da2a926f8567653edc8d3",
+      "id": 250,
+      "version": "1"
+    },
+    {
+      "checksum": "0fbd2ac5e961e483edca8fde2c15063a",
+      "id": 251,
+      "version": "1"
+    },
+    {
+      "checksum": "28793068acef6aef183577fbf793d041",
+      "id": 252,
+      "version": "1"
+    },
+    {
+      "checksum": "c519ca67ef8154bd08d27b88dfa26d00",
+      "id": 253,
+      "version": "1"
+    },
+    {
+      "checksum": "3390c6d5f185b76fa7da0344a47ef5b2",
+      "id": 254,
+      "version": "1"
+    },
+    {
+      "checksum": "2658c269c83ba3cf64b42a536935c986",
+      "id": 260,
+      "version": "1"
+    },
+    {
+      "checksum": "2658c269c83ba3cf64b42a536935c986",
+      "id": 262,
+      "version": "1"
+    },
+    {
+      "checksum": "2cb35979d2bae0dbb1eb2b18803704d5",
+      "id": 264,
+      "version": "1"
+    },
+    {
+      "checksum": "2cb35979d2bae0dbb1eb2b18803704d5",
+      "id": 265,
+      "version": "1"
+    },
+    {
+      "checksum": "88818b9189b7736dad5c6f3abbdcf05c",
+      "id": 266,
+      "version": "1"
+    },
+    {
+      "checksum": "88818b9189b7736dad5c6f3abbdcf05c",
+      "id": 267,
+      "version": "1"
+    },
+    {
+      "checksum": "dac6cb8e18b50e589bce1d95d32a6559",
+      "id": 268,
+      "version": "1"
+    },
+    {
+      "checksum": "dac6cb8e18b50e589bce1d95d32a6559",
+      "id": 269,
+      "version": "1"
+    },
+    {
+      "checksum": "8f3ccff50d71a602bb01f12a3531bd29",
+      "id": 270,
+      "version": "1"
+    },
+    {
+      "checksum": "8f3ccff50d71a602bb01f12a3531bd29",
+      "id": 271,
+      "version": "1"
+    },
+    {
+      "checksum": "1dd9f935bf07664585233a5f762e8cf9",
+      "id": 272,
+      "version": "1"
+    },
+    {
+      "checksum": "1dd9f935bf07664585233a5f762e8cf9",
+      "id": 273,
+      "version": "1"
+    },
+    {
+      "checksum": "87f77adadd83378312adfdb02bbb8142",
+      "id": 274,
+      "version": "1"
+    },
+    {
+      "checksum": "87f77adadd83378312adfdb02bbb8142",
+      "id": 275,
+      "version": "1"
+    },
+    {
+      "checksum": "1dd9f935bf07664585233a5f762e8cf9",
+      "id": 276,
+      "version": "1"
+    },
+    {
+      "checksum": "1dd9f935bf07664585233a5f762e8cf9",
+      "id": 277,
+      "version": "1"
+    },
+    {
+      "checksum": "757723ec549f53d2bc96e5e2b426cbb8",
+      "id": 280,
+      "version": "1"
+    },
+    {
+      "checksum": "757723ec549f53d2bc96e5e2b426cbb8",
+      "id": 281,
+      "version": "1"
+    }
+  ]
+}

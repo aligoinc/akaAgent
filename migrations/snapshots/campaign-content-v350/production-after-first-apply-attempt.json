@@ -1,0 +1,338 @@
+{
+  "blocks": [
+    {
+      "checksum": "7cfeeeef9643ee52336c20f4f86e943a",
+      "code_md5": "95f4ea0e0137282bdbb30ce93c6c980b",
+      "id": 28,
+      "name": "fb_type_post_content"
+    },
+    {
+      "checksum": "76f518194abfc5555f238689fe475010",
+      "code_md5": "c7bd3036206f8690e1ffab6f0d0a832c",
+      "id": 34,
+      "name": "fb_comment_at_position"
+    },
+    {
+      "checksum": "99d9dd8196ae2a3e29dedcecbfd0b331",
+      "code_md5": "cf7ca824f8843a7799facee264bb0c3f",
+      "id": 35,
+      "name": "fb_scrape_post"
+    },
+    {
+      "checksum": "e0641523b9829e33289fda9bf04f5797",
+      "code_md5": "af123fbb5dbcf776fa489045dd891971",
+      "id": 36,
+      "name": "fb_share_post"
+    },
+    {
+      "checksum": "6e03c33ddccdcd4ea4ccd2ed432ef477",
+      "code_md5": "b7dbbf4c078a81dc0a8147e269a2d8c0",
+      "id": 37,
+      "name": "fb_post_reels"
+    },
+    {
+      "checksum": "87cfa551ba59224bc7ea199eab32899d",
+      "code_md5": "a113bc441a24934fe229da1b008ea8c1",
+      "id": 38,
+      "name": "fb_send_message"
+    },
+    {
+      "checksum": "dc5c6cb697379ca4e052a0c991461d0d",
+      "code_md5": "55a6c9b302659203f4c796daadeec345",
+      "id": 2614,
+      "name": "fb_prepare_post_link_comment_iteration"
+    },
+    {
+      "checksum": "ec43050240b86eab3ef7766d9d553d7c",
+      "code_md5": "b83da0206f5181161a22ce97f9e49e7b",
+      "id": 2616,
+      "name": "fb_comment_current_post"
+    },
+    {
+      "checksum": "be6fc2f800e17d530c4601e2e3aabd60",
+      "code_md5": "3500e1ad755f4250d5a43233400c602e",
+      "id": 2669,
+      "name": "fb_page_post_api"
+    },
+    {
+      "checksum": "9b5c4395d5e548d23338651ef5e01ade",
+      "code_md5": "51fd63984172218e62d581bc3ec5555e",
+      "id": 2672,
+      "name": "fb_post_current_identity_ui"
+    },
+    {
+      "checksum": "36c31f41ccb4a4a6deb351b2e5c1d9f3",
+      "code_md5": "e79d354bc823529e00b47f69633463b0",
+      "id": 2674,
+      "name": "fb_rewrite_source_content_ai"
+    },
+    {
+      "checksum": "abc5bdc22bb9de589edc518dc041720c",
+      "code_md5": "0188b50b40325ed10d15ff00e76b4461",
+      "id": 2679,
+      "name": "fb_send_page_inbox_message"
+    },
+    {
+      "checksum": "e241b753a00bff97c4652a8ddced73b6",
+      "code_md5": "d0a361525e69c00edf0f3fd072db2e88",
+      "id": 2706,
+      "name": "fb_newsfeed_check_comment"
+    },
+    {
+      "checksum": "e5fe8de65bc4be76d486b4e5075bcc7f",
+      "code_md5": "ef5d91b1b76a2eafa0e0e9589c936617",
+      "id": 2824,
+      "name": "fb_compose_source_manual_content"
+    }
+  ],
+  "captured_at": "2026-10-06 10:11:59.537275+00",
+  "columns": [],
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "6c656e83c8b38ccea75bcc8f7d81ffed",
+      "config": [
+        "search_path=public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_canonical_campaign_input_payload()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_action text;\n  v_has_phone boolean;\n  v_target_changed boolean;\nBEGIN\n  IF OLD.canonical_target_key IS NULL THEN\n    RETURN NEW;\n  END IF;\n\n  -- Information is editable in both direct and data_group campaigns; the\n  -- delivery target and ledger references are not. No alias cleanup is needed.\n  IF NEW.campaign_id IS DISTINCT FROM OLD.campaign_id\n    OR NEW.input_id IS DISTINCT FROM OLD.input_id\n    OR NEW.canonical_target_key IS DISTINCT FROM OLD.canonical_target_key\n    OR NEW.auto_automation_detail_id IS DISTINCT FROM OLD.auto_automation_detail_id\n    OR NEW.is_delete IS DISTINCT FROM OLD.is_delete\n  THEN\n    RAISE EXCEPTION 'canonical_campaign_input_payload_immutable';\n  END IF;\n\n  -- Status, name, notes, carrier, info1..5, content and scheduling changes\n  -- require no campaign lookup. Only possible target changes need the action.\n  IF NEW.phone IS NOT DISTINCT FROM OLD.phone\n    AND NEW.uid IS NOT DISTINCT FROM OLD.uid\n    AND NEW.email IS NOT DISTINCT FROM OLD.email\n  THEN\n    RETURN NEW;\n  END IF;\n\n  SELECT campaign.action_id INTO v_action\n  FROM public.auto_campaigns AS campaign WHERE campaign.id = OLD.campaign_id;\n\n  IF v_action IN ('zalo_message_phone', 'sms_send', 'voice_call', 'zalo_add_group_member') THEN\n    v_has_phone := COALESCE(public.normalize_phone(OLD.phone) ~ '^0[35789][0-9]{8}$', false);\n    IF v_action = 'zalo_add_group_member' AND NOT v_has_phone THEN\n      -- Adding a valid phone would switch this UID-based row to another route.\n      v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid\n        OR COALESCE(public.normalize_phone(NEW.phone) ~ '^0[35789][0-9]{8}$', false);\n    ELSE\n      v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n        OR (NOT v_has_phone AND NEW.uid IS DISTINCT FROM OLD.uid)\n        OR (v_action = 'zalo_add_group_member' AND NULLIF(btrim(OLD.uid), '') IS NOT NULL\n          AND NEW.uid IS DISTINCT FROM OLD.uid);\n    END IF;\n  ELSIF v_action = 'email_send' THEN\n    v_target_changed := NEW.email IS DISTINCT FROM OLD.email;\n  ELSIF v_action LIKE 'facebook_%' OR v_action LIKE 'zalo_%' THEN\n    v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid;\n  ELSE\n    -- Unknown/legacy actions keep all potential target fields protected.\n    v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n      OR NEW.uid IS DISTINCT FROM OLD.uid OR NEW.email IS DISTINCT FROM OLD.email;\n  END IF;\n\n  IF v_target_changed THEN\n    RAISE EXCEPTION 'canonical_campaign_input_target_immutable';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": false,
+      "signature": "aka_agent_guard_canonical_campaign_input_payload()",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "74c082aacb1de27a8cedff2e824f219f",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0 THEN\n    RAISE EXCEPTION 'campaign_input_serialization_id_invalid';\n  END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended(\n    'aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0\n  ));\nEND;\n$function$\n",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "aka_agent_lock_campaign_input_serialization(bigint)",
+      "volatility": "v"
+    }
+  ],
+  "history": [],
+  "history_columns": [
+    {
+      "column": "version",
+      "default": null,
+      "nullable": "NO",
+      "type": "text"
+    },
+    {
+      "column": "statements",
+      "default": null,
+      "nullable": "YES",
+      "type": "ARRAY"
+    },
+    {
+      "column": "name",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "created_by",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "idempotency_key",
+      "default": null,
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "column": "rollback",
+      "default": null,
+      "nullable": "YES",
+      "type": "ARRAY"
+    }
+  ],
+  "server_version": "17.6",
+  "workflows": [
+    {
+      "checksum": "f9607b1d3b3f6e5e959c85641bb7cee8",
+      "id": 1,
+      "version": null
+    },
+    {
+      "checksum": "86ef08cfd77bb2c17508a30b4f6b9653",
+      "id": 2,
+      "version": null
+    },
+    {
+      "checksum": "40e2e49615795cb5c3991cd2f372064b",
+      "id": 3,
+      "version": null
+    },
+    {
+      "checksum": "0ed5246831d144e08cb4bfa625d3be20",
+      "id": 157,
+      "version": null
+    },
+    {
+      "checksum": "860b6b9379300da021922ffa6f50b3cb",
+      "id": 207,
+      "version": null
+    },
+    {
+      "checksum": "a1e349c0d989ecdf94cd9fa00934b052",
+      "id": 208,
+      "version": null
+    },
+    {
+      "checksum": "dee94ca08364e736841f8a87165705b9",
+      "id": 226,
+      "version": null
+    },
+    {
+      "checksum": "1c09f5b3ec98a237a7d390af494c9004",
+      "id": 227,
+      "version": null
+    },
+    {
+      "checksum": "aaebe302fa3f69f2a015550f2c189f79",
+      "id": 238,
+      "version": null
+    },
+    {
+      "checksum": "860b6b9379300da021922ffa6f50b3cb",
+      "id": 244,
+      "version": null
+    },
+    {
+      "checksum": "0ed5246831d144e08cb4bfa625d3be20",
+      "id": 245,
+      "version": null
+    },
+    {
+      "checksum": "a1e349c0d989ecdf94cd9fa00934b052",
+      "id": 248,
+      "version": null
+    },
+    {
+      "checksum": "40e2e49615795cb5c3991cd2f372064b",
+      "id": 249,
+      "version": null
+    },
+    {
+      "checksum": "dee94ca08364e736841f8a87165705b9",
+      "id": 250,
+      "version": null
+    },
+    {
+      "checksum": "86ef08cfd77bb2c17508a30b4f6b9653",
+      "id": 251,
+      "version": null
+    },
+    {
+      "checksum": "f9607b1d3b3f6e5e959c85641bb7cee8",
+      "id": 252,
+      "version": null
+    },
+    {
+      "checksum": "1c09f5b3ec98a237a7d390af494c9004",
+      "id": 253,
+      "version": null
+    },
+    {
+      "checksum": "aaebe302fa3f69f2a015550f2c189f79",
+      "id": 254,
+      "version": null
+    },
+    {
+      "checksum": "b6699827672bbabcc95ab644a87c5e24",
+      "id": 260,
+      "version": null
+    },
+    {
+      "checksum": "b6699827672bbabcc95ab644a87c5e24",
+      "id": 262,
+      "version": null
+    },
+    {
+      "checksum": "6c720e1c12aaad556f86c321475bf007",
+      "id": 264,
+      "version": null
+    },
+    {
+      "checksum": "6c720e1c12aaad556f86c321475bf007",
+      "id": 265,
+      "version": null
+    },
+    {
+      "checksum": "caf0e22e2c1e0a9fdcb03f19baba21de",
+      "id": 266,
+      "version": null
+    },
+    {
+      "checksum": "caf0e22e2c1e0a9fdcb03f19baba21de",
+      "id": 267,
+      "version": null
+    },
+    {
+      "checksum": "6bd4b615b52013291e744390a82f68bb",
+      "id": 268,
+      "version": null
+    },
+    {
+      "checksum": "6bd4b615b52013291e744390a82f68bb",
+      "id": 269,
+      "version": null
+    },
+    {
+      "checksum": "c071aef143d962e45f3969578eea0e9e",
+      "id": 270,
+      "version": null
+    },
+    {
+      "checksum": "c071aef143d962e45f3969578eea0e9e",
+      "id": 271,
+      "version": null
+    },
+    {
+      "checksum": "d6c484b594e8ababa540c5342659e55a",
+      "id": 272,
+      "version": null
+    },
+    {
+      "checksum": "d6c484b594e8ababa540c5342659e55a",
+      "id": 273,
+      "version": null
+    },
+    {
+      "checksum": "e4c51c06c65061c27d557ef6092fdbbb",
+      "id": 274,
+      "version": null
+    },
+    {
+      "checksum": "e4c51c06c65061c27d557ef6092fdbbb",
+      "id": 275,
+      "version": null
+    },
+    {
+      "checksum": "d6c484b594e8ababa540c5342659e55a",
+      "id": 276,
+      "version": null
+    },
+    {
+      "checksum": "d6c484b594e8ababa540c5342659e55a",
+      "id": 277,
+      "version": null
+    },
+    {
+      "checksum": "e9d3c3c844ec08dea6ea5fac25f9ac73",
+      "id": 280,
+      "version": null
+    },
+    {
+      "checksum": "e9d3c3c844ec08dea6ea5fac25f9ac73",
+      "id": 281,
+      "version": null
+    }
+  ]
+}

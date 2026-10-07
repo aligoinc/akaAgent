@@ -1,0 +1,52 @@
+[
+  {
+    "name": "anon_security_definer_function_executable",
+    "title": "Public Can Execute SECURITY DEFINER Function",
+    "level": "WARN",
+    "facing": "EXTERNAL",
+    "categories": [
+      "SECURITY"
+    ],
+    "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+    "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+    "count": 190,
+    "findings": [
+      {
+        "detail": "Function `public.aka_agent_take_campaign_content_index(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_runtime_claim_token uuid, p_runtime_unit_token uuid, p_input_data_id bigint, p_action_code text, p_variant_count integer)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_take_campaign_content_index`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+        "metadata": {
+          "name": "aka_agent_take_campaign_content_index",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_runtime_claim_token uuid, p_runtime_unit_token uuid, p_input_data_id bigint, p_action_code text, p_variant_count integer",
+          "security_definer": true
+        },
+        "observed_at": "2026-10-06T10:15:02.246Z"
+      }
+    ]
+  },
+  {
+    "name": "authenticated_security_definer_function_executable",
+    "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+    "level": "WARN",
+    "facing": "EXTERNAL",
+    "categories": [
+      "SECURITY"
+    ],
+    "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+    "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+    "count": 190,
+    "findings": [
+      {
+        "detail": "Function `public.aka_agent_take_campaign_content_index(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_runtime_claim_token uuid, p_runtime_unit_token uuid, p_input_data_id bigint, p_action_code text, p_variant_count integer)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_take_campaign_content_index`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+        "metadata": {
+          "name": "aka_agent_take_campaign_content_index",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_runtime_claim_token uuid, p_runtime_unit_token uuid, p_input_data_id bigint, p_action_code text, p_variant_count integer",
+          "security_definer": true
+        },
+        "observed_at": "2026-10-06T10:15:02.246Z"
+      }
+    ]
+  }
+]

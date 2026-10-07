@@ -1,0 +1,16 @@
+[
+  {
+    "check": "auto_campaigns new column",
+    "status": 200
+  },
+  {
+    "check": "auto_campaign_input_data new column",
+    "status": 200
+  },
+  {
+    "check": "RPC exposed; invalid arguments rejected before writes",
+    "status": 400,
+    "code": "P0001",
+    "message": "campaign_content_invalid_arguments"
+  }
+]

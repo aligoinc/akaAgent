@@ -1,0 +1,5 @@
+[
+  {
+    "observation": "[{\"mode\": \"RowShareLock\", \"state\": \"active\", \"table\": \"auto_campaign_input_data\", \"backend\": \"client backend\", \"granted\": true, \"wait_event\": null, \"application\": \"postgrest\", \"xact_age_ms\": 49.492000, \"wait_event_type\": null}, {\"mode\": \"AccessShareLock\", \"state\": \"active\", \"table\": \"auto_campaign_input_data\", \"backend\": \"client backend\", \"granted\": true, \"wait_event\": null, \"application\": \"postgrest\", \"xact_age_ms\": 49.516000, \"wait_event_type\": null}, {\"mode\": \"RowShareLock\", \"state\": \"active\", \"table\": \"auto_campaigns\", \"backend\": \"client backend\", \"granted\": true, \"wait_event\": null, \"application\": \"postgrest\", \"xact_age_ms\": 49.539000, \"wait_event_type\": null}, {\"mode\": \"AccessShareLock\", \"state\": \"active\", \"table\": \"auto_campaigns\", \"backend\": \"client backend\", \"granted\": true, \"wait_event\": null, \"application\": \"postgrest\", \"xact_age_ms\": 49.552000, \"wait_event_type\": null}]"
+  }
+]

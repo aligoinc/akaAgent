@@ -1,0 +1,24 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history": {
+    "v350": "20261006101341",
+    "v351": "20261006101435"
+  },
+  "files": {
+    "migrations/migration_v350_campaign_content_rotation.sql": "eccc9e80763f53dfe088a378b897badd667b7d5e4a37cfdcc8e0cd51eeb9d1ef",
+    "migrations/migration_v351_campaign_content_blocks.sql": "8cb448e399ca7eb0340d53da0dc829859ef7c4964da2f5602d9f336ac69d1789",
+    "migrations/tests/migration_v350_campaign_content_rotation_rollback.sql": "2cd75ad45890ecc5eeb0cdfed9b416ae190b18c1a48f09f125ed4de05dc5fd07",
+    "migrations/snapshots/campaign-content-v350/production-after-first-apply-attempt.json": "d3e3fa08ceccb77ba8e6823563def075887021a83165a4dfb9547feb6376b200",
+    "migrations/snapshots/campaign-content-v350/production-after-v350.json": "d00a6608afce45bb57f133e7c0363f6731b60521aa34c48e427d6ed63c8aaa50",
+    "migrations/snapshots/campaign-content-v350/production-after.json": "e4459bdf7ca0d43971508d7bd9fd58f297fb0a4fc6586982182ac7702455243a",
+    "migrations/snapshots/campaign-content-v350/production-before.json": "7445fb38b139f0251516094cf9595b02d74d5aef427e62998917c99b850de406",
+    "migrations/snapshots/campaign-content-v350/production-ddl-lock-observation.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "migrations/snapshots/campaign-content-v350/production-ddl-lock-probe.json": "6409acabbda0294cc4ed55ad44d1d601d488307a6761becf88b58618208154e2",
+    "migrations/snapshots/campaign-content-v350/production-http-checks.json": "3322067ea784e3e8b46b53ba1eedba98c773f7f7c7f7771335479b2f5738dd20",
+    "migrations/snapshots/campaign-content-v350/production-nowait-rollback.json": "e5b2969f32a0615b39a4273c8a5fb62c71eae2cd0c4edcc5009dffbbc5db17e8",
+    "migrations/snapshots/campaign-content-v350/production-postapply-rollback.json": "e5b2969f32a0615b39a4273c8a5fb62c71eae2cd0c4edcc5009dffbbc5db17e8",
+    "migrations/snapshots/campaign-content-v350/production-preapply-rollback.json": "e5b2969f32a0615b39a4273c8a5fb62c71eae2cd0c4edcc5009dffbbc5db17e8",
+    "migrations/snapshots/campaign-content-v350/production-security-advisors.json": "f97fad1702a6aa84857480e967f6c92e0a9276a285a384ebc4144e82ae71ace2",
+    "migrations/snapshots/campaign-content-v350/production-v351-apply.json": "93450ed3234b77f343558a49b9984ccd210a54fa09743c5a0cc5fb905e57d818"
+  }
+}
