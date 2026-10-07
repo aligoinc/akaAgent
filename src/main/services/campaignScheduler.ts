@@ -14333,11 +14333,14 @@ export class CampaignScheduler {
     const log = partialSend.stage === 'content_after_media'
       ? 'Đã gửi file nhưng gửi nội dung thất bại'
       : 'Đã gửi nội dung nhưng gửi file thất bại'
+    // Keep the existing policy/fallback message; partial delivery must not
+    // replace it or introduce a different error-message rendering policy.
+    const failureLog = detail.log?.trim() || partialSend.error.trim()
     return {
       ...detail,
       createDetail: true,
       status: 'thất bại',
-      log: partialSend.mediaTimeout ? `${log}. ${partialSend.error}` : log,
+      log: failureLog ? `${log}. ${failureLog}` : log,
       countsTowardLimit: true,
       countsTowardBadTarget: partialSend.mediaTimeout ? detail.countsTowardBadTarget : false,
       resetInputToPending: false,
