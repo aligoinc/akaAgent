@@ -21,6 +21,25 @@ BEGIN
 END;
 $preflight$;
 
+-- Runtime unit claims lock input before campaign. Acquire both DDL locks without
+-- waiting so a busy runtime cannot deadlock against a partially locked migration.
+-- A failed subtransaction releases either acquired lock before the short retry.
+DO $ddl_locks$
+DECLARE attempt integer;
+BEGIN
+  FOR attempt IN 1..20 LOOP
+    BEGIN
+      LOCK TABLE public.auto_campaign_input_data, public.auto_campaigns
+        IN ACCESS EXCLUSIVE MODE NOWAIT;
+      EXIT;
+    EXCEPTION WHEN lock_not_available THEN
+      IF attempt=20 THEN RAISE; END IF;
+    END;
+    PERFORM pg_sleep(0.05);
+  END LOOP;
+END;
+$ddl_locks$;
+
 ALTER TABLE public.auto_campaigns ADD COLUMN content_rotation_indexes jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE public.auto_campaign_input_data ADD COLUMN content_rotation_indexes jsonb NOT NULL DEFAULT '{}'::jsonb;
 -- Constant defaults are valid for old rows. Enforce future writes without a full-table validation scan.

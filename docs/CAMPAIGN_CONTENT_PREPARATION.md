@@ -1,6 +1,6 @@
 # Chuẩn bị nội dung và xoay mẫu theo data
 
-Trạng thái: **đã chuẩn bị code và migration, chưa apply production/phát hành**. Hai repo dùng nhánh `codex/campaign-content-preparation`: akaAgent và akaAgentChatApi.
+Trạng thái: **V350/V351 đã apply production akachat ngày 06/10/2026; không apply lại**. PR akaAgent #465 và Chat #87 đã merge. Chat worker đã deploy ngày 06/10/2026 lúc 17:24 Việt Nam từ commit `785ba56`. Bốn bộ cài 8.1.0 đã build local; đã đối chiếu log Desktop 8.1.0 và Server cập nhật ngày 06–07/10/2026.
 
 ## Quy tắc
 
@@ -52,14 +52,14 @@ npm run build
 
 RPC smoke dùng PGlite trong RAM, dựng dependency/row live và apply V350/V351 trong transaction kết thúc ROLLBACK. Bao phủ 3×3, reorder/skip, action/batch isolation, seed/modulo/reset, ownership, quyền Chat, canonical guard, hash cấu hình và checksum. PGlite không thay thế kiểm thử cạnh tranh nhiều session trên PostgreSQL production. Service/VM smoke và test Chat dùng adapter giả lập; không kiểm chứng DOM Facebook hoặc giao tin Zalo/Email thật.
 
-## Thứ tự triển khai riêng
+## Thứ tự triển khai
 
 1. Trước apply, xác minh lại project ref và checksum live; dừng nếu row/function khác snapshot. Apply riêng V350, xác minh signature/owner/ACL/target hash và HTTP RPC sau schema reload. Không bulk push migration khác.
 2. Apply V351 bằng đường data-only không tạo DDL phụ để ghi history; xác minh block hashes/default flag. Không yêu cầu reload schema lần nữa.
 3. Phát hành Desktop/Server và deploy Chat worker đã cập nhật. App cũ tiếp tục hành vi cũ; chỉ runtime mới bảo đảm xoay theo data.
 4. Nếu cần quay về runtime cũ, giữ hai cột mới/cursor. Muốn khôi phục block phải guard target hash rồi dùng source snapshot; không drop cột chứa lịch sử xoay trong rollback thông thường.
 
-Không apply/deploy/release trong task này.
+Các bước DB/worker đã hoàn tất; xem audit bên dưới và [audit worker](https://github.com/aligoinc/akaAgentChatApi/blob/dev/docs/DEPLOY_CAMPAIGN_CONTENT_ROTATION_20261006.md) để đối chiếu image và rollback.
 
 ## Kết quả local 06/10/2026
 
@@ -67,4 +67,23 @@ Không apply/deploy/release trong task này.
 - Service/VM/shared parity, legacy Fanpage/Page Inbox, Zalo rich share/opt-out/engagement không chặn và campaign failure cleanup: PASS.
 - akaAgent: hai typecheck PASS, build Desktop và build Server PASS. Build hai sản phẩm tuần tự vì electron-vite dùng chung tên file config tạm theo millisecond.
 - akaAgentChatApi: typecheck/build PASS; toàn bộ 96 file / 1.485 test PASS. Lần đầu một test DB cũ timeout 5s khi chạy chung build; test đó và lần chạy lại toàn bộ đã qua.
-- Không chạy gửi thật, không apply production và không phát hành bộ cài.
+- Các kết quả local trên được ghi trước apply; không chạy gửi thật hoặc phát hành bộ cài.
+
+## Audit production 06–07/10/2026
+
+Đích: **akachat `cgjbsmqtfhqvttudyjzq`**. Hai migration dưới đây đã apply; **không apply lại khi merge PR hoặc phát hành app**.
+
+| Migration | History UTC | Thời gian Việt Nam |
+|---|---|---|
+| V350 — hai cột JSONB và RPC | `20261006101341 / migration_v350_campaign_content_rotation` | 17:13:41, 06/10 |
+| V351 — 14 block, 36 workflow | `20261006101435 / migration_v351_campaign_content_blocks` | 17:14:35, 06/10 |
+
+- RPC: `public.aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)`. Function chưa tồn tại trước V350; MD5 `pg_get_functiondef` sau apply và lần đọc lại 07/10: **`006a6da075ede4e9c6b07194422f65c9`**. Owner `postgres`, SECURITY DEFINER, VOLATILE, `search_path=pg_catalog, public`; EXECUTE cho owner/anon/authenticated/service_role/aka_agent_chat_api, không cấp PUBLIC. Không đổi body/ACL của các RPC có sẵn.
+- Lần apply V350 đầu bị deadlock và đã rollback toàn bộ. Bản SQL trong repo bổ sung lấy cả hai khóa DDL theo thứ tự input → campaign bằng NOWAIT, nhả khóa khi bận rồi thử lại tối đa 20 lần, nghỉ 50 ms/lần. Đây là giới hạn retry **khi triển khai**, không thay quy tắc không retry RPC cấp mẫu của runtime. Không tăng connection/pool.
+- SHA-256 V350 đã dùng: `eccc9e80763f53dfe088a378b897badd667b7d5e4a37cfdcc8e0cd51eeb9d1ef`. V351 giữ nguyên SQL đã merge, MD5 file/history `3d712a04a5ee21cb500b2439cd5be505`. V351 chỉ ghi dữ liệu và history trong transaction, không DDL/reload schema.
+- [Smoke rollback production](../migrations/tests/migration_v350_campaign_content_rotation_rollback.sql) đã PASS trước/sau apply: fixture tổng hợp, ID tường minh, không gọi sequence, luôn ROLLBACK. Bao phủ 3×3, reorder/skip, action/batch riêng, singleton, ownership, reset, seed/modulo và Server soft-pause. Management API không cho SET ROLE worker; thực thi role `aka_agent_chat_api` được kiểm chứng trên PGlite, production chỉ xác minh ACL/quyền EXECUTE.
+- Data API sau apply: đọc hai cột trả HTTP 200; gọi RPC với tham số âm trả đúng HTTP 400 / `campaign_content_invalid_arguments`. Checksum 14 block và flag của 36 workflow đúng target; dependency serializer/canonical guard không thay đổi. Snapshot nguồn/target phục vụ smoke đã có trong [campaign-content-v350](../migrations/snapshots/campaign-content-v350/).
+- Chat worker deploy 17:24 ngày 06/10, commit `785ba56`; [image, kiểm chứng và rollback](https://github.com/aligoinc/akaAgentChatApi/blob/dev/docs/DEPLOY_CAMPAIGN_CONTENT_ROTATION_20261006.md). Bốn bộ cài 8.1.0 đã build local. App cũ giữ nhánh legacy.
+- Kiểm tra chỉ đọc sáng 07/10, dữ liệu đến 09:15 Việt Nam: 1.979 nội dung Zalo Desktop/Server/Chat và 153 lần chuẩn bị Facebook khớp mẫu; 1.988 con trỏ khớp ở các dòng đủ điều kiện đối chiếu. Campaign 12850 có 9 data chạy 11–12 lần, 94 chuyển mẫu liên tiếp đúng. Không phát hiện rỗng/gộp mẫu trong phần đối chiếu, hoặc lỗi allocator trong log DB 07:00–09:15. 102 bản AI có nội dung nhưng không so nguyên văn; 6 lần Chat bị chặn ở bước media nên chưa có lệnh gửi chữ. Lỗi gửi do người nhận chặn/selector Facebook vẫn được phân biệt với chọn mẫu. Đây là mẫu quan sát, không phải benchmark hay xác nhận mọi loại chiến dịch.
+
+Nếu rollback runtime, giữ schema và cursor; không replay lệnh gửi hoặc xóa claim. Khôi phục block phải kiểm tra target checksum và dùng snapshot nguồn. Không gửi thử tới khách, apply migration hoặc deploy trong lần chốt hồ sơ này.
