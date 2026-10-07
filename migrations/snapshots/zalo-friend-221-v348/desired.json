@@ -1,0 +1,31 @@
+{
+  "count_consecutive_errors": null,
+  "counts_toward_bad_target": false,
+  "counts_toward_limit": true,
+  "detail_status": "thất bại",
+  "disable_action_codes": [
+    "zalo_message_friend"
+  ],
+  "disable_action_days": null,
+  "disable_action_mode": "fixed_minutes",
+  "disable_action_time": null,
+  "error_code": "err_zalo_221_message_friend",
+  "error_desc": "Zalo trả lỗi 221 khi gửi hoặc chia sẻ tin nhắn đến bạn bè; tạm khóa hành động nhắn bạn bè 60 phút.",
+  "error_element": null,
+  "error_name": "Đạt giới hạn nhắn bạn bè (mã 221)",
+  "error_type": "external zalo",
+  "is_active": true,
+  "is_delete": false,
+  "noti_campaign": "Tạm khóa nhắn bạn bè 60 phút.",
+  "noti_running_process": "Đạt giới hạn nhắn bạn bè (mã 221)",
+  "time_disable_actions": 60,
+  "update_login_status": null,
+  "update_status_account": null,
+  "update_status_campaign": null,
+  "zalo_action_codes": [
+    "zalo_message_friend"
+  ],
+  "zalo_error_codes": [
+    "221"
+  ]
+}

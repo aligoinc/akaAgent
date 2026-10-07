@@ -1,0 +1,368 @@
+{
+  "action": {
+    "code": "zalo_message_friend",
+    "created_at": "2026-06-10T06:55:23.96107+00:00",
+    "flatform_type": "zalo",
+    "id": 23,
+    "is_active": true,
+    "is_delete": false,
+    "name": "Zalo - Gửi tin nhắn đến bạn bè",
+    "updated_at": "2026-06-22T14:01:18.306776+00:00"
+  },
+  "action_md5": "cd06b29750f198c5a0cf93d7b6461101",
+  "captured_at": "2026-10-06 02:02:39.98248+00",
+  "history": null,
+  "metadata": {
+    "columns": [
+      {
+        "default": "nextval('auto_error_id_seq'::regclass)",
+        "name": "id",
+        "not_null": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "error_type",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "error_name",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "error_desc",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "error_code",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "error_element",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "noti_running_process",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "noti_campaign",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "update_status_account",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "update_status_campaign",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": "'{}'::text[]",
+        "name": "disable_action_codes",
+        "not_null": true,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "name": "time_disable_actions",
+        "not_null": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "count_consecutive_errors",
+        "not_null": false,
+        "type": "integer"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "not_null": true,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "not_null": true,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "not_null": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "not_null": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "'{}'::text[]",
+        "name": "zalo_error_codes",
+        "not_null": true,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "name": "detail_status",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "name": "counts_toward_limit",
+        "not_null": true,
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "name": "counts_toward_bad_target",
+        "not_null": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "update_login_status",
+        "not_null": false,
+        "type": "text"
+      },
+      {
+        "default": "'fixed_minutes'::text",
+        "name": "disable_action_mode",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "default": "'{}'::text[]",
+        "name": "zalo_action_codes",
+        "not_null": true,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "name": "disable_action_days",
+        "not_null": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "disable_action_time",
+        "not_null": false,
+        "type": "time without time zone"
+      }
+    ],
+    "constraints": [
+      "CHECK (((disable_action_mode <> 'days_at_time'::text) OR ((disable_action_days IS NOT NULL) AND (time_disable_actions IS NOT NULL) AND (time_disable_actions > 0) AND ((disable_action_days > 0) OR (disable_action_time IS NOT NULL)))))",
+      "CHECK (((disable_action_days IS NULL) OR (disable_action_days >= 0)))",
+      "CHECK ((disable_action_mode = ANY (ARRAY['fixed_minutes'::text, 'end_of_day'::text, 'indefinite'::text, 'days_at_time'::text])))",
+      "CHECK (((disable_action_time IS NULL) OR (disable_action_time < '24:00:00'::time without time zone)))",
+      "UNIQUE (error_code)",
+      "PRIMARY KEY (id)"
+    ],
+    "triggers": null
+  },
+  "metadata_md5": "dfcf3e836e62d21dc647bfe74c896344",
+  "policies": [
+    {
+      "count_consecutive_errors": null,
+      "counts_toward_bad_target": false,
+      "counts_toward_limit": true,
+      "created_at": "2026-06-10T16:06:00.85814+00:00",
+      "detail_status": null,
+      "disable_action_codes": [
+        "zalo_find_phone_user"
+      ],
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "error_code": "err_zalo_find_phone_limit",
+      "error_desc": "Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại trong giờ",
+      "error_element": null,
+      "error_name": "Đạt giới hạn tìm SĐT trong giờ",
+      "error_type": "external zalo",
+      "id": 9,
+      "is_active": true,
+      "is_delete": false,
+      "noti_campaign": "Đạt giới hạn tìm kiếm SĐT trong giờ, tạm nghỉ [x] phút",
+      "noti_running_process": "Đạt giới hạn tìm kiếm SĐT trong giờ",
+      "time_disable_actions": 60,
+      "update_login_status": null,
+      "update_status_account": null,
+      "update_status_campaign": null,
+      "updated_at": "2026-09-07T07:08:42.135721+00:00",
+      "zalo_action_codes": [
+        "zalo_find_phone_user"
+      ],
+      "zalo_error_codes": [
+        "312",
+        "221"
+      ]
+    },
+    {
+      "count_consecutive_errors": null,
+      "counts_toward_bad_target": true,
+      "counts_toward_limit": true,
+      "created_at": "2026-06-10T16:06:00.85814+00:00",
+      "detail_status": "thất bại",
+      "disable_action_codes": [],
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "error_code": "err_zalo_api_business_failed",
+      "error_desc": "Fallback cho lỗi nghiệp vụ Zalo không có mã code",
+      "error_element": null,
+      "error_name": "Thao tác Zalo thất bại",
+      "error_type": "external zalo",
+      "id": 18,
+      "is_active": true,
+      "is_delete": false,
+      "noti_campaign": "[a] thất bại: [x]",
+      "noti_running_process": "[a] thất bại: [x]",
+      "time_disable_actions": null,
+      "update_login_status": null,
+      "update_status_account": null,
+      "update_status_campaign": null,
+      "updated_at": "2026-06-10T17:43:27.301665+00:00",
+      "zalo_action_codes": [],
+      "zalo_error_codes": []
+    },
+    {
+      "count_consecutive_errors": null,
+      "counts_toward_bad_target": false,
+      "counts_toward_limit": true,
+      "created_at": "2026-08-25T04:04:14.811788+00:00",
+      "detail_status": "thất bại",
+      "disable_action_codes": [
+        "zalo_add_friend"
+      ],
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "error_code": "err_zalo_add_friend_limit",
+      "error_desc": "Zalo giới hạn số request gửi lời mời kết bạn trong giờ",
+      "error_element": null,
+      "error_name": "Đạt giới hạn kết bạn trong giờ",
+      "error_type": "external zalo",
+      "id": 41,
+      "is_active": true,
+      "is_delete": false,
+      "noti_campaign": "Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút",
+      "noti_running_process": "Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút",
+      "time_disable_actions": 60,
+      "update_login_status": null,
+      "update_status_account": null,
+      "update_status_campaign": null,
+      "updated_at": "2026-09-26T07:52:56.186325+00:00",
+      "zalo_action_codes": [
+        "zalo_add_friend"
+      ],
+      "zalo_error_codes": [
+        "221"
+      ]
+    },
+    {
+      "count_consecutive_errors": null,
+      "counts_toward_bad_target": false,
+      "counts_toward_limit": true,
+      "created_at": "2026-09-25T20:27:21.516235+00:00",
+      "detail_status": "thất bại",
+      "disable_action_codes": [
+        "zalo_message_group"
+      ],
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "error_code": "err_zalo_221_message_group",
+      "error_desc": "Đạt giới hạn nhắn nhóm (mã 221)",
+      "error_element": null,
+      "error_name": "Đạt giới hạn nhắn nhóm (mã 221)",
+      "error_type": "external zalo",
+      "id": 52,
+      "is_active": true,
+      "is_delete": false,
+      "noti_campaign": "Tạm khóa nhắn nhóm 60 phút.",
+      "noti_running_process": "Đạt giới hạn nhắn nhóm (mã 221)",
+      "time_disable_actions": 60,
+      "update_login_status": null,
+      "update_status_account": null,
+      "update_status_campaign": null,
+      "updated_at": "2026-09-25T20:27:21.516235+00:00",
+      "zalo_action_codes": [
+        "zalo_message_group"
+      ],
+      "zalo_error_codes": [
+        "221"
+      ]
+    }
+  ],
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "row_count": 45,
+  "row_md5": {
+    "1": "cde204ef721a0709992019c989c9dc74",
+    "2": "39af6d3558fe67d07128427d008d9a69",
+    "3": "e01a8c709b8ddca5607d99c4f2adb188",
+    "4": "fc1ac8018f6cf18f185875f9ae30c4d6",
+    "5": "6962d5198d9884f148a8affa8f168dfa",
+    "6": "ffcac753dd901f0e06905d1a35d2dd0f",
+    "7": "e9614ca486fa6faa042914def39234d4",
+    "8": "1900462f4ceb8682c595140a68b00c5b",
+    "9": "10d8ab73ef809991b40cdf90fdcb930b",
+    "10": "d53de701e30c8bdab611240b5af14927",
+    "11": "541972c8188d73be665b10eea4a50222",
+    "12": "d0d3d328bea8d8a994df113ea609a231",
+    "13": "7ec0365d5347a58046fcccc48762664b",
+    "14": "58b5b8c9fbf970a875d62ea6a692d29d",
+    "15": "1da20c622657be8867245afef9d152d6",
+    "16": "23ffa15841f8e53a741ff562040db48d",
+    "17": "5cd3f744a1610fdbca4ea38ce4181285",
+    "18": "620145588f938528e5ce2d384790e59e",
+    "31": "60012afb6d3bdcd81bbde8599a1d099a",
+    "32": "f284d00d5eb4ac4f7baf7cb2808fad0f",
+    "33": "9a995bf015f8664753cc5b702ec8051e",
+    "34": "c11325b983700a4b0ab5819fcab0f182",
+    "35": "ab62f24355de58e938a59903b51eb795",
+    "36": "b60a31d5fb2821e83073bf583432cde6",
+    "41": "36ca53432b5cb02e0da0f1f2d51b90dc",
+    "42": "232225b6201be8000a4d6cc283250570",
+    "43": "b2036f71ceaa0a476efd012bae2b2099",
+    "44": "9ea0eb0d38911023c2784b9b092e1640",
+    "45": "c1b893ee1220f455284f8778390375ac",
+    "46": "566921b1b5f7c9c712267cd755a49a1f",
+    "47": "9d2d8d548c95da0a50ac26543402a18e",
+    "48": "5bd2f85b7c3cbf43cc4b3e51725e7687",
+    "49": "5e944cc2bb311335848d0eac36bce708",
+    "50": "453505419a158e99e123365b7aeca991",
+    "51": "2a9ecfef77871648eab8ef53faef9d3f",
+    "52": "f54d268ff3f4e80adc387651161f1c44",
+    "53": "5df315bf00971a7fe5a9f864eb37e725",
+    "54": "8b4658c17d37f2d5711db3abb525a0e8",
+    "55": "8ee1e9c2a56b5f7ffc16e515add1c47e",
+    "56": "1860997dcc68f749af83d25a81e0e10b",
+    "57": "c85ae290afa882eb3b5b14ca9f8b9004",
+    "58": "b31a383072a53800c7547736b31a39a1",
+    "59": "7090537926fca2b9ded67c929c2085db",
+    "60": "7db733c60002587e8b91507c7d690ce7",
+    "61": "9da26d1c8587fcd7d31539f749f2e8f9"
+  },
+  "table_md5": "159646ca3dafb959177c1379c63e573a"
+}
