@@ -1,0 +1,14 @@
+[
+  {
+    "definition_md5": "5a9a503db72b965eb644739f5f60905d",
+    "signature": "auto_assert_automation_identity(bigint,bigint,text,text)"
+  },
+  {
+    "definition_md5": "46412e94cf00a788230835f6d56d8d3b",
+    "signature": "resolve_organization_zalo_account_capabilities(bigint)"
+  },
+  {
+    "definition_md5": "74c082aacb1de27a8cedff2e824f219f",
+    "signature": "aka_agent_lock_campaign_input_serialization(bigint)"
+  }
+]

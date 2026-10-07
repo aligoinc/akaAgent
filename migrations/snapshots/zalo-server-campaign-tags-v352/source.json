@@ -1,0 +1,58 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "functions": [
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_mutate_contact_tags(p_staff_id bigint, p_organization_id bigint, p_contact_ids bigint[], p_tag_ids bigint[], p_auth_username text, p_auth_password text, p_mode text)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE v_contact public.auto_account_contacts%ROWTYPE; v_tags bigint[];\n  v_previous_batch text; v_chat_account_id bigint; v_zalo_uid text; v_conversation_type text;\n  v_conversation_id bigint; v_changed integer; v_count integer:=0;\nBEGIN\n  PERFORM public.auto_assert_automation_identity(p_staff_id,p_organization_id,p_auth_username,p_auth_password);\n  IF p_mode IS NULL OR p_mode NOT IN ('add','remove') THEN RAISE EXCEPTION 'contact_tag_mode_invalid'; END IF;\n  IF COALESCE(cardinality(p_contact_ids),0)>100\n    THEN RAISE EXCEPTION 'contact_tag_batch_limit_exceeded'; END IF;\n  SELECT COALESCE(array_agg(DISTINCT id ORDER BY id),'{}'::bigint[]) INTO v_tags\n    FROM public.auto_contact_tags WHERE id=ANY(p_tag_ids) AND staff_id=p_staff_id\n      AND organization_id=p_organization_id AND (p_mode='remove' OR NOT is_delete);\n  IF cardinality(v_tags)=0 THEN RETURN jsonb_build_object('success',true,'count',0); END IF;\n  FOR v_contact IN SELECT * FROM public.auto_account_contacts\n    WHERE id=ANY(p_contact_ids) AND staff_id=p_staff_id AND organization_id=p_organization_id AND NOT is_delete\n    ORDER BY id\n  LOOP\n    IF p_mode='add' AND EXISTS (SELECT 1 FROM public.auto_contact_tags t WHERE t.id=ANY(v_tags)\n      AND t.auto_account_id IS NOT NULL AND t.auto_account_id IS DISTINCT FROM v_contact.account_id)\n      THEN RAISE EXCEPTION 'contact_tag_scope_invalid'; END IF;\n    SELECT conv.id,ac.chat_zalo_account_id,ac.zalo_id,ac.conversation_type\n      INTO v_conversation_id,v_chat_account_id,v_zalo_uid,v_conversation_type\n    FROM public.auto_account_contacts c\n    JOIN public.chat_zalo_account_organization b ON b.auto_account_id=c.account_id\n      AND b.organization_id=c.organization_id AND b.is_active AND c.flatform_type='zalo'\n    JOIN public.chat_zalo_account_conversation ac ON ac.chat_zalo_account_id=b.chat_zalo_account_id\n      AND ac.zalo_id=c.uid AND ac.conversation_type=CASE WHEN c.contact_type='person' THEN 'user' WHEN c.contact_type='group' THEN 'group' END\n    JOIN public.chat_zalo_conversation conv ON conv.chat_zalo_account_organization_id=b.id\n      AND conv.chat_zalo_account_conversation_id=ac.id AND conv.organization_id=c.organization_id\n    WHERE c.id=v_contact.id;\n    IF v_conversation_id IS NOT NULL THEN\n      -- Suppress per-tag mirrors/queue writes only inside this batch. Restore\n      -- before the single contact event and projection, including on errors.\n      v_previous_batch:=current_setting('aka_agent.chat_tag_batch',true);\n      PERFORM set_config('aka_agent.chat_tag_batch','on',true);\n      BEGIN\n        IF p_mode='add' THEN\n          INSERT INTO public.chat_zalo_conversation_system_tag(organization_id,chat_zalo_conversation_id,auto_contact_tag_id,assigned_by_org_staff_id)\n            SELECT p_organization_id,v_conversation_id,k,p_staff_id FROM unnest(v_tags) k\n            ON CONFLICT(chat_zalo_conversation_id,auto_contact_tag_id) DO NOTHING;\n        ELSE\n          DELETE FROM public.chat_zalo_conversation_system_tag\n            WHERE chat_zalo_conversation_id=v_conversation_id AND organization_id=p_organization_id AND auto_contact_tag_id=ANY(v_tags);\n        END IF;\n        GET DIAGNOSTICS v_changed=ROW_COUNT;\n      EXCEPTION WHEN OTHERS THEN\n        PERFORM set_config('aka_agent.chat_tag_batch',COALESCE(v_previous_batch,''),true);\n        RAISE;\n      END;\n      PERFORM set_config('aka_agent.chat_tag_batch',COALESCE(v_previous_batch,''),true);\n      IF v_changed>0 AND v_conversation_type='user' THEN\n        PERFORM public.aka_agent_enqueue_data_group_chat_user(v_chat_account_id,v_zalo_uid,p_organization_id);\n      END IF;\n      PERFORM public.aka_agent_refresh_contact_chat_tags(v_contact.id);\n    ELSE\n      UPDATE public.auto_account_contacts SET akabiz_tag_ids=ARRAY(\n        SELECT DISTINCT k FROM unnest(COALESCE(akabiz_tag_ids,'{}'::bigint[])||CASE WHEN p_mode='add' THEN v_tags ELSE '{}'::bigint[] END) k\n        WHERE p_mode='add' OR NOT k=ANY(v_tags) ORDER BY k\n      ),updated_at=clock_timestamp()\n      WHERE id=v_contact.id AND NOT is_delete AND CASE WHEN p_mode='add'\n        THEN NOT COALESCE(akabiz_tag_ids,'{}'::bigint[]) @> v_tags\n        ELSE COALESCE(akabiz_tag_ids,'{}'::bigint[]) && v_tags END;\n      GET DIAGNOSTICS v_changed=ROW_COUNT;\n    END IF;\n    IF v_changed>0 THEN v_count:=v_count+1; END IF;\n  END LOOP;\n  RETURN jsonb_build_object('success',true,'count',v_count);\nEND;\n$function$\n",
+      "definition_md5": "2e2d262fa88fd2be5051c2e3aac35f9c",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "resolved": "aka_agent_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text,text,text)",
+      "signature": "public.aka_agent_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text,text,text)"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "definition_md5": "5a9a503db72b965eb644739f5f60905d",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "s",
+      "resolved": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.resolve_organization_zalo_account_capabilities(p_organization_id bigint)\n RETURNS TABLE(entitlement_id bigint, product_id bigint, product_name text, package_name text, package_type text, expiration_date timestamp with time zone, max_sends_per_day integer, max_accounts integer, created_at timestamp with time zone, qr_enabled boolean, web_enabled boolean, server_enabled boolean, capability_revision text)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public', 'private'\nAS $function$\n  WITH pools AS MATERIALIZED (\n    SELECT *\n    FROM private.resolve_organization_zalo_entitlement_pools(p_organization_id)\n  ),\n  flags AS (\n    SELECT\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'qr'),\n        false\n      ) AS qr_enabled,\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'web'),\n        false\n      ) AS web_enabled,\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'server'),\n        false\n      ) AS server_enabled\n    FROM pools\n  ),\n  primary_pool AS (\n    SELECT *\n    FROM pools\n    WHERE entitlement_id IS NOT NULL\n    ORDER BY CASE account_subtype\n      WHEN 'server' THEN 1\n      WHEN 'web' THEN 2\n      ELSE 3\n    END\n    LIMIT 1\n  )\n  SELECT\n    primary_pool.entitlement_id,\n    primary_pool.product_id,\n    primary_pool.product_name,\n    primary_pool.package_name,\n    primary_pool.package_type,\n    primary_pool.expiration_date,\n    primary_pool.max_sends_per_day,\n    primary_pool.max_accounts,\n    primary_pool.created_at,\n    flags.qr_enabled,\n    flags.web_enabled,\n    flags.server_enabled,\n    COALESCE(\n      primary_pool.pool_revision,\n      'none:' || COALESCE(p_organization_id::text, 'null')\n    ) AS capability_revision\n  FROM flags\n  LEFT JOIN primary_pool ON true;\n$function$\n",
+      "definition_md5": "46412e94cf00a788230835f6d56d8d3b",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": false,
+      "provolatile": "s",
+      "resolved": "resolve_organization_zalo_account_capabilities(bigint)",
+      "signature": "public.resolve_organization_zalo_account_capabilities(bigint)"
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0 THEN\n    RAISE EXCEPTION 'campaign_input_serialization_id_invalid';\n  END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended(\n    'aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0\n  ));\nEND;\n$function$\n",
+      "definition_md5": "74c082aacb1de27a8cedff2e824f219f",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "resolved": "aka_agent_lock_campaign_input_serialization(bigint)",
+      "signature": "public.aka_agent_lock_campaign_input_serialization(bigint)"
+    }
+  ]
+}

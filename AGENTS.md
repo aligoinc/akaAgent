@@ -150,6 +150,12 @@ Chat 401/logout phải được nhận ở `onHeadersReceived`: web có thể ch
 
 Đồng bộ tag Zalo trong form chiến dịch của tenant Chat phải gọi `ZaloChatApiClient.listLabels()` (`queryType='list_labels'`) rồi persist `zalo_tag`/membership tại Desktop; không được rơi về `ZaloServerClient` chỉ vì socket App Server đang offline.
 
+V352 đã apply `20261007025522 / migration_v352_zalo_server_campaign_tags` trên akachat ngày 07/10/2026. Packaged Server gắn tag akaBiz bằng parent claim + run-unit token và input UID qua RPC riêng; Desktop giữ credential auth. Core tag v290 giữ nguyên, không cấp EXECUTE trực tiếp; không thêm connection hoặc retry gửi khi tag lỗi. Cần binary Server 8.1.1; không apply lại. Xem [audit và kiểm chứng](docs/ZALO_SERVER_CAMPAIGN_TAGS_V352.md).
+
+V353 đã apply `20261007031133 / migration_v353_zalo_server_campaign_tag_limits` ngày 07/10/2026 theo yêu cầu bỏ giới hạn riêng: không chặn 100 tag/lần gọi, không đặt lock timeout riêng, RPC dùng statement timeout 60 giây như Local; caller bỏ abort 20 giây. Giữ toàn bộ guard quyền/claim/recipient và cách xử lý lỗi như Local. Không apply lại v352/v353; bộ cài 8.1.1 được build lại sau v353. Xem [audit](docs/ZALO_SERVER_CAMPAIGN_TAG_LIMITS_V353.md).
+
+V354 đã apply `20261007031753 / migration_v354_zalo_server_deleted_tags` trên akachat ngày 07/10/2026: RPC tag Server bỏ kiểm tra `NOT t.is_delete` ở bước xác minh scope; core chung tiếp tục lọc tag đã xóa như Local. Tag sai staff/org/account/cấu hình vẫn bị chặn; person/group và all-deleted no-op đã kiểm chứng. Không sửa app hoặc cần build lại, không apply lại v352–354. Xem [audit](docs/ZALO_SERVER_DELETED_TAGS_V354.md).
+
 [src/main/playwright/webviewController.ts](src/main/playwright/webviewController.ts) — thin wrapper exposing `isConnected()` + `getURL()` cho `webContents` của Electron `<webview>` đã embed cho từng tài khoản FB. Visible webviews vẫn dùng cho login thủ công, check login của account cũ/tạo thủ công, chạy workflow và test trong editor; account import tự động dùng HTTP dưới đây.
 
 `WebviewRegistry` maps `accountId -> webContentsId`. Scheduler uses `isRegistered()` to ensure the account has mounted a browser tab at least once; accountPoller uses `listRegistered()` to skip dead tabs. Runtime uses `accountId` and partition `persist:account_${accountId}`; browser profiles from the previous partition prefix are not reused. For browser-based accounts, account proxy is prepared by `ProxyRuntimeService` on this same partition before background page loads and when user manually reloads visible webview; editing/assigning proxy only saves DB and must not auto-reload, close connections, or destroy visible/background pages. Account context actions "Hiển thị & xem trang web" and "Load lại trang web" must ensure BrowserPage opens/mounts the visible webview when `WebviewRegistry` has no tab yet; do not surface "Tab trình duyệt chưa được mở" for these user-triggered open/reload actions.
@@ -481,6 +487,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Tag akaBiz trên Zalo Server**: dùng RPC claim/unit dành cho Server, không truyền credential Desktop rỗng. Lỗi tag chỉ ghi cảnh báo, không gửi lại Zalo; tag đã xóa được core chung bỏ qua, nhưng tag sai staff/org/account/cấu hình vẫn bị chặn. V352–354 đã apply; không apply lại khi merge/phát hành.
 
 - **Zalo Server admin UI**: local IPC batches every 250 ms, stops while hidden/minimized and resyncs the bounded 1,000-event history on restore. Keep gateway/runtime delivery independent; reuse DOM rows and preserve the clear-log sequence fence. Offline smoke/benchmark: `node scripts/zalo-server-admin-ui-smoke.cjs --compare-base`.
 

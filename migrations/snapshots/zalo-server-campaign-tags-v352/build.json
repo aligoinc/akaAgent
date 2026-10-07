@@ -1,0 +1,9 @@
+{
+  "version": "8.1.1",
+  "installer": "dist-server/akaAgent-Zalo-Server-Setup-8.1.1.exe",
+  "bytes": 107021084,
+  "sha256": "3cca6b487f3b52c36d2c7e9be44210d63c5741ec3828b13207e00d3df0546748",
+  "asar_sha256": "fa013d1ec650649680edcd4008ba8d2c7b121152a8d6ecafc50f66d7adee2773",
+  "command": "npm run build:server:win",
+  "vps_installed": false
+}

@@ -14,6 +14,17 @@ export interface ContactTagMutationResult {
   count: number
 }
 
+export interface ZaloServerCampaignTagInput {
+  campaignId: number
+  accountId: number
+  inputDataId: number
+  runtimeClaimToken: string
+  runtimeUnitToken: string
+  contactType: ContactType
+  targetUid: string
+  tagIds: number[]
+}
+
 const client = () => getSupabaseClient()
 const CONTACT_TAG_QUERY_CHUNK_SIZE = 100
 const CONTACT_TAG_CLEANUP_PAGE_SIZE = 1000
@@ -174,7 +185,8 @@ async function mutateContactTags(
   const tags = normalizeTagIds(tagIds)
   if (tags.length === 0 || contactIds.length === 0) return 0
   const user = requireCurrentUser()
-  // Service-role Server callers have no Desktop login credentials.
+  // Interactive clients authenticate with Desktop credentials. Packaged Server
+  // campaigns use applyZaloServerCampaignTags and their existing runtime lease.
   const credentials = getCurrentUserCredentials()
   let count = 0
   for (let from = 0; from < contactIds.length; from += CONTACT_TAG_WRITE_CHUNK_SIZE) {
@@ -200,6 +212,42 @@ async function mutateContactTags(
     }
   }
   return count
+}
+
+export async function applyZaloServerCampaignTags(
+  input: ZaloServerCampaignTagInput
+): Promise<ContactTagMutationResult> {
+  const user = requireCurrentUser()
+  if (![input.campaignId, input.accountId, input.inputDataId].every(id => Number.isSafeInteger(id) && id > 0)
+    || !input.runtimeClaimToken || !input.runtimeUnitToken || !input.targetUid.trim()
+    || !['person', 'group'].includes(input.contactType)) {
+    throw new Error('server_campaign_tag_claim_required')
+  }
+  const tagIds = normalizeTagIds(input.tagIds)
+  if (tagIds.length === 0) return { success: true, count: 0 }
+  const params = {
+    p_staff_id: user.staffId,
+    p_organization_id: user.organizationId,
+    p_campaign_id: input.campaignId,
+    p_account_id: input.accountId,
+    p_runtime_claim_token: input.runtimeClaimToken,
+    p_runtime_unit_token: input.runtimeUnitToken,
+    p_input_data_id: input.inputDataId,
+    p_contact_type: input.contactType,
+    p_target_uid: input.targetUid.trim(),
+    p_tag_ids: tagIds
+  }
+  // No contact lookup or Desktop-auth fallback. The RPC resolves the recipient
+  // and checks configuration while holding the existing campaign/unit locks.
+  for (let attempt = 0; ; attempt++) {
+    const { data, error } = await client().rpc('aka_agent_apply_zalo_server_campaign_tags', params)
+    if (error && ['40P01', '40001'].includes(error.code) && attempt < 2) {
+      await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)))
+      continue
+    }
+    if (error) throw new Error(`Failed to update akaBiz contact tags: ${error.message}`)
+    return { success: true, count: Number(data?.count) || 0 }
+  }
 }
 
 export async function applyAkaBizTagsToContactIds(

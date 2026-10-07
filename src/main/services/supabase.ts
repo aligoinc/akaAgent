@@ -617,6 +617,9 @@ export class SupabaseService {
   ) {
     return contactTagRepo.applyAkaBizTagsToContactTargets(targets, tagIds)
   }
+  applyZaloServerCampaignTags(input: contactTagRepo.ZaloServerCampaignTagInput) {
+    return contactTagRepo.applyZaloServerCampaignTags(input)
+  }
   addContactsToGroup(groupId: number, contactIds: number[]) {
     return accountContactRepo.addContactsToGroup(groupId, contactIds)
   }

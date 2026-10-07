@@ -7314,7 +7314,8 @@ export class CampaignScheduler {
     account: AutoAccount,
     campaign: Campaign,
     target: ZaloResolvedTarget | null | undefined,
-    contactType: ContactType
+    contactType: ContactType,
+    inputDataId: number
   ): Promise<void> {
     const tagIds = this.getAkaBizTagIdsForCampaign(campaign)
     if (tagIds.length === 0 || !target?.uid) return
@@ -7323,14 +7324,28 @@ export class CampaignScheduler {
     if (uids.length === 0) return
 
     try {
-      const result = await this.supabase.applyAkaBizTagsToContactTargets(
-        uids.map(uid => ({
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      // This is the scheduler's owner, not the account transport (Desktop can
+      // use a remote Zalo transport while retaining its Desktop credentials).
+      const result = this.runtimeTarget === 'server'
+        ? await this.supabase.applyZaloServerCampaignTags({
+          campaignId: campaign.id,
           accountId: account.id,
+          inputDataId,
+          runtimeClaimToken: this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken || '',
+          runtimeUnitToken: this.activeCampaignRunUnits.get(campaign.id)?.runtimeUnitToken || '',
           contactType,
-          uid
-        })),
-        tagIds
-      )
+          targetUid: target.uid,
+          tagIds
+        })
+        : await this.supabase.applyAkaBizTagsToContactTargets(
+          uids.map(uid => ({
+            accountId: account.id,
+            contactType,
+            uid
+          })),
+          tagIds
+        )
       this.throwIfZaloRuntimeStopping(campaign.id)
       if (result.count > 0) {
         const label = contactType === 'group'
@@ -14027,7 +14042,7 @@ export class CampaignScheduler {
           }
         }
       }
-      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person', inputDataId)
       this.throwIfZaloRuntimeStopping(campaign.id)
       return {
         ok: true,
@@ -14078,7 +14093,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
-    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person', Number(options.inputData?.id))
 
     return { ok: true, zaloTarget: target }
   }
@@ -14172,7 +14187,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
-    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person', Number(options.inputData?.id))
 
     return { ok: true, zaloTarget: target }
   }
@@ -14212,7 +14227,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
-    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person', Number(options.inputData?.id))
 
     return { ok: true, zaloTarget: target }
   }
@@ -14426,7 +14441,7 @@ export class CampaignScheduler {
     this.throwIfZaloRuntimeStopping(campaign.id)
     await this.upsertZaloResolvedProfileTarget(account, target, campaign.actionId)
     this.throwIfZaloRuntimeStopping(campaign.id)
-    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person')
+    await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'person', Number(metadata?.campaignInputDataId ?? options.inputData?.id))
     const preparedContent = await this.prepareZaloOutgoingContent(account, campaign, 'zalo_message_friend', options, target, metadata)
     const attachments = preparedContent.media
     const message = preparedContent.content
@@ -14505,7 +14520,7 @@ export class CampaignScheduler {
     try {
       const response = await this.dispatchZaloMessage(account.id, groupId, true, message, attachments)
       this.throwIfZaloRuntimeStopping(campaign.id)
-      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'group')
+      await this.applyAkaBizTagsToZaloTarget(account, campaign, target, 'group', Number(metadata?.campaignInputDataId ?? options.inputData?.id))
       return {
         ok: true,
         zaloTarget: target,
