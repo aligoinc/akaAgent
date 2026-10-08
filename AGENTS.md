@@ -489,6 +489,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Messenger tin nhắn chờ**: v355 đã apply `20261008035803 / migration_v355_facebook_message_waiting_limit`; block `fb_send_message` kiểm tra XPath `LimitMessageSpan` khi chờ textbox thất bại và rethrow `err_limit_waiting_message` qua outer catch để scheduler áp policy hiện có. V356 đã apply `20261008040758`, đổi thời gian nghỉ thành **24 giờ (1.440 phút)** cho lần kích hoạt tiếp theo; không đổi thành `{ok:false}` hoặc apply lại, xem [audit và smoke](docs/FACEBOOK_MESSAGE_WAITING_LIMIT_V355.md).
+
 - **Tag akaBiz trên Zalo Server**: dùng RPC claim/unit dành cho Server, không truyền credential Desktop rỗng. Lỗi tag chỉ ghi cảnh báo, không gửi lại Zalo; tag đã xóa được core chung bỏ qua, nhưng tag sai staff/org/account/cấu hình vẫn bị chặn. V352–354 đã apply; không apply lại khi merge/phát hành.
 
 - **Zalo Server admin UI**: local IPC batches every 250 ms, stops while hidden/minimized and resyncs the bounded 1,000-event history on restore. Keep gateway/runtime delivery independent; reuse DOM rows and preserve the clear-log sequence fence. Offline smoke/benchmark: `node scripts/zalo-server-admin-ui-smoke.cjs --compare-base`.

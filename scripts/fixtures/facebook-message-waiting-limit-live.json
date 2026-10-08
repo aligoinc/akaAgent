@@ -1,0 +1,104 @@
+{
+  "block": {
+    "category": "facebook",
+    "code": "// Centralized AI rewrite via ai_using.\nconst __aiRewriteUsingCode = \"fb_send_message_rewrite\";\nconst __extractAIText = (value) => {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'string') return value.trim();\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();\n  if (Array.isArray(value)) return value.map(__extractAIText).filter(Boolean).join('\\n').trim();\n  if (typeof value === 'object') {\n    const data = value;\n    const direct = data.content ?? data.data ?? data.Data ?? data.text ?? data.output ?? data.response ?? data.message ?? data.Message ?? data.answer ?? data.result;\n    if (direct !== undefined && direct !== null && direct !== value) {\n      const directText = __extractAIText(direct);\n      if (directText) return directText;\n    }\n    try { return JSON.stringify(value); } catch { return String(value); }\n  }\n  return String(value || '').trim();\n};\nconst __callCentralAI = async (usingCode, payload) => {\n  if (!usingCode) throw new Error('Thiếu mã cấu hình AI');\n  if (typeof helpers.callAIUsing !== 'function') throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  const result = await helpers.callAIUsing(usingCode, payload || {});\n  if (result && result.unsupported) throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));\n  return result;\n};\nconst __callAIText = async (usingCode, payload) => {\n  const result = await __callCentralAI(usingCode, payload);\n  return __extractAIText(result && (result.content ?? result.data ?? result.text ?? result.output ?? result.response ?? result.rawResponse ?? result));\n};\nconst __callAIRewriteContent = async (content) => {\n  const text = String(content || '');\n  return await __callAIText(__aiRewriteUsingCode, {\n    content: text,\n    question: text,\n    source: 'aka_agent'\n  });\n};\n\n\ntry {\n  let text = String(input.text || vars.campaignContent || '')\n  let imgs = Array.isArray(input.images) && input.images.length > 0\n    ? input.images\n    : (Array.isArray(vars.images) ? vars.images : [])\n\n  const shouldRewriteContentEachRun = vars.rewriteContentEachRun === true\n\nconst formatTemplateDate = (dayKey, formatKey) => {\n  const d = new Date()\n  const key = String(dayKey || 'TODAY').toUpperCase()\n  if (key === 'TOMORROW') d.setDate(d.getDate() + 1)\n  if (key === 'YESTERDAY') d.setDate(d.getDate() - 1)\n\n  const dd = String(d.getDate()).padStart(2, '0')\n  const mm = String(d.getMonth() + 1).padStart(2, '0')\n  const yyyy = String(d.getFullYear())\n  const format = String(formatKey || 'DD/MM/YYYY').toUpperCase()\n  return format === 'MM/DD/YYYY'\n    ? mm + '/' + dd + '/' + yyyy\n    : dd + '/' + mm + '/' + yyyy\n}\n\nconst renderContentTemplate = async (raw, options = {}) => {\n  let rendered = String(raw || '')\n\n  if (/#\\{\\s*FULL_NAME\\s*\\}/i.test(rendered)) {\n    let fullName = String(vars.campaignInputDataName || vars.inputDataName || '').trim()\n    if (!fullName && options.resolveFullNameFromPage) {\n      const nameXpath = \"//*[contains(@class,'xxymvpz x1dyh7pn')]\"\n      try {\n        const found = await page.waitForSelector(nameXpath, { timeout: 3000 }).catch(() => false)\n        if (found) fullName = String(await page.getText(nameXpath).catch(() => '') || '').trim()\n      } catch (e) {\n        fullName = ''\n      }\n    }\n    rendered = rendered.replace(/#\\{\\s*FULL_NAME\\s*\\}/gi, fullName)\n  }\n\n  rendered = rendered.replace(\n    /#\\{\\s*(TODAY|TOMORROW|YESTERDAY)\\s*(?:\\(\\s*(DD\\/MM\\/YYYY|MM\\/DD\\/YYYY)\\s*\\))?\\s*\\}/gi,\n    (_match, dayKey, formatKey) => formatTemplateDate(dayKey, formatKey)\n  )\n\n  return rendered\n}\n\nconst rewriteContentForRun = async (raw) => {\n  const original = String(raw || '')\n  const content = original.trim()\n  if (!shouldRewriteContentEachRun || !content) return original\n\n  try {\n    const rewritten = await __callAIRewriteContent(content)\n    if (!rewritten) throw new Error('AI trả về nội dung không hợp lệ.')\n    helpers.log('Đã viết lại nội dung bằng AI')\n    return rewritten\n  } catch (e) {\n    const message = e && e.message ? String(e.message) : String(e)\n    helpers.log('AI viết lại nội dung lỗi, dùng nội dung gốc: ' + message)\n    return original\n  }\n}\n\n\n  // Đóng dialog \"Khôi phục đoạn chat\" nếu hiện\n  try {\n    const closeBtn = '[aria-label=\"Đóng\"], [aria-label=\"Close\"]'\n    const found = await page.waitForSelector(closeBtn, { timeout: 3000 })\n    if (found) {\n      await page.click(closeBtn)\n      await helpers.sleep(2000, signal)\n      const confirm = '(//*[@role=\"button\" and @aria-label=\"Không khôi phục tin nhắn\" and @tabindex=\"0\"])[position()=1]'\n      const c = await page.waitForSelector(confirm, { timeout: 3000 }).catch(() => false)\n      if (c) {\n        await page.click(confirm)\n        await helpers.sleep(2000, signal)\n      }\n    }\n  } catch (e) { /* không có dialog -> bỏ qua */ }\n\n  // Đóng dialog E2EE \"Tiếp tục\" nếu hiện\n  try {\n    const cont = '//*[@role=\"button\" and .=\"Tiếp tục\"]'\n    const found = await page.waitForSelector(cont, { timeout: 2000 })\n    if (found) {\n      await page.click(cont)\n      await helpers.sleep(2000, signal)\n    }\n  } catch (e) { /* không có -> bỏ qua */ }\n\n  const box = await helpers.element('fb_messenger_textbox')\n  await page.waitForSelector(box, { timeout: 15000 })\n  await helpers.sleep(1000, signal)\n  await page.click(box)\n  await helpers.sleep(500, signal)\n\n  if (typeof helpers.prepareCampaignContent === 'function') {\n    const prepared = await helpers.prepareCampaignContent({ rewriteCode: __aiRewriteUsingCode, resolveFullNameFromPage: true })\n    text = prepared.content.trim()\n    imgs = prepared.media\n    vars.contentVariantIndex = prepared.variantIndex\n  } else {\n    text = (await renderContentTemplate(text, { resolveFullNameFromPage: true })).trim()\n    text = (await rewriteContentForRun(text)).trim()\n  }\n\n  if (text) {\n    await page.fill(box, text)\n    await helpers.sleep(1000, signal)\n  }\n  if (imgs.length > 0) {\n    await page.dropFile(box, imgs)\n    await helpers.sleep(Math.max(3000, imgs.length * 1500), signal)\n  }\n  if (text || imgs.length > 0) {\n    await page.press('Enter')\n    await helpers.sleep(2000, signal)\n  }\n  return { ok: true, content: text, rewrittenContent: shouldRewriteContentEachRun }\n} catch (e) {\n  return { ok: false, error: e.message }\n}\n",
+    "config_schema": [
+      {
+        "label": "Nội dung",
+        "name": "text",
+        "required": true,
+        "type": "textarea"
+      },
+      {
+        "default": [],
+        "label": "Ảnh kèm (array path)",
+        "name": "images",
+        "type": "json"
+      }
+    ],
+    "created_at": "2026-04-26T17:29:28.530917+00:00",
+    "default_config": {
+      "images": []
+    },
+    "description": "Gửi tin nhắn qua Messenger",
+    "icon": "MessageSquare",
+    "id": 38,
+    "is_builtin": true,
+    "kind": "js",
+    "name": "fb_send_message",
+    "organization_id": 1,
+    "output_schema": [
+      {
+        "label": "Gửi thành công không",
+        "name": "ok",
+        "type": "boolean"
+      },
+      {
+        "label": "Lỗi (nếu có)",
+        "name": "error",
+        "type": "string"
+      }
+    ],
+    "staff_id": 1,
+    "system_type": null,
+    "updated_at": "2026-10-06T10:14:35.142327+00:00"
+  },
+  "block_md5": "3a7f999972550721bf67b25744363b9f",
+  "policy": {
+    "count_consecutive_errors": null,
+    "counts_toward_bad_target": true,
+    "counts_toward_limit": true,
+    "created_at": "2026-05-09T04:16:20.5176+00:00",
+    "detail_status": null,
+    "disable_action_codes": [
+      "fb_message_stranger"
+    ],
+    "disable_action_days": null,
+    "disable_action_mode": "fixed_minutes",
+    "disable_action_time": null,
+    "error_code": "err_limit_waiting_message",
+    "error_desc": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+    "error_element": "//span//span[contains(.,\"Bạn đã đạt giới hạn về số tin nhắn đang chờ\")]",
+    "error_name": "Nhắn tin",
+    "error_type": "external facebook",
+    "id": 5,
+    "is_active": true,
+    "is_delete": false,
+    "noti_campaign": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+    "noti_running_process": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+    "time_disable_actions": 60,
+    "update_login_status": null,
+    "update_status_account": null,
+    "update_status_campaign": null,
+    "updated_at": "2026-05-09T04:16:20.5176+00:00",
+    "zalo_action_codes": [],
+    "zalo_error_codes": []
+  },
+  "policy_md5": "6962d5198d9884f148a8affa8f168dfa",
+  "row_md5": "56dfd1f6942ea2a552792edda3fb1ec3",
+  "workflows": [
+    {
+      "id": 249,
+      "md5": "48a1a840224f2eccb6c3432dd9c3a9eb",
+      "name": "facebook_message_friend__test__facebook_message_friend"
+    },
+    {
+      "id": 208,
+      "md5": "7a1b85e0e7a19537d99ce753784b06d1",
+      "name": "facebook_message_uid"
+    },
+    {
+      "id": 248,
+      "md5": "126faf27aad5040dcd64cb2d48892523",
+      "name": "facebook_message_uid__test__facebook_message_uid"
+    },
+    {
+      "id": 3,
+      "md5": "ce08a74e7cca8cf06ec1f4d51b904a0e",
+      "name": "facebook_message_friend"
+    }
+  ],
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_date": "2026-10-08",
+  "target_code_md5": "fb11e928304d044f50f3a11a93821463"
+}
