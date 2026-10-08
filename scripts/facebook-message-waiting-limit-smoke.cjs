@@ -184,7 +184,11 @@ async function main() {
   assert.equal(captures[0].error, message)
   console.log('PASS actual engine stops downstream and requests an after-failure screenshot')
   for (const minutes of [60, 1440]) {
-    const policy = mapAutoErrorPolicyFromDB({ ...baseline.policy, time_disable_actions: minutes })
+    const currentNotices = minutes === 1440 ? {
+      noti_running_process: 'Facebook đang hạn chế nhắn tin cho người lạ.',
+      noti_campaign: 'Facebook đang hạn chế nhắn tin cho người lạ. Tạm nghỉ 24 giờ.'
+    } : {}
+    const policy = mapAutoErrorPolicyFromDB({ ...baseline.policy, ...currentNotices, time_disable_actions: minutes })
     const writes = [], disables = [], requested = []
     const scheduler = Object.assign(new Scheduler(), {
       failedRunErrorPolicies: new Map(), attemptedRunErrorPolicies: new Set(),
@@ -205,7 +209,7 @@ async function main() {
     assert.deepEqual(disables[0].slice(0, 3), [2, ['fb_message_stranger'], minutes])
     assert.equal(disables[0][3].errorCode, policy.errorCode)
     assert.equal(writes[0].status, 'chờ xử lý')
-    assert.equal(writes[0].note, message)
+    assert.equal(writes[0].note, policy.notiCampaign)
     assert(requested.every(key => key === policy.errorCode))
     console.log(`PASS existing scheduler applies exact policy and ${minutes}-minute action disable`)
   }

@@ -27,7 +27,17 @@ END $verify$;`
 const verify = makeVerify(originalPolicyCheck)
 // Verify the recorded follow-up without weakening v355 apply/smoke guards.
 const expected24h = JSON.stringify({ ...baseline.policy, time_disable_actions: 1440 }).replace(/'/g, "''")
-const currentVerify = makeVerify(`IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name='migration_v356_facebook_message_waiting_limit_24h') THEN
+const expectedNotices = JSON.stringify({
+  ...baseline.policy, time_disable_actions: 1440,
+  noti_running_process: 'Facebook đang hạn chế nhắn tin cho người lạ.',
+  noti_campaign: 'Facebook đang hạn chế nhắn tin cho người lạ. Tạm nghỉ 24 giờ.'
+}).replace(/'/g, "''")
+const currentVerify = makeVerify(`IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name='migration_v357_facebook_waiting_message_notices') THEN
+    IF (SELECT to_jsonb(p) - 'updated_at' FROM public.auto_error p WHERE error_code='err_limit_waiting_message')
+       IS DISTINCT FROM ('${expectedNotices}'::jsonb - 'updated_at') THEN
+      RAISE EXCEPTION 'v357 verification: waiting-message policy changed';
+    END IF;
+  ELSIF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name='migration_v356_facebook_message_waiting_limit_24h') THEN
     IF (SELECT to_jsonb(p) - 'updated_at' FROM public.auto_error p WHERE error_code='err_limit_waiting_message')
        IS DISTINCT FROM ('${expected24h}'::jsonb - 'updated_at') THEN
       RAISE EXCEPTION 'v356 verification: 24-hour policy changed';
@@ -36,8 +46,8 @@ const currentVerify = makeVerify(`IF EXISTS (SELECT 1 FROM supabase_migrations.s
     ${originalPolicyCheck}
   END IF;`)
 const report = `SELECT jsonb_build_object('block',(SELECT jsonb_build_object('id',id,'name',name,'code_md5',md5(code)) FROM public.auto_blocks WHERE id=38),
-  'policy',(SELECT jsonb_build_object('error_code',error_code,'time_disable_actions',time_disable_actions,'policy_md5',md5(to_jsonb(p)::text)) FROM public.auto_error p WHERE error_code='err_limit_waiting_message'),
-  'history',(SELECT jsonb_agg(jsonb_build_object('version',version,'name',name) ORDER BY version) FROM supabase_migrations.schema_migrations WHERE name IN ('${name}','migration_v356_facebook_message_waiting_limit_24h'))) AS verification;`
+  'policy',(SELECT jsonb_build_object('error_code',error_code,'time_disable_actions',time_disable_actions,'noti_running_process',noti_running_process,'noti_campaign',noti_campaign,'policy_md5',md5(to_jsonb(p)::text)) FROM public.auto_error p WHERE error_code='err_limit_waiting_message'),
+  'history',(SELECT jsonb_agg(jsonb_build_object('version',version,'name',name) ORDER BY version) FROM supabase_migrations.schema_migrations WHERE name IN ('${name}','migration_v356_facebook_message_waiting_limit_24h','migration_v357_facebook_waiting_message_notices'))) AS verification;`
 const mode = process.argv[2]
 let sql
 if (mode === 'smoke') {

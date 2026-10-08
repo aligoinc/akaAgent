@@ -10,13 +10,28 @@ Do not reapply.
 request. [Canonical SQL](../migrations/migration_v356_facebook_message_waiting_limit_24h.sql)
 guards the live policy checksum, updates only `time_disable_actions` and
 `updated_at`, and verifies all other policy fields are unchanged. Rollback smoke
-and a separate post-commit read passed. Policy MD5 is now
+and a separate post-commit read passed. Policy MD5 immediately after v356 was
 `1d7a519002b4180aa14158db7e80d61e`; block MD5 remains
 `fb11e928304d044f50f3a11a93821463`. Existing account cooldown timestamps were not
 rewritten; the duration applies when the policy next triggers. No build or schema
 reload is required. The 60-minute values and policy checksum below record the
-original v355 deployment. The read-only `verify` command checks the 24-hour policy
-when v356 is recorded, while `apply`/`smoke` retain the original v355 preconditions.
+original v355 deployment. The read-only `verify` command checks the policy at the
+latest recorded v355/v356/v357 revision, while `apply`/`smoke` retain the original
+v355 preconditions.
+
+**Current notices:** v357 was applied on 08/10/2026 at 11:30:42 Vietnam time,
+history `20261008043042 / migration_v357_facebook_waiting_message_notices`.
+
+- `noti_running_process`: “Facebook đang hạn chế nhắn tin cho người lạ.”
+- `noti_campaign`: “Facebook đang hạn chế nhắn tin cho người lạ. Tạm nghỉ 24 giờ.”
+
+[Canonical SQL](../migrations/migration_v357_facebook_waiting_message_notices.sql)
+uses the captured live v356 checksum and changes only those two fields and
+`updated_at`. Current policy MD5: `604d7635ae91594495830f917173d77c`. Detection text,
+XPath, block code, 1,440-minute cooldown and all other policy settings are
+unchanged. Rollback smoke, post-commit verification and the 14-case Electron
+smoke passed; the scheduler assertion covers the new campaign note. Previously
+stored log/campaign notes are not rewritten. No app release or schema reload.
 
 ## Cause and change
 
