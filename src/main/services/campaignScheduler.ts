@@ -239,6 +239,19 @@ interface MilestoneSummary {
   optOutBlocked?: boolean
   facebookFriendFailures?: FacebookFriendFailure[]
   helperControlSources?: Set<string>
+  explicitErrorPolicies?: Map<string, ExplicitResultErrorPolicy>
+}
+
+interface ExplicitResultErrorPolicy {
+  inputDataId: number | null
+  actionCode: string
+  errorCode: string
+  message?: string
+  thresholdReason?: string
+  runId?: string
+  policy: AutoErrorPolicy | null
+  countsTowardBadTarget: boolean
+  handling?: Promise<RuntimeErrorResult>
 }
 
 interface FacebookFriendFailure {
@@ -761,6 +774,7 @@ export class CampaignScheduler {
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
     signature: string; write: Promise<CampaignDetail | null>; helperDetail?: ZaloActionDetailOutput | null
+    errorPolicy: { receipt?: ExplicitResultErrorPolicy }
   }>>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
@@ -4110,6 +4124,9 @@ export class CampaignScheduler {
             const lastErrorStep = [...result.steps].reverse().find(step => step.status === 'error')
             const friendErrorHandled = lastErrorStep?.blockName === 'fb_add_friend' && friendFailures.length > 0
             const policyOptions: TargetErrorPolicyOptions = { targetCounter: {}, campaignDecision: { paused: false } }
+            const explicitPolicies = await this.finalizeExplicitResultPolicies(account, campaign, detail?.id, milestoneSummary, policyOptions)
+            runtimeStopTriggered ||= explicitPolicies.triggered
+            shouldStopAfterTarget ||= explicitPolicies.triggered
             // A completed friend click remains a success when only its trailing
             // delay was cancelled. Real step failures still use their policy.
             const cancelledAfterDelivery = result.status === 'cancelled' &&
@@ -4139,12 +4156,12 @@ export class CampaignScheduler {
                 },
                 policyOptions
               )
-              runtimeStopTriggered = handled.triggered
-              shouldStopAfterTarget = handled.triggered
+              runtimeStopTriggered ||= handled.triggered
+              shouldStopAfterTarget ||= handled.triggered
             } else if (
-              milestoneSummary.hasError ||
+              !explicitPolicies.coversBadTarget && (milestoneSummary.hasError ||
               milestoneSummary.hasHardFailure ||
-              (milestoneSummary.hasFailure && !milestoneSummary.hasSuccess)
+              (milestoneSummary.hasFailure && !milestoneSummary.hasSuccess))
             ) {
               const handled = await this.handleCampaignBadTarget(
                 account,
@@ -4159,8 +4176,8 @@ export class CampaignScheduler {
                 },
                 policyOptions
               )
-              runtimeStopTriggered = handled.triggered
-              shouldStopAfterTarget = handled.triggered
+              runtimeStopTriggered ||= handled.triggered
+              shouldStopAfterTarget ||= handled.triggered
             } else if (milestoneSummary.hasSuccess && !friendFailures.some(failure => failure.policy?.countsTowardBadTarget !== false)) {
               await this.resetCampaignBadTargetCount(campaign)
             }
@@ -4767,15 +4784,19 @@ export class CampaignScheduler {
         }
         const hasContract = result.steps.some(s => s.output && ('actionResult' in s.output || 'actionResults' in s.output || ('actionCode' in s.output && 'statusCode' in s.output)))
         if (hasContract) {
-          await this.logMilestonesV2(campaign, null, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
+          const summary = await this.logMilestonesV2(campaign, null, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
           let stop = result.status !== 'completed'
+          const campaignDecision = { paused: false }
           for (const target of batch) {
             const effects = managedTargetEffects(campaign.id, target.inputDataId)
             if (!effects) throw new ResultContractError('output_invalid', actionDescriptor.code, 'batch_result_missing')
             await this.supabase.updateCampaignInputData(target.inputDataId, { status: 'hoàn thành' })
-            if (effects.badTargetEffect === 'increment') {
+            const policyOptions: TargetErrorPolicyOptions = { targetCounter: {}, campaignDecision }
+            const explicitPolicies = await this.finalizeExplicitResultPolicies(account, campaign, target.inputDataId, summary, policyOptions)
+            stop ||= explicitPolicies.triggered
+            if (effects.badTargetEffect === 'increment' && !explicitPolicies.coversBadTarget) {
               const handled = await this.handleCampaignBadTarget(account, campaign, target.inputDataId,
-                'err_undefined', actionDescriptor.code, { message: result.error || '', runId: String(result.runId || '') })
+                'err_undefined', actionDescriptor.code, { message: result.error || '', runId: String(result.runId || '') }, policyOptions)
               stop ||= handled.triggered
             }
           }
@@ -10321,6 +10342,7 @@ export class CampaignScheduler {
       if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', output.actionCode, sourceKey)
       const helperLegacy = previous ? previous.helperDetail
         : helperDetail?.actionCode === output.actionCode && inputDataId === detail?.id ? helperDetail : null
+      const errorPolicy: { receipt?: ExplicitResultErrorPolicy } = previous?.errorPolicy ?? {}
       let write = previous?.write
       if (!write) {
         // Share even failed attempts across progress/finalization and relays.
@@ -10378,9 +10400,28 @@ export class CampaignScheduler {
             }
           }
           if (output.errorCode && helperLegacy?.handledErrorCode !== output.errorCode) {
-            const account = await this.supabase.getAccount(accountId)
-            if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
-              { message: typeof row.message === 'string' ? row.message : undefined }, { explicitOnly: true })
+            const specific = await this.supabase.getErrorPolicy(output.errorCode)
+            const policy = specific || await this.supabase.getErrorPolicy('err_undefined')
+            const receipt: ExplicitResultErrorPolicy = {
+              inputDataId: inputDataId ?? null, actionCode: output.actionCode,
+              errorCode: specific ? output.errorCode : 'err_undefined', policy,
+              message: typeof row.message === 'string' ? row.message : undefined,
+              thresholdReason: created ? this.getCampaignDetailRootReason(created) : undefined,
+              runId: step.runId ? String(step.runId) : undefined,
+              countsTowardBadTarget: created?.policySnapshot?.badTargetEffect === 'increment'
+            }
+            errorPolicy.receipt = receipt
+            // Thresholds belong to the complete target, not an individual
+            // result/progress event. Non-counting and immediate effects retain
+            // their existing timing and share the same receipt on replay.
+            if (!this.getPolicyThreshold(policy) || !receipt.countsTowardBadTarget) {
+              const account = await this.supabase.getAccount(accountId)
+              if (account) {
+                receipt.handling = this.applyRuntimeErrorPolicy(account, campaign, receipt.errorCode, output.actionCode,
+                  { message: receipt.message }, { policy, explicitOnly: true })
+                await receipt.handling
+              }
+            }
           }
           if (legacy && !newsfeedLogged) {
             await this.logCampaignProgress(campaign, legacy.progress)
@@ -10388,9 +10429,13 @@ export class CampaignScheduler {
           }
           return created
         })()
-        writes.set(sourceKey, { signature, write, helperDetail: helperLegacy })
+        writes.set(sourceKey, { signature, write, helperDetail: helperLegacy, errorPolicy })
       }
       const created = await write
+      if (errorPolicy.receipt) {
+        const policies = summary.explicitErrorPolicies ??= new Map()
+        policies.set(sourceKey, errorPolicy.receipt)
+      }
       if (helperLegacy && !summary.helperControlSources?.has(sourceKey)) {
         this.applyHelperMilestoneControls(summary, helperLegacy)
         const sources = summary.helperControlSources ??= new Set<string>()
@@ -10398,6 +10443,35 @@ export class CampaignScheduler {
       }
       if (created) this.recordMilestoneSummary(summary, created.status, created.log, created.actionName)
     }
+  }
+
+  private async finalizeExplicitResultPolicies(
+    account: AutoAccount, campaign: Campaign, inputDataId: number | null | undefined,
+    summary: MilestoneSummary, options: TargetErrorPolicyOptions
+  ): Promise<{ triggered: boolean; coversBadTarget: boolean }> {
+    let triggered = false
+    let coversBadTarget = false
+    for (const receipt of summary.explicitErrorPolicies?.values() ?? []) {
+      if (receipt.inputDataId !== (inputDataId ?? null)) continue
+      if (!receipt.handling) {
+        const policyOptions = { ...options, policy: receipt.policy, explicitOnly: true }
+        const replacements = { message: receipt.message, thresholdReason: receipt.thresholdReason, runId: receipt.runId }
+        receipt.handling = receipt.countsTowardBadTarget
+          ? this.handleCampaignBadTarget(account, campaign, inputDataId,
+            receipt.errorCode, receipt.actionCode, replacements, policyOptions)
+          : this.applyRuntimeErrorPolicy(account, campaign, receipt.errorCode, receipt.actionCode,
+            replacements, policyOptions)
+      }
+      const handled = await receipt.handling
+      triggered ||= handled.triggered
+      // A cause with neither a threshold nor a stop decision still leaves the
+      // existing generic consecutive-target guard in charge.
+      coversBadTarget ||= receipt.countsTowardBadTarget && (this.getPolicyThreshold(receipt.policy) != null || handled.triggered)
+      if (handled.triggered && receipt.policy?.updateStatusCampaign === 'tạm dừng' && options.campaignDecision) {
+        options.campaignDecision.paused = true
+      }
+    }
+    return { triggered, coversBadTarget }
   }
 
   private async logNewsfeedMilestoneStep(

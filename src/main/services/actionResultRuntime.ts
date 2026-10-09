@@ -78,8 +78,19 @@ export function validateActionResultStep(campaignId: number, value: Record<strin
   const pending = new Map<string, string>()
   for (const row of rows) {
     const output = parseActionResultOutput(row)
-    if (run.unit && run.unit.inputIds.length > 1 && !run.unit.inputIds.includes(Number(row.inputDataId))) throw new ResultContractError('output_invalid', output?.actionCode ?? '', 'batch_input_missing')
     if (!output || !run.loaded.actionCodes.has(output.actionCode)) throw new ResultContractError('output_invalid', output?.actionCode ?? '', 'action_unavailable')
+    if (run.unit) {
+      const ids = run.unit.inputIds
+      // A single target may omit its ID; a targetless unit may only omit it.
+      // Validate supplied IDs before a downstream node can perform more work.
+      const id = row.inputDataId == null ? (ids.length === 1 ? ids[0] : null) : Number(row.inputDataId)
+      const suppliedIdValid = row.inputDataId == null || typeof row.inputDataId === 'number'
+        || (typeof row.inputDataId === 'string' && /^\d+$/.test(row.inputDataId))
+      if (!suppliedIdValid || (ids.length > 0 && (id == null || !Number.isSafeInteger(id) || !ids.includes(id)))
+        || (ids.length === 0 && id != null)) {
+        throw new ResultContractError('output_invalid', output.actionCode, 'batch_input_missing')
+      }
+    }
     const error = output.errorCode ? run.loaded.errors.get(output.errorCode) : null
     run.loaded.catalog.resolve(output, error ? { detailMode: error.detailMode ?? null,
       detailStatusId: error.detailStatusId ?? null, inputEffect: error.inputEffect ?? null } : null)

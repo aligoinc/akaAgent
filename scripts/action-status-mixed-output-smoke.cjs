@@ -99,7 +99,11 @@ async function newsfeed(zca) {
   try {
     let policyCalls = 0
     policies.scheduler.supabase.getAccount = async () => policies.account
-    policies.scheduler.applyRuntimeErrorPolicy = async () => { policyCalls++ }
+    policies.scheduler.applyRuntimeErrorPolicy = async () => { policyCalls++; return { triggered: false } }
+    // This case tests immediate policy receipt replay; threshold decisions
+    // are separately exercised at the full target boundary.
+    const getPolicy = policies.scheduler.supabase.getErrorPolicy
+    policies.scheduler.supabase.getErrorPolicy = async code => ({ ...await getPolicy(code), countConsecutiveErrors: null })
     const s = step(1, 'fb_newsfeed_comment_submit', { actionResult: result('fb_comment', 'campaign_detail_failed', {
       errorCode: 'err_undefined', message: 'existing diagnostic'
     }) })
