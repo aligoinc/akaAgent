@@ -1,0 +1,12 @@
+{
+  "version": "20261009213548",
+  "name": "migration_v378_zalo_222_accepted",
+  "at": "2026-10-09T21:35:48.124Z",
+  "id": 31,
+  "code": "err_zalo_friend_request_sent",
+  "md5": "8ae2654d42b0fa20d46f8e5621f0cf0e",
+  "after_sha256": "f2e824b1e679f84923c92de16eaf10e9d884f3368b1eca625e8e729e46b5c0f7",
+  "verified_at": "2026-10-09T21:35:53.066Z",
+  "other_rows_unchanged": true,
+  "schema_dependencies_and_historical_details_unchanged": true
+}

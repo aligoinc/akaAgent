@@ -1,0 +1,60 @@
+{
+  "migration_sha256": "00a498587d24d06f10a28bc4caee55ff831bbcd540f1f0ac23f20ffe52eda2dd",
+  "rollback_sha256": "6364a762431ee5fc3cfe053e808b302deec12f89790a6008b60f95e4553154b3",
+  "changed_fields": [
+    "error_name",
+    "error_desc",
+    "noti_running_process",
+    "noti_campaign",
+    "detail_status",
+    "counts_toward_limit",
+    "zalo_action_codes",
+    "updated_at"
+  ],
+  "id": 31,
+  "code": "err_zalo_friend_request_sent",
+  "before": {
+    "count_consecutive_errors": null,
+    "counts_toward_bad_target": false,
+    "counts_toward_limit": false,
+    "created_at": "2026-06-10T18:03:47.067016+00:00",
+    "detail_mode": null,
+    "detail_status": "đã gửi lời mời",
+    "detail_status_id": null,
+    "disable_action_codes": [],
+    "disable_action_days": null,
+    "disable_action_mode": "fixed_minutes",
+    "disable_action_time": null,
+    "error_code": "err_zalo_friend_request_sent",
+    "error_desc": "Zalo báo lời mời kết bạn đã được gửi hoặc đang tồn tại",
+    "error_element": null,
+    "error_name": "Đã gửi lời mời kết bạn",
+    "error_type": "external zalo",
+    "id": 31,
+    "input_effect": null,
+    "is_active": true,
+    "is_delete": false,
+    "noti_campaign": "Đã gửi lời mời",
+    "noti_running_process": "Đã gửi lời mời",
+    "time_disable_actions": null,
+    "update_login_status": null,
+    "update_status_account": null,
+    "update_status_campaign": null,
+    "updated_at": "2026-06-10T18:03:47.067016+00:00",
+    "zalo_action_codes": [],
+    "zalo_error_codes": [
+      "222"
+    ]
+  },
+  "patch": {
+    "error_name": "Đã chấp nhận lời mời kết bạn",
+    "error_desc": "Zalo trả mã 222 “Tự động kết bạn”: đối phương đã gửi lời mời đến, thao tác kết bạn được xử lý thành chấp nhận lời mời.",
+    "noti_running_process": "Đã chấp nhận lời mời kết bạn",
+    "noti_campaign": "Đã chấp nhận lời mời kết bạn",
+    "detail_status": "thành công",
+    "counts_toward_limit": true,
+    "zalo_action_codes": [
+      "zalo_add_friend"
+    ]
+  }
+}
