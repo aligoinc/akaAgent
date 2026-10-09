@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-09T21:35:32.732Z",
+  "passed": true,
+  "applied_then_restored_in_transaction": true,
+  "whole_table_matches_before": true,
+  "committed": false
+}

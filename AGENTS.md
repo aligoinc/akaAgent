@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V378 đã apply trên akachat ngày 10/10/2026 (`20261009213548 / migration_v378_zalo_222_accepted`): mã Zalo `222` chỉ áp dụng `zalo_add_friend`, ghi Thành công / “Đã chấp nhận lời mời kết bạn”, tính lượt, không tăng/reset target lỗi và không dừng chiến dịch. Giữ mã nội bộ `err_zalo_friend_request_sent`; không apply lại hoặc sửa detail lịch sử; [snapshot và rollback](migrations/snapshots/zalo-222-accepted-v378/manifest.json), smoke `node scripts/zalo-222-accepted-v378-smoke.cjs`.
+
 V376/V377 đã apply trên akachat ngày 10/10/2026 (`20261009201357` / `20261009202253`); không apply lại khi merge. Riêng `err_fb_composer_editor_not_found`: `update_status_campaign=NULL`, `counts_toward_bad_target=true`, `counts_toward_limit=false`; không dừng ngay, vẫn theo ngưỡng target lỗi chung hiện có của `err_undefined` (4 tại thời điểm apply). `chờ xử lý` ở cột campaign kết thúc lượt hiện tại, không phải bỏ qua target. Giữ nguyên năm policy UI/media chưa có producer theo yêu cầu người dùng. Không cần build lại; catalog đã nạp giữ suốt lượt. Snapshot/rollback và kiểm chứng: [V376](docs/FB_COMPOSER_TARGET_ERROR_V376.md), [V377](docs/FB_COMPOSER_BAD_TARGET_V377.md).
 
 V361–V368 đã apply trên akachat ngày 09/10/2026; không apply lại. Web readers và Chat worker đã deploy, Server 8.2.0 đã đóng gói local nhưng chưa phát hành; giữ output block tương thích client cũ. Detail đã dùng metadata mới nên rollback runtime phải giữ schema/catalog/readers và lịch sử. Snapshot/checksum/rollout: [audit runtime](docs/ACTION_STATUS_READERS_V362.md), [V367](docs/ACTION_STATUS_COMPATIBILITY_V367.md), [V368](docs/EMAIL_STATUS_OBSERVATIONS_V368.md).

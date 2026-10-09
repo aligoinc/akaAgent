@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-09T21:35:36.273Z",
+  "passed": true,
+  "scenarios": 6,
+  "runtimes": [
+    "desktop",
+    "packaged-server",
+    "chat-result-writer"
+  ],
+  "scoped_lookup": true,
+  "success_quota_and_input_verified": true,
+  "no_bad_target_increment_or_reset": true,
+  "approved_notice_only": true,
+  "no_account_or_campaign_stop": true,
+  "external_operations": 0
+}
