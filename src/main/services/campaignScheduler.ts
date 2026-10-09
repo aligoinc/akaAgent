@@ -10400,10 +10400,10 @@ export class CampaignScheduler {
             actionName: helperProgress.actionName, action: helperProgress.actionName, a: helperProgress.actionName,
             t: policy.timeDisableActions == null ? undefined : String(policy.timeDisableActions)
           }) : ''
-          const progressMessage = created?.log || helperLegacy?.log || policyNotice || helperProgress.log
-            || (output.errorCode ? policy?.errorName || 'Có lỗi xảy ra' : undefined)
           const failure = !!output.errorCode || created?.reportGroup === 'failure'
             || created?.status === 'lỗi' || created?.status === 'thất bại'
+          const progressMessage = created?.log || helperLegacy?.log || policyNotice || helperProgress.log
+            || (failure ? policy?.errorName || 'Có lỗi xảy ra' : undefined)
           if (output.actionCode === 'email_send') {
             if (created) {
               // A batch must identify tracking per result; a wrapper ID cannot

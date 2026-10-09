@@ -11,13 +11,14 @@
 - Kết quả explicit lỗi/thất bại chưa có logger chuyên biệt ghi thông báo một lần trong receipt của kết quả. Nhận nhóm failure từ metadata đã lưu, không phụ thuộc việc policy có tính bad-target hay dừng chiến dịch.
 - Dùng thông báo đã ghi trong detail; khi policy suppress detail, dùng thông báo từ policy đã nạp hoặc helper hiện có. Không đọc thêm catalog, thêm pool hoặc thay thời điểm nạp.
 - Email/Zalo tiếp tục dùng logger hiện tại; khi detail không có log thì giữ được thông báo sẵn có từ helper/policy.
+- Output Email/Zalo chỉ có trạng thái lỗi/thất bại, thiếu `message` và `errorCode`, dùng câu dự phòng hiện có “Có lỗi xảy ra” cho log tiến trình. Nhận diện cả trạng thái mới có `report_group=failure`; không thêm thông báo cho Thành công/Bỏ qua thiếu nội dung và không ghi câu dự phòng vào detail.
 - Adapter newsfeed thành công chỉ dùng cho output Thành công phù hợp; cờ DOM cũ không ghi đè thông báo lỗi trong explicit result.
 - Group-post verification giữ logger chuyên biệt; replay, relay và finalization dùng receipt để không lặp log. Batch không gán tên target đầu cho kết quả của target khác.
 - Giữ nguyên log hoàn thành data, note/log cũ, mẫu thông báo, detail/input settlement, quota, bad-target, ngưỡng lỗi và side effect của policy. Không sửa producer, schema hoặc dữ liệu DB.
 
 ## Kiểm chứng
 
-`node scripts/action-result-progress-smoke.cjs` chạy 17 trường hợp với writer/settlement PostgreSQL WASM, workflow và scheduler thật; browser/transport được giả lập, không gửi/đăng thật. Bao gồm lỗi có/không dừng, inherit/suppress, Facebook/Email/Zalo, trạng thái failure mới, batch, newsfeed dual output, callback đồng thời và replay. Trường hợp vòng scheduler đầy đủ kiểm tra lỗi composer → log lỗi → hoàn thành data → nghỉ 30 giây giả lập → target tiếp theo thành công; counter 0→1→0, quota chỉ tính thành công.
+`node scripts/action-result-progress-smoke.cjs` chạy 31 trường hợp với writer/settlement PostgreSQL WASM, workflow và scheduler thật; browser/transport được giả lập, không gửi/đăng thật. Bao gồm lỗi có/không dừng, inherit/suppress, Facebook/Email/Zalo, trạng thái failure mới, batch, newsfeed dual output, callback đồng thời và replay. Có 14 trường hợp Email/Zalo kiểm tra thông điệp thiếu/rỗng, giữ thông điệp đã có, không thêm log Thành công/Bỏ qua, không đổi detail/quota/policy và không ghi log trùng. Kiểm thử thiếu thông điệp đã thất bại trên source trước sửa. Trường hợp vòng scheduler đầy đủ kiểm tra lỗi composer → log lỗi → hoàn thành data → nghỉ 30 giây giả lập → target tiếp theo thành công; counter 0→1→0, quota chỉ tính thành công.
 
 Các smoke mixed-output, origin/tracking, helper compatibility/control, threshold/input, policy progress, partial-send và V376/V377 bảo vệ hành vi hiện có. Test mapper cục bộ bổ sung `reportGroup` để giống mapper production. Chat worker đã có log độc lập với detail/policy-stop; sáu kiểm thử `policy progress independent from details` đạt, không cần sửa source Chat.
 

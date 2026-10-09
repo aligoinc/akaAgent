@@ -85,6 +85,54 @@ async function explicitCases(zca) {
   }
 }
 
+async function missingMessageCases(zca) {
+  for (const [action, platform, actionId] of [
+    ['email_send', 'email', 'email_send'],
+    ['zalo_message_friend', 'zalo', 'zalo_message_friend']
+  ]) {
+    const f = await setup(zca, { platform, actionId })
+    try {
+      await f.db.exec(`INSERT INTO auto_status(code,name,status_key,component_type,flatform_type,status_value,is_active,is_delete)
+        VALUES('fixture_failure','Fixture','fixture_failure','campaign_detail','all','fixture failure',true,false);
+        INSERT INTO auto_account_action_status_policies(status_id,report_group,counts_toward_limit,bad_target_effect,reset_error_streak,input_effect,description)
+        SELECT id,'failure',false,'ignore',false,'complete','Fixture' FROM auto_status WHERE code='fixture_failure'`)
+      await f.runtime.beginActionResultRun({ campaignId: 1, accountId: 1, staffId: 1, platform, claimToken: claim }, [action])
+      f.runtime.beginActionResultUnit(1, unit, [1, 2])
+      let index = 0
+      for (const [status, message, expected] of [
+        ['campaign_detail_error', undefined, 'Có lỗi xảy ra'],
+        ['campaign_detail_failed', undefined, 'Có lỗi xảy ra'],
+        ['fixture_failure', undefined, 'Có lỗi xảy ra'],
+        ['campaign_detail_error', '', 'Có lỗi xảy ra'],
+        ['campaign_detail_failed', 'Existing failure', 'Existing failure'],
+        ['campaign_detail_success', undefined, null],
+        ['campaign_detail_skipped', undefined, null]
+      ]) {
+        const s = step(++index, 'custom_result', { actionResult: result(action, status,
+          { inputDataId: 1, ...(message === undefined ? {} : { message }) }) })
+        const previousLogCount = f.logs.length
+        await Promise.all([f.realtime(s), f.realtime(structuredClone(s))])
+        await f.final([structuredClone(s)])
+        const details = await f.details()
+        assert.equal(details.length, index, 'replay must not duplicate the detail')
+        const created = details.at(-1)
+        assert.equal(created.log, message ?? null, 'progress fallback must not change the stored detail log')
+        assert.equal(created.error_code, null, 'progress fallback must not invent an error policy')
+        assert.deepEqual(f.logs.slice(previousLogCount), expected ? [`${action}: ${expected}`] : [],
+          `${action}/${status}: one failure notice, no invented success/skipped log`)
+        const policy = (await f.db.query('SELECT * FROM auto_account_action_status_policies WHERE id=$1',
+          [created.action_status_policy_id])).rows[0]
+        assert.equal(created.counts_toward_limit, policy.counts_toward_limit)
+        assert.equal(created.policy_snapshot.badTargetEffect, policy.bad_target_effect)
+        assert.equal(created.policy_snapshot.inputEffect, policy.input_effect)
+        assert.equal(await f.quota(), details.filter(row => row.counts_toward_limit).length,
+          'replayed progress must not add quota')
+        checks++
+      }
+    } finally { await f.close() }
+  }
+}
+
 async function schedulerLoop(zca) {
   const f = await setup(zca)
   try {
@@ -156,6 +204,7 @@ async function schedulerLoop(zca) {
 
 async function main() {
   const zca = await import('zca-js')
+  await missingMessageCases(zca)
   await explicitCases(zca)
   await schedulerLoop(zca)
   console.log(JSON.stringify({ checks, actual_scheduler_loop: true, completion_log_preserved: true, external_operations: 0 }))
