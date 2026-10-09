@@ -1,0 +1,302 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "version": "20261006033730",
+  "name": "migration_v346_fb_email_error_policies",
+  "inserted_rows": [
+    {
+      "id": 63,
+      "md5": "27a3436a38a43e67fa442f852e34d213",
+      "error_code": "err_fb_checkpoint"
+    },
+    {
+      "id": 64,
+      "md5": "d7b60779e7a7b2d07a3223ba9c9b5e97",
+      "error_code": "err_fb_feature_blocked"
+    },
+    {
+      "id": 65,
+      "md5": "a065dc9f885bbe57248a4a41db22d743",
+      "error_code": "err_fb_identity_switch_failed"
+    },
+    {
+      "id": 66,
+      "md5": "f4eb8e204a000574a47ba54bca8cd4c4",
+      "error_code": "err_fb_identity_restore_failed"
+    },
+    {
+      "id": 67,
+      "md5": "105c0cb06b279cdbd8b094f0a8e9dd5a",
+      "error_code": "err_fb_page_permission_token_missing"
+    },
+    {
+      "id": 68,
+      "md5": "003f201e24fca8af3bb32f08d5fb247d",
+      "error_code": "err_fb_page_permission_no_page_token"
+    },
+    {
+      "id": 69,
+      "md5": "1d9c1b0209bce214d2694171e21b74d1",
+      "error_code": "err_fb_page_permission_api_error"
+    },
+    {
+      "id": 70,
+      "md5": "9206156a840bfe4c6698365387093878",
+      "error_code": "err_fb_group_cannot_post_not_member"
+    },
+    {
+      "id": 71,
+      "md5": "9b1182d814e0878cc96f96c82490c652",
+      "error_code": "err_fb_group_cannot_post_join_pending"
+    },
+    {
+      "id": 72,
+      "md5": "fd5e7d0f916aa474288f6aeb48dc35e3",
+      "error_code": "err_fb_group_cannot_post_admin_only"
+    },
+    {
+      "id": 73,
+      "md5": "dbb4231f2937abcb5506959b6d84dc50",
+      "error_code": "err_fb_group_cannot_post_unavailable"
+    },
+    {
+      "id": 74,
+      "md5": "6b208e98c90c5b3615992b4f19584e55",
+      "error_code": "err_fb_comment_unavailable_post_pending"
+    },
+    {
+      "id": 75,
+      "md5": "848c3b77bfe8db185b501b54e4f669cc",
+      "error_code": "err_fb_comment_unavailable_comment_disabled"
+    },
+    {
+      "id": 76,
+      "md5": "5f5f3b1dbe0c4594cab0d210b1c72a80",
+      "error_code": "err_fb_comment_unavailable_post_not_found"
+    },
+    {
+      "id": 77,
+      "md5": "c2345e284cf9d72847f83b212d55b80f",
+      "error_code": "err_fb_comment_unavailable_not_member"
+    },
+    {
+      "id": 78,
+      "md5": "4e26587146e283f736be6a09fe6d2ae0",
+      "error_code": "err_fb_messenger_unavailable_target_not_messageable"
+    },
+    {
+      "id": 79,
+      "md5": "43a58b8bdf785d1d64034fa9e75a65d8",
+      "error_code": "err_fb_messenger_unavailable_e2ee_pin_required"
+    },
+    {
+      "id": 80,
+      "md5": "fe17f840daa2cae87b455c82f4dfa679",
+      "error_code": "err_fb_messenger_unavailable_account_restricted"
+    },
+    {
+      "id": 81,
+      "md5": "a3eb0e674f12ca6bd444a7ce6f4ebb88",
+      "error_code": "err_fb_add_friend_unavailable"
+    },
+    {
+      "id": 82,
+      "md5": "9bd482a257419cd67105ecd8bd34c93f",
+      "error_code": "err_fb_page_inbox_customer_not_found"
+    },
+    {
+      "id": 83,
+      "md5": "f7a9a202df46ffbb84b179a81bf6557d",
+      "error_code": "err_fb_page_inbox_wrong_conversation"
+    },
+    {
+      "id": 84,
+      "md5": "b08b1527eb5394923a72aaa340ebf808",
+      "error_code": "err_fb_page_inbox_cannot_reply_outside_window"
+    },
+    {
+      "id": 85,
+      "md5": "38e0bcf11c086593e68b3628990e5400",
+      "error_code": "err_fb_page_inbox_cannot_reply_blocked_by_user"
+    },
+    {
+      "id": 86,
+      "md5": "305d89b9517072f9729413cd00b6be20",
+      "error_code": "err_fb_join_group_failed_limit"
+    },
+    {
+      "id": 87,
+      "md5": "30ae8f4a8b84e68d2733480ca6a0e3cc",
+      "error_code": "err_fb_join_group_failed_questions_required"
+    },
+    {
+      "id": 88,
+      "md5": "0b3d22a87753a3b841f4d8b4be12a11f",
+      "error_code": "err_fb_join_group_failed_ui"
+    },
+    {
+      "id": 89,
+      "md5": "6bc6709f831a44ca9a969a7f8b6c1de6",
+      "error_code": "err_fb_post_not_confirmed"
+    },
+    {
+      "id": 90,
+      "md5": "f026adccf0d3cdebfb6980b7536d6ec8",
+      "error_code": "err_fb_post_not_published_content_blocked"
+    },
+    {
+      "id": 91,
+      "md5": "41b97eecf13d6c3639edbae923dd1752",
+      "error_code": "err_fb_post_not_published_duplicate"
+    },
+    {
+      "id": 92,
+      "md5": "523f640be64559d85cd2d9be00db44fc",
+      "error_code": "err_fb_formatted_content_rejected"
+    },
+    {
+      "id": 93,
+      "md5": "541cdfc954ccc2944b60236097a23fe0",
+      "error_code": "err_fb_media_upload_timeout"
+    },
+    {
+      "id": 94,
+      "md5": "c52ae04f1f67f86b27f970841175d8f9",
+      "error_code": "err_fb_composer_editor_not_found"
+    },
+    {
+      "id": 95,
+      "md5": "7f7939624333163cb0e2feca92c1b344",
+      "error_code": "err_fb_post_button_not_found"
+    },
+    {
+      "id": 96,
+      "md5": "257f183d3ba2e8f61291b7465cf5ea0e",
+      "error_code": "err_fb_page_inbox_ui"
+    },
+    {
+      "id": 97,
+      "md5": "6f90427a7cb70b423e48176a5c50e7ee",
+      "error_code": "err_fb_upload_form_changed"
+    },
+    {
+      "id": 98,
+      "md5": "0170d6a7c9e73895ed69bf9d60c36512",
+      "error_code": "err_fb_group_invite_ui"
+    },
+    {
+      "id": 99,
+      "md5": "bf47e5cca472ebabe1d11667461123f3",
+      "error_code": "err_media_file_missing"
+    },
+    {
+      "id": 100,
+      "md5": "65f5ac9289b077ba8eb60fdb15690c86",
+      "error_code": "err_input_invalid"
+    },
+    {
+      "id": 101,
+      "md5": "5e2797e730d36cf60cc99f305c7ed6b6",
+      "error_code": "err_campaign_config_invalid"
+    },
+    {
+      "id": 102,
+      "md5": "38ad2bed2bdbc6e4d80fbc81bfd7c3aa",
+      "error_code": "err_system_block_load"
+    },
+    {
+      "id": 103,
+      "md5": "19558d314315dd87c17d4b498d8c3b33",
+      "error_code": "err_network_offline"
+    },
+    {
+      "id": 104,
+      "md5": "00f6a4068a8239d02693cd9229cf6fbd",
+      "error_code": "err_proxy_failed"
+    },
+    {
+      "id": 105,
+      "md5": "2fd0f860b3a3d402e7b091edf7b6b92d",
+      "error_code": "err_ai_service_unavailable"
+    },
+    {
+      "id": 106,
+      "md5": "b3fd60b6fc977262fdd44f0f6b8a2480",
+      "error_code": "err_device_sleep"
+    },
+    {
+      "id": 107,
+      "md5": "2356c392293c05957145e93fe2711ec1",
+      "error_code": "err_runtime_browser"
+    },
+    {
+      "id": 108,
+      "md5": "c49d41775f9dc8bfdd09d9052a01d3b2",
+      "error_code": "err_server_unreachable"
+    },
+    {
+      "id": 109,
+      "md5": "96c090a892de78c766c3217a9de0dd7e",
+      "error_code": "err_email_daily_limit"
+    },
+    {
+      "id": 110,
+      "md5": "f3c387c2cae7460d1a1f46ab8176a1f4",
+      "error_code": "err_email_web_login_required"
+    },
+    {
+      "id": 111,
+      "md5": "65572a994af44a0af24d816f15e1a4c3",
+      "error_code": "err_email_bad_credentials"
+    },
+    {
+      "id": 112,
+      "md5": "252cfc010a622b0632dad29c0181fc1c",
+      "error_code": "err_email_login_throttled"
+    },
+    {
+      "id": 113,
+      "md5": "36870f15385ed08d280c64aeec3c4419",
+      "error_code": "err_email_server_busy"
+    },
+    {
+      "id": 114,
+      "md5": "886f770bc12da21e31e538a8bb44af66",
+      "error_code": "err_email_connection"
+    },
+    {
+      "id": 115,
+      "md5": "be3478ebc6e5ee03621c1e99cb4cf3f5",
+      "error_code": "err_email_system_temporary"
+    },
+    {
+      "id": 116,
+      "md5": "85b480131c34958e110e8c6f0b46ad6c",
+      "error_code": "err_email_smtp_not_configured"
+    },
+    {
+      "id": 117,
+      "md5": "da31bf18e7af6de531599f740f3cbd9d",
+      "error_code": "err_email_missing_recipient"
+    },
+    {
+      "id": 118,
+      "md5": "24a96a0eda446cc12dfaba9a8c17a154",
+      "error_code": "err_email_message_too_large"
+    },
+    {
+      "id": 119,
+      "md5": "8b03cfc4f0e928373f824a6d44ef1b5a",
+      "error_code": "err_email_content_blocked"
+    },
+    {
+      "id": 120,
+      "md5": "5b10ab96d1149601f9836c5c3034feea",
+      "error_code": "err_email_send_failed"
+    }
+  ],
+  "original_rows_unchanged": true,
+  "verified_at": "2026-10-06T03:37:34.115Z",
+  "after_table_md5": "4dff9c5fb54e9267e0f4bc4b5f7a4359",
+  "after_sha256": "41053f1347538e8ddfd6909754c9e88d1ce8c5c42582897863fc80b8e2f67039",
+  "migration_sha256": "acdf350e0d612c80179d419fe619b0b2b4d183fee70d26c766a20e2524cb965e"
+}

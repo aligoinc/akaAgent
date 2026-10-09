@@ -64,10 +64,14 @@ async function main() {
         assert.ok(rows, table)
         rows = rows.map(row => {
           const input = inputs.find(input => input.id === row.input_data_id)
+          const pending = details.filter(d => d.input_data_id === row.id && Array.from(p).every(([key, expression]) =>
+            !key.startsWith('pending_result.') || matches(d, `${key.slice('pending_result.'.length)}.${expression}`)))
           return { ...row, auto_campaigns: campaigns.find(c => c.id === row.campaign_id),
+            pending_result: pending.length ? pending : null,
             report_input: input ? { ...input, auto_campaigns: campaigns.find(c => c.id === input.campaign_id) } : null }
         })
         for (const [key, expression] of p) {
+          if (key.startsWith('pending_result.')) continue
           if (['select', 'order', 'limit', 'offset'].includes(key)) continue
           const predicate = key === 'or' ? `or${expression}` : `${key}.${expression}`
           const leftAlias = key.startsWith('report_input.') ? 'report_input'

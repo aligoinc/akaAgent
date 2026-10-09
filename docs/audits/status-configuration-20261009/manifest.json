@@ -1,0 +1,41 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09T03:34:44.203193+00:00",
+  "mode": "read-only audit; no DB/schema/runtime changes",
+  "coverage": {
+    "status_catalog": 38,
+    "detail_status_catalog": 19,
+    "error_policies": 104,
+    "automation_mappings": 313,
+    "directly_referencing_functions": 82,
+    "builtin_blocks": 137,
+    "builtin_workflows": 33,
+    "recent_detail_sample": 10000
+  },
+  "files": [
+    {
+      "path": "docs/audits/status-configuration-20261009/database-catalogs.json",
+      "sha256": "1ee65136731359802c252380a5bf9e30424601d74b97f4c63d09f29dbc67af4c"
+    },
+    {
+      "path": "docs/audits/status-configuration-20261009/live-status-consumers.json",
+      "sha256": "935aee73b4fca50e86d531e82880a910847ff2c001bee1cd553b2c3be30cdf93"
+    },
+    {
+      "path": "docs/audits/status-configuration-20261009/related-schema.json",
+      "sha256": "a618ae138f0482072f3d3bf2fc7cd918225d4002be79dd32e114349452a0a056"
+    },
+    {
+      "path": "docs/audits/status-configuration-20261009/source-status-consumers.json",
+      "sha256": "b39b8c3f794a324a5026b3d1580f228814a250b5268b356c4059a1807c4b84ea"
+    },
+    {
+      "path": "docs/STATUS_CONFIGURATION_AUDIT_20261009.md",
+      "sha256": "e5032acb6b30238cf37099a9de976811af8fb6fe7f9112fdc44fc77624cec13b"
+    },
+    {
+      "path": "docs/STATUS_CONFIGURATION_INVENTORY_20261009.md",
+      "sha256": "32c198645f165567c6dbd698b9a4e2effea24b800cab757aa8434759b6d272e7"
+    }
+  ]
+}

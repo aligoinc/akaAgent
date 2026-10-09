@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-09T10:58:04.006Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "status": 200,
+  "query": {
+    "select": "id,pending_result:auto_campaign_details!auto_campaign_details_input_data_id_fkey()",
+    "id": "eq.-1",
+    "pending_result.report_group": "eq.pending",
+    "pending_result.action_code": "eq.email_send",
+    "pending_result.is_delete": "eq.false",
+    "pending_result.created_at": "gte.2026-10-09T00:00:00Z",
+    "pending_result": "is.null",
+    "limit": "1"
+  }
+}

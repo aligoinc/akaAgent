@@ -443,6 +443,9 @@ export interface AutoAccountActionStatus {
 export type AutoErrorDisableActionMode = 'fixed_minutes' | 'end_of_day' | 'indefinite' | 'days_at_time'
 
 export interface AutoErrorPolicy {
+  detailStatusId?: number | null
+  detailMode?: 'inherit' | 'override' | 'suppress' | null
+  inputEffect?: import('./actionStatusPolicy').ResultInputEffect | null
   id: number
   errorType: string
   errorName: string
@@ -1181,6 +1184,14 @@ export interface AddCampaignInputDataRowsResult {
 export type CampaignDetailStatus = string
 
 export interface CampaignDetail {
+  statusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
+  subStatusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
+  statusId?: number | null
+  subStatusId?: number | null
+  actionStatusPolicyId?: number | null
+  reportGroup?: import('./actionStatusPolicy').ResultReportGroup | null
+  policySnapshot?: Record<string, unknown> | null
+  resultKey?: string | null
   zaloEngagementApplicable?: boolean
   zaloEngagement?: ZaloEngagement | null
   id: number
@@ -1232,6 +1243,9 @@ export interface CampaignDetailPageResult {
 }
 
 export type CreateCampaignDetailInput = Partial<CampaignDetail> & {
+  resultOutput?: import('./actionStatusPolicy').ActionResultOutput
+  resultGuards?: import('./actionStatusPolicy').ResultExecutionGuards
+  resultSourceKey?: string
   /**
    * Optional counter override for platforms with open-ended detail statuses.
    * Omit to keep the legacy Facebook rule: count 'thành công' and 'thất bại'.
@@ -1430,6 +1444,8 @@ export interface AccountActionReportDetailRow {
   status: CampaignDetailStatus | 'chờ xử lý'
   detailText?: string | null
   postUrl?: string | null
+  statusLabel?: string | null
+  subStatusLabel?: string | null
 }
 
 export interface AccountActionReportDetailResult {
@@ -2361,6 +2377,9 @@ export type AutomationExecutionStatus =
   | 'lỗi'
 
 export interface AutomationTriggerCondition {
+  /** Omitted preserves a saved filter; null clears it. */
+  subStatusIds?: number[] | null
+  subStatusLabels?: string[] | null
   id?: number
   statusMappingId?: number | null
   semanticStatusId?: number | null

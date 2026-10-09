@@ -1,0 +1,45 @@
+{
+  "checked_at": "2026-10-06T01:19:57.781Z",
+  "result": [
+    {
+      "result": "passed: add column, descriptions, insert, default, stale/row/description/reference guards, delete/drop rollback; no committed changes"
+    }
+  ],
+  "migration_sha256": "8721c3ba80009e26d169219d2e1866005113d6b32462183566edd04f1e71bcfa",
+  "catalog_sha256": "2d0733f191e3413ee42ce7d18ab8ad14ae3bb00719ff71ea5dd77d0fb82520aa",
+  "table_restored_inside_transaction": true,
+  "schema_restored": true,
+  "sequence_unchanged_inside_transaction": true,
+  "concurrent_runtime_updated_at_changes": [
+    13,
+    81,
+    82,
+    160,
+    161,
+    220,
+    1002,
+    1003,
+    1006,
+    1007,
+    1434,
+    1944,
+    2369,
+    2739,
+    5831,
+    7079,
+    8157,
+    12700,
+    27360,
+    62164,
+    62165,
+    67385,
+    75671,
+    80695,
+    91385,
+    115669,
+    150209,
+    162646,
+    164750,
+    293532
+  ]
+}

@@ -1,3 +1,4 @@
+import { automationSubFilterCovers, automationSubStatusField } from '../../../../shared/automationResultFilters'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -337,11 +338,11 @@ const canonicalizeInitialTriggerKeys = (
   const keys = new Set<string>()
   conditionsBySemanticStatus.forEach(group => {
     const wildcard = group.find(isAutomationTriggerWildcard)
-    if (wildcard) {
-      keys.add(triggerKey(wildcard))
-      return
-    }
-    group.forEach(condition => keys.add(triggerKey(condition)))
+    group.forEach(condition => {
+      if (!wildcard || condition === wildcard || !automationSubFilterCovers(wildcard.subStatusIds, condition.subStatusIds)) {
+        keys.add(triggerKey(condition))
+      }
+    })
   })
   return Array.from(keys)
 }
@@ -890,8 +891,10 @@ export default function AutomationFormModal({
         const existingOption = triggerOptionByKey.get(existingKey)
         if (!existingOption) return false
         if (getAutomationTriggerSemanticKey(existingOption) !== semanticKey) return true
-        if (isWildcard) return false
-        return !isAutomationTriggerWildcard(existingOption)
+        const selectedFilter = automation?.triggerConditions.find(condition => triggerKey(condition) === key)?.subStatusIds
+        const existingFilter = automation?.triggerConditions.find(condition => triggerKey(condition) === existingKey)?.subStatusIds
+        if (isWildcard) return !automationSubFilterCovers(selectedFilter, existingFilter)
+        return !isAutomationTriggerWildcard(existingOption) || !automationSubFilterCovers(existingFilter, selectedFilter)
       })
 
       return {
@@ -1000,6 +1003,7 @@ export default function AutomationFormModal({
     .map(key => triggerOptionByKey.get(key))
     .filter((item): item is AutomationTriggerOption => !!item)
     .map(item => ({
+      ...automationSubStatusField((automation?.triggerConditions.find(condition => triggerKey(condition) === triggerKey(item)) || {}) as Record<string, unknown>),
       statusMappingId: item.statusMappingId ?? null,
       semanticStatusId: item.semanticStatusId ?? null,
       actionCode: item.actionCode || null,
@@ -1007,7 +1011,7 @@ export default function AutomationFormModal({
       isWildcard: isAutomationTriggerWildcard(item),
       status: item.status,
       statusLabel: item.statusLabel || item.status
-    })), [form.triggerKeys, triggerOptionByKey])
+    })), [form.triggerKeys, triggerOptionByKey, automation])
 
   const handleSubmit = async () => {
     const validationError = validateStep(1) || validateStep(2) || validateStep(3)

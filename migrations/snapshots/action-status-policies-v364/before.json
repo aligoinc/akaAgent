@@ -1,0 +1,453 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "at": "2026-10-09T11:49:19.401Z",
+  "column_grants": null,
+  "schema": {
+    "access": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "force_rls": false,
+      "owner": "postgres",
+      "rls": false
+    },
+    "columns": [
+      {
+        "default": "nextval('auto_account_actions_id_seq'::regclass)",
+        "generated": "",
+        "identity": "",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "default": "'facebook'::text",
+        "generated": "",
+        "identity": "",
+        "name": "flatform_type",
+        "not_null": true,
+        "position": 2,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "name",
+        "not_null": true,
+        "position": 3,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "code",
+        "not_null": true,
+        "position": 4,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "name": "is_active",
+        "not_null": true,
+        "position": 5,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "is_delete",
+        "not_null": true,
+        "position": 6,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 7,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 8,
+        "type": "timestamp with time zone"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "UNIQUE (code)",
+        "name": "auto_account_actions_code_key",
+        "validated": true
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "auto_account_actions_pkey",
+        "validated": true
+      }
+    ],
+    "exists": true,
+    "grants": [
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_account_actions",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      }
+    ],
+    "incoming_foreign_keys": [
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code)",
+        "name": "auto_account_action_status_action_code_fkey",
+        "table": "auto_account_action_status"
+      },
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code) ON DELETE RESTRICT",
+        "name": "auto_account_action_status_policies_action_code_fkey",
+        "table": "auto_account_action_status_policies"
+      },
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code) ON DELETE SET NULL",
+        "name": "auto_automation_trigger_statuses_action_code_fkey",
+        "table": "auto_automation_trigger_statuses"
+      },
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code) ON DELETE SET NULL",
+        "name": "auto_campaign_action_detail_statuses_action_code_fkey",
+        "table": "auto_campaign_action_detail_statuses"
+      },
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code)",
+        "name": "auto_campaign_details_action_code_fkey",
+        "table": "auto_campaign_details"
+      }
+    ],
+    "indexes": [
+      {
+        "indexdef": "CREATE UNIQUE INDEX auto_account_actions_code_key ON public.auto_account_actions USING btree (code)",
+        "indexname": "auto_account_actions_code_key",
+        "schemaname": "public",
+        "tablename": "auto_account_actions",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX auto_account_actions_pkey ON public.auto_account_actions USING btree (id)",
+        "indexname": "auto_account_actions_pkey",
+        "schemaname": "public",
+        "tablename": "auto_account_actions",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE INDEX idx_auto_account_actions_platform ON public.auto_account_actions USING btree (flatform_type) WHERE (is_delete = false)",
+        "indexname": "idx_auto_account_actions_platform",
+        "schemaname": "public",
+        "tablename": "auto_account_actions",
+        "tablespace": null
+      }
+    ],
+    "policies": null,
+    "sequence": {
+      "cache_size": 1,
+      "cycle": false,
+      "data_type": "bigint",
+      "increment_by": 1,
+      "last_value": 75,
+      "max_value": 9223372036854776000,
+      "min_value": 1,
+      "schemaname": "public",
+      "sequencename": "auto_account_actions_id_seq",
+      "sequenceowner": "postgres",
+      "start_value": 1
+    },
+    "table": "auto_account_actions",
+    "triggers": null
+  }
+}

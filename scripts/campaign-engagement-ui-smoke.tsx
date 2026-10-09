@@ -20,6 +20,8 @@ const inputs = Array.from({ length: 205 }, (_, i) => ({ id: i + 1, campaignId: 9
 const results = inputs.map(row => ({ id: row.id, campaignId: 91, createdAt: row.createdAt,
   actionName: `Result ${row.id}`, actionCode: 'zalo_message_friend', status: 'thành công', log: `Result ${row.id}`, isDelete: false }))
 results.forEach((row: any) => {
+ row.statusPresentation={code:'campaign_detail_success',name:'Thành công từ danh mục',color:'#22aa55'}
+ row.subStatusPresentation={code:'campaign_detail_pending_review',name:'Chờ xác nhận',color:null}
  row.zaloEngagementApplicable=row.id!==205
  row.zaloEngagement=row.id>=204?null:{seen_at:row.id===199?'2026-10-01T04:00:00Z':null,sent_at:'2026-10-01T00:00:00Z',tracking_until:row.id===201?'2020-01-01T00:00:00Z':'2099-01-01T00:00:00Z',responded_at:row.id<201?'2026-10-01T01:00:00Z':null,reacted_at:row.id===203?'2026-10-01T02:00:00Z':null,friended_at:row.id===202?'2026-10-01T03:00:00Z':null}
 })

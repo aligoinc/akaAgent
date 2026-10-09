@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-09T16:25:10.779Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "rpc": "aka_agent_mark_email_open",
+      "status": 200,
+      "invalid_token_rejected": true
+    },
+    {
+      "rpc": "aka_agent_mark_email_click",
+      "status": 200,
+      "invalid_token_rejected": true
+    },
+    {
+      "relation": "main/sub status",
+      "status": 200
+    }
+  ],
+  "external_operations": 0
+}

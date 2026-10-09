@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-10-06T03:32:50Z",
+  "migration": "migration_v349_campaign_detail_status_ids",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "decision": "keep_applied",
+  "user_message": "giữ đi",
+  "context": "User chose to retain v349 after being informed it was applied due to misunderstanding their intended v346 request.",
+  "rollback_executed": false,
+  "prior_review": "scope-correction-review.json",
+  "v346_rollback_choice": "pending_separate_answer"
+}

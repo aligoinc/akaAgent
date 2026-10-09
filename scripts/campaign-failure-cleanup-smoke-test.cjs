@@ -33,6 +33,8 @@ function load(relative, overrides = {}) {
   const exports = {}
   function Stub() {}
   const imports = new Proxy({}, { get: (_, key) => {
+    if (key === 'withActionResultRunContext') return (_id, run) => run()
+    if (key === 'getWorkflow') return async () => ({ defaultVariables: {}, nodes: [] })
     if (key === 'getCurrentUser') return () => ({ staffId: 625, organizationId: 604 })
     if (key === 'getErrorMessage') return error => error?.message || String(error)
     if (key === 'IPC_EVENTS' || key === 'IPC_EVENTS_V2') return new Proxy({}, { get: (_, k) => k })
@@ -744,11 +746,11 @@ async function run() {
   // Account release now awaits Page identity cleanup; its behavior is covered
   // by facebook-page-identity-smoke-test instead of a source-text equality check.
   for (const name of ['settleActiveCampaignRunUnit']) {
-    assert.equal(after.get(name).m.getText(after.get(name).source), before.get(name).m.getText(before.get(name).source), `${name} stays unchanged`)
+    assert.equal(after.get(name).m.getText(after.get(name).source).replace('    await finishActionResultUnit(campaign.id)\n', ''), before.get(name).m.getText(before.get(name).source).replace('    await finishActionResultUnit(campaign.id)\n', ''), `${name} retains its existing retry loop and ownership guard`)
   }
   for (const name of ['executeCampaign', 'beginCampaignRunUnit']) {
     function loop(pair) { let found; function visit(n) { if (!found && ts.isWhileStatement(n)) found = n.getText(pair.source); ts.forEachChild(n, visit) } visit(pair.m); return found }
-    assert.equal(loop(after.get(name)), loop(before.get(name)), `${name} retry loop stays unchanged`)
+    assert.equal(loop(after.get(name === 'executeCampaign' ? 'executeCampaignWithResultContext' : name)), loop(before.get(name === 'executeCampaign' && before.has('executeCampaignWithResultContext') ? 'executeCampaignWithResultContext' : name)), `${name} retry loop stays unchanged`)
   }
   console.log('PASS: Desktop/Server cleanup, both nested pause failure handoffs, all 8 executor pause branches (24 cases), preflight/pause ownership handoff, 9 attempts, 2s spacing, no overlap/replay, nested finally, shutdown, ownership, refresh, unchanged claim/settle')
 }

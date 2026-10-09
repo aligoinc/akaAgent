@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-09T15:50:06.465Z",
+  "checks": 77,
+  "production_touched": false,
+  "migration_sha256": "767c245b00b96ba0109a3505061d4b71c80da28ab37cbe75f7cf15f2bc4b3fce",
+  "indexDefinition": "CREATE INDEX auto_detail_committed_delivery_v367 ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE ((policy_snapshot ->> 'operationState'::text) = 'committed'::text)"
+}

@@ -134,6 +134,8 @@ export interface RunStepV2 {
   status: StepStatus
   input: Record<string, unknown>
   output: Record<string, unknown>
+  /** Engine-owned origins, aligned with explicit result rows; preserved in progress/final snapshots. */
+  actionResultSourceKeys?: (string | null)[]
   error?: string
   durationMs?: number
   startedAt?: string

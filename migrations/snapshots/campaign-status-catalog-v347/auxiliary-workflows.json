@@ -1,0 +1,324 @@
+[
+  {
+    "campaign_action_id": "zalo_message_friend",
+    "md5": "1e7ae8c1c1e298baf4725533d1340ad2",
+    "nodes": [
+      {
+        "blockId": 2780,
+        "blockName": "zalo_send_friend_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 266
+  },
+  {
+    "campaign_action_id": "zalo_message_group_member",
+    "md5": "6c00fea10ab9489a49e0ea5db73931aa",
+    "nodes": [
+      {
+        "blockId": 2782,
+        "blockName": "zalo_resolve_group_member_target",
+        "config": {},
+        "id": "resolve_member",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2783,
+        "blockName": "zalo_send_group_member_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2784,
+        "blockName": "zalo_send_group_member_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 272
+  },
+  {
+    "campaign_action_id": "zalo_message_remarketing_customer",
+    "md5": "225a9ed69f1fddd279a6769a5aba1f03",
+    "nodes": [
+      {
+        "blockId": 2785,
+        "blockName": "zalo_resolve_remarketing_customer_target",
+        "config": {},
+        "id": "resolve_customer",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2786,
+        "blockName": "zalo_send_remarketing_customer_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2787,
+        "blockName": "zalo_send_remarketing_customer_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 274
+  },
+  {
+    "campaign_action_id": "zalo_message_group_realtime",
+    "md5": "225a5d46887bde651bc6aa6c94c68f7c",
+    "nodes": [
+      {
+        "blockId": 2782,
+        "blockName": "zalo_resolve_group_member_target",
+        "config": {},
+        "id": "resolve_member",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2783,
+        "blockName": "zalo_send_group_member_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2784,
+        "blockName": "zalo_send_group_member_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 276
+  },
+  {
+    "campaign_action_id": "zalo_message_friend_recommendation",
+    "md5": "ee129c50f59d45c0bbc049e312aee3b9",
+    "nodes": [
+      {
+        "blockId": 2789,
+        "blockName": "zalo_resolve_friend_recommendation_target",
+        "config": {},
+        "id": "resolve_recommendation",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2790,
+        "blockName": "zalo_send_friend_recommendation_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2791,
+        "blockName": "zalo_send_friend_recommendation_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 280
+  },
+  {
+    "campaign_action_id": "zalo_message_phone",
+    "md5": "27c7b4e990be4e37b534f1ab4633f868",
+    "nodes": [
+      {
+        "blockId": 2769,
+        "blockName": "zalo_find_phone_user",
+        "config": {},
+        "id": "find_phone",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2770,
+        "blockName": "zalo_send_phone_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2771,
+        "blockName": "zalo_send_phone_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "workflow_id": 260
+  }
+]

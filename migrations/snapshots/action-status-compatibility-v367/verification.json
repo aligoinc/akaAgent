@@ -1,0 +1,51 @@
+{
+  "at": "2026-10-09T15:58:16.709Z",
+  "local_postgres_checks": 77,
+  "checks": [
+    {
+      "name": "desktop_typecheck_node",
+      "passed": true,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "desktop_typecheck_renderer",
+      "passed": true,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "web_typecheck",
+      "passed": true,
+      "log_sha256": "5e804c87cf811b505c0596355da5cf9caf95100ad15c3606bf577ccd01365f5b"
+    },
+    {
+      "name": "desktop_build",
+      "passed": true,
+      "log_sha256": "8efb251401ea5cf6526926fa08393612302da976e1be3e5136cca26b32687562"
+    },
+    {
+      "name": "packaged_server_build",
+      "passed": true,
+      "log_sha256": "f19ab3c23baca61f2de60cb9f8194b3ff292f7c9a77fffab110be47889dbcd6c"
+    },
+    {
+      "name": "web_build",
+      "passed": true,
+      "log_sha256": "1f10f84a03f4adc9c53ab4eb09a0a7f243a128115e0c79c236bdc233ddb96af2"
+    },
+    {
+      "name": "web_api_tests_734",
+      "passed": true,
+      "log_sha256": "55cf1476c0fa5aacab76ae6ee328311e132d2ef98dfeb4b74e3a751cfe52fa3b"
+    },
+    {
+      "name": "web_browser_e2e",
+      "passed": true,
+      "log_sha256": "acea1a527802f5f9b6f06c9a43a7fa5148d28aa0d9b0683f5d11ecb0f02b06f1"
+    }
+  ],
+  "live_smoke_before_and_after": true,
+  "live_api_checked": true,
+  "real_sends": 0,
+  "old_notes_or_logs_modified": false,
+  "desktop_installers_published": false
+}

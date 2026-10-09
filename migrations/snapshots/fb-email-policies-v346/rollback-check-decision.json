@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-06T03:35:50.213Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "user_message": "vậy bỏ qua bước kiểm tra thôi, vì kiểm tra cũng có được gì đâu",
+  "decision": "omit_separate_runtime_data_reference_scan",
+  "scope": "Skip manual scans of auto_campaign_details, auto_account_error_state, auto_account_action_status and auto_zalo_api_error_logs during rollback. Keep native FK enforcement, row ID/code/checksum, schema and source/runtime-definition checks.",
+  "index_added": false,
+  "constraints_disabled": false
+}

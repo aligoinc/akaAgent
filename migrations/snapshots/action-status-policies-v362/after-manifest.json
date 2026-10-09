@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-09T11:47:32.081Z",
+  "sha256": "b9e6740fa4d77f99e7111c93a2d95cf59701ecf65dd7f1024f0b0192eb68e481",
+  "rollback_sha256": "a879197b1d644021d2d0985b5963e4bd52bf41f9fee871e80f74f797b81a0ed6",
+  "verified": true,
+  "rollback_repaired_at": "2026-10-09T11:53:38.976Z"
+}

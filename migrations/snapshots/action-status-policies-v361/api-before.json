@@ -1,0 +1,103 @@
+{
+  "at": "2026-10-09T10:20:25.912Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "prepared": false,
+  "checks": [
+    {
+      "table": "auto_status",
+      "http_status": 200,
+      "elapsed_ms": 606,
+      "columns": [
+        "id",
+        "code",
+        "name",
+        "description",
+        "status_key",
+        "flatform_type",
+        "component_type",
+        "is_default",
+        "is_terminal",
+        "can_set_manually",
+        "is_active",
+        "is_delete",
+        "sort_order",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "auto_error",
+      "http_status": 200,
+      "elapsed_ms": 165,
+      "columns": [
+        "id",
+        "error_type",
+        "error_name",
+        "error_desc",
+        "error_code",
+        "error_element",
+        "noti_running_process",
+        "noti_campaign",
+        "update_status_account",
+        "update_status_campaign",
+        "disable_action_codes",
+        "time_disable_actions",
+        "count_consecutive_errors",
+        "is_active",
+        "is_delete",
+        "created_at",
+        "updated_at",
+        "zalo_error_codes",
+        "detail_status",
+        "counts_toward_limit",
+        "counts_toward_bad_target",
+        "update_login_status",
+        "disable_action_mode",
+        "zalo_action_codes",
+        "disable_action_days",
+        "disable_action_time"
+      ]
+    },
+    {
+      "table": "auto_campaign_details",
+      "http_status": 200,
+      "elapsed_ms": 200,
+      "columns": [
+        "id",
+        "input_data_id",
+        "campaign_id",
+        "account_id",
+        "action_name",
+        "status",
+        "log",
+        "data",
+        "post_url",
+        "is_delete",
+        "created_at",
+        "action_code",
+        "error_code",
+        "counts_toward_limit",
+        "auto_automation_detail_id"
+      ]
+    },
+    {
+      "table": "auto_campaign_action_detail_statuses",
+      "http_status": 200,
+      "elapsed_ms": 452,
+      "columns": [
+        "id",
+        "campaign_action_id",
+        "action_code",
+        "status_id",
+        "status_value",
+        "label",
+        "is_active",
+        "is_delete",
+        "sort_order",
+        "created_at",
+        "updated_at",
+        "description"
+      ]
+    }
+  ]
+}

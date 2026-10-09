@@ -41,7 +41,7 @@ async function main() {
     'shouldUseZaloShareMessageBatch', 'isFormattedContentCampaign', 'getZaloShareMessageForBatch',
     'getZaloOutgoingMessageText', 'processZaloShareMessageBatch', 'findZaloForwardTargetResult',
     'executeZaloShareMessageBatchCampaign'
-  ], { stageCampaignEngagementSource: async () => {}, beginCampaignEngagementSend: () => ({revision:'',sentAt:''}), abandonCampaignEngagementSend: () => {}, ...html, ...spin, convertHtmlToZaloMessage, isRecentDeliveryCooldownEnabled: () => false,
+  ], { managesActionResult: () => false, managedTargetEffects: () => null, stageCampaignEngagementSource: async () => {}, beginCampaignEngagementSend: () => ({revision:'',sentAt:''}), abandonCampaignEngagementSend: () => {}, ...html, ...spin, convertHtmlToZaloMessage, isRecentDeliveryCooldownEnabled: () => false,
     ZALO_MESSAGE_SEND_MODE_SHARE: 'share', ZALO_MESSAGE_FRIEND_ACTION_ID: 'zalo_message_friend', ZALO_MESSAGE_GROUP_ACTION_ID: 'zalo_message_group',
     callAiUsing: () => { throw new Error('Rich share must not call AI') } })
   for (const isGroup of [false, true]) {

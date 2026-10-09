@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-09T15:56:48.996Z",
+  "source_commit": "f17c0a79296a06926dea4417dee837e0db3cfc21",
+  "app": "aka-agent-web-app",
+  "machine_id": "48ee749f357398",
+  "machine_ids_unchanged": true,
+  "machine_count": 1,
+  "before_image": "registry.fly.io/aka-agent-web-app:action-status-20261009-efcf389@sha256:ede1b221fd75abbc684582e64c5d1993b9f076ae6bb8e3185e4258337aa06524",
+  "after_image": "registry.fly.io/aka-agent-web-app:action-status-v367-20261009@sha256:8f364722a1c1b8a58b8626a1cfcd43cbe480b69ab85c13e9b91225d6f87b58ee",
+  "config_without_image_sha256": "efd4c55afb7b732984ef2ddd9eaedf566fcf488e47bba824ffc2651dc8f843e8",
+  "config_without_image_unchanged": true,
+  "health_http": 200,
+  "home_http": 200,
+  "bundle": {
+    "path": "/assets/index-DdCheDhL.js",
+    "http": 200,
+    "sha256": "92210806a71bfba11726d7176f66121bcc26cc312e25b7f8c76265bc9859e5bf",
+    "matches_local": true
+  },
+  "checks": [
+    {
+      "name": "servicecheck-00-http-8080",
+      "status": "passing",
+      "output": "ok",
+      "updated_at": "2026-10-09T15:55:33.558Z"
+    }
+  ]
+}

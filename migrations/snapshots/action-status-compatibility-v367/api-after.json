@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-09T15:54:29.832Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "rpc": "aka_agent_list_campaign_details_page",
+      "status": 400,
+      "rejected": "automation_auth_required"
+    },
+    {
+      "rpc": "aka_agent_list_campaign_details_page_v2",
+      "status": 400,
+      "rejected": "automation_auth_required"
+    },
+    {
+      "relation": "main/sub status",
+      "status": 200
+    }
+  ],
+  "external_operations": 0
+}

@@ -1,0 +1,6 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "before_sha256": "8ca8201b3a57b1617fc76272df50bf91497321ab76290b697abbff2a5552d63f",
+  "migration_sha256": "dc09a0134bfdbfcc7b2b14c34a5351d71bc20979e11d956352500cc20798abcc",
+  "rollback_sha256": "f8d818582fa2cde2482c4538fd50916d8588db4cb0b4ffd63ddec18a2c953e69"
+}

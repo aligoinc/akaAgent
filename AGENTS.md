@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V361–V368 đã apply trên akachat ngày 09/10/2026; không apply lại. Web readers và Chat worker đã deploy, Server 8.2.0 đã đóng gói local nhưng chưa phát hành; giữ output block tương thích client cũ. Detail đã dùng metadata mới nên rollback runtime phải giữ schema/catalog/readers và lịch sử. Snapshot/checksum/rollout: [audit runtime](docs/ACTION_STATUS_READERS_V362.md), [V367](docs/ACTION_STATUS_COMPATIBILITY_V367.md), [V368](docs/EMAIL_STATUS_OBSERVATIONS_V368.md).
+
 ## Supabase/Postgres: phải thảo luận trước khi tăng connection
 
 Connection là tài nguyên có giới hạn, dùng chung giữa các service và toàn bộ client của hệ thống. **Không tự ý thêm nguồn connection hoặc tăng ngân sách connection. Phải trình bày đề xuất và chờ người dùng đồng ý trước khi triển khai thay đổi đó.** Yêu cầu làm một tính năng không mặc nhiên cho phép tăng connection.
@@ -74,6 +76,12 @@ Windows packaging có native module `better-sqlite3`; luôn dùng `npm run build
 Zalo Server Windows cũng phải build bằng `npm run build:server:win`; verifier phải dùng executable/profile Server và không áp contract dependency riêng của desktop như `playwright-core`, vì bundle Server không import Playwright. Mọi hook trong `build/installer.nsh` dành cho desktop phải được compile-time gate bằng `PRODUCT_NAME == akaAgent`, nếu không Electron Builder sẽ tự áp chúng lên installer Zalo Server.
 
 ## Architecture
+
+V346 đã apply `20261006033730 / migration_v346_fb_email_error_policies` trên akachat: thêm 58 policy FB/Email/chung đang bật, giữ nguyên 46 policy cũ; không sửa app/RPC/block/workflow/schema. Không apply lại. Theo yêu cầu người dùng đã bỏ quét tham chiếu dữ liệu riêng khi rollback, vẫn giữ FK và guard ID/mã/checksum; INSERT/ROLLBACK đạt nhưng hard DELETE thử nghiệm timeout 30 giây tại FK bảng detail. Snapshot/receipt và giới hạn rollback: [audit](docs/FB_EMAIL_ERROR_POLICIES_V346.md).
+
+V347 đã apply `20261006012006 / migration_v347_campaign_status_agent_descriptions` trên akachat: thêm 55 mapping trạng thái và `auto_campaign_action_detail_statuses.description` cho agent; NULL action là wildcard, NULL status_id là chưa có nhóm ngữ nghĩa. Không apply lại; snapshot/rollback có guard runtime và tham chiếu: [audit](docs/CAMPAIGN_STATUS_CATALOG_V347.md).
+
+V349 đã apply `20261006032336 / migration_v349_campaign_detail_status_ids`: thêm 16 trạng thái chuẩn và gán ID cho 120 mapping NULL, giữ nguyên nhóm lựa chọn/điều kiện Automation; không sửa RPC/code hay reload schema. Không apply lại; revert v349 trước khi xét revert v347: [audit và rollback](docs/CAMPAIGN_STATUS_IDS_V349.md).
 
 **Electron 33 + React 19 desktop app** cho automation Facebook/Zalo/Email. Build qua `electron-vite`. State Zustand. Canvas `@xyflow/react`. DB Supabase. Code editor Monaco.
 
@@ -671,3 +679,17 @@ KHÔNG update khi:
 Pattern: chỉnh tại đúng section, giữ entry **terse** (1-2 dòng), link `file:line` thay vì paraphrase code. Nếu plan-mode tạo file lớn → reference plan file thay vì duplicate.
 
 - Zalo rich share: friend/group share campaigns retain formatting and send up to 50 targets through nested `msgInfo.rtfProps`; never force normal/plain on rich toggle, templates or quick edit. Chat Sync recognizes `webchat/rtf` and its `params` styles. Preserve media-first/per-target failure behavior. If the whole spin is blank without media, recover a nonblank branch before forwarding; preserve optional blanks when text/media remains. See [ZALO_RICH_SHARE.md](docs/ZALO_RICH_SHARE.md).
+
+V362/V363/V364 đã apply 09/10/2026: reader/Automation/CRM tương thích, writer result theo claim+unit và quyền SELECT(code,is_active,is_delete) của Chat trên catalog action. Không apply lại; audit/checksum/rollback ở [ACTION_STATUS_READERS_V362.md](docs/ACTION_STATUS_READERS_V362.md). Policy nạp một lần/run, detail lưu quyết định đã áp dụng; không tính lại lịch sử, không thêm pool/polling và giữ adapter payload cũ.
+
+Output cũ/mới dùng lẫn phải ghi theo thứ tự step và giữ context verify/link/pending; Newsfeed realtime/tổng kết dùng chung receipt theo step, chỉ tính một lượt dù block giữ cả `liked`/`commented` và `actionResult`. Kiểm chứng: `node scripts/action-status-mixed-output-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#mixed-output-review-fixes--09102026).
+
+Kết quả explicit giữ origin qua merge/parallel/spread/JSON; thao tác mới phải trả result mới, không tái dùng marker `__akaActionResultSource`. Email explicit dùng lại liên kết tracking sau ghi detail, batch truyền `emailTrackingMessageId` từng result; kiểm chứng `node scripts/action-status-origin-tracking-smoke.cjs`, xem [audit](docs/ACTION_STATUS_READERS_V362.md#result-origins-and-email-tracking-review-fixes--09102026).
+
+Partial-send Zalo phải giữ `deliveryCommitted` qua adapter cũ/explicit; kiểm tra origin ngay sau producer, lưu kết quả hợp lệ đã hoàn tất trước cleanup và không chạy node kế tiếp khi xung đột. Group-post explicit dùng chung hậu xử lý legacy và receipt chống lặp; kiểm chứng `node scripts/action-status-result-boundary-smoke.cjs`, xem [audit](docs/ACTION_STATUS_READERS_V362.md#partial-delivery-and-result-boundaries--09102026).
+
+Dual output Zalo giữ cờ dừng/chống chạy lại của helper theo origin, kể cả suppress/relay; `handledErrorCode` ngăn áp lại cùng policy lỗi. Bằng chứng committed/unknown không được hạ thành chưa gửi; smoke `action-status-helper-controls-smoke.cjs`, xem [audit](docs/ACTION_STATUS_READERS_V362.md#helper-controls-and-execution-evidence--09102026).
+
+Adapter helper cũ/explicit dùng chung guard NULL/suppress/requeue/quota và hậu xử lý log/SMS; receipt explicit chỉ hậu xử lý một lần, batch không mượn input người khác. Smoke `action-status-helper-compat-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#legacy-helper-compatibility-and-sms--09102026).
+
+Explicit result có ngưỡng lỗi phải chờ chốt toàn bộ target, giữ receipt policy chống áp lặp và kiểm tra input ownership ngay sau producer cho cả unit 0/1/n input. Smoke: `node scripts/action-status-threshold-input-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#error-thresholds-and-input-ownership--09102026).

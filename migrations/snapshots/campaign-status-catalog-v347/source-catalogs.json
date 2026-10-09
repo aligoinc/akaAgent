@@ -1,0 +1,725 @@
+{
+  "actions": [
+    {
+      "code": "email_send",
+      "created_at": "2026-06-17T04:01:55.278344+00:00",
+      "flatform_type": "email",
+      "id": 41,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Email - Gửi email",
+      "updated_at": "2026-06-17T04:01:55.278344+00:00"
+    },
+    {
+      "code": "fb_add_friend",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 6,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Kết bạn",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_comment",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 3,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Comment",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_group_invite",
+      "created_at": "2026-07-09T10:25:49.2266+00:00",
+      "flatform_type": "facebook",
+      "id": 69,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Mời vào group",
+      "updated_at": "2026-07-09T13:12:12.982163+00:00"
+    },
+    {
+      "code": "fb_join_group",
+      "created_at": "2026-06-26T06:53:28.027675+00:00",
+      "flatform_type": "facebook",
+      "id": 65,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Tham gia group",
+      "updated_at": "2026-06-26T07:36:16.745462+00:00"
+    },
+    {
+      "code": "fb_like_post",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 7,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Like post",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_message_friend",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 5,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin bạn bè",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_message_page_inbox_customer",
+      "created_at": "2026-05-25T10:18:52.556155+00:00",
+      "flatform_type": "facebook",
+      "id": 9,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin khách inbox page",
+      "updated_at": "2026-05-25T13:03:40.639283+00:00"
+    },
+    {
+      "code": "fb_message_stranger",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 4,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin người lạ",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_post_group",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 1,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài group",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_post_my_profile",
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "flatform_type": "facebook",
+      "id": 2,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài trang cá nhân",
+      "updated_at": "2026-05-09T04:16:20.5176+00:00"
+    },
+    {
+      "code": "fb_post_page",
+      "created_at": "2026-05-23T04:11:37.732551+00:00",
+      "flatform_type": "facebook",
+      "id": 8,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài fanpage",
+      "updated_at": "2026-05-23T04:11:37.406+00:00"
+    },
+    {
+      "code": "sms_send",
+      "created_at": "2026-07-02T11:48:38.259256+00:00",
+      "flatform_type": "sms",
+      "id": 66,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Gửi tin nhắn SMS",
+      "updated_at": "2026-07-02T11:48:38.259256+00:00"
+    },
+    {
+      "code": "voice_call",
+      "created_at": "2026-07-17T14:18:01.90632+00:00",
+      "flatform_type": "sms",
+      "id": 74,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Gọi tự động qua SIM",
+      "updated_at": "2026-07-17T15:46:06.054275+00:00"
+    },
+    {
+      "code": "zalo_add_friend",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 20,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Kết bạn",
+      "updated_at": "2026-06-26T03:20:43.831324+00:00"
+    },
+    {
+      "code": "zalo_add_group_member",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 21,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Thêm thành viên vào group",
+      "updated_at": "2026-07-09T07:34:26.158507+00:00"
+    },
+    {
+      "code": "zalo_cancel_sent_friend_request",
+      "created_at": "2026-06-26T04:18:23.697427+00:00",
+      "flatform_type": "zalo",
+      "id": 64,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Huỷ lời mời kết bạn đã gửi",
+      "updated_at": "2026-06-26T04:18:23.697427+00:00"
+    },
+    {
+      "code": "zalo_change_alias",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 28,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Đổi tên",
+      "updated_at": "2026-06-26T03:20:43.831324+00:00"
+    },
+    {
+      "code": "zalo_find_phone_user",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 22,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tìm SĐT",
+      "updated_at": "2026-07-09T07:34:26.158507+00:00"
+    },
+    {
+      "code": "zalo_join_group",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 26,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tham gia vào group",
+      "updated_at": "2026-06-10T06:55:23.96107+00:00"
+    },
+    {
+      "code": "zalo_join_group_link",
+      "created_at": "2026-06-25T00:06:55.089933+00:00",
+      "flatform_type": "zalo",
+      "id": 59,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tham gia group",
+      "updated_at": "2026-06-25T00:06:55.089933+00:00"
+    },
+    {
+      "code": "zalo_message_friend",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 23,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến bạn bè",
+      "updated_at": "2026-06-22T14:01:18.306776+00:00"
+    },
+    {
+      "code": "zalo_message_group",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 24,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến group",
+      "updated_at": "2026-06-22T09:44:32.288436+00:00"
+    },
+    {
+      "code": "zalo_message_stranger",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 25,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến người lạ",
+      "updated_at": "2026-06-26T03:20:43.831324+00:00"
+    },
+    {
+      "code": "zalo_tag_contact",
+      "created_at": "2026-06-10T06:55:23.96107+00:00",
+      "flatform_type": "zalo",
+      "id": 27,
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gắn tag",
+      "updated_at": "2026-06-26T03:20:43.831324+00:00"
+    }
+  ],
+  "auxiliary_blocks": null,
+  "campaigns": [
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-17T04:01:55.278344+00:00",
+      "flatform_type": "email",
+      "id": "email_send",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "email_send"
+      ],
+      "name": "Email - Gửi email tới danh sách",
+      "test_workflow_id": 265,
+      "workflow_id": 264
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-04-29T08:29:34.509151+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_comment_seeding",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_comment"
+      ],
+      "name": "Facebook - Comment seeding vào danh sách group/page/profile",
+      "test_workflow_id": 245,
+      "workflow_id": 157
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-05-15T07:33:51.480634+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_comment_seeding_post",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_comment"
+      ],
+      "name": "Facebook - Comment seeding vào danh sách bài post",
+      "test_workflow_id": 244,
+      "workflow_id": 207
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-05-06T10:38:17.133256+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_find_data_group",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [],
+      "name": "Facebook - Tìm kiếm data trong group",
+      "test_workflow_id": 246,
+      "workflow_id": 206
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-02T03:24:12.284568+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_find_data_search",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [],
+      "name": "Facebook - Tìm kiếm data bằng search",
+      "test_workflow_id": 247,
+      "workflow_id": 239
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-07-09T10:25:49.2266+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_group_invite",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_group_invite"
+      ],
+      "name": "Facebook - Mời vào group",
+      "test_workflow_id": 305,
+      "workflow_id": 304
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": true,
+      "created_at": "2026-03-23T07:30:47.249638+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_group_post",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_post_group",
+        "fb_comment"
+      ],
+      "name": "Facebook - Đăng bài vào group",
+      "test_workflow_id": 252,
+      "workflow_id": 1
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-26T06:53:28.027675+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_join_group",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_join_group"
+      ],
+      "name": "Facebook - Tham gia vào group",
+      "test_workflow_id": 285,
+      "workflow_id": 284
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-04-14T16:56:18.297351+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_message_friend",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_message_friend"
+      ],
+      "name": "Facebook - Nhắn tin đến bạn bè",
+      "test_workflow_id": 249,
+      "workflow_id": 3
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": true,
+      "created_at": "2026-05-18T03:28:33.612962+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_message_uid",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_message_stranger",
+        "fb_add_friend"
+      ],
+      "name": "Facebook - Nhắn tin & Kết bạn đến UID",
+      "test_workflow_id": 248,
+      "workflow_id": 208
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-05-28T16:28:42.550407+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_newsfeed_interaction",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [],
+      "name": "Facebook - Lướt newsfeed và tương tác",
+      "test_workflow_id": 254,
+      "workflow_id": 238
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-05-23T04:11:37.406+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_page_post",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_post_page"
+      ],
+      "name": "Facebook - Đăng bài lên fanpage",
+      "test_workflow_id": 250,
+      "workflow_id": 226
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-05-25T10:18:52.556155+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_page_to_message",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "fb_message_page_inbox_customer"
+      ],
+      "name": "Facebook - Gửi tin nhắn đến khách hàng từng inbox với page",
+      "test_workflow_id": 253,
+      "workflow_id": 227
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-04-14T16:27:27.427752+00:00",
+      "flatform_type": "facebook",
+      "id": "facebook_timeline_post",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [],
+      "name": "Facebook - Đăng bài lên trang cá nhân",
+      "test_workflow_id": 251,
+      "workflow_id": 2
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-07-02T11:48:38.259256+00:00",
+      "flatform_type": "sms",
+      "id": "sms_send",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "sms_send"
+      ],
+      "name": "SMS - Gửi tin nhắn",
+      "test_workflow_id": null,
+      "workflow_id": null
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-07-17T14:18:01.90632+00:00",
+      "flatform_type": "sms",
+      "id": "voice_call",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "voice_call"
+      ],
+      "name": "SMS - Gọi tự động qua SIM",
+      "test_workflow_id": null,
+      "workflow_id": null
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-07-09T07:34:26.158507+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_add_group_member",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_add_group_member"
+      ],
+      "name": "Zalo - Thêm thành viên vào group",
+      "test_workflow_id": 303,
+      "workflow_id": 302
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-26T04:18:23.697427+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_cancel_sent_friend_request",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [],
+      "name": "Zalo - Huỷ lời mời kết bạn đã gửi",
+      "test_workflow_id": 283,
+      "workflow_id": 282
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-25T00:06:55.089933+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_join_group_link",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_join_group_link"
+      ],
+      "name": "Zalo - Tham gia vào group bằng link",
+      "test_workflow_id": 279,
+      "workflow_id": 278
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-22T14:01:18.306776+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_birthday",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_friend"
+      ],
+      "name": "Zalo - Gửi tin nhắn chúc mừng sinh nhật",
+      "test_workflow_id": 271,
+      "workflow_id": 270
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-22T09:44:32.288436+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_friend",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_friend"
+      ],
+      "name": "Zalo - Gửi tin nhắn đến bạn bè",
+      "test_workflow_id": 267,
+      "workflow_id": 266
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-26T03:20:43.831324+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_friend_recommendation",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "name": "Zalo - Nhắn tin, kết bạn theo đề xuất Zalo",
+      "test_workflow_id": 281,
+      "workflow_id": 280
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-22T09:44:32.288436+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_group",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_group"
+      ],
+      "name": "Zalo - Gửi tin nhắn đến group",
+      "test_workflow_id": 269,
+      "workflow_id": 268
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-22T15:23:29.915707+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_group_member",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "name": "Zalo - Nhắn tin, kết bạn đến thành viên group",
+      "test_workflow_id": 273,
+      "workflow_id": 272
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-24T06:29:42.525859+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_group_realtime",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "name": "Zalo - Nhắn tin, kết bạn đến người tham gia/rời/tương tác group theo thời gian thực",
+      "test_workflow_id": 277,
+      "workflow_id": 276
+    },
+    {
+      "allow_multiple_accounts": true,
+      "allow_secondary_account": true,
+      "created_at": "2026-06-10T16:06:00.85814+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_phone",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_find_phone_user",
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "name": "Zalo - Nhắn tin, kết bạn đến SĐT",
+      "test_workflow_id": 262,
+      "workflow_id": 260
+    },
+    {
+      "allow_multiple_accounts": false,
+      "allow_secondary_account": false,
+      "created_at": "2026-06-23T06:45:47.55605+00:00",
+      "flatform_type": "zalo",
+      "id": "zalo_message_remarketing_customer",
+      "is_active": true,
+      "is_delete": false,
+      "limit_check_action_codes": [
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "name": "Zalo - Nhắn tin, kết bạn đến khách hàng cũ từng gửi tin",
+      "test_workflow_id": 275,
+      "workflow_id": 274
+    }
+  ],
+  "producers": [
+    {
+      "body": "\nDECLARE\n  v_input record;\n  v_existing record;\n  v_detail_id bigint := NULL;\n  v_final_status text := p_detail_status;\n  v_counted boolean := false;\n  v_input_updated boolean := false;\n  v_note text := p_note;\n  v_existing_found boolean := false;\n  v_detail_data jsonb := '{}'::jsonb;\nBEGIN\n  IF p_input_data_id IS NULL OR p_account_id IS NULL THEN\n    RETURN QUERY SELECT\n      p_input_data_id,\n      NULL::bigint,\n      NULL::bigint,\n      NULL::text,\n      false,\n      false,\n      false,\n      'input_data_id/account_id không hợp lệ';\n    RETURN;\n  END IF;\n\n  IF p_detail_status NOT IN ('đã gửi', 'đã nhận', 'thất bại') THEN\n    RETURN QUERY SELECT\n      p_input_data_id,\n      NULL::bigint,\n      NULL::bigint,\n      NULL::text,\n      false,\n      false,\n      false,\n      'Trạng thái SMS không hợp lệ';\n    RETURN;\n  END IF;\n\n  SELECT\n    input_data.id,\n    input_data.campaign_id,\n    input_data.status,\n    COALESCE(input_data.is_delete, false) AS input_deleted,\n    COALESCE(campaign.is_delete, false) AS campaign_deleted,\n    input_data.phone,\n    input_data.phone_carrier,\n    input_data.content,\n    input_data.name,\n    input_data.info1,\n    input_data.info2,\n    input_data.info3,\n    input_data.info4,\n    input_data.info5,\n    input_data.schedule AS input_schedule,\n    campaign.account_id,\n    campaign.name AS campaign_name,\n    campaign.schedule AS campaign_schedule\n  INTO v_input\n  FROM public.auto_campaign_input_data AS input_data\n  JOIN public.auto_campaigns AS campaign\n    ON campaign.id = input_data.campaign_id\n  WHERE input_data.id = p_input_data_id\n    AND campaign.action_id = 'sms_send'\n  FOR UPDATE OF input_data;\n\n  IF NOT FOUND THEN\n    RETURN QUERY SELECT\n      p_input_data_id,\n      NULL::bigint,\n      NULL::bigint,\n      NULL::text,\n      false,\n      false,\n      false,\n      'Không tìm thấy dữ liệu SMS cần cập nhật';\n    RETURN;\n  END IF;\n\n  v_detail_data := COALESCE(p_data, '{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(\n    'phone', v_input.phone,\n    'phoneCarrier', v_input.phone_carrier,\n    'content', v_input.content,\n    'name', v_input.name,\n    'info1', v_input.info1,\n    'info2', v_input.info2,\n    'info3', v_input.info3,\n    'info4', v_input.info4,\n    'info5', v_input.info5,\n    'inputSchedule', v_input.input_schedule,\n    'campaignSchedule', v_input.campaign_schedule,\n    'effectiveSchedule', COALESCE(v_input.input_schedule, v_input.campaign_schedule),\n    'campaignName', v_input.campaign_name\n  ));\n\n  PERFORM pg_advisory_xact_lock(hashtextextended('aka_agent_sms_status:' || p_input_data_id::text, 0));\n\n  SELECT\n    detail.id,\n    detail.account_id,\n    detail.campaign_id,\n    detail.status,\n    detail.log,\n    detail.data\n  INTO v_existing\n  FROM public.auto_campaign_details AS detail\n  WHERE detail.input_data_id = p_input_data_id\n    AND detail.action_code = 'sms_send'\n    AND COALESCE(detail.is_delete, false) = false\n  ORDER BY detail.created_at DESC NULLS LAST, detail.id DESC\n  LIMIT 1\n  FOR UPDATE;\n  v_existing_found := FOUND;\n\n  IF NOT v_existing_found THEN\n    IF p_detail_status = 'đã nhận' THEN\n      RETURN QUERY SELECT\n        p_input_data_id,\n        v_input.campaign_id,\n        NULL::bigint,\n        NULL::text,\n        false,\n        false,\n        false,\n        'Chưa có trạng thái đã gửi để cập nhật đã nhận';\n      RETURN;\n    END IF;\n\n    INSERT INTO public.auto_campaign_details (\n      input_data_id,\n      campaign_id,\n      account_id,\n      action_code,\n      action_name,\n      status,\n      log,\n      data,\n      counts_toward_limit\n    )\n    VALUES (\n      p_input_data_id,\n      v_input.campaign_id,\n      p_account_id,\n      'sms_send',\n      'Gửi tin nhắn SMS',\n      p_detail_status,\n      p_log,\n      v_detail_data,\n      true\n    )\n    RETURNING id INTO v_detail_id;\n\n    PERFORM public.increment_auto_account_action_count(p_account_id, 'sms_send', 1);\n    v_counted := true;\n    v_input_updated := true;\n  ELSE\n    v_detail_id := v_existing.id;\n    v_final_status := v_existing.status;\n\n    IF v_existing.status <> 'đã nhận'\n      AND (\n        p_detail_status = 'đã nhận'\n        OR (p_detail_status = 'thất bại' AND v_existing.status <> 'thất bại')\n      )\n    THEN\n      UPDATE public.auto_campaign_details\n      SET\n        status = p_detail_status,\n        log = p_log,\n        data = COALESCE(v_existing.data, '{}'::jsonb) || v_detail_data\n      WHERE id = v_existing.id;\n\n      v_final_status := p_detail_status;\n      v_input_updated := true;\n    END IF;\n\n    IF NOT v_input_updated AND v_input.status <> 'hoàn thành' THEN\n      v_input_updated := true;\n      IF v_final_status = 'thất bại' THEN\n        v_note := COALESCE(\n          v_existing.log,\n          v_existing.data ->> 'errorMessage',\n          v_existing.data ->> 'errorCode',\n          'Gửi SMS thất bại'\n        );\n      ELSE\n        v_note := NULL;\n      END IF;\n    END IF;\n  END IF;\n\n  -- Accept the result without restoring or finalizing a deleted source.\n  IF v_input.input_deleted OR v_input.campaign_deleted THEN\n    RETURN QUERY SELECT\n      p_input_data_id, v_input.campaign_id, v_detail_id, v_final_status,\n      v_counted, false, true, NULL::text;\n    RETURN;\n  END IF;\n\n  IF v_input_updated THEN\n    IF v_final_status = 'thất bại' THEN\n      v_note := COALESCE(v_note, p_log, 'Gửi SMS thất bại');\n    ELSE\n      v_note := NULL;\n    END IF;\n\n    UPDATE public.auto_campaign_input_data\n    SET\n      status = 'hoàn thành',\n      note = v_note,\n      date_action = now()\n    WHERE id = p_input_data_id;\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.auto_campaign_input_data AS remaining\n    WHERE remaining.campaign_id = v_input.campaign_id\n      AND COALESCE(remaining.is_delete, false) = false\n      AND remaining.status IN ('chờ xử lý', 'tạm dừng', 'đang chạy')\n  ) THEN\n    UPDATE public.auto_campaigns\n    SET\n      status = 'hoàn thành',\n      note = NULL,\n      updated_at = now()\n    WHERE id = v_input.campaign_id\n      AND action_id = 'sms_send'\n      AND COALESCE(is_delete, false) = false;\n  END IF;\n\n  RETURN QUERY SELECT\n    p_input_data_id,\n    v_input.campaign_id,\n    v_detail_id,\n    v_final_status,\n    v_counted,\n    v_input_updated,\n    true,\n    NULL::text;\nEND;\n",
+      "md5": "97255d2b4ee4bfd8df2eaae9104c4f7e",
+      "signature": "aka_agent_record_sms_message_status(bigint,bigint,text,text,jsonb,text)"
+    },
+    {
+      "body": "\nDECLARE\n  v_job public.auto_voice_call_jobs%ROWTYPE;\n  v_event_type text := lower(btrim(COALESCE(p_event_type, '')));\n  v_payload jsonb := COALESCE(p_payload, '{}'::jsonb);\n  v_next_status text;\n  v_terminal boolean := false;\n  v_detail_status text := 'thất bại';\n  v_note text;\n  v_existing_event_job_id bigint;\n  v_existing_sequence_event_id uuid;\n  v_inserted_event_id bigint;\n  v_playback_succeeded boolean := false;\n  v_audio_download_attempts integer;\nBEGIN\n  IF p_event_id IS NULL OR COALESCE(p_sequence, 0) <= 0 OR v_event_type = '' THEN\n    RETURN QUERY SELECT false, false, NULL::jsonb, 'invalid_event'::text;\n    RETURN;\n  END IF;\n\n  SELECT * INTO v_job FROM public.auto_voice_call_jobs\n  WHERE id = p_job_id AND account_id = p_account_id AND device_id = p_device_id AND claim_token = p_claim_token\n  FOR UPDATE;\n  IF NOT FOUND THEN\n    RETURN QUERY SELECT false, false, NULL::jsonb, 'not_found'::text;\n    RETURN;\n  END IF;\n\n  SELECT event.job_id INTO v_existing_event_job_id\n  FROM public.auto_voice_call_events AS event\n  WHERE event.event_id = p_event_id;\n  IF FOUND THEN\n    IF v_existing_event_job_id = v_job.id THEN\n      RETURN QUERY SELECT true, true, to_jsonb(v_job), 'duplicate'::text;\n    ELSE\n      RETURN QUERY SELECT false, false, to_jsonb(v_job), 'event_id_conflict'::text;\n    END IF;\n    RETURN;\n  END IF;\n\n  SELECT event.event_id INTO v_existing_sequence_event_id\n  FROM public.auto_voice_call_events AS event\n  WHERE event.job_id = v_job.id AND event.sequence = p_sequence;\n  IF FOUND THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'sequence_conflict'::text;\n    RETURN;\n  END IF;\n\n  IF p_sequence <= v_job.last_event_sequence THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'out_of_order'::text;\n    RETURN;\n  END IF;\n\n  IF NOT (v_event_type = ANY (ARRAY[\n    'dial_committed','heartbeat','placing','call_placing','offhook','waiting_answer',\n    'answered','answer_detected','answer_verified','playback_started','playback_completed',\n    'ending','call_ended','call_idle','no_connection','idle_before_playback',\n    'audio_download_failed','uncertain','recovered_uncertain','process_recovered_uncertain',\n    'completed','failed','call_failed','playback_failed','profile_mismatch','speaker_failed',\n    'hangup_succeeded','hangup_failed'\n  ]::text[])) THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'unsupported_event'::text;\n    RETURN;\n  END IF;\n\n  IF v_job.status IN ('succeeded','failed','no_connection','uncertain','cancelled') THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'terminal_status'::text;\n    RETURN;\n  END IF;\n\n  IF v_job.status = 'ending' AND NOT (v_event_type = ANY (ARRAY[\n    'heartbeat','ending','call_ended','call_idle','completed',\n    'uncertain','recovered_uncertain','process_recovered_uncertain',\n    'failed','call_failed','playback_failed','profile_mismatch','speaker_failed',\n    'hangup_succeeded','hangup_failed'\n  ]::text[])) THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'invalid_transition'::text;\n    RETURN;\n  END IF;\n\n  IF v_job.dial_committed_at IS NULL\n    AND NOT (v_event_type = ANY (ARRAY['audio_download_failed','failed','profile_mismatch']::text[]))\n  THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'dial_not_committed'::text;\n    RETURN;\n  END IF;\n\n  IF v_job.dial_committed_at IS NULL\n    AND v_event_type IN ('failed','profile_mismatch')\n    AND v_job.status NOT IN ('claimed','preparing_audio','audio_ready')\n  THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'invalid_status'::text;\n    RETURN;\n  END IF;\n\n  IF v_event_type = 'audio_download_failed'\n    AND (\n      v_job.dial_committed_at IS NOT NULL\n      OR v_job.status <> 'audio_ready'\n      OR v_job.tts_asset_id IS NULL\n    ) THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'invalid_status'::text;\n    RETURN;\n  END IF;\n\n  IF v_event_type = 'completed'\n    AND NOT (\n      v_job.result = 'success'\n      OR v_job.playback_completed_at IS NOT NULL\n      OR lower(COALESCE(v_payload->>'result', '')) IN ('success', 'succeeded')\n      OR lower(COALESCE(v_payload->>'playbackCompleted', 'false')) = 'true'\n    ) THEN\n    RETURN QUERY SELECT false, false, to_jsonb(v_job), 'playback_not_completed'::text;\n    RETURN;\n  END IF;\n\n  INSERT INTO public.auto_voice_call_events (job_id, event_id, sequence, event_type, occurred_at, payload)\n  VALUES (v_job.id, p_event_id, p_sequence, v_event_type, COALESCE(p_occurred_at, now()), v_payload)\n  ON CONFLICT DO NOTHING\n  RETURNING id INTO v_inserted_event_id;\n  IF v_inserted_event_id IS NULL THEN\n    SELECT event.job_id INTO v_existing_event_job_id\n    FROM public.auto_voice_call_events AS event\n    WHERE event.event_id = p_event_id;\n    RETURN QUERY SELECT\n      false,\n      false,\n      to_jsonb(v_job),\n      CASE WHEN v_existing_event_job_id IS NOT NULL THEN 'event_id_conflict' ELSE 'sequence_conflict' END::text;\n    RETURN;\n  END IF;\n\n  v_playback_succeeded := v_job.result = 'success'\n    OR v_job.playback_completed_at IS NOT NULL\n    OR lower(COALESCE(v_payload->>'result', '')) IN ('success', 'succeeded')\n    OR lower(COALESCE(v_payload->>'playbackCompleted', 'false')) = 'true';\n  v_audio_download_attempts := v_job.audio_download_attempts;\n  v_next_status := v_job.status;\n  CASE v_event_type\n    WHEN 'dial_committed', 'heartbeat' THEN v_next_status := v_job.status;\n    WHEN 'placing', 'call_placing' THEN v_next_status := 'placing';\n    WHEN 'offhook', 'waiting_answer' THEN v_next_status := 'waiting_answer';\n    WHEN 'answered', 'answer_detected', 'answer_verified' THEN v_next_status := 'waiting_answer';\n    WHEN 'playback_started' THEN v_next_status := 'playing';\n    WHEN 'playback_completed' THEN\n      v_next_status := 'ending'; v_terminal := true; v_detail_status := 'thành công'; v_note := 'Đã phát xong nội dung cuộc gọi';\n    WHEN 'ending' THEN v_next_status := 'ending';\n    WHEN 'call_ended', 'call_idle' THEN\n      IF v_playback_succeeded THEN\n        v_next_status := 'succeeded'; v_terminal := true; v_detail_status := 'thành công'; v_note := 'Đã phát xong nội dung và kết thúc cuộc gọi';\n      ELSE\n        v_next_status := 'no_connection'; v_terminal := true; v_note := 'Cuộc gọi kết thúc trước khi phát xong nội dung';\n      END IF;\n    WHEN 'no_connection', 'idle_before_playback' THEN\n      v_next_status := 'no_connection'; v_terminal := true; v_note := COALESCE(v_payload->>'errorMessage', 'Không kết nối được cuộc gọi');\n    WHEN 'audio_download_failed' THEN\n      v_audio_download_attempts := LEAST(v_job.audio_download_attempts + 1, 3);\n      IF v_audio_download_attempts < 3 THEN\n        v_next_status := 'audio_ready';\n        v_note := COALESCE(v_payload->>'errorMessage', 'Tải audio thất bại; sẽ cấp lại URL tải trên cùng tác vụ');\n      ELSE\n        v_next_status := 'failed';\n        v_terminal := true;\n        v_note := COALESCE(v_payload->>'errorMessage', 'Không thể tải audio cuộc gọi sau 3 lần thử');\n      END IF;\n    WHEN 'uncertain', 'recovered_uncertain', 'process_recovered_uncertain' THEN\n      v_terminal := true;\n      IF v_playback_succeeded THEN\n        v_next_status := 'succeeded';\n        v_detail_status := 'thành công';\n        v_note := COALESCE(v_payload->>'errorMessage', 'Đã phát xong nội dung; kết quả tự ngắt cuộc gọi sau khôi phục không chắc chắn');\n      ELSE\n        v_next_status := 'uncertain';\n        v_note := COALESCE(v_payload->>'errorMessage', 'Không xác định được kết quả cuộc gọi sau khi khôi phục');\n      END IF;\n    WHEN 'completed' THEN\n      v_terminal := true;\n      v_next_status := 'succeeded';\n      v_detail_status := 'thành công';\n      v_note := COALESCE(v_payload->>'message', 'Đã hoàn tất cuộc gọi tự động');\n    WHEN 'failed', 'call_failed', 'playback_failed', 'profile_mismatch', 'speaker_failed' THEN\n      v_next_status := 'failed'; v_terminal := true; v_note := COALESCE(v_payload->>'errorMessage', 'Cuộc gọi tự động thất bại');\n    WHEN 'hangup_succeeded' THEN\n      v_next_status := CASE WHEN v_playback_succeeded THEN 'succeeded' ELSE 'failed' END;\n      v_terminal := true;\n      v_detail_status := CASE WHEN v_next_status = 'succeeded' THEN 'thành công' ELSE 'thất bại' END;\n      v_note := CASE WHEN v_next_status = 'succeeded' THEN 'Đã phát xong nội dung và tự ngắt cuộc gọi' ELSE 'Cuộc gọi đã ngắt trước khi phát xong nội dung' END;\n    WHEN 'hangup_failed' THEN\n      v_next_status := CASE WHEN v_playback_succeeded THEN 'succeeded' ELSE 'failed' END;\n      v_terminal := true;\n      v_detail_status := CASE WHEN v_next_status = 'succeeded' THEN 'thành công' ELSE 'thất bại' END;\n      v_note := CASE WHEN v_next_status = 'succeeded' THEN 'Đã phát xong nội dung nhưng không tự ngắt được cuộc gọi' ELSE 'Không tự ngắt được cuộc gọi' END;\n    ELSE\n      v_next_status := v_job.status;\n  END CASE;\n\n  UPDATE public.auto_voice_call_jobs\n  SET\n    status = v_next_status,\n    last_event_sequence = p_sequence,\n    audio_download_attempts = v_audio_download_attempts,\n    answer_detection_mode = COALESCE(\n      NULLIF(v_payload->>'answerDetectionMode', ''),\n      NULLIF(v_payload->>'detectionMode', ''),\n      answer_detection_mode\n    ),\n    answer_verified = CASE\n      WHEN v_event_type = 'answer_verified' THEN true\n      WHEN v_payload ? 'answerVerified' THEN lower(v_payload->>'answerVerified') = 'true'\n      ELSE answer_verified\n    END,\n    hangup_outcome = COALESCE(NULLIF(v_payload->>'hangupOutcome', ''),\n      CASE\n        WHEN v_event_type = 'hangup_failed' THEN 'failed'\n        WHEN v_event_type IN ('uncertain','recovered_uncertain','process_recovered_uncertain') AND v_playback_succeeded THEN 'unknown'\n        WHEN v_event_type IN ('call_ended','call_idle','hangup_succeeded') THEN 'success'\n        ELSE hangup_outcome\n      END),\n    result = CASE\n      WHEN v_event_type = 'playback_completed' THEN 'success'\n      WHEN v_event_type = 'completed' THEN 'success'\n      WHEN v_event_type IN ('call_ended','call_idle','hangup_succeeded','uncertain','recovered_uncertain','process_recovered_uncertain') AND v_playback_succeeded THEN 'success'\n      WHEN v_event_type IN ('no_connection','idle_before_playback') THEN 'no_connection'\n      WHEN v_event_type = 'audio_download_failed'\n        AND (dial_committed_at IS NOT NULL OR v_audio_download_attempts >= 3) THEN 'failed'\n      WHEN v_event_type = 'hangup_failed' AND v_playback_succeeded THEN 'success'\n      WHEN v_event_type IN ('failed','call_failed','playback_failed','profile_mismatch','speaker_failed','hangup_succeeded','hangup_failed') THEN 'failed'\n      WHEN v_event_type IN ('uncertain','recovered_uncertain','process_recovered_uncertain') THEN 'uncertain'\n      ELSE result\n    END,\n    error_code = COALESCE(NULLIF(v_payload->>'errorCode', ''), error_code),\n    error_message = COALESCE(NULLIF(v_payload->>'errorMessage', ''), error_message),\n    placed_at = CASE WHEN v_event_type IN ('placing','call_placing') THEN COALESCE(p_occurred_at, now()) ELSE placed_at END,\n    answered_at = CASE WHEN v_event_type IN ('answered','answer_detected','answer_verified') THEN COALESCE(p_occurred_at, now()) ELSE answered_at END,\n    playback_started_at = CASE WHEN v_event_type = 'playback_started' THEN COALESCE(p_occurred_at, now()) ELSE playback_started_at END,\n    playback_completed_at = CASE WHEN v_event_type = 'playback_completed' THEN COALESCE(p_occurred_at, now()) ELSE playback_completed_at END,\n    ended_at = CASE WHEN v_terminal AND v_event_type <> 'playback_completed' THEN COALESCE(p_occurred_at, now()) ELSE ended_at END,\n    lease_expires_at = now() + interval '5 minutes',\n    updated_at = now()\n  WHERE id = v_job.id\n  RETURNING * INTO v_job;\n\n  IF v_job.detail_id IS NOT NULL THEN\n    UPDATE public.auto_campaign_details\n    SET data = COALESCE(data, '{}'::jsonb) || v_payload || jsonb_strip_nulls(jsonb_build_object(\n      'answerDetectionMode', v_job.answer_detection_mode,\n      'answerVerified', v_job.answer_verified,\n      'hangupOutcome', v_job.hangup_outcome,\n      'audioDurationMs', v_job.audio_duration_ms,\n      'errorCode', v_job.error_code,\n      'errorMessage', v_job.error_message\n    ))\n    WHERE id = v_job.detail_id;\n  END IF;\n\n  IF v_terminal THEN\n    PERFORM public.aka_agent_finalize_voice_call_job_internal(v_job.id, v_detail_status, v_note);\n    SELECT * INTO v_job FROM public.auto_voice_call_jobs WHERE id = v_job.id;\n  END IF;\n\n  RETURN QUERY SELECT true, false, to_jsonb(v_job), NULL::text;\nEND;\n",
+      "md5": "94dfffe540ca5ad98c7c2f80e75cd021",
+      "signature": "aka_agent_apply_voice_call_event(bigint,bigint,text,uuid,uuid,integer,text,timestamp with time zone,jsonb)"
+    }
+  ],
+  "statuses": [
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_success",
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone hành động thành công.",
+      "flatform_type": "all",
+      "id": 20,
+      "is_active": true,
+      "is_default": true,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Thành công",
+      "sort_order": 10,
+      "status_key": "success",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_failed",
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone bị từ chối hoặc không đạt nghiệp vụ.",
+      "flatform_type": "all",
+      "id": 21,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Thất bại",
+      "sort_order": 20,
+      "status_key": "failed",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_error",
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone lỗi kỹ thuật hoặc exception.",
+      "flatform_type": "all",
+      "id": 22,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Lỗi",
+      "sort_order": 30,
+      "status_key": "error",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    }
+  ]
+}

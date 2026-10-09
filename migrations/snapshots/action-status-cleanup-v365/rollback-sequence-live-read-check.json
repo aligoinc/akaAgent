@@ -1,0 +1,9 @@
+{
+  "checked_at": "2026-10-09 12:49:25.466647+00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "removed_status_still_absent": true,
+  "rollback_sha256": "a70b6d91737897b5cb7fcf9b8cf692143b432532c8ed5da080d8758436eb070e",
+  "actual_restore_guard_passed": true,
+  "read_only": true,
+  "production_write": false
+}

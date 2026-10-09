@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-09T16:25:13.363Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "rolled_back": true,
+  "external_operations": 0,
+  "migration_sha256": "ef99c53de21cbfab0ede6754318e22a2a93e8269927dd99878b5ff186f745fda",
+  "smoke_sha256": "ec241e3189e0f406ff6a78efd0e5926cd2e340d09cb77a9d1d42027126e3bc48",
+  "duration": "00:00:00.399435",
+  "functions": [
+    {
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_mark_email_open(p_open_token text, p_user_agent text DEFAULT NULL::text)\n RETURNS TABLE(ok boolean, message_tracking_id bigint, campaign_detail_id bigint, open_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_message public.auto_email_message_trackings%ROWTYPE;\n  v_now timestamptz := now();\n  v_user_agent text := NULLIF(left(COALESCE(p_user_agent, ''), 1000), '');\n  v_raw_token text := trim(COALESCE(p_open_token, ''));\n  v_open_token uuid;\nBEGIN\n  IF v_raw_token !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN\n    RETURN QUERY SELECT false, NULL::bigint, NULL::bigint, 0;\n    RETURN;\n  END IF;\n\n  v_open_token := v_raw_token::uuid;\n\n  SELECT *\n  INTO v_message\n  FROM public.auto_email_message_trackings\n  WHERE open_token = v_open_token\n    AND is_delete = false\n  FOR UPDATE;\n\n  IF NOT FOUND THEN\n    RETURN QUERY SELECT false, NULL::bigint, NULL::bigint, 0;\n    RETURN;\n  END IF;\n\n  UPDATE public.auto_email_message_trackings AS message_tracking\n  SET open_count = message_tracking.open_count + 1,\n      first_opened_at = COALESCE(message_tracking.first_opened_at, v_now),\n      last_opened_at = v_now,\n      last_open_user_agent = v_user_agent,\n      updated_at = v_now\n  WHERE message_tracking.id = v_message.id\n  RETURNING message_tracking.* INTO v_message;\n\n  IF v_message.campaign_detail_id IS NOT NULL THEN\n    -- Policy-managed results keep their original main result, log, quota and\n    -- report group. A later real observation only changes the secondary ID.\n    UPDATE public.auto_campaign_details d\n    SET sub_status_id=s.id\n    FROM public.auto_status s\n    WHERE d.id=v_message.campaign_detail_id AND d.action_code='email_send'\n      AND d.status_id IS NOT NULL AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete\n      AND s.code='campaign_detail_viewed' AND s.component_type='campaign_detail'\n      AND d.sub_status_id IS DISTINCT FROM s.id\n      AND NOT EXISTS (SELECT 1 FROM public.auto_status old WHERE old.id=d.sub_status_id AND old.code='campaign_detail_clicked');\n    UPDATE public.auto_campaign_details\n    SET status = 'đã xem'\n    WHERE id = v_message.campaign_detail_id\n      AND action_code = 'email_send'\n      AND status = 'thành công'\n      AND status_id IS NULL\n      AND is_delete = false;\n  END IF;\n\n  RETURN QUERY SELECT true, v_message.id, v_message.campaign_detail_id, v_message.open_count;\nEND;\n$function$\n",
+      "md5": "e13f3b6c3de915b2713965b76dbd33a7",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "signature": "aka_agent_mark_email_open(text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_mark_email_click(p_click_token text, p_user_agent text DEFAULT NULL::text)\n RETURNS TABLE(ok boolean, message_tracking_id bigint, link_tracking_id bigint, original_url text, click_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_link public.auto_email_link_trackings%ROWTYPE;\n  v_message public.auto_email_message_trackings%ROWTYPE;\n  v_now timestamptz := now();\n  v_user_agent text := NULLIF(left(COALESCE(p_user_agent, ''), 1000), '');\n  v_raw_token text := trim(COALESCE(p_click_token, ''));\n  v_click_token uuid;\nBEGIN\n  IF v_raw_token !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN\n    RETURN QUERY SELECT false, NULL::bigint, NULL::bigint, NULL::text, 0;\n    RETURN;\n  END IF;\n\n  v_click_token := v_raw_token::uuid;\n\n  SELECT *\n  INTO v_link\n  FROM public.auto_email_link_trackings\n  WHERE click_token = v_click_token\n    AND is_delete = false\n  FOR UPDATE;\n\n  IF NOT FOUND THEN\n    RETURN QUERY SELECT false, NULL::bigint, NULL::bigint, NULL::text, 0;\n    RETURN;\n  END IF;\n\n  SELECT *\n  INTO v_message\n  FROM public.auto_email_message_trackings\n  WHERE id = v_link.message_tracking_id\n    AND is_delete = false\n  FOR UPDATE;\n\n  IF NOT FOUND THEN\n    RETURN QUERY SELECT false, NULL::bigint, v_link.id, NULL::text, 0;\n    RETURN;\n  END IF;\n\n  UPDATE public.auto_email_link_trackings AS link_tracking\n  SET click_count = link_tracking.click_count + 1,\n      first_clicked_at = COALESCE(link_tracking.first_clicked_at, v_now),\n      last_clicked_at = v_now,\n      last_click_user_agent = v_user_agent,\n      updated_at = v_now\n  WHERE link_tracking.id = v_link.id\n  RETURNING link_tracking.* INTO v_link;\n\n  UPDATE public.auto_email_message_trackings AS message_tracking\n  SET click_count = message_tracking.click_count + 1,\n      first_clicked_at = COALESCE(message_tracking.first_clicked_at, v_now),\n      last_clicked_at = v_now,\n      first_opened_at = COALESCE(message_tracking.first_opened_at, v_now),\n      last_opened_at = COALESCE(message_tracking.last_opened_at, v_now),\n      open_count = GREATEST(message_tracking.open_count, 1),\n      last_click_user_agent = v_user_agent,\n      updated_at = v_now\n  WHERE message_tracking.id = v_message.id\n  RETURNING message_tracking.* INTO v_message;\n\n  IF v_message.campaign_detail_id IS NOT NULL THEN\n    -- Policy-managed results keep their original main result, log, quota and\n    -- report group. A later real observation only changes the secondary ID.\n    UPDATE public.auto_campaign_details d\n    SET sub_status_id=s.id\n    FROM public.auto_status s\n    WHERE d.id=v_message.campaign_detail_id AND d.action_code='email_send'\n      AND d.status_id IS NOT NULL AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete\n      AND s.code='campaign_detail_clicked' AND s.component_type='campaign_detail'\n      AND d.sub_status_id IS DISTINCT FROM s.id\n      ;\n    UPDATE public.auto_campaign_details\n    SET status = 'đã click'\n    WHERE id = v_message.campaign_detail_id\n      AND action_code = 'email_send'\n      AND status IN ('thành công', 'đã xem')\n      AND status_id IS NULL\n      AND is_delete = false;\n  END IF;\n\n  RETURN QUERY SELECT true, v_message.id, v_link.id, v_link.original_url, v_link.click_count;\nEND;\n$function$\n",
+      "md5": "9f0ec78c3127d0f48605298b5ea2c3f0",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=public"
+      ],
+      "signature": "aka_agent_mark_email_click(text,text)",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_project_linked_email_status_v366()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  -- Linking holds the tracking row lock. Callbacks take that same lock before\n  -- touching the detail, so neither ordering can lose an early observation.\n  IF NEW.is_delete OR NEW.campaign_detail_id IS NULL OR (NEW.open_count <= 0 AND NEW.click_count <= 0) THEN RETURN NEW; END IF;\n  UPDATE public.auto_campaign_details d SET sub_status_id=s.id\n  FROM public.auto_status s\n  WHERE d.id=NEW.campaign_detail_id AND d.campaign_id=NEW.campaign_id\n    AND d.account_id IS NOT DISTINCT FROM NEW.account_id\n    AND d.input_data_id IS NOT DISTINCT FROM NEW.input_data_id\n    AND d.action_code='email_send' AND d.status_id IS NOT NULL\n    AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete\n    AND s.code=CASE WHEN NEW.click_count>0 THEN 'campaign_detail_clicked' ELSE 'campaign_detail_viewed' END\n    AND s.component_type='campaign_detail'\n    AND d.sub_status_id IS DISTINCT FROM s.id\n    AND (NEW.click_count>0 OR NOT EXISTS (\n      SELECT 1 FROM public.auto_status prior WHERE prior.id=d.sub_status_id AND prior.code='campaign_detail_clicked'));\n  RETURN NEW;\nEND\n$function$\n",
+      "md5": "6535346b9292f2c69031bb801f5a5f68",
+      "owner": "postgres",
+      "security_definer": false,
+      "settings": [
+        "search_path=pg_catalog, public"
+      ],
+      "signature": "aka_agent_project_linked_email_status_v366()",
+      "volatility": "v"
+    }
+  ],
+  "verified": true
+}

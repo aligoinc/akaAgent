@@ -1,0 +1,150 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09 10:04:38.693876+00",
+  "before_sha256": "b4949a3f5e9a3ba6611a679ff5f128e5372a8743de7cda0973348b15f99e5354",
+  "tables": {
+    "auto_account_actions": {
+      "count": 25,
+      "md5": "d27de13d8d0ae980808d1a0fc21f33fb"
+    },
+    "auto_automation_trigger_statuses": {
+      "count": 11,
+      "md5": "82d18074c0bcd1f3adaeefb8c55453e3"
+    },
+    "auto_campaign_action_detail_statuses": {
+      "count": 313,
+      "md5": "b86315a00379a8fbe4d02848ee184974"
+    },
+    "auto_error": {
+      "count": 104,
+      "md5": "32e8af1d0797a48f30819cee4433cdb3"
+    },
+    "auto_status": {
+      "count": 38,
+      "md5": "cf6146738a82e0723840d033da20a1a8"
+    }
+  },
+  "schema_sha256": "a342ef06f1d75215d18fd55793da3f71816501eb15c40a546a79c4b2dba0357f",
+  "functions": [
+    {
+      "signature": "aka_agent_apply_voice_call_event(bigint,bigint,text,uuid,uuid,integer,text,timestamp with time zone,jsonb)",
+      "md5": "a1db0ff35dde9a5fa7966986fe725d2d"
+    },
+    {
+      "signature": "aka_agent_authorize_voice_call(bigint,bigint,text,uuid,integer,integer)",
+      "md5": "9901855896fb1086d2468cc76483c730"
+    },
+    {
+      "signature": "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+      "md5": "2bacb504c895ea6efd6a1d9b68d6e213"
+    },
+    {
+      "signature": "aka_agent_enqueue_campaign_detail_automations()",
+      "md5": "b4633f2bdbbe70a8fe63344eed56900f"
+    },
+    {
+      "signature": "aka_agent_enqueue_group_only_automations()",
+      "md5": "c6611cee9b1c40772bdb9e41234049de"
+    },
+    {
+      "signature": "aka_agent_finalize_voice_call_job_internal(bigint,text,text)",
+      "md5": "b57ef3487281d08c7cd6d9aee9593062"
+    },
+    {
+      "signature": "aka_agent_get_automation_options(bigint,bigint,text,text)",
+      "md5": "80ec7c7d50f1c86dfa77472d0ae8e3c3"
+    },
+    {
+      "signature": "aka_agent_get_data_group_panel(bigint,bigint,bigint,text,text)",
+      "md5": "66dedeb5be692b600b4a762a9ac6a60d"
+    },
+    {
+      "signature": "aka_agent_guard_automation_trigger_status_scope()",
+      "md5": "19f41536f4c47443ad8152eea64b9f90"
+    },
+    {
+      "signature": "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)",
+      "md5": "58d02e6696fa3f89cda13cea288df876"
+    },
+    {
+      "signature": "aka_agent_list_automation_details(bigint,bigint,bigint,text,integer,integer,text,text)",
+      "md5": "947d98945a281def47f259585ece6835"
+    },
+    {
+      "signature": "aka_agent_list_campaign_automation_details(bigint,bigint,bigint,text,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)",
+      "md5": "ecad3867d725b6fbb27148366f90b6ce"
+    },
+    {
+      "signature": "aka_agent_list_campaign_detail_automation_triggers(bigint,bigint,bigint,bigint[],text,text)",
+      "md5": "56822434723347452c8944484764daea"
+    },
+    {
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "md5": "7b7407f8102f56591435b9bc092c7b34"
+    },
+    {
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "md5": "9652783556c25109e6250375da031fa3"
+    },
+    {
+      "signature": "aka_agent_mark_email_click(text,text)",
+      "md5": "781ec75bf51abb960a2509414ebd19cc"
+    },
+    {
+      "signature": "aka_agent_mark_email_open(text,text)",
+      "md5": "28044017acb9bf67c688b70be92cb5cc"
+    },
+    {
+      "signature": "aka_agent_record_sms_message_status(bigint,bigint,text,text,jsonb,text)",
+      "md5": "6ed7c94a13aa8d1644fa9bbb401f10b2"
+    },
+    {
+      "signature": "aka_agent_save_automation_v205_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "md5": "ea9c24e056218b9428b0d8f3dff2e999"
+    },
+    {
+      "signature": "aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "md5": "a35e88510af1a993d1a2b280638f8f06"
+    },
+    {
+      "signature": "aka_agent_set_automation_active(bigint,bigint,bigint,boolean,text,text)",
+      "md5": "ecb38ce9c6161c2d0abc593ecaab0dc2"
+    },
+    {
+      "signature": "auto_automation_to_json(bigint,bigint,bigint)",
+      "md5": "22235c9fa385ebb4a70d28e984a39d4f"
+    },
+    {
+      "signature": "auto_retry_automation_enqueue_failure_internal(bigint)",
+      "md5": "1471921cd3ed58df1c35b7f709d65664"
+    },
+    {
+      "signature": "auto_save_automation_v171_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text)",
+      "md5": "ebeb86eddde4baea96215a3580c2659f"
+    },
+    {
+      "signature": "auto_validate_automation_rule_v171_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean)",
+      "md5": "f18877d0547e455b9417a53ad998931d"
+    },
+    {
+      "signature": "auto_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)",
+      "md5": "f97379948078b2827062edc550901f01"
+    },
+    {
+      "signature": "crm_agent_campaign_results(bigint[],bigint[])",
+      "md5": "91d3e6d4a80d197fc05fa6ffb56c2bd1"
+    },
+    {
+      "signature": "crm_trial_campaign_signal_counts(bigint[],bigint[])",
+      "md5": "52afca54428c297fec537604e3c577e1"
+    },
+    {
+      "signature": "fn_opp_ctx(aka_salesopportunity)",
+      "md5": "db2b5f09d88ea0c16b4bb258c4c70a3c"
+    },
+    {
+      "signature": "fn_opp_trial_state(bigint)",
+      "md5": "2d4a4de61067d497efb1adac4e66fa67"
+    }
+  ]
+}

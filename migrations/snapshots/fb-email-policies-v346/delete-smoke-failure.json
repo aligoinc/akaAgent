@@ -1,0 +1,15 @@
+{
+  "checked_at": "2026-10-06T03:37:05.956Z",
+  "test": "INSERT then explicit DELETE then outer transaction ROLLBACK",
+  "result": "failed_statement_timeout",
+  "sqlstate": "57014",
+  "statement_timeout_seconds": 30,
+  "failing_operation": "Native FK SELECT on public.auto_campaign_details.error_code during DELETE FROM public.auto_error",
+  "manual_reference_scan": false,
+  "constraints_enabled": true,
+  "committed_changes": false,
+  "original_table_checksum_matches": true,
+  "sequence_unchanged": true,
+  "table_md5": "7da58da4309fca12355b1d8f95c91131",
+  "conclusion": "INSERT/transaction ROLLBACK is tested separately. Hard DELETE rollback has not passed within the current timeout; no index, constraint bypass, or timeout increase was applied."
+}

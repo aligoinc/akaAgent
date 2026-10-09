@@ -65,9 +65,9 @@ const settle = `async settleInput(milestoneSummary, result, options={}) {
   ${schedulerText.slice(settleStart,start)}
   return {shouldStopAfterTarget,consumed:[...consumedGroupPostInputDataIds]};
 }`
-const Scheduler = new Function('IPC_EVENTS', 'PAGE_INBOX_MESSAGE_ACTION_ID', 'COMMENT_FREQUENCY_LIMIT_ERROR_CODE',
+const Scheduler = new Function('managedTargetEffects', 'managesActionResult', 'ResultContractError', 'parseActionResultOutput', 'IPC_EVENTS', 'PAGE_INBOX_MESSAGE_ACTION_ID', 'COMMENT_FREQUENCY_LIMIT_ERROR_CODE',
   'GROUP_POST_ACTION_ID', 'GROUP_POST_FREQUENCY_LIMIT_ERROR_CODE', 'CAMPAIGN_PAUSE_PENDING_NOTE',
-  transpile('class Harness {' + methods + finish + settle + '}') + ';return Harness')({}, 'facebook_page_to_message',
+  transpile('class Harness {' + methods + finish + settle + '}') + ';return Harness')(() => null, () => false, class ResultContractError extends Error {}, () => null, {}, 'facebook_page_to_message',
   'err_comment_frequency_limit', 'facebook_group_post', 'err_post_frequency_limit', 'Đã tạm dừng')
 const helperSource = ts.createSourceFile('helpers.ts', read('src/main/v2/runtime/blockHelpers.ts'), ts.ScriptTarget.Latest, true)
 let sleepMethod

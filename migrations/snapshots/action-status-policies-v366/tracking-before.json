@@ -1,0 +1,1041 @@
+{
+  "error_state_schema": {
+    "access": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "aka_agent_chat_api=arw/postgres"
+      ],
+      "force_rls": false,
+      "owner": "postgres",
+      "rls": false
+    },
+    "columns": [
+      {
+        "default": "nextval('auto_campaign_error_state_id_seq'::regclass)",
+        "generated": "",
+        "identity": "",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "campaign_id",
+        "not_null": true,
+        "position": 2,
+        "type": "bigint"
+      },
+      {
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "name": "count_consecutive_bad_targets",
+        "not_null": true,
+        "position": 3,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_input_data_id",
+        "not_null": false,
+        "position": 4,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_reason",
+        "not_null": false,
+        "position": 5,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_bad_target_at",
+        "not_null": false,
+        "position": 6,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 7,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 8,
+        "type": "timestamp with time zone"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "FOREIGN KEY (campaign_id) REFERENCES auto_campaigns(id) ON DELETE CASCADE",
+        "name": "auto_campaign_error_state_campaign_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "UNIQUE (campaign_id)",
+        "name": "auto_campaign_error_state_campaign_unique",
+        "validated": true
+      },
+      {
+        "definition": "FOREIGN KEY (last_input_data_id) REFERENCES auto_campaign_input_data(id) ON DELETE SET NULL",
+        "name": "auto_campaign_error_state_last_input_data_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "auto_campaign_error_state_pkey",
+        "validated": true
+      }
+    ],
+    "exists": true,
+    "grants": [
+      {
+        "grantee": "aka_agent_chat_api",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "aka_agent_chat_api",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "aka_agent_chat_api",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_campaign_error_state",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      }
+    ],
+    "incoming_foreign_keys": null,
+    "indexes": [
+      {
+        "indexdef": "CREATE UNIQUE INDEX auto_campaign_error_state_campaign_unique ON public.auto_campaign_error_state USING btree (campaign_id)",
+        "indexname": "auto_campaign_error_state_campaign_unique",
+        "schemaname": "public",
+        "tablename": "auto_campaign_error_state",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX auto_campaign_error_state_pkey ON public.auto_campaign_error_state USING btree (id)",
+        "indexname": "auto_campaign_error_state_pkey",
+        "schemaname": "public",
+        "tablename": "auto_campaign_error_state",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE INDEX idx_auto_campaign_error_state_campaign ON public.auto_campaign_error_state USING btree (campaign_id)",
+        "indexname": "idx_auto_campaign_error_state_campaign",
+        "schemaname": "public",
+        "tablename": "auto_campaign_error_state",
+        "tablespace": null
+      }
+    ],
+    "policies": null,
+    "sequence": {
+      "cache_size": 1,
+      "cycle": false,
+      "data_type": "bigint",
+      "increment_by": 1,
+      "last_value": 2155602,
+      "max_value": 9223372036854776000,
+      "min_value": 1,
+      "schemaname": "public",
+      "sequencename": "auto_campaign_error_state_id_seq",
+      "sequenceowner": "postgres",
+      "start_value": 1
+    },
+    "table": "auto_campaign_error_state",
+    "triggers": null
+  },
+  "schema": {
+    "access": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres"
+      ],
+      "force_rls": false,
+      "owner": "postgres",
+      "rls": false
+    },
+    "columns": [
+      {
+        "default": "nextval('auto_email_message_trackings_id_seq'::regclass)",
+        "generated": "",
+        "identity": "",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "name": "open_token",
+        "not_null": true,
+        "position": 2,
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "campaign_detail_id",
+        "not_null": false,
+        "position": 3,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "campaign_id",
+        "not_null": true,
+        "position": 4,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "account_id",
+        "not_null": false,
+        "position": 5,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "input_data_id",
+        "not_null": false,
+        "position": 6,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "recipient_email",
+        "not_null": true,
+        "position": 7,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "recipient_name",
+        "not_null": false,
+        "position": 8,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "subject",
+        "not_null": false,
+        "position": 9,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "message_id",
+        "not_null": false,
+        "position": 10,
+        "type": "text"
+      },
+      {
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "name": "open_count",
+        "not_null": true,
+        "position": 11,
+        "type": "integer"
+      },
+      {
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "name": "click_count",
+        "not_null": true,
+        "position": 12,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "sent_at",
+        "not_null": false,
+        "position": 13,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "first_opened_at",
+        "not_null": false,
+        "position": 14,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_opened_at",
+        "not_null": false,
+        "position": 15,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "first_clicked_at",
+        "not_null": false,
+        "position": 16,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_clicked_at",
+        "not_null": false,
+        "position": 17,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_open_user_agent",
+        "not_null": false,
+        "position": 18,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "last_click_user_agent",
+        "not_null": false,
+        "position": 19,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "is_delete",
+        "not_null": true,
+        "position": 20,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 21,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 22,
+        "type": "timestamp with time zone"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "FOREIGN KEY (account_id) REFERENCES auto_accounts(id) ON DELETE SET NULL",
+        "name": "auto_email_message_trackings_account_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "FOREIGN KEY (campaign_detail_id) REFERENCES auto_campaign_details(id) ON DELETE SET NULL",
+        "name": "auto_email_message_trackings_campaign_detail_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "FOREIGN KEY (campaign_id) REFERENCES auto_campaigns(id) ON DELETE CASCADE",
+        "name": "auto_email_message_trackings_campaign_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "FOREIGN KEY (input_data_id) REFERENCES auto_campaign_input_data(id) ON DELETE SET NULL",
+        "name": "auto_email_message_trackings_input_data_id_fkey",
+        "validated": true
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "auto_email_message_trackings_pkey",
+        "validated": true
+      }
+    ],
+    "exists": true,
+    "grants": [
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "anon",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "authenticated",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "postgres",
+        "grantor": "postgres",
+        "is_grantable": "YES",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "DELETE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "INSERT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "REFERENCES",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "SELECT",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "YES"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRIGGER",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "TRUNCATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      },
+      {
+        "grantee": "service_role",
+        "grantor": "postgres",
+        "is_grantable": "NO",
+        "privilege_type": "UPDATE",
+        "table_catalog": "postgres",
+        "table_name": "auto_email_message_trackings",
+        "table_schema": "public",
+        "with_hierarchy": "NO"
+      }
+    ],
+    "incoming_foreign_keys": [
+      {
+        "definition": "FOREIGN KEY (message_tracking_id) REFERENCES auto_email_message_trackings(id) ON DELETE CASCADE",
+        "name": "auto_email_link_trackings_message_tracking_id_fkey",
+        "table": "auto_email_link_trackings"
+      }
+    ],
+    "indexes": [
+      {
+        "indexdef": "CREATE UNIQUE INDEX auto_email_message_trackings_pkey ON public.auto_email_message_trackings USING btree (id)",
+        "indexname": "auto_email_message_trackings_pkey",
+        "schemaname": "public",
+        "tablename": "auto_email_message_trackings",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE INDEX idx_auto_email_message_trackings_campaign ON public.auto_email_message_trackings USING btree (campaign_id, created_at) WHERE (is_delete = false)",
+        "indexname": "idx_auto_email_message_trackings_campaign",
+        "schemaname": "public",
+        "tablename": "auto_email_message_trackings",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE INDEX idx_auto_email_message_trackings_detail ON public.auto_email_message_trackings USING btree (campaign_detail_id) WHERE (is_delete = false)",
+        "indexname": "idx_auto_email_message_trackings_detail",
+        "schemaname": "public",
+        "tablename": "auto_email_message_trackings",
+        "tablespace": null
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX idx_auto_email_message_trackings_open_token ON public.auto_email_message_trackings USING btree (open_token)",
+        "indexname": "idx_auto_email_message_trackings_open_token",
+        "schemaname": "public",
+        "tablename": "auto_email_message_trackings",
+        "tablespace": null
+      }
+    ],
+    "policies": null,
+    "sequence": {
+      "cache_size": 1,
+      "cycle": false,
+      "data_type": "bigint",
+      "increment_by": 1,
+      "last_value": 3834,
+      "max_value": 9223372036854776000,
+      "min_value": 1,
+      "schemaname": "public",
+      "sequencename": "auto_email_message_trackings_id_seq",
+      "sequenceowner": "postgres",
+      "start_value": 1
+    },
+    "table": "auto_email_message_trackings",
+    "triggers": null
+  }
+}

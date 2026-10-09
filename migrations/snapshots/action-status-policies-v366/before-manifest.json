@@ -1,0 +1,31 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09 13:17:34.239352+00",
+  "sha256": "d624d9951f715c5b704fab8c5b93e48c89f55fdc20db0276fc9a179c45dc8046",
+  "tables": {
+    "auto_account_action_status_policies": {
+      "count": 19,
+      "md5": "c6771b6d5a7c45bc93ddbbaa33167200"
+    },
+    "auto_account_actions": {
+      "count": 25,
+      "md5": "d27de13d8d0ae980808d1a0fc21f33fb"
+    },
+    "auto_automation_trigger_statuses": {
+      "count": 11,
+      "md5": "ad1cc3d8cb21d77299f3cf0f48a499d3"
+    },
+    "auto_campaign_action_detail_statuses": {
+      "count": 313,
+      "md5": "5d93174756fcb2db2d161b85135170e5"
+    },
+    "auto_error": {
+      "count": 104,
+      "md5": "17cfb317137944c66db8c56632f6e288"
+    },
+    "auto_status": {
+      "count": 40,
+      "md5": "5fdf954dcde5d04c6bfba710642076e4"
+    }
+  }
+}

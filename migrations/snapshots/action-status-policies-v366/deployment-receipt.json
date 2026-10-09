@@ -1,0 +1,149 @@
+{
+  "captured_at": "2026-10-09T13:38:10.888Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "source_commits": {
+    "akaAgent": "82e0c1f744d14b5257a6316a931e1bce13567575",
+    "akaAgentChatApi": "c3ab8888d6e27d1633a90faae3f1f8db452fce34"
+  },
+  "machine_changes": [
+    {
+      "id": "784574da214578",
+      "group": "worker",
+      "state": "started",
+      "before_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "action-status-20261009-59420f7",
+        "digest": "sha256:e9a872b0fef3e01411d83f8c85cb85788dc96c26ff7195451824e7a1831637fd"
+      },
+      "after_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "action-status-fix-20261009-c3ab888",
+        "digest": "sha256:54c952cc191e679f8b4bcf69285a335914d6aaef75dd168ab105aac55ed8345b"
+      },
+      "configuration_without_image_sha256": "d5ab8e82c0838058c348df024e12d64475c30818a6503330a92e0b7cf98e720d",
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "config_unchanged": true
+    },
+    {
+      "id": "7845747fe073e8",
+      "group": "api",
+      "state": "started",
+      "before_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "qr-admin-20261009-1638",
+        "digest": "sha256:fbf6df94f55d1b24fdcfa566c90b0df4a27c1a7083ee3f484b878acdeac16c4d"
+      },
+      "after_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "qr-admin-20261009-1638",
+        "digest": "sha256:fbf6df94f55d1b24fdcfa566c90b0df4a27c1a7083ee3f484b878acdeac16c4d"
+      },
+      "configuration_without_image_sha256": "054fdc6448ed78c5569ef4da10d5dfee4fb586a9f3e6d7b4afc42900fd2444b5",
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "config_unchanged": true
+    },
+    {
+      "id": "0803139f1d1058",
+      "group": "zalo_runtime",
+      "state": "started",
+      "before_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "media-timeout-20261005-144337-5015320",
+        "digest": "sha256:49059809646f68d8691966bf02eacf22b9c46b3ede0092dc15e1cfeada381e74"
+      },
+      "after_image": {
+        "registry": "registry.fly.io",
+        "repository": "aka-agent-chat-api",
+        "tag": "media-timeout-20261005-144337-5015320",
+        "digest": "sha256:49059809646f68d8691966bf02eacf22b9c46b3ede0092dc15e1cfeada381e74"
+      },
+      "configuration_without_image_sha256": "6a51c2017f4e1a32429f9aa0c4ca040dffa1caeb0db71ca6e490f4cbb972276e",
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 1,
+        "memory_mb": 1024
+      },
+      "config_unchanged": true
+    }
+  ],
+  "worker_stop": {
+    "signal": "SIGTERM",
+    "target": "actual Node worker PID 679",
+    "signal_at": "2026-10-09T13:33:44.412Z",
+    "exit_at": "2026-10-09T13:33:45.364509197Z",
+    "exit_code": 0,
+    "restarted_by_fly": false,
+    "overlap": false
+  },
+  "worker_start": "2026-10-09T13:35:24.924540352Z",
+  "worker_observation": [
+    {
+      "timestamp": "2026-10-09T13:36:28.740607269Z",
+      "event": "zalo_runtime_inbox_worker_stats",
+      "intervalStartedAt": "2026-10-09T13:35:28.568Z",
+      "intervalEndedAt": "2026-10-09T13:36:28.739Z",
+      "normalize": {
+        "claimed": 956,
+        "completed": 954,
+        "failed": 2,
+        "claimLost": 0,
+        "rejected": 0,
+        "infrastructureErrors": 0
+      },
+      "project": {
+        "claimed": 942,
+        "completed": 942,
+        "failed": 0,
+        "claimLost": 0,
+        "rejected": 0,
+        "infrastructureErrors": 0
+      },
+      "cleanup": {
+        "runs": 28,
+        "deleted": 975,
+        "infrastructureErrors": 0
+      },
+      "backlog": {
+        "rawPending": 1,
+        "projectPending": 0,
+        "retryScheduled": 0
+      }
+    }
+  ],
+  "compiled_worker_sha256": {
+    "packages/database/dist/campaignActionResults.js": "e31becf0d909f4706a64cb0f05fb969c5600aa6b8951d57d0751ad0d9d9a66e6",
+    "packages/database/dist/result-policy/actionStatusPolicy.js": "78b827b603efb8ba03a75a42b7846a0ef9fb70d3abcf0816590fc7bcee59d1e5",
+    "apps/system-worker/dist/zaloCampaignExecutor.js": "8ffb99204674286bdb50a791e84d7a8c6dd8945f56ef124aeaef72a21f89b95d"
+  },
+  "compiled_remote_matches_local": true,
+  "http_checks": [
+    {
+      "url": "https://aka-agent-chat-api.fly.dev/health/live",
+      "status": 200
+    },
+    {
+      "url": "https://agent.akabiz.net/healthz",
+      "status": 200
+    }
+  ],
+  "release_scope": {
+    "worker_only": true,
+    "pool_and_machine_config_unchanged": true,
+    "desktop_packaged_server": "local builds only; installers not published",
+    "source_branches": "local commits; not pushed or merged"
+  },
+  "rollback_image": "registry.fly.io/aka-agent-chat-api:action-status-20261009-59420f7@sha256:e9a872b0fef3e01411d83f8c85cb85788dc96c26ff7195451824e7a1831637fd"
+}

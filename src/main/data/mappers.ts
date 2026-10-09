@@ -160,6 +160,9 @@ export function mapAutoAccountActionStatusFromDB(row: Record<string, unknown>): 
 export function mapAutoErrorPolicyFromDB(row: Record<string, unknown>): AutoErrorPolicy {
   const disableActionMode = String(row.disable_action_mode || '').trim()
   return {
+    detailStatusId: (row.detail_status_id as number | null | undefined) ?? null,
+    detailMode: (row.detail_mode as AutoErrorPolicy['detailMode']) ?? null,
+    inputEffect: (row.input_effect as AutoErrorPolicy['inputEffect']) ?? null,
     id: row.id as number,
     errorType: row.error_type as string,
     errorName: row.error_name as string,
@@ -572,6 +575,14 @@ export function mapMediaGroupFromDB(row: Record<string, unknown>): MediaGroup {
 
 export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignDetail {
   return {
+    statusPresentation: (row.status_presentation as CampaignDetail['statusPresentation']) ?? null,
+    subStatusPresentation: (row.sub_status_presentation as CampaignDetail['subStatusPresentation']) ?? null,
+    statusId: (row.status_id as number | null | undefined) ?? null,
+    subStatusId: (row.sub_status_id as number | null | undefined) ?? null,
+    actionStatusPolicyId: (row.action_status_policy_id as number | null | undefined) ?? null,
+    reportGroup: (row.report_group as CampaignDetail['reportGroup']) ?? null,
+    policySnapshot: (row.policy_snapshot as CampaignDetail['policySnapshot']) ?? null,
+    resultKey: (row.result_key as string | null | undefined) ?? null,
     zaloEngagementApplicable: row.zalo_engagement_applicable as boolean | undefined,
     zaloEngagement: row.zalo_engagement as CampaignDetail['zaloEngagement'],
     id: row.id as number,

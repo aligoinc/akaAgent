@@ -9,6 +9,7 @@ const source = ts.createSourceFile('scheduler.ts', sourceText, ts.ScriptTarget.L
 const schedulerClass = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'CampaignScheduler')
 const compile = code => ts.transpileModule(code, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText
 function methods(names, globals = {}) {
+  globals = { managesActionResult: () => false, managedTargetEffects: () => null, ...globals }
   const code = names.map(name => {
     const node = schedulerClass.members.find(n => ts.isMethodDeclaration(n) && n.name.getText(source) === name)
     assert(node, name)
@@ -20,7 +21,8 @@ const formatModule = {exports: {}}
 new Function('exports', compile(fs.readFileSync(path.join(root, 'src/shared/campaignLogFormat.ts'), 'utf8')))(formatModule.exports)
 const Harness = methods([
   'recordZaloShareActionDetail', 'formatZaloProgressLog', 'logCampaignProgress',
-  'createMilestoneSummary', 'getZaloActionDetailFromStep', 'logZaloMessagePhoneMilestones'
+  'createMilestoneSummary', 'getZaloActionDetailFromStep', 'getHelperResultGuards', 'applyHelperMilestoneControls',
+  'logHelperMilestoneProgress', 'logZaloMilestoneContext', 'pushZaloMilestoneToSms', 'logZaloMessagePhoneMilestones'
 ], {formatCampaignLogMessage: formatModule.exports.formatCampaignLogMessage, ZALO_FIND_PHONE_ACTION_CODE: 'zalo_find_phone_user'})
 
 async function verifyStopNotes() {

@@ -1,0 +1,20 @@
+{
+  "at": "2026-10-09T12:50:02.932Z",
+  "checks": [
+    "restore exact row without advancing sequence",
+    "original rollback reproduces P2 after independent insert",
+    "fixed rollback preserves independent row and sequence",
+    "sequence advance from rolled-back insert also permitted",
+    "occupied ID cannot be overwritten",
+    "occupied code cannot be overwritten",
+    "occupied status value cannot be overwritten",
+    "sequence definition change still rejected",
+    "table column change still rejected",
+    "index change still rejected",
+    "restored data checksum still enforced",
+    "permission change still rejected"
+  ],
+  "rollback_sha256": "a70b6d91737897b5cb7fcf9b8cf692143b432532c8ed5da080d8758436eb070e",
+  "original_migration_sha256": "30f9bd4977ff1ea3331a11d5eeeba6e65dab04bd8f1b0ce9f4aa2a13d7f3733b",
+  "production_touched": false
+}

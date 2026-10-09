@@ -15,7 +15,8 @@ function functions(file, names, globals = {}, text = read(file)) {
   return new Function(...Object.keys(globals), compile(code) + ';return {' + names.join(',') + '}')(...Object.values(globals))
 }
 function schedulerMethods(names, globals) {
-  globals = { CAMPAIGN_MEDIA_TIMEOUT_CODE: 'campaign_media_timeout', ...globals }
+  globals = { CAMPAIGN_MEDIA_TIMEOUT_CODE: 'campaign_media_timeout', managesActionResult: () => false,
+    managedTargetEffects: () => null, ...globals }
   const file = 'src/main/services/campaignScheduler.ts'
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true)
   const c = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'CampaignScheduler')
@@ -80,7 +81,8 @@ async function main() {
   const Harness = schedulerMethods([
     'resolvePolicyActionDisableContext','renderPolicyMessage','renderZaloPolicyCampaignNote','renderZaloPolicyLog',
     'applyZaloPolicySideEffects','applyRuntimeErrorPolicy','createZaloErrorDetail','zaloAddGroupMember',
-    'checkActionDisabled','createMilestoneSummary','logZaloMessagePhoneMilestones'
+    'checkActionDisabled','createMilestoneSummary','getHelperResultGuards','applyHelperMilestoneControls',
+    'logHelperMilestoneProgress','logZaloMilestoneContext','pushZaloMilestoneToSms','logZaloMessagePhoneMilestones'
   ], {IPC_EVENTS:{ACCOUNT_STATUS_UPDATED:'updated'}, ZALO_API_BUSINESS_FAILED_ERROR_CODE:'err_zalo_api_business_failed',
       ZALO_ADD_GROUP_MEMBER_ACTION_ID:'zalo_add_group_member'})
   let campaignWrites = []
@@ -136,7 +138,7 @@ async function main() {
     return q
   }})
   const {getZaloErrorPolicyByCode: lookup}=functions('src/main/data/repositories/errorPolicyRepository.ts',
-    ['getZaloErrorPolicyByCode'],{client:lookupClient,mapAutoErrorPolicyFromDB:map})
+    ['getZaloErrorPolicyByCode'],{client:lookupClient,mapAutoErrorPolicyFromDB:map,currentActionResultErrors:()=>null})
   h.getZaloPolicyByErrorCode=lookup
   assert.equal(desired.length,18)
   const seen=new Set()

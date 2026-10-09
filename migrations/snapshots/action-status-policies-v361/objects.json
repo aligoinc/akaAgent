@@ -1,0 +1,31 @@
+{
+  "version": 361,
+  "new_table": "auto_account_action_status_policies",
+  "new_functions": [
+    "aka_agent_guard_result_catalog_v361()",
+    "aka_agent_guard_detail_result_v361()",
+    "aka_agent_guard_result_status_v361()"
+  ],
+  "columns": {
+    "auto_status": [
+      "status_value",
+      "color"
+    ],
+    "auto_error": [
+      "detail_status_id",
+      "detail_mode",
+      "input_effect"
+    ],
+    "auto_campaign_details": [
+      "status_id",
+      "sub_status_id",
+      "action_status_policy_id",
+      "report_group",
+      "policy_snapshot",
+      "result_key"
+    ],
+    "auto_automation_trigger_statuses": [
+      "sub_status_ids"
+    ]
+  }
+}

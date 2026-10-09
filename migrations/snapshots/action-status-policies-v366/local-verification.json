@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-09T13:34:17.125Z",
+  "checks": {
+    "desktop_server_sql": 78,
+    "chat_managed_sql": 11,
+    "chat_executor_existing": 237,
+    "shared_policy": 11,
+    "managed_adapters": 22
+  },
+  "commands": [
+    "npx tsc --noEmit -p tsconfig.node.json",
+    "npx tsc --noEmit -p tsconfig.web.json",
+    "npm run build",
+    "npm run build:server",
+    "Chat: npm run build",
+    "node scripts/campaign-media-timeout-smoke-test.cjs",
+    "node scripts/zalo-partial-send-log-smoke-test.cjs",
+    "node scripts/zalo-rich-share-smoke-test.cjs",
+    "node scripts/zalo-policy-progress-smoke-test.cjs"
+  ],
+  "external_operations": 0,
+  "sources": {
+    "src/shared/actionStatusPolicy.ts": "5ec0791f7f4e969e3bdc733a2d4fee0efffd5bafbfad0508b056e01a66eb21e9",
+    "src/main/services/actionResultRuntime.ts": "384d7fdb4cae7a284864866df2d5c0fcff7b78c85be48253134afac95989baf3",
+    "src/main/services/campaignScheduler.ts": "bb849b973b09fe41156291d0125e68e672cc4de91c6f0f700f9d9cb3d1da9234",
+    "src/main/data/repositories/emailTrackingRepository.ts": "c26173918307c4103ac44b4e338cc1fe2951ceb1408ae6d62e46576cc4fa9fac",
+    "scripts/action-status-fixes-smoke.cjs": "a0a4e7de6eb3d22580f12668c481bf22690c1973b654285bb0bcf4be41ff3070"
+  }
+}

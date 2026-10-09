@@ -1,0 +1,649 @@
+{
+  "blocks": [
+    {
+      "md5": "21335b279cb31cfb4f382d0a1185e59a",
+      "row": {
+        "category": "facebook",
+        "code": "if (vars.groupPostSkippedByKnownApproval === true || vars.skipGroupPostByKnownApproval === true) {\n  const isPending = vars.groupPostRequiresPostApproval === true;\n  vars.groupPostIsPending = isPending;\n  return {\n    isPending,\n    postUrl: '',\n    skippedPost: true,\n    source: vars.groupPostApprovalSource || 'account_contact',\n    pendingCheckConclusive: true\n  };\n}\n\nconst groupPostUrl = String(vars.groupPostPostUrl || input.postUrl || input.link || '').trim();\nif (groupPostUrl.includes('/pending_posts/')) {\n  vars.groupPostIsPending = true;\n  return {\n    isPending: true,\n    postUrl: groupPostUrl,\n    pendingCheckConclusive: true,\n    source: 'post_url'\n  };\n}\n\nfunction extractGroupKey(value) {\n  const raw = String(value || '').trim();\n  if (!raw) return '';\n\n  const cleaned = raw.replace(/^\\/+|\\/+$/g, '');\n  if (/^groups\\//i.test(cleaned)) {\n    const parts = cleaned.split('/').filter(Boolean);\n    return parts[1] || '';\n  }\n\n  try {\n    const url = new URL(/^https?:\\/\\//i.test(raw) ? raw : 'https://' + raw);\n    const parts = url.pathname.split('/').filter(Boolean);\n    const groupIdx = parts.findIndex(part => part.toLowerCase() === 'groups');\n    if (groupIdx >= 0 && parts[groupIdx + 1]) return parts[groupIdx + 1];\n  } catch {}\n\n  if (/^[a-zA-Z0-9._-]+$/.test(cleaned)) return cleaned;\n  return '';\n}\n\nfunction buildPendingContentUrl() {\n  const sources = [\n    vars.targetUrl,\n    vars.inputDataUid,\n    input.targetUrl,\n    groupPostUrl,\n    vars.groupPostRawPostLink,\n    input.rawPostLink\n  ];\n\n  for (const source of sources) {\n    const groupKey = extractGroupKey(source);\n    if (groupKey) {\n      return 'https://www.facebook.com/groups/' + encodeURIComponent(groupKey) + '/my_pending_content';\n    }\n  }\n  return '';\n}\n\nconst pendingContentUrl = buildPendingContentUrl();\nif (!pendingContentUrl) {\n  vars.groupPostIsPending = false;\n  helpers.log('Không dựng được URL my_pending_content để kiểm tra bài chờ duyệt');\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl: '',\n    pendingContentLinks: [],\n    pendingCheckConclusive: false,\n    source: 'missing_pending_content_url'\n  };\n}\n\nconst rawSelector = await helpers.element('GroupPostRawPostLink');\nconst linkSelector = await helpers.element('GroupPostPostLink');\n\nhelpers.log('Đang kiểm tra trang bài chờ duyệt: ' + pendingContentUrl);\n\nlet check;\ntry {\n  check = await helpers.checkGroupPendingContent({\n    url: pendingContentUrl,\n    rawSelector,\n    linkSelector,\n    timeoutMs: 18000\n  });\n} catch (err) {\n  const message = err && err.message ? String(err.message) : String(err);\n  vars.groupPostIsPending = false;\n  helpers.log('Không kiểm tra được trang bài chờ duyệt: ' + message);\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl,\n    pendingContentLinks: [],\n    pendingCheckConclusive: false,\n    source: 'pending_content_error',\n    error: message\n  };\n}\n\nconst links = Array.isArray(check && check.links)\n  ? check.links.map(link => String(link || '').trim()).filter(Boolean)\n  : [];\nconst conclusive = check && check.conclusive === true;\n\nif (!conclusive) {\n  const message = check && check.error ? String(check.error) : 'không kết luận được';\n  vars.groupPostIsPending = false;\n  helpers.log('Không kết luận được trạng thái chờ duyệt từ my_pending_content: ' + message);\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl,\n    pendingContentLinks: links,\n    pendingCheckConclusive: false,\n    source: 'pending_content_inconclusive',\n    error: message\n  };\n}\n\nconst isPending = links.length > 0;\nvars.groupPostIsPending = isPending;\n\nhelpers.log(isPending\n  ? 'Phát hiện bài trong trang chờ duyệt của group'\n  : 'Không thấy bài trong trang chờ duyệt của group');\n\nreturn {\n  isPending,\n  postUrl: groupPostUrl,\n  pendingContentUrl,\n  pendingContentLinks: links,\n  pendingCheckConclusive: true,\n  source: isPending ? 'pending_content' : 'pending_content_empty'\n};",
+        "config_schema": [],
+        "created_at": "2026-04-26T17:29:27.70052+00:00",
+        "default_config": {},
+        "description": "Phát hiện bài group chờ duyệt bằng link hoặc trang my_pending_content trên page phụ",
+        "icon": "AlertCircle",
+        "id": 31,
+        "is_builtin": true,
+        "kind": "js",
+        "name": "fb_detect_pending_post",
+        "organization_id": 1,
+        "output_schema": [
+          {
+            "label": "Bài có đang chờ duyệt không",
+            "name": "isPending",
+            "type": "boolean"
+          },
+          {
+            "label": "Post URL",
+            "name": "postUrl",
+            "type": "string"
+          },
+          {
+            "label": "Đã bỏ qua đăng bài",
+            "name": "skippedPost",
+            "type": "boolean"
+          },
+          {
+            "label": "Nguồn trạng thái",
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "label": "URL trang bài chờ duyệt",
+            "name": "pendingContentUrl",
+            "type": "string"
+          },
+          {
+            "label": "Link tìm thấy trong trang bài chờ duyệt",
+            "name": "pendingContentLinks",
+            "type": "json"
+          },
+          {
+            "label": "Đã kết luận được từ trang pending",
+            "name": "pendingCheckConclusive",
+            "type": "boolean"
+          },
+          {
+            "label": "Lỗi kiểm tra pending",
+            "name": "error",
+            "type": "string"
+          }
+        ],
+        "staff_id": 1,
+        "system_type": null,
+        "updated_at": "2026-07-06T10:53:49.826+00:00"
+      }
+    },
+    {
+      "md5": "930a3a9668e680bbb6f3f15b2951d073",
+      "row": {
+        "category": "facebook",
+        "code": "\nconst submitButton = await helpers.element('GroupPostSubmitButtonAfterClick');\nconst frequencyLimitError = await helpers.element('GroupPostFrequencyLimitError');\nconst publishMedia = Array.isArray(vars.images) ? vars.images : []\nconst publishHasVideo = publishMedia.some(path => /^data:video\\//i.test(String(path || '')) || /\\.(3g2|3gp|avi|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)(?:[?#].*)?$/i.test(String(path || '')))\nconst publishTimeoutMs = publishHasVideo ? 180000 : 60000\nconst publishStarted = Number(vars.facebookPostPublishStartedAt) || Date.now();\nlet posted = false;\nlet message = '';\n\nasync function hasVisibleElement(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n\n    function isVisible(el) {\n      if (!el) return false;\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;\n      const rect = el.getBoundingClientRect();\n      return rect.width > 0 && rect.height > 0;\n    }\n\n    function xpathAll(xpath) {\n      const out = [];\n      if (!xpath) return out;\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n\n    return xpathAll(selector).some(isVisible);\n  `, selector);\n}\n\nwhile (true) {\n  if (signal.aborted) throw new Error('Đã dừng chờ xác nhận đăng bài');\n  if (!await hasVisibleElement(submitButton)) {\n    posted = true;\n    message = 'Form đăng bài đã đóng';\n    break;\n  }\n  const remainingMs = publishTimeoutMs - (Date.now() - publishStarted);\n  if (remainingMs <= 0) break;\n  await helpers.sleep(Math.min(500, remainingMs), signal);\n}\nif (!posted) {\n  const hasFrequencyLimitError = await hasVisibleElement(frequencyLimitError);\n  if (hasFrequencyLimitError) {\n    message = 'Facebook báo giới hạn tần suất bạn đăng bài';\n    vars.groupPostSubmitted = false;\n    vars.groupPostFrequencyLimitError = true;\n    helpers.log(message);\n    throw new Error(message);\n  }\n  message = 'Form đăng bài chưa đóng sau ' + (publishTimeoutMs / 1000) + ' giây';\n}\n\nvars.groupPostSubmitted = posted;\nif (!posted) helpers.log(message);\n\nreturn {\n  ok: posted,\n  posted,\n  submitClosed: posted,\n  publishTimeoutMs,\n  message\n};\n",
+        "config_schema": [],
+        "created_at": "2026-05-18T07:27:39.438454+00:00",
+        "default_config": {},
+        "description": "Xác nhận form đăng bài group đã đóng sau khi click Post/Đăng",
+        "icon": "CheckCircle",
+        "id": 2624,
+        "is_builtin": true,
+        "kind": "js",
+        "name": "fb_verify_group_post_form_closed",
+        "organization_id": null,
+        "output_schema": [
+          {
+            "label": "Submit OK",
+            "name": "ok",
+            "type": "boolean"
+          },
+          {
+            "label": "Đã đăng",
+            "name": "posted",
+            "type": "boolean"
+          },
+          {
+            "label": "Form đã đóng",
+            "name": "submitClosed",
+            "type": "boolean"
+          },
+          {
+            "label": "Thông báo",
+            "name": "message",
+            "type": "string"
+          }
+        ],
+        "staff_id": null,
+        "system_type": null,
+        "updated_at": "2026-09-13T15:28:51.393417+00:00"
+      }
+    },
+    {
+      "md5": "2f0cd602c45bc32b9789d2bf5bb12cb3",
+      "row": {
+        "category": "facebook",
+        "code": "\nconst rawSelector = await helpers.element('GroupPostRawPostLink');\nconst linkSelector = await helpers.element('GroupPostPostLink');\n\nconst result = await page.evaluate(`\n  const rawSelector = __args[0];\n  const linkSelector = __args[1];\n\n  function delay(ms) {\n    return new Promise(resolve => setTimeout(resolve, ms));\n  }\n\n  function xpathAll(xpath) {\n    const out = [];\n    if (!xpath) return out;\n    try {\n      const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      for (let i = 0; i < result.snapshotLength; i++) {\n        const item = result.snapshotItem(i);\n        if (item) out.push(item);\n      }\n    } catch {}\n    return out;\n  }\n\n  function hrefOf(el) {\n    return el ? (el.href || el.getAttribute('href') || '') : '';\n  }\n\n  function cleanPostHref(href) {\n    if (!href) return '';\n    try {\n      const url = new URL(href, location.href);\n      if (/^(m|mbasic|mobile)\\\\.facebook\\\\.com$/i.test(url.hostname)) {\n        url.hostname = 'www.facebook.com';\n      }\n      url.hash = '';\n      Array.from(url.searchParams.keys()).forEach(key => {\n        if (\n          key.startsWith('__') ||\n          key === 'mibextid' ||\n          key === 'ref' ||\n          key === 'locale' ||\n          key === 'comment_id' ||\n          key === 'reply_comment_id'\n        ) {\n          url.searchParams.delete(key);\n        }\n      });\n      return url.href;\n    } catch {\n      return String(href || '').trim();\n    }\n  }\n\n  function isCommentPermalink(href) {\n    if (!href) return false;\n    try {\n      const url = new URL(href, location.href);\n      if (url.searchParams.has('comment_id') || url.searchParams.has('reply_comment_id')) return true;\n      const rawQuery = String(url.search || '').toLowerCase();\n      return rawQuery.includes('comment_id=') || rawQuery.includes('reply_comment_id=');\n    } catch {\n      const raw = String(href || '').toLowerCase();\n      return raw.includes('comment_id=') || raw.includes('reply_comment_id=');\n    }\n  }\n\n  function isPostPermalink(href) {\n    if (!href || isCommentPermalink(href)) return false;\n    return href.includes('/pending_posts/') || href.includes('/posts/') || href.includes('story_fbid=');\n  }\n\n  function simulateFocusin(element) {\n    if (!element) return;\n    try {\n      element.scrollIntoView({ block: 'center', inline: 'nearest' });\n    } catch {}\n    try {\n      element.dispatchEvent(new FocusEvent('focusin', {\n        view: window,\n        bubbles: true,\n        cancelable: true\n      }));\n    } catch {\n      try { element.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true })); } catch {}\n    }\n  }\n\n  const rawEl = xpathAll(rawSelector)[0] || null;\n  const rawPostLink = rawEl ? cleanPostHref(hrefOf(rawEl)) : '';\n  if (rawEl) {\n    simulateFocusin(rawEl);\n    await delay(700);\n  }\n\n  const postUrl = xpathAll(linkSelector)\n    .map(el => cleanPostHref(hrefOf(el)))\n    .filter(Boolean)\n    .filter(isPostPermalink)[0] || '';\n\n  return { rawPostLink, postUrl };\n`, rawSelector, linkSelector);\n\nconst rawPostLink = String(result && result.rawPostLink ? result.rawPostLink : '').trim();\nconst postUrl = String(result && result.postUrl ? result.postUrl : '').trim();\nvars.groupPostRawPostLink = rawPostLink;\nvars.groupPostPostUrl = postUrl;\nhelpers.log(postUrl ? 'Đã lấy được link bài post' : 'Chưa lấy được link bài post sau khi đăng');\n\nreturn {\n  ok: postUrl.length > 0,\n  rawPostLink,\n  postUrl,\n  link: postUrl\n};\n",
+        "config_schema": [],
+        "created_at": "2026-05-18T07:27:39.438454+00:00",
+        "default_config": {},
+        "description": "Lấy link bài group đầu tiên sau khi đăng bằng raw link + focusin",
+        "icon": "Link",
+        "id": 2626,
+        "is_builtin": true,
+        "kind": "js",
+        "name": "fb_get_first_group_post_link",
+        "organization_id": null,
+        "output_schema": [
+          {
+            "label": "Có link",
+            "name": "ok",
+            "type": "boolean"
+          },
+          {
+            "label": "Raw post link",
+            "name": "rawPostLink",
+            "type": "string"
+          },
+          {
+            "label": "Post URL",
+            "name": "postUrl",
+            "type": "string"
+          },
+          {
+            "label": "Link",
+            "name": "link",
+            "type": "string"
+          }
+        ],
+        "staff_id": null,
+        "system_type": null,
+        "updated_at": "2026-05-18T07:27:39.438454+00:00"
+      }
+    }
+  ],
+  "captured_at": "2026-10-09 12:13:23.054351+00",
+  "incoming_fks": [
+    {
+      "definition": "FOREIGN KEY (status_id) REFERENCES auto_status(id) ON DELETE SET NULL",
+      "name": "auto_campaign_action_detail_statuses_status_id_fkey",
+      "table": "auto_campaign_action_detail_statuses"
+    },
+    {
+      "definition": "FOREIGN KEY (status_id) REFERENCES auto_status(id) ON DELETE RESTRICT",
+      "name": "auto_account_action_status_policies_status_id_fkey",
+      "table": "auto_account_action_status_policies"
+    },
+    {
+      "definition": "FOREIGN KEY (detail_status_id) REFERENCES auto_status(id) ON DELETE RESTRICT",
+      "name": "auto_error_detail_status_id_fkey",
+      "table": "auto_error"
+    },
+    {
+      "definition": "FOREIGN KEY (status_id) REFERENCES auto_status(id) ON DELETE RESTRICT",
+      "name": "auto_detail_status_fk",
+      "table": "auto_campaign_details"
+    },
+    {
+      "definition": "FOREIGN KEY (sub_status_id) REFERENCES auto_status(id) ON DELETE RESTRICT",
+      "name": "auto_detail_sub_status_fk",
+      "table": "auto_campaign_details"
+    }
+  ],
+  "migrations": [
+    {
+      "name": "migration_v364_action_status_catalog_grants",
+      "version": "20261009115214"
+    },
+    {
+      "name": "migration_v363_action_status_writer",
+      "version": "20261009114836"
+    },
+    {
+      "name": "migration_v362_action_status_readers",
+      "version": "20261009114725"
+    },
+    {
+      "name": "migration_v361_action_status_policy_catalog",
+      "version": "20261009102331"
+    },
+    {
+      "name": "migration_v360_facebook_friend_cancel_commit",
+      "version": "20261009025028"
+    },
+    {
+      "name": "migration_v359_facebook_friend_statuses",
+      "version": "20261009022202"
+    },
+    {
+      "name": "migration_v358_zalo_receiver_blocks_no_quota",
+      "version": "20261009014334"
+    },
+    {
+      "name": "migration_v357_facebook_waiting_message_notices",
+      "version": "20261008043042"
+    },
+    {
+      "name": "migration_v356_facebook_message_waiting_limit_24h",
+      "version": "20261008040758"
+    },
+    {
+      "name": "migration_v355_facebook_message_waiting_limit",
+      "version": "20261008035803"
+    },
+    {
+      "name": "migration_v354_zalo_server_deleted_tags",
+      "version": "20261007031753"
+    },
+    {
+      "name": "migration_v353_zalo_server_campaign_tag_limits",
+      "version": "20261007031133"
+    }
+  ],
+  "statuses": [
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_success",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone hành động thành công.",
+      "flatform_type": "all",
+      "id": 20,
+      "is_active": true,
+      "is_default": true,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Thành công",
+      "sort_order": 10,
+      "status_key": "success",
+      "status_value": "thành công",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_failed",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone bị từ chối hoặc không đạt nghiệp vụ.",
+      "flatform_type": "all",
+      "id": 21,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Thất bại",
+      "sort_order": 20,
+      "status_key": "failed",
+      "status_value": "thất bại",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_error",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-06-05T02:49:35.117406+00:00",
+      "description": "Milestone lỗi kỹ thuật hoặc exception.",
+      "flatform_type": "all",
+      "id": 22,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Lỗi",
+      "sort_order": 30,
+      "status_key": "error",
+      "status_value": "lỗi",
+      "updated_at": "2026-06-05T02:49:35.117406+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_clicked",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Email tracking ghi nhận click liên kết; không khẳng định người thật hoặc chuyển đổi. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 23,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã click",
+      "sort_order": 40,
+      "status_key": "clicked",
+      "status_value": "đã click",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_alias_changed",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Chuỗi trạng thái đổi tên có trong danh mục lịch sử; giữ riêng, không gộp với Thành công. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 24,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã đổi tên",
+      "sort_order": 50,
+      "status_key": "alias_changed",
+      "status_value": "đã đổi tên",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_tag_applied",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Chuỗi trạng thái gắn tag có trong danh mục lịch sử; giữ riêng, không gộp với Thành công. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 25,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã gắn tag",
+      "sort_order": 60,
+      "status_key": "tag_applied",
+      "status_value": "đã gắn tag",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_sent",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "SMS có tín hiệu đã gửi; có thể cập nhật tiếp thành đã nhận hoặc thất bại. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 26,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã gửi",
+      "sort_order": 70,
+      "status_key": "sent",
+      "status_value": "đã gửi",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_invitation_sent",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Đã có hoặc đã ghi nhận lời mời theo hành động; không xác nhận đã chấp nhận lời mời. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 27,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã gửi lời mời",
+      "sort_order": 80,
+      "status_key": "invitation_sent",
+      "status_value": "đã gửi lời mời",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_friend_request_sent",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Chuỗi trạng thái kết bạn lịch sử; giữ riêng với Đã gửi lời mời và Đã là bạn bè. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 28,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã gửi lời mời kết bạn",
+      "sort_order": 90,
+      "status_key": "friend_request_sent",
+      "status_value": "đã gửi lời mời kết bạn",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_message_sent",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Chuỗi trạng thái nhắn tin lịch sử; không suy ra đã nhận/đã xem hoặc đổi thành Thành công. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 29,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã gửi tin nhắn",
+      "sort_order": 100,
+      "status_key": "message_sent",
+      "status_value": "đã gửi tin nhắn",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_already_friend",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Quan hệ bạn bè đã tồn tại; không có nghĩa vừa gửi một lời mời mới. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 30,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã là bạn bè",
+      "sort_order": 110,
+      "status_key": "already_friend",
+      "status_value": "đã là bạn bè",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_already_member",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Đối tượng đã là thành viên group; không chứng minh vừa thêm mới. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 31,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã là thành viên",
+      "sort_order": 120,
+      "status_key": "already_member",
+      "status_value": "đã là thành viên",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_received",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "SMS có tín hiệu nhận/phát theo tích hợp; không chứng minh đã đọc. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 32,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã nhận",
+      "sort_order": 130,
+      "status_key": "received",
+      "status_value": "đã nhận",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_joined",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Tài khoản đã tham gia group, có thể là kết quả kiểm tra trước thao tác. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 33,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Đã tham gia",
+      "sort_order": 140,
+      "status_key": "joined",
+      "status_value": "đã tham gia",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_viewed",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Email tracking ghi nhận mở/xem; vẫn có thể ghi nhận click sau đó, không chứng minh người thật đã đọc. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 34,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã xem",
+      "sort_order": 150,
+      "status_key": "viewed",
+      "status_value": "đã xem",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_calling",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Cuộc gọi đang quay số/thực hiện; là trạng thái trung gian trước kết quả cuộc gọi. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 35,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đang gọi",
+      "sort_order": 160,
+      "status_key": "calling",
+      "status_value": "đang gọi",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_not_found",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Không tìm thấy đối tượng theo phép kiểm tra của hành động; không suy ra đối tượng không tồn tại trên toàn nền tảng. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 36,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Không tồn tại",
+      "sort_order": 170,
+      "status_key": "not_found",
+      "status_value": "không tồn tại",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_tag_not_found",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Không tìm thấy tag Zalo cần gắn; không đồng nghĩa gắn tag thành công. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 37,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Tag không tồn tại",
+      "sort_order": 180,
+      "status_key": "tag_not_found",
+      "status_value": "tag không tồn tại",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_invalid_parameter",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-06T03:23:35.476313+00:00",
+      "description": "Với đổi tên Zalo: tên mới sau render template rỗng; không tự suy ra thành công từ helper ok=true. Trạng thái chuẩn component_type=campaign_detail, liên kết theo tên không phân biệt hoa/thường. Mỗi giá trị có ID riêng; không gộp alias hoặc suy ra retry/khóa tài khoản. is_terminal chỉ mô tả kết quả milestone, không điều khiển scheduler. Bổ sung v349 cho agent và danh mục Automation.",
+      "flatform_type": "all",
+      "id": 38,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Tham số không hợp lệ",
+      "sort_order": 190,
+      "status_key": "invalid_parameter",
+      "status_value": "tham số không hợp lệ",
+      "updated_at": "2026-10-06T03:23:35.476313+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_skipped",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-09T10:23:33.056576+00:00",
+      "description": "Không thực hiện một thao tác mới. Policy trạng thái chính quyết định cách đếm.",
+      "flatform_type": "all",
+      "id": 51,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": true,
+      "name": "Bỏ qua",
+      "sort_order": 200,
+      "status_key": "skipped",
+      "status_value": "bỏ qua",
+      "updated_at": "2026-10-09T10:23:33.056576+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_post_pending",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-09T10:23:33.056576+00:00",
+      "description": "Quan sát sau đăng bài thành công: có bằng chứng đang chờ duyệt. Khi dùng làm subStatusCode chỉ phục vụ báo cáo/Automation, không thay policy chính.",
+      "flatform_type": "all",
+      "id": 52,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Chờ duyệt bài",
+      "sort_order": 210,
+      "status_key": "post_pending",
+      "status_value": "chờ duyệt bài",
+      "updated_at": "2026-10-09T10:23:33.056576+00:00"
+    },
+    {
+      "can_set_manually": false,
+      "code": "campaign_detail_post_visible",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-09T10:23:33.056576+00:00",
+      "description": "Quan sát xác nhận bài đã hiển thị; không suy ra từ việc chưa phát hiện chờ duyệt. Khi dùng làm subStatusCode không thay policy chính.",
+      "flatform_type": "all",
+      "id": 53,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã hiển thị bài",
+      "sort_order": 220,
+      "status_key": "post_visible",
+      "status_value": "đã hiển thị bài",
+      "updated_at": "2026-10-09T10:23:33.056576+00:00"
+    }
+  ],
+  "visible_workflows": null
+}

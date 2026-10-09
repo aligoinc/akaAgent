@@ -1,0 +1,15 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "before_sha256": "a2efbc8809e11be00b6e610a5a33158c499dff231e06d547ddf1ed5a247896ed",
+  "config_sha256": "432a723c96eeb30884be5c4b777e9f4dee424e6e73bb25e6fa7a20bf7db6c8ed",
+  "new_functions": [
+    "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)",
+    "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)",
+    "aka_agent_guard_result_policy_identity_v363()"
+  ],
+  "absent": {
+    "aka_agent_guard_result_policy_identity_v363()": true,
+    "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)": true,
+    "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)": true
+  }
+}

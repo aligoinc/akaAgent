@@ -1,0 +1,86 @@
+[
+  {
+    "before": {
+      "canonical": "{\"id\": 10, \"is_active\": true, \"is_delete\": false, \"status_id\": 36, \"created_at\": \"2026-10-09T10:23:33.056576+00:00\", \"updated_at\": \"2026-10-09T10:23:33.056576+00:00\", \"action_code\": \"fb_group_invite\", \"description\": \"Không tìm thấy đối tượng để mời nhóm Facebook được báo cáo bỏ qua theo report hiện tại.\", \"input_effect\": \"complete\", \"report_group\": \"skipped\", \"bad_target_effect\": \"ignore\", \"reset_error_streak\": false, \"counts_toward_limit\": false}",
+      "md5": "56eece03f6c69517a7f9e55b1f6cbcb3",
+      "row": {
+        "action_code": "fb_group_invite",
+        "bad_target_effect": "ignore",
+        "counts_toward_limit": false,
+        "created_at": "2026-10-09T10:23:33.056576+00:00",
+        "description": "Không tìm thấy đối tượng để mời nhóm Facebook được báo cáo bỏ qua theo report hiện tại.",
+        "id": 10,
+        "input_effect": "complete",
+        "is_active": true,
+        "is_delete": false,
+        "report_group": "skipped",
+        "reset_error_streak": false,
+        "status_id": 36,
+        "updated_at": "2026-10-09T10:23:33.056576+00:00"
+      }
+    },
+    "after": {
+      "canonical": "{\"id\": 10, \"is_active\": true, \"is_delete\": false, \"status_id\": 36, \"created_at\": \"2026-10-09T10:23:33.056576+00:00\", \"updated_at\": \"2026-10-09T11:48:37.379236+00:00\", \"action_code\": \"fb_group_invite\", \"description\": \"Mời vào group Facebook: không tồn tại được báo cáo bỏ qua, không tính lượt và đặt lại chuỗi target lỗi; đối chiếu handleFacebookGroupInviteBatchResult.\", \"input_effect\": \"complete\", \"report_group\": \"skipped\", \"bad_target_effect\": \"reset\", \"reset_error_streak\": false, \"counts_toward_limit\": false}",
+      "md5": "05e6beeb3ff982b5fdf815589648bbdf",
+      "row": {
+        "action_code": "fb_group_invite",
+        "bad_target_effect": "reset",
+        "counts_toward_limit": false,
+        "created_at": "2026-10-09T10:23:33.056576+00:00",
+        "description": "Mời vào group Facebook: không tồn tại được báo cáo bỏ qua, không tính lượt và đặt lại chuỗi target lỗi; đối chiếu handleFacebookGroupInviteBatchResult.",
+        "id": 10,
+        "input_effect": "complete",
+        "is_active": true,
+        "is_delete": false,
+        "report_group": "skipped",
+        "reset_error_streak": false,
+        "status_id": 36,
+        "updated_at": "2026-10-09T11:48:37.379236+00:00"
+      }
+    }
+  },
+  {
+    "before": null,
+    "after": {
+      "canonical": "{\"id\": 26, \"is_active\": true, \"is_delete\": false, \"status_id\": 37, \"created_at\": \"2026-10-09T11:48:37.379236+00:00\", \"updated_at\": \"2026-10-09T11:48:37.379236+00:00\", \"action_code\": null, \"description\": \"Tag không tồn tại: ghi kết quả thất bại; không tính lượt, không thay chuỗi lỗi. Đối chiếu applyTag của Desktop/Chat; hiện dùng bởi zalo_tag_contact.\", \"input_effect\": \"complete\", \"report_group\": \"failure\", \"bad_target_effect\": \"ignore\", \"reset_error_streak\": false, \"counts_toward_limit\": false}",
+      "md5": "dd35bcfefcb70fb653ac871a2039b3bf",
+      "row": {
+        "action_code": null,
+        "bad_target_effect": "ignore",
+        "counts_toward_limit": false,
+        "created_at": "2026-10-09T11:48:37.379236+00:00",
+        "description": "Tag không tồn tại: ghi kết quả thất bại; không tính lượt, không thay chuỗi lỗi. Đối chiếu applyTag của Desktop/Chat; hiện dùng bởi zalo_tag_contact.",
+        "id": 26,
+        "input_effect": "complete",
+        "is_active": true,
+        "is_delete": false,
+        "report_group": "failure",
+        "reset_error_streak": false,
+        "status_id": 37,
+        "updated_at": "2026-10-09T11:48:37.379236+00:00"
+      }
+    }
+  },
+  {
+    "before": null,
+    "after": {
+      "canonical": "{\"id\": 27, \"is_active\": true, \"is_delete\": false, \"status_id\": 38, \"created_at\": \"2026-10-09T11:48:37.379236+00:00\", \"updated_at\": \"2026-10-09T11:48:37.379236+00:00\", \"action_code\": null, \"description\": \"Tham số đổi tên không hợp lệ: ghi kết quả thất bại; không tính lượt, không thay chuỗi lỗi. Đối chiếu changeAlias của Desktop/Chat; hiện dùng bởi zalo_change_alias.\", \"input_effect\": \"complete\", \"report_group\": \"failure\", \"bad_target_effect\": \"ignore\", \"reset_error_streak\": false, \"counts_toward_limit\": false}",
+      "md5": "9cd2e296727391bae1e4b226a5383992",
+      "row": {
+        "action_code": null,
+        "bad_target_effect": "ignore",
+        "counts_toward_limit": false,
+        "created_at": "2026-10-09T11:48:37.379236+00:00",
+        "description": "Tham số đổi tên không hợp lệ: ghi kết quả thất bại; không tính lượt, không thay chuỗi lỗi. Đối chiếu changeAlias của Desktop/Chat; hiện dùng bởi zalo_change_alias.",
+        "id": 27,
+        "input_effect": "complete",
+        "is_active": true,
+        "is_delete": false,
+        "report_group": "failure",
+        "reset_error_streak": false,
+        "status_id": 38,
+        "updated_at": "2026-10-09T11:48:37.379236+00:00"
+      }
+    }
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09 10:27:05.334175+00",
+  "sha256": "0ffbcbfd3279b343d2d4ce191c3c6e13f3cd64586e94cb296ef8ebdafdefb40d",
+  "rollback_sha256": "9d17ae2872e8320e3365d3cd4c9d9898acc0a002a8a7f86a20fbb8818db40ca3",
+  "old_rows_unchanged": true,
+  "rollback_lock_fix_at": "2026-10-09T11:56:17.476Z"
+}

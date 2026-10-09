@@ -1,0 +1,170 @@
+[
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1002,
+    "before": "2026-10-09T10:17:46.118311+00:00",
+    "after": "2026-10-09T10:27:00.230881+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1003,
+    "before": "2026-10-09T10:17:25.130482+00:00",
+    "after": "2026-10-09T10:26:58.622983+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1006,
+    "before": "2026-10-09T10:17:46.791298+00:00",
+    "after": "2026-10-09T10:27:01.207181+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1007,
+    "before": "2026-10-09T10:17:44.263628+00:00",
+    "after": "2026-10-09T10:27:00.100095+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 115669,
+    "before": "2026-10-09T10:11:50.72028+00:00",
+    "after": "2026-10-09T10:24:05.661256+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 12700,
+    "before": "2026-10-09T10:17:12.721138+00:00",
+    "after": "2026-10-09T10:25:54.606272+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1434,
+    "before": "2026-10-09T10:17:42.471292+00:00",
+    "after": "2026-10-09T10:25:55.106541+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 150209,
+    "before": "2026-10-09T10:17:27.168986+00:00",
+    "after": "2026-10-09T10:26:49.392066+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 160,
+    "before": "2026-10-09T10:16:44.655976+00:00",
+    "after": "2026-10-09T10:18:28.648854+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 161,
+    "before": "2026-10-09T10:17:44.634029+00:00",
+    "after": "2026-10-09T10:26:59.280558+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 162646,
+    "before": "2026-10-09T10:17:22.878756+00:00",
+    "after": "2026-10-09T10:26:41.532691+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 182,
+    "before": "2026-10-09T10:17:32.144338+00:00",
+    "after": "2026-10-09T10:26:48.306561+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 183,
+    "before": "2026-10-09T10:16:56.225962+00:00",
+    "after": "2026-10-09T10:26:05.423812+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 1944,
+    "before": "2026-10-09T10:04:43.794039+00:00",
+    "after": "2026-10-09T10:25:49.777425+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 214,
+    "before": "2026-10-09T10:17:00.226414+00:00",
+    "after": "2026-10-09T10:18:37.755274+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 220,
+    "before": "2026-10-09T10:17:34.348943+00:00",
+    "after": "2026-10-09T10:26:50.936028+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 2369,
+    "before": "2026-10-09T10:12:24.769396+00:00",
+    "after": "2026-10-09T10:25:02.911303+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 244,
+    "before": "2026-10-09T09:47:33.482003+00:00",
+    "after": "2026-10-09T10:21:16.833275+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 27360,
+    "before": "2026-10-09T10:17:13.315629+00:00",
+    "after": "2026-10-09T10:26:06.61511+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 293532,
+    "before": "2026-10-09T10:16:10.281783+00:00",
+    "after": "2026-10-09T10:24:12.291733+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 5831,
+    "before": "2026-10-09T10:02:16.855064+00:00",
+    "after": "2026-10-09T10:25:53.046339+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 62164,
+    "before": "2026-10-09T10:17:31.35026+00:00",
+    "after": "2026-10-09T10:27:01.65993+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 62165,
+    "before": "2026-10-09T10:17:46.27081+00:00",
+    "after": "2026-10-09T10:27:04.405031+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 67385,
+    "before": "2026-10-09T10:17:45.917351+00:00",
+    "after": "2026-10-09T10:26:33.838396+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 7079,
+    "before": "2026-10-09T10:17:32.576409+00:00",
+    "after": "2026-10-09T10:26:48.797029+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 75671,
+    "before": "2026-10-09T10:15:48.454108+00:00",
+    "after": "2026-10-09T10:22:04.755479+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 80695,
+    "before": "2026-10-09T10:15:54.734368+00:00",
+    "after": "2026-10-09T10:27:05.090877+00:00"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "id": 94346,
+    "before": "2026-10-09T10:15:55.97731+00:00",
+    "after": "2026-10-09T10:26:58.458154+00:00"
+  }
+]

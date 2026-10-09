@@ -1,0 +1,13 @@
+{
+  "both_desktop_typechecks": "passed",
+  "desktop_production_build": "passed",
+  "packaged_server_build": "passed",
+  "group_post_smoke_checks": 7,
+  "delete_restore_transaction": "passed and rolled back",
+  "api_status": 200,
+  "real_outbound_actions": 0,
+  "app_redeploy": false,
+  "installers_published": false,
+  "schema_reload": false,
+  "note_log_templates_changed": false
+}
