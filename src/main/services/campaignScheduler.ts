@@ -234,6 +234,22 @@ interface MilestoneSummary {
   inputCompletionNote?: string
   stopAfterTarget?: boolean
   optOutBlocked?: boolean
+  facebookFriendFailures?: FacebookFriendFailure[]
+}
+
+interface FacebookFriendFailure {
+  errorCode: string
+  message: string
+  policy: AutoErrorPolicy | null
+}
+
+interface TargetErrorPolicyOptions {
+  policy?: AutoErrorPolicy | null
+  explicitOnly?: boolean
+  // A message and friend request may fail on the same target. Count it once.
+  targetCounter?: { count?: number }
+  // Later policies can still disable actions/accounts, but cannot undo a pause.
+  campaignDecision?: { paused: boolean }
 }
 
 interface BlockScreenshotRunResult {
@@ -3961,7 +3977,7 @@ export class CampaignScheduler {
           if (runtimeModeStopRequested && this.isZaloRuntimeWriteBarrierActive(campaign.id)) return
           let runtimeStopTriggered = false
           const committedDeliveryMustNotRetry = milestoneSummary.preventInputRetry || (
-            milestoneSummary.deliveryCommitted === true && (Boolean(accountStopReason) || pauseCancelledRun)
+            milestoneSummary.deliveryCommitted === true && (Boolean(accountStopReason) || result.status === 'cancelled')
           )
 
           if (accountStopReason && !runtimeModeStopRequested) {
@@ -4033,7 +4049,15 @@ export class CampaignScheduler {
           }
 
           if (!accountStopReason && !pauseCancelledRun && !runtimeModeStopRequested) {
-            const runtimeError = result.status !== 'completed'
+            const friendFailures = milestoneSummary.facebookFriendFailures || []
+            const lastErrorStep = [...result.steps].reverse().find(step => step.status === 'error')
+            const friendErrorHandled = lastErrorStep?.blockName === 'fb_add_friend' && friendFailures.length > 0
+            const policyOptions: TargetErrorPolicyOptions = { targetCounter: {}, campaignDecision: { paused: false } }
+            // A completed friend click remains a success when only its trailing
+            // delay was cancelled. Real step failures still use their policy.
+            const cancelledAfterDelivery = result.status === 'cancelled' &&
+              milestoneSummary.deliveryCommitted === true && !lastErrorStep && !result.error
+            const runtimeError = result.status !== 'completed' && !friendErrorHandled && !cancelledAfterDelivery
               ? this.normalizeRuntimeError(campaign, result.steps, result.error)
               : null
 
@@ -4055,7 +4079,8 @@ export class CampaignScheduler {
                 {
                   message: runtimeError.message,
                   runId: result.runId ? String(result.runId) : undefined
-                }
+                },
+                policyOptions
               )
               runtimeStopTriggered = handled.triggered
               shouldStopAfterTarget = handled.triggered
@@ -4074,12 +4099,27 @@ export class CampaignScheduler {
                   message: this.getMilestoneBadReason(milestoneSummary),
                   thresholdReason: this.getMilestoneBadRootReason(milestoneSummary),
                   runId: result.runId ? String(result.runId) : undefined
-                }
+                },
+                policyOptions
               )
               runtimeStopTriggered = handled.triggered
               shouldStopAfterTarget = handled.triggered
-            } else if (milestoneSummary.hasSuccess) {
+            } else if (milestoneSummary.hasSuccess && !friendFailures.some(failure => failure.policy?.countsTowardBadTarget !== false)) {
               await this.resetCampaignBadTargetCount(campaign)
+            }
+
+            for (const failure of friendFailures) {
+              const replacements = {
+                message: failure.message,
+                actionName: 'Kết bạn',
+                runId: result.runId ? String(result.runId) : undefined
+              }
+              const options = { ...policyOptions, policy: failure.policy, explicitOnly: true }
+              const handled = failure.policy?.countsTowardBadTarget === false
+                ? await this.applyRuntimeErrorPolicy(account, campaign, failure.errorCode, 'fb_add_friend', replacements, options)
+                : await this.handleCampaignBadTarget(account, campaign, detail?.id, failure.errorCode, 'fb_add_friend', replacements, options)
+              runtimeStopTriggered ||= handled.triggered
+              shouldStopAfterTarget ||= handled.triggered
             }
           }
 
@@ -9315,17 +9355,22 @@ export class CampaignScheduler {
     errorCode: string,
     actionCode: string | undefined,
     replacements: Record<string, string | undefined> = {},
-    options: { campaignNote?: string; guardRunning?: boolean } = {}
+    options: TargetErrorPolicyOptions & { campaignNote?: string; guardRunning?: boolean } = {}
   ): Promise<RuntimeErrorResult> {
     return this.runCampaignErrorPolicy(campaign.id, async () => {
+      const updateCampaign = async (status: string, note: string): Promise<void> => {
+        if (options.campaignDecision?.paused) return
+        await this.updateErrorPolicyCampaign(campaign, { status, note }, options.guardRunning)
+        if (options.campaignDecision && status === 'tạm dừng') options.campaignDecision.paused = true
+      }
       const policyReplacements: Record<string, string | undefined> = {
         ...replacements,
         actionCode: replacements.actionCode || actionCode,
         action_code: replacements.action_code || actionCode
       }
-      const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+      const specificPolicy = options.policy !== undefined ? options.policy : await this.supabase.getErrorPolicy(errorCode)
       const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
-      const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+      const policy = options.policy !== undefined ? options.policy : specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
       const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
       const userFacingReplacements = isUndefinedErrorPolicy
         ? {
@@ -9339,7 +9384,7 @@ export class CampaignScheduler {
           ? safeUserMessage || 'Có lỗi xảy ra'
           : policyReplacements.message || 'Có lỗi xảy ra'
         const note = options.campaignNote || message
-        await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note }, options.guardRunning)
+        await updateCampaign('chờ xử lý', note)
         await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
         return { triggered: true, message: note }
       }
@@ -9354,7 +9399,17 @@ export class CampaignScheduler {
         || policy.errorName,
         userFacingReplacements
       )
+      if (options.explicitOnly && !policy.updateStatusAccount && !policy.updateLoginStatus &&
+        policy.disableActionCodes.length === 0 && !policy.updateStatusCampaign) {
+        return { triggered: false, message, policy }
+      }
+      // Once an account/action is disabled the current run must release its
+      // campaign too; preserve the existing waiting-state lifecycle fallback.
       const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'
+
+      if (options.explicitOnly && policy.updateLoginStatus) {
+        await this.updateErrorPolicyAccount(account, campaign, { loginStatus: policy.updateLoginStatus })
+      }
 
       if (policy.updateStatusAccount) {
         await this.updateErrorPolicyAccount(account, campaign, { status: policy.updateStatusAccount })
@@ -9371,7 +9426,7 @@ export class CampaignScheduler {
       // The campaign note carries threshold context; keep the existing policy
       // progress text and side effects unchanged.
       const note = options.campaignNote || message
-      await this.updateErrorPolicyCampaign(campaign, { status: campaignStatus, note }, options.guardRunning)
+      await updateCampaign(campaignStatus, note)
       await this.logCampaignProgress(campaign, `⚠️ Dừng chiến dịch "${campaign.name}": ${message}`)
 
       return { triggered: true, message: note, policy }
@@ -9384,7 +9439,8 @@ export class CampaignScheduler {
     inputDataId: number | null | undefined,
     errorCode: string,
     actionCode: string | undefined,
-    replacements: Record<string, string | undefined> = {}
+    replacements: Record<string, string | undefined> = {},
+    options: TargetErrorPolicyOptions = {}
   ): Promise<CampaignBadTargetResult> {
     return this.runCampaignErrorPolicy(campaign.id, async () => {
       const policyReplacements: Record<string, string | undefined> = {
@@ -9392,9 +9448,9 @@ export class CampaignScheduler {
         actionCode: replacements.actionCode || actionCode,
         action_code: replacements.action_code || actionCode
       }
-      const specificPolicy = await this.supabase.getErrorPolicy(errorCode)
+      const specificPolicy = options.policy !== undefined ? options.policy : await this.supabase.getErrorPolicy(errorCode)
       const isUndefinedErrorPolicy = errorCode === 'err_undefined' || !specificPolicy
-      const policy = specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
+      const policy = options.policy !== undefined ? options.policy : specificPolicy || await this.supabase.getErrorPolicy('err_undefined')
       const safeUserMessage = String(policyReplacements.safeUserMessage || '').trim() || undefined
       const userFacingReplacements = isUndefinedErrorPolicy
         ? {
@@ -9405,7 +9461,13 @@ export class CampaignScheduler {
         : policyReplacements
       const threshold = this.getPolicyThreshold(policy)
       if (!policy || !threshold) {
-        return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements)
+        if (options.explicitOnly && policy?.countsTowardBadTarget) {
+          const count = options.targetCounter?.count ?? (await this.supabase.incrementCampaignBadTargetCount(
+            campaign.id, inputDataId, policyReplacements.message || policy.errorName
+          )).countConsecutiveBadTargets
+          if (options.targetCounter) options.targetCounter.count = count
+        }
+        return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements, options)
       }
 
       const configuredNotice = this.renderPolicyMessage(policy.notiRunningProcess, userFacingReplacements)
@@ -9417,12 +9479,10 @@ export class CampaignScheduler {
       const failureMessage = isUndefinedErrorPolicy
         ? safeUserMessage || notice
         : policyReplacements.message || notice
-      const state = await this.supabase.incrementCampaignBadTargetCount(
-        campaign.id,
-        inputDataId,
-        failureMessage
-      )
-      const count = state.countConsecutiveBadTargets
+      const count = options.targetCounter?.count ?? (await this.supabase.incrementCampaignBadTargetCount(
+        campaign.id, inputDataId, failureMessage
+      )).countConsecutiveBadTargets
+      if (options.targetCounter) options.targetCounter.count = count
       // Page inbox messaging gets one scheduler restart before the policy is
       // applied. Keep the counter so the restarted run must add a full second
       // threshold of consecutive bad targets; any success resets it as usual.
@@ -9438,6 +9498,11 @@ export class CampaignScheduler {
         const retryCount = count - threshold
         const message = `${notice} (${retryCount}/${threshold} trong lượt tự chạy lại)`
         return { triggered: false, message, policy, count, threshold }
+      }
+
+      if (options.explicitOnly && !policy.updateStatusAccount && !policy.updateLoginStatus &&
+        policy.disableActionCodes.length === 0 && !policy.updateStatusCampaign) {
+        return { triggered: false, message: notice, policy, count, threshold }
       }
 
       let thresholdReason = String(
@@ -9475,7 +9540,7 @@ export class CampaignScheduler {
       )
 
       const campaignNote = `Dừng sau ${count} data lỗi/thất bại liên tiếp (ngưỡng ${finalThreshold}): ${thresholdReason}`
-      const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements, { campaignNote })
+      const handled = await this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements, { ...options, campaignNote })
       return { ...handled, count, threshold }
     })
   }
@@ -9772,6 +9837,7 @@ export class CampaignScheduler {
       pageName: detail?.name || '',
       businessUrl: 'https://business.facebook.com/content_management',
       // Message extras
+      facebookFriendOutcomeVersion: 1,
       enableMessage: (
         campaign.actionId === MESSAGE_FRIEND_ACTION_ID ||
         campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID ||
@@ -10183,6 +10249,70 @@ export class CampaignScheduler {
     }
 
     return summary
+  }
+
+  private async logFacebookFriendMilestone(
+    campaign: Campaign,
+    detail: CampaignInputData | null,
+    accountId: number,
+    step: RunStepV2,
+    summary: MilestoneSummary
+  ): Promise<void> {
+    const out = step.output || {}
+    if (out.outcome === 'cancelled') return
+    const name = this.getInputDataDisplayName(campaign, detail, '')
+    const ok = step.status === 'success' && out.ok === true
+    // A cached pre-v359 block cannot distinguish friendship from a hidden button.
+    const outcome = ok ? String(out.outcome || (out.alreadyFriend === true
+      ? 'legacy_skipped' : out.clicked === true ? 'request_sent' : 'failed')) : 'failed'
+    const normalResults: Record<string, { status: string; log: string; count: boolean }> = {
+      already_requested: { status: 'đã gửi lời mời', log: `Đã gửi lời mời kết bạn trước đó đến ${name}`, count: false },
+      already_friend: { status: 'đã là bạn bè', log: `Đã là bạn bè với ${name}`, count: false },
+      legacy_skipped: { status: 'bỏ qua', log: `Bỏ qua kết bạn với ${name} (chưa xác định được trạng thái kết bạn)`, count: false },
+      accepted: { status: 'thành công', log: `Đã xác nhận kết bạn với ${name}`, count: true },
+      request_sent: { status: 'thành công', log: `Đã gửi lời mời kết bạn đến ${name}`, count: true }
+    }
+    const normal = normalResults[outcome]
+    if (normal) {
+      await this.supabase.createCampaignDetail({
+        inputDataId: detail?.id, campaignId: campaign.id, accountId,
+        actionCode: 'fb_add_friend', actionName: 'Kết bạn', status: normal.status,
+        log: normal.log, shouldCountAction: normal.count, data: { friendOutcome: outcome }
+      })
+      this.recordMilestoneSummary(summary, normal.status, normal.log, 'Kết bạn')
+      if (normal.count) {
+        summary.deliveryCommitted = true
+        summary.inputCompletionNote = `${normal.log}; không tự chạy lại data để tránh thực hiện trùng.`
+      }
+      await this.logCampaignProgress(campaign, `${normal.count ? '🤝' : 'ℹ️'} ${normal.log}`)
+      return
+    }
+
+    await this.runCampaignErrorPolicy(campaign.id, async () => {
+      const message = String(out.error || step.error || 'Không thực hiện được thao tác kết bạn')
+      const requestedCode = out.outcome === 'unavailable' && out.errorCode === 'err_fb_add_friend_unavailable'
+        ? 'err_fb_add_friend_unavailable'
+        : this.normalizeRuntimeError(campaign, [step], message).errorCode
+      const policy = await this.supabase.getErrorPolicy(requestedCode)
+        || (requestedCode !== 'err_undefined' ? await this.supabase.getErrorPolicy('err_undefined') : null)
+      const errorCode = policy?.errorCode || requestedCode
+      const status = policy?.detailStatus || (step.status === 'error' ? 'lỗi' : 'thất bại')
+      const log = this.renderPolicyMessage(policy?.notiRunningProcess || policy?.notiCampaign, {
+        actionName: 'Kết bạn', action: 'Kết bạn', actionCode: 'fb_add_friend',
+        message: errorCode === 'err_undefined' ? undefined : message
+      }) || policy?.errorName || `Không thực hiện được thao tác kết bạn với ${name}`
+      await this.supabase.createCampaignDetail({
+        inputDataId: detail?.id, campaignId: campaign.id, accountId,
+        actionCode: 'fb_add_friend', actionName: 'Kết bạn', status, errorCode, log,
+        shouldCountAction: policy?.countsTowardLimit ?? true,
+        data: { friendOutcome: out.outcome || 'failed', error: message }
+      })
+      // Keep the policy snapshot through target finalization. Do not fold this
+      // failure into the generic err_undefined milestone path or reset counters.
+      const failures = summary.facebookFriendFailures ||= []
+      failures.push({ errorCode, message, policy })
+      await this.logCampaignProgress(campaign, `❌ ${log}`)
+    })
   }
 
   /**
@@ -11083,63 +11213,10 @@ export class CampaignScheduler {
       } catch (err) { console.error('Failed log message:', err) }
     }
 
-    // Kết bạn — alreadyFriend / clicked = thành công; ok=false không exception = thất bại; exception = lỗi
-    const friendSteps = steps.filter(s =>
-      s.blockName === 'fb_add_friend' &&
-      (s.status === 'success' || s.status === 'error')
-    )
-    for (const s of friendSteps) {
-      const out = (s.output as any) || {}
-      const ok = s.status === 'success' && out.ok === true
-      const alreadyFriend = ok && out.alreadyFriend === true
-      const clicked = ok && out.clicked === true
-      const errMsg = out.error || s.error || 'Lỗi không xác định'
-
-      try {
-        if (alreadyFriend) {
-          await createCampaignDetail({
-            inputDataId: detail?.id,
-            campaignId: campaign.id,
-            accountId,
-            actionCode: 'fb_add_friend',
-            actionName: 'Kết bạn',
-            status: 'thành công',
-            log: `Bỏ qua kết bạn với ${inputDataName} (đã là bạn bè hoặc nút bị ẩn)`,
-            data: { alreadyFriend: true }
-          })
-          await this.logCampaignProgress(campaign, `ℹ️ Bỏ qua kết bạn với "${inputDataName}" (đã là bạn hoặc nút bị ẩn)`)
-          await flushScreenshotLogsForStep(s)
-        } else if (clicked) {
-          await createCampaignDetail({
-            inputDataId: detail?.id,
-            campaignId: campaign.id,
-            accountId,
-            actionCode: 'fb_add_friend',
-            actionName: 'Kết bạn',
-            status: 'thành công',
-            log: `Kết bạn thành công với ${inputDataName}`
-          })
-          await this.logCampaignProgress(campaign, `🤝 Kết bạn thành công với "${inputDataName}"`)
-          await flushScreenshotLogsForStep(s)
-        } else {
-          // s.status='error' → 'lỗi' (crash); s.status='success' nhưng ok=false → 'thất bại' (FB từ chối)
-          const status: 'thất bại' | 'lỗi' = s.status === 'error' ? 'lỗi' : 'thất bại'
-          const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined
-          await createCampaignDetail({
-            inputDataId: detail?.id,
-            campaignId: campaign.id,
-            accountId,
-            actionCode: 'fb_add_friend',
-            actionName: 'Kết bạn',
-            status,
-            errorCode,
-            log: `Lỗi kết bạn với ${inputDataName}: ${errMsg}`,
-            data: { error: errMsg }
-          })
-          await this.logCampaignProgress(campaign, `❌ Lỗi kết bạn "${inputDataName}": ${errMsg}`)
-          await flushScreenshotLogsForStep(s)
-        }
-      } catch (err) { console.error('Failed log friend:', err) }
+    for (const step of steps.filter(s => s.blockName === 'fb_add_friend' &&
+      (s.status === 'success' || s.status === 'error'))) {
+      await this.logFacebookFriendMilestone(campaign, detail, accountId, step, summary)
+      await flushScreenshotLogsForStep(step)
     }
 
     await flushRemainingScreenshotLogs()
