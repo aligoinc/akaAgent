@@ -8,6 +8,8 @@ let code = new Function('return `' + existing + '`')()
 code = code.replace("createRoot(document.getElementById('root'))", `
 let sources=[],runs=[];
 window.sheetCalls=[];
+window.setSheetEndDate=value=>{sources=sources.map(s=>({...s,endDate:value}))};
+window.getSheetSources=()=>structuredClone(sources);
 window.finishSheetRun=(id,status='success')=>{
  const source=sources.find(s=>s.id===id);
  sources=sources.map(s=>s.id===id?{...s,status,lastRunAt:new Date().toISOString(),rowCount:3,addedCount:s.addedCount+(status==='success'?1:0),lastError:status==='retry'?'Lỗi mạng, chờ thử lại.':null,nextRunAt:new Date(Date.now()+s.everyHours*3600000).toISOString()}:s);
@@ -32,7 +34,7 @@ if(location.hash.startsWith('#source-type-')){
  types.push({id:104,code:'email',name:'Email'});
  const dataType=types.find(t=>t.code===type);
  Object.assign(groups[0],{dataTypeCode:dataType?.code||null,dataTypeName:dataType?.name||null,dataTypeCategoryItemId:dataType?.id||null,boundZaloAccountId:null,boundZaloAccountName:null});
- sources=[{id:91,groupId:1,name:'Nguồn đổi loại',revision:7,config:{url:'https://docs.google.com/spreadsheets/d/public-test/edit#gid=42',dataTypeCode:'phone',hasHeader:true,expectedHeaders:['UID','Họ tên','Phone'],mapping:[{column:2,field:'phone'},{column:1,field:'name'}]},everyHours:12,endDate:'2030-12-31',isEnabled:false,status:'paused',rowCount:0,addedCount:0,lastAddedCount:0,lastRunAt:null,lastError:null,nextRunAt:null}];
+ sources=[{id:91,groupId:1,name:'Nguồn đổi loại',revision:7,config:{url:'https://docs.google.com/spreadsheets/d/public-test/edit#gid=42',dataTypeCode:'phone',hasHeader:true,expectedHeaders:['UID','Họ tên','Phone'],mapping:[{column:2,field:'phone'},{column:1,field:'name'}]},everyHours:12,endDate:'2026-10-30',isEnabled:false,status:'paused',rowCount:0,addedCount:0,lastAddedCount:0,lastRunAt:null,lastError:null,nextRunAt:null}];
 }
 createRoot(document.getElementById('root'))`)
 ;(async () => {
@@ -43,10 +45,10 @@ createRoot(document.getElementById('root'))`)
  if(process.argv.includes('--serve')){console.log(JSON.stringify({url,dir}));return}
  let browser
  try{browser=await chromium.launch({headless:true})}catch{browser=await chromium.launch({headless:true,channel:'chrome'})}
- const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[]
+ const page=await browser.newPage({viewport:{width:1440,height:900},timezoneId:'America/Los_Angeles'}),errors=[]
  page.on('pageerror',e=>errors.push(e.message))
  try{
-  await page.clock.install();await page.goto(url)
+  await page.clock.install({time:new Date('2026-10-11T17:00:00Z')});await page.goto(url)
   await page.getByRole('tab',{name:/Đồng bộ ngoài/}).click()
   await page.getByText('Chưa có nguồn đồng bộ',{exact:true}).waitFor()
   const info=page.getByRole('complementary',{name:'Thông tin nhóm data'}),near=(a,b)=>assert.ok(Math.abs(a-b)<2,`${a} vs ${b}`)
@@ -56,6 +58,10 @@ createRoot(document.getElementById('root'))`)
   await page.getByRole('button',{name:'Thêm nguồn',exact:true}).click()
   await page.getByRole('button',{name:'Từ Google Sheet',exact:true}).click()
   const dialog=page.getByRole('dialog',{name:'Đồng bộ từ Google Sheet',exact:true})
+  const endDateInput=dialog.getByLabel('Ngày dừng đồng bộ',{exact:true})
+  assert.equal(await endDateInput.inputValue(),'2026-10-19','Vietnam October 12 defaults to October 19, even in another host timezone')
+  assert.equal(await endDateInput.getAttribute('max'),'2027-04-10')
+  assert.equal(await endDateInput.getAttribute('required'),'')
   const headerCheckbox=dialog.getByRole('checkbox',{name:'Dòng đầu tiên là tiêu đề cột',exact:true})
   const checkHeaderToggle=async hasHeader=>{
    const previous=await page.evaluate(()=>window.sheetCalls.filter(c=>c[0]==='preview').at(-1)[2])
@@ -128,9 +134,19 @@ createRoot(document.getElementById('root'))`)
   await dialog.getByRole('alert').waitFor()
   assert.equal(await dialog.getByRole('region',{name:'Kết quả chạy thử'}).count(),0,'Failed preview must not retain old results')
   await page.evaluate(()=>window.previewError=false)
+  for(const [date,enabled,message] of [['',true,'Vui lòng chọn ngày dừng đồng bộ.'],['',false,'Vui lòng chọn ngày dừng đồng bộ.'],['2027-04-11',false,'Ngày dừng đồng bộ không được quá 180 ngày kể từ hôm nay.']]){
+   await dialog.getByRole('checkbox',{name:'Bật lịch đồng bộ',exact:true}).setChecked(enabled)
+   await endDateInput.fill(date)
+   await dialog.getByRole('button',{name:'Lưu nguồn đồng bộ',exact:true}).click()
+   await dialog.getByRole('alert').waitFor()
+   assert.equal(await dialog.getByRole('alert').textContent(),message)
+   assert.equal(await page.evaluate(()=>window.sheetCalls.filter(c=>c[0]==='save').length),0,'Empty and out-of-range dates cannot reach IPC, even when paused')
+  }
+  await endDateInput.fill('2026-10-19')
+  await dialog.getByRole('checkbox',{name:'Bật lịch đồng bộ',exact:true}).check()
   await dialog.getByRole('button',{name:'Lưu nguồn đồng bộ',exact:true}).click();await dialog.waitFor({state:'hidden'})
   await page.getByRole('button',{name:/Khách hội thảo.*Chờ đồng bộ/}).waitFor()
-  const saved=await page.evaluate(()=>window.sheetCalls.find(c=>c[0]==='save')[1]);assert.equal(saved.everyHours,6);assert.equal(saved.endDate,null);assert.equal(saved.config.hasHeader,true)
+  const saved=await page.evaluate(()=>window.sheetCalls.find(c=>c[0]==='save')[1]);assert.equal(saved.everyHours,6);assert.equal(saved.endDate,'2026-10-19');assert.equal(saved.config.hasHeader,true)
   await page.getByText('Đang chờ đồng bộ lần đầu',{exact:true}).waitFor()
   const membersBeforeSync=await page.evaluate(()=>window.calls.filter(c=>c[0]==='listMembers').length)
   await page.evaluate(()=>window.finishSheetRun(1,'running'))
@@ -217,6 +233,7 @@ createRoot(document.getElementById('root'))`)
    assert.equal(await dialog.evaluate(el=>el.contains(document.activeElement)),true,'Disabled fieldset cannot release focus to the parent dialog')
    await page.evaluate(()=>{window.inspectDeferred=false;window.finishSheetInspection()})
    await dialog.getByText('Đã kết nối · 3 dòng dữ liệu',{exact:true}).waitFor()
+   assert.equal(await endDateInput.inputValue(),'2026-10-30','Editing keeps the stored end date')
    if(groupType==='email'){
     assert.equal(await dialog.getByRole('combobox',{name:'Trường dữ liệu 1',exact:true}).count(),0,'Changed type requires explicit remapping')
     await dialog.getByRole('button',{name:'Lưu nguồn đồng bộ',exact:true}).click();await dialog.getByRole('alert').waitFor()
@@ -234,7 +251,7 @@ createRoot(document.getElementById('root'))`)
    const calls=await page.evaluate(()=>window.sheetCalls),payload=calls.find(c=>c[0]==='save')[1]
    assert.equal(payload.config.dataTypeCode,groupType==='email'?'email':'phone')
    assert.deepEqual(payload.config,calls.find(c=>c[0]==='preview')[2])
-   assert.deepEqual([payload.id,payload.expectedRevision,payload.everyHours,payload.endDate,payload.isEnabled],[91,7,12,'2030-12-31',false])
+   assert.deepEqual([payload.id,payload.expectedRevision,payload.everyHours,payload.endDate,payload.isEnabled],[91,7,12,'2026-10-30',false])
    assert.deepEqual(payload.config.mapping,groupType==='email'?[{column:0,field:'email'}]:[{column:2,field:'phone'},{column:1,field:'name'}])
   }
   // Existing-source auto-connect errors allow recovery without losing mapping.
@@ -307,8 +324,30 @@ createRoot(document.getElementById('root'))`)
   await info.getByText('Chưa có nguồn đồng bộ',{exact:true}).waitFor()
   await page.evaluate(()=>window.finishSheetList())
   assert.equal(await info.getByRole('button',{name:/Nguồn đổi loại/}).count(),0)
+  // Legacy NULL dates remain untouched by listing, toggling, opening and cancelling.
+  await page.goto('about:blank');await page.goto(url+'/#source-type-phone')
+  await page.evaluate(()=>window.setSheetEndDate(null))
+  await page.getByRole('tab',{name:/Đồng bộ ngoài/}).click()
+  await page.getByRole('button',{name:'Bật lại',exact:true}).click()
+  await page.getByRole('button',{name:/Nguồn đổi loại.*Chờ đồng bộ/}).waitFor()
+  assert.equal(await page.evaluate(()=>window.getSheetSources()[0].endDate),null)
+  await page.getByRole('button',{name:/Nguồn đổi loại.*Chờ đồng bộ/}).click()
+  await dialog.getByText('Đã kết nối · 3 dòng dữ liệu',{exact:true}).waitFor()
+  assert.equal(await endDateInput.inputValue(),'2026-10-19')
+  await dialog.getByRole('button',{name:'Hủy',exact:true}).click()
+  assert.equal(await page.evaluate(()=>window.getSheetSources()[0].endDate),null)
+  assert.equal(await page.evaluate(()=>window.sheetCalls.filter(c=>c[0]==='save').length),0)
+  await page.getByRole('button',{name:/Nguồn đổi loại.*Chờ đồng bộ/}).click()
+  await dialog.getByText('Đã kết nối · 3 dòng dữ liệu',{exact:true}).waitFor()
+  await dialog.getByRole('button',{name:'Lưu nguồn đồng bộ',exact:true}).click();await dialog.waitFor({state:'hidden'})
+  assert.equal(await page.evaluate(()=>window.getSheetSources()[0].endDate),'2026-10-19','Default is persisted only on save')
+  await page.getByRole('button',{name:/Nguồn đổi loại.*Chờ đồng bộ/}).click()
+  await dialog.getByText('Đã kết nối · 3 dòng dữ liệu',{exact:true}).waitFor()
+  await endDateInput.fill('2027-04-10')
+  await dialog.getByRole('button',{name:'Lưu nguồn đồng bộ',exact:true}).click();await dialog.waitFor({state:'hidden'})
+  assert.equal(await page.evaluate(()=>window.getSheetSources()[0].endDate),'2027-04-10','Day 180 is accepted and saved')
   assert.deepEqual(errors,[])
-  console.log(JSON.stringify({result:'PASS',screenshots:dir,checks:'preview, CRUD, errors, loading, source filter, bounded visible sync refresh, automatic member refresh, 372/520px, narrow dialog, shared responsive state, keyboard focus, changed group type recovery, auto-connect edit, unchanged/wildcard source preservation, header toggle reload/loading/retry/mapping preservation'}))
+  console.log(JSON.stringify({result:'PASS',screenshots:dir,checks:'preview, CRUD, errors, loading, source filter, bounded visible sync refresh, automatic member refresh, 372/520px, narrow dialog, shared responsive state, keyboard focus, changed group type recovery, auto-connect edit, unchanged/wildcard source preservation, header toggle reload/loading/retry/mapping preservation, Vietnam +7 default, required date, inclusive 180-day limit, legacy NULL preservation until save'}))
  }catch(e){await page.screenshot({path:dir+'/failure.png',fullPage:true});console.error('Screenshot:',dir+'/failure.png');throw e}
  finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

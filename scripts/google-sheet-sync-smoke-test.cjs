@@ -5,9 +5,72 @@ const path = require('node:path')
 const esbuild = require('esbuild')
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-sheet-parser-'))
 esbuild.buildSync({ entryPoints: ['src/shared/googleSheetSync.ts'], bundle: true, platform: 'node', format: 'cjs', outfile: path.join(dir, 'sync.cjs') })
-const { parseSheetCsv, googleSheetUrl, readGoogleSheet, mapGoogleSheet, SHEET_MAX_BYTES } = require(path.join(dir, 'sync.cjs'))
+const { parseSheetCsv, googleSheetUrl, readGoogleSheet, mapGoogleSheet, SHEET_MAX_BYTES, getGoogleSheetSyncEndDates, validateGoogleSheetSyncEndDate } = require(path.join(dir, 'sync.cjs'))
 const config = { url: 'https://docs.google.com/spreadsheets/d/test/edit#gid=123', dataTypeCode: 'zalo_person', hasHeader: true, mapping: [{ column: 0, field: 'uid' }, { column: 1, field: 'name' }, { column: 2, field: 'phone' }], expectedHeaders: ['UID', 'Tên', 'Phone'] }
 async function main() {
+  const dateCases = [
+    ['2026-10-09T17:00:00Z', '2026-10-17', '2027-04-08'],
+    ['2026-10-11T16:59:59Z', '2026-10-18', '2027-04-09'],
+    ['2026-10-11T17:00:00Z', '2026-10-19', '2027-04-10'],
+    ['2026-01-27T05:00:00Z', '2026-02-03', '2026-07-26'],
+    ['2026-12-28T05:00:00Z', '2027-01-04', '2027-06-26'],
+    ['2028-02-23T05:00:00Z', '2028-03-01', '2028-08-21']
+  ]
+  const originalTimezone = process.env.TZ
+  try {
+    for (const timezone of ['UTC', 'America/Los_Angeles', 'Asia/Ho_Chi_Minh', 'Pacific/Kiritimati']) {
+      process.env.TZ = timezone
+      for (const [instant, defaultEndDate, maxEndDate] of dateCases) {
+        const now = new Date(instant)
+        assert.deepEqual(getGoogleSheetSyncEndDates(now), { defaultEndDate, maxEndDate }, timezone + ' ' + instant)
+        assert.doesNotThrow(() => validateGoogleSheetSyncEndDate(defaultEndDate, now))
+        assert.doesNotThrow(() => validateGoogleSheetSyncEndDate(maxEndDate, now), 'Day 180 is allowed')
+        const beyond = new Date(maxEndDate + 'T00:00:00Z')
+        beyond.setUTCDate(beyond.getUTCDate() + 1)
+        assert.throws(() => validateGoogleSheetSyncEndDate(beyond.toISOString().slice(0, 10), now), /180 ngày/)
+      }
+    }
+  } finally {
+    if (originalTimezone === undefined) delete process.env.TZ
+    else process.env.TZ = originalTimezone
+  }
+  for (const date of [null, undefined, '', ' ']) assert.throws(() => validateGoogleSheetSyncEndDate(date), /Vui lòng chọn/)
+  for (const date of ['2026-02-30', '2026-13-01', '2026-00-10', '2026-10-00', '2026-1-1', '12/10/2026', '0000-01-01', 20261019]) {
+    assert.throws(() => validateGoogleSheetSyncEndDate(date), /không hợp lệ/)
+  }
+  // Exercise the real main-process boundary with isolated auth/HTTP fixtures.
+  await esbuild.build({
+    entryPoints: ['src/main/data/repositories/dataGroupExternalSyncRepository.ts'], bundle: true,
+    platform: 'node', format: 'cjs', outfile: path.join(dir, 'repository.cjs'),
+    plugins: [{ name: 'sheet-fixtures', setup(builder) {
+      builder.onResolve({ filter: /\/(supabaseClient|currentUser)$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: args.path.endsWith('/supabaseClient')
+        ? 'export const getSupabaseClient = () => globalThis.sheetTestClient'
+        : 'const user = {staffId: 7, organizationId: 9}, credentials = {username: "fixture", password: "fixture"}; export const requireCurrentUser = () => user; export const getCurrentUser = requireCurrentUser; export const requireCurrentUserCredentials = () => credentials; export const getCurrentUserCredentials = requireCurrentUserCredentials' }))
+    } }]
+  })
+  const rpcCalls = [], fetchCalls = []
+  globalThis.sheetTestClient = { rpc(name, args) {
+    rpcCalls.push(args)
+    return { abortSignal: async () => ({ data: args.p_action === 'save' ? { ...args.p_data, id: 91 } : null, error: null }) }
+  } }
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (...args) => { fetchCalls.push(args); return new Response('UID,Tên,Phone\n12345678901234567890,An,0912345678\n') }
+  try {
+    const repository = require(path.join(dir, 'repository.cjs'))
+    const input = { groupId: 1, name: 'Nguồn thử nghiệm', config, everyHours: 6, isEnabled: false, requestId: 'fixture' }
+    for (const endDate of [undefined, null, '', ' ', '2026-02-30', '9999-12-31']) {
+      await assert.rejects(() => repository.saveDataGroupExternalSync({ ...input, endDate }), /ngày dừng đồng bộ|Ngày dừng đồng bộ/)
+    }
+    assert.equal(rpcCalls.length, 0, 'Invalid dates must be rejected before any RPC')
+    assert.equal(fetchCalls.length, 0, 'Invalid dates must be rejected before fetching the Sheet')
+    const endDate = getGoogleSheetSyncEndDates().maxEndDate
+    assert.equal((await repository.saveDataGroupExternalSync({ ...input, endDate })).endDate, endDate)
+    assert.deepEqual(rpcCalls.map(call => call.p_action), ['check', 'save'])
+    assert.equal(fetchCalls.length, 1)
+    await repository.toggleDataGroupExternalSync(1, 91, 7, true)
+    assert.equal(rpcCalls.at(-1).p_action, 'toggle', 'Toggle remains compatible with legacy sources without end dates')
+  } finally { globalThis.fetch = originalFetch; delete globalThis.sheetTestClient }
   assert.deepEqual(parseSheetCsv('\uFEFFUID,Tên,Phone\r\n12345678901234567890,"An,\nBình",0912345678\r\n'), [['UID','Tên','Phone'],['12345678901234567890','An,\nBình','0912345678']])
   assert.deepEqual(parseSheetCsv('a,"b""c",\n'), [['a','b"c','']])
   assert.deepEqual(parseSheetCsv(''), [])
@@ -96,6 +159,6 @@ async function main() {
     'https://www.facebook.com/groups/123?multi_permalinks=123,456',
     'https://www.facebook.com/groups/123?multi_permalinks=123&multi_permalinks=456'
   ]) assert.equal(one('facebook_post_url', 'url', url).invalidCount, 1, url)
-  console.log('Google Sheet parser, validation, limits, redirects and shared mapping: PASS')
+  console.log('Google Sheet parser, validation, limits, redirects, shared mapping, Vietnam end dates and main-process save boundary: PASS')
 }
 main().finally(() => fs.rmSync(dir,{recursive:true,force:true})).catch(error => {console.error(error);process.exitCode=1})

@@ -113,6 +113,8 @@ Tab **Đồng bộ ngoài** dùng `dataGroupExternalSync` qua main/preload/rende
 
 UI chỉ theo dõi pending/running mỗi 10 giây, tối đa 5 phút, khi tab/dialog đồng bộ hiện và không mở editor; thành công tải lại member/group/panel rồi dừng. Sửa nguồn tự kết nối, đổi chế độ tiêu đề tự đọc lại, cột thay đổi phải ghép lại; chỉ mount một panel giữa chế độ rộng/hẹp. Kiểm chứng bằng parser smoke, UI smoke Google Sheet, SQL rollback và hai typecheck/build.
 
+Ngày dừng Google Sheet bắt buộc khi lưu Desktop: mặc định hôm nay +7, tối đa +180 ngày theo giờ Việt Nam; form/main dùng chung kiểm tra trong [googleSheetSync.ts](src/shared/googleSheetSync.ts). Nguồn cũ NULL vẫn chạy, chỉ điền ngày khi mở sửa và ghi khi Lưu; không backfill/migration. Xem [hướng dẫn và smoke](docs/DATA_GROUP_GOOGLE_SHEET_SYNC.md).
+
 V311 cấp thêm `EXECUTE` cho `service_role` trên `aka_agent_data_group_external_sync(bigint,bigint,text,text,text,jsonb)` và `aka_agent_list_data_group_members_v3` để Web gọi được RPC; giữ nguyên body/owner/ACL Desktop và không reload schema. Smoke phải đổi role SQL thật bằng `SET LOCAL ROLE service_role`, không chỉ đặt JWT claim. Xem [audit v311](docs/DATA_GROUP_SHEET_V311_AUDIT.md).
 
 ### Admin akaBiz (desktop)
@@ -500,6 +502,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Ngày dừng Sheet cũ NULL**: chỉ bắt buộc ngày ở luồng lưu; không áp kiểm tra này khi đọc, bật/tắt hoặc chạy nguồn cũ. Ngày mặc định và giới hạn phải dùng lịch Việt Nam, không lấy ngày UTC hoặc múi giờ máy.
 
 - **Zalo người nhận chặn tin nhắn**: v358 đã apply `20261009014334 / migration_v358_zalo_receiver_blocks_no_quota`; policy 119/122 dùng chung cho gửi bạn bè/người lạ có `counts_toward_limit=false`, vẫn ghi `thất bại`. Không hoàn bộ đếm cũ hoặc apply lại; xem [audit](docs/ZALO_RECEIVER_BLOCKS_NO_QUOTA_V358.md).
 
