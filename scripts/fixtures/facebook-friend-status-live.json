@@ -1,0 +1,1204 @@
+{
+  "block": {
+    "id": 39,
+    "code": "try {\r\n  const btn = await helpers.element('fb_add_friend_button')\r\n  // waitForSelector throws khi timeout → catch ở dưới chỉ catch lỗi engine, không phải timeout\r\n  const found = await page.waitForSelector(btn, { timeout: 5000 }).catch(() => false)\r\n  if (!found) {\r\n    // Không có nút \"Thêm bạn bè\" — tình huống bình thường:\r\n    //   - Đã là bạn (FB hiện \"Bạn bè\" thay vì \"Thêm bạn bè\")\r\n    //   - Đã gửi lời mời, đang chờ phản hồi (FB hiện \"Đã gửi yêu cầu\")\r\n    //   - Profile khoá / FB ẩn nút (privacy settings)\r\n    // → KHÔNG coi là lỗi, return ok: true với cờ alreadyFriend\r\n    helpers.log('ℹ️ Không có nút Thêm bạn bè — bỏ qua (có thể đã là bạn hoặc nút bị ẩn)')\r\n    return { ok: true, clicked: false, alreadyFriend: true }\r\n  }\r\n  await page.click(btn)\r\n  await helpers.sleep(2000, signal)\r\n  return { ok: true, clicked: true, alreadyFriend: false }\r\n} catch (e) {\r\n  return { ok: false, clicked: false, alreadyFriend: false, error: e.message }\r\n}",
+    "icon": "UserPlus",
+    "kind": "js",
+    "name": "fb_add_friend",
+    "category": "facebook",
+    "staff_id": 1,
+    "created_at": "2026-04-26T17:29:28.632356+00:00",
+    "is_builtin": true,
+    "updated_at": "2026-04-29T10:24:52.401+00:00",
+    "description": "Click nút Thêm bạn bè. Nếu không có nút → coi là đã là bạn / FB ẩn nút (KHÔNG lỗi).",
+    "system_type": null,
+    "config_schema": [],
+    "output_schema": [
+      {
+        "name": "ok",
+        "type": "boolean",
+        "label": "Có lỗi nghiêm trọng không (false=lỗi, true=OK hoặc skipped)"
+      },
+      {
+        "name": "clicked",
+        "type": "boolean",
+        "label": "Đã click nút kết bạn chưa"
+      },
+      {
+        "name": "alreadyFriend",
+        "type": "boolean",
+        "label": "Skip do đã là bạn / nút bị ẩn"
+      },
+      {
+        "name": "error",
+        "type": "string",
+        "label": "Lỗi (nếu có)"
+      }
+    ],
+    "default_config": {},
+    "organization_id": 1
+  },
+  "history": [
+    {
+      "name": "migration_v358_zalo_receiver_blocks_no_quota",
+      "version": "20261009014334"
+    },
+    {
+      "name": "migration_v357_facebook_waiting_message_notices",
+      "version": "20261008043042"
+    },
+    {
+      "name": "migration_v356_facebook_message_waiting_limit_24h",
+      "version": "20261008040758"
+    },
+    {
+      "name": "migration_v355_facebook_message_waiting_limit",
+      "version": "20261008035803"
+    }
+  ],
+  "elements": [
+    {
+      "md5": "6e03d6a844cd2948a31028e2da8785ea",
+      "row": {
+        "id": 12,
+        "name": "fb_add_friend_button",
+        "xpath": "//*[@role=\"button\" and .=\"Thêm bạn bè\"]",
+        "category": "facebook",
+        "staff_id": 1,
+        "created_at": "2026-04-26T17:29:23.370697+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-04-29T10:24:44.738+00:00",
+        "description": "Nút Thêm bạn bè trên profile",
+        "organization_id": 1
+      }
+    },
+    {
+      "md5": "a77900da94eabe6316c66cbb36549e7a",
+      "row": {
+        "id": 1734,
+        "name": "FbProfileFriendDivLink",
+        "xpath": "//*[@class='xjp7ctv']//a[@role='link' and @tabindex=0 and not(contains(@href,'friends_mutual'))]",
+        "category": "facebook",
+        "staff_id": null,
+        "created_at": "2026-07-06T17:56:00.870734+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-07-06T18:04:55.815349+00:00",
+        "description": "Facebook profile friend link. Mirrors C# FriendDiv_Link.",
+        "organization_id": null
+      }
+    },
+    {
+      "md5": "c66cb54aadf6a03d3b9e40b1c4fdc6b6",
+      "row": {
+        "id": 1741,
+        "name": "fb_group_invite_friend_menu_item",
+        "xpath": "//*[@role='menuitem' and contains(.,'Mời bạn bè')]",
+        "category": "facebook",
+        "staff_id": null,
+        "created_at": "2026-07-09T10:25:49.2266+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-07-09T13:12:12.982163+00:00",
+        "description": "Menu item mời bạn bè vào group Facebook, nếu Facebook hiển thị menu trung gian.",
+        "organization_id": null
+      }
+    }
+  ],
+  "policies": [
+    {
+      "id": 81,
+      "is_active": true,
+      "is_delete": false,
+      "created_at": "2026-10-06T03:37:29.593089+00:00",
+      "error_code": "err_fb_add_friend_unavailable",
+      "error_desc": "Phạm vi: Không có nút kết bạn, đã loại trừ trạng thái đã là bạn/đã gửi lời mời.\n\nGiới hạn cấu hình / cần triển khai sau: Không tạo policy lỗi cho đã là bạn/đã gửi lời mời. Chỉ suy ra chặn tài khoản khi có bằng chứng; không khóa chỉ vì một hồ sơ thiếu nút.\n\nv346 chỉ bổ sung danh mục DB. Nhận diện mã và hành vi chưa được tích hợp vào runtime; is_active=true không tự nhận diện lỗi mới.\n\nNguồn: Danh_sach_loi_Facebook_auto_28092026.xlsx / Danh sách lỗi FB / dòng 13\n\nNguồn: FACEBOOK_ERROR_HANDLING_20260928.xlsx / 1. Danh sách lỗi FB / dòng 18",
+      "error_name": "Không thể gửi lời mời kết bạn Facebook",
+      "error_type": "external facebook",
+      "updated_at": "2026-10-06T03:37:29.593089+00:00",
+      "detail_status": "thất bại",
+      "error_element": null,
+      "noti_campaign": "Không thể gửi lời mời kết bạn Facebook",
+      "zalo_error_codes": [],
+      "zalo_action_codes": [],
+      "counts_toward_limit": false,
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "update_login_status": null,
+      "disable_action_codes": [],
+      "noti_running_process": "Không thể gửi lời mời kết bạn Facebook",
+      "time_disable_actions": null,
+      "update_status_account": null,
+      "update_status_campaign": null,
+      "count_consecutive_errors": null,
+      "counts_toward_bad_target": false
+    },
+    {
+      "id": 4,
+      "is_active": true,
+      "is_delete": false,
+      "created_at": "2026-05-09T04:16:20.5176+00:00",
+      "error_code": "err_undefined",
+      "error_desc": "Lỗi không xác định",
+      "error_name": "Lỗi không xác định",
+      "error_type": "system",
+      "updated_at": "2026-09-25T22:24:28.593743+00:00",
+      "detail_status": null,
+      "error_element": null,
+      "noti_campaign": "Có lỗi xảy ra",
+      "zalo_error_codes": [],
+      "zalo_action_codes": [],
+      "counts_toward_limit": true,
+      "disable_action_days": null,
+      "disable_action_mode": "fixed_minutes",
+      "disable_action_time": null,
+      "update_login_status": null,
+      "disable_action_codes": [],
+      "noti_running_process": "Có lỗi xảy ra",
+      "time_disable_actions": null,
+      "update_status_account": null,
+      "update_status_campaign": "tạm dừng",
+      "count_consecutive_errors": 4,
+      "counts_toward_bad_target": true
+    }
+  ],
+  "block_md5": "7a07491212e603b21b1585f8d6f0f78a",
+  "workflows": [
+    {
+      "md5": "48a1a840224f2eccb6c3432dd9c3a9eb",
+      "row": {
+        "id": 249,
+        "name": "facebook_message_friend__test__facebook_message_friend",
+        "edges": [
+          {
+            "id": "e-if_msg-resolve_msg-true",
+            "source": "if_msg",
+            "target": "resolve_msg",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_msg-merge_msg-false",
+            "source": "if_msg",
+            "target": "merge_msg",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_msg-nav_msg",
+            "source": "resolve_msg",
+            "target": "nav_msg"
+          },
+          {
+            "id": "e-nav_msg-send_msg",
+            "source": "nav_msg",
+            "target": "send_msg"
+          },
+          {
+            "id": "e-send_msg-merge_msg",
+            "source": "send_msg",
+            "target": "merge_msg"
+          },
+          {
+            "id": "e-merge_msg-if_friend",
+            "source": "merge_msg",
+            "target": "if_friend"
+          },
+          {
+            "id": "e-if_friend-resolve_profile-true",
+            "source": "if_friend",
+            "target": "resolve_profile",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_friend-merge_friend-false",
+            "source": "if_friend",
+            "target": "merge_friend",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_profile-nav_profile",
+            "source": "resolve_profile",
+            "target": "nav_profile"
+          },
+          {
+            "id": "e-nav_profile-add_friend",
+            "source": "nav_profile",
+            "target": "add_friend"
+          },
+          {
+            "id": "e-add_friend-merge_friend",
+            "source": "add_friend",
+            "target": "merge_friend"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "if_msg",
+            "config": {
+              "condition": "vars.enableMessage === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 0
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_msg",
+            "label": "Resolve UID/link → /messages/t/",
+            "config": {
+              "urlType": "messenger"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 80
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_msg",
+            "label": "Mở Messenger",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 160
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "send_msg",
+            "config": {
+              "screenshotCaptureOn": "failure",
+              "screenshotCaptureTiming": "after"
+            },
+            "blockId": 38,
+            "position": {
+              "x": 0,
+              "y": 240
+            },
+            "blockName": "fb_send_message"
+          },
+          {
+            "id": "merge_msg",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 340
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_friend",
+            "config": {
+              "condition": "vars.enableAddFriend === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 440
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_profile",
+            "label": "Resolve UID/link → profile URL",
+            "config": {
+              "urlType": "profile"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 520
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_profile",
+            "label": "Mở profile",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 600
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "add_friend",
+            "config": {},
+            "blockId": 39,
+            "position": {
+              "x": 0,
+              "y": 680
+            },
+            "blockName": "fb_add_friend"
+          },
+          {
+            "id": "merge_friend",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 780
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          }
+        ],
+        "staff_id": 1,
+        "created_at": "2026-06-03T10:01:07.982314+00:00",
+        "is_builtin": false,
+        "updated_at": "2026-10-06T10:14:35.142327+00:00",
+        "description": "Workflow nhắn tin & kết bạn (mỗi action self-catch lỗi, không fail toàn workflow)",
+        "organization_id": 1,
+        "variables_schema": [
+          {
+            "name": "inputDataUid",
+            "type": "string",
+            "label": "UID/URL của target"
+          },
+          {
+            "name": "campaignContent",
+            "type": "string",
+            "label": "Nội dung tin nhắn"
+          },
+          {
+            "name": "images",
+            "type": "array",
+            "label": "Ảnh kèm tin nhắn"
+          },
+          {
+            "name": "enableMessage",
+            "type": "boolean",
+            "label": "Bật gửi tin nhắn"
+          },
+          {
+            "name": "enableAddFriend",
+            "type": "boolean",
+            "label": "Bật kết bạn"
+          }
+        ],
+        "default_variables": {
+          "images": [],
+          "inputDataUid": "",
+          "enableMessage": true,
+          "campaignContent": "",
+          "enableAddFriend": false,
+          "campaignContentPreparationVersion": 1
+        }
+      }
+    },
+    {
+      "md5": "7a1b85e0e7a19537d99ce753784b06d1",
+      "row": {
+        "id": 208,
+        "name": "facebook_message_uid",
+        "edges": [
+          {
+            "id": "e-if_msg-resolve_msg-true",
+            "source": "if_msg",
+            "target": "resolve_msg",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_msg-merge_msg-false",
+            "source": "if_msg",
+            "target": "merge_msg",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_msg-nav_msg",
+            "source": "resolve_msg",
+            "target": "nav_msg"
+          },
+          {
+            "id": "e-nav_msg-send_msg",
+            "source": "nav_msg",
+            "target": "send_msg"
+          },
+          {
+            "id": "e-send_msg-merge_msg",
+            "source": "send_msg",
+            "target": "merge_msg"
+          },
+          {
+            "id": "e-merge_msg-if_friend",
+            "source": "merge_msg",
+            "target": "if_friend"
+          },
+          {
+            "id": "e-if_friend-resolve_profile-true",
+            "source": "if_friend",
+            "target": "resolve_profile",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_friend-merge_friend-false",
+            "source": "if_friend",
+            "target": "merge_friend",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_profile-nav_profile",
+            "source": "resolve_profile",
+            "target": "nav_profile"
+          },
+          {
+            "id": "e-nav_profile-add_friend",
+            "source": "nav_profile",
+            "target": "add_friend"
+          },
+          {
+            "id": "e-add_friend-merge_friend",
+            "source": "add_friend",
+            "target": "merge_friend"
+          },
+          {
+            "id": "e-if_collect_suggested_friends-collect-true",
+            "source": "if_collect_suggested_friends",
+            "target": "collect_suggested_friends",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_collect_suggested_friends-if_msg-false",
+            "source": "if_collect_suggested_friends",
+            "target": "if_msg",
+            "sourceHandle": "false"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "if_msg",
+            "config": {
+              "condition": "vars.enableMessage === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 0
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_msg",
+            "label": "Resolve UID/link → /messages/t/",
+            "config": {
+              "urlType": "messenger"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 80
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_msg",
+            "label": "Mở Messenger",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 160
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "send_msg",
+            "config": {
+              "screenshotCaptureOn": "failure",
+              "screenshotCaptureTiming": "after"
+            },
+            "blockId": 38,
+            "position": {
+              "x": 0,
+              "y": 240
+            },
+            "blockName": "fb_send_message"
+          },
+          {
+            "id": "merge_msg",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 340
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_friend",
+            "config": {
+              "condition": "vars.enableAddFriend === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 440
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_profile",
+            "label": "Resolve UID/link → profile URL",
+            "config": {
+              "urlType": "profile"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 520
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_profile",
+            "label": "Mở profile",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 600
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "add_friend",
+            "config": {},
+            "blockId": 39,
+            "position": {
+              "x": 0,
+              "y": 680
+            },
+            "blockName": "fb_add_friend"
+          },
+          {
+            "id": "merge_friend",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 780
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_collect_suggested_friends",
+            "config": {
+              "condition": "vars.collectSuggestedFriendsOnly === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": -180
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "collect_suggested_friends",
+            "label": "Lấy đề xuất bạn bè",
+            "config": {},
+            "blockId": 2620,
+            "position": {
+              "x": -120,
+              "y": -80
+            },
+            "blockName": "fb_collect_suggested_friends"
+          }
+        ],
+        "staff_id": 1,
+        "created_at": "2026-05-18T03:28:33.612962+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-10-06T10:14:35.142327+00:00",
+        "description": "Workflow nhắn tin và kết bạn đến UID Facebook, clone từ workflow nhắn tin bạn bè.",
+        "organization_id": 1,
+        "variables_schema": [
+          {
+            "name": "inputDataUid",
+            "type": "string",
+            "label": "UID/URL của target"
+          },
+          {
+            "name": "campaignContent",
+            "type": "string",
+            "label": "Nội dung tin nhắn"
+          },
+          {
+            "name": "images",
+            "type": "array",
+            "label": "Ảnh kèm tin nhắn"
+          },
+          {
+            "name": "enableMessage",
+            "type": "boolean",
+            "label": "Bật gửi tin nhắn"
+          },
+          {
+            "name": "enableAddFriend",
+            "type": "boolean",
+            "label": "Bật kết bạn"
+          },
+          {
+            "name": "collectSuggestedFriendsOnly",
+            "type": "boolean",
+            "label": "Chỉ lấy đề xuất bạn bè",
+            "default": false
+          },
+          {
+            "name": "suggestedFriendsCount",
+            "type": "number",
+            "label": "Số lượng đề xuất",
+            "default": 10
+          }
+        ],
+        "default_variables": {
+          "images": [],
+          "inputDataUid": "",
+          "enableMessage": true,
+          "campaignContent": "",
+          "enableAddFriend": false,
+          "suggestedFriendsCount": 10,
+          "collectSuggestedFriendsOnly": false,
+          "campaignContentPreparationVersion": 1
+        }
+      }
+    },
+    {
+      "md5": "126faf27aad5040dcd64cb2d48892523",
+      "row": {
+        "id": 248,
+        "name": "facebook_message_uid__test__facebook_message_uid",
+        "edges": [
+          {
+            "id": "e-if_msg-resolve_msg-true",
+            "source": "if_msg",
+            "target": "resolve_msg",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_msg-merge_msg-false",
+            "source": "if_msg",
+            "target": "merge_msg",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_msg-nav_msg",
+            "source": "resolve_msg",
+            "target": "nav_msg"
+          },
+          {
+            "id": "e-nav_msg-send_msg",
+            "source": "nav_msg",
+            "target": "send_msg"
+          },
+          {
+            "id": "e-send_msg-merge_msg",
+            "source": "send_msg",
+            "target": "merge_msg"
+          },
+          {
+            "id": "e-merge_msg-if_friend",
+            "source": "merge_msg",
+            "target": "if_friend"
+          },
+          {
+            "id": "e-if_friend-resolve_profile-true",
+            "source": "if_friend",
+            "target": "resolve_profile",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_friend-merge_friend-false",
+            "source": "if_friend",
+            "target": "merge_friend",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_profile-nav_profile",
+            "source": "resolve_profile",
+            "target": "nav_profile"
+          },
+          {
+            "id": "e-nav_profile-add_friend",
+            "source": "nav_profile",
+            "target": "add_friend"
+          },
+          {
+            "id": "e-add_friend-merge_friend",
+            "source": "add_friend",
+            "target": "merge_friend"
+          },
+          {
+            "id": "e-if_collect_suggested_friends-collect-true",
+            "source": "if_collect_suggested_friends",
+            "target": "collect_suggested_friends",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_collect_suggested_friends-if_msg-false",
+            "source": "if_collect_suggested_friends",
+            "target": "if_msg",
+            "sourceHandle": "false"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "if_msg",
+            "config": {
+              "condition": "vars.enableMessage === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 0
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_msg",
+            "label": "Resolve UID/link → /messages/t/",
+            "config": {
+              "urlType": "messenger"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 80
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_msg",
+            "label": "Mở Messenger",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 160
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "send_msg",
+            "config": {
+              "screenshotCaptureOn": "failure",
+              "screenshotCaptureTiming": "after"
+            },
+            "blockId": 38,
+            "position": {
+              "x": 0,
+              "y": 240
+            },
+            "blockName": "fb_send_message"
+          },
+          {
+            "id": "merge_msg",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 340
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_friend",
+            "config": {
+              "condition": "vars.enableAddFriend === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 440
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_profile",
+            "label": "Resolve UID/link → profile URL",
+            "config": {
+              "urlType": "profile"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 520
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_profile",
+            "label": "Mở profile",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 600
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "add_friend",
+            "config": {},
+            "blockId": 39,
+            "position": {
+              "x": 0,
+              "y": 680
+            },
+            "blockName": "fb_add_friend"
+          },
+          {
+            "id": "merge_friend",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 780
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_collect_suggested_friends",
+            "config": {
+              "condition": "vars.collectSuggestedFriendsOnly === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": -180
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "collect_suggested_friends",
+            "label": "Lấy đề xuất bạn bè",
+            "config": {},
+            "blockId": 2620,
+            "position": {
+              "x": -120,
+              "y": -80
+            },
+            "blockName": "fb_collect_suggested_friends"
+          }
+        ],
+        "staff_id": 1,
+        "created_at": "2026-06-03T10:01:07.982314+00:00",
+        "is_builtin": false,
+        "updated_at": "2026-10-06T10:14:35.142327+00:00",
+        "description": "Workflow nhắn tin và kết bạn đến UID Facebook, clone từ workflow nhắn tin bạn bè.",
+        "organization_id": 1,
+        "variables_schema": [
+          {
+            "name": "inputDataUid",
+            "type": "string",
+            "label": "UID/URL của target"
+          },
+          {
+            "name": "campaignContent",
+            "type": "string",
+            "label": "Nội dung tin nhắn"
+          },
+          {
+            "name": "images",
+            "type": "array",
+            "label": "Ảnh kèm tin nhắn"
+          },
+          {
+            "name": "enableMessage",
+            "type": "boolean",
+            "label": "Bật gửi tin nhắn"
+          },
+          {
+            "name": "enableAddFriend",
+            "type": "boolean",
+            "label": "Bật kết bạn"
+          },
+          {
+            "name": "collectSuggestedFriendsOnly",
+            "type": "boolean",
+            "label": "Chỉ lấy đề xuất bạn bè",
+            "default": false
+          },
+          {
+            "name": "suggestedFriendsCount",
+            "type": "number",
+            "label": "Số lượng đề xuất",
+            "default": 10
+          }
+        ],
+        "default_variables": {
+          "images": [],
+          "inputDataUid": "",
+          "enableMessage": true,
+          "campaignContent": "",
+          "enableAddFriend": false,
+          "suggestedFriendsCount": 10,
+          "collectSuggestedFriendsOnly": false,
+          "campaignContentPreparationVersion": 1
+        }
+      }
+    },
+    {
+      "md5": "ce08a74e7cca8cf06ec1f4d51b904a0e",
+      "row": {
+        "id": 3,
+        "name": "facebook_message_friend",
+        "edges": [
+          {
+            "id": "e-if_msg-resolve_msg-true",
+            "source": "if_msg",
+            "target": "resolve_msg",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_msg-merge_msg-false",
+            "source": "if_msg",
+            "target": "merge_msg",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_msg-nav_msg",
+            "source": "resolve_msg",
+            "target": "nav_msg"
+          },
+          {
+            "id": "e-nav_msg-send_msg",
+            "source": "nav_msg",
+            "target": "send_msg"
+          },
+          {
+            "id": "e-send_msg-merge_msg",
+            "source": "send_msg",
+            "target": "merge_msg"
+          },
+          {
+            "id": "e-merge_msg-if_friend",
+            "source": "merge_msg",
+            "target": "if_friend"
+          },
+          {
+            "id": "e-if_friend-resolve_profile-true",
+            "source": "if_friend",
+            "target": "resolve_profile",
+            "sourceHandle": "true"
+          },
+          {
+            "id": "e-if_friend-merge_friend-false",
+            "source": "if_friend",
+            "target": "merge_friend",
+            "sourceHandle": "false"
+          },
+          {
+            "id": "e-resolve_profile-nav_profile",
+            "source": "resolve_profile",
+            "target": "nav_profile"
+          },
+          {
+            "id": "e-nav_profile-add_friend",
+            "source": "nav_profile",
+            "target": "add_friend"
+          },
+          {
+            "id": "e-add_friend-merge_friend",
+            "source": "add_friend",
+            "target": "merge_friend"
+          }
+        ],
+        "nodes": [
+          {
+            "id": "if_msg",
+            "config": {
+              "condition": "vars.enableMessage === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 0
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_msg",
+            "label": "Resolve UID/link → /messages/t/",
+            "config": {
+              "urlType": "messenger"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 80
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_msg",
+            "label": "Mở Messenger",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 160
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "send_msg",
+            "config": {
+              "screenshotCaptureOn": "failure",
+              "screenshotCaptureTiming": "after"
+            },
+            "blockId": 38,
+            "position": {
+              "x": 0,
+              "y": 240
+            },
+            "blockName": "fb_send_message"
+          },
+          {
+            "id": "merge_msg",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 340
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          },
+          {
+            "id": "if_friend",
+            "config": {
+              "condition": "vars.enableAddFriend === true"
+            },
+            "blockId": 1,
+            "position": {
+              "x": 100,
+              "y": 440
+            },
+            "blockName": "if_else",
+            "systemType": "ifElse"
+          },
+          {
+            "id": "resolve_profile",
+            "label": "Resolve UID/link → profile URL",
+            "config": {
+              "urlType": "profile"
+            },
+            "blockId": 612,
+            "position": {
+              "x": 0,
+              "y": 520
+            },
+            "blockName": "fb_resolve_url"
+          },
+          {
+            "id": "nav_profile",
+            "label": "Mở profile",
+            "config": {},
+            "blockId": 5,
+            "position": {
+              "x": 0,
+              "y": 600
+            },
+            "blockName": "nav_to_url"
+          },
+          {
+            "id": "add_friend",
+            "config": {},
+            "blockId": 39,
+            "position": {
+              "x": 0,
+              "y": 680
+            },
+            "blockName": "fb_add_friend"
+          },
+          {
+            "id": "merge_friend",
+            "config": {
+              "mode": "any"
+            },
+            "blockId": 4,
+            "position": {
+              "x": 100,
+              "y": 780
+            },
+            "blockName": "merge",
+            "systemType": "merge"
+          }
+        ],
+        "staff_id": 1,
+        "created_at": "2026-04-26T17:29:28.980276+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-10-06T10:14:35.142327+00:00",
+        "description": "Workflow nhắn tin & kết bạn (mỗi action self-catch lỗi, không fail toàn workflow)",
+        "organization_id": 1,
+        "variables_schema": [
+          {
+            "name": "inputDataUid",
+            "type": "string",
+            "label": "UID/URL của target"
+          },
+          {
+            "name": "campaignContent",
+            "type": "string",
+            "label": "Nội dung tin nhắn"
+          },
+          {
+            "name": "images",
+            "type": "array",
+            "label": "Ảnh kèm tin nhắn"
+          },
+          {
+            "name": "enableMessage",
+            "type": "boolean",
+            "label": "Bật gửi tin nhắn"
+          },
+          {
+            "name": "enableAddFriend",
+            "type": "boolean",
+            "label": "Bật kết bạn"
+          }
+        ],
+        "default_variables": {
+          "images": [],
+          "inputDataUid": "",
+          "enableMessage": true,
+          "campaignContent": "",
+          "enableAddFriend": false,
+          "campaignContentPreparationVersion": 1
+        }
+      }
+    }
+  ],
+  "project_ref": "cgjbsmqtfhqvttudyjzq"
+}

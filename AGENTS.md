@@ -230,6 +230,10 @@ Convention quan trọng (xem memory `campaign_conventions.md`):
 
 ### Workflow engine v2
 
+Facebook kết bạn v359 đã apply `20261009022202 / migration_v359_facebook_friend_statuses` trên akachat ngày 09/10/2026; không apply lại. Desktop mới dùng `facebookFriendOutcomeVersion=1` để phân biệt đã gửi/chấp nhận/đã là bạn/gửi mới/thiếu nút, giữ snapshot `auto_error` cho status/quota/bad-target/side effects và đếm một bad-target cho lỗi nhắn tin+kết bạn cùng input; app cũ giữ body legacy, Desktop mới chưa phát hành. Xem [audit và rollout](docs/FACEBOOK_FRIEND_STATUSES_V359.md).
+
+V360 đã apply `20261009025028 / migration_v360_facebook_friend_cancel_commit`: giữ kết quả/quota của click đã hoàn tất khi hủy sleep, không requeue input đã thực hiện; quyết định pause đầu tiên không bị policy sau ghi đè, các khóa account/action vẫn áp dụng. Desktop đã build local, chưa phát hành; không apply lại. Xem [audit và kiểm chứng](docs/FACEBOOK_FRIEND_CANCEL_POLICY_V360.md).
+
 [src/main/v2/runtime/](src/main/v2/runtime/) — engine duy nhất chạy campaign:
 - `workflowEngine.ts` — DAG executor cohort-based: parallel split (multiple outgoing edges), AND/OR join (mode='all'/'any' merge node), `ifElse` skip propagation, loop body re-exec với `vars.loopItem`/`vars.loopIndex`, `AbortSignal` cancellation. `allSteps[]` track loop iterations để scheduler log đầy đủ (snapshot `nodeStates` chỉ giữ iteration cuối).
 - `blockExecutor.ts` — `vm.createContext` sandbox. KHÔNG expose `process`/`require`/`Buffer`/`fs`. Block code = JS string, return object → output, throw → fail.
