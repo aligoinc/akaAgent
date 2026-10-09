@@ -1,0 +1,7 @@
+{
+  "applied_at": "2026-10-09 12:18:51.321111+00",
+  "version": "20261009121850",
+  "name": "migration_v365_remove_unsupported_post_visible_status",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "sql_sha256": "30f9bd4977ff1ea3331a11d5eeeba6e65dab04bd8f1b0ce9f4aa2a13d7f3733b"
+}

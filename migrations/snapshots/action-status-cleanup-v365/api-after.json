@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-09T12:19:30.318Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "http_status": 200,
+  "rows": [
+    {
+      "id": 51,
+      "code": "campaign_detail_skipped"
+    },
+    {
+      "id": 52,
+      "code": "campaign_detail_post_pending"
+    }
+  ],
+  "schema_reload_requested": false
+}

@@ -8,6 +8,7 @@ Preparation applied to **akachat / cgjbsmqtfhqvttudyjzq** on 09/10/2026, history
 - Added the agreed nullable columns to `auto_status`, `auto_error`, `auto_campaign_details`, and `auto_automation_trigger_statuses`.
 - Filled only the new `auto_status.status_value` column on 19 existing detail statuses, using the unambiguous existing Automation mapping. No existing value or timestamp on those rows changed.
 - Added status IDs **51** (`campaign_detail_skipped`), **52** (`campaign_detail_post_pending`), and **53** (`campaign_detail_post_visible`). The latter two have no main-result policy; they can be observations. A future main-role use needs its own verified policy.
+  Correction: V365 removed unused ID 53 after confirming no live producer detects post visibility. IDs 51/52 have actual producer/adapter evidence and remain. See [the full status review](ACTION_STATUS_CLEANUP_V365.md); the original V361 SQL is retained as applied history.
 - Preserved all 104 `auto_error` rows, including the two inactive policies; all three new error columns remain NULL.
 - Added component/identity guards. Old detail INSERTs with NULL result metadata return immediately from the new guard without catalog lookups.
 - Created four partial indexes using separate `CREATE INDEX CONCURRENTLY` calls: unique result key, main status FK, secondary status FK, and policy FK. Validated the six detail constraints separately after preparation.

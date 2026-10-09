@@ -4,6 +4,8 @@
 
 Only akachat, `cgjbsmqtfhqvttudyjzq`. Existing connections/pools are reused. No application release setting or shared block/workflow was changed.
 
+Follow-up correction: [V365](ACTION_STATUS_CLEANUP_V365.md) removed the unsupported, unused “Đã hiển thị bài” catalog row and speculative Desktop consumer. “Chờ duyệt bài” remains backed by the live pending-detection block. Other policies, results and deployed worker/Web behavior are unchanged.
+
 | Migration | History version | SQL SHA-256 |
 |---|---|---|
 | migration_v361_action_status_policy_catalog | 20261009102331 | `08326ab7bb228fd97f5139ecccbaf677de2d3aea1ce17b6bfbf350ecfb4eeaad` |

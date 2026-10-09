@@ -11028,7 +11028,6 @@ export class CampaignScheduler {
         const detectOut = ((detectStep?.output as any) || {}) as {
           isPending?: unknown
           pendingCheckConclusive?: unknown
-          postVisible?: unknown
           pendingContentUrl?: unknown
           pendingContentLinks?: unknown
           source?: unknown
@@ -11063,8 +11062,7 @@ export class CampaignScheduler {
           status,
           errorCode,
           resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
-            subStatusCode: isPending ? 'campaign_detail_post_pending'
-              : (out.postVisible === true || detectOut.postVisible === true) ? 'campaign_detail_post_visible' : null,
+            subStatusCode: isPending ? 'campaign_detail_post_pending' : null,
             operationState: 'committed' } : undefined,
           resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
           log: posted
@@ -11161,7 +11159,6 @@ export class CampaignScheduler {
         const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
           isPending?: unknown
           pendingCheckConclusive?: unknown
-          postVisible?: unknown
         }
         const detectHasIsPending = typeof detectOut.isPending === 'boolean'
         const pendingCheckConclusive = detectOut.pendingCheckConclusive === false

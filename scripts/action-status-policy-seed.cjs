@@ -52,7 +52,6 @@ for (const action of ['zalo_tag_contact', 'zalo_change_alias']) {
 }
 const newStatuses = [
   { code: 'campaign_detail_skipped', name: 'Bỏ qua', status_key: 'skipped', status_value: 'bỏ qua', description: 'Không thực hiện một thao tác mới. Policy trạng thái chính quyết định cách đếm.', is_terminal: true, sort_order: 200 },
-  { code: 'campaign_detail_post_pending', name: 'Chờ duyệt bài', status_key: 'post_pending', status_value: 'chờ duyệt bài', description: 'Quan sát sau đăng bài thành công: có bằng chứng đang chờ duyệt. Khi dùng làm subStatusCode chỉ phục vụ báo cáo/Automation, không thay policy chính.', is_terminal: false, sort_order: 210 },
-  { code: 'campaign_detail_post_visible', name: 'Đã hiển thị bài', status_key: 'post_visible', status_value: 'đã hiển thị bài', description: 'Quan sát xác nhận bài đã hiển thị; không suy ra từ việc chưa phát hiện chờ duyệt. Khi dùng làm subStatusCode không thay policy chính.', is_terminal: false, sort_order: 220 }
+  { code: 'campaign_detail_post_pending', name: 'Chờ duyệt bài', status_key: 'post_pending', status_value: 'chờ duyệt bài', description: 'Quan sát sau đăng bài thành công: có bằng chứng đang chờ duyệt. Khi dùng làm subStatusCode chỉ phục vụ báo cáo/Automation, không thay policy chính.', is_terminal: false, sort_order: 210 }
 ]
 module.exports = { rows, newStatuses, source }

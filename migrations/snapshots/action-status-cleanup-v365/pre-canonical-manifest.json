@@ -1,0 +1,14 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "name": "migration_v365_remove_unsupported_post_visible_status",
+  "before_sha256": "85b7a968568dee32ae7e1d807686d72d299f48340b5e8e1b372e02f44163f199",
+  "sql_sha256": "a1ffc2655100898805d08fbd137c4f8f0ddc47e52f146a2f0bbe48350f80dc0e",
+  "rollback_sha256": "f359a7204e02ebc74915f2db703abe74af4bbac3d1d2f940ca1b2174be3bf48b",
+  "removed": [
+    {
+      "id": 53,
+      "code": "campaign_detail_post_visible",
+      "md5": "8dd41aac9d84779af5bf7ae73a362b2a"
+    }
+  ]
+}

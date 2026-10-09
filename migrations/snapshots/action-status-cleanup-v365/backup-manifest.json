@@ -1,0 +1,32 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09 12:14:21.96797+00",
+  "before_sha256": "85b7a968568dee32ae7e1d807686d72d299f48340b5e8e1b372e02f44163f199",
+  "schema_sha256": "5482e79f93eadeb54e7c33f0c1125c93fb08a6b9af12dc731090ba86a01d9c17",
+  "tables": {
+    "auto_account_action_status_policies": {
+      "count": 19,
+      "md5": "c6771b6d5a7c45bc93ddbbaa33167200"
+    },
+    "auto_account_actions": {
+      "count": 25,
+      "md5": "d27de13d8d0ae980808d1a0fc21f33fb"
+    },
+    "auto_automation_trigger_statuses": {
+      "count": 11,
+      "md5": "ad1cc3d8cb21d77299f3cf0f48a499d3"
+    },
+    "auto_campaign_action_detail_statuses": {
+      "count": 313,
+      "md5": "67e1a9cd532307f6ce1ec377a2b9a539"
+    },
+    "auto_error": {
+      "count": 104,
+      "md5": "17cfb317137944c66db8c56632f6e288"
+    },
+    "auto_status": {
+      "count": 41,
+      "md5": "fd95f851992d2664288c780fd65b797b"
+    }
+  }
+}

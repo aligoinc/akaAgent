@@ -1,0 +1,4 @@
+{
+  "reason": "Schema comparison failed before DELETE: JSON.parse rounded pg_sequences.max_value beyond JS safe integer range. Exact canonical schema captured and checksum-verified; actual metadata unchanged.",
+  "committed": false
+}
