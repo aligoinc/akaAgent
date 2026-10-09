@@ -509,6 +509,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Explicit result progress**: `✅ Hoàn thành` là hoàn thành data và phải giữ nguyên kể cả action lỗi. Kết quả explicit Facebook vẫn cần log lỗi độc lập với việc policy dừng hoặc suppress detail; dùng thông báo đã render/cached và receipt để không lặp khi relay/finalization. Email/Zalo giữ helper log khi detail.log trống. Không dùng cờ newsfeed thành công legacy để ghi đè explicit failure. Xem [bản sửa và smoke](docs/ACTION_RESULT_PROGRESS_LOGS_20261010.md).
 - **Composer result contract**: block `fb_open_composer` phải return `actionResult`, kèm `vars.inputDataId` cho lượt giữ nhiều input; không gắn result vào exception vì executor hiện có bỏ output khi throw. Gate cả hai nhánh đăng/share, nhánh lỗi group đi qua `merge_join` rồi cleanup Page. Chỉ bắt timeout của hai bước mở composer; không đổi cancellation hoặc suy đoán loại group. Smoke: `node scripts/fb-composer-policy-smoke.cjs`.
 - **Catalog refresh và trạng thái phụ**: tải catalog lỗi được dùng bản cũ, nhưng catalog mới tải thành công có policy tắt/thiếu vẫn phải bị preflight chặn. Chỉ gán Đã duyệt bài khi detector hiện có trả `pendingCheckConclusive=true` và không pending; kết quả chưa rõ giữ sub-status NULL. Không tính lại detail cũ.
 
