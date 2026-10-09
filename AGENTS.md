@@ -2,7 +2,7 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
-V361 đã apply `20261009102331 / migration_v361_action_status_policy_catalog` trên akachat ngày 09/10/2026: schema chuẩn bị policy trạng thái, 9 mặc định/8 ngoại lệ; 104 policy lỗi cũ giữ nguyên. Bốn partial index đã tạo CONCURRENTLY và FK/CHECK đã validate. Chưa kích hoạt runtime mới; không apply lại hoặc phát mã mới cho client cũ. Snapshot/checksum/rollback và giới hạn triển khai: [audit v361](docs/ACTION_STATUS_POLICIES_V361.md).
+V361–V368 đã apply trên akachat ngày 09/10/2026; không apply lại. Web readers và Chat worker đã deploy, Server 8.2.0 đã đóng gói local nhưng chưa phát hành; giữ output block tương thích client cũ. Detail đã dùng metadata mới nên rollback runtime phải giữ schema/catalog/readers và lịch sử. Snapshot/checksum/rollout: [audit runtime](docs/ACTION_STATUS_READERS_V362.md), [V367](docs/ACTION_STATUS_COMPATIBILITY_V367.md), [V368](docs/EMAIL_STATUS_OBSERVATIONS_V368.md).
 
 ## Supabase/Postgres: phải thảo luận trước khi tăng connection
 
