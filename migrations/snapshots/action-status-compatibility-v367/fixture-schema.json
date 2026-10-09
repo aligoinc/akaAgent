@@ -1,0 +1,3757 @@
+{
+  "schema": [
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "d",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "default": "'campaign_detail_route'::text",
+          "generated": "",
+          "identity": "",
+          "name": "automation_action_id",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "name",
+          "not_null": true,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_id",
+          "not_null": true,
+          "position": 4,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_campaign_id",
+          "not_null": false,
+          "position": 5,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_code",
+          "not_null": true,
+          "position": 6,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_contact_group_id",
+          "not_null": false,
+          "position": 7,
+          "type": "bigint"
+        },
+        {
+          "default": "'immediate'::text",
+          "generated": "",
+          "identity": "",
+          "name": "schedule_mode",
+          "not_null": true,
+          "position": 8,
+          "type": "text"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "delay_days",
+          "not_null": true,
+          "position": 9,
+          "type": "integer"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "delay_hours",
+          "not_null": true,
+          "position": 10,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "fixed_at",
+          "not_null": false,
+          "position": 11,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "note",
+          "not_null": false,
+          "position": 12,
+          "type": "text"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_active",
+          "not_null": true,
+          "position": 13,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "activated_at",
+          "not_null": false,
+          "position": 14,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "last_data_at",
+          "not_null": false,
+          "position": 15,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "1",
+          "generated": "",
+          "identity": "",
+          "name": "config_version",
+          "not_null": true,
+          "position": 16,
+          "type": "integer"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 17,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": true,
+          "position": 18,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": true,
+          "position": 19,
+          "type": "bigint"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 20,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 21,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "delay_value",
+          "not_null": false,
+          "position": 22,
+          "type": "integer"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "delay_unit",
+          "not_null": false,
+          "position": 23,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "daily_time",
+          "not_null": false,
+          "position": 24,
+          "type": "time without time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "delay_exact_time",
+          "not_null": false,
+          "position": 25,
+          "type": "time without time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_data_group_id",
+          "not_null": false,
+          "position": 26,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_category_item_id",
+          "not_null": false,
+          "position": 27,
+          "type": "bigint"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (((NOT is_active) OR (activated_at IS NOT NULL)))",
+          "name": "auto_automation_active_activation_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (automation_action_id) REFERENCES auto_automation_actions(id) ON DELETE RESTRICT",
+          "name": "auto_automation_automation_action_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((config_version > 0))",
+          "name": "auto_automation_config_version_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((daily_time IS NULL) OR (EXTRACT(second FROM daily_time) = (0)::numeric)))",
+          "name": "auto_automation_daily_time_minute_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_category_item_id) REFERENCES category_item(id) ON DELETE RESTRICT",
+          "name": "auto_automation_data_type_category_item_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_automation_data_type_code_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((delay_days >= 0) AND (delay_days <= 3650)))",
+          "name": "auto_automation_delay_days_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((delay_exact_time IS NULL) OR ((delay_exact_time < '24:00:00'::time without time zone) AND (EXTRACT(second FROM delay_exact_time) = (0)::numeric))))",
+          "name": "auto_automation_delay_exact_time_minute_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((delay_hours >= 0) AND (delay_hours <= 23)))",
+          "name": "auto_automation_delay_hours_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((((delay_value IS NULL) AND (delay_unit IS NULL)) OR ((delay_value IS NOT NULL) AND (delay_unit IS NOT NULL) AND (((delay_unit = 'minute'::text) AND ((delay_value >= 1) AND (delay_value <= 5256000))) OR ((delay_unit = 'hour'::text) AND ((delay_value >= 1) AND (delay_value <= 87600))) OR ((delay_unit = 'day'::text) AND ((delay_value >= 1) AND (delay_value <= 3650)))))) IS TRUE))",
+          "name": "auto_automation_delay_value_unit_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((target_campaign_id IS NOT NULL) OR (target_data_group_id IS NOT NULL) OR (is_active = false) OR (is_delete = true)))",
+          "name": "auto_automation_destination_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((target_campaign_id IS NULL) OR (source_campaign_id <> target_campaign_id)))",
+          "name": "auto_automation_distinct_campaigns_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((target_campaign_id IS NOT NULL) OR (target_contact_group_id IS NULL)))",
+          "name": "auto_automation_legacy_group_requires_campaign_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 200)))",
+          "name": "auto_automation_name_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (organization_id) REFERENCES org_organization(id) ON DELETE CASCADE",
+          "name": "auto_automation_organization_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_automation_pkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((((schedule_mode = 'immediate'::text) AND (delay_days = 0) AND (delay_hours = 0) AND (delay_value IS NULL) AND (delay_unit IS NULL) AND (delay_exact_time IS NULL) AND (daily_time IS NULL) AND (fixed_at IS NULL)) OR ((schedule_mode = 'after_delay'::text) AND (delay_value IS NOT NULL) AND (delay_unit = ANY (ARRAY['minute'::text, 'hour'::text, 'day'::text])) AND (daily_time IS NULL) AND (fixed_at IS NULL)) OR ((schedule_mode = 'daily_time'::text) AND (delay_days = 0) AND (delay_hours = 0) AND (delay_value IS NULL) AND (delay_unit IS NULL) AND (delay_exact_time IS NULL) AND (daily_time IS NOT NULL) AND (fixed_at IS NULL)) OR ((schedule_mode = 'fixed_at'::text) AND (delay_days = 0) AND (delay_hours = 0) AND (delay_value IS NULL) AND (delay_unit IS NULL) AND (delay_exact_time IS NULL) AND (daily_time IS NULL) AND (fixed_at IS NOT NULL))) IS TRUE))",
+          "name": "auto_automation_schedule_config_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((schedule_mode = ANY (ARRAY['immediate'::text, 'after_delay'::text, 'daily_time'::text, 'fixed_at'::text])))",
+          "name": "auto_automation_schedule_mode_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_id) REFERENCES auto_campaigns(id) ON DELETE RESTRICT",
+          "name": "auto_automation_source_campaign_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (staff_id) REFERENCES org_staff(id) ON DELETE CASCADE",
+          "name": "auto_automation_staff_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_campaign_id) REFERENCES auto_campaigns(id) ON DELETE RESTRICT",
+          "name": "auto_automation_target_campaign_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_target_contact_group_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_target_data_group_id_fkey",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": [
+        {
+          "definition": "FOREIGN KEY (automation_id) REFERENCES auto_automation(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_automation_id_fkey",
+          "table": "auto_automation_detail"
+        },
+        {
+          "definition": "FOREIGN KEY (automation_id) REFERENCES auto_automation(id) ON DELETE CASCADE",
+          "name": "auto_automation_trigger_statuses_automation_id_fkey",
+          "table": "auto_automation_trigger_statuses"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_pkey ON public.auto_automation USING btree (id)",
+          "indexname": "auto_automation_pkey",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_source_active ON public.auto_automation USING btree (source_campaign_id, activated_at, id) WHERE ((is_delete = false) AND (is_active = true))",
+          "indexname": "idx_auto_automation_source_active",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_target_active ON public.auto_automation USING btree (target_campaign_id, id) WHERE ((is_delete = false) AND (is_active = true))",
+          "indexname": "idx_auto_automation_target_active",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_target_data_group ON public.auto_automation USING btree (target_data_group_id, id)",
+          "indexname": "idx_auto_automation_target_data_group",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_tenant_list ON public.auto_automation USING btree (staff_id, organization_id, updated_at DESC, id DESC) WHERE (is_delete = false)",
+          "indexname": "idx_auto_automation_tenant_list",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_automations_semantic_type ON public.auto_automation USING btree (data_type_category_item_id, source_campaign_id, id) WHERE (is_delete = false)",
+          "indexname": "idx_automations_semantic_type",
+          "schemaname": "public",
+          "tablename": "auto_automation",
+          "tablespace": null
+        }
+      ],
+      "policies": null,
+      "sequence": {
+        "cache_size": 1,
+        "cycle": false,
+        "data_type": "bigint",
+        "increment_by": 1,
+        "last_value": 84,
+        "max_value": 9223372036854776000,
+        "min_value": 1,
+        "schemaname": "public",
+        "sequencename": "auto_automation_id_seq",
+        "sequenceowner": "postgres",
+        "start_value": 1
+      },
+      "table": "auto_automation",
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_automation_destination_update BEFORE INSERT OR UPDATE OF target_campaign_id, target_data_group_id, is_active, is_delete ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_automation_destination_update()",
+          "name": "trg_aka_agent_guard_automation_destination_update"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_automation_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id, data_type_code, source_campaign_id, target_campaign_id, target_data_group_id, is_active ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_automation_semantic_type()",
+          "name": "trg_aka_agent_guard_automation_semantic_type"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_bound_data_group_automation BEFORE INSERT OR UPDATE OF target_data_group_id, source_campaign_id, is_active, is_delete ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_bound_data_group_source()",
+          "name": "trg_aka_agent_guard_bound_data_group_automation"
+        }
+      ]
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "d",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "automation_id",
+          "not_null": true,
+          "position": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "parent_automation_detail_id",
+          "not_null": false,
+          "position": 3,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_detail_id",
+          "not_null": true,
+          "position": 4,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_input_data_id",
+          "not_null": true,
+          "position": 5,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_id",
+          "not_null": true,
+          "position": 6,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_account_id",
+          "not_null": true,
+          "position": 7,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_action_id",
+          "not_null": true,
+          "position": 8,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_action_code",
+          "not_null": false,
+          "position": 9,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_status",
+          "not_null": true,
+          "position": 10,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_campaign_id",
+          "not_null": false,
+          "position": 11,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_account_id",
+          "not_null": false,
+          "position": 12,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_action_id",
+          "not_null": false,
+          "position": 13,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_code",
+          "not_null": true,
+          "position": 14,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_value",
+          "not_null": false,
+          "position": 15,
+          "type": "text"
+        },
+        {
+          "default": "'{}'::jsonb",
+          "generated": "",
+          "identity": "",
+          "name": "source_input_snapshot",
+          "not_null": true,
+          "position": 16,
+          "type": "jsonb"
+        },
+        {
+          "default": "'{}'::jsonb",
+          "generated": "",
+          "identity": "",
+          "name": "config_snapshot",
+          "not_null": true,
+          "position": 17,
+          "type": "jsonb"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_contact_group_id",
+          "not_null": false,
+          "position": 18,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "scheduled_at",
+          "not_null": true,
+          "position": 19,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_row_index",
+          "not_null": false,
+          "position": 20,
+          "type": "bigint"
+        },
+        {
+          "default": "'chờ xử lý'::text",
+          "generated": "",
+          "identity": "",
+          "name": "status",
+          "not_null": true,
+          "position": 21,
+          "type": "text"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "attempt_count",
+          "not_null": true,
+          "position": 22,
+          "type": "integer"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "next_attempt_at",
+          "not_null": true,
+          "position": 23,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "locked_at",
+          "not_null": false,
+          "position": 24,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "locked_by",
+          "not_null": false,
+          "position": 25,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_input_data_id",
+          "not_null": false,
+          "position": 26,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_contact_id",
+          "not_null": false,
+          "position": 27,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_contact_group_member_id",
+          "not_null": false,
+          "position": 28,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_input_snapshot",
+          "not_null": false,
+          "position": 29,
+          "type": "jsonb"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "last_error",
+          "not_null": false,
+          "position": 30,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "processed_at",
+          "not_null": false,
+          "position": 31,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": true,
+          "position": 32,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": true,
+          "position": 33,
+          "type": "bigint"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 34,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 35,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_data_group_id",
+          "not_null": false,
+          "position": 36,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_data_group_member_id",
+          "not_null": false,
+          "position": 37,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_data_group_sync_status",
+          "not_null": false,
+          "position": 38,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_data_group_sync_error",
+          "not_null": false,
+          "position": 39,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_category_item_id",
+          "not_null": false,
+          "position": 40,
+          "type": "bigint"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK ((attempt_count >= 0))",
+          "name": "auto_automation_detail_attempt_count_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (automation_id) REFERENCES auto_automation(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_automation_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((((target_campaign_id IS NULL) AND (target_account_id IS NULL) AND (target_action_id IS NULL) AND (target_contact_group_id IS NULL)) OR ((target_campaign_id IS NOT NULL) AND (target_account_id IS NOT NULL) AND (target_action_id IS NOT NULL))))",
+          "name": "auto_automation_detail_campaign_snapshot_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((target_data_group_sync_status IS NULL) OR (target_data_group_sync_status = ANY (ARRAY['pending'::text, 'completed'::text, 'skipped'::text, 'failed'::text]))))",
+          "name": "auto_automation_detail_data_group_sync_status_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_category_item_id) REFERENCES category_item(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_data_type_category_item_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_data_type_code_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (organization_id) REFERENCES org_organization(id) ON DELETE CASCADE",
+          "name": "auto_automation_detail_organization_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (parent_automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_parent_automation_detail_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_automation_detail_pkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((jsonb_typeof(source_input_snapshot) = 'object'::text) AND (jsonb_typeof(config_snapshot) = 'object'::text) AND ((target_input_snapshot IS NULL) OR (jsonb_typeof(target_input_snapshot) = 'object'::text))))",
+          "name": "auto_automation_detail_snapshot_type_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_account_id) REFERENCES auto_accounts(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_source_account_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_action_id) REFERENCES auto_campaign_actions(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_source_action_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_detail_id) REFERENCES auto_campaign_details(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_source_campaign_detail_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_id) REFERENCES auto_campaigns(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_source_campaign_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_input_data_id) REFERENCES auto_campaign_input_data(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_source_campaign_input_data_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (staff_id) REFERENCES org_staff(id) ON DELETE CASCADE",
+          "name": "auto_automation_detail_staff_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((status = ANY (ARRAY['chờ xử lý'::text, 'đang xử lý'::text, 'đã thêm'::text, 'bỏ qua'::text, 'lỗi'::text])))",
+          "name": "auto_automation_detail_status_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_account_id) REFERENCES auto_accounts(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_target_account_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_action_id) REFERENCES auto_campaign_actions(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_target_action_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_campaign_id) REFERENCES auto_campaigns(id) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_target_campaign_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_contact_group_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_group_member_id) REFERENCES auto_account_contact_group_members(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_contact_group_member_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_id) REFERENCES auto_account_contacts(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_contact_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_data_group_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_data_group_member_id) REFERENCES auto_account_contact_group_members(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_data_group_member_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (target_input_data_id) REFERENCES auto_campaign_input_data(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_input_data_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "UNIQUE (automation_id, source_campaign_detail_id)",
+          "name": "auto_automation_detail_unique_source",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_detail",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": [
+        {
+          "definition": "FOREIGN KEY (automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE SET NULL",
+          "name": "auto_account_contact_group_member_ori_automation_detail_id_fkey",
+          "table": "auto_account_contact_group_member_origins"
+        },
+        {
+          "definition": "FOREIGN KEY (parent_automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_parent_automation_detail_id_fkey",
+          "table": "auto_automation_detail"
+        },
+        {
+          "definition": "FOREIGN KEY (auto_automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE SET NULL",
+          "name": "auto_campaign_details_automation_detail_fkey",
+          "table": "auto_campaign_details"
+        },
+        {
+          "definition": "FOREIGN KEY (auto_automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE SET NULL",
+          "name": "auto_campaign_input_data_automation_detail_fkey",
+          "table": "auto_campaign_input_data"
+        },
+        {
+          "definition": "FOREIGN KEY (automation_detail_id) REFERENCES auto_automation_detail(id) ON DELETE CASCADE",
+          "name": "auto_campaign_input_origins_automation_detail_id_fkey",
+          "table": "auto_campaign_input_origins"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_detail_pkey ON public.auto_automation_detail USING btree (id)",
+          "indexname": "auto_automation_detail_pkey",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_detail_unique_source ON public.auto_automation_detail USING btree (automation_id, source_campaign_detail_id)",
+          "indexname": "auto_automation_detail_unique_source",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_history ON public.auto_automation_detail USING btree (automation_id, created_at DESC, id DESC)",
+          "indexname": "idx_auto_automation_detail_history",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_locked ON public.auto_automation_detail USING btree (staff_id, organization_id, locked_at, id) WHERE (status = 'đang xử lý'::text)",
+          "indexname": "idx_auto_automation_detail_locked",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_parent ON public.auto_automation_detail USING btree (parent_automation_detail_id) WHERE (parent_automation_detail_id IS NOT NULL)",
+          "indexname": "idx_auto_automation_detail_parent",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_queue ON public.auto_automation_detail USING btree (staff_id, organization_id, next_attempt_at, scheduled_at, id) WHERE (status = 'chờ xử lý'::text)",
+          "indexname": "idx_auto_automation_detail_queue",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_source_campaign_history ON public.auto_automation_detail USING btree (staff_id, organization_id, source_campaign_id, created_at DESC, id DESC)",
+          "indexname": "idx_auto_automation_detail_source_campaign_history",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_status_summary ON public.auto_automation_detail USING btree (automation_id, status)",
+          "indexname": "idx_auto_automation_detail_status_summary",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_target_campaign_history ON public.auto_automation_detail USING btree (staff_id, organization_id, target_campaign_id, created_at DESC, id DESC)",
+          "indexname": "idx_auto_automation_detail_target_campaign_history",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_target_data_group ON public.auto_automation_detail USING btree (target_data_group_id, id)",
+          "indexname": "idx_auto_automation_detail_target_data_group",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_detail_target_input ON public.auto_automation_detail USING btree (target_input_data_id) WHERE (target_input_data_id IS NOT NULL)",
+          "indexname": "idx_auto_automation_detail_target_input",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_automation_details_semantic_type ON public.auto_automation_detail USING btree (data_type_category_item_id, source_campaign_input_data_id, id)",
+          "indexname": "idx_automation_details_semantic_type",
+          "schemaname": "public",
+          "tablename": "auto_automation_detail",
+          "tablespace": null
+        }
+      ],
+      "policies": null,
+      "sequence": {
+        "cache_size": 1,
+        "cycle": false,
+        "data_type": "bigint",
+        "increment_by": 1,
+        "last_value": 855,
+        "max_value": 9223372036854776000,
+        "min_value": 1,
+        "schemaname": "public",
+        "sequencename": "auto_automation_detail_id_seq",
+        "sequenceowner": "postgres",
+        "start_value": 1
+      },
+      "table": "auto_automation_detail",
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_prepare_automation_detail_schedule BEFORE INSERT ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_prepare_automation_detail_schedule()",
+          "name": "trg_aka_agent_prepare_automation_detail_schedule"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_resolve_automation_canonical_input BEFORE UPDATE OF status, target_input_data_id ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_resolve_automation_canonical_input()",
+          "name": "trg_aka_agent_resolve_automation_canonical_input"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_snapshot_automation_data_group BEFORE INSERT ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_snapshot_automation_data_group()",
+          "name": "trg_aka_agent_snapshot_automation_data_group"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_stamp_automation_detail_semantic_type BEFORE INSERT OR UPDATE OF automation_id, source_campaign_input_data_id, data_type_category_item_id ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_automation_detail_semantic_type()",
+          "name": "trg_aka_agent_stamp_automation_detail_semantic_type"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_zz_aka_agent_set_group_only_sync_terminal BEFORE INSERT OR UPDATE OF status, target_campaign_id, target_data_group_id, last_error ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_set_group_only_sync_terminal()",
+          "name": "trg_zz_aka_agent_set_group_only_sync_terminal"
+        }
+      ]
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "d",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_detail_id",
+          "not_null": true,
+          "position": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_campaign_id",
+          "not_null": true,
+          "position": 3,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_status",
+          "not_null": true,
+          "position": 4,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_action_code",
+          "not_null": false,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "source_is_delete",
+          "not_null": true,
+          "position": 6,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "event_at",
+          "not_null": true,
+          "position": 7,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "'pending'::text",
+          "generated": "",
+          "identity": "",
+          "name": "status",
+          "not_null": true,
+          "position": 8,
+          "type": "text"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "attempt_count",
+          "not_null": true,
+          "position": 9,
+          "type": "integer"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "next_attempt_at",
+          "not_null": true,
+          "position": 10,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "last_error",
+          "not_null": false,
+          "position": 11,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "resolved_at",
+          "not_null": false,
+          "position": 12,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": true,
+          "position": 13,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": true,
+          "position": 14,
+          "type": "bigint"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 15,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 16,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK ((attempt_count >= 0))",
+          "name": "auto_automation_enqueue_failures_attempt_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (organization_id) REFERENCES org_organization(id) ON DELETE CASCADE",
+          "name": "auto_automation_enqueue_failures_organization_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_automation_enqueue_failures_pkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_detail_id) REFERENCES auto_campaign_details(id) ON DELETE CASCADE",
+          "name": "auto_automation_enqueue_failures_source_campaign_detail_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (source_campaign_id) REFERENCES auto_campaigns(id) ON DELETE CASCADE",
+          "name": "auto_automation_enqueue_failures_source_campaign_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "UNIQUE (source_campaign_detail_id)",
+          "name": "auto_automation_enqueue_failures_source_unique",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (staff_id) REFERENCES org_staff(id) ON DELETE CASCADE",
+          "name": "auto_automation_enqueue_failures_staff_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'resolved'::text])))",
+          "name": "auto_automation_enqueue_failures_status_check",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_enqueue_failures",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": null,
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_enqueue_failures_pkey ON public.auto_automation_enqueue_failures USING btree (id)",
+          "indexname": "auto_automation_enqueue_failures_pkey",
+          "schemaname": "public",
+          "tablename": "auto_automation_enqueue_failures",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_enqueue_failures_source_unique ON public.auto_automation_enqueue_failures USING btree (source_campaign_detail_id)",
+          "indexname": "auto_automation_enqueue_failures_source_unique",
+          "schemaname": "public",
+          "tablename": "auto_automation_enqueue_failures",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_automation_enqueue_failures_pending ON public.auto_automation_enqueue_failures USING btree (staff_id, organization_id, next_attempt_at, event_at, id) WHERE (status = 'pending'::text)",
+          "indexname": "idx_auto_automation_enqueue_failures_pending",
+          "schemaname": "public",
+          "tablename": "auto_automation_enqueue_failures",
+          "tablespace": null
+        }
+      ],
+      "policies": null,
+      "sequence": {
+        "cache_size": 1,
+        "cycle": false,
+        "data_type": "bigint",
+        "increment_by": 1,
+        "last_value": 1,
+        "max_value": 9223372036854776000,
+        "min_value": 1,
+        "schemaname": "public",
+        "sequencename": "auto_automation_enqueue_failures_id_seq",
+        "sequenceowner": "postgres",
+        "start_value": 1
+      },
+      "table": "auto_automation_enqueue_failures",
+      "triggers": null
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres",
+          "anon=r/postgres",
+          "authenticated=r/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "name",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "description",
+          "not_null": false,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_available",
+          "not_null": true,
+          "position": 4,
+          "type": "boolean"
+        },
+        {
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "is_active",
+          "not_null": true,
+          "position": 5,
+          "type": "boolean"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 6,
+          "type": "boolean"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "sort_order",
+          "not_null": true,
+          "position": 7,
+          "type": "integer"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 8,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 9,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK ((id ~ '^[a-z0-9_]+$'::text))",
+          "name": "auto_automation_actions_id_check",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_automation_actions_pkey",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_actions",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": [
+        {
+          "definition": "FOREIGN KEY (automation_action_id) REFERENCES auto_automation_actions(id) ON DELETE RESTRICT",
+          "name": "auto_automation_automation_action_id_fkey",
+          "table": "auto_automation"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_actions_pkey ON public.auto_automation_actions USING btree (id)",
+          "indexname": "auto_automation_actions_pkey",
+          "schemaname": "public",
+          "tablename": "auto_automation_actions",
+          "tablespace": null
+        }
+      ],
+      "policies": [
+        {
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "policyname": "auto_automation_actions_read_catalog",
+          "qual": "true",
+          "roles": [
+            "anon",
+            "authenticated"
+          ],
+          "schemaname": "public",
+          "tablename": "auto_automation_actions",
+          "with_check": null
+        }
+      ],
+      "sequence": null,
+      "table": "auto_automation_actions",
+      "triggers": null
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres",
+          "anon=r/postgres",
+          "authenticated=r/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "code",
+          "not_null": true,
+          "position": 1,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "name",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "source_column",
+          "not_null": true,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "contact_type",
+          "not_null": true,
+          "position": 4,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "flatform_type",
+          "not_null": true,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_account_scoped",
+          "not_null": true,
+          "position": 6,
+          "type": "boolean"
+        },
+        {
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "is_active",
+          "not_null": true,
+          "position": 7,
+          "type": "boolean"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 8,
+          "type": "boolean"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "sort_order",
+          "not_null": true,
+          "position": 9,
+          "type": "integer"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 10,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 11,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK ((code = ANY (ARRAY['phone'::text, 'email'::text, 'zalo_uid'::text, 'facebook_uid'::text])))",
+          "name": "auto_automation_data_types_code_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((contact_type = ANY (ARRAY['phone'::text, 'email'::text, 'person'::text])))",
+          "name": "auto_automation_data_types_contact_type_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((flatform_type = ANY (ARRAY['all'::text, 'facebook'::text, 'zalo'::text, 'email'::text, 'sms'::text])))",
+          "name": "auto_automation_data_types_flatform_type_check",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (code)",
+          "name": "auto_automation_data_types_pkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((source_column = ANY (ARRAY['phone'::text, 'email'::text, 'uid'::text])))",
+          "name": "auto_automation_data_types_source_column_check",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_automation_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": [
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_automation_data_type_code_fkey",
+          "table": "auto_automation"
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_automation_detail_data_type_code_fkey",
+          "table": "auto_automation_detail"
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_campaign_action_data_types_data_type_code_fkey",
+          "table": "auto_campaign_action_data_types"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_automation_data_types_pkey ON public.auto_automation_data_types USING btree (code)",
+          "indexname": "auto_automation_data_types_pkey",
+          "schemaname": "public",
+          "tablename": "auto_automation_data_types",
+          "tablespace": null
+        }
+      ],
+      "policies": [
+        {
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "policyname": "auto_automation_data_types_read_catalog",
+          "qual": "true",
+          "roles": [
+            "anon",
+            "authenticated"
+          ],
+          "schemaname": "public",
+          "tablename": "auto_automation_data_types",
+          "with_check": null
+        }
+      ],
+      "sequence": null,
+      "table": "auto_automation_data_types",
+      "triggers": null
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres",
+          "anon=r/postgres",
+          "authenticated=r/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "campaign_action_id",
+          "not_null": true,
+          "position": 1,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_code",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "can_source",
+          "not_null": true,
+          "position": 3,
+          "type": "boolean"
+        },
+        {
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "can_target",
+          "not_null": true,
+          "position": 4,
+          "type": "boolean"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_contact_type",
+          "not_null": true,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "is_active",
+          "not_null": true,
+          "position": 6,
+          "type": "boolean"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 7,
+          "type": "boolean"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "sort_order",
+          "not_null": true,
+          "position": 8,
+          "type": "integer"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 9,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 10,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_category_item_id",
+          "not_null": false,
+          "position": 11,
+          "type": "bigint"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "FOREIGN KEY (campaign_action_id) REFERENCES auto_campaign_actions(id) ON DELETE CASCADE",
+          "name": "auto_campaign_action_data_types_campaign_action_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((target_contact_type = ANY (ARRAY['person'::text, 'group'::text, 'page'::text, 'page_inbox_customer'::text, 'phone'::text, 'email'::text, 'campaign_input'::text])))",
+          "name": "auto_campaign_action_data_types_contact_type_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_category_item_id) REFERENCES category_item(id) ON DELETE RESTRICT",
+          "name": "auto_campaign_action_data_types_data_type_category_item_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_code) REFERENCES auto_automation_data_types(code) ON DELETE RESTRICT",
+          "name": "auto_campaign_action_data_types_data_type_code_fkey",
+          "validated": true
+        },
+        {
+          "definition": "UNIQUE NULLS NOT DISTINCT (campaign_action_id, data_type_category_item_id)",
+          "name": "uq_auto_campaign_action_semantic_data_type",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_action_data_types",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": null,
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX uq_auto_campaign_action_semantic_data_type ON public.auto_campaign_action_data_types USING btree (campaign_action_id, data_type_category_item_id) NULLS NOT DISTINCT",
+          "indexname": "uq_auto_campaign_action_semantic_data_type",
+          "schemaname": "public",
+          "tablename": "auto_campaign_action_data_types",
+          "tablespace": null
+        }
+      ],
+      "policies": [
+        {
+          "cmd": "SELECT",
+          "permissive": "PERMISSIVE",
+          "policyname": "auto_campaign_action_data_types_read_catalog",
+          "qual": "true",
+          "roles": [
+            "anon",
+            "authenticated"
+          ],
+          "schemaname": "public",
+          "tablename": "auto_campaign_action_data_types",
+          "with_check": null
+        }
+      ],
+      "sequence": null,
+      "table": "auto_campaign_action_data_types",
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_action_semantic_mapping BEFORE INSERT OR UPDATE OF data_type_category_item_id, is_active, is_delete ON public.auto_campaign_action_data_types FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_action_semantic_mapping()",
+          "name": "trg_aka_agent_guard_action_semantic_mapping"
+        }
+      ]
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres",
+          "anon=arwdDxtm/postgres",
+          "authenticated=arwdDxtm/postgres",
+          "service_role=arwdDxtm/postgres",
+          "aka_agent_chat_api=r/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": false
+      },
+      "columns": [
+        {
+          "default": "nextval('auto_account_contact_groups_id_seq'::regclass)",
+          "generated": "",
+          "identity": "",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "account_id",
+          "not_null": false,
+          "position": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "contact_type",
+          "not_null": false,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "name",
+          "not_null": true,
+          "position": 4,
+          "type": "text"
+        },
+        {
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 5,
+          "type": "boolean"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 6,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 7,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": false,
+          "position": 8,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": false,
+          "position": 9,
+          "type": "bigint"
+        },
+        {
+          "default": "'data_group'::text",
+          "generated": "",
+          "identity": "",
+          "name": "purpose",
+          "not_null": true,
+          "position": 10,
+          "type": "text"
+        },
+        {
+          "default": "'#2563EB'::text",
+          "generated": "",
+          "identity": "",
+          "name": "color",
+          "not_null": true,
+          "position": 11,
+          "type": "text"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "sort_order",
+          "not_null": true,
+          "position": 12,
+          "type": "integer"
+        },
+        {
+          "default": "0",
+          "generated": "",
+          "identity": "",
+          "name": "revision",
+          "not_null": true,
+          "position": 13,
+          "type": "bigint"
+        },
+        {
+          "default": "'manual'::text",
+          "generated": "",
+          "identity": "",
+          "name": "dataset_sync_mode",
+          "not_null": true,
+          "position": 14,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "dataset_sync_key",
+          "not_null": false,
+          "position": 15,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_type_category_item_id",
+          "not_null": false,
+          "position": 16,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "note",
+          "not_null": false,
+          "position": 17,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "bound_zalo_account_id",
+          "not_null": false,
+          "position": 18,
+          "type": "bigint"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "FOREIGN KEY (account_id) REFERENCES auto_accounts(id) ON DELETE CASCADE",
+          "name": "auto_account_contact_groups_account_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (bound_zalo_account_id) REFERENCES auto_accounts(id) ON DELETE RESTRICT",
+          "name": "auto_account_contact_groups_bound_zalo_account_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (data_type_category_item_id) REFERENCES category_item(id) ON DELETE RESTRICT",
+          "name": "auto_account_contact_groups_data_type_category_item_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((((dataset_sync_mode = 'manual'::text) AND (dataset_sync_key IS NULL)) OR ((dataset_sync_mode = 'dataset_auto'::text) AND (dataset_sync_key IS NOT NULL))))",
+          "name": "auto_account_contact_groups_dataset_sync_mode_check",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_account_contact_groups_pkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((purpose = ANY (ARRAY['data_group'::text, 'zalo_friend_blocklist'::text])))",
+          "name": "auto_account_contact_groups_purpose_check",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "aka_agent_chat_api",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "anon",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": "NO",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_account_contact_groups",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": [
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE CASCADE",
+          "name": "auto_account_contact_group_dynamic_filters_group_id_fkey",
+          "table": "auto_account_contact_group_dynamic_filters"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE CASCADE",
+          "name": "auto_account_contact_group_members_group_id_fkey",
+          "table": "auto_account_contact_group_members"
+        },
+        {
+          "definition": "FOREIGN KEY (auto_data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_account_contacts_dataset_auto_data_group_fkey",
+          "table": "auto_account_contacts_dataset"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_account_contacts_dataset_group_id_fkey",
+          "table": "auto_account_contacts_dataset"
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_target_contact_group_id_fkey",
+          "table": "auto_automation"
+        },
+        {
+          "definition": "FOREIGN KEY (target_data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_target_data_group_id_fkey",
+          "table": "auto_automation"
+        },
+        {
+          "definition": "FOREIGN KEY (target_contact_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_contact_group_id_fkey",
+          "table": "auto_automation_detail"
+        },
+        {
+          "definition": "FOREIGN KEY (target_data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_automation_detail_target_data_group_id_fkey",
+          "table": "auto_automation_detail"
+        },
+        {
+          "definition": "FOREIGN KEY (data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE RESTRICT",
+          "name": "auto_campaign_creation_bundles_data_group_id_fkey",
+          "table": "auto_campaign_creation_bundles"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE RESTRICT",
+          "name": "auto_campaign_data_group_sources_group_id_fkey",
+          "table": "auto_campaign_data_group_sources"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_campaign_input_origins_group_id_fkey",
+          "table": "auto_campaign_input_origins"
+        },
+        {
+          "definition": "FOREIGN KEY (data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_campaigns_data_group_id_fkey",
+          "table": "auto_campaigns"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id)",
+          "name": "auto_data_group_external_sync_runs_group_id_fkey",
+          "table": "auto_data_group_external_sync_runs"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id)",
+          "name": "auto_data_group_external_sync_seen_group_id_fkey",
+          "table": "auto_data_group_external_sync_seen"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id)",
+          "name": "auto_data_group_external_sync_sources_group_id_fkey",
+          "table": "auto_data_group_external_sync_sources"
+        },
+        {
+          "definition": "FOREIGN KEY (group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_data_ingest_batches_group_id_fkey",
+          "table": "auto_data_ingest_batches"
+        },
+        {
+          "definition": "FOREIGN KEY (target_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_data_ingest_batches_target_group_id_fkey",
+          "table": "auto_data_ingest_batches"
+        }
+      ],
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_account_contact_groups_pkey ON public.auto_account_contact_groups USING btree (id)",
+          "indexname": "auto_account_contact_groups_pkey",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_account_contact_groups_account_type ON public.auto_account_contact_groups USING btree (account_id, contact_type, purpose) WHERE (is_delete = false)",
+          "indexname": "idx_auto_account_contact_groups_account_type",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_auto_account_contact_groups_shared_list ON public.auto_account_contact_groups USING btree (staff_id, organization_id, sort_order, updated_at DESC, id DESC) WHERE ((is_delete = false) AND (purpose = 'data_group'::text))",
+          "indexname": "idx_auto_account_contact_groups_shared_list",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_data_group_bound_zalo_account ON public.auto_account_contact_groups USING btree (bound_zalo_account_id) WHERE ((bound_zalo_account_id IS NOT NULL) AND (is_delete = false))",
+          "indexname": "idx_data_group_bound_zalo_account",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX idx_data_groups_semantic_type ON public.auto_account_contact_groups USING btree (staff_id, organization_id, data_type_category_item_id, sort_order, id) WHERE ((purpose = 'data_group'::text) AND (is_delete = false))",
+          "indexname": "idx_data_groups_semantic_type",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX uq_auto_account_contact_groups_blocklist_name ON public.auto_account_contact_groups USING btree (staff_id, account_id, contact_type, purpose, lower(name)) WHERE ((is_delete = false) AND (purpose = 'zalo_friend_blocklist'::text))",
+          "indexname": "uq_auto_account_contact_groups_blocklist_name",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE UNIQUE INDEX uq_auto_data_groups_active_dataset_sync_key ON public.auto_account_contact_groups USING btree (staff_id, organization_id, dataset_sync_key) WHERE ((purpose = 'data_group'::text) AND (dataset_sync_mode = 'dataset_auto'::text) AND (dataset_sync_key IS NOT NULL) AND (is_delete = false))",
+          "indexname": "uq_auto_data_groups_active_dataset_sync_key",
+          "schemaname": "public",
+          "tablename": "auto_account_contact_groups",
+          "tablespace": null
+        }
+      ],
+      "policies": null,
+      "sequence": {
+        "cache_size": 1,
+        "cycle": false,
+        "data_type": "bigint",
+        "increment_by": 1,
+        "last_value": 4016,
+        "max_value": 9223372036854776000,
+        "min_value": 1,
+        "schemaname": "public",
+        "sequencename": "auto_account_contact_groups_id_seq",
+        "sequenceowner": "postgres",
+        "start_value": 1
+      },
+      "table": "auto_account_contact_groups",
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_deactivate_group_only_automations BEFORE DELETE OR UPDATE OF is_delete ON public.auto_account_contact_groups FOR EACH ROW WHEN ((old.purpose = 'data_group'::text)) EXECUTE FUNCTION aka_agent_deactivate_group_only_automations()",
+          "name": "trg_aka_agent_deactivate_group_only_automations"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_bound_account BEFORE INSERT OR UPDATE OF bound_zalo_account_id, data_type_category_item_id, staff_id, organization_id ON public.auto_account_contact_groups FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_data_group_bound_account()",
+          "name": "trg_aka_agent_guard_data_group_bound_account"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id ON public.auto_account_contact_groups FOR EACH ROW WHEN ((new.purpose = 'data_group'::text)) EXECUTE FUNCTION aka_agent_guard_data_group_semantic_type()",
+          "name": "trg_aka_agent_guard_data_group_semantic_type"
+        }
+      ]
+    },
+    {
+      "access": {
+        "acl": [
+          "postgres=arwdDxtm/postgres"
+        ],
+        "force_rls": false,
+        "owner": "postgres",
+        "rls": true
+      },
+      "columns": [
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "campaign_detail_id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": true,
+          "position": 2,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": true,
+          "position": 3,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "account_id",
+          "not_null": true,
+          "position": 4,
+          "type": "bigint"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "account_zalo_uid",
+          "not_null": true,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "target_zalo_uid",
+          "not_null": true,
+          "position": 6,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "action_type",
+          "not_null": true,
+          "position": 7,
+          "type": "text"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "sent_at",
+          "not_null": true,
+          "position": 8,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "tracking_until",
+          "not_null": true,
+          "position": 9,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "'{}'::text[]",
+          "generated": "",
+          "identity": "",
+          "name": "message_ids",
+          "not_null": true,
+          "position": 10,
+          "type": "text[]"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "seen_at",
+          "not_null": false,
+          "position": 11,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "responded_at",
+          "not_null": false,
+          "position": 12,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "reacted_at",
+          "not_null": false,
+          "position": 13,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "friended_at",
+          "not_null": false,
+          "position": 14,
+          "type": "timestamp with time zone"
+        },
+        {
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 15,
+          "type": "timestamp with time zone"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (((length(account_zalo_uid) >= 1) AND (length(account_zalo_uid) <= 128)))",
+          "name": "auto_campaign_detail_zalo_engagement_account_zalo_uid_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((action_type = ANY (ARRAY['message'::text, 'friend_request'::text])))",
+          "name": "auto_campaign_detail_zalo_engagement_action_type_check",
+          "validated": true
+        },
+        {
+          "definition": "FOREIGN KEY (campaign_detail_id) REFERENCES auto_campaign_details(id) ON DELETE CASCADE",
+          "name": "auto_campaign_detail_zalo_engagement_campaign_detail_id_fkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK ((tracking_until > sent_at))",
+          "name": "auto_campaign_detail_zalo_engagement_check",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((seen_at IS NULL) OR ((seen_at >= sent_at) AND (seen_at <= tracking_until))))",
+          "name": "auto_campaign_detail_zalo_engagement_check1",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((responded_at IS NULL) OR ((responded_at >= sent_at) AND (responded_at <= tracking_until))))",
+          "name": "auto_campaign_detail_zalo_engagement_check2",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((reacted_at IS NULL) OR ((reacted_at >= sent_at) AND (reacted_at <= tracking_until))))",
+          "name": "auto_campaign_detail_zalo_engagement_check3",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((friended_at IS NULL) OR ((friended_at >= sent_at) AND (friended_at <= tracking_until))))",
+          "name": "auto_campaign_detail_zalo_engagement_check4",
+          "validated": true
+        },
+        {
+          "definition": "PRIMARY KEY (campaign_detail_id)",
+          "name": "auto_campaign_detail_zalo_engagement_pkey",
+          "validated": true
+        },
+        {
+          "definition": "CHECK (((length(target_zalo_uid) >= 1) AND (length(target_zalo_uid) <= 128)))",
+          "name": "auto_campaign_detail_zalo_engagement_target_zalo_uid_check",
+          "validated": true
+        }
+      ],
+      "exists": true,
+      "grants": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "DELETE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "INSERT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "REFERENCES",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "SELECT",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "YES"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRIGGER",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "TRUNCATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": "YES",
+          "privilege_type": "UPDATE",
+          "table_catalog": "postgres",
+          "table_name": "auto_campaign_detail_zalo_engagement",
+          "table_schema": "public",
+          "with_hierarchy": "NO"
+        }
+      ],
+      "incoming_foreign_keys": null,
+      "indexes": [
+        {
+          "indexdef": "CREATE UNIQUE INDEX auto_campaign_detail_zalo_engagement_pkey ON public.auto_campaign_detail_zalo_engagement USING btree (campaign_detail_id)",
+          "indexname": "auto_campaign_detail_zalo_engagement_pkey",
+          "schemaname": "public",
+          "tablename": "auto_campaign_detail_zalo_engagement",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX auto_campaign_engagement_catalog ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, tracking_until, campaign_detail_id)",
+          "indexname": "auto_campaign_engagement_catalog",
+          "schemaname": "public",
+          "tablename": "auto_campaign_detail_zalo_engagement",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX auto_campaign_engagement_deadline ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, tracking_until, campaign_detail_id)",
+          "indexname": "auto_campaign_engagement_deadline",
+          "schemaname": "public",
+          "tablename": "auto_campaign_detail_zalo_engagement",
+          "tablespace": null
+        },
+        {
+          "indexdef": "CREATE INDEX auto_campaign_engagement_target ON public.auto_campaign_detail_zalo_engagement USING btree (organization_id, staff_id, account_id, account_zalo_uid, target_zalo_uid, sent_at DESC) INCLUDE (tracking_until, action_type)",
+          "indexname": "auto_campaign_engagement_target",
+          "schemaname": "public",
+          "tablename": "auto_campaign_detail_zalo_engagement",
+          "tablespace": null
+        }
+      ],
+      "policies": null,
+      "sequence": null,
+      "table": "auto_campaign_detail_zalo_engagement",
+      "triggers": null
+    }
+  ]
+}

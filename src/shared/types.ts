@@ -1184,8 +1184,8 @@ export interface AddCampaignInputDataRowsResult {
 export type CampaignDetailStatus = string
 
 export interface CampaignDetail {
-  statusPresentation?: { code: string; name: string; color: string | null } | null
-  subStatusPresentation?: { code: string; name: string; color: string | null } | null
+  statusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
+  subStatusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
   statusId?: number | null
   subStatusId?: number | null
   actionStatusPolicyId?: number | null

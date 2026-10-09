@@ -4085,6 +4085,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
       if (status && !optionMap.has(status)) {
         optionMap.set(status, { value: status, label: status })
       }
+      const secondary = detail.subStatusPresentation
+      const secondaryValue = secondary?.statusValue || secondary?.name
+      if (secondaryValue && !optionMap.has(secondaryValue)) {
+        optionMap.set(secondaryValue, { value: secondaryValue, label: secondary!.name })
+      }
     })
     const selectedStatus = String(actionDetailFilters.status || '').trim()
     if (selectedStatus && !optionMap.has(selectedStatus)) {

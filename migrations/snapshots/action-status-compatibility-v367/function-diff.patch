@@ -1,0 +1,145 @@
+--- a/aka_agent_enqueue_campaign_detail_automations.sql
++++ b/aka_agent_enqueue_campaign_detail_automations.sql
+@@ -11,0 +12,2 @@
++  v_observed_status text;
++  v_old_observed_status text;
+@@ -50,0 +53,17 @@
++  END IF;
++
++  -- Preserve old Email/SMS main-only conditions without changing saved rules
++  -- or historical details. Explicit secondary filters keep their exact meaning.
++  IF NEW.action_code IN ('email_send','sms_send') AND NEW.status_id IS NOT NULL AND NEW.sub_status_id IS NOT NULL THEN
++    SELECT CASE WHEN NEW.status_id IS NOT NULL THEN CASE NEW.action_code
++          WHEN 'email_send' THEN CASE s.code WHEN 'campaign_detail_viewed' THEN 'đã xem' WHEN 'campaign_detail_clicked' THEN 'đã click' END
++          WHEN 'sms_send' THEN CASE s.code WHEN 'campaign_detail_sent' THEN 'đã gửi' WHEN 'campaign_detail_received' THEN 'đã nhận' WHEN 'campaign_detail_failed' THEN 'thất bại' END
++        END END INTO v_observed_status
++    FROM public.auto_status s WHERE s.id=NEW.sub_status_id AND s.component_type='campaign_detail';
++  END IF;
++  IF TG_OP='UPDATE' AND OLD.action_code IN ('email_send','sms_send') AND OLD.status_id IS NOT NULL AND OLD.sub_status_id IS NOT NULL THEN
++    SELECT CASE WHEN OLD.status_id IS NOT NULL THEN CASE OLD.action_code
++          WHEN 'email_send' THEN CASE s.code WHEN 'campaign_detail_viewed' THEN 'đã xem' WHEN 'campaign_detail_clicked' THEN 'đã click' END
++          WHEN 'sms_send' THEN CASE s.code WHEN 'campaign_detail_sent' THEN 'đã gửi' WHEN 'campaign_detail_received' THEN 'đã nhận' WHEN 'campaign_detail_failed' THEN 'thất bại' END
++        END END INTO v_old_observed_status
++    FROM public.auto_status s WHERE s.id=OLD.sub_status_id AND s.component_type='campaign_detail';
+@@ -330 +349,2 @@
+-        AND lower(trigger_status.status_value) = lower(NEW.status)
++        AND ((
++          lower(trigger_status.status_value) = lower(NEW.status)
+@@ -346,0 +367,10 @@
++        ) OR (
++          trigger_status.sub_status_ids IS NULL
++          AND v_observed_status IS NOT NULL
++          AND lower(trigger_status.status_value)=v_observed_status
++          AND (TG_OP<>'UPDATE' OR v_is_reconcile OR NOT COALESCE(
++            NOT COALESCE(OLD.is_delete,false)
++            AND (trigger_status.action_code IS NULL OR trigger_status.action_code IS NOT DISTINCT FROM OLD.action_code)
++            AND (lower(trigger_status.status_value)=lower(OLD.status)
++              OR lower(trigger_status.status_value)=v_old_observed_status),false))
++        ))
+--- a/aka_agent_enqueue_group_only_automations.sql
++++ b/aka_agent_enqueue_group_only_automations.sql
+@@ -11,0 +12,2 @@
++  v_observed_status text;
++  v_old_observed_status text;
+@@ -39,0 +42,17 @@
++  END IF;
++
++  -- Preserve old Email/SMS main-only conditions without changing saved rules
++  -- or historical details. Explicit secondary filters keep their exact meaning.
++  IF NEW.action_code IN ('email_send','sms_send') AND NEW.status_id IS NOT NULL AND NEW.sub_status_id IS NOT NULL THEN
++    SELECT CASE WHEN NEW.status_id IS NOT NULL THEN CASE NEW.action_code
++          WHEN 'email_send' THEN CASE s.code WHEN 'campaign_detail_viewed' THEN 'đã xem' WHEN 'campaign_detail_clicked' THEN 'đã click' END
++          WHEN 'sms_send' THEN CASE s.code WHEN 'campaign_detail_sent' THEN 'đã gửi' WHEN 'campaign_detail_received' THEN 'đã nhận' WHEN 'campaign_detail_failed' THEN 'thất bại' END
++        END END INTO v_observed_status
++    FROM public.auto_status s WHERE s.id=NEW.sub_status_id AND s.component_type='campaign_detail';
++  END IF;
++  IF TG_OP='UPDATE' AND OLD.action_code IN ('email_send','sms_send') AND OLD.status_id IS NOT NULL AND OLD.sub_status_id IS NOT NULL THEN
++    SELECT CASE WHEN OLD.status_id IS NOT NULL THEN CASE OLD.action_code
++          WHEN 'email_send' THEN CASE s.code WHEN 'campaign_detail_viewed' THEN 'đã xem' WHEN 'campaign_detail_clicked' THEN 'đã click' END
++          WHEN 'sms_send' THEN CASE s.code WHEN 'campaign_detail_sent' THEN 'đã gửi' WHEN 'campaign_detail_received' THEN 'đã nhận' WHEN 'campaign_detail_failed' THEN 'thất bại' END
++        END END INTO v_old_observed_status
++    FROM public.auto_status s WHERE s.id=OLD.sub_status_id AND s.component_type='campaign_detail';
+@@ -233 +252,2 @@
+-        AND lower(trigger_status.status_value) = lower(NEW.status)
++        AND ((
++          lower(trigger_status.status_value) = lower(NEW.status)
+@@ -249,0 +270,10 @@
++        ) OR (
++          trigger_status.sub_status_ids IS NULL
++          AND v_observed_status IS NOT NULL
++          AND lower(trigger_status.status_value)=v_observed_status
++          AND (TG_OP<>'UPDATE' OR v_is_reconcile OR NOT COALESCE(
++            NOT COALESCE(OLD.is_delete,false)
++            AND (trigger_status.action_code IS NULL OR trigger_status.action_code IS NOT DISTINCT FROM OLD.action_code)
++            AND (lower(trigger_status.status_value)=lower(OLD.status)
++              OR lower(trigger_status.status_value)=v_old_observed_status),false))
++        ))
+--- a/aka_agent_internal_send_delivery_history.sql
++++ b/aka_agent_internal_send_delivery_history.sql
+@@ -30 +30,16 @@
+-    FROM public.auto_campaign_details AS d
++    FROM (
++      -- Disjoint branches retain the existing legacy partial-index path.
++      -- Evidence wins over names/report groups, including partial deliveries.
++      SELECT id,created_at,campaign_id,input_data_id,action_code
++      FROM public.auto_campaign_details
++      WHERE account_id=p_account_id AND action_code=ANY(p_action_codes)
++        AND created_at>=p_since AND created_at<=p_now
++        AND policy_snapshot->>'operationState'='committed'
++      UNION ALL
++      SELECT id,created_at,campaign_id,input_data_id,action_code
++      FROM public.auto_campaign_details
++      WHERE account_id=p_account_id AND action_code=ANY(p_action_codes)
++        AND created_at>=p_since AND created_at<=p_now
++        AND policy_snapshot->>'operationState' IS NULL
++        AND status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')
++    ) AS d
+@@ -33,5 +48 @@
+-    WHERE d.account_id = p_account_id
+-      AND d.action_code = ANY(p_action_codes)
+-      AND d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')
+-      AND d.created_at >= p_since
+-      AND d.created_at <= p_now
++
+--- a/aka_agent_list_campaign_details_page_v2.sql
++++ b/aka_agent_list_campaign_details_page_v2.sql
+@@ -41 +41,6 @@
+-  IF v_status IS NOT NULL THEN v_where := v_where || ' AND d.status = $2'; END IF;
++  IF v_status IS NOT NULL THEN
++    v_where := v_where || ' AND (d.status = $2 OR EXISTS (
++      SELECT 1 FROM public.auto_status filter_status
++      WHERE filter_status.id IN (d.status_id,d.sub_status_id)
++        AND (filter_status.status_value=$2 OR lower(filter_status.name)=lower($2))))';
++  END IF;
+@@ -46 +51,4 @@
+-      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5)';
++      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5
++      OR EXISTS (SELECT 1 FROM public.auto_status search_status
++        WHERE search_status.id IN (d.status_id,d.sub_status_id)
++          AND (search_status.name ILIKE $5 OR search_status.status_value ILIKE $5)))';
+@@ -76,2 +84,2 @@
+-          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color) END,
+-          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',
++          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,
++          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',
+--- a/aka_agent_list_campaign_details_page.sql
++++ b/aka_agent_list_campaign_details_page.sql
+@@ -41 +41,6 @@
+-  IF v_status IS NOT NULL THEN v_where := v_where || ' AND d.status = $2'; END IF;
++  IF v_status IS NOT NULL THEN
++    v_where := v_where || ' AND (d.status = $2 OR EXISTS (
++      SELECT 1 FROM public.auto_status filter_status
++      WHERE filter_status.id IN (d.status_id,d.sub_status_id)
++        AND (filter_status.status_value=$2 OR lower(filter_status.name)=lower($2))))';
++  END IF;
+@@ -46 +51,4 @@
+-      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5)';
++      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5
++      OR EXISTS (SELECT 1 FROM public.auto_status search_status
++        WHERE search_status.id IN (d.status_id,d.sub_status_id)
++          AND (search_status.name ILIKE $5 OR search_status.status_value ILIKE $5)))';
+@@ -67,2 +75,2 @@
+-          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color) END,
+-          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color) END)) ORDER BY page.created_at %2$s, page.id %2$s)
++          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,
++          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) ORDER BY page.created_at %2$s, page.id %2$s)

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "migration_v366_action_status_runtime_fixes",
+    "version": "20261009133014"
+  },
+  {
+    "name": "migration_v365_remove_unsupported_post_visible_status",
+    "version": "20261009121850"
+  },
+  {
+    "name": "migration_v364_action_status_catalog_grants",
+    "version": "20261009115214"
+  },
+  {
+    "name": "migration_v363_action_status_writer",
+    "version": "20261009114836"
+  },
+  {
+    "name": "migration_v362_action_status_readers",
+    "version": "20261009114725"
+  },
+  {
+    "name": "migration_v361_action_status_policy_catalog",
+    "version": "20261009102331"
+  },
+  {
+    "name": "migration_v360_facebook_friend_cancel_commit",
+    "version": "20261009025028"
+  },
+  {
+    "name": "migration_v359_facebook_friend_statuses",
+    "version": "20261009022202"
+  },
+  {
+    "name": "migration_v358_zalo_receiver_blocks_no_quota",
+    "version": "20261009014334"
+  },
+  {
+    "name": "migration_v357_facebook_waiting_message_notices",
+    "version": "20261008043042"
+  },
+  {
+    "name": "migration_v356_facebook_message_waiting_limit_24h",
+    "version": "20261008040758"
+  },
+  {
+    "name": "migration_v355_facebook_message_waiting_limit",
+    "version": "20261008035803"
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "at": "2026-10-09T15:52:16.373Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "definition": "CREATE INDEX auto_detail_committed_delivery_v367 ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE ((policy_snapshot ->> 'operationState'::text) = 'committed'::text)",
+  "timeout": "Existing linked API statement_timeout=2min; no connection/settings changes"
+}

@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-09T15:52:38.147Z",
+  "elapsed_ms": 21773,
+  "definition": "CREATE INDEX auto_detail_committed_delivery_v367 ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE ((policy_snapshot ->> 'operationState'::text) = 'committed'::text)",
+  "indisready": true,
+  "indisvalid": true,
+  "size": "32 kB"
+}

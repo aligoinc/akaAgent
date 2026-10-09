@@ -1,0 +1,37 @@
+[
+  {
+    "data_types": [
+      {
+        "campaign_action_id": "email_send",
+        "can_source": true,
+        "can_target": true,
+        "created_at": "2026-07-15T15:14:06.141048+00:00",
+        "data_type_category_item_id": 35,
+        "data_type_code": "email",
+        "is_active": true,
+        "is_delete": false,
+        "sort_order": 20,
+        "target_contact_type": "email",
+        "updated_at": "2026-07-28T11:14:45.205831+00:00"
+      }
+    ],
+    "email_types": [
+      {
+        "code": "email",
+        "contact_type": "email",
+        "created_at": "2026-07-15T15:14:06.141048+00:00",
+        "flatform_type": "email",
+        "is_account_scoped": false,
+        "is_active": true,
+        "is_delete": false,
+        "name": "Email",
+        "sort_order": 20,
+        "source_column": "email",
+        "updated_at": "2026-07-15T15:14:06.141048+00:00"
+      }
+    ],
+    "heap_size": "4648 MB",
+    "lock_timeout": "0",
+    "statement_timeout": "2min"
+  }
+]
