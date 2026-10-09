@@ -14,13 +14,14 @@ const result = (actionCode, statusCode = 'campaign_detail_success', extra = {}) 
 const step = (id, blockName, output) => ({ id, runId: 7, nodeId: blockName, blockName,
   startedAt: `2026-10-09T00:00:${String(id).padStart(2, '0')}Z`, status: 'success', output })
 
-async function harness(zca, actionId = 'facebook_newsfeed_interaction', platform = 'facebook') {
+async function harness(zca, actionId = 'facebook_newsfeed_interaction', platform = 'facebook', schedulerImports = {}) {
   const db = await createFixture()
   const { runtime, load, write } = await desktop(db)
   const Scheduler = schedulerClass(zca, {
     './actionResultRuntime': runtime,
     '../../shared/actionResultSession': load(path.join(root, 'src/shared/actionResultSession.ts')),
-    '../../shared/actionStatusPolicy': load(path.join(root, 'src/shared/actionStatusPolicy.ts'))
+    '../../shared/actionStatusPolicy': load(path.join(root, 'src/shared/actionStatusPolicy.ts')),
+    ...schedulerImports
   })
   const f = fixture(Scheduler)
   Object.assign(f.campaign, { id: 1, actionId })

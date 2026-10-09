@@ -81,7 +81,8 @@ async function main() {
   const Harness = schedulerMethods([
     'resolvePolicyActionDisableContext','renderPolicyMessage','renderZaloPolicyCampaignNote','renderZaloPolicyLog',
     'applyZaloPolicySideEffects','applyRuntimeErrorPolicy','createZaloErrorDetail','zaloAddGroupMember',
-    'checkActionDisabled','createMilestoneSummary','applyHelperMilestoneControls','logZaloMessagePhoneMilestones'
+    'checkActionDisabled','createMilestoneSummary','getHelperResultGuards','applyHelperMilestoneControls',
+    'logHelperMilestoneProgress','logZaloMilestoneContext','pushZaloMilestoneToSms','logZaloMessagePhoneMilestones'
   ], {IPC_EVENTS:{ACCOUNT_STATUS_UPDATED:'updated'}, ZALO_API_BUSINESS_FAILED_ERROR_CODE:'err_zalo_api_business_failed',
       ZALO_ADD_GROUP_MEMBER_ACTION_ID:'zalo_add_group_member'})
   let campaignWrites = []

@@ -689,3 +689,5 @@ Kết quả explicit giữ origin qua merge/parallel/spread/JSON; thao tác mớ
 Partial-send Zalo phải giữ `deliveryCommitted` qua adapter cũ/explicit; kiểm tra origin ngay sau producer, lưu kết quả hợp lệ đã hoàn tất trước cleanup và không chạy node kế tiếp khi xung đột. Group-post explicit dùng chung hậu xử lý legacy và receipt chống lặp; kiểm chứng `node scripts/action-status-result-boundary-smoke.cjs`, xem [audit](docs/ACTION_STATUS_READERS_V362.md#partial-delivery-and-result-boundaries--09102026).
 
 Dual output Zalo giữ cờ dừng/chống chạy lại của helper theo origin, kể cả suppress/relay; `handledErrorCode` ngăn áp lại cùng policy lỗi. Bằng chứng committed/unknown không được hạ thành chưa gửi; smoke `action-status-helper-controls-smoke.cjs`, xem [audit](docs/ACTION_STATUS_READERS_V362.md#helper-controls-and-execution-evidence--09102026).
+
+Adapter helper cũ/explicit dùng chung guard NULL/suppress/requeue/quota và hậu xử lý log/SMS; receipt explicit chỉ hậu xử lý một lần, batch không mượn input người khác. Smoke `action-status-helper-compat-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#legacy-helper-compatibility-and-sms--09102026).

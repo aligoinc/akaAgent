@@ -10237,6 +10237,19 @@ export class CampaignScheduler {
     } }
   }
 
+  private getHelperResultGuards(
+    actionDetail: ZaloActionDetailOutput, email = actionDetail.actionCode === 'email_send'
+  ): CreateCampaignDetailInput['resultGuards'] {
+    return {
+      quotaSuppressed: email && actionDetail.countsTowardLimit === false,
+      operationState: actionDetail.deliveryCommitted ? 'committed' : actionDetail.preventInputRetry ? 'unknown' : undefined,
+      legacySuppress: actionDetail.createDetail === false || !actionDetail.status,
+      legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
+      partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
+      targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công'
+    }
+  }
+
   private applyHelperMilestoneControls(summary: MilestoneSummary, actionDetail: ZaloActionDetailOutput): void {
     if (actionDetail.optOutBlocked) summary.optOutBlocked = true
 
@@ -10324,11 +10337,10 @@ export class CampaignScheduler {
             resultOutput: group && output.subStatusCode == null
               ? { ...output, subStatusCode: group.action.resultOutput?.subStatusCode } : output,
             resultSourceKey: sourceKey,
-            resultGuards: helperLegacy ? {
-              partialDelivery: helperLegacy.deliveryCommitted === true && helperLegacy.status !== 'thành công',
-              operationState: helperLegacy.deliveryCommitted ? 'committed' : helperLegacy.preventInputRetry ? 'unknown' : undefined,
-              targetOnlyFailure: helperLegacy.countsTowardBadTarget === false && helperLegacy.status !== 'thành công'
-            } : undefined,
+            ...(helperLegacy ? {
+              shouldCountAction: helperLegacy.countsTowardLimit === true,
+              resultGuards: this.getHelperResultGuards(helperLegacy)
+            } : {}),
             errorCode: output.errorCode,
             log: typeof row.message === 'string' ? row.message : legacy?.action.log ?? helperLegacy?.log ?? group?.action.log
               ?? (shareTarget ? `Đăng bài dạng chia sẻ vào ${shareTarget.name}` : undefined),
@@ -10344,14 +10356,26 @@ export class CampaignScheduler {
           if (shareTarget && created && output.operationState === 'committed') {
             await this.finishGroupPostShareTarget(campaign, shareTarget, consumedGroupPostInputDataIds)
           }
-          if (created && output.actionCode === 'email_send') {
-            // A batch must identify tracking per result; a wrapper ID cannot
-            // be linked to several recipients or overwrite a previous link.
-            await this.linkEmailResultTracking(campaign, detail, accountId, step, created,
-              row.emailTrackingMessageId ?? (outputs.length === 1 ? step.output.emailTrackingMessageId : undefined))
-            if (created.log) await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
-              actionName: created.actionName || helperLegacy?.actionName, log: created.log
-            }))
+          const resultInput = inputDataId === detail?.id ? detail : null
+          const helperProgress = helperLegacy ?? {
+            actionCode: output.actionCode,
+            actionName: created?.actionName || this.getAccountActionName(output.actionCode),
+            log: typeof row.message === 'string' ? row.message : undefined
+          }
+          if (output.actionCode === 'email_send') {
+            if (created) {
+              // A batch must identify tracking per result; a wrapper ID cannot
+              // be linked to several recipients or overwrite a previous link.
+              await this.linkEmailResultTracking(campaign, resultInput, accountId, step, created,
+                row.emailTrackingMessageId ?? (outputs.length === 1 ? step.output.emailTrackingMessageId : undefined))
+            }
+            await this.logHelperMilestoneProgress(campaign, helperProgress, created)
+          } else if (output.actionCode.startsWith('zalo_')) {
+            await this.logHelperMilestoneProgress(campaign, helperProgress, created)
+            if (created) {
+              await this.logZaloMilestoneContext(campaign, resultInput, helperProgress)
+              await this.pushZaloMilestoneToSms(campaign, resultInput, created)
+            }
           }
           if (output.errorCode && helperLegacy?.handledErrorCode !== output.errorCode) {
             const account = await this.supabase.getAccount(accountId)
@@ -10419,6 +10443,48 @@ export class CampaignScheduler {
       : `${actionName}: ${log}`
   }
 
+  private async logHelperMilestoneProgress(
+    campaign: Campaign, actionDetail: ZaloActionDetailOutput, created: CampaignDetail | null
+  ): Promise<void> {
+    if (!created) {
+      if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+    } else if (created.log) {
+      await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
+        ...actionDetail,
+        actionName: created.actionName || actionDetail.actionName,
+        log: created.log
+      }))
+    }
+  }
+
+  private async logZaloMilestoneContext(
+    campaign: Campaign, detail: CampaignInputData | null, actionDetail: ZaloActionDetailOutput
+  ): Promise<void> {
+    if (actionDetail.actionCode !== ZALO_FIND_PHONE_ACTION_CODE || !detail) return
+    const optOutContext = this.zaloMessageOptOutContexts.get(
+      this.zaloMessageOptOutContextKey(campaign.id, detail.id)
+    )
+    await this.logZaloMessageOptOutWarnings(campaign, detail, optOutContext?.warnings || [])
+    if (actionDetail.optOutBlocked && optOutContext?.blockedNote && !optOutContext.sendExclusionError) {
+      await this.logZaloMessageOptOutBlocked(campaign, detail, optOutContext.blockedNote)
+    }
+  }
+
+  private async pushZaloMilestoneToSms(
+    campaign: Campaign, detail: CampaignInputData | null, created: CampaignDetail
+  ): Promise<void> {
+    try {
+      if (campaign.extraSettings?.internalSmsEnabled === true) {
+        await this.pushZaloDetailToInternalSmsIfNeeded(campaign, detail, created)
+      } else {
+        await this.pushZaloDetailToExternalSmsIfNeeded(campaign, detail, created)
+      }
+    } catch (err) {
+      console.error('Failed to process SMS push for Zalo detail:', err)
+      await this.logExternalPushWarning(campaign, 'Không thể xử lý kiêm gửi SMS', err)
+    }
+  }
+
   private async linkEmailResultTracking(
     campaign: Campaign, detail: CampaignInputData | null, accountId: number,
     step: RunStepV2, created: CampaignDetail, rawTrackingMessageId: unknown
@@ -10476,9 +10542,7 @@ export class CampaignScheduler {
       if (!actionDetail) continue
 
       if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
-        if (actionDetail.log) {
-          await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
-        }
+        await this.logHelperMilestoneProgress(campaign, actionDetail, null)
         continue
       }
 
@@ -10494,13 +10558,11 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true,
         resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
-        resultGuards: { quotaSuppressed: actionDetail.countsTowardLimit === false, operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
-          legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
-          targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công' }
+        resultGuards: this.getHelperResultGuards(actionDetail, true)
       })
 
       if (!created) {
-        if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        await this.logHelperMilestoneProgress(campaign, actionDetail, null)
         continue
       }
       await this.linkEmailResultTracking(campaign, detail, accountId, step, created, step.output?.emailTrackingMessageId)
@@ -10517,13 +10579,7 @@ export class CampaignScheduler {
         summary.hasSuccess = true
       }
 
-      if (created.log) {
-        await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
-          ...actionDetail,
-          actionName: created.actionName || actionDetail.actionName,
-          log: created.log
-        }))
-      }
+      await this.logHelperMilestoneProgress(campaign, actionDetail, created)
     }
 
     return summary
@@ -10551,9 +10607,7 @@ export class CampaignScheduler {
       this.applyHelperMilestoneControls(summary, actionDetail)
 
       if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
-        if (actionDetail.log) {
-          await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
-        }
+        await this.logHelperMilestoneProgress(campaign, actionDetail, null)
         continue
       }
 
@@ -10569,12 +10623,10 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true,
         resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
-        resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
-          legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
-          targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công' }
+        resultGuards: this.getHelperResultGuards(actionDetail, false)
       })
       if (!created) {
-        if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        await this.logHelperMilestoneProgress(campaign, actionDetail, null)
         continue
       }
       smsPushDetails.push(created)
@@ -10589,36 +10641,12 @@ export class CampaignScheduler {
         )
       }
 
-      if (created.log) {
-        await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
-          ...actionDetail,
-          actionName: created.actionName || actionDetail.actionName,
-          log: created.log
-        }))
-      }
-
-      if (actionDetail.actionCode === ZALO_FIND_PHONE_ACTION_CODE && detail) {
-        const optOutContext = this.zaloMessageOptOutContexts.get(
-          this.zaloMessageOptOutContextKey(campaign.id, detail.id)
-        )
-        await this.logZaloMessageOptOutWarnings(campaign, detail, optOutContext?.warnings || [])
-        if (actionDetail.optOutBlocked && optOutContext?.blockedNote && !optOutContext.sendExclusionError) {
-          await this.logZaloMessageOptOutBlocked(campaign, detail, optOutContext.blockedNote)
-        }
-      }
+      await this.logHelperMilestoneProgress(campaign, actionDetail, created)
+      await this.logZaloMilestoneContext(campaign, detail, actionDetail)
     }
 
     for (const created of smsPushDetails) {
-      try {
-        if (campaign.extraSettings?.internalSmsEnabled === true) {
-          await this.pushZaloDetailToInternalSmsIfNeeded(campaign, detail, created)
-        } else {
-          await this.pushZaloDetailToExternalSmsIfNeeded(campaign, detail, created)
-        }
-      } catch (err) {
-        console.error('Failed to process SMS push for Zalo detail:', err)
-        await this.logExternalPushWarning(campaign, 'Không thể xử lý kiêm gửi SMS', err)
-      }
+      await this.pushZaloMilestoneToSms(campaign, detail, created)
     }
 
     return summary
