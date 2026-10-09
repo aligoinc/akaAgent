@@ -1,0 +1,514 @@
+[
+  {
+    "name": "chat_catalog",
+    "group": "catalog",
+    "sql": "SELECT\n (SELECT coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) FROM public.auto_status s) statuses,\n (SELECT coalesce(jsonb_agg(to_jsonb(p)),'[]'::jsonb) FROM public.auto_account_action_status_policies p) policies,\n (SELECT coalesce(jsonb_agg(to_jsonb(e)),'[]'::jsonb) FROM public.auto_error e WHERE e.is_active AND NOT e.is_delete) errors,\n (SELECT coalesce(jsonb_agg(jsonb_build_object('code',a.code,'is_active',a.is_active,'is_delete',a.is_delete)),'[]'::jsonb) FROM public.auto_account_actions a) actions"
+  },
+  {
+    "name": "desktop_catalog_auto_status",
+    "group": "catalog",
+    "sql": "SELECT * FROM public.auto_status WHERE id>0 ORDER BY id LIMIT 500"
+  },
+  {
+    "name": "desktop_catalog_auto_account_action_status_policies",
+    "group": "catalog",
+    "sql": "SELECT * FROM public.auto_account_action_status_policies WHERE id>0 ORDER BY id LIMIT 500"
+  },
+  {
+    "name": "desktop_catalog_auto_error",
+    "group": "catalog",
+    "sql": "SELECT * FROM public.auto_error WHERE id>0 ORDER BY id LIMIT 500"
+  },
+  {
+    "name": "desktop_catalog_auto_account_actions",
+    "group": "catalog",
+    "sql": "SELECT * FROM public.auto_account_actions WHERE id>0 ORDER BY id LIMIT 500"
+  },
+  {
+    "name": "details_all_385",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(385,365,7370,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "rpc": true
+  },
+  {
+    "name": "details_success_385",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(385,365,7370,NULL,'thành công',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "rpc": true
+  },
+  {
+    "name": "details_sub_385",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(385,365,7370,NULL,'chờ duyệt bài',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "rpc": true
+  },
+  {
+    "name": "automation_options_385",
+    "group": "automation",
+    "sql": "SELECT public.aka_agent_get_automation_options(385,365,NULL,NULL)",
+    "staff_id": 385,
+    "rpc": true
+  },
+  {
+    "name": "crm_agent_campaign_results_385",
+    "group": "crm",
+    "sql": "SELECT * FROM public.crm_agent_campaign_results(ARRAY[365]::bigint[],ARRAY[7370,7759,7768,7755,7757]::bigint[])",
+    "staff_id": 385,
+    "campaign_ids": [
+      7370,
+      7759,
+      7768,
+      7755,
+      7757
+    ]
+  },
+  {
+    "name": "crm_trial_campaign_signal_counts_385",
+    "group": "crm",
+    "sql": "SELECT * FROM public.crm_trial_campaign_signal_counts(ARRAY[365]::bigint[],ARRAY[7370,7759,7768,7755,7757]::bigint[])",
+    "staff_id": 385,
+    "campaign_ids": [
+      7370,
+      7759,
+      7768,
+      7755,
+      7757
+    ]
+  },
+  {
+    "name": "details_all_521",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(521,500,10022,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 521,
+    "campaign_id": 10022,
+    "rpc": true
+  },
+  {
+    "name": "details_success_521",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(521,500,10022,NULL,'thành công',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 521,
+    "campaign_id": 10022,
+    "rpc": true
+  },
+  {
+    "name": "details_sub_521",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(521,500,10022,NULL,'chờ duyệt bài',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 521,
+    "campaign_id": 10022,
+    "rpc": true
+  },
+  {
+    "name": "crm_agent_campaign_results_521",
+    "group": "crm",
+    "sql": "SELECT * FROM public.crm_agent_campaign_results(ARRAY[500]::bigint[],ARRAY[10022,9056,9055,10436,9054]::bigint[])",
+    "staff_id": 521,
+    "campaign_ids": [
+      10022,
+      9056,
+      9055,
+      10436,
+      9054
+    ]
+  },
+  {
+    "name": "crm_trial_campaign_signal_counts_521",
+    "group": "crm",
+    "sql": "SELECT * FROM public.crm_trial_campaign_signal_counts(ARRAY[500]::bigint[],ARRAY[10022,9056,9055,10436,9054]::bigint[])",
+    "staff_id": 521,
+    "campaign_ids": [
+      10022,
+      9056,
+      9055,
+      10436,
+      9054
+    ]
+  },
+  {
+    "name": "details_all_603",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(603,582,12050,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 603,
+    "campaign_id": 12050,
+    "rpc": true
+  },
+  {
+    "name": "details_all_659",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(659,636,11980,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "rpc": true
+  },
+  {
+    "name": "details_success_659",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(659,636,11980,NULL,'thành công',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "rpc": true
+  },
+  {
+    "name": "details_sub_659",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(659,636,11980,NULL,'chờ duyệt bài',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "rpc": true
+  },
+  {
+    "name": "details_all_1190",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(1190,1097,21907,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 1190,
+    "campaign_id": 21907,
+    "rpc": true
+  },
+  {
+    "name": "automation_options_1190",
+    "group": "automation",
+    "sql": "SELECT public.aka_agent_get_automation_options(1190,1097,NULL,NULL)",
+    "staff_id": 1190,
+    "rpc": true
+  },
+  {
+    "name": "details_all_305",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(305,286,6854,NULL,NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 305,
+    "campaign_id": 6854,
+    "rpc": true
+  },
+  {
+    "name": "count_385_success_current",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND (d.status='thành công' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='thành công' OR lower(filter_status.name)=lower('thành công'))))",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "count_385_success_legacy",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='thành công'",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "count_385_sub_current",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND (d.status='chờ duyệt bài' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='chờ duyệt bài' OR lower(filter_status.name)=lower('chờ duyệt bài'))))",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "count_385_sub_legacy",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='chờ duyệt bài'",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "count_659_success_current",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND (d.status='thành công' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='thành công' OR lower(filter_status.name)=lower('thành công'))))",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "count_659_success_legacy",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status='thành công'",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "count_659_sub_current",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND (d.status='chờ duyệt bài' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='chờ duyệt bài' OR lower(filter_status.name)=lower('chờ duyệt bài'))))",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "count_659_sub_legacy",
+    "group": "filter_comparison",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status='chờ duyệt bài'",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "details_search_sub_659",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(659,636,11980,'Chờ duyệt bài',NULL,NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "rpc": true
+  },
+  {
+    "name": "details_deep_page_659",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(659,636,11980,NULL,NULL,NULL,NULL,30000,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "rpc": true
+  },
+  {
+    "name": "report_page_385_current",
+    "group": "report_page",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status,report_group FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[1560,1563,1564,1567,1568,1570,1571,1574,1575,1577,1578,1580,1581,1583,1584,1585,1586,1589,1590,1592,1593,1594,1595,1596,1597,1598,1599,1600,1601,1602,1603,1606,1607,1608,1609,1610,1611,1612,1613,1614,1844,3565,3566,3567,3569,3571,3605,3606,3671,3672,3682,3685,3688,3689,3690,3691,3692,6664,6928]::bigint[]) AND action_code IN (SELECT code FROM public.auto_account_actions WHERE is_active AND NOT is_delete) AND (report_group IN ('success','failure','skipped','pending') OR (report_group IS NULL AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên'))) AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 385,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "report_page_385_legacy",
+    "group": "report_page",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[1560,1563,1564,1567,1568,1570,1571,1574,1575,1577,1578,1580,1581,1583,1584,1585,1586,1589,1590,1592,1593,1594,1595,1596,1597,1598,1599,1600,1601,1602,1603,1606,1607,1608,1609,1610,1611,1612,1613,1614,1844,3565,3566,3567,3569,3571,3605,3606,3671,3672,3682,3685,3688,3689,3690,3691,3692,6664,6928]::bigint[]) AND action_code IN (SELECT code FROM public.auto_account_actions WHERE is_active AND NOT is_delete) AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên') AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 385,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "delivery_history_385",
+    "group": "delivery_history",
+    "sql": "SELECT\n      d.id AS detail_id,\n      d.created_at,\n      d.campaign_id,\n      c.name AS campaign_name,\n      public.aka_agent_internal_delivery_cooldown_target_keys(\n        CASE d.action_code\n          WHEN 'fb_post_group' THEN 'facebook_group'\n          WHEN 'fb_post_page' THEN 'facebook_page'\n          WHEN 'fb_message_friend' THEN 'facebook_person'\n          WHEN 'fb_message_stranger' THEN 'facebook_person'\n          WHEN 'fb_message_page_inbox_customer' THEN 'facebook_page_inbox'\n          WHEN 'zalo_message_friend' THEN 'zalo_person'\n          WHEN 'zalo_message_stranger' THEN 'zalo_person'\n          WHEN 'zalo_message_group' THEN 'zalo_group'\n          WHEN 'sms_send' THEN 'phone'\n          WHEN 'email_send' THEN 'email'\n          ELSE ''\n        END,\n        source_input.uid,\n        source_input.phone,\n        source_input.email\n      ) AS target_keys\n    FROM (\n      -- Disjoint branches retain the existing legacy partial-index path.\n      -- Evidence wins over names/report groups, including partial deliveries.\n      SELECT id,created_at,campaign_id,input_data_id,action_code\n      FROM public.auto_campaign_details\n      WHERE account_id=1844 AND action_code=ANY(ARRAY['zalo_message_friend','zalo_message_stranger','zalo_message_group']::text[])\n        AND created_at>=('2026-10-09T08:28:15.904837+00:00'::timestamptz-interval '30 days') AND created_at<='2026-10-09T08:28:15.904837+00:00'::timestamptz\n        AND policy_snapshot->>'operationState'='committed'\n      UNION ALL\n      SELECT id,created_at,campaign_id,input_data_id,action_code\n      FROM public.auto_campaign_details\n      WHERE account_id=1844 AND action_code=ANY(ARRAY['zalo_message_friend','zalo_message_stranger','zalo_message_group']::text[])\n        AND created_at>=('2026-10-09T08:28:15.904837+00:00'::timestamptz-interval '30 days') AND created_at<='2026-10-09T08:28:15.904837+00:00'::timestamptz\n        AND policy_snapshot->>'operationState' IS NULL\n        AND status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')\n    ) AS d\n    JOIN public.auto_campaign_input_data AS source_input ON source_input.id = d.input_data_id\n    LEFT JOIN public.auto_campaigns AS c ON c.id = d.campaign_id",
+    "staff_id": 385,
+    "account_id": 1844,
+    "window_ends_at": "2026-10-09T08:28:15.904837+00:00",
+    "exact_inner_sql": true
+  },
+  {
+    "name": "report_page_521_current",
+    "group": "report_page",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status,report_group FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[2305,2421,2422,2423,2722,2820]::bigint[]) AND action_code IN (SELECT code FROM public.auto_account_actions WHERE is_active AND NOT is_delete) AND (report_group IN ('success','failure','skipped','pending') OR (report_group IS NULL AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên'))) AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 521,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "report_page_521_legacy",
+    "group": "report_page",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[2305,2421,2422,2423,2722,2820]::bigint[]) AND action_code IN (SELECT code FROM public.auto_account_actions WHERE is_active AND NOT is_delete) AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên') AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 521,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "delivery_history_521",
+    "group": "delivery_history",
+    "sql": "SELECT\n      d.id AS detail_id,\n      d.created_at,\n      d.campaign_id,\n      c.name AS campaign_name,\n      public.aka_agent_internal_delivery_cooldown_target_keys(\n        CASE d.action_code\n          WHEN 'fb_post_group' THEN 'facebook_group'\n          WHEN 'fb_post_page' THEN 'facebook_page'\n          WHEN 'fb_message_friend' THEN 'facebook_person'\n          WHEN 'fb_message_stranger' THEN 'facebook_person'\n          WHEN 'fb_message_page_inbox_customer' THEN 'facebook_page_inbox'\n          WHEN 'zalo_message_friend' THEN 'zalo_person'\n          WHEN 'zalo_message_stranger' THEN 'zalo_person'\n          WHEN 'zalo_message_group' THEN 'zalo_group'\n          WHEN 'sms_send' THEN 'phone'\n          WHEN 'email_send' THEN 'email'\n          ELSE ''\n        END,\n        source_input.uid,\n        source_input.phone,\n        source_input.email\n      ) AS target_keys\n    FROM (\n      -- Disjoint branches retain the existing legacy partial-index path.\n      -- Evidence wins over names/report groups, including partial deliveries.\n      SELECT id,created_at,campaign_id,input_data_id,action_code\n      FROM public.auto_campaign_details\n      WHERE account_id=2722 AND action_code=ANY(ARRAY['zalo_message_friend','zalo_message_stranger','zalo_message_group']::text[])\n        AND created_at>=('2026-10-09T11:19:45.67378+00:00'::timestamptz-interval '30 days') AND created_at<='2026-10-09T11:19:45.67378+00:00'::timestamptz\n        AND policy_snapshot->>'operationState'='committed'\n      UNION ALL\n      SELECT id,created_at,campaign_id,input_data_id,action_code\n      FROM public.auto_campaign_details\n      WHERE account_id=2722 AND action_code=ANY(ARRAY['zalo_message_friend','zalo_message_stranger','zalo_message_group']::text[])\n        AND created_at>=('2026-10-09T11:19:45.67378+00:00'::timestamptz-interval '30 days') AND created_at<='2026-10-09T11:19:45.67378+00:00'::timestamptz\n        AND policy_snapshot->>'operationState' IS NULL\n        AND status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')\n    ) AS d\n    JOIN public.auto_campaign_input_data AS source_input ON source_input.id = d.input_data_id\n    LEFT JOIN public.auto_campaigns AS c ON c.id = d.campaign_id",
+    "staff_id": 521,
+    "account_id": 2722,
+    "window_ends_at": "2026-10-09T11:19:45.67378+00:00",
+    "exact_inner_sql": true
+  },
+  {
+    "name": "result_key_lookup",
+    "group": "writer_read",
+    "sql": "SELECT * FROM public.auto_campaign_details WHERE result_key='[\"action-result-v1\",\"02f5cafb84324ce2e86818bc7ae8116d\",\"6469959\",\"zalo_find_phone_user\",\"0\"]'"
+  },
+  {
+    "name": "result_key_miss",
+    "group": "writer_read",
+    "sql": "SELECT * FROM public.auto_campaign_details WHERE result_key='__readonly_performance_missing_key__'"
+  },
+  {
+    "name": "target_guard_385_input",
+    "group": "writer_read",
+    "sql": "SELECT EXISTS(SELECT 1 FROM public.auto_campaign_details old WHERE old.campaign_id=7370 AND old.input_data_id=1260228 AND old.policy_snapshot->>'unitKey'='__readonly_missing_unit__' AND old.policy_snapshot ? 'settlement')",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "input_id": 1260228
+  },
+  {
+    "name": "target_guard_385_null",
+    "group": "writer_read",
+    "sql": "SELECT EXISTS(SELECT 1 FROM public.auto_campaign_details old WHERE old.campaign_id=7370 AND old.input_data_id IS NULL AND old.policy_snapshot->>'unitKey'='__readonly_missing_unit__' AND old.policy_snapshot ? 'settlement')",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "input_id": null
+  },
+  {
+    "name": "target_guard_659_input",
+    "group": "writer_read",
+    "sql": "SELECT EXISTS(SELECT 1 FROM public.auto_campaign_details old WHERE old.campaign_id=11980 AND old.input_data_id=2653374 AND old.policy_snapshot->>'unitKey'='__readonly_missing_unit__' AND old.policy_snapshot ? 'settlement')",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "input_id": 2653374
+  },
+  {
+    "name": "target_guard_659_null",
+    "group": "writer_read",
+    "sql": "SELECT EXISTS(SELECT 1 FROM public.auto_campaign_details old WHERE old.campaign_id=11980 AND old.input_data_id IS NULL AND old.policy_snapshot->>'unitKey'='__readonly_missing_unit__' AND old.policy_snapshot ? 'settlement')",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "input_id": null
+  },
+  {
+    "name": "settlement_detail_ids",
+    "group": "writer_read",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details WHERE id=ANY(ARRAY[4828785]::bigint[]) AND campaign_id=25449 AND input_data_id IS NOT DISTINCT FROM 6469959 AND policy_snapshot->>'unitKey'='02f5cafb84324ce2e86818bc7ae8116d'"
+  },
+  {
+    "name": "page_inner_385_current_warm",
+    "group": "attribution",
+    "sql": "WITH page_ids AS MATERIALIZED (\n      SELECT d.id, d.created_at\n      FROM public.auto_campaign_details AS d\n      WHERE d.campaign_id=7370 AND d.is_delete=false AND (d.status='thành công' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='thành công' OR lower(filter_status.name)=lower('thành công'))))\n      ORDER BY d.created_at DESC, d.id DESC\n      LIMIT 100 OFFSET 0\n    )\n    SELECT jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg(((to_jsonb(detail) || jsonb_build_object(\n          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,\n          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',\n          engagement.campaign_detail_id IS NOT NULL OR (account.flatform_type='zalo' AND NOT COALESCE(account.is_zalo_show_web,false)\n            AND detail.status='thành công' AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')\n            AND detail.data->'partialSend' IS NULL))) ORDER BY page.created_at DESC, page.id DESC)\n        FROM page_ids AS page\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\n        LEFT JOIN public.auto_status main_status ON main_status.id=detail.status_id\n        LEFT JOIN public.auto_status sub_status ON sub_status.id=detail.sub_status_id\n        LEFT JOIN public.auto_campaign_detail_zalo_engagement engagement ON engagement.campaign_detail_id=page.id\n        LEFT JOIN public.auto_accounts account ON account.id=detail.account_id\n      ), '[]'::jsonb),\n      'total', (SELECT count(*) FROM public.auto_campaign_details AS d WHERE d.campaign_id=7370 AND d.is_delete=false AND (d.status='thành công' OR EXISTS (SELECT 1 FROM public.auto_status filter_status WHERE filter_status.id IN (d.status_id,d.sub_status_id) AND (filter_status.status_value='thành công' OR lower(filter_status.name)=lower('thành công')))))\n    )",
+    "staff_id": 385,
+    "legacy_predicate_only": false
+  },
+  {
+    "name": "page_inner_385_legacy_filter",
+    "group": "attribution",
+    "sql": "WITH page_ids AS MATERIALIZED (\n      SELECT d.id, d.created_at\n      FROM public.auto_campaign_details AS d\n      WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='thành công'\n      ORDER BY d.created_at DESC, d.id DESC\n      LIMIT 100 OFFSET 0\n    )\n    SELECT jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg(((to_jsonb(detail) || jsonb_build_object(\n          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,\n          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',\n          engagement.campaign_detail_id IS NOT NULL OR (account.flatform_type='zalo' AND NOT COALESCE(account.is_zalo_show_web,false)\n            AND detail.status='thành công' AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')\n            AND detail.data->'partialSend' IS NULL))) ORDER BY page.created_at DESC, page.id DESC)\n        FROM page_ids AS page\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\n        LEFT JOIN public.auto_status main_status ON main_status.id=detail.status_id\n        LEFT JOIN public.auto_status sub_status ON sub_status.id=detail.sub_status_id\n        LEFT JOIN public.auto_campaign_detail_zalo_engagement engagement ON engagement.campaign_detail_id=page.id\n        LEFT JOIN public.auto_accounts account ON account.id=detail.account_id\n      ), '[]'::jsonb),\n      'total', (SELECT count(*) FROM public.auto_campaign_details AS d WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='thành công')\n    )",
+    "staff_id": 385,
+    "legacy_predicate_only": true
+  },
+  {
+    "name": "automation_inner_385_legacy",
+    "group": "attribution",
+    "sql": "SELECT jsonb_build_object(\n    'automation_actions', COALESCE((\n      SELECT jsonb_agg(to_jsonb(automation_action) ORDER BY automation_action.sort_order, automation_action.id)\n      FROM public.auto_automation_actions AS automation_action\n      WHERE automation_action.is_active = true\n        AND automation_action.is_delete = false\n    ), '[]'::jsonb),\n    'data_types', COALESCE((\n      SELECT jsonb_agg(to_jsonb(data_type) ORDER BY data_type.sort_order, data_type.code)\n      FROM public.auto_automation_data_types AS data_type\n      WHERE data_type.is_active = true\n        AND data_type.is_delete = false\n    ), '[]'::jsonb),\n    'action_data_types', COALESCE((\n      SELECT jsonb_agg(public.aka_agent_semantic_row_json(to_jsonb(mapping)) ORDER BY mapping.sort_order, mapping.campaign_action_id, mapping.data_type_code, mapping.data_type_category_item_id)\n      FROM public.auto_campaign_action_data_types AS mapping\n      WHERE mapping.is_active = true\n        AND mapping.is_delete = false\n    ), '[]'::jsonb),\n    'campaigns', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', campaign.id,\n          'name', campaign.name,\n          'action_id', campaign.action_id,\n          'action_name', campaign_action.name,\n          'account_id', campaign.account_id,\n          'account_name', account.name,\n          'flatform_type', campaign_action.flatform_type,\n          'status', campaign.status,\n          'schedule', campaign.schedule,\n          'original_schedule', campaign.original_schedule,\n          'data_types', COALESCE((\n            SELECT jsonb_agg(\n              jsonb_build_object(\n                'code', mapping.data_type_code,\n                'can_source', mapping.can_source,\n                'can_target', mapping.can_target,\n                'target_contact_type', mapping.target_contact_type\n              )\n              ORDER BY mapping.sort_order, mapping.data_type_code\n            )\n            FROM public.auto_campaign_action_data_types AS mapping\n            WHERE mapping.campaign_action_id = campaign.action_id\n              AND mapping.is_active = true\n              AND mapping.is_delete = false\n          ), '[]'::jsonb)\n        )\n        ORDER BY campaign.updated_at DESC, campaign.id DESC\n      )\n      FROM public.auto_campaigns AS campaign\n      JOIN public.auto_campaign_actions AS campaign_action\n        ON campaign_action.id = campaign.action_id\n      JOIN public.auto_accounts AS account\n        ON account.id = campaign.account_id\n      WHERE campaign.staff_id = 385\n        AND campaign.organization_id = 365\n        AND COALESCE(campaign.is_delete, false) = false\n        AND campaign_action.is_active = true\n        AND COALESCE(campaign_action.is_delete, false) = false\n        AND account.staff_id = 385\n        AND account.organization_id = 365\n        AND COALESCE(account.is_delete, false) = false\n        AND EXISTS (\n          SELECT 1\n          FROM public.auto_campaign_action_data_types AS mapping\n          WHERE mapping.campaign_action_id = campaign.action_id\n            AND mapping.is_active = true\n            AND mapping.is_delete = false\n        )\n    ), '[]'::jsonb),\n    'contact_groups', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', contact_group.id,\n          'name', contact_group.name,\n          'account_id', contact_group.account_id,\n          'contact_type', contact_group.contact_type,\n          'purpose', contact_group.purpose\n        )\n        ORDER BY lower(contact_group.name), contact_group.id\n      )\n      FROM public.auto_account_contact_groups AS contact_group\n      JOIN public.auto_accounts AS account\n        ON account.id = contact_group.account_id\n      WHERE contact_group.staff_id = 385\n        AND contact_group.organization_id = 365\n        AND contact_group.purpose = 'data_group'\n        AND contact_group.is_delete = false\n        AND account.staff_id = 385\n        AND account.organization_id = 365\n        AND COALESCE(account.is_delete, false) = false\n    ), '[]'::jsonb),\n    'catalog_statuses', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', status_mapping.id,\n          'status_mapping_id', status_mapping.id,\n          'campaign_action_id', status_mapping.campaign_action_id,\n          'action_code', status_mapping.action_code,\n          'action_name', account_action.name,\n          'is_wildcard', status_mapping.action_code IS NULL,\n          'status_id', status_mapping.status_id,\n          'semantic_status_id', status_mapping.status_id,\n          'status_value', status_mapping.status_value,\n          'status_label', COALESCE(status_mapping.label, status_mapping.status_value),\n          'label', COALESCE(status_mapping.label, status_mapping.status_value)\n        )\n        ORDER BY status_mapping.campaign_action_id,\n          status_mapping.sort_order,\n          status_mapping.id\n      )\n      FROM public.auto_campaign_action_detail_statuses AS status_mapping\n      LEFT JOIN public.auto_account_actions AS account_action\n        ON account_action.code = status_mapping.action_code\n      WHERE status_mapping.is_active = true\n        AND status_mapping.is_delete = false\n    ), '[]'::jsonb),\n    'status_options', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'campaign_action_id', observed.campaign_action_id,\n          'status_mapping_id', NULL,\n          'action_code', observed.action_code,\n          'action_name', account_action.name,\n          'is_wildcard', observed.action_code IS NULL,\n          'status_id', semantic_status.id,\n          'semantic_status_id', semantic_status.id,\n          'status_value', observed.status_value,\n          'status_label', observed.status_value,\n          'occurrence_count', observed.occurrence_count,\n          'last_seen_at', observed.last_seen_at\n        )\n        ORDER BY observed.campaign_action_id,\n          lower(observed.status_value),\n          observed.action_code\n      )\n      FROM (\n        SELECT\n          campaign.action_id AS campaign_action_id,\n          detail.action_code,\n          detail.status AS status_value,\n          count(*)::integer AS occurrence_count,\n          max(detail.created_at) AS last_seen_at\n        FROM public.auto_campaigns AS campaign\n        JOIN public.auto_campaign_details AS detail\n          ON detail.campaign_id = campaign.id\n        WHERE campaign.staff_id = 385\n          AND campaign.organization_id = 365\n          AND COALESCE(campaign.is_delete, false) = false\n          AND COALESCE(detail.is_delete, false) = false\n        GROUP BY campaign.action_id, detail.action_code, detail.status\n      ) AS observed\n      LEFT JOIN public.auto_account_actions AS account_action\n        ON account_action.code = observed.action_code\n      LEFT JOIN LATERAL (\n        SELECT status_catalog.id\n        FROM public.auto_status AS status_catalog\n        WHERE status_catalog.component_type = 'campaign_detail'\n          AND status_catalog.is_active = true\n          AND status_catalog.is_delete = false\n          AND lower(status_catalog.name) = lower(observed.status_value)\n        ORDER BY status_catalog.sort_order, status_catalog.id\n        LIMIT 1\n      ) AS semantic_status ON true\n      WHERE NOT EXISTS (\n        SELECT 1\n        FROM public.auto_campaign_action_detail_statuses AS status_mapping\n        WHERE status_mapping.campaign_action_id = observed.campaign_action_id\n          AND status_mapping.action_code IS NOT DISTINCT FROM observed.action_code\n          AND lower(status_mapping.status_value) = lower(observed.status_value)\n          AND status_mapping.is_active = true\n          AND status_mapping.is_delete = false\n      )\n    ), '[]'::jsonb)\n  )",
+    "staff_id": 385,
+    "legacy_inner_sql": true,
+    "samples": 1
+  },
+  {
+    "name": "automation_inner_385_current_warm",
+    "group": "attribution",
+    "sql": "SELECT jsonb_build_object(\n    'result_statuses', COALESCE((SELECT jsonb_agg(jsonb_build_object(\n      'id',s.id,'code',s.code,'name',s.name,'status_value',s.status_value,'color',s.color,\n      'flatform_type',s.flatform_type,'description',s.description\n    ) ORDER BY s.sort_order,s.id) FROM public.auto_status s\n      WHERE s.component_type='campaign_detail' AND s.is_active AND NOT s.is_delete),'[]'::jsonb),\n    'automation_actions', COALESCE((\n      SELECT jsonb_agg(to_jsonb(automation_action) ORDER BY automation_action.sort_order, automation_action.id)\n      FROM public.auto_automation_actions AS automation_action\n      WHERE automation_action.is_active = true\n        AND automation_action.is_delete = false\n    ), '[]'::jsonb),\n    'data_types', COALESCE((\n      SELECT jsonb_agg(to_jsonb(data_type) ORDER BY data_type.sort_order, data_type.code)\n      FROM public.auto_automation_data_types AS data_type\n      WHERE data_type.is_active = true\n        AND data_type.is_delete = false\n    ), '[]'::jsonb),\n    'action_data_types', COALESCE((\n      SELECT jsonb_agg(public.aka_agent_semantic_row_json(to_jsonb(mapping)) ORDER BY mapping.sort_order, mapping.campaign_action_id, mapping.data_type_code, mapping.data_type_category_item_id)\n      FROM public.auto_campaign_action_data_types AS mapping\n      WHERE mapping.is_active = true\n        AND mapping.is_delete = false\n    ), '[]'::jsonb),\n    'campaigns', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', campaign.id,\n          'name', campaign.name,\n          'action_id', campaign.action_id,\n          'action_name', campaign_action.name,\n          'account_id', campaign.account_id,\n          'account_name', account.name,\n          'flatform_type', campaign_action.flatform_type,\n          'status', campaign.status,\n          'schedule', campaign.schedule,\n          'original_schedule', campaign.original_schedule,\n          'data_types', COALESCE((\n            SELECT jsonb_agg(\n              jsonb_build_object(\n                'code', mapping.data_type_code,\n                'can_source', mapping.can_source,\n                'can_target', mapping.can_target,\n                'target_contact_type', mapping.target_contact_type\n              )\n              ORDER BY mapping.sort_order, mapping.data_type_code\n            )\n            FROM public.auto_campaign_action_data_types AS mapping\n            WHERE mapping.campaign_action_id = campaign.action_id\n              AND mapping.is_active = true\n              AND mapping.is_delete = false\n          ), '[]'::jsonb)\n        )\n        ORDER BY campaign.updated_at DESC, campaign.id DESC\n      )\n      FROM public.auto_campaigns AS campaign\n      JOIN public.auto_campaign_actions AS campaign_action\n        ON campaign_action.id = campaign.action_id\n      JOIN public.auto_accounts AS account\n        ON account.id = campaign.account_id\n      WHERE campaign.staff_id = 385\n        AND campaign.organization_id = 365\n        AND COALESCE(campaign.is_delete, false) = false\n        AND campaign_action.is_active = true\n        AND COALESCE(campaign_action.is_delete, false) = false\n        AND account.staff_id = 385\n        AND account.organization_id = 365\n        AND COALESCE(account.is_delete, false) = false\n        AND EXISTS (\n          SELECT 1\n          FROM public.auto_campaign_action_data_types AS mapping\n          WHERE mapping.campaign_action_id = campaign.action_id\n            AND mapping.is_active = true\n            AND mapping.is_delete = false\n        )\n    ), '[]'::jsonb),\n    'contact_groups', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', contact_group.id,\n          'name', contact_group.name,\n          'account_id', contact_group.account_id,\n          'contact_type', contact_group.contact_type,\n          'purpose', contact_group.purpose\n        )\n        ORDER BY lower(contact_group.name), contact_group.id\n      )\n      FROM public.auto_account_contact_groups AS contact_group\n      JOIN public.auto_accounts AS account\n        ON account.id = contact_group.account_id\n      WHERE contact_group.staff_id = 385\n        AND contact_group.organization_id = 365\n        AND contact_group.purpose = 'data_group'\n        AND contact_group.is_delete = false\n        AND account.staff_id = 385\n        AND account.organization_id = 365\n        AND COALESCE(account.is_delete, false) = false\n    ), '[]'::jsonb),\n    'catalog_statuses', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'id', status_mapping.id,\n          'status_mapping_id', status_mapping.id,\n          'campaign_action_id', status_mapping.campaign_action_id,\n          'action_code', status_mapping.action_code,\n          'action_name', account_action.name,\n          'is_wildcard', status_mapping.action_code IS NULL,\n          'status_id', status_mapping.status_id,\n          'semantic_status_id', status_mapping.status_id,\n          'status_value', status_mapping.status_value,\n          'status_label', COALESCE(status_mapping.label, status_mapping.status_value),\n          'label', COALESCE(status_mapping.label, status_mapping.status_value)\n        )\n        ORDER BY status_mapping.campaign_action_id,\n          status_mapping.sort_order,\n          status_mapping.id\n      )\n      FROM public.auto_campaign_action_detail_statuses AS status_mapping\n      LEFT JOIN public.auto_account_actions AS account_action\n        ON account_action.code = status_mapping.action_code\n      WHERE status_mapping.is_active = true\n        AND status_mapping.is_delete = false\n    ), '[]'::jsonb),\n    'status_options', COALESCE((\n      SELECT jsonb_agg(\n        jsonb_build_object(\n          'campaign_action_id', observed.campaign_action_id,\n          'status_mapping_id', NULL,\n          'action_code', observed.action_code,\n          'action_name', account_action.name,\n          'is_wildcard', observed.action_code IS NULL,\n          'status_id', semantic_status.id,\n          'semantic_status_id', semantic_status.id,\n          'status_value', observed.status_value,\n          'status_label', observed.status_value,\n          'occurrence_count', observed.occurrence_count,\n          'last_seen_at', observed.last_seen_at\n        )\n        ORDER BY observed.campaign_action_id,\n          lower(observed.status_value),\n          observed.action_code\n      )\n      FROM (\n        SELECT\n          campaign.action_id AS campaign_action_id,\n          detail.action_code,\n          detail.status AS status_value,\n          count(*)::integer AS occurrence_count,\n          max(detail.created_at) AS last_seen_at\n        FROM public.auto_campaigns AS campaign\n        JOIN public.auto_campaign_details AS detail\n          ON detail.campaign_id = campaign.id\n        WHERE campaign.staff_id = 385\n          AND campaign.organization_id = 365\n          AND COALESCE(campaign.is_delete, false) = false\n          AND COALESCE(detail.is_delete, false) = false\n        GROUP BY campaign.action_id, detail.action_code, detail.status\n      ) AS observed\n      LEFT JOIN public.auto_account_actions AS account_action\n        ON account_action.code = observed.action_code\n      LEFT JOIN LATERAL (\n        SELECT status_catalog.id\n        FROM public.auto_status AS status_catalog\n        WHERE status_catalog.component_type = 'campaign_detail'\n          AND status_catalog.is_active = true\n          AND status_catalog.is_delete = false\n          AND lower(status_catalog.name) = lower(observed.status_value)\n        ORDER BY status_catalog.sort_order, status_catalog.id\n        LIMIT 1\n      ) AS semantic_status ON true\n      WHERE NOT EXISTS (\n        SELECT 1\n        FROM public.auto_campaign_action_detail_statuses AS status_mapping\n        WHERE status_mapping.campaign_action_id = observed.campaign_action_id\n          AND status_mapping.action_code IS NOT DISTINCT FROM observed.action_code\n          AND lower(status_mapping.status_value) = lower(observed.status_value)\n          AND status_mapping.is_active = true\n          AND status_mapping.is_delete = false\n      )\n    ), '[]'::jsonb)\n  )",
+    "staff_id": 385,
+    "legacy_inner_sql": false,
+    "samples": 1
+  },
+  {
+    "name": "crm_inner_385_legacy",
+    "group": "attribution",
+    "sql": "SELECT c.id, result.successful, result.failed, queue.pending\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) FILTER (WHERE d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')) AS successful,\n      count(*) FILTER (WHERE d.status IN ('thất bại', 'lỗi', 'không tồn tại')) AS failed\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS pending\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false AND i.status = 'chờ xử lý'\n  ) queue\n  WHERE c.organization_id = ANY(ARRAY[365]::bigint[]) AND c.id = ANY(ARRAY[7370,7759,7768,7755,7757]::bigint[]) AND c.is_delete = false",
+    "staff_id": 385,
+    "legacy_inner_sql": true,
+    "samples": 1
+  },
+  {
+    "name": "crm_inner_385_current",
+    "group": "attribution",
+    "sql": "SELECT c.id, result.successful, result.failed, result.managed_pending + queue.pending\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) FILTER (WHERE (d.report_group='success' OR (d.report_group IS NULL AND d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')))) AS successful,\n      count(*) FILTER (WHERE (d.report_group='failure' OR (d.report_group IS NULL AND d.status IN ('thất bại', 'lỗi', 'không tồn tại')))) AS failed, count(*) FILTER (WHERE d.report_group='pending') AS managed_pending\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS pending\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false AND i.status = 'chờ xử lý'\n      AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_details existing\n        WHERE existing.input_data_id=i.id AND existing.campaign_id=c.id\n          AND existing.is_delete=false AND existing.report_group='pending')\n  ) queue\n  WHERE c.organization_id = ANY(ARRAY[365]::bigint[]) AND c.id = ANY(ARRAY[7370,7759,7768,7755,7757]::bigint[]) AND c.is_delete = false",
+    "staff_id": 385,
+    "legacy_inner_sql": false,
+    "samples": 1
+  },
+  {
+    "name": "crm_inner_521_legacy",
+    "group": "attribution",
+    "sql": "SELECT c.id, result.successful, result.failed, queue.pending\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) FILTER (WHERE d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')) AS successful,\n      count(*) FILTER (WHERE d.status IN ('thất bại', 'lỗi', 'không tồn tại')) AS failed\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS pending\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false AND i.status = 'chờ xử lý'\n  ) queue\n  WHERE c.organization_id = ANY(ARRAY[500]::bigint[]) AND c.id = ANY(ARRAY[10022,9056,9055,10436,9054]::bigint[]) AND c.is_delete = false",
+    "staff_id": 521,
+    "legacy_inner_sql": true,
+    "samples": 1
+  },
+  {
+    "name": "crm_inner_521_current",
+    "group": "attribution",
+    "sql": "SELECT c.id, result.successful, result.failed, result.managed_pending + queue.pending\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) FILTER (WHERE (d.report_group='success' OR (d.report_group IS NULL AND d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')))) AS successful,\n      count(*) FILTER (WHERE (d.report_group='failure' OR (d.report_group IS NULL AND d.status IN ('thất bại', 'lỗi', 'không tồn tại')))) AS failed, count(*) FILTER (WHERE d.report_group='pending') AS managed_pending\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS pending\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false AND i.status = 'chờ xử lý'\n      AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_details existing\n        WHERE existing.input_data_id=i.id AND existing.campaign_id=c.id\n          AND existing.is_delete=false AND existing.report_group='pending')\n  ) queue\n  WHERE c.organization_id = ANY(ARRAY[500]::bigint[]) AND c.id = ANY(ARRAY[10022,9056,9055,10436,9054]::bigint[]) AND c.is_delete = false",
+    "staff_id": 521,
+    "legacy_inner_sql": false,
+    "samples": 1
+  },
+  {
+    "name": "proposed_count_385_success",
+    "group": "read_only_prototype",
+    "sql": "WITH matched AS MATERIALIZED (SELECT ARRAY(SELECT id FROM public.auto_status WHERE status_value='thành công' OR lower(name)=lower('thành công')) ids)\nSELECT (SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='thành công')\n +(SELECT count(*) FROM public.auto_campaign_details d CROSS JOIN matched m WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status IS DISTINCT FROM 'thành công' AND (d.status_id=ANY(m.ids) OR d.sub_status_id=ANY(m.ids))) AS total",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "status": "thành công",
+    "not_applied": true
+  },
+  {
+    "name": "proposed_count_385_sub",
+    "group": "read_only_prototype",
+    "sql": "WITH matched AS MATERIALIZED (SELECT ARRAY(SELECT id FROM public.auto_status WHERE status_value='chờ duyệt bài' OR lower(name)=lower('chờ duyệt bài')) ids)\nSELECT (SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status='chờ duyệt bài')\n +(SELECT count(*) FROM public.auto_campaign_details d CROSS JOIN matched m WHERE d.campaign_id=7370 AND d.is_delete=false AND d.status IS DISTINCT FROM 'chờ duyệt bài' AND (d.status_id=ANY(m.ids) OR d.sub_status_id=ANY(m.ids))) AS total",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "status": "chờ duyệt bài",
+    "not_applied": true
+  },
+  {
+    "name": "proposed_count_659_success",
+    "group": "read_only_prototype",
+    "sql": "WITH matched AS MATERIALIZED (SELECT ARRAY(SELECT id FROM public.auto_status WHERE status_value='thành công' OR lower(name)=lower('thành công')) ids)\nSELECT (SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status='thành công')\n +(SELECT count(*) FROM public.auto_campaign_details d CROSS JOIN matched m WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status IS DISTINCT FROM 'thành công' AND (d.status_id=ANY(m.ids) OR d.sub_status_id=ANY(m.ids))) AS total",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "status": "thành công",
+    "not_applied": true
+  },
+  {
+    "name": "proposed_count_659_sub",
+    "group": "read_only_prototype",
+    "sql": "WITH matched AS MATERIALIZED (SELECT ARRAY(SELECT id FROM public.auto_status WHERE status_value='chờ duyệt bài' OR lower(name)=lower('chờ duyệt bài')) ids)\nSELECT (SELECT count(*) FROM public.auto_campaign_details d WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status='chờ duyệt bài')\n +(SELECT count(*) FROM public.auto_campaign_details d CROSS JOIN matched m WHERE d.campaign_id=11980 AND d.is_delete=false AND d.status IS DISTINCT FROM 'chờ duyệt bài' AND (d.status_id=ANY(m.ids) OR d.sub_status_id=ANY(m.ids))) AS total",
+    "staff_id": 659,
+    "campaign_id": 11980,
+    "status": "chờ duyệt bài",
+    "not_applied": true
+  },
+  {
+    "name": "report_page_385_current_warm",
+    "group": "attribution",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status,report_group FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[1560,1563,1564,1567,1568,1570,1571,1574,1575,1577,1578,1580,1581,1583,1584,1585,1586,1589,1590,1592,1593,1594,1595,1596,1597,1598,1599,1600,1601,1602,1603,1606,1607,1608,1609,1610,1611,1612,1613,1614,1844,3565,3566,3567,3569,3571,3605,3606,3671,3672,3682,3685,3688,3689,3690,3691,3692,6664,6928]::bigint[]) AND action_code IN (SELECT code FROM public.auto_account_actions WHERE is_active AND NOT is_delete) AND (report_group IN ('success','failure','skipped','pending') OR (report_group IS NULL AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên'))) AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 385
+  },
+  {
+    "name": "crm_trial_inner_521_legacy",
+    "group": "attribution",
+    "sql": "SELECT c.id, inputs.input_total, result.successful, result.failed\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS input_total\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false\n  ) inputs\n  CROSS JOIN LATERAL (\n    -- Số LIÊN HỆ có ít nhất một lượt thành công / lỗi (một liên hệ có thể được gửi nhiều lượt), để tỷ lệ\n    -- \"đã gửi / tệp nạp\" cùng nghĩa với SQL autoCampaignDetail và tracking desktop (mỗi dòng = một liên hệ).\n    SELECT count(DISTINCT COALESCE(d.input_data_id, d.id)) FILTER (\n             WHERE d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')\n           ) AS successful,\n           count(DISTINCT COALESCE(d.input_data_id, d.id)) FILTER (\n             WHERE d.status IN ('thất bại', 'lỗi', 'không tồn tại')\n           ) AS failed\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  WHERE c.organization_id = ANY(ARRAY[500]::bigint[]) AND c.id = ANY(ARRAY[10022,9056,9055,10436,9054]::bigint[]) AND c.is_delete = false",
+    "staff_id": 521,
+    "legacy_inner_sql": true,
+    "samples": 1
+  },
+  {
+    "name": "crm_trial_inner_521_current",
+    "group": "attribution",
+    "sql": "SELECT c.id, inputs.input_total, result.successful, result.failed\n  FROM public.auto_campaigns c\n  CROSS JOIN LATERAL (\n    SELECT count(*) AS input_total\n    FROM public.auto_campaign_input_data i\n    WHERE i.campaign_id = c.id AND i.is_delete = false\n  ) inputs\n  CROSS JOIN LATERAL (\n    -- Số LIÊN HỆ có ít nhất một lượt thành công / lỗi (một liên hệ có thể được gửi nhiều lượt), để tỷ lệ\n    -- \"đã gửi / tệp nạp\" cùng nghĩa với SQL autoCampaignDetail và tracking desktop (mỗi dòng = một liên hệ).\n    SELECT count(DISTINCT COALESCE(d.input_data_id, d.id)) FILTER (\n             WHERE (d.report_group='success' OR (d.report_group IS NULL AND d.status IN ('thành công', 'đã gửi', 'đã nhận', 'đã xem', 'đã click')))\n           ) AS successful,\n           count(DISTINCT COALESCE(d.input_data_id, d.id)) FILTER (\n             WHERE (d.report_group='failure' OR (d.report_group IS NULL AND d.status IN ('thất bại', 'lỗi', 'không tồn tại')))\n           ) AS failed\n    FROM public.auto_campaign_details d\n    WHERE d.campaign_id = c.id AND d.is_delete = false\n  ) result\n  WHERE c.organization_id = ANY(ARRAY[500]::bigint[]) AND c.id = ANY(ARRAY[10022,9056,9055,10436,9054]::bigint[]) AND c.is_delete = false",
+    "staff_id": 521,
+    "legacy_inner_sql": false,
+    "samples": 1
+  },
+  {
+    "name": "report_literal_385_legacy",
+    "group": "report_literal",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[1560,1563,1564,1567,1568,1570,1571,1574,1575,1577,1578,1580,1581,1583,1584,1585,1586,1589,1590,1592,1593,1594,1595,1596,1597,1598,1599,1600,1601,1602,1603,1606,1607,1608,1609,1610,1611,1612,1613,1614,1844,3565,3566,3567,3569,3571,3605,3606,3671,3672,3682,3685,3688,3689,3690,3691,3692,6664,6928]::bigint[]) AND action_code=ANY(ARRAY['fb_post_group','fb_post_my_profile','fb_comment','fb_message_stranger','fb_message_friend','fb_add_friend','fb_like_post','fb_post_page','zalo_find_phone_user','zalo_add_group_member','fb_group_invite','fb_message_page_inbox_customer','zalo_join_group','voice_call','email_send','zalo_message_group','zalo_message_friend','zalo_join_group_link','zalo_message_stranger','zalo_add_friend','zalo_tag_contact','zalo_change_alias','zalo_cancel_sent_friend_request','fb_join_group','sms_send']::text[]) AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên') AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 385,
+    "legacy_predicate_only": true,
+    "scope": "all enabled action codes, all non-deleted accounts; no platform filter"
+  },
+  {
+    "name": "report_literal_385_current",
+    "group": "report_literal",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status,report_group FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[1560,1563,1564,1567,1568,1570,1571,1574,1575,1577,1578,1580,1581,1583,1584,1585,1586,1589,1590,1592,1593,1594,1595,1596,1597,1598,1599,1600,1601,1602,1603,1606,1607,1608,1609,1610,1611,1612,1613,1614,1844,3565,3566,3567,3569,3571,3605,3606,3671,3672,3682,3685,3688,3689,3690,3691,3692,6664,6928]::bigint[]) AND action_code=ANY(ARRAY['fb_post_group','fb_post_my_profile','fb_comment','fb_message_stranger','fb_message_friend','fb_add_friend','fb_like_post','fb_post_page','zalo_find_phone_user','zalo_add_group_member','fb_group_invite','fb_message_page_inbox_customer','zalo_join_group','voice_call','email_send','zalo_message_group','zalo_message_friend','zalo_join_group_link','zalo_message_stranger','zalo_add_friend','zalo_tag_contact','zalo_change_alias','zalo_cancel_sent_friend_request','fb_join_group','sms_send']::text[]) AND (report_group IN ('success','failure','skipped','pending') OR (report_group IS NULL AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên'))) AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 385,
+    "legacy_predicate_only": false,
+    "scope": "all enabled action codes, all non-deleted accounts; no platform filter"
+  },
+  {
+    "name": "report_literal_521_legacy",
+    "group": "report_literal",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[2305,2421,2422,2423,2722,2820]::bigint[]) AND action_code=ANY(ARRAY['fb_post_group','fb_post_my_profile','fb_comment','fb_message_stranger','fb_message_friend','fb_add_friend','fb_like_post','fb_post_page','zalo_find_phone_user','zalo_add_group_member','fb_group_invite','fb_message_page_inbox_customer','zalo_join_group','voice_call','email_send','zalo_message_group','zalo_message_friend','zalo_join_group_link','zalo_message_stranger','zalo_add_friend','zalo_tag_contact','zalo_change_alias','zalo_cancel_sent_friend_request','fb_join_group','sms_send']::text[]) AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên') AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 521,
+    "legacy_predicate_only": true,
+    "scope": "all enabled action codes, all non-deleted accounts; no platform filter"
+  },
+  {
+    "name": "report_literal_521_current",
+    "group": "report_literal",
+    "sql": "SELECT id,input_data_id,account_id,action_code,status,report_group FROM public.auto_campaign_details WHERE is_delete=false AND account_id=ANY(ARRAY[2305,2421,2422,2423,2722,2820]::bigint[]) AND action_code=ANY(ARRAY['fb_post_group','fb_post_my_profile','fb_comment','fb_message_stranger','fb_message_friend','fb_add_friend','fb_like_post','fb_post_page','zalo_find_phone_user','zalo_add_group_member','fb_group_invite','fb_message_page_inbox_customer','zalo_join_group','voice_call','email_send','zalo_message_group','zalo_message_friend','zalo_join_group_link','zalo_message_stranger','zalo_add_friend','zalo_tag_contact','zalo_change_alias','zalo_cancel_sent_friend_request','fb_join_group','sms_send']::text[]) AND (report_group IN ('success','failure','skipped','pending') OR (report_group IS NULL AND status IN ('thành công','đã xem','đã click','thất bại','lỗi','không tồn tại','đã gửi lời mời','đã là thành viên'))) AND created_at>='2026-09-09T17:00:00Z'::timestamptz AND created_at<'2026-10-10T17:00:00Z'::timestamptz AND id>0 ORDER BY id LIMIT 1000",
+    "staff_id": 521,
+    "legacy_predicate_only": false,
+    "scope": "all enabled action codes, all non-deleted accounts; no platform filter"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-09T19:34:10.708Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "table": "auto_blocks",
+      "status": 200,
+      "verified_rows": 1
+    },
+    {
+      "table": "auto_error",
+      "status": 200,
+      "verified_rows": 1
+    },
+    {
+      "table": "auto_workflows",
+      "status": 200,
+      "verified_rows": 4
+    }
+  ],
+  "schema_reload": false
+}

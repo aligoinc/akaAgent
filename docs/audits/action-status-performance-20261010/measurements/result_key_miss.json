@@ -1,0 +1,212 @@
+{
+  "checked_at": "2026-10-09T17:59:17.660Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "result_key_miss",
+    "group": "writer_read",
+    "sql": "SELECT * FROM public.auto_campaign_details WHERE result_key='__readonly_performance_missing_key__'"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 1294,
+      "execution_ms": 0.081,
+      "planning_ms": 2.425,
+      "rows": 0,
+      "shared_hit": 2,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 0,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.081,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 0,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '__readonly_performance_missing_key__'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 2,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.425,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 2,
+      "wall_ms": 1515,
+      "execution_ms": 0.075,
+      "planning_ms": 2.353,
+      "rows": 0,
+      "shared_hit": 2,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 0,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.075,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 0,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '__readonly_performance_missing_key__'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 2,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.353,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 3,
+      "wall_ms": 1544,
+      "execution_ms": 0.132,
+      "planning_ms": 2.404,
+      "rows": 0,
+      "shared_hit": 2,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 0,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.132,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 0,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '__readonly_performance_missing_key__'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 2,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.404,
+        "Triggers": []
+      }
+    }
+  ]
+}

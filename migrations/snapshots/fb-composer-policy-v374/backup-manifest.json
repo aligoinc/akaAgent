@@ -1,0 +1,24 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-09 19:27:36.247923+00",
+  "before_sha256": "e88c106d7720ef5004e1370f978f8a2ebcf1a6c4b6dfee0bdd0ef1b37d6649a2",
+  "schema_sha256": "93280fc29098fd1438ca2411470f10396a9518d8e2a1d0604f190af6cf831449",
+  "tables": {
+    "auto_blocks": {
+      "count": 1,
+      "md5": "93902c278e2acba6c7c08a9e420e8139"
+    },
+    "auto_error": {
+      "count": 104,
+      "md5": "66428cde6c62b9bdc35a0cc7163fcc10"
+    },
+    "auto_status": {
+      "count": 41,
+      "md5": "e974fb079937c858bf20718bea4b057e"
+    },
+    "auto_workflows": {
+      "count": 4,
+      "md5": "38860be7f86dd88b6029534baa2d977a"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-09T19:10:32.997Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "version": "20261009191030",
+  "name": "migration_v373_fb_post_approved_status",
+  "migration_sha256": "f232cfcb1704602eb60264e3f226d2d1db4af2da648a69cd54dc18245c5fe883",
+  "owned": {
+    "canonical": "{\"id\": 55, \"code\": \"campaign_detail_post_approved\", \"name\": \"Đã duyệt bài\", \"color\": null, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-10-09T19:10:32.190217+00:00\", \"is_default\": false, \"sort_order\": 220, \"status_key\": \"post_approved\", \"updated_at\": \"2026-10-09T19:10:32.190217+00:00\", \"description\": \"Trạng thái phụ sau đăng bài group Facebook thành công. Theo quy ước hiện có: isPending=false và pendingCheckConclusive=true được hiển thị là Đã duyệt bài (nhánh log Group không cần duyệt bài). Tái sử dụng kết luận detector, không thêm kiểm tra DOM hoặc xác nhận riêng về thao tác duyệt của quản trị viên. Không gán khi kiểm tra chưa kết luận; không suy từ URL công khai. Khi dùng làm subStatusCode không đổi policy Thành công, bộ đếm hoặc xử lý input. Chỉ áp dụng kết quả mới, không sửa detail/note/log lịch sử.\", \"is_terminal\": false, \"status_value\": \"đã duyệt bài\", \"flatform_type\": \"facebook\", \"component_type\": \"campaign_detail\", \"can_set_manually\": false}",
+    "md5": "f882b0284e00f33e215baa4bf19f4e64",
+    "row": {
+      "can_set_manually": false,
+      "code": "campaign_detail_post_approved",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-09T19:10:32.190217+00:00",
+      "description": "Trạng thái phụ sau đăng bài group Facebook thành công. Theo quy ước hiện có: isPending=false và pendingCheckConclusive=true được hiển thị là Đã duyệt bài (nhánh log Group không cần duyệt bài). Tái sử dụng kết luận detector, không thêm kiểm tra DOM hoặc xác nhận riêng về thao tác duyệt của quản trị viên. Không gán khi kiểm tra chưa kết luận; không suy từ URL công khai. Khi dùng làm subStatusCode không đổi policy Thành công, bộ đếm hoặc xử lý input. Chỉ áp dụng kết quả mới, không sửa detail/note/log lịch sử.",
+      "flatform_type": "facebook",
+      "id": 55,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã duyệt bài",
+      "sort_order": 220,
+      "status_key": "post_approved",
+      "status_value": "đã duyệt bài",
+      "updated_at": "2026-10-09T19:10:32.190217+00:00"
+    }
+  }
+}

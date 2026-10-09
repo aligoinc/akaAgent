@@ -1,0 +1,166 @@
+{
+  "actions": [
+    {
+      "code": "fb_post_group",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_post_my_profile",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_comment",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_message_stranger",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_message_friend",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_add_friend",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_like_post",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_post_page",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_find_phone_user",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_add_group_member",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_group_invite",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_message_page_inbox_customer",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_join_group",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "voice_call",
+      "flatform_type": "sms",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "email_send",
+      "flatform_type": "email",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_message_group",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_message_friend",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_join_group_link",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_message_stranger",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_add_friend",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_tag_contact",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_change_alias",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "zalo_cancel_sent_friend_request",
+      "flatform_type": "zalo",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "fb_join_group",
+      "flatform_type": "facebook",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "code": "sms_send",
+      "flatform_type": "sms",
+      "is_active": true,
+      "is_delete": false
+    }
+  ],
+  "read_security": [
+    {
+      "policies": null,
+      "rls": false,
+      "table": "auto_campaign_details"
+    },
+    {
+      "policies": null,
+      "rls": false,
+      "table": "auto_status"
+    }
+  ]
+}

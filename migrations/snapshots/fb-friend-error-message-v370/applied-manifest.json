@@ -1,0 +1,19 @@
+{
+  "name": "migration_v370_fb_friend_hidden_button_message",
+  "version": "20261009174750",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_at": "2026-10-09T17:47:53.682Z",
+  "updated_id": 81,
+  "columns": [
+    "noti_running_process",
+    "noti_campaign"
+  ],
+  "row_before_md5": "1173220a341d33b89d5cbb2730f27beb",
+  "row_after_md5": "32c199a31101c919fc98026054bb76e5",
+  "other_rows_unchanged": true,
+  "schema_unchanged": true,
+  "sequence_unchanged": true,
+  "migration_sha256": "2d5502f9491fc808aa6d39e6200c21eb610ea2589e26f92ba574b0a1fa20da9f",
+  "rollback_sha256": "fa8d9bdc5b13366aa6cd17a765e2f5a4ec3d7f5f924aff5ebbd2814078d79789",
+  "after_sha256": "e27a1d28f19de837bc06b79ca49f44557649f81055d2a2266c798d3a07e92810"
+}

@@ -1,0 +1,90 @@
+{
+  "activity": {
+    "active": 2,
+    "waiting_for_lock": 0
+  },
+  "captured_at": "2026-10-09 18:04:06.774725+00",
+  "functions": [
+    {
+      "md5": "8f00d3496adbc0f1a82c5261f7824018",
+      "signature": "aka_agent_enqueue_campaign_detail_automations()"
+    },
+    {
+      "md5": "a8bcf3ae13ffd7baddba76d104d2ad1e",
+      "signature": "aka_agent_enqueue_group_only_automations()"
+    },
+    {
+      "md5": "971cae0a816058b9213b6e85b4fd252d",
+      "signature": "aka_agent_get_automation_options(bigint,bigint,text,text)"
+    },
+    {
+      "md5": "c84a0510e6f1cfd5b62df9da39270cba",
+      "signature": "aka_agent_guard_result_catalog_v361()"
+    },
+    {
+      "md5": "5e3da51a01b8ba546f3ed5d2852441d6",
+      "signature": "aka_agent_guard_result_policy_identity_v363()"
+    },
+    {
+      "md5": "a8e94d7a35d42064236d369c6e0e088d",
+      "signature": "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)"
+    },
+    {
+      "md5": "0cab9241430282691f320221acf2ed5d",
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)"
+    },
+    {
+      "md5": "fb398b4e0fb53a5ebef8269805d51a8e",
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)"
+    },
+    {
+      "md5": "9f0ec78c3127d0f48605298b5ea2c3f0",
+      "signature": "aka_agent_mark_email_click(text,text)"
+    },
+    {
+      "md5": "e13f3b6c3de915b2713965b76dbd33a7",
+      "signature": "aka_agent_mark_email_open(text,text)"
+    },
+    {
+      "md5": "6535346b9292f2c69031bb801f5a5f68",
+      "signature": "aka_agent_project_linked_email_status_v366()"
+    },
+    {
+      "md5": "c06650808d8a4c26b1ad8e8fa21c81f6",
+      "signature": "aka_agent_record_sms_message_status(bigint,bigint,text,text,jsonb,text)"
+    },
+    {
+      "md5": "a46368117d2815b67442383cd753089b",
+      "signature": "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)"
+    },
+    {
+      "md5": "b4be76b63cd90ef5f4d7bdd93a22b288",
+      "signature": "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)"
+    },
+    {
+      "md5": "53da13aaf1f735071e4a50c74a2b862f",
+      "signature": "crm_agent_campaign_results(bigint[],bigint[])"
+    },
+    {
+      "md5": "f36e7da0909e3acc2ac43aff1f50b8e5",
+      "signature": "crm_trial_campaign_signal_counts(bigint[],bigint[])"
+    }
+  ],
+  "latest_migrations": [
+    {
+      "name": "migration_v370_fb_friend_hidden_button_message",
+      "version": "20261009174750"
+    },
+    {
+      "name": "migration_v369_selective_revert_automation_status_catalog",
+      "version": "20261009173841"
+    },
+    {
+      "name": "migration_v368_email_status_observations",
+      "version": "20261009162432"
+    }
+  ],
+  "functions_unchanged": true,
+  "production_data_modified": false,
+  "new_pool_or_connections_configured": false
+}

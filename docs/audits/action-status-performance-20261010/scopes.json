@@ -1,0 +1,353 @@
+{
+  "captured_at": "2026-10-09T17:51:20.430Z",
+  "scopes": [
+    {
+      "staff_id": 521,
+      "rows": [
+        {
+          "account_id": 2722,
+          "action_id": "zalo_message_phone",
+          "details": 19542,
+          "id": 10022,
+          "inputs": 6876,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2421,
+          "action_id": "zalo_message_phone",
+          "details": 13758,
+          "id": 9056,
+          "inputs": 3990,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2422,
+          "action_id": "zalo_message_phone",
+          "details": 13481,
+          "id": 9055,
+          "inputs": 3819,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2820,
+          "action_id": "zalo_message_phone",
+          "details": 7158,
+          "id": 10436,
+          "inputs": 1831,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2423,
+          "action_id": "zalo_message_phone",
+          "details": 6493,
+          "id": 9054,
+          "inputs": 1935,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2423,
+          "action_id": "zalo_message_phone",
+          "details": 3813,
+          "id": 17778,
+          "inputs": 1255,
+          "is_delete": false,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2423,
+          "action_id": "zalo_message_phone",
+          "details": 371,
+          "id": 17168,
+          "inputs": 1935,
+          "is_delete": true,
+          "organization_id": 500,
+          "staff_id": 521
+        },
+        {
+          "account_id": 2423,
+          "action_id": "zalo_message_phone",
+          "details": 0,
+          "id": 17776,
+          "inputs": 300,
+          "is_delete": true,
+          "organization_id": 500,
+          "staff_id": 521
+        }
+      ],
+      "details": 64616,
+      "inputs": 21941
+    },
+    {
+      "staff_id": 603,
+      "rows": [
+        {
+          "account_id": 2768,
+          "action_id": "zalo_message_phone",
+          "details": 7881,
+          "id": 12050,
+          "inputs": 9999,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2765,
+          "action_id": "zalo_message_phone",
+          "details": 7846,
+          "id": 12033,
+          "inputs": 9999,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2773,
+          "action_id": "zalo_message_phone",
+          "details": 7552,
+          "id": 12068,
+          "inputs": 10000,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2767,
+          "action_id": "zalo_message_phone",
+          "details": 7549,
+          "id": 12039,
+          "inputs": 9999,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2766,
+          "action_id": "zalo_message_phone",
+          "details": 7520,
+          "id": 12037,
+          "inputs": 9999,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2772,
+          "action_id": "zalo_message_phone",
+          "details": 7508,
+          "id": 12067,
+          "inputs": 10000,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        },
+        {
+          "account_id": 2770,
+          "action_id": "zalo_message_phone",
+          "details": 7334,
+          "id": 12066,
+          "inputs": 9999,
+          "is_delete": false,
+          "organization_id": 582,
+          "staff_id": 603
+        }
+      ],
+      "details": 53190,
+      "inputs": 69995
+    },
+    {
+      "staff_id": 659,
+      "rows": [
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 38570,
+          "id": 11980,
+          "inputs": 595,
+          "is_delete": false,
+          "organization_id": 636,
+          "staff_id": 659
+        },
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 1187,
+          "id": 11632,
+          "inputs": 595,
+          "is_delete": true,
+          "organization_id": 636,
+          "staff_id": 659
+        },
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 595,
+          "id": 11158,
+          "inputs": 595,
+          "is_delete": true,
+          "organization_id": 636,
+          "staff_id": 659
+        },
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 595,
+          "id": 11934,
+          "inputs": 595,
+          "is_delete": true,
+          "organization_id": 636,
+          "staff_id": 659
+        },
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 594,
+          "id": 11583,
+          "inputs": 594,
+          "is_delete": true,
+          "organization_id": 636,
+          "staff_id": 659
+        },
+        {
+          "account_id": 3037,
+          "action_id": "zalo_message_group",
+          "details": 250,
+          "id": 11789,
+          "inputs": 595,
+          "is_delete": true,
+          "organization_id": 636,
+          "staff_id": 659
+        }
+      ],
+      "details": 41791,
+      "inputs": 3569
+    },
+    {
+      "staff_id": 305,
+      "rows": [
+        {
+          "account_id": 1751,
+          "action_id": "facebook_find_data_group",
+          "details": 9095,
+          "id": 6854,
+          "inputs": 109,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1746,
+          "action_id": "facebook_find_data_group",
+          "details": 8355,
+          "id": 7519,
+          "inputs": 182,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1747,
+          "action_id": "facebook_find_data_group",
+          "details": 7335,
+          "id": 7928,
+          "inputs": 429,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1753,
+          "action_id": "facebook_find_data_group",
+          "details": 6688,
+          "id": 8726,
+          "inputs": 200,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1748,
+          "action_id": "facebook_find_data_group",
+          "details": 6126,
+          "id": 8839,
+          "inputs": 158,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1753,
+          "action_id": "facebook_find_data_group",
+          "details": 1215,
+          "id": 6855,
+          "inputs": 200,
+          "is_delete": true,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1748,
+          "action_id": "facebook_find_data_group",
+          "details": 1105,
+          "id": 7929,
+          "inputs": 158,
+          "is_delete": true,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1747,
+          "action_id": "facebook_find_data_group",
+          "details": 875,
+          "id": 6850,
+          "inputs": 429,
+          "is_delete": true,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1748,
+          "action_id": "facebook_find_data_group",
+          "details": 808,
+          "id": 6851,
+          "inputs": 158,
+          "is_delete": true,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1746,
+          "action_id": "facebook_find_data_group",
+          "details": 552,
+          "id": 6846,
+          "inputs": 182,
+          "is_delete": true,
+          "organization_id": 286,
+          "staff_id": 305
+        },
+        {
+          "account_id": 1746,
+          "action_id": "facebook_find_data_group",
+          "details": 0,
+          "id": 7930,
+          "inputs": 182,
+          "is_delete": false,
+          "organization_id": 286,
+          "staff_id": 305
+        }
+      ],
+      "details": 42154,
+      "inputs": 2387
+    }
+  ]
+}

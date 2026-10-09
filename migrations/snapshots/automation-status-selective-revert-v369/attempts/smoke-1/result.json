@@ -1,0 +1,32 @@
+{
+  "committed": false,
+  "error": "42725: operator precedence in JSON subtraction postflight; entire transaction aborted",
+  "fix": "Parenthesize x->row before subtracting description.",
+  "discarded_generated_artifacts": [
+    {
+      "file": "plan.json",
+      "sha256": "5e5e5c1605851a6db3f73f6d8730f12e972206c9846801949fd7e541c7a63921",
+      "bytes": 357677
+    },
+    {
+      "file": "migration_v369_selective_revert_automation_status_catalog.sql",
+      "sha256": "2176ececfa4366e354f7253456279753a7621d5d02220764dd90144e825c640b",
+      "bytes": 1307617
+    },
+    {
+      "file": "smoke.sql",
+      "sha256": "c23d92e2df02c5e812a914ffdca6d644f3919e08817ee6ac868e7a90e905bb38",
+      "bytes": 2166482
+    },
+    {
+      "file": "prepared-manifest.json",
+      "sha256": "3b4b57f53914ee90f499d6d8ab81c3194722abd624c282c37ff760afc8974044",
+      "bytes": 350
+    },
+    {
+      "file": "undo-selective-revert.sql",
+      "sha256": "7884a7e27a56e6d4661d11293d9f88068732886b8fb5bb7d4dfb5706eeb5e5f5",
+      "bytes": 1050125
+    }
+  ]
+}

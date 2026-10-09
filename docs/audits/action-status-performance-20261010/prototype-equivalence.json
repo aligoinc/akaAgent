@@ -1,0 +1,30 @@
+{
+  "checked_at": "2026-10-09T18:02:50.733Z",
+  "production_modified": false,
+  "checks": [
+    {
+      "case": "proposed_count_385_success",
+      "actual_count": 12996,
+      "proposed_count": 12996,
+      "same_result": true
+    },
+    {
+      "case": "proposed_count_385_sub",
+      "actual_count": 0,
+      "proposed_count": 0,
+      "same_result": true
+    },
+    {
+      "case": "proposed_count_659_success",
+      "actual_count": 38054,
+      "proposed_count": 38054,
+      "same_result": true
+    },
+    {
+      "case": "proposed_count_659_sub",
+      "actual_count": 0,
+      "proposed_count": 0,
+      "same_result": true
+    }
+  ]
+}

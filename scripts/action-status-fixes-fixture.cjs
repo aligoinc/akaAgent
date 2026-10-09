@@ -11,6 +11,10 @@ async function createFixture(){
  const before=JSON.parse(fs.readFileSync(path.join(dir,'before.json')));
  for(const name of ['aka_agent_mark_email_open','aka_agent_mark_email_click'])await db.exec(before.functions.find(f=>f.signature.startsWith(name+'(')).definition);
  await db.exec(fs.readFileSync(path.resolve(dir,'../../migration_v366_action_status_runtime_fixes.sql'),'utf8'));
+ // V373 adds a secondary status only; the success policy remains the owner of
+ // counters/input effects. No main policy is seeded for this observation.
+ await db.exec(`INSERT INTO auto_status(code,name,description,status_key,flatform_type,component_type,status_value,sort_order)
+  VALUES('campaign_detail_post_approved','Đã duyệt bài','Existing conclusive non-pending detector result','post_approved','facebook','campaign_detail','đã duyệt bài',220)`);
  return db;
 }
 module.exports={createFixture,config};

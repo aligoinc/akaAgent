@@ -1,0 +1,24 @@
+{
+  "checked_at": "2026-10-09T17:55:52.149Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "crm_agent_campaign_results_521",
+    "group": "crm",
+    "sql": "SELECT * FROM public.crm_agent_campaign_results(ARRAY[500]::bigint[],ARRAY[10022,9056,9055,10436,9054]::bigint[])",
+    "staff_id": 521,
+    "campaign_ids": [
+      10022,
+      9056,
+      9055,
+      10436,
+      9054
+    ]
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 6849,
+      "error": "Initialising login role...\nunexpected status 400: {\"message\":\"Failed to run sql query: ERROR:  57014: canceling statement due to statement timeout\\nCONTEXT:  SQL function \\\"crm_agent_campaign_results\\\" statement 1\\n\"}\nTry rerunning the command with --debug to troubleshoot the error.\n"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-09T19:32:41.303Z",
+  "migration_sha256": "39fe9b26d218abe25712bfc960683ec46561cf5e8cad021819f7c7be3c3d0a31",
+  "rolled_back": true,
+  "owned": [
+    {
+      "id": 27,
+      "md5": "9efe4e12362966770cd5fc135383ffcb",
+      "table": "auto_blocks"
+    },
+    {
+      "id": 94,
+      "md5": "4f57dcda93f01bfdd8d395f4fe7091b2",
+      "table": "auto_error"
+    },
+    {
+      "id": 1,
+      "md5": "0b95332400cc3723a4746ee89fea29d9",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 2,
+      "md5": "ae11d4a7a9f0d377b3af114dd73817e4",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 251,
+      "md5": "6446a00f488d58e2a3a0fe80452f701a",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 252,
+      "md5": "fc48d6675f1f89dc682690ae670b0dec",
+      "table": "auto_workflows"
+    }
+  ]
+}

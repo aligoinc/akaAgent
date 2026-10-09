@@ -1,0 +1,296 @@
+{
+  "checked_at": "2026-10-09T17:59:41.779Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "settlement_detail_ids",
+    "group": "writer_read",
+    "sql": "SELECT count(*) FROM public.auto_campaign_details WHERE id=ANY(ARRAY[4828785]::bigint[]) AND campaign_id=25449 AND input_data_id IS NOT DISTINCT FROM 6469959 AND policy_snapshot->>'unitKey'='02f5cafb84324ce2e86818bc7ae8116d'"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 2884,
+      "execution_ms": 0.157,
+      "planning_ms": 1.976,
+      "rows": 1,
+      "shared_hit": 4,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_campaign_details_pkey"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.157,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Async Capable": false,
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Aggregate",
+          "Parallel Aware": false,
+          "Partial Mode": "Simple",
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Plans": [
+            {
+              "Actual Loops": 1,
+              "Actual Rows": 1,
+              "Alias": "auto_campaign_details",
+              "Async Capable": false,
+              "Filter": "((NOT (input_data_id IS DISTINCT FROM 6469959)) AND (campaign_id = 25449) AND ((policy_snapshot ->> 'unitKey'::text) = '02f5cafb84324ce2e86818bc7ae8116d'::text))",
+              "Index Cond": "(id = ANY ('{4828785}'::bigint[]))",
+              "Index Name": "auto_campaign_details_pkey",
+              "Local Dirtied Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Written Blocks": 0,
+              "Node Type": "Index Scan",
+              "Parallel Aware": false,
+              "Parent Relationship": "Outer",
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Relation Name": "auto_campaign_details",
+              "Rows Removed by Filter": 0,
+              "Rows Removed by Index Recheck": 0,
+              "Scan Direction": "Forward",
+              "Shared Dirtied Blocks": 0,
+              "Shared Hit Blocks": 4,
+              "Shared Read Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Startup Cost": 0.43,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Total Cost": 2.66
+            }
+          ],
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 4,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 2.66,
+          "Strategy": "Plain",
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.67
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 447,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 1.976,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 2,
+      "wall_ms": 1268,
+      "execution_ms": 0.15,
+      "planning_ms": 2.014,
+      "rows": 1,
+      "shared_hit": 4,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_campaign_details_pkey"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.15,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Async Capable": false,
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Aggregate",
+          "Parallel Aware": false,
+          "Partial Mode": "Simple",
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Plans": [
+            {
+              "Actual Loops": 1,
+              "Actual Rows": 1,
+              "Alias": "auto_campaign_details",
+              "Async Capable": false,
+              "Filter": "((NOT (input_data_id IS DISTINCT FROM 6469959)) AND (campaign_id = 25449) AND ((policy_snapshot ->> 'unitKey'::text) = '02f5cafb84324ce2e86818bc7ae8116d'::text))",
+              "Index Cond": "(id = ANY ('{4828785}'::bigint[]))",
+              "Index Name": "auto_campaign_details_pkey",
+              "Local Dirtied Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Written Blocks": 0,
+              "Node Type": "Index Scan",
+              "Parallel Aware": false,
+              "Parent Relationship": "Outer",
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Relation Name": "auto_campaign_details",
+              "Rows Removed by Filter": 0,
+              "Rows Removed by Index Recheck": 0,
+              "Scan Direction": "Forward",
+              "Shared Dirtied Blocks": 0,
+              "Shared Hit Blocks": 4,
+              "Shared Read Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Startup Cost": 0.43,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Total Cost": 2.66
+            }
+          ],
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 4,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 2.66,
+          "Strategy": "Plain",
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.67
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 447,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.014,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 3,
+      "wall_ms": 1627,
+      "execution_ms": 0.175,
+      "planning_ms": 2.001,
+      "rows": 1,
+      "shared_hit": 4,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_campaign_details_pkey"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.175,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Async Capable": false,
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Aggregate",
+          "Parallel Aware": false,
+          "Partial Mode": "Simple",
+          "Plan Rows": 1,
+          "Plan Width": 8,
+          "Plans": [
+            {
+              "Actual Loops": 1,
+              "Actual Rows": 1,
+              "Alias": "auto_campaign_details",
+              "Async Capable": false,
+              "Filter": "((NOT (input_data_id IS DISTINCT FROM 6469959)) AND (campaign_id = 25449) AND ((policy_snapshot ->> 'unitKey'::text) = '02f5cafb84324ce2e86818bc7ae8116d'::text))",
+              "Index Cond": "(id = ANY ('{4828785}'::bigint[]))",
+              "Index Name": "auto_campaign_details_pkey",
+              "Local Dirtied Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Written Blocks": 0,
+              "Node Type": "Index Scan",
+              "Parallel Aware": false,
+              "Parent Relationship": "Outer",
+              "Plan Rows": 1,
+              "Plan Width": 0,
+              "Relation Name": "auto_campaign_details",
+              "Rows Removed by Filter": 0,
+              "Rows Removed by Index Recheck": 0,
+              "Scan Direction": "Forward",
+              "Shared Dirtied Blocks": 0,
+              "Shared Hit Blocks": 4,
+              "Shared Read Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Startup Cost": 0.43,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Total Cost": 2.66
+            }
+          ],
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 4,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 2.66,
+          "Strategy": "Plain",
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.67
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 447,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.001,
+        "Triggers": []
+      }
+    }
+  ]
+}

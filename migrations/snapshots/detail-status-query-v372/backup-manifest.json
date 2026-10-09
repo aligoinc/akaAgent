@@ -1,0 +1,14 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "before_sha256": "415dfca875c3e62bee9f838b8238c3ea082067e194a7e38ddc6ea86570bfee49",
+  "functions": [
+    {
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "md5": "fb398b4e0fb53a5ebef8269805d51a8e"
+    },
+    {
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "md5": "0cab9241430282691f320221acf2ed5d"
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+diff --git a/src/main/services/actionResultRuntime.ts b/src/main/services/actionResultRuntime.ts
+index 7618cca1..f16bbd26 100644
+--- a/src/main/services/actionResultRuntime.ts
++++ b/src/main/services/actionResultRuntime.ts
+@@ -116,7 +116,9 @@ export class ActionResultBoundary {
+     return JSON.stringify([step.runId, step.nodeId, step.startedAt, step.actionResultSourceKeys, step.output])
+   }
+   observe(step: RunStepV2): boolean {
+-    if (step.status !== 'success') return true
++    // A thrown block can carry a result too; validate its scope and policy
++    // before finalization, just like a normally returned result.
++    if (step.status !== 'success' && step.status !== 'error') return true
+     try { validateActionResultStep(this.campaignId, step.output); return true }
+     catch (error) {
+       this.error ??= error
+diff --git a/src/main/services/campaignScheduler.ts b/src/main/services/campaignScheduler.ts
+index 79a35cd6..c8a77aa7 100644
+--- a/src/main/services/campaignScheduler.ts
++++ b/src/main/services/campaignScheduler.ts
+@@ -4131,7 +4131,8 @@ export class CampaignScheduler {
+             // delay was cancelled. Real step failures still use their policy.
+             const cancelledAfterDelivery = result.status === 'cancelled' &&
+               milestoneSummary.deliveryCommitted === true && !lastErrorStep && !result.error
+-            const runtimeError = result.status !== 'completed' && !friendErrorHandled && !cancelledAfterDelivery
++            const explicitErrorHandled = this.hasExplicitFailurePolicy(lastErrorStep)
++            const runtimeError = result.status !== 'completed' && !friendErrorHandled && !cancelledAfterDelivery && !explicitErrorHandled
+               ? this.normalizeRuntimeError(campaign, result.steps, result.error)
+               : null
+ 
+@@ -10081,6 +10082,15 @@ export class CampaignScheduler {
+     return !!out && ('actionResult' in out || 'actionResults' in out || ('actionCode' in out && 'statusCode' in out))
+   }
+ 
++  private hasExplicitFailurePolicy(step: RunStepV2 | undefined): boolean {
++    if (!step || step.status !== 'error' || !this.hasExplicitActionResult(step)) return false
++    const rows = 'actionResults' in step.output ? step.output.actionResults : [step.output.actionResult ?? step.output]
++    // The boundary and writer have already validated these contracts. Their
++    // receipts own error handling; do not apply err_undefined for the same throw.
++    return Array.isArray(rows) && rows.length > 0 && rows.every(row =>
++      typeof row?.errorCode === 'string' && row.errorCode.trim().length > 0)
++  }
++
+   private newsfeedMilestonePayload(
+     campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2
+   ): { action: import('../../shared/types').CreateCampaignDetailInput; progress: string } | null {
+@@ -10193,7 +10203,7 @@ export class CampaignScheduler {
+       status,
+       errorCode,
+       resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
+-        subStatusCode: isPending ? 'campaign_detail_post_pending' : null,
++        subStatusCode: this.getGroupPostSubStatusCode(isPending, pendingCheckConclusive),
+         operationState: 'committed' } : undefined,
+       resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
+       log: posted
+@@ -11414,6 +11424,11 @@ export class CampaignScheduler {
+           actionCode: this.getPostActionCode(campaign),
+           actionName: 'Đăng bài',
+           status: 'thành công',
++          resultOutput: campaign.actionId === 'facebook_group_post' ? {
++            actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
++            subStatusCode: this.getGroupPostSubStatusCode(isPending, pendingCheckConclusive),
++            operationState: 'committed'
++          } : undefined,
+           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
+           data: isPending ? { isPending: true } : undefined
+         })
+@@ -13546,6 +13561,13 @@ export class CampaignScheduler {
+     return position === 1 ? 'bài đầu tiên' : `bài thứ ${position}`
+   }
+ 
++  private getGroupPostSubStatusCode(isPending: boolean, pendingCheckConclusive: boolean): string | null {
++    // Display the existing detector's conclusion; do not add a new DOM check
++    // or infer approval when that detector did not reach a conclusion.
++    if (isPending) return 'campaign_detail_post_pending'
++    return pendingCheckConclusive ? 'campaign_detail_post_approved' : null
++  }
++
+   private formatGroupPendingProgressLog(isPending: boolean, pendingCheckConclusive: boolean): string {
+     if (isPending) return '⏳ Group cần duyệt bài'
+     return pendingCheckConclusive
+@@ -15631,6 +15653,16 @@ export class CampaignScheduler {
+     }
+ 
+     return {
++      resolveActionResultErrorMessage: async raw => {
++        const output = parseActionResultOutput(raw)
++        if (!output?.errorCode) return null
++        // getErrorPolicy reads the catalog captured for this campaign run.
++        const policy = await this.supabase.getErrorPolicy(output.errorCode)
++        if (!policy) return null
++        return this.renderPolicyMessage(policy.notiRunningProcess || policy.notiCampaign, {
++          actionCode: output.actionCode, action_code: output.actionCode
++        }) || policy.errorName
++      },
+       ...(this.campaignContentPreparationRuns.has(campaign.id) ? {
+         prepareCampaignContent: (options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata) =>
+           this.prepareFacebookCampaignContent(account, campaign, detail, mainPage, options, metadata, mediaTempPaths)
+diff --git a/src/main/v2/runtime/blockExecutor.ts b/src/main/v2/runtime/blockExecutor.ts
+index aaa7894b..959f6bc5 100644
+--- a/src/main/v2/runtime/blockExecutor.ts
++++ b/src/main/v2/runtime/blockExecutor.ts
+@@ -35,7 +35,8 @@ export interface BlockExecuteOptions {
+  *   - object → output = object
+  *   - primitive → output = { value: primitive }
+  *   - undefined → output = {}
+- *   - throw → success=false, error=message
++ *   - throw → success=false, error=message; an attached actionResult preserves
++ *     the explicit failure contract while the DAG still stops downstream work.
+  */
+ export class BlockExecutor {
+   async execute(opts: BlockExecuteOptions, ctx: BlockExecuteContext): Promise<BlockResult> {
+@@ -89,10 +90,20 @@ export class BlockExecutor {
+         logs
+       }
+     } catch (err: any) {
++      let message = err?.message ? String(err.message) : String(err)
++      let actionResult: unknown = err?.actionResult
++      if (actionResult && typeof actionResult === 'object' && !Array.isArray(actionResult)) {
++        // Keep the producer's diagnostic data separate from the user notice.
++        // Invalid contracts remain visible to the normal result boundary.
++        try {
++          message = await ctx.runtimeHelpers?.resolveActionResultErrorMessage?.(actionResult as Record<string, unknown>) || message
++        } catch { /* Preserve the original exception/contract if notice lookup fails. */ }
++        actionResult = { ...actionResult, message }
++      }
+       return {
+         success: false,
+-        output: {},
+-        error: err?.message ? String(err.message) : String(err),
++        output: actionResult === undefined ? {} : { actionResult },
++        error: message,
+         durationMs: Date.now() - startTime,
+         logs
+       }
+diff --git a/src/main/v2/runtime/blockHelpers.ts b/src/main/v2/runtime/blockHelpers.ts
+index 5c901e59..6ec0f505 100644
+--- a/src/main/v2/runtime/blockHelpers.ts
++++ b/src/main/v2/runtime/blockHelpers.ts
+@@ -100,6 +100,8 @@ export interface BlockRuntimeMetadata {
+ }
+ 
+ export interface BlockRuntimeHelpers {
++  /** Resolve a structured exception's notice from the current run catalog. No side effects. */
++  resolveActionResultErrorMessage?: (result: Record<string, unknown>) => Promise<string | null>
+   prepareCampaignContent?: (options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata) => Promise<PreparedCampaignContent<string>>
+   checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
+   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>

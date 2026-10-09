@@ -1,0 +1,8 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "f232cfcb1704602eb60264e3f226d2d1db4af2da648a69cd54dc18245c5fe883",
+  "rollback_template_sha256": "557338e1ac468f9432748e6a5381d14f7b3a2a5fe11e3c3a4878fe5d23e917c3",
+  "code": "campaign_detail_post_approved",
+  "name": "migration_v373_fb_post_approved_status",
+  "description": "Trạng thái phụ sau đăng bài group Facebook thành công. Theo quy ước hiện có: isPending=false và pendingCheckConclusive=true được hiển thị là Đã duyệt bài (nhánh log Group không cần duyệt bài). Tái sử dụng kết luận detector, không thêm kiểm tra DOM hoặc xác nhận riêng về thao tác duyệt của quản trị viên. Không gán khi kiểm tra chưa kết luận; không suy từ URL công khai. Khi dùng làm subStatusCode không đổi policy Thành công, bộ đếm hoặc xử lý input. Chỉ áp dụng kết quả mới, không sửa detail/note/log lịch sử."
+}

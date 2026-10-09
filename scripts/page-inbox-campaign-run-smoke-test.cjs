@@ -19,6 +19,14 @@ const globals = {
   getWorkflow: async () => ({ defaultVariables: {} }),
   MOBILE_MANAGED_SMS_ACTION_IDS: new Set(['sms_send', 'voice_call']),
   AbortController, setInterval, clearInterval,
+  // This fixture emits legacy outputs and owns no managed result session.
+  // Explicit contracts/writers are exercised by the action-status suites.
+  ActionResultBoundary: class {
+    observe() { return true }
+    accepted(steps) { return steps }
+  },
+  managedTargetEffects: () => null,
+  ResultContractError: class extends Error {},
   ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
   isRecentDeliveryCooldownEnabled: () => false,
   supportsFacebookRestBrowse: restBrowseModule.exports.supportsFacebookRestBrowse
@@ -108,6 +116,7 @@ function fixture(options = {}) {
     getInputDataDisplayName: (_campaign, detail) => detail.name,
     createBlockRuntimeHelpers: () => ({}),
     logMilestonesV2: async () => ({}),
+    finalizeExplicitResultPolicies: async () => ({ triggered: false, coversBadTarget: false }),
     withZaloMessageOptOutWarnings: value => value,
     zaloMessageOptOutContextKey: (campaignId, inputId) => `${campaignId}:${inputId}`,
     getEffectiveSleepBetweenActions: () => 0,

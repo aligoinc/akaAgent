@@ -1,0 +1,37 @@
+{
+  "version": "20261009193333",
+  "name": "migration_v374_fb_composer_error_policy",
+  "owned": [
+    {
+      "id": 27,
+      "md5": "ea5c9faa03358d2c7897e26b8d7e3055",
+      "table": "auto_blocks"
+    },
+    {
+      "id": 94,
+      "md5": "e92aed4c2b6a4de72381536d538450ee",
+      "table": "auto_error"
+    },
+    {
+      "id": 1,
+      "md5": "3dac965898d515829ed97c669c9e6049",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 2,
+      "md5": "ff93dd7c9742b80b5fff1619fde57444",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 251,
+      "md5": "8381f1fdf842db8863eb5e3a94c4df31",
+      "table": "auto_workflows"
+    },
+    {
+      "id": 252,
+      "md5": "12e80d28d44495d213f6ff65874db9dc",
+      "table": "auto_workflows"
+    }
+  ],
+  "at": "2026-10-09T19:33:35.037Z"
+}

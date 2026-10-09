@@ -91,7 +91,7 @@ const effects = new Set<ResultInputEffect>(['complete', 'pause', 'requeue', 'non
 const badEffects = new Set<BadTargetEffect>(['increment', 'reset', 'ignore'])
 const key = (action: string | null, status: number): string => JSON.stringify([action, status])
 
-/** Construct once for a run/recovery; callers own and release this RAM catalog. */
+/** Read-only catalog; runs may share it and retain their reference until they end. */
 export class ActionStatusCatalog {
   private readonly statusesByCode = new Map<string, Readonly<ResultStatus>>()
   private readonly statusesById = new Map<number, Readonly<ResultStatus>>()

@@ -1,0 +1,45 @@
+{
+  "checked_at": "2026-10-09T17:38:57.796Z",
+  "schema_cache_refreshed": true,
+  "results": [
+    {
+      "name": "legacy_select_all",
+      "http_status": 200,
+      "returned_rows": 1,
+      "columns": [
+        "id",
+        "campaign_action_id",
+        "action_code",
+        "status_id",
+        "status_value",
+        "label",
+        "is_active",
+        "is_delete",
+        "sort_order",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    {
+      "name": "status_relation",
+      "http_status": 200,
+      "returned_rows": 1,
+      "columns": [
+        "id",
+        "status_id",
+        "auto_status"
+      ]
+    },
+    {
+      "name": "new_policy_catalog",
+      "http_status": 200,
+      "returned_rows": 1,
+      "columns": [
+        "id",
+        "action_code",
+        "status_id",
+        "auto_status"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "version": "20261009173841",
+  "name": "migration_v369_selective_revert_automation_status_catalog",
+  "checked_at": "2026-10-09T17:38:45.315Z",
+  "before_count": 315,
+  "after_count": 261,
+  "deleted_ids": [
+    3930160,
+    3930161,
+    3930162,
+    3930163,
+    3930164,
+    3930165,
+    3930166,
+    3930167,
+    3930168,
+    3930169,
+    3930170,
+    3930171,
+    3930172,
+    3930174,
+    3930175,
+    3930176,
+    3930177,
+    3930178,
+    3930179,
+    3930180,
+    3930181,
+    3930182,
+    3930183,
+    3930184,
+    3930185,
+    3930186,
+    3930187,
+    3930188,
+    3930189,
+    3930190,
+    3930191,
+    3930192,
+    3930193,
+    3930194,
+    3930195,
+    3930196,
+    3930197,
+    3930198,
+    3930199,
+    3930200,
+    3930201,
+    3930202,
+    3930203,
+    3930204,
+    3930205,
+    3930206,
+    3930207,
+    3930208,
+    3930209,
+    3930210,
+    3930211,
+    3930212,
+    3930213,
+    3930214
+  ],
+  "cleared_status_ids": [
+    80,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140,
+    141,
+    142,
+    143,
+    144,
+    145,
+    146,
+    147,
+    148,
+    150,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159,
+    113767,
+    135368,
+    1237040,
+    1787550,
+    3514360
+  ],
+  "retained_seed_rows": [
+    {
+      "id": 3930173,
+      "reason": "runtime or independent row change"
+    }
+  ],
+  "retained_filled_rows": [
+    {
+      "id": 79,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 81,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 82,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 149,
+      "reason": "saved Automation reference"
+    },
+    {
+      "id": 183,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 214,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 1007,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 70182,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 91258,
+      "reason": "saved Automation reference"
+    },
+    {
+      "id": 91322,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 150207,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 154133,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 176712,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 188601,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 190831,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 456765,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 589326,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 845780,
+      "reason": "runtime or independent row change"
+    },
+    {
+      "id": 3771145,
+      "reason": "runtime or independent row change"
+    }
+  ],
+  "retained_independent_rows": [
+    4688058,
+    4688097
+  ],
+  "functions_and_configs_unchanged": true,
+  "sequence_unchanged": true,
+  "apply_before_sha256": "a6fc67c3f917208861b0297df84f3d2b3bc17ea84bc473ad54284da72f758aa7",
+  "after_sha256": "b1cfd7db0f152cb4e2c72077b604be435bd44b9662cbfa9edac53ace06883fae",
+  "migration_sha256": "5e88f29ed2034861a41efc25e35598075e4b356d5631751b8271fd61749fcbc0",
+  "undo_sha256": "f2994275b0ea1eee894fefa57c56d64312b9cb0539fac6aa06c76fe7480814ed"
+}

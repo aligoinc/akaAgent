@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-09T19:09:57.683Z",
+  "migration_sha256": "f232cfcb1704602eb60264e3f226d2d1db4af2da648a69cd54dc18245c5fe883",
+  "rolled_back": true,
+  "owned": {
+    "canonical": "{\"id\": 54, \"code\": \"campaign_detail_post_approved\", \"name\": \"Đã duyệt bài\", \"color\": null, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-10-09T19:09:52.821478+00:00\", \"is_default\": false, \"sort_order\": 220, \"status_key\": \"post_approved\", \"updated_at\": \"2026-10-09T19:09:52.821478+00:00\", \"description\": \"Trạng thái phụ sau đăng bài group Facebook thành công. Theo quy ước hiện có: isPending=false và pendingCheckConclusive=true được hiển thị là Đã duyệt bài (nhánh log Group không cần duyệt bài). Tái sử dụng kết luận detector, không thêm kiểm tra DOM hoặc xác nhận riêng về thao tác duyệt của quản trị viên. Không gán khi kiểm tra chưa kết luận; không suy từ URL công khai. Khi dùng làm subStatusCode không đổi policy Thành công, bộ đếm hoặc xử lý input. Chỉ áp dụng kết quả mới, không sửa detail/note/log lịch sử.\", \"is_terminal\": false, \"status_value\": \"đã duyệt bài\", \"flatform_type\": \"facebook\", \"component_type\": \"campaign_detail\", \"can_set_manually\": false}",
+    "md5": "44fd1de64826b8d77e522a1f32e22de9",
+    "row": {
+      "can_set_manually": false,
+      "code": "campaign_detail_post_approved",
+      "color": null,
+      "component_type": "campaign_detail",
+      "created_at": "2026-10-09T19:09:52.821478+00:00",
+      "description": "Trạng thái phụ sau đăng bài group Facebook thành công. Theo quy ước hiện có: isPending=false và pendingCheckConclusive=true được hiển thị là Đã duyệt bài (nhánh log Group không cần duyệt bài). Tái sử dụng kết luận detector, không thêm kiểm tra DOM hoặc xác nhận riêng về thao tác duyệt của quản trị viên. Không gán khi kiểm tra chưa kết luận; không suy từ URL công khai. Khi dùng làm subStatusCode không đổi policy Thành công, bộ đếm hoặc xử lý input. Chỉ áp dụng kết quả mới, không sửa detail/note/log lịch sử.",
+      "flatform_type": "facebook",
+      "id": 54,
+      "is_active": true,
+      "is_default": false,
+      "is_delete": false,
+      "is_terminal": false,
+      "name": "Đã duyệt bài",
+      "sort_order": 220,
+      "status_key": "post_approved",
+      "status_value": "đã duyệt bài",
+      "updated_at": "2026-10-09T19:09:52.821478+00:00"
+    }
+  }
+}
