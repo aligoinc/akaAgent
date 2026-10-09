@@ -1,0 +1,11 @@
+{
+  "version": "20261009201357",
+  "name": "migration_v376_fb_composer_target_error",
+  "id": 94,
+  "code": "err_fb_composer_editor_not_found",
+  "md5": "af29fb7ce78b6c07b6816a335a3783fd",
+  "after_sha256": "421fc755ad494d75fea0b520512eac9e43c8deb52f47822779636f0341945c3f",
+  "verified_at": "2026-10-09T20:14:00.411Z",
+  "other_rows_unchanged": true,
+  "schema_and_producers_unchanged": true
+}

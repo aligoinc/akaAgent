@@ -10348,7 +10348,10 @@ export class CampaignScheduler {
         // Share even failed attempts across progress/finalization and relays.
         // An uncertain write remains owned by the existing run cleanup path.
         write = (async () => {
-          const legacy = newsfeed?.action.actionCode === output.actionCode ? newsfeed : null
+          // The legacy newsfeed payload is a success-only adapter. An explicit
+          // failure must not inherit its success text from leftover DOM flags.
+          const legacy = newsfeed?.action.actionCode === output.actionCode
+            && output.statusCode === 'campaign_detail_success' && !output.errorCode ? newsfeed : null
           const group = isGroupVerify && output.actionCode === 'fb_post_group' && inputDataId === detail?.id
             ? this.groupPostMilestonePayload(campaign, detail, accountId, step, steps, output) : null
           const shareTarget = isGroupVerify && output.actionCode === 'fb_post_group'
@@ -10384,6 +10387,23 @@ export class CampaignScheduler {
             actionName: created?.actionName || this.getAccountActionName(output.actionCode),
             log: typeof row.message === 'string' ? row.message : undefined
           }
+          const explicitErrorCode = helperLegacy?.handledErrorCode !== output.errorCode ? output.errorCode : undefined
+          const specific = explicitErrorCode ? await this.supabase.getErrorPolicy(explicitErrorCode) : null
+          const policy = explicitErrorCode ? specific || await this.supabase.getErrorPolicy('err_undefined') : null
+          // Logging is independent of detail suppression and stop/threshold effects.
+          // Reuse the writer's rendered notice; suppressed pure outputs have no
+          // detail/helper message, so render the same cached policy here.
+          const policyNotice = policy ? this.renderPolicyMessage(policy.notiRunningProcess || policy.notiCampaign, {
+            message: typeof row.message === 'string' ? row.message : undefined,
+            x: typeof row.message === 'string' ? row.message : undefined,
+            actionCode: output.actionCode, action_code: output.actionCode,
+            actionName: helperProgress.actionName, action: helperProgress.actionName, a: helperProgress.actionName,
+            t: policy.timeDisableActions == null ? undefined : String(policy.timeDisableActions)
+          }) : ''
+          const failure = !!output.errorCode || created?.reportGroup === 'failure'
+            || created?.status === 'lỗi' || created?.status === 'thất bại'
+          const progressMessage = created?.log || helperLegacy?.log || policyNotice || helperProgress.log
+            || (failure ? policy?.errorName || 'Có lỗi xảy ra' : undefined)
           if (output.actionCode === 'email_send') {
             if (created) {
               // A batch must identify tracking per result; a wrapper ID cannot
@@ -10391,20 +10411,26 @@ export class CampaignScheduler {
               await this.linkEmailResultTracking(campaign, resultInput, accountId, step, created,
                 row.emailTrackingMessageId ?? (outputs.length === 1 ? step.output.emailTrackingMessageId : undefined))
             }
-            await this.logHelperMilestoneProgress(campaign, helperProgress, created)
+            await this.logHelperMilestoneProgress(campaign, { ...helperProgress, log: progressMessage }, created)
           } else if (output.actionCode.startsWith('zalo_')) {
-            await this.logHelperMilestoneProgress(campaign, helperProgress, created)
+            await this.logHelperMilestoneProgress(campaign, { ...helperProgress, log: progressMessage }, created)
             if (created) {
               await this.logZaloMilestoneContext(campaign, resultInput, helperProgress)
               await this.pushZaloMilestoneToSms(campaign, resultInput, created)
             }
+          } else if (failure && !group) {
+            // Group verification already owns its progress messages. Other
+            // explicit results bypass the legacy exception/milestone logger.
+            // Never label a batch sibling with the current target's name.
+            const message = progressMessage || 'Có lỗi xảy ra'
+            await this.logCampaignProgress(campaign, resultInput
+              ? `❌ Lỗi "${this.getInputDataDisplayName(campaign, resultInput)}": ${message}`
+              : `❌ ${this.formatZaloProgressLog({ ...helperProgress, log: message })}`)
           }
-          if (output.errorCode && helperLegacy?.handledErrorCode !== output.errorCode) {
-            const specific = await this.supabase.getErrorPolicy(output.errorCode)
-            const policy = specific || await this.supabase.getErrorPolicy('err_undefined')
+          if (explicitErrorCode) {
             const receipt: ExplicitResultErrorPolicy = {
               inputDataId: inputDataId ?? null, actionCode: output.actionCode,
-              errorCode: specific ? output.errorCode : 'err_undefined', policy,
+              errorCode: specific ? explicitErrorCode : 'err_undefined', policy,
               message: typeof row.message === 'string' ? row.message : undefined,
               thresholdReason: created ? this.getCampaignDetailRootReason(created) : undefined,
               runId: step.runId ? String(step.runId) : undefined,
@@ -10423,7 +10449,7 @@ export class CampaignScheduler {
               }
             }
           }
-          if (legacy && !newsfeedLogged) {
+          if (legacy && !failure && !newsfeedLogged) {
             await this.logCampaignProgress(campaign, legacy.progress)
             newsfeedLogged = true
           }
@@ -10522,11 +10548,11 @@ export class CampaignScheduler {
   ): Promise<void> {
     if (!created) {
       if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
-    } else if (created.log) {
+    } else if (created.log || actionDetail.log) {
       await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
         ...actionDetail,
         actionName: created.actionName || actionDetail.actionName,
-        log: created.log
+        log: created.log || actionDetail.log
       }))
     }
   }

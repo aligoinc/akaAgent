@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-09T20:22:43.327Z",
+  "passed": true,
+  "scenarios": 4,
+  "increments_once_per_target": true,
+  "no_action_quota": true,
+  "no_immediate_composer_stop": true,
+  "existing_generic_threshold": 4,
+  "external_operations": 0
+}

@@ -19,7 +19,7 @@ async function desktop(db){
    then:async(resolve,reject)=>{try{const sets=Object.entries(patch).map(([k,v])=>`${k}=$${values.push(v)}`);const result=await db.query(`UPDATE ${table} SET ${sets.join(',')} WHERE ${where.join(' AND ')} RETURNING ${columns}`,values);return resolve({data:result.rows,error:null});}catch(e){return resolve({data:null,error:{message:e.message}})}}};return q;
  }};
  const load=loader({'/supabaseClient':{getSupabaseClient:()=>client},'/mappers':{
-  mapCampaignDetailFromDB:r=>({...r,id:Number(r.id),policySnapshot:r.policy_snapshot,actionName:r.action_name,actionCode:r.action_code,inputDataId:r.input_data_id}),mapCampaignInputDataFromDB:r=>r},
+  mapCampaignDetailFromDB:r=>({...r,id:Number(r.id),policySnapshot:r.policy_snapshot,reportGroup:r.report_group,actionName:r.action_name,actionCode:r.action_code,inputDataId:r.input_data_id}),mapCampaignInputDataFromDB:r=>r},
   '/zaloCampaignEngagement':{stageCampaignEngagementSource:()=>{},failCampaignEngagementDetail:()=>{}},
   '/actionStatusPolicyRepository':{loadRunResultCatalog:async()=>{
    const {ActionStatusCatalog}=load(path.join(root,'src/shared/actionStatusPolicy.ts'));
