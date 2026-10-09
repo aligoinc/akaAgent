@@ -1,0 +1,105 @@
+{
+  "version": "8.2.0",
+  "source_commit": "b126b88b1b1dd6c9c9ef97bb08f63ef5cd8b88ae",
+  "started_at": "2026-10-09T20:01:50.746373+00:00",
+  "old_artifacts_archive": "/Users/lequangnhut/Repos/akaAgent/dist/archive/before-8.2.0-20261010-030150",
+  "host_native_sha256": "ced697fcad5f7ba0b9599d0a95f552a22e9f1d05bdbebb0c3f4164c9990724a2",
+  "results": [
+    {
+      "target": "windows-desktop",
+      "script": "build:win",
+      "started_at": "2026-10-09T20:05:05.943556+00:00",
+      "finished_at": "2026-10-09T20:06:35.369823+00:00",
+      "elapsed_seconds": 89.43,
+      "exit_code": 0,
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/windows-desktop.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent-Setup-8.2.0.exe",
+      "bytes": 118292653,
+      "sha256": "434b98979d0b9cba1d173645e0c84c05a96ad65bfbc52e0b46617d836eab7a4a",
+      "compiled_files_matched": 110,
+      "verification": {
+        "target": "windows-desktop",
+        "installer_payload_matches_unpacked": true,
+        "asar_bytes": 232242392,
+        "asar_sha256": "01653b539c1a38b19de6420828cbeb2ac7aac87e4dc4ad5ce80071cc3d5d1dec"
+      }
+    },
+    {
+      "target": "windows-server",
+      "script": "build:server:win",
+      "started_at": "2026-10-09T20:06:35.437769+00:00",
+      "finished_at": "2026-10-09T20:07:26.310893+00:00",
+      "elapsed_seconds": 50.87,
+      "exit_code": 0,
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/windows-server.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist-server/akaAgent-Zalo-Server-Setup-8.2.0.exe",
+      "bytes": 107067041,
+      "sha256": "1fcf07fd7fb7f0982fc0d7aac76654b04422add57fd332e749898d55660f1ed7",
+      "compiled_files_matched": 10,
+      "verification": {
+        "target": "windows-server",
+        "installer_payload_matches_unpacked": true,
+        "asar_bytes": 167429073,
+        "asar_sha256": "0d808d14c55c09b8fe30c85f2f81d1600f0b07d2b60be0a6da36cbf17247dd2b"
+      }
+    },
+    {
+      "target": "mac-arm64",
+      "script": "build:mac",
+      "started_at": "2026-10-09T20:07:26.372837+00:00",
+      "finished_at": "2026-10-09T20:08:25.894431+00:00",
+      "elapsed_seconds": 59.52,
+      "exit_code": 0,
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/mac-arm64.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent.dmg",
+      "bytes": 144079945,
+      "sha256": "e6b8d254bbda18deaad2b2b47d8a807c5e24635b0aac8fd678c9823c703fef3c",
+      "compiled_files_matched": 110,
+      "verification": {
+        "application_arch": "arm64",
+        "sqlite_arch": "arm64",
+        "adhoc_signature_valid": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true,
+        "asar_sha256": "30b9731ff8920523917c0066c3f44f20fffb3af3ca0f7ef6ba2fd3f89d2eaf43",
+        "version": "8.2.0"
+      }
+    },
+    {
+      "target": "mac-intel",
+      "script": "build:mac:intel",
+      "started_at": "2026-10-09T20:08:25.991475+00:00",
+      "finished_at": "2026-10-09T20:09:23.911288+00:00",
+      "elapsed_seconds": 57.92,
+      "exit_code": 0,
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/mac-intel.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgentIntel.dmg",
+      "bytes": 151247064,
+      "sha256": "1619c6824244198e8f1fd796e909ef6a56318fa69897d6fa74a7f3e3010fd42c",
+      "compiled_files_matched": 110,
+      "verification": {
+        "application_arch": "x86_64",
+        "sqlite_arch": "x86_64",
+        "adhoc_signature_valid": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true,
+        "asar_sha256": "412aa2596a6682c52b36f6a16dcbc20c4b23f3ee04b1467dfa3657253645049b",
+        "version": "8.2.0"
+      }
+    }
+  ],
+  "published": false,
+  "finished_at": "2026-10-09T20:09:24.005511+00:00",
+  "verified_at": "2026-10-09T20:10:20.574311+00:00",
+  "electron_version": "33.4.11",
+  "typecheck_node": "passed",
+  "typecheck_renderer": "passed",
+  "host_native_restored": true,
+  "installer_runtime_launch_tested": false,
+  "signing": {
+    "windows": "unsigned, existing packaging configuration",
+    "macos": "ad-hoc signed, not notarized"
+  },
+  "chat_worker_deployment_receipt": "/Users/lequangnhut/Repos/akaAgentChatApi/docs/audits/result-catalog-cache-20261010/deployment-receipt.json",
+  "source_changes_for_build": false
+}

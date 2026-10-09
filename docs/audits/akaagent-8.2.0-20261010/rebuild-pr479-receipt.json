@@ -1,0 +1,113 @@
+{
+  "version": "8.2.0",
+  "source_commit": "55760cad7ced7f85a01f5139e4215b0fa426c21a",
+  "started_at": "2026-10-09T21:02:30.355094+00:00",
+  "old_artifacts_archive": "/Users/lequangnhut/Repos/akaAgent/dist/archive/before-8.2.0-pr479-20261010-040230",
+  "host_native_sha256": "ced697fcad5f7ba0b9599d0a95f552a22e9f1d05bdbebb0c3f4164c9990724a2",
+  "electron_version": "33.4.11",
+  "typecheck_node": "passed",
+  "typecheck_renderer": "passed",
+  "results": [
+    {
+      "target": "windows-desktop",
+      "script": "build:win",
+      "started_at": "2026-10-09T21:02:47.472298+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/windows-desktop.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent-Setup-8.2.0.exe",
+      "finished_at": "2026-10-09T21:04:12.345713+00:00",
+      "elapsed_seconds": 84.87,
+      "exit_code": 0,
+      "bytes": 118296720,
+      "sha256": "6875ac1c0da4ec4b18318c7d99842173d0a7e025f311009ed98ff89e26020917",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "743ab22508f0043228d2c747aa62e4e623cf253887a91156e8bed13d2c820fce",
+        "version": "8.2.0",
+        "compiled_files_matched": 110,
+        "installer_payload_matches_unpacked": true,
+        "application_arch": "PE x64",
+        "sqlite_arch": "PE x64"
+      }
+    },
+    {
+      "target": "windows-server",
+      "script": "build:server:win",
+      "started_at": "2026-10-09T21:04:12.463285+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/windows-server.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist-server/akaAgent-Zalo-Server-Setup-8.2.0.exe",
+      "finished_at": "2026-10-09T21:05:01.330184+00:00",
+      "elapsed_seconds": 48.87,
+      "exit_code": 0,
+      "bytes": 107065903,
+      "sha256": "f98624566755fab38a3f190a7e44ca02ddd8dea7582ee8406a203d43563f6744",
+      "compiled_files": 10,
+      "verification": {
+        "asar_sha256": "b8c4da143982ce554c000d648d86feeee5e5930f10ed5aabe7527d216976e02c",
+        "version": "8.2.0",
+        "compiled_files_matched": 10,
+        "installer_payload_matches_unpacked": true,
+        "application_arch": "PE x64",
+        "sqlite_arch": "PE x64"
+      }
+    },
+    {
+      "target": "mac-arm64",
+      "script": "build:mac",
+      "started_at": "2026-10-09T21:05:01.393924+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/mac-arm64.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent.dmg",
+      "finished_at": "2026-10-09T21:05:55.831851+00:00",
+      "elapsed_seconds": 54.44,
+      "exit_code": 0,
+      "bytes": 144078136,
+      "sha256": "8f49a759fe4cd17bd4379c2a3037de7767e23a8a9e86eb20ae540025b2d5a452",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "34a40a428e92cf8a44e5ae29f5aef5e5ba74fbd3ede01207ff379d865cbad9b6",
+        "version": "8.2.0",
+        "compiled_files_matched": 110,
+        "application_arch": "arm64",
+        "sqlite_arch": "arm64",
+        "adhoc_signature_valid": true,
+        "packaged_sqlite_smoke_passed": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true
+      }
+    },
+    {
+      "target": "mac-intel",
+      "script": "build:mac:intel",
+      "started_at": "2026-10-09T21:05:55.935214+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.2.0-logs/mac-intel.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgentIntel.dmg",
+      "finished_at": "2026-10-09T21:07:05.893724+00:00",
+      "elapsed_seconds": 69.96,
+      "exit_code": 0,
+      "bytes": 151250361,
+      "sha256": "2a63acfc414a0f86f09255c5560853ec2eed25b50f5a59e8d19b3ad7677769f2",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "4ecb20731b387dc6fb1c1c687bb470f637bb2e6bddbf9730a02d9ecacdd58b9e",
+        "version": "8.2.0",
+        "compiled_files_matched": 110,
+        "application_arch": "x86_64",
+        "sqlite_arch": "x86_64",
+        "adhoc_signature_valid": true,
+        "packaged_sqlite_smoke_passed": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true
+      }
+    }
+  ],
+  "published": false,
+  "source_changes_for_build": false,
+  "finished_at": "2026-10-09T21:07:06.016630+00:00",
+  "host_native_restored": true,
+  "verified_at": "2026-10-09T21:08:07.915Z",
+  "source_and_existing_local_files_unchanged": true,
+  "installer_runtime_launch_tested_on_windows": false,
+  "signing": {
+    "windows": "unsigned, existing packaging configuration",
+    "macos": "ad-hoc signed, not notarized"
+  }
+}
