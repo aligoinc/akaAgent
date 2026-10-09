@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-09T12:47:26.220Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "sql_sha256": "30f9bd4977ff1ea3331a11d5eeeba6e65dab04bd8f1b0ce9f4aa2a13d7f3733b",
+  "previous_rollback_file": "rollback-before-sequence-position-fix.sql",
+  "previous_rollback_sha256": "a85e65a731b704c7e3161366247e881bc348b82350e8f640a75e1166065bf250",
+  "rollback_sha256": "a70b6d91737897b5cb7fcf9b8cf692143b432532c8ed5da080d8758436eb070e",
+  "ignored_schema_state": [
+    "sequence.last_value"
+  ],
+  "applied_migration_changed": false,
+  "production_write": false
+}

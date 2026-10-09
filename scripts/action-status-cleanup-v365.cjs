@@ -22,9 +22,13 @@ assert.equal(m.hash(exactSchema.canonical, 'md5'), exactSchema.md5)
 assert.deepEqual(JSON.parse(exactSchema.canonical), schema)
 const start = "BEGIN;\nSET LOCAL lock_timeout='1s';\nSET LOCAL statement_timeout='2s';\nSET LOCAL enable_seqscan=off;\nSET LOCAL jit=off;\n"
 // Compare DB-canonical JSON: sequence max_value exceeds JavaScript safe integers.
+// Keep the applied migration's guard immutable. Rollback compares structure,
+// excluding only the sequence position, directly in PostgreSQL JSONB so bigint
+// metadata is never rounded through JavaScript.
 const guardSchema = `IF md5((${m.schemaSQL('auto_status')})::text) IS DISTINCT FROM '${exactSchema.md5}' THEN RAISE EXCEPTION 'auto_status schema drift'; END IF;`
+const rollbackSchemaGuard = `IF (${m.schemaSQL('auto_status')} #- '{sequence,last_value}') IS DISTINCT FROM (${m.quote(exactSchema.canonical)}::jsonb #- '{sequence,last_value}') THEN RAISE EXCEPTION 'auto_status schema drift'; END IF;`
 const restoreBody = `DO $restore_guard$ BEGIN
- ${guardSchema}
+ ${rollbackSchemaGuard}
  IF EXISTS(SELECT 1 FROM public.auto_status WHERE id=53 OR code='campaign_detail_post_visible' OR (component_type='campaign_detail' AND status_value='đã hiển thị bài')) THEN RAISE EXCEPTION 'Status identity already exists; do not overwrite'; END IF;
 END $restore_guard$;
 INSERT INTO public.auto_status SELECT * FROM jsonb_populate_record(NULL::public.auto_status, ${m.jsonSQL(owned.row, 'removed_row')});
@@ -54,15 +58,43 @@ DO $verify$ BEGIN IF EXISTS(SELECT 1 FROM public.auto_status WHERE id=53 OR code
 COMMIT;
 `
  fs.writeFileSync(sqlPath, sql, { flag: 'wx' })
- fs.writeFileSync(rollbackPath, '-- Explicit rollback only; restores exactly one deleted catalog row, never sequence/history.\n' + start + restoreBody + 'COMMIT;\n', { flag: 'wx' })
+ fs.writeFileSync(rollbackPath, rollbackSQL(), { flag: 'wx' })
  save('prepared-manifest.json', { project_ref:m.ref, name, before_sha256:read('backup-manifest.json').before_sha256,
    sql_sha256:m.hash(sql), rollback_sha256:m.hash(fs.readFileSync(rollbackPath)), removed:[{id:53,code:owned.row.code,md5:owned.md5}] })
 }
 function checkedSQL() {
  const sql=fs.readFileSync(sqlPath,'utf8'), manifest=read('prepared-manifest.json')
  assert.equal(m.hash(sql),manifest.sql_sha256)
- assert.equal(m.hash(fs.readFileSync(rollbackPath)),manifest.rollback_sha256)
+ if (fs.existsSync(path.join(dir, 'rollback-sequence-repair.json'))) {
+  const repair=read('rollback-sequence-repair.json')
+  assert.equal(repair.sql_sha256,manifest.sql_sha256)
+  assert.equal(repair.previous_rollback_sha256,manifest.rollback_sha256)
+  assert.equal(m.hash(fs.readFileSync(path.join(dir,repair.previous_rollback_file))),manifest.rollback_sha256)
+  assert.equal(m.hash(fs.readFileSync(rollbackPath)),repair.rollback_sha256)
+ } else assert.equal(m.hash(fs.readFileSync(rollbackPath)),manifest.rollback_sha256)
  return sql
+}
+function rollbackSQL() {
+ return '-- Explicit rollback only; restores exactly one deleted catalog row, never sequence/history.\n' + start + restoreBody + 'COMMIT;\n'
+}
+function repairRollback() {
+ const sql=checkedSQL(), next=rollbackSQL()
+ assert.equal(read('apply.json').sql_sha256,m.hash(sql), 'Applied migration must stay unchanged')
+ if (fs.existsSync(path.join(dir, 'rollback-sequence-repair.json'))) {
+  assert.equal(fs.readFileSync(rollbackPath,'utf8'),next, 'Rollback generator drift')
+  console.log('Rollback sequence repair already verified')
+  return
+ }
+ const previous=fs.readFileSync(rollbackPath), previousFile='rollback-before-sequence-position-fix.sql'
+ fs.writeFileSync(path.join(dir,previousFile),previous,{flag:'wx'})
+ const receipt={at:new Date().toISOString(),project_ref:m.ref,sql_sha256:m.hash(sql),
+  previous_rollback_file:previousFile,previous_rollback_sha256:m.hash(previous),rollback_sha256:m.hash(next),
+  ignored_schema_state:['sequence.last_value'],applied_migration_changed:false,production_write:false}
+ // Keep the original manifest and previous SQL as immutable apply-time evidence.
+ save('rollback-sequence-repair.json',receipt)
+ fs.writeFileSync(rollbackPath,next)
+ checkedSQL()
+ console.log('Rollback guard repaired; applied migration and original receipts unchanged')
 }
 function smoke() {
  const sql=checkedSQL().replace(/COMMIT;\s*$/, '')
@@ -93,6 +125,9 @@ function verify() {
    after_sha256:m.hash(fs.readFileSync(path.join(dir,'after.json')))})
  console.log({removed:53,other_config_unchanged:true,functions_unchanged:true,status_count:after.tables.auto_status.count})
 }
-const commands={build,smoke,apply,verify}
-assert(commands[process.argv[2]], 'Use build|smoke|apply|verify')
-commands[process.argv[2]]()
+module.exports={rollbackSQL,checkedSQL,dir}
+if (require.main===module) {
+ const commands={build,smoke,apply,verify,'repair-rollback':repairRollback}
+ assert(commands[process.argv[2]], 'Use build|smoke|apply|verify|repair-rollback')
+ commands[process.argv[2]]()
+}
