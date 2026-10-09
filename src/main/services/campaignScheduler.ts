@@ -5769,12 +5769,14 @@ export class CampaignScheduler {
             if (code === CAMPAIGN_MEDIA_TIMEOUT_CODE || code === 'command_result_unknown') {
               if (mediaSuccessSinceTimeout) {
                 await this.resetCampaignBadTargetCount(campaign, true)
-                mediaSuccessSinceTimeout = false
               }
               const actionDetail = await this.createZaloErrorDetail(account, campaign, sendError,
                 actionDescriptor.code, actionDescriptor.name,
                 { target: item.target, threadId: item.threadId, attachments, inputData: item.inputData, sendMode: 'share_media' })
-              const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs)
+              const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs,
+                { badTargetResetBefore: mediaSuccessSinceTimeout })
+              const timeoutEffects = managedTargetEffects(campaign.id, item.detail.id)
+              if (timeoutEffects ? timeoutEffects.badTargetEffect === 'increment' : actionDetail.countsTowardBadTarget !== false) mediaSuccessSinceTimeout = false
               await this.updateZaloShareInputStatus(item.detail, actionDetail, optOutContexts.get(item.detail.id))
               recordedMediaTimeouts.add(item.detail.id)
               shareFailCount += 1
@@ -5853,12 +5855,24 @@ export class CampaignScheduler {
       }
 
       const badTargetFailures: ZaloShareMessageBadTargetFailure[] = []
+      let managedBadTargetStopped = stoppedDuringMedia
       const batchHasSuccessfulTarget = processedBatch.some(item => {
         if (mediaFailures.has(item.detail.id)) return false
         if (mediaResponses.has(item.detail.id)) return true
         if (!trimmedMessage) return true
         return this.findZaloForwardTargetResult(forwardResult, item.threadId)?.ok === true
       })
+      const checkManagedBadTarget = async (inputId: number, actionDetail: ZaloActionDetailOutput): Promise<void> => {
+        if (!managesActionResult(campaign.id) || batchHasSuccessfulTarget || managedBadTargetStopped
+          || managedTargetEffects(campaign.id, inputId)?.badTargetEffect !== 'increment') return
+        const handled = await this.handleCampaignBadTarget(account, campaign, inputId, 'err_undefined',
+          actionDetail.actionCode || actionDescriptor.code, { message: actionDetail.log, thresholdReason: actionDetail.log })
+        if (handled.triggered) {
+          managedBadTargetStopped = true
+          stopAfterBatch = true
+          stopNote = handled.message
+        }
+      }
       const batchPolicyInputDataId = batchHasSuccessfulTarget || stoppedDuringMedia
         ? null
         : await this.selectZaloForwardBatchPolicyInputDataId(
@@ -5909,7 +5923,9 @@ export class CampaignScheduler {
           { inputData: this.buildZaloShareInputData(detail) },
           { policyHandling }
         )
-        const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail, progressLogs)
+        const created = await this.recordZaloShareActionDetail(campaign, detail, account.id, actionDetail, progressLogs,
+          { badTargetIncrementSuppressed: managedBadTargetStopped })
+        await checkManagedBadTarget(detail.id, actionDetail)
         await this.updateZaloShareInputStatus(detail, actionDetail, optOutContexts.get(detail.id))
         // Validation is now terminal for this claimed input even though no Zalo
         // API call was needed. A later runtime stop must not requeue it.
@@ -6024,7 +6040,12 @@ export class CampaignScheduler {
           )
         }
 
-        const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs)
+        const created = await this.recordZaloShareActionDetail(campaign, item.detail, account.id, actionDetail, progressLogs, {
+          badTargetIncrementSuppressed: managedBadTargetStopped,
+          ignoreBadTargetReset: recordedMediaTimeouts.size > 0 && !mediaSuccessSinceTimeout,
+          badTargetResetBefore: mediaSuccessSinceTimeout && mediaResponses.has(item.detail.id)
+        })
+        await checkManagedBadTarget(item.detail.id, actionDetail)
         const afterRecordStopReason = this.getZaloRuntimeStopReason(campaign.id)
         if (afterRecordStopReason) {
           await this.settleZaloShareBatchRuntimeStop(claimedDetails, startedInputDataIds, afterRecordStopReason)
@@ -6073,7 +6094,7 @@ export class CampaignScheduler {
       // consecutive bad-target threshold. Only a batch with zero successes may
       // advance the shared err_undefined threshold. Preserve legacy counting
       // after ordinary batch policies; only an earlier media stop suppresses it.
-      if (!batchHasSuccessfulTarget && !stoppedDuringMedia) {
+      if (!managesActionResult(campaign.id) && !batchHasSuccessfulTarget && !stoppedDuringMedia) {
         for (const failure of badTargetFailures) {
           const handled = await this.handleCampaignBadTarget(
             account,
@@ -6258,7 +6279,8 @@ export class CampaignScheduler {
     detail: CampaignInputData,
     accountId: number,
     actionDetail: ZaloActionDetailOutput,
-    progressLogs = new Set<string>()
+    progressLogs = new Set<string>(),
+    resultGuards: import('../../shared/actionStatusPolicy').ResultExecutionGuards = {}
   ): Promise<CampaignDetail | null> {
     // One progress entry per distinct failure in this batch; identical failures
     // still retain their individual details without flooding progress/DB writes.
@@ -6285,7 +6307,7 @@ export class CampaignScheduler {
       log: actionDetail.log || undefined,
       data: actionDetail.data || {},
       shouldCountAction: actionDetail.countsTowardLimit === true,
-      resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công', legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined, targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
+      resultGuards: { ...resultGuards, operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công', legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined, targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công' }
     })
 
     await logFailure()
@@ -10156,9 +10178,9 @@ export class CampaignScheduler {
         data: actionDetail.data || {},
         shouldCountAction: actionDetail.countsTowardLimit === true,
         resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
-        resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
+        resultGuards: { quotaSuppressed: actionDetail.countsTowardLimit === false, operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
           legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
-          targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
+          targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công' }
       })
 
       if (!created) {
@@ -10302,7 +10324,7 @@ export class CampaignScheduler {
         resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
         resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
           legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
-          targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
+          targetOnlyFailure: actionDetail.countsTowardBadTarget === false && actionDetail.status !== 'thành công' }
       })
       if (!created) {
         if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)

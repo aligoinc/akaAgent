@@ -1,0 +1,19 @@
+{
+  "at": "2026-10-09T13:31:20.935Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "sha256": "1fcd37fb0395d225a63fa9d50ce548e227a81e32522ec14b6ca14f312ee23cae",
+  "rollback_sha256": "e51de492f9f655795910975ca6f09834a86721d59a2e4755e37ffbca9af1e83f",
+  "independentChanges": [
+    {
+      "table": "auto_campaign_action_detail_statuses",
+      "id": 183,
+      "columns": [
+        "updated_at"
+      ],
+      "before": "2026-10-09T13:26:07.800062+00:00",
+      "after": "2026-10-09T13:30:16.7559+00:00",
+      "reason": "Existing live catalog sync refresh; migration contains no catalog DML"
+    }
+  ],
+  "verified": true
+}

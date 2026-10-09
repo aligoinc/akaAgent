@@ -57,6 +57,12 @@ export interface ResultExecutionGuards {
   legacyInputEffect?: ResultInputEffect
   /** A target-only member of a mixed batch cannot change campaign error state. */
   targetOnlyFailure?: boolean
+  /** Earlier confirmed media delivery, settled with the next durable result. */
+  badTargetResetBefore?: boolean
+  /** Summary of a success that preceded an already settled terminal timeout. */
+  ignoreBadTargetReset?: boolean
+  /** Stop-threshold guard: retain the detail without advancing the streak. */
+  badTargetIncrementSuppressed?: boolean
 }
 export interface EffectiveResult extends ResultPolicyDecisions {
   createDetail: boolean
@@ -66,6 +72,7 @@ export interface EffectiveResult extends ResultPolicyDecisions {
   statusValue: string | null
   operationState: OperationState
   partialDelivery: boolean
+  badTargetResetBefore?: boolean
 }
 export type ResultContractReason = 'status_unknown' | 'status_unavailable' | 'status_component_invalid'
   | 'status_value_missing' | 'status_value_ambiguous' | 'policy_missing' | 'policy_disabled'
@@ -177,6 +184,13 @@ export class ActionStatusCatalog {
     if (partialDelivery && result.createDetail) result = { ...result, countsTowardLimit: true, resetErrorStreak: true }
     if (guards.auxiliaryAction) result = { ...result, countsTowardLimit: false, badTargetEffect: 'ignore', resetErrorStreak: false }
     if (guards.targetOnlyFailure) result = { ...result, badTargetEffect: 'ignore' }
+    if (guards.badTargetIncrementSuppressed && result.badTargetEffect === 'increment') result = { ...result, badTargetEffect: 'ignore' }
+    if (guards.ignoreBadTargetReset && result.badTargetEffect === 'reset') result = { ...result, badTargetEffect: 'ignore' }
+    // Respect the run's success policy; evidence alone cannot invent a reset.
+    if (result.createDetail && !guards.auxiliaryAction && !guards.cancelled && guards.badTargetResetBefore
+      && this.selectPolicy(output.actionCode, 'campaign_detail_success').badTargetEffect === 'reset') {
+      result = { ...result, badTargetResetBefore: true }
+    }
     // No override may turn an uncertain or completed external operation into a retry.
     if (result.inputEffect === 'requeue' && operationState !== 'not_committed') result = { ...result, inputEffect: 'pause' }
     return Object.freeze(result)

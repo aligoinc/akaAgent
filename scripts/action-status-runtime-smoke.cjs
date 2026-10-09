@@ -86,4 +86,5 @@ async function main(){let checks=0;
  assert.notEqual(session.prepare('1',output,null).key,first.key);checks++;
  console.log(JSON.stringify({checks,runtimes:['desktop','chat'],external_operations:0}));
 }
-main().catch(e=>{console.error(e);process.exitCode=1});
+module.exports={loader};
+if(require.main===module)main().catch(e=>{console.error(e);process.exitCode=1});

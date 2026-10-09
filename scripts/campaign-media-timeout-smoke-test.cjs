@@ -183,7 +183,7 @@ async function runtimeCases(zca) {
   assert.equal(clock.tasks.size, 0)
 }
 
-function schedulerClass(zca) {
+function schedulerClass(zca, imports = {}) {
   function Stub() {}
   const placeholders = new Proxy({}, { get: (_, key) => {
     if (key === 'getCurrentUser') return () => ({ staffId: 3, organizationId: 4 })
@@ -192,9 +192,9 @@ function schedulerClass(zca) {
     if (key === 'IPC_EVENTS') return {}
     return Stub
   } })
-  return load('src/main/services/campaignScheduler.ts', name =>
+  return load('src/main/services/campaignScheduler.ts', name => imports[name] ?? (
     name === 'zca-js' ? zca : name === './campaignMediaExecution' ? media
-      : ['crypto', 'path', 'fs', 'os'].includes(name) ? require(name) : placeholders).CampaignScheduler
+      : ['crypto', 'path', 'fs', 'os'].includes(name) ? require(name) : placeholders)).CampaignScheduler
 }
 function fixture(Scheduler, { threshold = 4, initial = 0, explicit = null, target = 'desktop', group = true } = {}) {
   let count = initial

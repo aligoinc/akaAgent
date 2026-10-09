@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-09T13:31:47.096Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "rpc": "aka_agent_write_action_result_v1",
+      "http_status": 400,
+      "rejected": "action_result_payload_invalid"
+    },
+    {
+      "rpc": "aka_agent_settle_action_results_v1",
+      "http_status": 400,
+      "rejected": "action_result_settlement_invalid"
+    },
+    {
+      "relationship": "main/sub result catalog",
+      "http_status": 200
+    }
+  ],
+  "external_operations": 0
+}

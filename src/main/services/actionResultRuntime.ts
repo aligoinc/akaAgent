@@ -110,7 +110,7 @@ export async function writeManagedActionResult(action: CreateCampaignDetailInput
       resetErrorStreak: error.countsTowardLimit } : {})
   } : null
   const guards = { ...action.resultGuards,
-    quotaSuppressed: legacyErrorCounting && action.shouldCountAction === false,
+    quotaSuppressed: action.resultGuards?.quotaSuppressed === true || (legacyErrorCounting && action.shouldCountAction === false),
     targetOnlyFailure: action.resultGuards?.targetOnlyFailure === true || (action.actionCode === 'fb_comment'
       && status.code !== 'campaign_detail_success' && run.unit.session.target(action.inputDataId == null ? null : String(action.inputDataId)).results.some(r => r.operationState === 'committed')),
     auxiliaryAction: action.actionCode === 'zalo_tag_contact' || action.actionCode === 'zalo_change_alias' }
