@@ -1,0 +1,221 @@
+{
+  "auth_definition": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "md5": "5a9a503db72b965eb644739f5f60905d",
+      "owner": "postgres",
+      "security": true,
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "volatility": "s"
+    }
+  ],
+  "campaigns": [
+    {
+      "account_id": 3037,
+      "action_id": "zalo_message_group",
+      "estimated_details": 37952,
+      "frequency": 0.00783333,
+      "id": 11980,
+      "is_delete": false,
+      "organization_id": 636,
+      "staff_id": 659
+    },
+    {
+      "account_id": 2790,
+      "action_id": "zalo_message_group",
+      "estimated_details": 23902,
+      "frequency": 0.00493333,
+      "id": 12850,
+      "is_delete": false,
+      "organization_id": 381,
+      "staff_id": 402
+    },
+    {
+      "account_id": 2722,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 20995,
+      "frequency": 0.00433333,
+      "id": 10022,
+      "is_delete": false,
+      "organization_id": 500,
+      "staff_id": 521
+    },
+    {
+      "account_id": 1844,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 17926,
+      "frequency": 0.0037,
+      "id": 7370,
+      "is_delete": false,
+      "organization_id": 365,
+      "staff_id": 385
+    },
+    {
+      "account_id": 2160,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 16311,
+      "frequency": 0.00336667,
+      "id": 8346,
+      "is_delete": false,
+      "organization_id": 473,
+      "staff_id": 494
+    },
+    {
+      "account_id": 3260,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 14535,
+      "frequency": 0.003,
+      "id": 12318,
+      "is_delete": false,
+      "organization_id": 679,
+      "staff_id": 702
+    },
+    {
+      "account_id": 2421,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 13404,
+      "frequency": 0.00276667,
+      "id": 9056,
+      "is_delete": false,
+      "organization_id": 500,
+      "staff_id": 521
+    },
+    {
+      "account_id": 2105,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 12112,
+      "frequency": 0.0025,
+      "id": 9475,
+      "is_delete": false,
+      "organization_id": 458,
+      "staff_id": 479
+    },
+    {
+      "account_id": 2422,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 11951,
+      "frequency": 0.00246667,
+      "id": 9055,
+      "is_delete": false,
+      "organization_id": 500,
+      "staff_id": 521
+    },
+    {
+      "account_id": 2172,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 11628,
+      "frequency": 0.0024,
+      "id": 8316,
+      "is_delete": false,
+      "organization_id": 358,
+      "staff_id": 378
+    },
+    {
+      "account_id": 1751,
+      "action_id": "facebook_find_data_group",
+      "estimated_details": 11466,
+      "frequency": 0.00236667,
+      "id": 6854,
+      "is_delete": false,
+      "organization_id": 286,
+      "staff_id": 305
+    },
+    {
+      "account_id": 3348,
+      "action_id": "facebook_page_to_message",
+      "estimated_details": 11466,
+      "frequency": 0.00236667,
+      "id": 12574,
+      "is_delete": false,
+      "organization_id": 662,
+      "staff_id": 685
+    },
+    {
+      "account_id": 2765,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 11143,
+      "frequency": 0.0023,
+      "id": 12033,
+      "is_delete": false,
+      "organization_id": 582,
+      "staff_id": 603
+    },
+    {
+      "account_id": 1669,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 10659,
+      "frequency": 0.0022,
+      "id": 7135,
+      "is_delete": true,
+      "organization_id": 375,
+      "staff_id": 396
+    },
+    {
+      "account_id": 2242,
+      "action_id": "zalo_message_phone",
+      "estimated_details": 10497,
+      "frequency": 0.00216667,
+      "id": 8607,
+      "is_delete": false,
+      "organization_id": 489,
+      "staff_id": 510
+    }
+  ],
+  "staff_candidates": [
+    {
+      "common_campaigns": 5,
+      "estimated_details_in_common_campaigns": 61208,
+      "organization_id": 500,
+      "staff_id": 521
+    },
+    {
+      "common_campaigns": 7,
+      "estimated_details_in_common_campaigns": 58784,
+      "organization_id": 375,
+      "staff_id": 396
+    },
+    {
+      "common_campaigns": 7,
+      "estimated_details_in_common_campaigns": 54907,
+      "organization_id": 582,
+      "staff_id": 603
+    },
+    {
+      "common_campaigns": 5,
+      "estimated_details_in_common_campaigns": 40535,
+      "organization_id": 286,
+      "staff_id": 305
+    },
+    {
+      "common_campaigns": 4,
+      "estimated_details_in_common_campaigns": 39729,
+      "organization_id": 679,
+      "staff_id": 702
+    },
+    {
+      "common_campaigns": 1,
+      "estimated_details_in_common_campaigns": 37952,
+      "organization_id": 636,
+      "staff_id": 659
+    },
+    {
+      "common_campaigns": 4,
+      "estimated_details_in_common_campaigns": 32137,
+      "organization_id": 358,
+      "staff_id": 378
+    },
+    {
+      "common_campaigns": 2,
+      "estimated_details_in_common_campaigns": 29877,
+      "organization_id": 381,
+      "staff_id": 402
+    }
+  ]
+}

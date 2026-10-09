@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-10-09T17:55:18.085Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "automation_options_385",
+    "group": "automation",
+    "sql": "SELECT public.aka_agent_get_automation_options(385,365,NULL,NULL)",
+    "staff_id": 385,
+    "rpc": true
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 6955,
+      "error": "Initialising login role...\nunexpected status 400: {\"message\":\"Failed to run sql query: ERROR:  57014: canceling statement due to statement timeout\\nCONTEXT:  SQL function \\\"aka_agent_get_automation_options\\\" statement 2\\n\"}\nTry rerunning the command with --debug to troubleshoot the error.\n"
+    }
+  ]
+}

@@ -1,0 +1,1406 @@
+{
+  "at": "2026-10-09T18:49:11.372Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "92ba1abc3c352b0517bf31e70a77001ecea0ef0669a6e25625ecc605f7b1af59",
+  "rolled_back": true,
+  "production_data_writes": 0,
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_campaign_details_page(p_staff_id bigint, p_organization_id bigint, p_campaign_id bigint, p_search text, p_status text, p_date_from timestamp with time zone, p_date_to timestamp with time zone, p_offset integer, p_limit integer, p_sort text, p_auth_username text, p_auth_password text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE\n  v_sort text := COALESCE(p_sort, 'created_desc');\n  v_search text := NULLIF(btrim(left(p_search, 200)), '');\n  v_status text := NULLIF(btrim(left(p_status, 120)), '');\n  v_where text := 'd.campaign_id = $1 AND d.is_delete = false';\n  v_direction text;\n  v_status_ids bigint[];\n  v_search_ids bigint[];\n  v_count_sql text;\n  v_result jsonb;\nBEGIN\n  -- Same credential + campaign ownership guard as the live detail provenance RPC.\n  PERFORM public.auto_assert_automation_identity(\n    p_staff_id, p_organization_id, p_auth_username, p_auth_password\n  );\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0\n    OR COALESCE(p_offset, 0) < 0 OR COALESCE(p_limit, 100) NOT BETWEEN 1 AND 500 THEN\n    RAISE EXCEPTION 'invalid_campaign_details_page';\n  END IF;\n  IF v_sort NOT IN ('created_asc', 'created_desc') THEN\n    RAISE EXCEPTION 'invalid_campaign_details_sort';\n  END IF;\n  IF p_date_from IS NOT NULL AND p_date_to IS NOT NULL AND p_date_from > p_date_to THEN\n    RAISE EXCEPTION 'invalid_campaign_details_date_range';\n  END IF;\n  IF NOT EXISTS (\n    SELECT 1 FROM public.auto_campaigns AS campaign\n    WHERE campaign.id = p_campaign_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign.organization_id = p_organization_id\n  ) THEN\n    RAISE EXCEPTION 'campaign_not_found';\n  END IF;\n\n  -- Only fixed SQL fragments are concatenated. All user values are bound.\n  -- Omitting inactive predicates avoids generic OR plans scanning wide rows.\n  -- Resolve the small catalog once, not once per matching detail. STABLE\n  -- keeps these reads in the caller's snapshot, including the payload below.\n  -- Keep historical/inactive catalog entries and the exact legacy comparisons.\n  IF v_status IS NOT NULL THEN\n    v_status_ids := ARRAY(SELECT s.id FROM public.auto_status s\n      WHERE s.status_value=v_status OR lower(s.name)=lower(v_status));\n  END IF;\n  IF p_date_from IS NOT NULL THEN v_where := v_where || ' AND d.created_at >= $3'; END IF;\n  IF p_date_to IS NOT NULL THEN v_where := v_where || ' AND d.created_at <= $4'; END IF;\n  IF v_search IS NOT NULL THEN\n    v_search_ids := ARRAY(SELECT s.id FROM public.auto_status s\n      WHERE s.name ILIKE '%' || v_search || '%' OR s.status_value ILIKE '%' || v_search || '%');\n    v_where := v_where || ' AND (d.action_name ILIKE $5 OR d.action_code ILIKE $5\n      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5';\n    IF cardinality(v_search_ids)>0 THEN\n      v_where := v_where || ' OR d.status_id=ANY($9) OR d.sub_status_id=ANY($9)';\n    END IF;\n    v_where := v_where || ')';\n  END IF;\n  -- Count text matches with the existing covering status index. The second\n  -- branch only counts additional main/sub-status matches: no double counting,\n  -- even when both IDs match, or when the legacy text is NULL.\n  v_count_sql := 'SELECT count(*) FROM public.auto_campaign_details AS d WHERE ' || v_where;\n  IF v_status IS NOT NULL THEN\n    v_count_sql := 'SELECT (' || v_count_sql || ' AND d.status = $2)';\n    IF cardinality(v_status_ids)>0 THEN\n      v_count_sql := v_count_sql || ' + (SELECT count(*) FROM public.auto_campaign_details AS d WHERE '\n        || v_where || ' AND d.status IS DISTINCT FROM $2 AND (d.status_id=ANY($8) OR d.sub_status_id=ANY($8)))';\n      v_where := v_where || ' AND (d.status = $2 OR d.status_id=ANY($8) OR d.sub_status_id=ANY($8))';\n    ELSE\n      v_where := v_where || ' AND d.status = $2';\n    END IF;\n  END IF;\n  v_direction := CASE WHEN v_sort = 'created_asc' THEN 'ASC' ELSE 'DESC' END;\n\n  -- Both keys are NOT NULL in the live schema (checked by preflight). Default\n  -- NULL placement is therefore equivalent to NULLS LAST for both directions,\n  -- and allows one index to support forward and backward index-only scans.\n  -- MATERIALIZED limits the narrow ID set before any full-row payload lookup.\n  -- Count, page IDs and payload are read by one statement / MVCC snapshot;\n  -- count remains available even when the requested page has no items.\n  EXECUTE format($query$\n    WITH page_ids AS MATERIALIZED (\n      SELECT d.id, d.created_at\n      FROM public.auto_campaign_details AS d\n      WHERE %1$s\n      ORDER BY d.created_at %2$s, d.id %2$s\n      LIMIT $6 OFFSET $7\n    )\n    SELECT jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg((to_jsonb(detail) || jsonb_build_object(\n          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,\n          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) ORDER BY page.created_at %2$s, page.id %2$s)\n        FROM page_ids AS page\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\n        LEFT JOIN public.auto_status main_status ON main_status.id=detail.status_id\n        LEFT JOIN public.auto_status sub_status ON sub_status.id=detail.sub_status_id\n      ), '[]'::jsonb),\n      'total', (%3$s)\n    )\n  $query$, v_where, v_direction, v_count_sql)\n  INTO v_result\n  USING p_campaign_id, v_status, p_date_from, p_date_to,\n    '%' || v_search || '%', COALESCE(p_limit,100), COALESCE(p_offset,0), v_status_ids, v_search_ids;\n  RETURN v_result;\nEND;\n$function$\n",
+      "md5": "90d54cad612d1deba5bcfed744a98184",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_campaign_details_page_v2(p_staff_id bigint, p_organization_id bigint, p_campaign_id bigint, p_search text, p_status text, p_date_from timestamp with time zone, p_date_to timestamp with time zone, p_offset integer, p_limit integer, p_sort text, p_auth_username text, p_auth_password text, p_engagement_filter text DEFAULT NULL::text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE\n  v_sort text := COALESCE(p_sort, 'created_desc');\n  v_search text := NULLIF(btrim(left(p_search, 200)), '');\n  v_status text := NULLIF(btrim(left(p_status, 120)), '');\n  v_where text := 'd.campaign_id = $1 AND d.is_delete = false';\n  v_direction text;\n  v_status_ids bigint[];\n  v_search_ids bigint[];\n  v_count_sql text;\n  v_result jsonb;\nBEGIN\n  -- Same credential + campaign ownership guard as the live detail provenance RPC.\n  PERFORM public.auto_assert_automation_identity(\n    p_staff_id, p_organization_id, p_auth_username, p_auth_password\n  );\n  IF p_campaign_id IS NULL OR p_campaign_id <= 0\n    OR COALESCE(p_offset, 0) < 0 OR COALESCE(p_limit, 100) NOT BETWEEN 1 AND 500 THEN\n    RAISE EXCEPTION 'invalid_campaign_details_page';\n  END IF;\n  IF v_sort NOT IN ('created_asc', 'created_desc') THEN\n    RAISE EXCEPTION 'invalid_campaign_details_sort';\n  END IF;\n  IF p_date_from IS NOT NULL AND p_date_to IS NOT NULL AND p_date_from > p_date_to THEN\n    RAISE EXCEPTION 'invalid_campaign_details_date_range';\n  END IF;\n  IF NOT EXISTS (\n    SELECT 1 FROM public.auto_campaigns AS campaign\n    WHERE campaign.id = p_campaign_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign.organization_id = p_organization_id\n  ) THEN\n    RAISE EXCEPTION 'campaign_not_found';\n  END IF;\n\n  -- Only fixed SQL fragments are concatenated. All user values are bound.\n  -- Omitting inactive predicates avoids generic OR plans scanning wide rows.\n  -- Resolve the small catalog once, not once per matching detail. STABLE\n  -- keeps these reads in the caller's snapshot, including the payload below.\n  -- Keep historical/inactive catalog entries and the exact legacy comparisons.\n  IF v_status IS NOT NULL THEN\n    v_status_ids := ARRAY(SELECT s.id FROM public.auto_status s\n      WHERE s.status_value=v_status OR lower(s.name)=lower(v_status));\n  END IF;\n  IF p_date_from IS NOT NULL THEN v_where := v_where || ' AND d.created_at >= $3'; END IF;\n  IF p_date_to IS NOT NULL THEN v_where := v_where || ' AND d.created_at <= $4'; END IF;\n  IF v_search IS NOT NULL THEN\n    v_search_ids := ARRAY(SELECT s.id FROM public.auto_status s\n      WHERE s.name ILIKE '%' || v_search || '%' OR s.status_value ILIKE '%' || v_search || '%');\n    v_where := v_where || ' AND (d.action_name ILIKE $5 OR d.action_code ILIKE $5\n      OR d.status ILIKE $5 OR d.error_code ILIKE $5 OR d.log ILIKE $5 OR d.post_url ILIKE $5';\n    IF cardinality(v_search_ids)>0 THEN\n      v_where := v_where || ' OR d.status_id=ANY($9) OR d.sub_status_id=ANY($9)';\n    END IF;\n    v_where := v_where || ')';\n  END IF;\n  IF COALESCE(p_engagement_filter, 'all') NOT IN ('all','seen','responded','reacted','friended','none') THEN\n    RAISE EXCEPTION 'invalid_engagement_filter';\n  END IF;\n  IF p_engagement_filter IN ('seen','responded','reacted','friended','none') THEN\n    v_where := v_where || ' AND EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND ' ||\n      CASE p_engagement_filter WHEN 'seen' THEN 'e.seen_at IS NOT NULL' WHEN 'responded' THEN 'e.responded_at IS NOT NULL'\n        WHEN 'reacted' THEN 'e.reacted_at IS NOT NULL' WHEN 'friended' THEN 'e.friended_at IS NOT NULL'\n        ELSE 'e.seen_at IS NULL AND e.responded_at IS NULL AND e.reacted_at IS NULL AND e.friended_at IS NULL' END || ')';\n  END IF;\n  -- Count text matches with the existing covering status index. The second\n  -- branch only counts additional main/sub-status matches: no double counting,\n  -- even when both IDs match, or when the legacy text is NULL.\n  v_count_sql := 'SELECT count(*) FROM public.auto_campaign_details AS d WHERE ' || v_where;\n  IF v_status IS NOT NULL THEN\n    v_count_sql := 'SELECT (' || v_count_sql || ' AND d.status = $2)';\n    IF cardinality(v_status_ids)>0 THEN\n      v_count_sql := v_count_sql || ' + (SELECT count(*) FROM public.auto_campaign_details AS d WHERE '\n        || v_where || ' AND d.status IS DISTINCT FROM $2 AND (d.status_id=ANY($8) OR d.sub_status_id=ANY($8)))';\n      v_where := v_where || ' AND (d.status = $2 OR d.status_id=ANY($8) OR d.sub_status_id=ANY($8))';\n    ELSE\n      v_where := v_where || ' AND d.status = $2';\n    END IF;\n  END IF;\n  v_direction := CASE WHEN v_sort = 'created_asc' THEN 'ASC' ELSE 'DESC' END;\n\n  -- Both keys are NOT NULL in the live schema (checked by preflight). Default\n  -- NULL placement is therefore equivalent to NULLS LAST for both directions,\n  -- and allows one index to support forward and backward index-only scans.\n  -- MATERIALIZED limits the narrow ID set before any full-row payload lookup.\n  -- Count, page IDs and payload are read by one statement / MVCC snapshot;\n  -- count remains available even when the requested page has no items.\n  EXECUTE format($query$\n    WITH page_ids AS MATERIALIZED (\n      SELECT d.id, d.created_at\n      FROM public.auto_campaign_details AS d\n      WHERE %1$s\n      ORDER BY d.created_at %2$s, d.id %2$s\n      LIMIT $6 OFFSET $7\n    )\n    SELECT jsonb_build_object(\n      'items', COALESCE((\n        SELECT jsonb_agg(((to_jsonb(detail) || jsonb_build_object(\n          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,\n          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',\n          engagement.campaign_detail_id IS NOT NULL OR (account.flatform_type='zalo' AND NOT COALESCE(account.is_zalo_show_web,false)\n            AND detail.status='thành công' AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')\n            AND detail.data->'partialSend' IS NULL))) ORDER BY page.created_at %2$s, page.id %2$s)\n        FROM page_ids AS page\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\n        LEFT JOIN public.auto_status main_status ON main_status.id=detail.status_id\n        LEFT JOIN public.auto_status sub_status ON sub_status.id=detail.sub_status_id\n        LEFT JOIN public.auto_campaign_detail_zalo_engagement engagement ON engagement.campaign_detail_id=page.id\n        LEFT JOIN public.auto_accounts account ON account.id=detail.account_id\n      ), '[]'::jsonb),\n      'total', (%3$s)\n    )\n  $query$, v_where, v_direction, v_count_sql)\n  INTO v_result\n  USING p_campaign_id, v_status, p_date_from, p_date_to,\n    '%' || v_search || '%', COALESCE(p_limit,100), COALESCE(p_offset,0), v_status_ids, v_search_ids;\n  RETURN v_result;\nEND;\n$function$\n",
+      "md5": "97646cd22e77071aeb9fc8bddbc8bf1c",
+      "owner": "postgres",
+      "security_definer": true,
+      "settings": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "volatility": "s"
+    }
+  ],
+  "measurements": [
+    {
+      "error": null,
+      "hash": "78485e8fabf816c706c5a7a1d39e74e5",
+      "item_count": 100,
+      "name": "385_all_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1158,
+          "ms": 8.519,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1158,
+          "ms": 8.353,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1158,
+          "ms": 8.261,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16488
+    },
+    {
+      "error": null,
+      "hash": "78485e8fabf816c706c5a7a1d39e74e5",
+      "item_count": 100,
+      "name": "385_all_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 1158,
+          "ms": 9.018,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1158,
+          "ms": 8.977,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1158,
+          "ms": 8.956,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16488
+    },
+    {
+      "error": null,
+      "hash": "375f28cfaaa602655123792d2df09a95",
+      "item_count": 100,
+      "name": "385_all_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1698,
+          "ms": 10.817,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1698,
+          "ms": 10.504,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1698,
+          "ms": 10.571,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16488
+    },
+    {
+      "error": null,
+      "hash": "375f28cfaaa602655123792d2df09a95",
+      "item_count": 100,
+      "name": "385_all_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 1698,
+          "ms": 11.175,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1698,
+          "ms": 10.918,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1698,
+          "ms": 10.854,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16488
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "385_sub_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 15213,
+          "ms": 23.584,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15213,
+          "ms": 23.484,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15213,
+          "ms": 23.975,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "385_sub_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 31401,
+          "ms": 72.471,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 31401,
+          "ms": 72.849,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 31401,
+          "ms": 71.544,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "385_sub_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 15241,
+          "ms": 24.258,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15241,
+          "ms": 24.426,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15241,
+          "ms": 24.632,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "385_sub_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 31429,
+          "ms": 74.455,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 31429,
+          "ms": 74.475,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 31429,
+          "ms": 73.14,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "f94882f254a63a930583f903efe50d49",
+      "item_count": 100,
+      "name": "385_success_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1272,
+          "ms": 10.819,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1272,
+          "ms": 10.592,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1272,
+          "ms": 10.511,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "f94882f254a63a930583f903efe50d49",
+      "item_count": 100,
+      "name": "385_success_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 15747,
+          "ms": 31.539,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15747,
+          "ms": 31.065,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 15747,
+          "ms": 30.9,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "eb696f6b067ba879de06843f4498bd44",
+      "item_count": 100,
+      "name": "385_success_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1816,
+          "ms": 12.931,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1816,
+          "ms": 12.659,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1816,
+          "ms": 12.514,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "eb696f6b067ba879de06843f4498bd44",
+      "item_count": 100,
+      "name": "385_success_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 16291,
+          "ms": 33.986,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 16291,
+          "ms": 33.569,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 16291,
+          "ms": 33.147,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "595c16c995df9b633bd733156031ba87",
+      "item_count": 100,
+      "name": "521_all_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1435,
+          "ms": 8.528,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1435,
+          "ms": 8.473,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1435,
+          "ms": 8.411,
+          "read_blocks": 0
+        }
+      ],
+      "total": 19542
+    },
+    {
+      "error": null,
+      "hash": "595c16c995df9b633bd733156031ba87",
+      "item_count": 100,
+      "name": "521_all_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 1435,
+          "ms": 9.164,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1435,
+          "ms": 8.833,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1435,
+          "ms": 8.661,
+          "read_blocks": 0
+        }
+      ],
+      "total": 19542
+    },
+    {
+      "error": null,
+      "hash": "450800f21e254fb47ebea84b7eaf3010",
+      "item_count": 100,
+      "name": "521_all_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1963,
+          "ms": 10.529,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1963,
+          "ms": 10.452,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1963,
+          "ms": 10.539,
+          "read_blocks": 0
+        }
+      ],
+      "total": 19542
+    },
+    {
+      "error": null,
+      "hash": "450800f21e254fb47ebea84b7eaf3010",
+      "item_count": 100,
+      "name": "521_all_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 1963,
+          "ms": 11.004,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1963,
+          "ms": 10.856,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1963,
+          "ms": 10.867,
+          "read_blocks": 0
+        }
+      ],
+      "total": 19542
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "521_sub_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 19360,
+          "ms": 28.198,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19360,
+          "ms": 28.375,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19360,
+          "ms": 28.303,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "521_sub_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 37744,
+          "ms": 87.477,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 37744,
+          "ms": 87.906,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 37744,
+          "ms": 86.682,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "521_sub_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 19388,
+          "ms": 28.878,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19388,
+          "ms": 29.112,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19388,
+          "ms": 29.251,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "521_sub_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 37772,
+          "ms": 87.626,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 37772,
+          "ms": 87.651,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 37772,
+          "ms": 87.78,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "f284a46ae4add4fcf1791caa999841fe",
+      "item_count": 100,
+      "name": "521_success_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 1530,
+          "ms": 10.881,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1530,
+          "ms": 10.951,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 1530,
+          "ms": 10.946,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16726
+    },
+    {
+      "error": null,
+      "hash": "f284a46ae4add4fcf1791caa999841fe",
+      "item_count": 100,
+      "name": "521_success_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 18968,
+          "ms": 34.524,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 18968,
+          "ms": 34.412,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 18968,
+          "ms": 34.471,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16726
+    },
+    {
+      "error": null,
+      "hash": "de601341408f14ca95d2bc98fef5fd6b",
+      "item_count": 100,
+      "name": "521_success_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 2058,
+          "ms": 12.983,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2058,
+          "ms": 12.924,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2058,
+          "ms": 12.888,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16726
+    },
+    {
+      "error": null,
+      "hash": "de601341408f14ca95d2bc98fef5fd6b",
+      "item_count": 100,
+      "name": "521_success_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 19496,
+          "ms": 36.766,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19496,
+          "ms": 36.588,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 19496,
+          "ms": 36.895,
+          "read_blocks": 0
+        }
+      ],
+      "total": 16726
+    },
+    {
+      "error": null,
+      "hash": "b00bddbc8c9c2d6d9e675e649629178b",
+      "item_count": 100,
+      "name": "659_all_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 2357,
+          "ms": 12.917,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2357,
+          "ms": 12.901,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2357,
+          "ms": 12.852,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38570
+    },
+    {
+      "error": null,
+      "hash": "b00bddbc8c9c2d6d9e675e649629178b",
+      "item_count": 100,
+      "name": "659_all_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 2357,
+          "ms": 13.462,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2357,
+          "ms": 13.095,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2357,
+          "ms": 12.795,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38570
+    },
+    {
+      "error": null,
+      "hash": "82769e46d6bdbc300e6a361f19765699",
+      "item_count": 100,
+      "name": "659_all_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 2885,
+          "ms": 15.209,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2885,
+          "ms": 15.217,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2885,
+          "ms": 15.233,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38570
+    },
+    {
+      "error": null,
+      "hash": "82769e46d6bdbc300e6a361f19765699",
+      "item_count": 100,
+      "name": "659_all_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 2885,
+          "ms": 15.348,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2885,
+          "ms": 15.284,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2885,
+          "ms": 15.409,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38570
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "659_sub_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 38516,
+          "ms": 51.739,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 38516,
+          "ms": 51.357,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 38516,
+          "ms": 50.825,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "659_sub_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69958,
+          "ms": 165.763,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 69958,
+          "ms": 169.966,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 69958,
+          "ms": 168.941,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "659_sub_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 38544,
+          "ms": 51.197,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 38544,
+          "ms": 51.217,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 38544,
+          "ms": 51.138,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "659_sub_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69986,
+          "ms": 168.704,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 69986,
+          "ms": 168.426,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 69986,
+          "ms": 168.385,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "0b79f14f78ae5b3f846ebc7c3e42506a",
+      "item_count": 100,
+      "name": "659_success_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 2717,
+          "ms": 17.214,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2717,
+          "ms": 17.139,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 2717,
+          "ms": 17.077,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "0b79f14f78ae5b3f846ebc7c3e42506a",
+      "item_count": 100,
+      "name": "659_success_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 32054,
+          "ms": 53.828,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 32054,
+          "ms": 54.021,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 32054,
+          "ms": 54.336,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "db5f927f4fefa990c376f52fd60b8ca1",
+      "item_count": 100,
+      "name": "659_success_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 3245,
+          "ms": 22.925,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 3245,
+          "ms": 22.841,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 3245,
+          "ms": 22.665,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "db5f927f4fefa990c376f52fd60b8ca1",
+      "item_count": 100,
+      "name": "659_success_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 32582,
+          "ms": 57.328,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 32582,
+          "ms": 56.715,
+          "read_blocks": 0
+        },
+        {
+          "hit_blocks": 32582,
+          "ms": 57.086,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "case_whitespace_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 19361,
+          "ms": 28.004,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "case_whitespace_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 37744,
+          "ms": 92.792,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "case_whitespace_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 19389,
+          "ms": 28.88,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "case_whitespace_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 37772,
+          "ms": 92.417,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "c5027c9393e79c07d2cf3f16787f5435",
+      "item_count": 17,
+      "name": "combined_filters_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 15308,
+          "ms": 45.105,
+          "read_blocks": 0
+        }
+      ],
+      "total": 9641
+    },
+    {
+      "error": null,
+      "hash": "c5027c9393e79c07d2cf3f16787f5435",
+      "item_count": 17,
+      "name": "combined_filters_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 12672,
+          "ms": 44.087,
+          "read_blocks": 0
+        }
+      ],
+      "total": 9641
+    },
+    {
+      "error": null,
+      "hash": "c3fbabeda45aaa01114b42fcc3a0bc0e",
+      "item_count": 17,
+      "name": "combined_filters_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 47749,
+          "ms": 115.613,
+          "read_blocks": 0
+        }
+      ],
+      "total": 36
+    },
+    {
+      "error": null,
+      "hash": "c3fbabeda45aaa01114b42fcc3a0bc0e",
+      "item_count": 17,
+      "name": "combined_filters_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 45106,
+          "ms": 128.506,
+          "read_blocks": 0
+        }
+      ],
+      "total": 36
+    },
+    {
+      "error": null,
+      "hash": "9d35a839d82519dae3e21d4bfe74e102",
+      "item_count": 100,
+      "name": "deep_page_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 34120,
+          "ms": 86.361,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "9d35a839d82519dae3e21d4bfe74e102",
+      "item_count": 100,
+      "name": "deep_page_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 62330,
+          "ms": 104.267,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "37ccb865d68a28657c4b81ee8805a66f",
+      "item_count": 100,
+      "name": "deep_page_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 34648,
+          "ms": 92.133,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "37ccb865d68a28657c4b81ee8805a66f",
+      "item_count": 100,
+      "name": "deep_page_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 62858,
+          "ms": 109.311,
+          "read_blocks": 0
+        }
+      ],
+      "total": 38054
+    },
+    {
+      "error": null,
+      "hash": "9664b89421ea6083cefd95fc56adea5c",
+      "item_count": 0,
+      "name": "empty_page_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 15860,
+          "ms": 30.163,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "9664b89421ea6083cefd95fc56adea5c",
+      "item_count": 0,
+      "name": "empty_page_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 30335,
+          "ms": 52.688,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "9664b89421ea6083cefd95fc56adea5c",
+      "item_count": 0,
+      "name": "empty_page_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 15888,
+          "ms": 30.136,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": null,
+      "hash": "9664b89421ea6083cefd95fc56adea5c",
+      "item_count": 0,
+      "name": "empty_page_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 30363,
+          "ms": 53.108,
+          "read_blocks": 0
+        }
+      ],
+      "total": 12996
+    },
+    {
+      "error": "P0001:invalid_campaign_details_date_range",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_dates_v1",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_date_range",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_dates_v1",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_date_range",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_dates_v2",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_date_range",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_dates_v2",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_sort",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_sort_v1",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_sort",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_sort_v1",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_sort",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_sort_v2",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:invalid_campaign_details_sort",
+      "hash": null,
+      "item_count": null,
+      "name": "invalid_sort_v2",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:campaign_not_found",
+      "hash": null,
+      "item_count": null,
+      "name": "ownership_v1",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:campaign_not_found",
+      "hash": null,
+      "item_count": null,
+      "name": "ownership_v1",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:campaign_not_found",
+      "hash": null,
+      "item_count": null,
+      "name": "ownership_v2",
+      "phase": "after",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": "P0001:campaign_not_found",
+      "hash": null,
+      "item_count": null,
+      "name": "ownership_v2",
+      "phase": "before",
+      "timings": [],
+      "total": null
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "search_secondary_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 69965,
+          "ms": 539.676,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "search_secondary_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69958,
+          "ms": 634.233,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "search_secondary_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 69993,
+          "ms": 527.795,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "search_secondary_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69986,
+          "ms": 636.595,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "unknown_status_v1",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 34,
+          "ms": 0.931,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "unknown_status_v1",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69958,
+          "ms": 173.396,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "unknown_status_v2",
+      "phase": "after",
+      "timings": [
+        {
+          "hit_blocks": 62,
+          "ms": 1.607,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    },
+    {
+      "error": null,
+      "hash": "6195bd8c0a9355341df1ae73bb609e42",
+      "item_count": 0,
+      "name": "unknown_status_v2",
+      "phase": "before",
+      "timings": [
+        {
+          "hit_blocks": 69986,
+          "ms": 172.033,
+          "read_blocks": 0
+        }
+      ],
+      "total": 0
+    }
+  ],
+  "verified": true
+}

@@ -1,0 +1,11 @@
+{
+  "checked_at": "2026-10-09T17:38:19.481Z",
+  "migration_sha256": "5e88f29ed2034861a41efc25e35598075e4b356d5631751b8271fd61749fcbc0",
+  "result": [
+    {
+      "result": "passed: selective delete, status restore, drop description, legacy writer, undo roundtrip, stale/reference guards, unchanged sequence/config/functions"
+    }
+  ],
+  "no_committed_changes": true,
+  "schema_restored": true
+}

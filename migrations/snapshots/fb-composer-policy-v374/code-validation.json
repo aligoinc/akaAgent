@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-09T19:34:10.764Z",
+  "base_commit": "0b315a334c32418712e39b50b7d4550b12b452b6",
+  "checks": {
+    "composer_smoke": 21,
+    "result_boundary": 24,
+    "mixed_output": 25,
+    "origin_tracking": 33,
+    "typecheck_node": 0,
+    "typecheck_web": 0,
+    "production_build": 0
+  },
+  "external_operations": 0,
+  "installer_built": false,
+  "sha256": {
+    "src/main/services/actionResultRuntime.ts": "1f73c2eceed73155ea854650ec9a48d78b6817213fcabe94e180627cffdb1208",
+    "src/main/services/campaignScheduler.ts": "12b1e9b5192d9b60c41f6c80e98012aef4164fd3c800a7dfde26d84e9aace196",
+    "src/main/v2/runtime/blockExecutor.ts": "f017f70cb439a0dc251fd9aa0a4a2d0d0b7979027e6ed493d33bcf34a21ed9be",
+    "src/main/v2/runtime/blockHelpers.ts": "7f276e96a594eeaf98f74b2c603b09ad452083444d41018094462e9f56bdd12b",
+    "scripts/fb-composer-policy-smoke.cjs": "cffb32f07eaa1f398ae056382eeea94aba55f010552a1ff2f7d35c8d1e2cee12"
+  }
+}

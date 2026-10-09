@@ -165,8 +165,12 @@ async function groups(zca) {
       const rows = await f.details(), originalLogs = [...f.logs]
       assert.equal(rows.length, 2)
       assert.equal(await f.quota(), 2)
-      const sub = (await f.db.query("SELECT id FROM auto_status WHERE code='campaign_detail_post_pending'")).rows[0].id
-      assert.equal(rows[0].sub_status_id, pending === true ? sub : null)
+      const sub = pending == null ? null : (await f.db.query('SELECT id FROM auto_status WHERE code=$1',
+        [pending ? 'campaign_detail_post_pending' : 'campaign_detail_post_approved'])).rows[0].id
+      assert.equal(rows[0].sub_status_id, sub)
+      assert.equal(rows[1].sub_status_id, null, 'the source group conclusion cannot be copied to a shared target')
+      assert.equal(rows[0].status, 'thành công')
+      assert.equal(rows[0].counts_toward_limit, true)
       assert.equal(f.writes[0].postUrl, url)
       assert.equal(rows[0].log, `Đăng bài thành công vào Fixture group${pending === true ? ' (chờ duyệt)' : ''}`)
       assert.equal(rows[1].log, 'Đăng bài dạng chia sẻ vào Share group')

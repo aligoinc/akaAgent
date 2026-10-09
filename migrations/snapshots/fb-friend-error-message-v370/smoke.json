@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-10-09T17:47:34.247Z",
+  "result": [
+    {
+      "result": "passed: both notifications updated, other values unchanged, rollback restores entire table"
+    }
+  ]
+}

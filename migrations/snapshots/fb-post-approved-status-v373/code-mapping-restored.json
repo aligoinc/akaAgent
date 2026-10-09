@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-09T19:22:50.978Z",
+  "reason": "User requested reverting the DB-only direction and retaining code mapping for now.",
+  "scheduler_sha256": "1d5e92f1d8ca61f4e62276d42a69a7e402cb1814e636948716603696a88c3d53",
+  "same_as_original_v373_validation": true,
+  "checks": {
+    "targeted_smoke": 19,
+    "boundary_smoke": 24,
+    "typecheck_node": true,
+    "typecheck_web": true,
+    "production_build": true
+  },
+  "live_block_workflow_changes": 0,
+  "catalog_id_kept": 55,
+  "installer_built": false
+}

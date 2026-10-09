@@ -1,0 +1,199 @@
+{
+  "committed": false,
+  "after_drop": {
+    "access": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "anon=r/postgres",
+        "authenticated=r/postgres"
+      ],
+      "force_rls": false,
+      "owner": "postgres",
+      "rls": true
+    },
+    "columns": [
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "d",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "campaign_action_id",
+        "not_null": true,
+        "position": 2,
+        "type": "text"
+      },
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "action_code",
+        "not_null": false,
+        "position": 3,
+        "type": "text"
+      },
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "status_id",
+        "not_null": false,
+        "position": 4,
+        "type": "bigint"
+      },
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "status_value",
+        "not_null": true,
+        "position": 5,
+        "type": "text"
+      },
+      {
+        "comment": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "label",
+        "not_null": true,
+        "position": 6,
+        "type": "text"
+      },
+      {
+        "comment": null,
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "name": "is_active",
+        "not_null": true,
+        "position": 7,
+        "type": "boolean"
+      },
+      {
+        "comment": null,
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "is_delete",
+        "not_null": true,
+        "position": 8,
+        "type": "boolean"
+      },
+      {
+        "comment": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "name": "sort_order",
+        "not_null": true,
+        "position": 9,
+        "type": "integer"
+      },
+      {
+        "comment": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 10,
+        "type": "timestamp with time zone"
+      },
+      {
+        "comment": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 11,
+        "type": "timestamp with time zone"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "FOREIGN KEY (action_code) REFERENCES auto_account_actions(code) ON DELETE SET NULL",
+        "name": "auto_campaign_action_detail_statuses_action_code_fkey"
+      },
+      {
+        "definition": "FOREIGN KEY (campaign_action_id) REFERENCES auto_campaign_actions(id) ON DELETE CASCADE",
+        "name": "auto_campaign_action_detail_statuses_campaign_action_id_fkey"
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "auto_campaign_action_detail_statuses_pkey"
+      },
+      {
+        "definition": "FOREIGN KEY (status_id) REFERENCES auto_status(id) ON DELETE SET NULL",
+        "name": "auto_campaign_action_detail_statuses_status_id_fkey"
+      },
+      {
+        "definition": "CHECK (((length(btrim(status_value)) >= 1) AND (length(btrim(status_value)) <= 200)))",
+        "name": "auto_campaign_action_detail_statuses_value_check"
+      }
+    ],
+    "incoming_foreign_keys": [
+      {
+        "definition": "FOREIGN KEY (status_mapping_id) REFERENCES auto_campaign_action_detail_statuses(id) ON DELETE RESTRICT",
+        "name": "auto_automation_trigger_statuses_status_mapping_id_fkey",
+        "table": "auto_automation_trigger_statuses"
+      }
+    ],
+    "indexes": [
+      {
+        "definition": "CREATE UNIQUE INDEX auto_campaign_action_detail_statuses_pkey ON public.auto_campaign_action_detail_statuses USING btree (id)",
+        "name": "auto_campaign_action_detail_statuses_pkey"
+      },
+      {
+        "definition": "CREATE INDEX idx_campaign_action_detail_status_options ON public.auto_campaign_action_detail_statuses USING btree (campaign_action_id, action_code, sort_order, id) WHERE ((is_delete = false) AND (is_active = true))",
+        "name": "idx_campaign_action_detail_status_options"
+      },
+      {
+        "definition": "CREATE UNIQUE INDEX uq_campaign_action_detail_status_identity ON public.auto_campaign_action_detail_statuses USING btree (campaign_action_id, COALESCE(action_code, ''::text), lower(status_value)) WHERE (is_delete = false)",
+        "name": "uq_campaign_action_detail_status_identity"
+      }
+    ],
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "permissive": "PERMISSIVE",
+        "policyname": "auto_campaign_action_detail_statuses_read_catalog",
+        "qual": "true",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "schemaname": "public",
+        "tablename": "auto_campaign_action_detail_statuses",
+        "with_check": null
+      }
+    ],
+    "sequence_definition": {
+      "cache_size": 1,
+      "cycle": false,
+      "data_type": "bigint",
+      "increment_by": 1,
+      "max_value": 9223372036854776000,
+      "min_value": 1,
+      "schemaname": "public",
+      "sequencename": "auto_campaign_action_detail_statuses_id_seq",
+      "sequenceowner": "postgres",
+      "start_value": 1
+    },
+    "triggers": null
+  }
+}

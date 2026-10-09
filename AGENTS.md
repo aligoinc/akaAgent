@@ -4,6 +4,10 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 V361–V368 đã apply trên akachat ngày 09/10/2026; không apply lại. Web readers và Chat worker đã deploy, Server 8.2.0 đã đóng gói local nhưng chưa phát hành; giữ output block tương thích client cũ. Detail đã dùng metadata mới nên rollback runtime phải giữ schema/catalog/readers và lịch sử. Snapshot/checksum/rollout: [audit runtime](docs/ACTION_STATUS_READERS_V362.md), [V367](docs/ACTION_STATUS_COMPATIBILITY_V367.md), [V368](docs/EMAIL_STATUS_OBSERVATIONS_V368.md).
 
+V369, V370 và V372–V375 đã apply trên akachat ngày 10/10/2026; không apply lại khi merge/phát hành. V369 hoàn nguyên chọn lọc seed Automation, giữ mapping đã được dùng và các catalog policy; V372 tối ưu hai RPC đọc detail, giữ nguyên chữ ký/quyền và lịch sử. V373 thêm catalog Đã duyệt bài, nhưng mapping app còn chờ phát hành. V374/V375 xử lý lỗi composer bằng output `actionResult` trong DB và gate workflow, dùng thông báo “Không tìm thấy ô đăng bài”; V375 thay thế phần transport exception của V374 và không cần app mới ngoài runtime policy đã có. Xem [V369](docs/AUTOMATION_STATUS_SELECTIVE_REVERT_V369.md), [V372](docs/DETAIL_STATUS_QUERY_V372.md), [V373](docs/FB_POST_APPROVED_STATUS_V373.md), [V375](docs/FB_COMPOSER_DB_RESULT_V375.md).
+
+Catalog policy kết quả dùng cache RAM chung 60 giây mỗi process; Chat chia sẻ theo Kysely client. Vẫn lấy snapshot/preflight tại đầu lượt, không cập nhật policy giữa lượt. Refresh lỗi giữ catalog hoàn chỉnh cũ, chờ 60 giây trước lần cần tải tiếp theo; cold failure giữ đường lỗi hiện có. Không polling, pool hoặc connection mới. Cache và mapping Đã duyệt bài chưa được đóng gói/deploy trong đợt này; xem [cache và kiểm chứng](docs/ACTION_STATUS_CATALOG_CACHE_20261010.md).
+
 ## Supabase/Postgres: phải thảo luận trước khi tăng connection
 
 Connection là tài nguyên có giới hạn, dùng chung giữa các service và toàn bộ client của hệ thống. **Không tự ý thêm nguồn connection hoặc tăng ngân sách connection. Phải trình bày đề xuất và chờ người dùng đồng ý trước khi triển khai thay đổi đó.** Yêu cầu làm một tính năng không mặc nhiên cho phép tăng connection.
@@ -502,6 +506,9 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Composer result contract**: block `fb_open_composer` phải return `actionResult`, kèm `vars.inputDataId` cho lượt giữ nhiều input; không gắn result vào exception vì executor hiện có bỏ output khi throw. Gate cả hai nhánh đăng/share, nhánh lỗi group đi qua `merge_join` rồi cleanup Page. Chỉ bắt timeout của hai bước mở composer; không đổi cancellation hoặc suy đoán loại group. Smoke: `node scripts/fb-composer-policy-smoke.cjs`.
+- **Catalog refresh và trạng thái phụ**: tải catalog lỗi được dùng bản cũ, nhưng catalog mới tải thành công có policy tắt/thiếu vẫn phải bị preflight chặn. Chỉ gán Đã duyệt bài khi detector hiện có trả `pendingCheckConclusive=true` và không pending; kết quả chưa rõ giữ sub-status NULL. Không tính lại detail cũ.
 
 - **Ngày dừng Sheet cũ NULL**: chỉ bắt buộc ngày ở luồng lưu; không áp kiểm tra này khi đọc, bật/tắt hoặc chạy nguồn cũ. Ngày mặc định và giới hạn phải dùng lịch Việt Nam, không lấy ngày UTC hoặc múi giờ máy.
 

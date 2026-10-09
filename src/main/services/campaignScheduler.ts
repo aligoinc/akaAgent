@@ -10193,7 +10193,7 @@ export class CampaignScheduler {
       status,
       errorCode,
       resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
-        subStatusCode: isPending ? 'campaign_detail_post_pending' : null,
+        subStatusCode: this.getGroupPostSubStatusCode(isPending, pendingCheckConclusive),
         operationState: 'committed' } : undefined,
       resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
       log: posted
@@ -11414,6 +11414,11 @@ export class CampaignScheduler {
           actionCode: this.getPostActionCode(campaign),
           actionName: 'Đăng bài',
           status: 'thành công',
+          resultOutput: campaign.actionId === 'facebook_group_post' ? {
+            actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
+            subStatusCode: this.getGroupPostSubStatusCode(isPending, pendingCheckConclusive),
+            operationState: 'committed'
+          } : undefined,
           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
           data: isPending ? { isPending: true } : undefined
         })
@@ -13544,6 +13549,13 @@ export class CampaignScheduler {
 
   private formatOrdinalPost(position: number): string {
     return position === 1 ? 'bài đầu tiên' : `bài thứ ${position}`
+  }
+
+  private getGroupPostSubStatusCode(isPending: boolean, pendingCheckConclusive: boolean): string | null {
+    // Display the existing detector's conclusion; do not add a new DOM check
+    // or infer approval when that detector did not reach a conclusion.
+    if (isPending) return 'campaign_detail_post_pending'
+    return pendingCheckConclusive ? 'campaign_detail_post_approved' : null
   }
 
   private formatGroupPendingProgressLog(isPending: boolean, pendingCheckConclusive: boolean): string {

@@ -1,0 +1,212 @@
+{
+  "checked_at": "2026-10-09T17:59:13.305Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "result_key_lookup",
+    "group": "writer_read",
+    "sql": "SELECT * FROM public.auto_campaign_details WHERE result_key='[\"action-result-v1\",\"02f5cafb84324ce2e86818bc7ae8116d\",\"6469959\",\"zalo_find_phone_user\",\"0\"]'"
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 1574,
+      "execution_ms": 0.097,
+      "planning_ms": 2.349,
+      "rows": 1,
+      "shared_hit": 3,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.097,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '[\"action-result-v1\",\"02f5cafb84324ce2e86818bc7ae8116d\",\"6469959\",\"zalo_find_phone_user\",\"0\"]'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 3,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.349,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 2,
+      "wall_ms": 1327,
+      "execution_ms": 0.09,
+      "planning_ms": 2.357,
+      "rows": 1,
+      "shared_hit": 3,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.09,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '[\"action-result-v1\",\"02f5cafb84324ce2e86818bc7ae8116d\",\"6469959\",\"zalo_find_phone_user\",\"0\"]'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 3,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.357,
+        "Triggers": []
+      }
+    },
+    {
+      "attempt": 3,
+      "wall_ms": 1543,
+      "execution_ms": 0.092,
+      "planning_ms": 2.417,
+      "rows": 1,
+      "shared_hit": 3,
+      "shared_read": 0,
+      "temp_read": 0,
+      "temp_written": 0,
+      "indexes": [
+        "auto_detail_result_key_uq"
+      ],
+      "scans": [
+        {
+          "type": "Index Scan",
+          "relation": "auto_campaign_details",
+          "actual_rows": 1,
+          "loops": 1,
+          "removed": 0
+        }
+      ],
+      "plan": {
+        "Execution Time": 0.092,
+        "Plan": {
+          "Actual Loops": 1,
+          "Actual Rows": 1,
+          "Alias": "auto_campaign_details",
+          "Async Capable": false,
+          "Index Cond": "(result_key = '[\"action-result-v1\",\"02f5cafb84324ce2e86818bc7ae8116d\",\"6469959\",\"zalo_find_phone_user\",\"0\"]'::text)",
+          "Index Name": "auto_detail_result_key_uq",
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Node Type": "Index Scan",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 1183,
+          "Relation Name": "auto_campaign_details",
+          "Rows Removed by Index Recheck": 0,
+          "Scan Direction": "Forward",
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 3,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Startup Cost": 0.28,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Total Cost": 2.5
+        },
+        "Planning": {
+          "Local Dirtied Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Hit Blocks": 486,
+          "Shared Read Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 2.417,
+        "Triggers": []
+      }
+    }
+  ]
+}

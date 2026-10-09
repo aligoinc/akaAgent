@@ -1,0 +1,19 @@
+{
+  "checked_at": "2026-10-09T17:36:35.708Z",
+  "status": 200,
+  "columns": [
+    "id",
+    "campaign_action_id",
+    "action_code",
+    "status_id",
+    "status_value",
+    "label",
+    "is_active",
+    "is_delete",
+    "sort_order",
+    "created_at",
+    "updated_at",
+    "description"
+  ],
+  "description_present": true
+}

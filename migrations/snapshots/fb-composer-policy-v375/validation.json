@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-09T19:46:15.164Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_version": "20261009194359",
+  "checks": {
+    "composer_scenarios": 31,
+    "full_consumer_workflows": 4,
+    "page_identity_suite": "passed: 12 reference graphs and lifecycle/target-loop cases",
+    "result_boundary_scenarios": 24,
+    "mixed_output_scenarios": 25,
+    "typecheck_node_exit": 0,
+    "typecheck_web_exit": 0,
+    "production_build_exit": 0,
+    "apply_rollback_smoke": true,
+    "after_apply_rollback_smoke": true,
+    "api_verified": true
+  },
+  "runtime_app_changes_required": 0,
+  "real_facebook_operations": 0,
+  "installer_built": false,
+  "files_sha256": {
+    "scripts/fb-composer-policy-v375.cjs": "43392b59b35a4193dfb9e58eae9a5f37bfe815cbdf17bd09eee36508f55b716e",
+    "scripts/fb-composer-policy-v375-smoke.cjs": "5c49356e042e2fadfa30190b6baa34ebcb41d2cf35d0453d761aedd64cdb786a",
+    "scripts/fb-composer-policy-api-smoke.cjs": "55205d284b3d17427ac7f9b5f02e9c79853651758b075b635edbcbbffcd714ea",
+    "scripts/page-inbox-campaign-run-smoke-test.cjs": "345396a3ec48a01724622a06395b7dca282d8642d4f4235a8617e2534195b213",
+    "src/main/services/campaignScheduler.ts": "1d5e92f1d8ca61f4e62276d42a69a7e402cb1814e636948716603696a88c3d53"
+  }
+}

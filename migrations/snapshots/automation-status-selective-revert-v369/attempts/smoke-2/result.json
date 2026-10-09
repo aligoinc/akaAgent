@@ -1,0 +1,32 @@
+{
+  "committed": false,
+  "error": "P0001: schema postflight rejected JS-rounded sequence max_value",
+  "fix": "Build SQL metadata expectation from lossless PostgreSQL schema_canonical; no sequence changed.",
+  "discarded_generated_artifacts": [
+    {
+      "file": "plan.json",
+      "sha256": "5e5e5c1605851a6db3f73f6d8730f12e972206c9846801949fd7e541c7a63921",
+      "bytes": 357677
+    },
+    {
+      "file": "migration_v369_selective_revert_automation_status_catalog.sql",
+      "sha256": "0b9b981960d37847bf9e24027834abd203ae670678df780ac290da99d1f6ba1c",
+      "bytes": 1307625
+    },
+    {
+      "file": "smoke.sql",
+      "sha256": "00a7324a429ee595f833565dabf8aa5ca6443cf1cdf3d4e97ef3588912397b24",
+      "bytes": 2167042
+    },
+    {
+      "file": "prepared-manifest.json",
+      "sha256": "98eeb441676718a2b2424fbb5b54ec3283e8212ef26b537dc17badc1510c59a6",
+      "bytes": 350
+    },
+    {
+      "file": "undo-selective-revert.sql",
+      "sha256": "7884a7e27a56e6d4661d11293d9f88068732886b8fb5bb7d4dfb5706eeb5e5f5",
+      "bytes": 1050125
+    }
+  ]
+}

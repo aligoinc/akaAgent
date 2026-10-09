@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-09T19:40:26.828Z",
+  "sha256": {
+    "src/main/services/actionResultRuntime.ts": "dd2010a7832aec279648e5318e960e8d3a8fb070f3ad96b9773f9c7e1ef85fa7",
+    "src/main/v2/runtime/blockExecutor.ts": "aa13276ff21557ab9da8345cdad548d33fe8034e1100bfbba0858de1f7465c12",
+    "src/main/v2/runtime/blockHelpers.ts": "6aeeb5613cd0bc42a877311e724b59d2cdc1d373e5e97b15d739bf8dc23ce65c",
+    "src/main/services/campaignScheduler.ts": "1d5e92f1d8ca61f4e62276d42a69a7e402cb1814e636948716603696a88c3d53"
+  },
+  "only_composer_changes_removed": true
+}

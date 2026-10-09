@@ -1,0 +1,349 @@
+[
+  {
+    "QUERY PLAN": [
+      {
+        "Plan": {
+          "Async Capable": false,
+          "Node Type": "Result",
+          "Parallel Aware": false,
+          "Plan Rows": 1,
+          "Plan Width": 32,
+          "Plans": [
+            {
+              "Async Capable": false,
+              "Node Type": "Limit",
+              "Parallel Aware": false,
+              "Parent Relationship": "InitPlan",
+              "Plan Rows": 100,
+              "Plan Width": 16,
+              "Plans": [
+                {
+                  "Alias": "d",
+                  "Async Capable": false,
+                  "Filter": "((status = 'thành công'::text) OR EXISTS(SubPlan 1))",
+                  "Index Cond": "(campaign_id = 7370)",
+                  "Index Name": "idx_campaign_details_page",
+                  "Node Type": "Index Scan",
+                  "Parallel Aware": false,
+                  "Parent Relationship": "Outer",
+                  "Plan Rows": 16585,
+                  "Plan Width": 16,
+                  "Plans": [
+                    {
+                      "Alias": "filter_status",
+                      "Async Capable": false,
+                      "Filter": "((status_value = 'thành công'::text) OR (lower(name) = 'thành công'::text))",
+                      "Node Type": "Bitmap Heap Scan",
+                      "Parallel Aware": false,
+                      "Parent Relationship": "SubPlan",
+                      "Plan Rows": 1,
+                      "Plan Width": 0,
+                      "Plans": [
+                        {
+                          "Async Capable": false,
+                          "Index Cond": "(id = ANY (ARRAY[d.status_id, d.sub_status_id]))",
+                          "Index Name": "auto_status_pkey",
+                          "Node Type": "Bitmap Index Scan",
+                          "Parallel Aware": false,
+                          "Parent Relationship": "Outer",
+                          "Plan Rows": 2,
+                          "Plan Width": 0,
+                          "Startup Cost": 0,
+                          "Total Cost": 1.25
+                        }
+                      ],
+                      "Recheck Cond": "(id = ANY (ARRAY[d.status_id, d.sub_status_id]))",
+                      "Relation Name": "auto_status",
+                      "Startup Cost": 1.26,
+                      "Subplan Name": "SubPlan 1",
+                      "Total Cost": 3.39
+                    }
+                  ],
+                  "Relation Name": "auto_campaign_details",
+                  "Scan Direction": "Backward",
+                  "Startup Cost": 0.43,
+                  "Total Cost": 73129.58
+                }
+              ],
+              "Startup Cost": 0.43,
+              "Subplan Name": "CTE page_ids",
+              "Total Cost": 441.37
+            },
+            {
+              "Async Capable": false,
+              "Node Type": "Aggregate",
+              "Parallel Aware": false,
+              "Parent Relationship": "InitPlan",
+              "Partial Mode": "Simple",
+              "Plan Rows": 1,
+              "Plan Width": 32,
+              "Plans": [
+                {
+                  "Async Capable": false,
+                  "Node Type": "Sort",
+                  "Parallel Aware": false,
+                  "Parent Relationship": "Outer",
+                  "Plan Rows": 100,
+                  "Plan Width": 2559,
+                  "Plans": [
+                    {
+                      "Async Capable": false,
+                      "Inner Unique": true,
+                      "Join Type": "Left",
+                      "Node Type": "Nested Loop",
+                      "Parallel Aware": false,
+                      "Parent Relationship": "Outer",
+                      "Plan Rows": 100,
+                      "Plan Width": 2559,
+                      "Plans": [
+                        {
+                          "Async Capable": false,
+                          "Inner Unique": true,
+                          "Join Type": "Left",
+                          "Node Type": "Nested Loop",
+                          "Parallel Aware": false,
+                          "Parent Relationship": "Outer",
+                          "Plan Rows": 100,
+                          "Plan Width": 2560,
+                          "Plans": [
+                            {
+                              "Async Capable": false,
+                              "Hash Cond": "(detail.sub_status_id = sub_status.id)",
+                              "Inner Unique": true,
+                              "Join Type": "Left",
+                              "Node Type": "Hash Join",
+                              "Parallel Aware": false,
+                              "Parent Relationship": "Outer",
+                              "Plan Rows": 100,
+                              "Plan Width": 2334,
+                              "Plans": [
+                                {
+                                  "Async Capable": false,
+                                  "Hash Cond": "(detail.status_id = main_status.id)",
+                                  "Inner Unique": true,
+                                  "Join Type": "Left",
+                                  "Node Type": "Hash Join",
+                                  "Parallel Aware": false,
+                                  "Parent Relationship": "Outer",
+                                  "Plan Rows": 100,
+                                  "Plan Width": 2206,
+                                  "Plans": [
+                                    {
+                                      "Async Capable": false,
+                                      "Inner Unique": true,
+                                      "Join Type": "Inner",
+                                      "Node Type": "Nested Loop",
+                                      "Parallel Aware": false,
+                                      "Parent Relationship": "Outer",
+                                      "Plan Rows": 100,
+                                      "Plan Width": 2078,
+                                      "Plans": [
+                                        {
+                                          "Alias": "page",
+                                          "Async Capable": false,
+                                          "CTE Name": "page_ids",
+                                          "Node Type": "CTE Scan",
+                                          "Parallel Aware": false,
+                                          "Parent Relationship": "Outer",
+                                          "Plan Rows": 100,
+                                          "Plan Width": 16,
+                                          "Startup Cost": 0,
+                                          "Total Cost": 2
+                                        },
+                                        {
+                                          "Alias": "detail",
+                                          "Async Capable": false,
+                                          "Index Cond": "(id = page.id)",
+                                          "Index Name": "auto_campaign_details_pkey",
+                                          "Node Type": "Index Scan",
+                                          "Parallel Aware": false,
+                                          "Parent Relationship": "Inner",
+                                          "Plan Rows": 1,
+                                          "Plan Width": 2070,
+                                          "Relation Name": "auto_campaign_details",
+                                          "Scan Direction": "Forward",
+                                          "Startup Cost": 0.43,
+                                          "Total Cost": 2.65
+                                        }
+                                      ],
+                                      "Startup Cost": 0.43,
+                                      "Total Cost": 267
+                                    },
+                                    {
+                                      "Async Capable": false,
+                                      "Node Type": "Hash",
+                                      "Parallel Aware": false,
+                                      "Parent Relationship": "Inner",
+                                      "Plan Rows": 41,
+                                      "Plan Width": 136,
+                                      "Plans": [
+                                        {
+                                          "Alias": "main_status",
+                                          "Async Capable": false,
+                                          "Node Type": "Seq Scan",
+                                          "Parallel Aware": false,
+                                          "Parent Relationship": "Outer",
+                                          "Plan Rows": 41,
+                                          "Plan Width": 136,
+                                          "Relation Name": "auto_status",
+                                          "Startup Cost": 0,
+                                          "Total Cost": 7.41
+                                        }
+                                      ],
+                                      "Startup Cost": 7.41,
+                                      "Total Cost": 7.41
+                                    }
+                                  ],
+                                  "Startup Cost": 8.36,
+                                  "Total Cost": 275.19
+                                },
+                                {
+                                  "Async Capable": false,
+                                  "Node Type": "Hash",
+                                  "Parallel Aware": false,
+                                  "Parent Relationship": "Inner",
+                                  "Plan Rows": 41,
+                                  "Plan Width": 136,
+                                  "Plans": [
+                                    {
+                                      "Alias": "sub_status",
+                                      "Async Capable": false,
+                                      "Node Type": "Seq Scan",
+                                      "Parallel Aware": false,
+                                      "Parent Relationship": "Outer",
+                                      "Plan Rows": 41,
+                                      "Plan Width": 136,
+                                      "Relation Name": "auto_status",
+                                      "Startup Cost": 0,
+                                      "Total Cost": 7.41
+                                    }
+                                  ],
+                                  "Startup Cost": 7.41,
+                                  "Total Cost": 7.41
+                                }
+                              ],
+                              "Startup Cost": 16.28,
+                              "Total Cost": 283.37
+                            },
+                            {
+                              "Alias": "engagement",
+                              "Async Capable": false,
+                              "Index Cond": "(campaign_detail_id = page.id)",
+                              "Index Name": "auto_campaign_detail_zalo_engagement_pkey",
+                              "Node Type": "Index Scan",
+                              "Parallel Aware": false,
+                              "Parent Relationship": "Inner",
+                              "Plan Rows": 1,
+                              "Plan Width": 226,
+                              "Relation Name": "auto_campaign_detail_zalo_engagement",
+                              "Scan Direction": "Forward",
+                              "Startup Cost": 0.29,
+                              "Total Cost": 2.31
+                            }
+                          ],
+                          "Startup Cost": 16.57,
+                          "Total Cost": 514.57
+                        },
+                        {
+                          "Alias": "account",
+                          "Async Capable": false,
+                          "Index Cond": "(id = detail.account_id)",
+                          "Index Name": "auto_accounts_pkey",
+                          "Node Type": "Index Scan",
+                          "Parallel Aware": false,
+                          "Parent Relationship": "Inner",
+                          "Plan Rows": 1,
+                          "Plan Width": 15,
+                          "Relation Name": "auto_accounts",
+                          "Scan Direction": "Forward",
+                          "Startup Cost": 0.28,
+                          "Total Cost": 0.3
+                        }
+                      ],
+                      "Startup Cost": 16.85,
+                      "Total Cost": 544.6
+                    }
+                  ],
+                  "Sort Key": [
+                    "page.created_at DESC",
+                    "page.id DESC"
+                  ],
+                  "Startup Cost": 547.92,
+                  "Total Cost": 548.17
+                }
+              ],
+              "Startup Cost": 551.55,
+              "Strategy": "Plain",
+              "Subplan Name": "InitPlan 3",
+              "Total Cost": 551.56
+            },
+            {
+              "Async Capable": false,
+              "Node Type": "Aggregate",
+              "Parallel Aware": false,
+              "Parent Relationship": "InitPlan",
+              "Partial Mode": "Simple",
+              "Plan Rows": 1,
+              "Plan Width": 8,
+              "Plans": [
+                {
+                  "Alias": "d_1",
+                  "Async Capable": false,
+                  "Filter": "((NOT is_delete) AND ((status = 'thành công'::text) OR EXISTS(SubPlan 4)))",
+                  "Index Cond": "(campaign_id = 7370)",
+                  "Index Name": "idx_campaign_details_campaign_id",
+                  "Node Type": "Index Scan",
+                  "Parallel Aware": false,
+                  "Parent Relationship": "Outer",
+                  "Plan Rows": 16585,
+                  "Plan Width": 0,
+                  "Plans": [
+                    {
+                      "Alias": "filter_status_1",
+                      "Async Capable": false,
+                      "Filter": "((status_value = 'thành công'::text) OR (lower(name) = 'thành công'::text))",
+                      "Node Type": "Bitmap Heap Scan",
+                      "Parallel Aware": false,
+                      "Parent Relationship": "SubPlan",
+                      "Plan Rows": 1,
+                      "Plan Width": 0,
+                      "Plans": [
+                        {
+                          "Async Capable": false,
+                          "Index Cond": "(id = ANY (ARRAY[d_1.status_id, d_1.sub_status_id]))",
+                          "Index Name": "auto_status_pkey",
+                          "Node Type": "Bitmap Index Scan",
+                          "Parallel Aware": false,
+                          "Parent Relationship": "Outer",
+                          "Plan Rows": 2,
+                          "Plan Width": 0,
+                          "Startup Cost": 0,
+                          "Total Cost": 1.25
+                        }
+                      ],
+                      "Recheck Cond": "(id = ANY (ARRAY[d_1.status_id, d_1.sub_status_id]))",
+                      "Relation Name": "auto_status",
+                      "Startup Cost": 1.26,
+                      "Subplan Name": "SubPlan 4",
+                      "Total Cost": 3.39
+                    }
+                  ],
+                  "Relation Name": "auto_campaign_details",
+                  "Scan Direction": "Forward",
+                  "Startup Cost": 0.43,
+                  "Total Cost": 67122.63
+                }
+              ],
+              "Startup Cost": 67164.09,
+              "Strategy": "Plain",
+              "Subplan Name": "InitPlan 5",
+              "Total Cost": 67164.1
+            }
+          ],
+          "Startup Cost": 68157.02,
+          "Total Cost": 68157.04
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,17 @@
+--- before_task
+
++++ current
+
+@@ -13,6 +13,11 @@
+
+   );
+ 
+   SELECT jsonb_build_object(
++    'result_statuses', COALESCE((SELECT jsonb_agg(jsonb_build_object(
++      'id',s.id,'code',s.code,'name',s.name,'status_value',s.status_value,'color',s.color,
++      'flatform_type',s.flatform_type,'description',s.description
++    ) ORDER BY s.sort_order,s.id) FROM public.auto_status s
++      WHERE s.component_type='campaign_detail' AND s.is_active AND NOT s.is_delete),'[]'::jsonb),
+     'automation_actions', COALESCE((
+       SELECT jsonb_agg(to_jsonb(automation_action) ORDER BY automation_action.sort_order, automation_action.id)
+       FROM public.auto_automation_actions AS automation_action

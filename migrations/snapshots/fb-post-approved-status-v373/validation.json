@@ -1,0 +1,52 @@
+{
+  "at": "2026-10-09T19:12:06.901Z",
+  "checks": [
+    {
+      "command": "node scripts/fb-post-approved-status-smoke.cjs",
+      "scenarios": 18,
+      "passed": true
+    },
+    {
+      "command": "node scripts/action-status-result-boundary-smoke.cjs",
+      "scenarios": 24,
+      "passed": true
+    },
+    {
+      "command": "node scripts/action-status-mixed-output-smoke.cjs",
+      "scenarios": 25,
+      "passed": true
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "passed": true
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "passed": true
+    },
+    {
+      "command": "npm run build",
+      "passed": true
+    }
+  ],
+  "external_facebook_operations": 0,
+  "installer_built": false,
+  "source_files": [
+    {
+      "file": "src/main/services/campaignScheduler.ts",
+      "sha256": "1d5e92f1d8ca61f4e62276d42a69a7e402cb1814e636948716603696a88c3d53"
+    },
+    {
+      "file": "scripts/action-status-fixes-fixture.cjs",
+      "sha256": "d5449be27c3e7da7348d895de80b8f8f165b3ffff85b23007480d31f5b159331"
+    },
+    {
+      "file": "scripts/action-status-result-boundary-smoke.cjs",
+      "sha256": "a43e85509f51bf83e591cb61876511415d2cb8f23102b05291cf6e62bb8ca54d"
+    },
+    {
+      "file": "scripts/fb-post-approved-status-smoke.cjs",
+      "sha256": "224a247d9ba72f66a3e4431b3f3f7a6f2d86ee5f7b7928c69d8d6bff92b64fff"
+    }
+  ]
+}

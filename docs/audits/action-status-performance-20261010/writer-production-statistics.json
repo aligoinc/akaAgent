@@ -1,0 +1,53 @@
+{
+  "captured_at": "2026-10-09T17:58:03.642Z",
+  "statistics_info": {
+    "dealloc": 17,
+    "stats_reset": "2026-09-28T09:11:42.019574+00:00"
+  },
+  "writer_statistics": [
+    {
+      "calls": 540,
+      "function": "aka_agent_write_action_result_v1",
+      "max_exec_ms": 77.339165,
+      "mean_exec_ms": 31.3590975574074,
+      "min_exec_ms": 2.394835,
+      "query_id": "-2698490339773299407",
+      "query_md5": "ae198ce1be1c6cbfd9e35fdf5fa6773a",
+      "rows": 540,
+      "total_exec_ms": 16933.912681
+    },
+    {
+      "calls": 344,
+      "function": "aka_agent_write_action_result_v1",
+      "max_exec_ms": 165.330153,
+      "mean_exec_ms": 28.28529275,
+      "min_exec_ms": 2.426696,
+      "query_id": "6809387373797440446",
+      "query_md5": "697f387bd14ce54ba8d6004d9aadb511",
+      "rows": 344,
+      "total_exec_ms": 9730.140706
+    },
+    {
+      "calls": 313,
+      "function": "aka_agent_settle_action_results_v1",
+      "max_exec_ms": 9.574722,
+      "mean_exec_ms": 3.84915162619808,
+      "min_exec_ms": 2.071901,
+      "query_id": "-5913542592586230718",
+      "query_md5": "40737110fd8e88d01e058d2124fbe573",
+      "rows": 313,
+      "total_exec_ms": 1204.784459
+    },
+    {
+      "calls": 169,
+      "function": "aka_agent_settle_action_results_v1",
+      "max_exec_ms": 10.272889,
+      "mean_exec_ms": 3.54490701183432,
+      "min_exec_ms": 2.045096,
+      "query_id": "8802317683002494908",
+      "query_md5": "5ade3288bfe1afdd609a7e3c589dee56",
+      "rows": 169,
+      "total_exec_ms": 599.089285
+    }
+  ]
+}

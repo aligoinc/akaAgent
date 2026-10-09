@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-09T18:47:36.922Z",
+  "migration_sha256": "92ba1abc3c352b0517bf31e70a77001ecea0ef0669a6e25625ecc605f7b1af59",
+  "cases": 381,
+  "explicit_overlap_checks": 10,
+  "matching_errors": 23,
+  "passed": true,
+  "production_writes": 0
+}

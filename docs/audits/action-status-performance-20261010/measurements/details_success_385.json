@@ -1,0 +1,19 @@
+{
+  "checked_at": "2026-10-09T17:55:05.817Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "case": {
+    "name": "details_success_385",
+    "group": "detail_rpc",
+    "sql": "SELECT public.aka_agent_list_campaign_details_page_v2(385,365,7370,NULL,'thành công',NULL,NULL,0,100,'created_desc',NULL,NULL,NULL)",
+    "staff_id": 385,
+    "campaign_id": 7370,
+    "rpc": true
+  },
+  "samples": [
+    {
+      "attempt": 1,
+      "wall_ms": 6426,
+      "error": "Initialising login role...\nunexpected status 400: {\"message\":\"Failed to run sql query: ERROR:  57014: canceling statement due to statement timeout\\nCONTEXT:  SQL statement \\\"\\n    WITH page_ids AS MATERIALIZED (\\n      SELECT d.id, d.created_at\\n      FROM public.auto_campaign_details AS d\\n      WHERE d.campaign_id = $1 AND d.is_delete = false AND (d.status = $2 OR EXISTS (\\n      SELECT 1 FROM public.auto_status filter_status\\n      WHERE filter_status.id IN (d.status_id,d.sub_status_id)\\n        AND (filter_status.status_value=$2 OR lower(filter_status.name)=lower($2))))\\n      ORDER BY d.created_at DESC, d.id DESC\\n      LIMIT $6 OFFSET $7\\n    )\\n    SELECT jsonb_build_object(\\n      'items', COALESCE((\\n        SELECT jsonb_agg(((to_jsonb(detail) || jsonb_build_object(\\n          'status_presentation', CASE WHEN main_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',main_status.code,'name',main_status.name,'color',main_status.color,'statusValue',main_status.status_value) END,\\n          'sub_status_presentation', CASE WHEN sub_status.id IS NULL THEN NULL ELSE jsonb_build_object('code',sub_status.code,'name',sub_status.name,'color',sub_status.color,'statusValue',sub_status.status_value) END)) || jsonb_build_object('zalo_engagement', to_jsonb(engagement), 'zalo_engagement_applicable',\\n          engagement.campaign_detail_id IS NOT NULL OR (account.flatform_type='zalo' AND NOT COALESCE(account.is_zalo_show_web,false)\\n            AND detail.status='thành công' AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')\\n            AND detail.data->'partialSend' IS NULL))) ORDER BY page.created_at DESC, page.id DESC)\\n        FROM page_ids AS page\\n        JOIN public.auto_campaign_details AS detail ON detail.id = page.id\\n  "
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "at": "2026-10-09T18:50:34.602Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "0d43c40b6a3d8e9fd6804c6bbae83e49f79ae8ad371bb463a5ecf6488b72a714",
+  "rollback_sha256": "43abddc2e4a6f8501ca80885438e5e6d3d314b075199a2f681d2c5e70a4a32c6",
+  "functions": [
+    {
+      "signature": "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)",
+      "md5": "0b63820ca957726725ed2372d46a5d02",
+      "source_md5": "fb398b4e0fb53a5ebef8269805d51a8e"
+    },
+    {
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "md5": "10fc44b5eb273974bb44aa3aaf757630",
+      "source_md5": "0cab9241430282691f320221acf2ed5d"
+    }
+  ],
+  "latest_repository_source": "migration_v367_action_status_compatibility",
+  "live_matches_repository": true
+}
