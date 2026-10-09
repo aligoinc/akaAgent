@@ -238,6 +238,7 @@ interface MilestoneSummary {
   stopAfterTarget?: boolean
   optOutBlocked?: boolean
   facebookFriendFailures?: FacebookFriendFailure[]
+  helperControlSources?: Set<string>
 }
 
 interface FacebookFriendFailure {
@@ -759,7 +760,7 @@ export class CampaignScheduler {
   private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
-    signature: string; write: Promise<CampaignDetail | null>
+    signature: string; write: Promise<CampaignDetail | null>; helperDetail?: ZaloActionDetailOutput | null
   }>>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
@@ -10236,6 +10237,47 @@ export class CampaignScheduler {
     } }
   }
 
+  private applyHelperMilestoneControls(summary: MilestoneSummary, actionDetail: ZaloActionDetailOutput): void {
+    if (actionDetail.optOutBlocked) summary.optOutBlocked = true
+
+    if (actionDetail.deliveryCommitted) {
+      summary.deliveryCommitted = true
+      if (summary.resetInputToPending) {
+        summary.preventInputRetry = true
+        summary.resetInputToPending = false
+        summary.inputCompletionNote = `${summary.pendingNote || actionDetail.log || 'Tin nhắn đã gửi'}. Không tự chạy lại data để tránh gửi trùng.`
+      }
+    }
+    if (actionDetail.preventInputRetry) {
+      // A successful first send cannot be rolled back. This terminal marker
+      // wins over retry requests from every action before or after it.
+      summary.preventInputRetry = true
+      summary.resetInputToPending = false
+      summary.inputCompletionNote = actionDetail.log || summary.inputCompletionNote
+    }
+    if (actionDetail.resetInputToPending) {
+      if (summary.deliveryCommitted || summary.preventInputRetry) {
+        summary.preventInputRetry = true
+        summary.resetInputToPending = false
+        const downstreamFailure = actionDetail.pendingNote || actionDetail.log
+        if (downstreamFailure) {
+          summary.inputCompletionNote = `${downstreamFailure}. Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.`
+        }
+      } else {
+        summary.resetInputToPending = true
+        summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
+      }
+    }
+    if (actionDetail.stopAfterTarget) {
+      summary.stopAfterTarget = true
+      // A terminal policy detail (for example Zalo duplicate/fast message)
+      // does not reset the input to pending, but its campaign notice still
+      // has to survive so the outer stop handler does not use the generic
+      // "Tài khoản Zalo cần kiểm tra lại" fallback.
+      summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
+    }
+  }
+
   private async logExplicitActionResultStep(
     campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2, summary: MilestoneSummary,
     steps: RunStepV2[] = [step], consumedGroupPostInputDataIds?: Set<number>
@@ -10264,13 +10306,14 @@ export class CampaignScheduler {
       const signature = actionResultSignature(row, detail?.id)
       const previous = writes.get(sourceKey)
       if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', output.actionCode, sourceKey)
+      const helperLegacy = previous ? previous.helperDetail
+        : helperDetail?.actionCode === output.actionCode && inputDataId === detail?.id ? helperDetail : null
       let write = previous?.write
       if (!write) {
         // Share even failed attempts across progress/finalization and relays.
         // An uncertain write remains owned by the existing run cleanup path.
         write = (async () => {
           const legacy = newsfeed?.action.actionCode === output.actionCode ? newsfeed : null
-          const helperLegacy = helperDetail?.actionCode === output.actionCode && inputDataId === detail?.id ? helperDetail : null
           const group = isGroupVerify && output.actionCode === 'fb_post_group' && inputDataId === detail?.id
             ? this.groupPostMilestonePayload(campaign, detail, accountId, step, steps, output) : null
           const shareTarget = isGroupVerify && output.actionCode === 'fb_post_group'
@@ -10283,7 +10326,7 @@ export class CampaignScheduler {
             resultSourceKey: sourceKey,
             resultGuards: helperLegacy ? {
               partialDelivery: helperLegacy.deliveryCommitted === true && helperLegacy.status !== 'thành công',
-              operationState: helperLegacy.preventInputRetry ? (helperLegacy.deliveryCommitted ? 'committed' : 'unknown') : undefined,
+              operationState: helperLegacy.deliveryCommitted ? 'committed' : helperLegacy.preventInputRetry ? 'unknown' : undefined,
               targetOnlyFailure: helperLegacy.countsTowardBadTarget === false && helperLegacy.status !== 'thành công'
             } : undefined,
             errorCode: output.errorCode,
@@ -10310,7 +10353,7 @@ export class CampaignScheduler {
               actionName: created.actionName || helperLegacy?.actionName, log: created.log
             }))
           }
-          if (output.errorCode) {
+          if (output.errorCode && helperLegacy?.handledErrorCode !== output.errorCode) {
             const account = await this.supabase.getAccount(accountId)
             if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
               { message: typeof row.message === 'string' ? row.message : undefined }, { explicitOnly: true })
@@ -10321,9 +10364,14 @@ export class CampaignScheduler {
           }
           return created
         })()
-        writes.set(sourceKey, { signature, write })
+        writes.set(sourceKey, { signature, write, helperDetail: helperLegacy })
       }
       const created = await write
+      if (helperLegacy && !summary.helperControlSources?.has(sourceKey)) {
+        this.applyHelperMilestoneControls(summary, helperLegacy)
+        const sources = summary.helperControlSources ??= new Set<string>()
+        sources.add(sourceKey)
+      }
       if (created) this.recordMilestoneSummary(summary, created.status, created.log, created.actionName)
     }
   }
@@ -10500,44 +10548,7 @@ export class CampaignScheduler {
       const actionDetail = this.getZaloActionDetailFromStep(step)
       if (!actionDetail) continue
 
-      if (actionDetail.optOutBlocked) summary.optOutBlocked = true
-
-      if (actionDetail.deliveryCommitted) {
-        summary.deliveryCommitted = true
-        if (summary.resetInputToPending) {
-          summary.preventInputRetry = true
-          summary.resetInputToPending = false
-          summary.inputCompletionNote = `${summary.pendingNote || actionDetail.log || 'Tin nhắn đã gửi'}. Không tự chạy lại data để tránh gửi trùng.`
-        }
-      }
-      if (actionDetail.preventInputRetry) {
-        // A successful first send cannot be rolled back. This terminal marker
-        // wins over retry requests from every action before or after it.
-        summary.preventInputRetry = true
-        summary.resetInputToPending = false
-        summary.inputCompletionNote = actionDetail.log || summary.inputCompletionNote
-      }
-      if (actionDetail.resetInputToPending) {
-        if (summary.deliveryCommitted || summary.preventInputRetry) {
-          summary.preventInputRetry = true
-          summary.resetInputToPending = false
-          const downstreamFailure = actionDetail.pendingNote || actionDetail.log
-          if (downstreamFailure) {
-            summary.inputCompletionNote = `${downstreamFailure}. Tin nhắn đã được gửi; không tự chạy lại data để tránh gửi trùng.`
-          }
-        } else {
-          summary.resetInputToPending = true
-          summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
-        }
-      }
-      if (actionDetail.stopAfterTarget) {
-        summary.stopAfterTarget = true
-        // A terminal policy detail (for example Zalo duplicate/fast message)
-        // does not reset the input to pending, but its campaign notice still
-        // has to survive so the outer stop handler does not use the generic
-        // "Tài khoản Zalo cần kiểm tra lại" fallback.
-        summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
-      }
+      this.applyHelperMilestoneControls(summary, actionDetail)
 
       if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
         if (actionDetail.log) {
@@ -13958,6 +13969,7 @@ export class CampaignScheduler {
         actionName,
         status: detailStatus || undefined,
         errorCode: policy?.errorCode || null,
+        handledErrorCode: policy?.errorCode || undefined,
         log,
         countsTowardLimit: policy?.countsTowardLimit ?? true,
         countsTowardBadTarget: policyHandling === 'target-only'
@@ -14021,6 +14033,7 @@ export class CampaignScheduler {
         actionName,
         status: detailStatus || undefined,
         errorCode: policy?.errorCode || null,
+        handledErrorCode: policy?.errorCode || undefined,
         log,
         countsTowardLimit: policy?.countsTowardLimit ?? true,
         countsTowardBadTarget: policyHandling === 'target-only'

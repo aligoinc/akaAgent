@@ -139,6 +139,8 @@ export interface ZaloActionDetailOutput {
   actionName?: string
   status?: string
   log?: string
+  /** Error policy already handled (including intentional target-only handling) by this helper. */
+  handledErrorCode?: string
   errorCode?: string | null
   data?: Record<string, unknown>
   countsTowardLimit?: boolean

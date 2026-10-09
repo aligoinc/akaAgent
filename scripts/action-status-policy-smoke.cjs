@@ -3,7 +3,7 @@ const path = require('node:path')
 const vm = require('node:vm')
 const assert = require('node:assert/strict')
 const ts = require('typescript')
-const source = fs.readFileSync(path.join(__dirname,'../src/shared/actionStatusPolicy.ts'),'utf8')
+const source = fs.readFileSync(process.argv[2] || path.join(__dirname,'../src/shared/actionStatusPolicy.ts'),'utf8')
 const mod = { exports: {} }
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:mod.exports,module:mod,require,Object,Map,Set,Error,Number,JSON})
 const { ActionStatusCatalog, ResultContractError, aggregateResultEffects, secondaryConditionTransition } = mod.exports
@@ -51,6 +51,22 @@ test('partial, auxiliary, mixed batch and unknown-operation guards survive overr
 test('multiple results cannot requeue a target with a committed sibling action',()=>{
  const c=new ActionStatusCatalog(statuses,defaults);const rows=[c.resolve(output()),c.resolve(output({operationState:'not_committed'}),{detailMode:'inherit',detailStatusId:null,inputEffect:'requeue'})];assert.equal(aggregateResultEffects(rows).inputEffect,'pause')
 })
+for (const producer of ['not_committed','unknown','committed']) {
+ for (const evidence of [undefined,'not_committed','unknown','committed']) {
+  for (const detailMode of ['inherit','suppress']) test(`execution evidence ${producer}/${evidence}/${detailMode} cannot reopen delivery`,()=>{
+   const c=new ActionStatusCatalog(statuses,defaults)
+   const expected=producer==='committed'||evidence==='committed'?'committed':producer==='unknown'||evidence==='unknown'?'unknown':'not_committed'
+   const e={detailMode,detailStatusId:null,inputEffect:'requeue'}
+   const r=c.resolve(output({operationState:producer}),e,{operationState:evidence,cancelled:true})
+   assert.equal(r.operationState,expected)
+   assert.equal(r.inputEffect,expected==='not_committed'?'requeue':'pause')
+   assert.equal(r.createDetail,detailMode==='inherit'&&expected!=='not_committed')
+   const partial=c.resolve(output({operationState:producer}),e,{operationState:evidence,partialDelivery:true})
+   assert.equal(partial.operationState,'committed');assert.equal(partial.inputEffect,'pause')
+   assert.equal(partial.createDetail,true);assert.equal(partial.countsTowardLimit,true)
+  })
+ }
+}
 test('secondary automation fires only on a false-to-true edge',()=>{
  assert.equal(secondaryConditionTransition(true,true,null,3,[3]),true);assert.equal(secondaryConditionTransition(true,true,3,3,[3]),false);assert.equal(secondaryConditionTransition(true,true,null,3,null),false);assert.equal(secondaryConditionTransition(false,false,null,3,[3]),false)
 })

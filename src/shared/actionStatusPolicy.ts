@@ -163,7 +163,10 @@ export class ActionStatusCatalog {
       status = this.status(override.code, output.actionCode)
     }
     const partialDelivery = guards.partialDelivery === true
-    const operationState = partialDelivery ? 'committed' : output.operationState
+    // Neither a producer nor a legacy adapter can downgrade observed delivery
+    // to retryable work. Confirmed delivery wins; uncertainty still fences retry.
+    const operationState = partialDelivery || guards.operationState === 'committed' || output.operationState === 'committed'
+      ? 'committed' : guards.operationState === 'unknown' || output.operationState === 'unknown' ? 'unknown' : 'not_committed'
     const suppressed = !partialDelivery && ((guards.cancelled === true && operationState === 'not_committed')
       || error?.detailMode === 'suppress' || (error?.detailMode == null && guards.legacySuppress === true))
     let result: EffectiveResult
