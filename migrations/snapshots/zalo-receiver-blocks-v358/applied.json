@@ -1,0 +1,84 @@
+{
+  "history": [
+    {
+      "name": "migration_v358_zalo_receiver_blocks_no_quota",
+      "source_md5": "6511d72d8db8ad2b29cbf17e718cacd4",
+      "version": "20261009014334"
+    }
+  ],
+  "policies": [
+    {
+      "checksum": "5d89500959f2a113b1744557584d0336",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_receiver_blocks_stranger_message",
+        "error_desc": "Người nhận không nhận tin nhắn từ người lạ",
+        "error_element": null,
+        "error_name": "Người nhận chặn tin nhắn người lạ",
+        "error_type": "external zalo",
+        "id": 10,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận chặn tin nhắn từ người lạ",
+        "noti_running_process": "Người nhận chặn tin nhắn từ người lạ",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-09T01:43:34.924055+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "122"
+        ]
+      }
+    },
+    {
+      "checksum": "13941bd789f0507129abf90efaeabedc",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_receiver_blocks_message",
+        "error_desc": "Người nhận không muốn nhận tin nhắn từ tài khoản này",
+        "error_element": null,
+        "error_name": "Người nhận chặn tin nhắn",
+        "error_type": "external zalo",
+        "id": 11,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận chặn tin nhắn từ bạn",
+        "noti_running_process": "Người nhận chặn tin nhắn từ bạn",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-09T01:43:34.924055+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "119"
+        ]
+      }
+    }
+  ],
+  "verified_at": "2026-10-09T01:44:33.695939+00:00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "a8db850cc3cd89fdc468a674d6c421a403307f1232839f331b913788fa76891a",
+  "before_checksums": {
+    "10": "d53de701e30c8bdab611240b5af14927",
+    "11": "541972c8188d73be665b10eea4a50222"
+  }
+}
