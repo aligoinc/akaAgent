@@ -71,3 +71,14 @@ export function parseActionResultOutput(value: unknown): ActionResultOutput | nu
   }
   return row as unknown as ActionResultOutput
 }
+
+/** Compare operation fields only; relay/context fields do not change a receipt. */
+export function actionResultSignature(row: Record<string, unknown>, fallbackInputId?: number): string {
+  const output = parseActionResultOutput(row)
+  if (!output) throw new ResultContractError('output_invalid', '', '')
+  return JSON.stringify({ actionCode: output.actionCode, statusCode: output.statusCode,
+    subStatusCode: output.subStatusCode, errorCode: output.errorCode, operationState: output.operationState,
+    inputDataId: row.inputDataId == null ? fallbackInputId : Number(row.inputDataId),
+    actionName: row.actionName, message: row.message, data: row.data,
+    emailTrackingMessageId: row.emailTrackingMessageId })
+}

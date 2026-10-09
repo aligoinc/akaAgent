@@ -1,7 +1,8 @@
+import type { RunStepV2 } from '../../shared/v2Types'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { stageCampaignEngagementSource, failCampaignEngagementDetail } from './zaloCampaignEngagement'
 import { createHash } from 'node:crypto'
-import { ActionResultSession, parseActionResultOutput } from '../../shared/actionResultSession'
+import { ActionResultSession, actionResultSignature, parseActionResultOutput } from '../../shared/actionResultSession'
 import { ResultContractError, ResultErrorOverride } from '../../shared/actionStatusPolicy'
 import { CampaignDetail, CampaignInputData, CreateCampaignDetailInput } from '../../shared/types'
 import { getSupabaseClient } from '../data/supabaseClient'
@@ -12,7 +13,7 @@ interface Settlement { settlement: { badTargetCount: number; badTargetEffect: st
 interface Run {
   campaignId: number; accountId: number; staffId: number; platform: string; claimToken: string
   loaded: RunResultCatalog
-  unit?: { token: string; session: ActionResultSession; inputIds: number[]; settlements: Map<string, Settlement> }
+  unit?: { token: string; session: ActionResultSession; inputIds: number[]; settlements: Map<string, Settlement>; validatedResults: Map<string, string> }
 }
 const runContext = new AsyncLocalStorage<number>()
 export const withActionResultRunContext = <T>(id: number, operation: () => T): T => runContext.run(id, operation)
@@ -57,7 +58,7 @@ export function beginActionResultUnit(campaignId: number, token: string, inputId
   const run = runs.get(campaignId)
   if (!run) return
   for (const id of run.unit?.inputIds ?? []) inputs.delete(id)
-  run.unit = { token, inputIds: [...inputIds], settlements: new Map(), session: new ActionResultSession(run.loaded.catalog,
+  run.unit = { token, inputIds: [...inputIds], settlements: new Map(), validatedResults: new Map(), session: new ActionResultSession(run.loaded.catalog,
     createHash('md5').update(token).digest('hex')) }
   for (const id of inputIds) inputs.set(id, run)
 }
@@ -74,6 +75,7 @@ export function validateActionResultStep(campaignId: number, value: Record<strin
   if (!run) return
   const rows = 'actionResults' in value ? value.actionResults : [value.actionResult ?? value]
   if (!Array.isArray(rows) || !rows.length) throw new ResultContractError('output_invalid', '', 'batch_empty')
+  const pending = new Map<string, string>()
   for (const row of rows) {
     const output = parseActionResultOutput(row)
     if (run.unit && run.unit.inputIds.length > 1 && !run.unit.inputIds.includes(Number(row.inputDataId))) throw new ResultContractError('output_invalid', output?.actionCode ?? '', 'batch_input_missing')
@@ -81,6 +83,39 @@ export function validateActionResultStep(campaignId: number, value: Record<strin
     const error = output.errorCode ? run.loaded.errors.get(output.errorCode) : null
     run.loaded.catalog.resolve(output, error ? { detailMode: error.detailMode ?? null,
       detailStatusId: error.detailStatusId ?? null, inputEffect: error.inputEffect ?? null } : null)
+    const source = row.__akaActionResultSource
+    if (typeof source === 'string' && run.unit) {
+      const signature = actionResultSignature(row, run.unit.inputIds.length === 1 ? run.unit.inputIds[0] : undefined)
+      const prior = pending.get(source) ?? run.unit.validatedResults.get(source)
+      if (prior != null && prior !== signature) throw new ResultContractError('result_key_conflict', output.actionCode, source)
+      pending.set(source, signature)
+    }
+  }
+  // An invalid batch must not register receipts for any of its rows.
+  for (const [source, signature] of pending) run.unit?.validatedResults.set(source, signature)
+}
+
+/** Abort before the next node, then let already-started siblings drain. */
+export class ActionResultBoundary {
+  error: unknown
+  private readonly rejected = new Set<string>()
+  constructor(private readonly campaignId: number, private readonly abort: () => void) {}
+  private key(step: RunStepV2): string {
+    // Loop iterations can share a millisecond and engine snapshots omit DB IDs.
+    return JSON.stringify([step.runId, step.nodeId, step.startedAt, step.actionResultSourceKeys, step.output])
+  }
+  observe(step: RunStepV2): boolean {
+    if (step.status !== 'success') return true
+    try { validateActionResultStep(this.campaignId, step.output); return true }
+    catch (error) {
+      this.error ??= error
+      this.rejected.add(this.key(step))
+      this.abort()
+      return false
+    }
+  }
+  accepted(steps: RunStepV2[]): RunStepV2[] {
+    return steps.filter(step => !this.rejected.has(this.key(step)))
   }
 }
 

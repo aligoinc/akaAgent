@@ -1,5 +1,5 @@
-import { parseActionResultOutput } from '../../shared/actionResultSession'
-import { beginActionResultRun, beginActionResultUnit, endActionResultRun, withActionResultRunContext, managedTargetEffects, managesActionResult, finishActionResultUnit, validateActionResultStep } from './actionResultRuntime'
+import { actionResultSignature, parseActionResultOutput } from '../../shared/actionResultSession'
+import { beginActionResultRun, beginActionResultUnit, endActionResultRun, withActionResultRunContext, managedTargetEffects, managesActionResult, finishActionResultUnit, ActionResultBoundary } from './actionResultRuntime'
 import { ResultContractError } from '../../shared/actionStatusPolicy'
 import { takeCampaignContentIndex } from '../data/repositories/campaignContentRepository'
 import type { CampaignContentVariant, PreparedCampaignContent } from '../../shared/campaignContentPreparation'
@@ -33,7 +33,7 @@ import { SupabaseService } from './supabase'
 import type { DisableAccountActionContext } from '../data/repositories/accountActionRepository'
 import { CampaignFailureCleanup, CampaignFailureCleanupPayload } from './campaignFailureCleanup'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CreateCampaignDetailInput, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import {
@@ -3904,6 +3904,7 @@ export class CampaignScheduler {
         const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
         let milestoneWrites = Promise.resolve()
         let milestoneWriteError: unknown
+        const resultBoundary = new ActionResultBoundary(campaign.id, () => abort.abort())
         const pageIdentity = this.facebookPageIdentities.get(campaign.id)
         if (pageIdentity) { pageIdentity.page = page; pageIdentity.targetStarted = false }
         try {
@@ -3923,17 +3924,14 @@ export class CampaignScheduler {
               if (progressLog) screenshotProgressLogs.push(progressLog)
             },
             onStepProgress: (step: RunStepV2) => {
-              if (step.status === 'success' && !milestoneWriteError) {
-                try { validateActionResultStep(campaign.id, step.output) }
-                catch (error) { milestoneWriteError = error; abort.abort() }
-              }
+              const accepted = resultBoundary.observe(step)
               if (pageIdentity) {
                 const started = pageIdentity.targetStarted
                 pageIdentity.observe(step)
                 if (!started && pageIdentity.targetStarted) this.markCampaignRunUnitStarted(campaign.id)
               }
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
-              if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
+              if (accepted && campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
                 milestoneWrites = milestoneWrites.then(async () => {
                   if (milestoneWriteError) return
                   try { await this.logNewsfeedMilestoneStep(campaign, detail, account.id, step) }
@@ -3948,6 +3946,13 @@ export class CampaignScheduler {
 
           await milestoneWrites
           if (milestoneWriteError) throw milestoneWriteError
+          if (resultBoundary.error) {
+            // Preserve completed operations before the existing failure cleanup.
+            // Rejected contracts never reach the writer or normal settlement.
+            await this.logMilestonesV2(campaign, detail, account.id, resultBoundary.accepted(result.steps), false,
+              screenshotProgressLogs, consumedGroupPostInputDataIds)
+            throw resultBoundary.error
+          }
 
           if (pageIdentity && !pageIdentity.targetStarted) {
             const failure = result.steps.find(step => step.status === 'error')
@@ -4706,7 +4711,7 @@ export class CampaignScheduler {
     }
 
     const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
-    let contractError: unknown
+    const resultBoundary = new ActionResultBoundary(campaign.id, () => abort.abort())
     try {
       try {
         const variables = {
@@ -4747,10 +4752,7 @@ export class CampaignScheduler {
             if (progressLog) screenshotProgressLogs.push(progressLog)
           },
           onStepProgress: (step: RunStepV2) => {
-            if (step.status === 'success' && !contractError) {
-              try { validateActionResultStep(campaign.id, step.output) }
-              catch (error) { contractError = error; abort.abort() }
-            }
+            resultBoundary.observe(step)
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
           },
           onLog: (entry) => {
@@ -4758,7 +4760,10 @@ export class CampaignScheduler {
           }
         })
 
-        if (contractError) throw contractError
+        if (resultBoundary.error) {
+          await this.logMilestonesV2(campaign, null, account.id, resultBoundary.accepted(result.steps), false, screenshotProgressLogs)
+          throw resultBoundary.error
+        }
         const hasContract = result.steps.some(s => s.output && ('actionResult' in s.output || 'actionResults' in s.output || ('actionCode' in s.output && 'statusCode' in s.output)))
         if (hasContract) {
           await this.logMilestonesV2(campaign, null, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
@@ -10082,8 +10087,158 @@ export class CampaignScheduler {
     }
   }
 
+  private groupPostShareTargets(steps: RunStepV2[], detail: CampaignInputData | null): GroupPostShareTarget[] {
+    const shareStep = [...steps].reverse().find(x => x.blockName === 'fb_select_group_post_share_targets' && x.status === 'success')
+    const shareOut = ((shareStep?.output as any) || {}) as { selectedTargets?: unknown }
+    const rawSelectedTargets = Array.isArray(shareOut.selectedTargets) ? shareOut.selectedTargets : []
+    const selectedShareTargets: GroupPostShareTarget[] = []
+    const seenShareTargetIds = new Set<number>()
+    for (const item of rawSelectedTargets) {
+      const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      const id = Number(record.id)
+      if (!Number.isFinite(id) || id <= 0 || seenShareTargetIds.has(id)) continue
+      if (detail && id === detail.id) continue
+      const name = this.normalizeGroupPostShareName(record.name)
+      selectedShareTargets.push({
+        id,
+        name: name || `group #${id}`,
+        uid: String(record.uid || '').trim() || undefined
+      })
+      seenShareTargetIds.add(id)
+    }
+    return selectedShareTargets
+  }
+
+  private async finishGroupPostShareTarget(
+    campaign: Campaign, target: GroupPostShareTarget, consumedGroupPostInputDataIds?: Set<number>
+  ): Promise<void> {
+    await this.supabase.updateCampaignInputData(target.id, {
+      status: 'hoàn thành',
+      note: 'Đăng bài dạng chia sẻ'
+    })
+    consumedGroupPostInputDataIds?.add(target.id)
+    await this.logCampaignProgress(campaign, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
+  }
+
+  private groupPostMilestonePayload(
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number, s: RunStepV2,
+    steps: RunStepV2[], explicitOutput?: import('../../shared/actionStatusPolicy').ActionResultOutput
+  ) {
+    const inputDataName = this.getInputDataDisplayName(campaign, detail, '')
+    const out = (s.output as any) || {}
+    const posted = s.status === 'success' && (out.posted === true || out.ok === true
+      || explicitOutput?.operationState === 'committed')
+    const linkStep = [...steps].reverse().find(x => x.blockName === 'fb_get_first_group_post_link' && x.status === 'success')
+    const linkOut = ((linkStep?.output as any) || {}) as { postUrl?: unknown; link?: unknown; rawPostLink?: unknown }
+    const postUrl = posted
+      ? this.cleanPostLinkForStorage(String(linkOut.postUrl || linkOut.link || out.postUrl || ''))
+      : ''
+    const detectStep = [...steps].reverse().find(x => x.blockName === 'fb_detect_pending_post' && x.status === 'success')
+    const detectOut = ((detectStep?.output as any) || {}) as {
+      isPending?: unknown
+      pendingCheckConclusive?: unknown
+      pendingContentUrl?: unknown
+      pendingContentLinks?: unknown
+      source?: unknown
+    }
+    const detectHasIsPending = typeof detectOut.isPending === 'boolean'
+    const pendingCheckConclusive = detectOut.pendingCheckConclusive === false
+      ? false
+      : detectHasIsPending
+    const isPending = detectHasIsPending ? detectOut.isPending === true : postUrl.includes('/pending_posts/')
+    const requiresPostApproval = posted
+      ? (isPending ? true : (pendingCheckConclusive ? false : undefined))
+      : undefined
+    const rawPostLink = String(linkOut.rawPostLink || '').trim()
+    const failureMessage = String(s.error || out.error || out.message || 'Không xác nhận được form đăng bài đã đóng')
+    const status: 'thành công' | 'thất bại' | 'lỗi' =
+      posted ? 'thành công'
+      : s.status === 'error' ? 'lỗi'
+      : 'thất bại'
+    const errorCode = status === 'lỗi'
+      ? this.normalizeRuntimeError(campaign, [s], failureMessage).errorCode
+      : undefined
+    const pendingContentLinks = Array.isArray(detectOut.pendingContentLinks)
+      ? detectOut.pendingContentLinks.map(link => String(link || '').trim()).filter(Boolean)
+      : undefined
+    const pendingApprovalLog = this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive)
+    const action: CreateCampaignDetailInput = {
+      inputDataId: detail?.id,
+      campaignId: campaign.id,
+      accountId,
+      actionCode: this.getPostActionCode(campaign),
+      actionName: 'Đăng bài',
+      status,
+      errorCode,
+      resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
+        subStatusCode: isPending ? 'campaign_detail_post_pending' : null,
+        operationState: 'committed' } : undefined,
+      resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
+      log: posted
+        ? (detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : `Đăng bài thành công${isPending ? ' (chờ duyệt)' : ''}`)
+        : status === 'lỗi'
+          ? (detail ? `Lỗi đăng bài vào ${inputDataName}: ${failureMessage}` : `Lỗi đăng bài: ${failureMessage}`)
+          : (detail ? `Đăng bài thất bại vào ${inputDataName}: ${failureMessage}` : `Đăng bài thất bại: ${failureMessage}`),
+      postUrl: postUrl || undefined,
+      data: {
+        isPending,
+        pendingCheckConclusive,
+        pendingContentUrl: typeof detectOut.pendingContentUrl === 'string' ? detectOut.pendingContentUrl : undefined,
+        pendingContentLinks,
+        pendingSource: typeof detectOut.source === 'string' ? detectOut.source : undefined,
+        rawPostLink: rawPostLink || undefined,
+        postUrl: postUrl || undefined,
+        submitClosed: posted,
+        errorCode,
+        error: posted ? undefined : failureMessage
+      }
+    }
+    return { action, finish: async (
+      createCampaignDetail: (action: CreateCampaignDetailInput) => Promise<CampaignDetail | null>,
+      consumedGroupPostInputDataIds?: Set<number>, explicitInputIds = new Set<number>()
+    ) => {
+      if (posted) {
+        await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
+        const selectedShareTargets = this.groupPostShareTargets(steps, detail)
+        for (const target of selectedShareTargets) {
+          if (explicitInputIds.has(target.id)) continue
+          try {
+            await createCampaignDetail({
+              inputDataId: target.id,
+              campaignId: campaign.id,
+              accountId,
+              actionCode: 'fb_post_group',
+              actionName: 'Đăng bài',
+              status: 'thành công',
+              log: `Đăng bài dạng chia sẻ vào ${target.name}`,
+              data: {
+                shareMode: 'group_composer_add_group',
+                sharedFromInputDataId: detail?.id ?? null,
+                sharedFromName: inputDataName || undefined,
+                targetUid: target.uid
+              }
+            })
+            await this.finishGroupPostShareTarget(campaign, target, consumedGroupPostInputDataIds)
+          } catch (shareErr) {
+            if (shareErr instanceof ResultContractError) throw shareErr
+            console.error('Failed log group post share target:', shareErr)
+          }
+        }
+        await this.logCampaignProgress(campaign, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+        await this.logCampaignProgress(campaign, pendingApprovalLog)
+        if (postUrl) await this.logCampaignProgress(campaign, `🔗 Link bài post: ${postUrl}`)
+        await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
+      } else if (status === 'lỗi') {
+        await this.logCampaignProgress(campaign, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+      } else {
+        await this.logCampaignProgress(campaign, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
+      }
+    } }
+  }
+
   private async logExplicitActionResultStep(
-    campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2, summary: MilestoneSummary
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2, summary: MilestoneSummary,
+    steps: RunStepV2[] = [step], consumedGroupPostInputDataIds?: Set<number>
   ): Promise<void> {
     const outputs = 'actionResults' in step.output ? step.output.actionResults : [step.output.actionResult ?? step.output]
     if (!Array.isArray(outputs) || !outputs.length) throw new ResultContractError('output_invalid', '', 'batch_empty')
@@ -10091,7 +10246,11 @@ export class CampaignScheduler {
     if (!writes) { writes = new Map(); this.explicitMilestoneWrites.set(campaign.id, writes) }
     const newsfeed = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
       ? this.newsfeedMilestonePayload(campaign, detail, accountId, step) : null
-    const emailDetail = this.getZaloActionDetailFromStep(step)
+    const helperDetail = this.getZaloActionDetailFromStep(step)
+    const isGroupVerify = campaign.actionId === 'facebook_group_post' && step.blockName === 'fb_verify_group_post_form_closed'
+    const shareTargets = isGroupVerify ? this.groupPostShareTargets(steps, detail) : []
+    const explicitInputIds = new Set<number>(outputs.filter(row => row?.actionCode === 'fb_post_group')
+      .map(row => row.inputDataId == null ? detail?.id : Number(row.inputDataId)).filter(id => id != null))
     let newsfeedLogged = false
     for (const [index, raw] of outputs.entries()) {
       const output = parseActionResultOutput(raw)
@@ -10102,10 +10261,7 @@ export class CampaignScheduler {
         ?? JSON.stringify([step.runId, step.id ?? step.nodeId, step.startedAt, index])
       // Compare only result fields, not arbitrary context a merge adds to a
       // direct output. The origin belongs to the operation, not its relay node.
-      const signature = JSON.stringify({ actionCode: output.actionCode, statusCode: output.statusCode,
-        subStatusCode: output.subStatusCode, errorCode: output.errorCode, operationState: output.operationState,
-        inputDataId, actionName: row.actionName, message: row.message, data: row.data,
-        emailTrackingMessageId: row.emailTrackingMessageId })
+      const signature = actionResultSignature(row, detail?.id)
       const previous = writes.get(sourceKey)
       if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', output.actionCode, sourceKey)
       let write = previous?.write
@@ -10114,21 +10270,44 @@ export class CampaignScheduler {
         // An uncertain write remains owned by the existing run cleanup path.
         write = (async () => {
           const legacy = newsfeed?.action.actionCode === output.actionCode ? newsfeed : null
-          const emailLegacy = output.actionCode === 'email_send' && emailDetail?.actionCode === output.actionCode
-            && inputDataId === detail?.id ? emailDetail : null
-          const created = await this.supabase.createCampaignDetail({ ...legacy?.action, campaignId: campaign.id, accountId,
+          const helperLegacy = helperDetail?.actionCode === output.actionCode && inputDataId === detail?.id ? helperDetail : null
+          const group = isGroupVerify && output.actionCode === 'fb_post_group' && inputDataId === detail?.id
+            ? this.groupPostMilestonePayload(campaign, detail, accountId, step, steps, output) : null
+          const shareTarget = isGroupVerify && output.actionCode === 'fb_post_group'
+            ? shareTargets.find(target => target.id === inputDataId) : undefined
+          const created = await this.supabase.createCampaignDetail({ ...legacy?.action, ...group?.action, campaignId: campaign.id, accountId,
             inputDataId, actionCode: output.actionCode,
-            actionName: String(row.actionName || legacy?.action.actionName || emailLegacy?.actionName || this.getAccountActionName(output.actionCode)),
-            resultOutput: output, resultSourceKey: sourceKey,
-            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : legacy?.action.log ?? emailLegacy?.log,
-            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : legacy?.action.data ?? emailLegacy?.data })
+            actionName: String(row.actionName || legacy?.action.actionName || helperLegacy?.actionName || group?.action.actionName || this.getAccountActionName(output.actionCode)),
+            resultOutput: group && output.subStatusCode == null
+              ? { ...output, subStatusCode: group.action.resultOutput?.subStatusCode } : output,
+            resultSourceKey: sourceKey,
+            resultGuards: helperLegacy ? {
+              partialDelivery: helperLegacy.deliveryCommitted === true && helperLegacy.status !== 'thành công',
+              operationState: helperLegacy.preventInputRetry ? (helperLegacy.deliveryCommitted ? 'committed' : 'unknown') : undefined,
+              targetOnlyFailure: helperLegacy.countsTowardBadTarget === false && helperLegacy.status !== 'thành công'
+            } : undefined,
+            errorCode: output.errorCode,
+            log: typeof row.message === 'string' ? row.message : legacy?.action.log ?? helperLegacy?.log ?? group?.action.log
+              ?? (shareTarget ? `Đăng bài dạng chia sẻ vào ${shareTarget.name}` : undefined),
+            data: { ...(legacy?.action.data ?? helperLegacy?.data ?? group?.action.data),
+              ...(shareTarget ? { shareMode: 'group_composer_add_group', sharedFromInputDataId: detail?.id ?? null,
+                sharedFromName: this.getInputDataDisplayName(campaign, detail, '') || undefined, targetUid: shareTarget.uid } : {}),
+              ...(row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : {}) } })
+          if (group) await group.finish(async action => {
+            const shared = await this.supabase.createCampaignDetail(action)
+            if (shared) this.recordMilestoneSummary(summary, shared.status, shared.log, shared.actionName)
+            return shared
+          }, consumedGroupPostInputDataIds, explicitInputIds)
+          if (shareTarget && created && output.operationState === 'committed') {
+            await this.finishGroupPostShareTarget(campaign, shareTarget, consumedGroupPostInputDataIds)
+          }
           if (created && output.actionCode === 'email_send') {
             // A batch must identify tracking per result; a wrapper ID cannot
             // be linked to several recipients or overwrite a previous link.
             await this.linkEmailResultTracking(campaign, detail, accountId, step, created,
               row.emailTrackingMessageId ?? (outputs.length === 1 ? step.output.emailTrackingMessageId : undefined))
             if (created.log) await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
-              actionName: created.actionName || emailLegacy?.actionName, log: created.log
+              actionName: created.actionName || helperLegacy?.actionName, log: created.log
             }))
           }
           if (output.errorCode) {
@@ -10574,7 +10753,7 @@ export class CampaignScheduler {
       // legacy adapters (post verification/link/pending checks and ordinals).
       for (const step of steps) {
         if (this.hasExplicitActionResult(step)) {
-          await this.logExplicitActionResultStep(campaign, detail, accountId, step, summary)
+          await this.logExplicitActionResultStep(campaign, detail, accountId, step, summary, steps, consumedGroupPostInputDataIds)
         } else if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
           await this.logNewsfeedMilestoneStep(campaign, detail, accountId, step)
           if (this.newsfeedMilestonePayload(campaign, detail, accountId, step)) {
@@ -11088,132 +11267,10 @@ export class CampaignScheduler {
     for (const s of groupPostVerifySteps) {
       if (!emits(s)) continue
       try {
-        const out = (s.output as any) || {}
-        const posted = s.status === 'success' && (out.posted === true || out.ok === true)
-        const linkStep = [...steps].reverse().find(x => x.blockName === 'fb_get_first_group_post_link' && x.status === 'success')
-        const linkOut = ((linkStep?.output as any) || {}) as { postUrl?: unknown; link?: unknown; rawPostLink?: unknown }
-        const postUrl = posted
-          ? this.cleanPostLinkForStorage(String(linkOut.postUrl || linkOut.link || out.postUrl || ''))
-          : ''
-        const detectStep = [...steps].reverse().find(x => x.blockName === 'fb_detect_pending_post' && x.status === 'success')
-        const detectOut = ((detectStep?.output as any) || {}) as {
-          isPending?: unknown
-          pendingCheckConclusive?: unknown
-          pendingContentUrl?: unknown
-          pendingContentLinks?: unknown
-          source?: unknown
-        }
-        const detectHasIsPending = typeof detectOut.isPending === 'boolean'
-        const pendingCheckConclusive = detectOut.pendingCheckConclusive === false
-          ? false
-          : detectHasIsPending
-        const isPending = detectHasIsPending ? detectOut.isPending === true : postUrl.includes('/pending_posts/')
-        const requiresPostApproval = posted
-          ? (isPending ? true : (pendingCheckConclusive ? false : undefined))
-          : undefined
-        const rawPostLink = String(linkOut.rawPostLink || '').trim()
-        const failureMessage = String(s.error || out.error || out.message || 'Không xác nhận được form đăng bài đã đóng')
-        const status: 'thành công' | 'thất bại' | 'lỗi' =
-          posted ? 'thành công'
-          : s.status === 'error' ? 'lỗi'
-          : 'thất bại'
-        const errorCode = status === 'lỗi'
-          ? this.normalizeRuntimeError(campaign, [s], failureMessage).errorCode
-          : undefined
-        const pendingContentLinks = Array.isArray(detectOut.pendingContentLinks)
-          ? detectOut.pendingContentLinks.map(link => String(link || '').trim()).filter(Boolean)
-          : undefined
-        const pendingApprovalLog = this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive)
-        await createCampaignDetail({
-          inputDataId: detail?.id,
-          campaignId: campaign.id,
-          accountId,
-          actionCode: this.getPostActionCode(campaign),
-          actionName: 'Đăng bài',
-          status,
-          errorCode,
-          resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
-            subStatusCode: isPending ? 'campaign_detail_post_pending' : null,
-            operationState: 'committed' } : undefined,
-          resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
-          log: posted
-            ? (detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : `Đăng bài thành công${isPending ? ' (chờ duyệt)' : ''}`)
-            : status === 'lỗi'
-              ? (detail ? `Lỗi đăng bài vào ${inputDataName}: ${failureMessage}` : `Lỗi đăng bài: ${failureMessage}`)
-              : (detail ? `Đăng bài thất bại vào ${inputDataName}: ${failureMessage}` : `Đăng bài thất bại: ${failureMessage}`),
-          postUrl: postUrl || undefined,
-          data: {
-            isPending,
-            pendingCheckConclusive,
-            pendingContentUrl: typeof detectOut.pendingContentUrl === 'string' ? detectOut.pendingContentUrl : undefined,
-            pendingContentLinks,
-            pendingSource: typeof detectOut.source === 'string' ? detectOut.source : undefined,
-            rawPostLink: rawPostLink || undefined,
-            postUrl: postUrl || undefined,
-            submitClosed: posted,
-            errorCode,
-            error: posted ? undefined : failureMessage
-          }
-        })
-        if (posted) {
-          await this.syncGroupPostContactStatus(accountId, detail, requiresPostApproval)
-          const shareStep = [...steps].reverse().find(x => x.blockName === 'fb_select_group_post_share_targets' && x.status === 'success')
-          const shareOut = ((shareStep?.output as any) || {}) as { selectedTargets?: unknown }
-          const rawSelectedTargets = Array.isArray(shareOut.selectedTargets) ? shareOut.selectedTargets : []
-          const selectedShareTargets: GroupPostShareTarget[] = []
-          const seenShareTargetIds = new Set<number>()
-          for (const item of rawSelectedTargets) {
-            const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
-            const id = Number(record.id)
-            if (!Number.isFinite(id) || id <= 0 || seenShareTargetIds.has(id)) continue
-            if (detail && id === detail.id) continue
-            const name = this.normalizeGroupPostShareName(record.name)
-            selectedShareTargets.push({
-              id,
-              name: name || `group #${id}`,
-              uid: String(record.uid || '').trim() || undefined
-            })
-            seenShareTargetIds.add(id)
-          }
-          for (const target of selectedShareTargets) {
-            try {
-              await createCampaignDetail({
-                inputDataId: target.id,
-                campaignId: campaign.id,
-                accountId,
-                actionCode: 'fb_post_group',
-                actionName: 'Đăng bài',
-                status: 'thành công',
-                log: `Đăng bài dạng chia sẻ vào ${target.name}`,
-                data: {
-                  shareMode: 'group_composer_add_group',
-                  sharedFromInputDataId: detail?.id ?? null,
-                  sharedFromName: inputDataName || undefined,
-                  targetUid: target.uid
-                }
-              })
-              await this.supabase.updateCampaignInputData(target.id, {
-                status: 'hoàn thành',
-                note: 'Đăng bài dạng chia sẻ'
-              })
-              consumedGroupPostInputDataIds?.add(target.id)
-              await this.logCampaignProgress(campaign, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
-            } catch (shareErr) {
-              console.error('Failed log group post share target:', shareErr)
-            }
-          }
-          await this.logCampaignProgress(campaign, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
-          await this.logCampaignProgress(campaign, pendingApprovalLog)
-          if (postUrl) await this.logCampaignProgress(campaign, `🔗 Link bài post: ${postUrl}`)
-          await this.enqueuePostBumpAfterGroupPost(campaign, postUrl, isPending)
-          await flushScreenshotLogsForStep(s)
-        } else if (status === 'lỗi') {
-          await this.logCampaignProgress(campaign, `❌ Lỗi đăng bài${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
-          await flushScreenshotLogsForStep(s)
-        } else {
-          await this.logCampaignProgress(campaign, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
-          await flushScreenshotLogsForStep(s)
-        }
+        const milestone = this.groupPostMilestonePayload(campaign, detail, accountId, s, steps)
+        await createCampaignDetail(milestone.action)
+        await milestone.finish(createCampaignDetail, consumedGroupPostInputDataIds)
+        await flushScreenshotLogsForStep(s)
       } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log group post:', err) }
     }
 
@@ -14642,6 +14699,7 @@ export class CampaignScheduler {
       countsTowardBadTarget: partialSend.mediaTimeout ? detail.countsTowardBadTarget : false,
       resetInputToPending: false,
       preventInputRetry: true,
+      deliveryCommitted: true,
       pendingNote: undefined,
       data: {
         ...(detail.data || {}),

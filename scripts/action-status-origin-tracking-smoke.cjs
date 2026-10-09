@@ -31,14 +31,20 @@ function js(id, code, blockName = id) {
 const edge = (source, target, sourceHandle) => ({ id: `${source}-${target}`, source, target, sourceHandle })
 async function run(f, nodes, edges, realtime = true, runtimeHelpers) {
   let progress = Promise.resolve()
+  const abort = new AbortController()
+  const boundary = new f.runtime.ActionResultBoundary(1, () => abort.abort())
   const executed = await new WorkflowEngineV2().run({ id: 7, nodes, edges }, {}, null, {
-    persist: false, runtimeHelpers,
+    persist: false, runtimeHelpers, signal: abort.signal,
     onStepProgress: step => {
-      if (step.status === 'success') f.runtime.validateActionResultStep(1, step.output)
-      if (realtime) progress = progress.then(() => f.realtime(step))
+      const accepted = boundary.observe(step)
+      if (accepted && realtime) progress = progress.then(() => f.realtime(step))
     }
   })
   await progress
+  if (boundary.error) {
+    await f.final(boundary.accepted(executed.steps))
+    throw boundary.error
+  }
   assert.equal(executed.status, 'completed')
   // Simulate the UI/IPC roundtrip too, not only shared in-memory references.
   const cloned = JSON.parse(JSON.stringify(executed.steps))
@@ -163,4 +169,5 @@ async function main() {
   await emails(zca)
   console.log(JSON.stringify({ scenarios, external_operations: 0 }))
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { WorkflowEngineV2, js, edge, output, run }
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })

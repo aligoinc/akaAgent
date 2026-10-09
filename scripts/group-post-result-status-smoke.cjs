@@ -8,10 +8,16 @@ const source = fs.readFileSync(path.join(root, 'src/main/services/campaignSchedu
 const start = source.indexOf('    const groupPostVerifySteps =')
 const end = source.indexOf('    // Timeline/Reels only report success', start)
 assert(start > 0 && end > start)
-const compiled = ts.transpileModule(`module.exports = async function({steps,campaign,accountId,detail,inputDataName,createCampaignDetail,flushScreenshotLogsForStep}) {
+const ast = ts.createSourceFile('scheduler.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+const cls = ast.statements.find(s => ts.isClassDeclaration(s) && s.name.text === 'CampaignScheduler')
+const methods = cls.members.filter(m => ['groupPostMilestonePayload', 'groupPostShareTargets'].includes(m.name?.getText(ast)))
+  .map(m => m.getText(ast).replace(/^private /, '')).join('\n')
+const compiled = ts.transpileModule(`module.exports = class { ${methods}
+ async run({steps,campaign,accountId,detail,inputDataName,createCampaignDetail,flushScreenshotLogsForStep}) {
  const emits = () => true
+ const consumedGroupPostInputDataIds = new Set()
  ${source.slice(start, end)}
-}`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
+} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
 const context = { module: { exports: null }, ResultContractError: class extends Error {}, console: { error: (...args) => { throw new Error(args.join(' ')) } } }
 vm.runInNewContext(compiled, context)
 async function check({ detector, url = '', posted = true, expectedSub = null }) {
@@ -19,12 +25,12 @@ async function check({ detector, url = '', posted = true, expectedSub = null }) 
  const steps = [{ id:'verify', blockName:'fb_verify_group_post_form_closed', status:'success', output:{posted,postVisible:true} }]
  if (detector) steps.push({blockName:'fb_detect_pending_post',status:'success',output:detector})
  if (url) steps.push({blockName:'fb_get_first_group_post_link',status:'success',output:{postUrl:url}})
- await context.module.exports.call({
-  cleanPostLinkForStorage: x => x, getPostActionCode: () => 'fb_post_group',
+ await context.module.exports.prototype.run.call(Object.assign(new context.module.exports(), {
+  getInputDataDisplayName: () => 'Fixture group', cleanPostLinkForStorage: x => x, getPostActionCode: () => 'fb_post_group',
   formatGroupPendingProgressLog: () => 'existing progress',
   syncGroupPostContactStatus: async (_account,_detail,value) => approvals.push(value),
   logCampaignProgress: async () => {}, enqueuePostBumpAfterGroupPost: async () => {}
- }, { steps,campaign:{id:1,actionId:'facebook_group_post'},accountId:1,detail:{id:2},inputDataName:'Fixture group',
+ }), { steps,campaign:{id:1,actionId:'facebook_group_post'},accountId:1,detail:{id:2},inputDataName:'Fixture group',
   createCampaignDetail: async detail => details.push(detail),flushScreenshotLogsForStep:async()=>{} })
  assert.equal(details.length,1)
  assert.equal(details[0].status,posted?'thành công':'thất bại')
