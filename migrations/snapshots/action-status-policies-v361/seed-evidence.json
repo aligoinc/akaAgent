@@ -1,0 +1,524 @@
+{
+  "rows": [
+    {
+      "status_code": "campaign_detail_success",
+      "action_code": null,
+      "report_group": "success",
+      "counts_toward_limit": true,
+      "bad_target_effect": "reset",
+      "reset_error_streak": true,
+      "input_effect": "complete",
+      "description": "Thao tác chính đã được xác nhận thành công: tính lượt, đặt lại chuỗi lỗi; chốt input sau khi tổng hợp các hành động. Gửi yêu cầu thành công không cần chờ bên nhận chấp thuận.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#createZaloSuccessDetail/logFacebookFriendMilestone/emailSendMessage",
+        "src/main/data/repositories/campaignRepository.ts#createCampaignDetail",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#runStep"
+      ],
+      "verified_actions": [
+        "fb_add_friend",
+        "fb_join_group",
+        "fb_post_group",
+        "fb_post_my_profile",
+        "fb_post_page",
+        "fb_comment",
+        "fb_message_friend",
+        "fb_message_stranger",
+        "fb_message_page_inbox_customer",
+        "fb_like_post",
+        "fb_group_invite",
+        "zalo_add_friend",
+        "zalo_add_group_member",
+        "zalo_join_group_link",
+        "zalo_message_friend",
+        "zalo_message_stranger",
+        "zalo_message_group",
+        "zalo_find_phone_user",
+        "email_send"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_failed",
+      "action_code": null,
+      "report_group": "failure",
+      "counts_toward_limit": true,
+      "bad_target_effect": "increment",
+      "reset_error_streak": true,
+      "input_effect": "complete",
+      "description": "Thao tác thất bại thông thường: ghi thất bại và tính lượt theo writer hiện có. Policy lỗi và guard gửi một phần/hành động phụ được kết hợp riêng; không tự phát lại thao tác.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#recordMilestoneSummary/emailSendMessage",
+        "src/main/data/repositories/campaignRepository.ts#createCampaignDetail",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "fb_post_group",
+        "fb_post_my_profile",
+        "fb_post_page",
+        "fb_comment",
+        "fb_message_friend",
+        "fb_message_stranger",
+        "fb_join_group",
+        "zalo_message_friend",
+        "zalo_message_stranger",
+        "zalo_message_group",
+        "email_send"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_error",
+      "action_code": null,
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "increment",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Lỗi của kết quả thông thường: báo cáo thất bại, không tính lượt mặc định. Không thay cách diễn giải detail_status NULL, khóa/dừng hoặc requeue của policy lỗi legacy.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#recordMilestoneSummary/logCampaignMilestones",
+        "src/main/data/repositories/campaignRepository.ts#createCampaignDetail"
+      ],
+      "verified_actions": [
+        "fb_post_group",
+        "fb_post_my_profile",
+        "fb_post_page",
+        "fb_comment",
+        "fb_message_friend",
+        "fb_message_stranger",
+        "fb_message_page_inbox_customer"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_skipped",
+      "action_code": null,
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Bỏ qua mà không thực hiện thao tác mới: không tính lượt và không thay chuỗi target lỗi.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#logFacebookFriendMilestone (legacy_skipped)"
+      ],
+      "verified_actions": [
+        "fb_add_friend"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_already_friend",
+      "action_code": null,
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Quan hệ hoặc yêu cầu đã tồn tại từ trước; giữ mã trạng thái chính riêng. Không có thao tác mới để tính lượt; không thay chuỗi target lỗi.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#logFacebookFriendMilestone / err_zalo_already_friend"
+      ],
+      "verified_actions": [
+        "fb_add_friend",
+        "zalo_add_friend"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_invitation_sent",
+      "action_code": null,
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Quan hệ hoặc yêu cầu đã tồn tại từ trước; giữ mã trạng thái chính riêng. Không có thao tác mới để tính lượt; không thay chuỗi target lỗi.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#logFacebookFriendMilestone / err_zalo_friend_request_sent"
+      ],
+      "verified_actions": [
+        "fb_add_friend",
+        "zalo_add_friend"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_already_member",
+      "action_code": null,
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Quan hệ hoặc yêu cầu đã tồn tại từ trước; giữ mã trạng thái chính riêng. Không có thao tác mới để tính lượt; không thay chuỗi target lỗi.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#err_zalo_group_member_already_exists"
+      ],
+      "verified_actions": [
+        "zalo_add_group_member"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_joined",
+      "action_code": null,
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Quan hệ hoặc yêu cầu đã tồn tại từ trước; giữ mã trạng thái chính riêng. Không có thao tác mới để tính lượt; không thay chuỗi target lỗi.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#already_joined branch"
+      ],
+      "verified_actions": [
+        "fb_join_group",
+        "zalo_join_group_link"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_not_found",
+      "action_code": null,
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Không tồn tại: nhóm báo cáo thất bại; mặc định không tính lượt và không thay chuỗi target lỗi. Lượt tra cứu Zalo vẫn theo auto_error; mời nhóm Facebook có policy riêng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#emailSendMessage / fb_message_page_inbox_customer",
+        "src/main/data/repositories/reportRepository.ts"
+      ],
+      "verified_actions": [
+        "email_send",
+        "fb_message_page_inbox_customer"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_not_found",
+      "action_code": "fb_group_invite",
+      "report_group": "skipped",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Không tìm thấy đối tượng để mời nhóm Facebook được báo cáo bỏ qua theo report hiện tại.",
+      "evidence": [
+        "src/main/data/repositories/reportRepository.ts#FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES"
+      ],
+      "verified_actions": [
+        "fb_group_invite"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_error",
+      "action_code": "fb_join_group",
+      "report_group": "failure",
+      "counts_toward_limit": true,
+      "bad_target_effect": "increment",
+      "reset_error_streak": true,
+      "input_effect": "complete",
+      "description": "Nhánh lỗi tham gia nhóm Facebook hiện tính lượt khi outcome không phải already_joined; bảo toàn khác biệt này.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#FACEBOOK_JOIN_GROUP_ACTION_ID: shouldCountAction = outcome !== already_joined",
+        "src/main/data/repositories/campaignRepository.ts#createCampaignDetail"
+      ],
+      "verified_actions": [
+        "fb_join_group"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_success",
+      "action_code": "zalo_tag_contact",
+      "report_group": "success",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_tag_contact"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_failed",
+      "action_code": "zalo_tag_contact",
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_tag_contact"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_error",
+      "action_code": "zalo_tag_contact",
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_tag_contact"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_success",
+      "action_code": "zalo_change_alias",
+      "report_group": "success",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_change_alias"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_failed",
+      "action_code": "zalo_change_alias",
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_change_alias"
+      ]
+    },
+    {
+      "status_code": "campaign_detail_error",
+      "action_code": "zalo_change_alias",
+      "report_group": "failure",
+      "counts_toward_limit": false,
+      "bad_target_effect": "ignore",
+      "reset_error_streak": false,
+      "input_effect": "complete",
+      "description": "Hành động phụ gắn tag/đổi tên: không tính lượt, không tăng hoặc reset bộ đếm target lỗi; giữ kết quả và xử lý lỗi tương ứng.",
+      "evidence": [
+        "src/main/services/campaignScheduler.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts#isAuxiliaryZaloTargetAction",
+        "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+      ],
+      "verified_actions": [
+        "zalo_change_alias"
+      ]
+    }
+  ],
+  "newStatuses": [
+    {
+      "code": "campaign_detail_skipped",
+      "name": "Bỏ qua",
+      "status_key": "skipped",
+      "status_value": "bỏ qua",
+      "description": "Không thực hiện một thao tác mới. Policy trạng thái chính quyết định cách đếm.",
+      "is_terminal": true,
+      "sort_order": 200
+    },
+    {
+      "code": "campaign_detail_post_pending",
+      "name": "Chờ duyệt bài",
+      "status_key": "post_pending",
+      "status_value": "chờ duyệt bài",
+      "description": "Quan sát sau đăng bài thành công: có bằng chứng đang chờ duyệt. Khi dùng làm subStatusCode chỉ phục vụ báo cáo/Automation, không thay policy chính.",
+      "is_terminal": false,
+      "sort_order": 210
+    },
+    {
+      "code": "campaign_detail_post_visible",
+      "name": "Đã hiển thị bài",
+      "status_key": "post_visible",
+      "status_value": "đã hiển thị bài",
+      "description": "Quan sát xác nhận bài đã hiển thị; không suy ra từ việc chưa phát hiện chờ duyệt. Khi dùng làm subStatusCode không thay policy chính.",
+      "is_terminal": false,
+      "sort_order": 220
+    }
+  ],
+  "source": {
+    "desktop": "src/main/services/campaignScheduler.ts",
+    "writer": "src/main/data/repositories/campaignRepository.ts#createCampaignDetail",
+    "report": "src/main/data/repositories/reportRepository.ts",
+    "chat": "akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts",
+    "chatWriter": "akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts#createDetail"
+  },
+  "status_values": [
+    {
+      "id": 20,
+      "code": "campaign_detail_success",
+      "status_value": "thành công"
+    },
+    {
+      "id": 21,
+      "code": "campaign_detail_failed",
+      "status_value": "thất bại"
+    },
+    {
+      "id": 22,
+      "code": "campaign_detail_error",
+      "status_value": "lỗi"
+    },
+    {
+      "id": 23,
+      "code": "campaign_detail_clicked",
+      "status_value": "đã click"
+    },
+    {
+      "id": 24,
+      "code": "campaign_detail_alias_changed",
+      "status_value": "đã đổi tên"
+    },
+    {
+      "id": 25,
+      "code": "campaign_detail_tag_applied",
+      "status_value": "đã gắn tag"
+    },
+    {
+      "id": 26,
+      "code": "campaign_detail_sent",
+      "status_value": "đã gửi"
+    },
+    {
+      "id": 27,
+      "code": "campaign_detail_invitation_sent",
+      "status_value": "đã gửi lời mời"
+    },
+    {
+      "id": 28,
+      "code": "campaign_detail_friend_request_sent",
+      "status_value": "đã gửi lời mời kết bạn"
+    },
+    {
+      "id": 29,
+      "code": "campaign_detail_message_sent",
+      "status_value": "đã gửi tin nhắn"
+    },
+    {
+      "id": 30,
+      "code": "campaign_detail_already_friend",
+      "status_value": "đã là bạn bè"
+    },
+    {
+      "id": 31,
+      "code": "campaign_detail_already_member",
+      "status_value": "đã là thành viên"
+    },
+    {
+      "id": 32,
+      "code": "campaign_detail_received",
+      "status_value": "đã nhận"
+    },
+    {
+      "id": 33,
+      "code": "campaign_detail_joined",
+      "status_value": "đã tham gia"
+    },
+    {
+      "id": 34,
+      "code": "campaign_detail_viewed",
+      "status_value": "đã xem"
+    },
+    {
+      "id": 35,
+      "code": "campaign_detail_calling",
+      "status_value": "đang gọi"
+    },
+    {
+      "id": 36,
+      "code": "campaign_detail_not_found",
+      "status_value": "không tồn tại"
+    },
+    {
+      "id": 37,
+      "code": "campaign_detail_tag_not_found",
+      "status_value": "tag không tồn tại"
+    },
+    {
+      "id": 38,
+      "code": "campaign_detail_invalid_parameter",
+      "status_value": "tham số không hợp lệ"
+    }
+  ],
+  "unseeded_main_statuses": [
+    {
+      "id": 23,
+      "code": "campaign_detail_clicked",
+      "status_value": "đã click"
+    },
+    {
+      "id": 24,
+      "code": "campaign_detail_alias_changed",
+      "status_value": "đã đổi tên"
+    },
+    {
+      "id": 25,
+      "code": "campaign_detail_tag_applied",
+      "status_value": "đã gắn tag"
+    },
+    {
+      "id": 26,
+      "code": "campaign_detail_sent",
+      "status_value": "đã gửi"
+    },
+    {
+      "id": 28,
+      "code": "campaign_detail_friend_request_sent",
+      "status_value": "đã gửi lời mời kết bạn"
+    },
+    {
+      "id": 29,
+      "code": "campaign_detail_message_sent",
+      "status_value": "đã gửi tin nhắn"
+    },
+    {
+      "id": 32,
+      "code": "campaign_detail_received",
+      "status_value": "đã nhận"
+    },
+    {
+      "id": 34,
+      "code": "campaign_detail_viewed",
+      "status_value": "đã xem"
+    },
+    {
+      "id": 35,
+      "code": "campaign_detail_calling",
+      "status_value": "đang gọi"
+    },
+    {
+      "id": 37,
+      "code": "campaign_detail_tag_not_found",
+      "status_value": "tag không tồn tại"
+    },
+    {
+      "id": 38,
+      "code": "campaign_detail_invalid_parameter",
+      "status_value": "tham số không hợp lệ"
+    }
+  ],
+  "note": "An unseeded status may be a secondary observation. Using it as a main result requires an explicit verified policy; absence never infers its role."
+}

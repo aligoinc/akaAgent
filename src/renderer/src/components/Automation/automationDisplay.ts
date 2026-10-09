@@ -10,6 +10,8 @@ type AutomationTriggerDisplayValue = Pick<
 > & {
   statusMappingId?: number | null
   semanticStatusId?: number | null
+  subStatusIds?: number[] | null
+  subStatusLabels?: string[] | null
 }
 
 type AutomationTriggerIdentityValue = Pick<
@@ -83,7 +85,8 @@ export const formatAutomationTriggerLabel = (
   trigger: AutomationTriggerDisplayValue
 ): string => {
   const statusLabel = String(trigger.statusLabel || trigger.status || '').trim() || 'Không rõ trạng thái'
-  return `${statusLabel} — ${getAutomationTriggerScopeLabel(trigger)}`
+  const secondary = trigger.subStatusIds?.map((id, index) => trigger.subStatusLabels?.[index] || `#${id}`).join(' / ')
+  return `${statusLabel}${secondary ? ` (${secondary})` : ''} — ${getAutomationTriggerScopeLabel(trigger)}`
 }
 
 const formatFixedAt = (value?: string | null): string => {

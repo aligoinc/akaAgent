@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-09T10:26:53.756Z",
+  "completed": [
+    "auto_detail_result_key_uq",
+    "auto_detail_status_id_idx",
+    "auto_detail_sub_status_id_idx",
+    "auto_detail_action_status_policy_id_idx"
+  ]
+}

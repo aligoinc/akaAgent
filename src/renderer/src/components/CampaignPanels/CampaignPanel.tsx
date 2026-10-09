@@ -4590,7 +4590,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             ...buildTargetExportFields(targetInfo, campaignDetailExportTargetColumns),
             'SIM': voice.simSlot === '-' ? '' : voice.simSlot,
             'Hành động': detail.actionName || '',
-            'Trạng thái': detail.status,
+            'Trạng thái': detail.statusPresentation?.name || detail.status,
+            'Trạng thái phụ': detail.subStatusPresentation?.name || '',
             'Nội dung cuộc gọi': voice.content,
             'Xác minh bắt máy': voice.answerVerified ? 'Có' : 'Không',
             'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
@@ -4613,7 +4614,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             'Nhà mạng': sms.carrierLabel === '-' ? '' : sms.carrierLabel,
             'SIM': sms.simSlot === '-' ? '' : sms.simSlot,
             'Hành động': detail.actionName || '',
-            'Trạng thái': detail.status,
+            'Trạng thái': detail.statusPresentation?.name || detail.status,
+            'Trạng thái phụ': detail.subStatusPresentation?.name || '',
             'Nội dung SMS': sms.content,
             'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
             'Chi tiết': detail.log || '',
@@ -4631,7 +4633,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           'Thời gian': detail.createdAt ? new Date(detail.createdAt).toLocaleString('vi-VN') : '',
           ...buildTargetExportFields(targetInfo, campaignDetailTargetColumns),
           'Hành động': detail.actionName || '',
-          'Trạng thái': detail.status,
+          'Trạng thái': detail.statusPresentation?.name || detail.status,
+            'Trạng thái phụ': detail.subStatusPresentation?.name || '',
           'Kích hoạt tự động hóa': (detail.triggeredAutomations || []).map(item => item.automationName).join(', '),
           'Chi tiết': detail.log || '',
           'Link bài viết': detail.postUrl || '',
@@ -7110,7 +7113,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                       <tbody>
                         {filteredCampaignDetails.map(a => {
                           const createdAtLabel = formatDisplayDateTime(a.createdAt)
-                          const statusLabel = getDetailStatusLabel(a.status)
+                          const statusLabel = a.statusPresentation?.name || getDetailStatusLabel(a.status)
                           const detailLogTitle = getCampaignDetailLogTitle(a)
                           const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
                           const voiceDetail = isSelectedVoiceCallCampaign ? getVoiceCallCampaignDetailInfo(a) : null
@@ -7161,9 +7164,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                                 </>
                               )}
                               <td title={statusLabel}>
-                                <span style={{ color: getStatusColor(a.status) }}>
+                                <span style={{ color: a.statusPresentation?.color || getStatusColor(a.status) }}>
                                   {statusLabel}
                                 </span>
+                                {a.subStatusPresentation && <div style={{ color: a.subStatusPresentation.color || 'var(--text-tertiary)', fontSize: '0.85em' }}>
+                                  {a.subStatusPresentation.name}
+                                </div>}
                               </td>
                               {selectedCampaignAccount?.flatformType === 'zalo' && <td style={{ whiteSpace: 'pre-line', minWidth: 210 }} title={a.zaloEngagement ? `Theo dõi đến ${formatDisplayDateTime(a.zaloEngagement.tracking_until)}` : undefined}>
                                 {engagementDisplay(a.zaloEngagement, a.zaloEngagementApplicable ?? (engagementApplicable(a.actionCode) && a.status === 'thành công' && !selectedCampaignAccount.isZaloShowWeb))}

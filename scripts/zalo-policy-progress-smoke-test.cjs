@@ -9,6 +9,7 @@ const source = ts.createSourceFile('scheduler.ts', sourceText, ts.ScriptTarget.L
 const schedulerClass = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'CampaignScheduler')
 const compile = code => ts.transpileModule(code, {compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS}}).outputText
 function methods(names, globals = {}) {
+  globals = { managesActionResult: () => false, managedTargetEffects: () => null, ...globals }
   const code = names.map(name => {
     const node = schedulerClass.members.find(n => ts.isMethodDeclaration(n) && n.name.getText(source) === name)
     assert(node, name)

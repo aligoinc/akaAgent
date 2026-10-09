@@ -1,3 +1,4 @@
+import { resultReportFilter, storedReportGroup } from '../../../shared/resultReport'
 import { ReportReadFlights, reportFlightKey } from '../../domain/reports/reportReadFlights'
 import { completedReportCursor, pendingReportPartitions, pendingReportFilter, readPendingReportPage } from '../../domain/reports/reportPaging'
 import {
@@ -47,6 +48,8 @@ interface ReportDetailRow {
   account_id: number | null
   action_code: string | null
   status: CampaignDetailStatus
+  report_group?: AccountActionReportStatusBucket | null
+  input_data_id?: number | null
 }
 
 interface PendingInputRow {
@@ -71,6 +74,8 @@ interface CampaignDetailRecord {
   created_at: string | null
   auto_campaigns?: Record<string, unknown> | Record<string, unknown>[] | null
   report_input?: Record<string, unknown> | Record<string, unknown>[] | null
+  main_status?: Record<string, unknown> | Record<string, unknown>[] | null
+  sub_status?: Record<string, unknown> | Record<string, unknown>[] | null
 }
 
 interface PendingDetailInputRow {
@@ -341,6 +346,8 @@ function mapCampaignDetailRecordToRow(
     targetPhone,
     targetEmail,
     status: detail.status,
+    statusLabel: textValue(getNestedObject(detail.main_status)?.name),
+    subStatusLabel: textValue(getNestedObject(detail.sub_status)?.name),
     detailText: detailParts.join('\n') || null,
     postUrl
   }
@@ -519,16 +526,17 @@ async function loadAccountActionReport(input: AccountActionReportQuery): Promise
   }
 
   const accountIds = accounts.map(account => account.id)
+  const pendingResultInputs = new Set<string>()
 
   let detailAfterId = 0
   while (true) {
     let detailQuery = client()
       .from('auto_campaign_details')
-      .select('id, account_id, action_code, status')
+      .select('id, input_data_id, account_id, action_code, status, report_group')
       .eq('is_delete', false)
       .in('account_id', accountIds)
       .in('action_code', actionCodes)
-      .in('status', REPORT_COUNT_DETAIL_STATUSES)
+      .or(resultReportFilter('all', REPORT_COUNT_DETAIL_STATUSES))
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('id', { ascending: true })
@@ -545,8 +553,11 @@ async function loadAccountActionReport(input: AccountActionReportQuery): Promise
       if (!reportRow || !actionCodeSet.has(actionCode)) continue
 
       const cell = reportRow.countsByActionCode[actionCode] || makeEmptyCell()
-      const bucket = getReportDetailBucket(actionCode, detail.status)
-      if (bucket === 'success') cell.successCount += 1
+      const bucket = storedReportGroup(detail.report_group) || getReportDetailBucket(actionCode, detail.status)
+      if (bucket === 'pending') {
+        cell.pendingCount += 1
+        if (detail.input_data_id != null) pendingResultInputs.add(`${detail.input_data_id}:${actionCode}`)
+      } else if (bucket === 'success') cell.successCount += 1
       else if (bucket === 'skipped') cell.skippedCount += 1
       else if (bucket === 'failure') cell.failureCount += 1
       reportRow.countsByActionCode[actionCode] = cell
@@ -563,7 +574,7 @@ async function loadAccountActionReport(input: AccountActionReportQuery): Promise
       if (!row) continue
       for (const action of pendingCampaignActions(campaign)) {
         const cell = row.countsByActionCode[action.code]
-        if (cell) cell.pendingCount += 1
+        if (cell && !pendingResultInputs.has(`${input.id}:${action.code}`)) cell.pendingCount += 1
       }
     }
   })
@@ -581,10 +592,10 @@ async function getCampaignDetailRows(
   account: AccountActionReportAccount,
   action: AccountActionReportAction,
   staffId: number,
-  organizationId: number
+  organizationId: number,
+  signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
 ): Promise<AccountActionReportDetailResult> {
-  const signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
-  const statuses = getDetailStatuses(query.statusBucket, query.actionCode)
+  const statuses = query.statusBucket === 'pending' ? [] : getDetailStatuses(query.statusBucket, query.actionCode)
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
   const rows: CampaignDetailRecord[] = []
   let total = 0
@@ -605,6 +616,8 @@ async function getCampaignDetailRows(
         data,
         post_url,
         created_at,
+        main_status:auto_status!auto_detail_status_fk(name),
+        sub_status:auto_status!auto_detail_sub_status_fk(name),
         auto_campaigns(id,name,staff_id,organization_id),
         report_input:auto_campaign_input_data!auto_campaign_details_input_data_id_fkey(name,uid,phone,email,auto_campaigns!inner(staff_id,organization_id))
       `, query.exportAll ? {} : { count: 'exact' })
@@ -615,13 +628,12 @@ async function getCampaignDetailRows(
       .eq('auto_campaigns.organization_id', organizationId)
       .eq('report_input.auto_campaigns.staff_id', staffId)
       .eq('report_input.auto_campaigns.organization_id', organizationId)
-      .in('status', statuses)
+      .or(resultReportFilter(query.statusBucket, statuses, after ? completedReportCursor(after) : undefined))
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
     if (query.exportAll) {
-      if (after) request = request.or(completedReportCursor(after))
       request = request.limit(PAGE_SIZE)
     } else request = request.range(from, to)
 
@@ -667,21 +679,26 @@ async function getPendingDetailRows(
   staffId: number,
   organizationId: number
 ): Promise<AccountActionReportDetailResult> {
-  const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
-  const limit = query.pageSize || DETAIL_PAGE_SIZE
   const signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
+  const saved = await getCampaignDetailRows(query, account, action, staffId, organizationId, signal)
+  const offset = Math.max(0, ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE) - saved.total)
+  const limit = query.exportAll ? (query.pageSize || DETAIL_PAGE_SIZE) : Math.max(0, (query.pageSize || DETAIL_PAGE_SIZE) - saved.rows.length)
   const campaigns = await loadPendingReportCampaigns(staffId, organizationId, [account.id], [action.code], signal)
   const campaignById = new Map(campaigns.map(row => [Number(row.id), row]))
   const partitions = pendingReportPartitions(campaigns.map(row => ({ id: Number(row.id), schedule: row.schedule })), query.startIso, query.endIso)
   const result = await readPendingReportPage<PendingDetailInputRow>(partitions, offset, limit, !!query.exportAll, async (partition, page) => {
     let request = client().from('auto_campaign_input_data')
       .select(page.head
-        ? 'id,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)'
-        : 'id,campaign_id,name,phone,uid,email,note,schedule,created_at,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id)',
+        ? 'id,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id),pending_result:auto_campaign_details!auto_campaign_details_input_data_id_fkey()'
+        : 'id,campaign_id,name,phone,uid,email,note,schedule,created_at,auto_campaigns!inner(staff_id,organization_id,is_delete,account_id),pending_result:auto_campaign_details!auto_campaign_details_input_data_id_fkey()',
         page.head ? { count: 'exact', head: true } : {})
       .in('campaign_id', partition.campaignIds).eq('is_delete', false).eq('status', 'chờ xử lý')
       .eq('auto_campaigns.staff_id', staffId).eq('auto_campaigns.organization_id', organizationId)
       .eq('auto_campaigns.is_delete', false).eq('auto_campaigns.account_id', account.id)
+      .eq('pending_result.report_group', 'pending').eq('pending_result.action_code', action.code)
+      .eq('pending_result.account_id', account.id).eq('pending_result.is_delete', false)
+      .gte('pending_result.created_at', query.startIso).lt('pending_result.created_at', query.endIso)
+      .is('pending_result', null)
       .or(pendingReportFilter(partition, query.startIso, query.endIso, page.after))
     if (!page.head) {
       request = request.order('campaign_id').order('id')
@@ -699,14 +716,15 @@ async function getPendingDetailRows(
     const descriptor = pendingCampaignActions(campaign).find(item => item.code === action.code)
     return [mapPendingInputRecordToRow(input, account, { ...action, name: descriptor?.name || action.name }, campaign, effectiveSchedule)]
   })
-  const total = result.total
+  rows.unshift(...saved.rows)
+  const total = saved.total + result.total
 
   return {
     query,
     rows,
     total,
     page: query.exportAll ? 1 : query.page || 1,
-    pageSize: query.exportAll ? Math.max(rows.length, 1) : limit,
+    pageSize: query.exportAll ? Math.max(rows.length, 1) : (query.pageSize || DETAIL_PAGE_SIZE),
     generatedAt: new Date().toISOString(),
     accountName: account.name,
     actionName: action.name,

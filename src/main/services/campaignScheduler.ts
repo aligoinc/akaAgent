@@ -1,3 +1,6 @@
+import { parseActionResultOutput } from '../../shared/actionResultSession'
+import { beginActionResultRun, beginActionResultUnit, endActionResultRun, withActionResultRunContext, managedTargetEffects, managesActionResult, finishActionResultUnit, validateActionResultStep } from './actionResultRuntime'
+import { ResultContractError } from '../../shared/actionStatusPolicy'
 import { takeCampaignContentIndex } from '../data/repositories/campaignContentRepository'
 import type { CampaignContentVariant, PreparedCampaignContent } from '../../shared/campaignContentPreparation'
 import { plainTextToFormattedContent } from '../../shared/formattedContent'
@@ -2903,7 +2906,11 @@ export class CampaignScheduler {
     return limitResult.limitStatus
   }
 
-  private async executeCampaign(
+  private executeCampaign(account: AutoAccount, campaign: Campaign): Promise<'concurrency_wait' | void> {
+    return withActionResultRunContext(campaign.id, () => this.executeCampaignWithResultContext(account, campaign))
+  }
+
+  private async executeCampaignWithResultContext(
     account: AutoAccount,
     campaign: Campaign
   ): Promise<'concurrency_wait' | void> {
@@ -3138,6 +3145,24 @@ export class CampaignScheduler {
         return
       }
 
+      const resultWorkflow = await getWorkflow(workflowSelection.workflowId)
+      if (!resultWorkflow) throw new ResultContractError('catalog_invalid', campaign.actionId, 'workflow_missing')
+      const declarationSources = [resultWorkflow.defaultVariables.resultStatusDeclarations,
+        ...resultWorkflow.nodes.map(node => node.config.resultStatusDeclarations)].filter(value => value != null)
+      const declarations: { actionCode: string; statusCodes: string[] }[] = []
+      for (const value of declarationSources) {
+        if (!Array.isArray(value)) throw new ResultContractError('catalog_invalid', campaign.actionId, 'declarations_invalid')
+        for (const row of value) {
+          if (!row || typeof row.actionCode !== 'string' || !Array.isArray(row.statusCodes) || !row.statusCodes.length
+            || row.statusCodes.some((code: unknown) => typeof code !== 'string' || !code)) {
+            throw new ResultContractError('catalog_invalid', campaign.actionId, 'declarations_invalid')
+          }
+          declarations.push({ actionCode: row.actionCode, statusCodes: row.statusCodes })
+        }
+      }
+      await beginActionResultRun({ campaignId: campaign.id, accountId: account.id, staffId: campaign.staffId!,
+        platform: account.flatformType, claimToken: runtimeClaimToken }, executableActionDescriptors.map(a => a.code), declarations)
+
       await this.logCampaignProgress(campaign, `🚀 Bắt đầu chiến dịch "${campaign.name}" trên tài khoản "${account.name}"`)
 
       if (campaign.extraSettings?.runAsPage === true) {
@@ -3161,11 +3186,11 @@ export class CampaignScheduler {
       await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       if (err instanceof CampaignRunUnitOwnershipLostError) return
       failedRun = this.rememberFailedCampaignRun(account, campaign, err, ownedClaimToken)
-      if (err instanceof ZaloSendExclusionError) failedRun.payload.campaignStatus = 'tạm dừng'
+      if (err instanceof ZaloSendExclusionError || err instanceof ResultContractError) failedRun.payload.campaignStatus = 'tạm dừng'
       // All nested producers/resources have unwound. Policy is attempted once;
       // its status writes are deferred into the same token-checked transaction.
       try {
-        if (!(err instanceof ZaloSendExclusionError) && !failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
+        if (!(err instanceof ZaloSendExclusionError) && !(err instanceof ResultContractError) && !failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
           if (this.isNewsfeedDailyCampaign(campaign)) {
             this.attemptedRunErrorPolicies.add(campaign.id)
             // Unknown aggregate progress is paused by cleanup, never replayed.
@@ -3208,6 +3233,7 @@ export class CampaignScheduler {
         this.claimedServerZaloCampaignIds.delete(campaign.id)
         this.claimedServerZaloAccountIds.delete(account.id)
       }
+      endActionResultRun(campaign.id)
       if (unitSettled) this.activeCampaignRunUnits.delete(campaign.id)
       if (!this.failedCampaignRuns.has(campaign.id)) {
         this.campaignRunBoundaries.delete(campaign.id)
@@ -3872,6 +3898,8 @@ export class CampaignScheduler {
           this.startBackgroundPreview(account.id, campaign.id, page)
         }
         const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+        let milestoneWrites = Promise.resolve()
+        let milestoneWriteError: unknown
         const pageIdentity = this.facebookPageIdentities.get(campaign.id)
         if (pageIdentity) { pageIdentity.page = page; pageIdentity.targetStarted = false }
         try {
@@ -3891,6 +3919,10 @@ export class CampaignScheduler {
               if (progressLog) screenshotProgressLogs.push(progressLog)
             },
             onStepProgress: (step: RunStepV2) => {
+              if (step.status === 'success' && !milestoneWriteError) {
+                try { validateActionResultStep(campaign.id, step.output) }
+                catch (error) { milestoneWriteError = error; abort.abort() }
+              }
               if (pageIdentity) {
                 const started = pageIdentity.targetStarted
                 pageIdentity.observe(step)
@@ -3898,13 +3930,20 @@ export class CampaignScheduler {
               }
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
               if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && step.status === 'success') {
-                void this.logNewsfeedMilestoneStep(campaign, detail, account.id, step)
+                milestoneWrites = milestoneWrites.then(async () => {
+                  if (milestoneWriteError) return
+                  try { await this.logNewsfeedMilestoneStep(campaign, detail, account.id, step) }
+                  catch (error) { milestoneWriteError = error; abort.abort() }
+                })
               }
             },
             onLog: (entry) => {
               try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
             }
           })
+
+          await milestoneWrites
+          if (milestoneWriteError) throw milestoneWriteError
 
           if (pageIdentity && !pageIdentity.targetStarted) {
             const failure = result.steps.find(step => step.status === 'error')
@@ -3949,6 +3988,14 @@ export class CampaignScheduler {
             screenshotProgressLogs,
             consumedGroupPostInputDataIds
           )
+
+          const resultEffects = managedTargetEffects(campaign.id, detail?.id)
+          if (resultEffects) {
+            milestoneSummary.hasSuccess = resultEffects.badTargetEffect === 'reset'
+            milestoneSummary.hasFailure = resultEffects.badTargetEffect === 'increment'
+            milestoneSummary.hasHardFailure = resultEffects.badTargetEffect === 'increment'
+            milestoneSummary.hasError = false
+          }
 
           // Persist the successful lookup/quota first, then hand the failed
           // exclusion gate to token-checked cleanup without rewriting its input.
@@ -4158,6 +4205,9 @@ export class CampaignScheduler {
             }
           }
         } catch (err: any) {
+          await milestoneWrites
+          if (milestoneWriteError) throw milestoneWriteError
+          if (err instanceof ResultContractError) throw err
           // A pause RPC may have committed despite a lost response. Generic
           // target error handling must not overwrite that paused row or retry it.
           if (zaloOptOutContext?.sendExclusionError) throw zaloOptOutContext.sendExclusionError
@@ -4652,6 +4702,7 @@ export class CampaignScheduler {
     }
 
     const screenshotProgressLogs: BlockScreenshotProgressLog[] = []
+    let contractError: unknown
     try {
       try {
         const variables = {
@@ -4692,12 +4743,34 @@ export class CampaignScheduler {
             if (progressLog) screenshotProgressLogs.push(progressLog)
           },
           onStepProgress: (step: RunStepV2) => {
+            if (step.status === 'success' && !contractError) {
+              try { validateActionResultStep(campaign.id, step.output) }
+              catch (error) { contractError = error; abort.abort() }
+            }
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
           },
           onLog: (entry) => {
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
           }
         })
+
+        if (contractError) throw contractError
+        const hasContract = result.steps.some(s => s.output && ('actionResult' in s.output || 'actionResults' in s.output || ('actionCode' in s.output && 'statusCode' in s.output)))
+        if (hasContract) {
+          await this.logMilestonesV2(campaign, null, account.id, result.steps, result.status === 'completed', screenshotProgressLogs)
+          let stop = result.status !== 'completed'
+          for (const target of batch) {
+            const effects = managedTargetEffects(campaign.id, target.inputDataId)
+            if (!effects) throw new ResultContractError('output_invalid', actionDescriptor.code, 'batch_result_missing')
+            await this.supabase.updateCampaignInputData(target.inputDataId, { status: 'hoàn thành' })
+            if (effects.badTargetEffect === 'increment') {
+              const handled = await this.handleCampaignBadTarget(account, campaign, target.inputDataId,
+                'err_undefined', actionDescriptor.code, { message: result.error || '', runId: String(result.runId || '') })
+              stop ||= handled.triggered
+            }
+          }
+          return { stop, ...(this.isCampaignPauseRequested(campaign.id) ? { paused: true } : {}) }
+        }
 
         const pauseCancelledRun = this.isCampaignPauseRequested(campaign.id) && !accountStopReason && result.status === 'cancelled'
         if (pauseCancelledRun) return { stop: true, paused: true }
@@ -4730,6 +4803,7 @@ export class CampaignScheduler {
         )
       } catch (err: any) {
         // Preserve a nested pause/claim failure for the outer atomic cleanup.
+        if (err instanceof ResultContractError) throw err
         if (this.failedCampaignRuns.has(campaign.id) || this.attemptedRunErrorPolicies.has(campaign.id)) throw err
         if (this.isCampaignPauseRequested(campaign.id) && abort.signal.aborted && !accountStopReason) {
           return { stop: true, paused: true }
@@ -4904,6 +4978,12 @@ export class CampaignScheduler {
         note: status === 'thành công' ? '' : message
       })
 
+      const effects = managedTargetEffects(campaign.id, inputDataId)
+      if (effects?.badTargetEffect === 'increment' && status !== 'lỗi') {
+        const handled = await this.handleCampaignBadTarget(account, campaign, inputDataId,
+          'err_undefined', actionDescriptor.code, { message, runId })
+        stop ||= handled.triggered
+      }
       processedCount += 1
       if (status === 'thành công') {
         successCount += 1
@@ -6189,7 +6269,7 @@ export class CampaignScheduler {
       progressLogs.add(message)
       await this.logCampaignProgress(campaign, message)
     }
-    if (actionDetail.createDetail === false || !actionDetail.status) {
+    if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
       await logFailure()
       return null
     }
@@ -6200,11 +6280,12 @@ export class CampaignScheduler {
       accountId,
       actionCode: actionDetail.actionCode ?? null,
       actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
-      status: actionDetail.status,
+      status: actionDetail.status || 'lỗi',
       errorCode: actionDetail.errorCode ?? null,
       log: actionDetail.log || undefined,
       data: actionDetail.data || {},
-      shouldCountAction: actionDetail.countsTowardLimit === true
+      shouldCountAction: actionDetail.countsTowardLimit === true,
+      resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công', legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined, targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
     })
 
     await logFailure()
@@ -8593,6 +8674,7 @@ export class CampaignScheduler {
       ) {
         throw new Error('DB trả unit lease không khớp với lượt chạy hiện tại.')
       }
+      beginActionResultUnit(campaign.id, runtimeUnitToken, inputDataIds)
       this.activeCampaignRunUnits.set(campaign.id, {
         runtimeUnitToken,
         inputDataIds: [...inputDataIds],
@@ -8752,6 +8834,7 @@ export class CampaignScheduler {
       return false
     }
 
+    await finishActionResultUnit(campaign.id)
     const requeueRemaining = requeueRemainingOverride ?? lease.requeueRemainingOnSettle
     let retryLogged = false
     while (true) {
@@ -9459,6 +9542,10 @@ export class CampaignScheduler {
             x: safeUserMessage
           }
         : policyReplacements
+      const targetEffects = managedTargetEffects(campaign.id, inputDataId)
+      if (targetEffects && targetEffects.badTargetEffect !== 'increment') {
+        return this.applyRuntimeErrorPolicy(account, campaign, errorCode, actionCode, policyReplacements, { ...options, explicitOnly: true })
+      }
       const threshold = this.getPolicyThreshold(policy)
       if (!policy || !threshold) {
         if (options.explicitOnly && policy?.countsTowardBadTarget) {
@@ -10008,6 +10095,7 @@ export class CampaignScheduler {
       await this.logCampaignProgress(campaign, `💬 Đã comment bài newsfeed của "${targetName}"`)
     } catch (err) {
       this.loggedNewsfeedMilestoneKeys.delete(key)
+      if (err instanceof ResultContractError) throw err
       console.error('Failed log newsfeed milestone:', err)
     }
   }
@@ -10049,7 +10137,7 @@ export class CampaignScheduler {
       const actionDetail = this.getZaloActionDetailFromStep(step)
       if (!actionDetail) continue
 
-      if (actionDetail.createDetail === false || !actionDetail.status) {
+      if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
         if (actionDetail.log) {
           await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
         }
@@ -10062,13 +10150,21 @@ export class CampaignScheduler {
         accountId,
         actionCode: actionDetail.actionCode ?? null,
         actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
-        status: actionDetail.status,
+        status: actionDetail.status || 'lỗi',
         errorCode: actionDetail.errorCode ?? null,
         log: actionDetail.log || undefined,
         data: actionDetail.data || {},
-        shouldCountAction: actionDetail.countsTowardLimit === true
+        shouldCountAction: actionDetail.countsTowardLimit === true,
+        resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
+        resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
+          legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
+          targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
       })
 
+      if (!created) {
+        if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        continue
+      }
       const output = (step.output || {}) as Record<string, unknown>
       const trackingMessageId = Number(output.emailTrackingMessageId)
       if (Number.isFinite(trackingMessageId) && trackingMessageId > 0) {
@@ -10185,7 +10281,7 @@ export class CampaignScheduler {
         summary.pendingNote = actionDetail.pendingNote || actionDetail.log || summary.pendingNote
       }
 
-      if (actionDetail.createDetail === false || !actionDetail.status) {
+      if ((!managesActionResult(campaign.id) || !actionDetail.actionCode) && (actionDetail.createDetail === false || !actionDetail.status)) {
         if (actionDetail.log) {
           await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
         }
@@ -10198,12 +10294,20 @@ export class CampaignScheduler {
         accountId,
         actionCode: actionDetail.actionCode ?? null,
         actionName: actionDetail.actionName || this.getAccountActionName(actionDetail.actionCode || ''),
-        status: actionDetail.status,
+        status: actionDetail.status || 'lỗi',
         errorCode: actionDetail.errorCode ?? null,
         log: actionDetail.log || undefined,
         data: actionDetail.data || {},
-        shouldCountAction: actionDetail.countsTowardLimit === true
+        shouldCountAction: actionDetail.countsTowardLimit === true,
+        resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}`,
+        resultGuards: { operationState: actionDetail.preventInputRetry ? (actionDetail.deliveryCommitted ? 'committed' : 'unknown') : undefined, legacySuppress: actionDetail.createDetail === false || !actionDetail.status, partialDelivery: actionDetail.deliveryCommitted === true && actionDetail.status !== 'thành công',
+          legacyInputEffect: actionDetail.resetInputToPending ? 'requeue' : undefined,
+          targetOnlyFailure: actionDetail.countsTowardBadTarget === false }
       })
+      if (!created) {
+        if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
+        continue
+      }
       smsPushDetails.push(created)
 
       if (actionDetail.countsTowardBadTarget !== false) {
@@ -10338,8 +10442,9 @@ export class CampaignScheduler {
   ): Promise<MilestoneSummary> {
     void overallSuccess
     const summary = this.createMilestoneSummary()
-    const createCampaignDetail = async (action: Partial<CampaignDetail> & { shouldCountAction?: boolean }) => {
+    const createCampaignDetail = async (action: import('../../shared/types').CreateCampaignDetailInput) => {
       const created = await this.supabase.createCampaignDetail(action)
+      if (!created) return null
       this.recordMilestoneSummary(
         summary,
         created.status,
@@ -10381,6 +10486,41 @@ export class CampaignScheduler {
         const log = pendingScreenshotLogs.shift()
         if (log) await flushScreenshotLog(log)
       }
+    }
+
+    // Legacy Facebook outputs already have raw statusCode fields. Only the
+    // explicit envelope or the complete action/status pair claims this contract.
+    const explicitSteps = steps.filter(step => step.output && (
+      'actionResult' in step.output || 'actionResults' in step.output
+      || ('actionCode' in step.output && 'statusCode' in step.output)
+    ))
+    if (explicitSteps.length) {
+      const legacySteps = steps.filter(step => !explicitSteps.includes(step))
+      const combined = legacySteps.length ? await this.logMilestonesV2(campaign, detail, accountId,
+        legacySteps, overallSuccess, [], consumedGroupPostInputDataIds) : summary
+      for (const step of explicitSteps) {
+        const outputs = Array.isArray(step.output.actionResults) ? step.output.actionResults : [step.output.actionResult ?? step.output]
+        for (const [index, raw] of outputs.entries()) {
+          const output = parseActionResultOutput(raw)
+          if (!output) throw new ResultContractError('output_invalid', '', '')
+          const row = raw as Record<string, unknown>
+          const inputDataId = row.inputDataId == null ? detail?.id : Number(row.inputDataId)
+          const created = await this.supabase.createCampaignDetail({ campaignId: campaign.id, accountId,
+            inputDataId, actionCode: output.actionCode, actionName: String(row.actionName || this.getAccountActionName(output.actionCode)),
+            resultOutput: output, resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}:${index}`,
+            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : undefined,
+            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : undefined })
+          if (created) this.recordMilestoneSummary(combined, created.status, created.log, created.actionName)
+          if (output.errorCode) {
+            const account = await this.supabase.getAccount(accountId)
+            if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
+              { message: typeof row.message === 'string' ? row.message : undefined }, { explicitOnly: true })
+          }
+        }
+        await flushScreenshotLogsForStep(step)
+      }
+      await flushRemainingScreenshotLogs()
+      return combined
     }
 
     if (this.isZaloBrowserlessCampaign(campaign)) {
@@ -10588,7 +10728,7 @@ export class CampaignScheduler {
         if (isSuccess) await this.logCampaignProgress(campaign, `✅ ${successLog}`)
         else await this.logCampaignProgress(campaign, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
         await flushScreenshotLogsForStep(summaryStep || errorStep)
-      } catch (err) { console.error('Failed log find data:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log find data:', err) }
 
       if (isSuccess) {
         const foundUidsForPush = [
@@ -10745,7 +10885,7 @@ export class CampaignScheduler {
             await this.logCampaignProgress(campaign, `❌ Tham gia group thất bại "${groupName}": ${errMsg}`)
           }
           await flushScreenshotLogsForStep(s)
-        } catch (err) { console.error('Failed log Facebook join group:', err) }
+        } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log Facebook join group:', err) }
       }
       await flushRemainingScreenshotLogs()
       return summary
@@ -10829,7 +10969,7 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign, `❌ Lỗi đăng fanpage "${pageName}": ${failureMessage}`)
         }
         await flushScreenshotLogsForStep(s)
-      } catch (err) { console.error('Failed log page post:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log page post:', err) }
     }
 
     if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostSteps.length === 0 && switchToPageStep) {
@@ -10868,7 +11008,7 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign, `❌ Không chuyển được sang fanpage "${pageName}": ${failureMessage}`)
           await flushScreenshotLogsForStep(switchToPageStep)
         }
-      } catch (err) { console.error('Failed log page switch:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log page switch:', err) }
     }
 
     // Đăng bài group — xác nhận submit bằng việc form đóng, rồi lưu link bài vừa đăng nếu lấy được.
@@ -10888,6 +11028,7 @@ export class CampaignScheduler {
         const detectOut = ((detectStep?.output as any) || {}) as {
           isPending?: unknown
           pendingCheckConclusive?: unknown
+          postVisible?: unknown
           pendingContentUrl?: unknown
           pendingContentLinks?: unknown
           source?: unknown
@@ -10921,6 +11062,11 @@ export class CampaignScheduler {
           actionName: 'Đăng bài',
           status,
           errorCode,
+          resultOutput: posted ? { actionCode: this.getPostActionCode(campaign)!, statusCode: 'campaign_detail_success',
+            subStatusCode: isPending ? 'campaign_detail_post_pending'
+              : (out.postVisible === true || detectOut.postVisible === true) ? 'campaign_detail_post_visible' : null,
+            operationState: 'committed' } : undefined,
+          resultSourceKey: `${s.id ?? s.nodeId}:${s.startedAt ?? ''}`,
           log: posted
             ? (detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : `Đăng bài thành công${isPending ? ' (chờ duyệt)' : ''}`)
             : status === 'lỗi'
@@ -10999,7 +11145,7 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign, `❌ Đăng bài thất bại${detail ? ` vào "${inputDataName}"` : ''}: ${failureMessage}`)
           await flushScreenshotLogsForStep(s)
         }
-      } catch (err) { console.error('Failed log group post:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log group post:', err) }
     }
 
     // Timeline/Reels only report success after the publishing block confirms closure.
@@ -11015,6 +11161,7 @@ export class CampaignScheduler {
         const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
           isPending?: unknown
           pendingCheckConclusive?: unknown
+          postVisible?: unknown
         }
         const detectHasIsPending = typeof detectOut.isPending === 'boolean'
         const pendingCheckConclusive = detectOut.pendingCheckConclusive === false
@@ -11036,7 +11183,7 @@ export class CampaignScheduler {
           await this.logCampaignProgress(campaign, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
         }
         await flushScreenshotLogsForStep(s)
-      } catch (err) { console.error('Failed log post:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log post:', err) }
       void s
     }
 
@@ -11112,7 +11259,7 @@ export class CampaignScheduler {
           })
           await this.logCampaignProgress(campaign, `⚠️ Không comment được ${target}${detail ? ` tại "${inputDataName}"` : ''}: ${errMsg}`)
           await flushScreenshotLogsForStep(s)
-        } catch (err) { console.error('Failed log failed comment:', err) }
+        } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log failed comment:', err) }
         continue
       }
 
@@ -11133,7 +11280,7 @@ export class CampaignScheduler {
         })
         await this.logCampaignProgress(campaign, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
         await flushScreenshotLogsForStep(s)
-      } catch (err) { console.error('Failed log comment:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log comment:', err) }
     }
 
     // Comment seeding: không có bài phù hợp thì chỉ ghi log chiến dịch, không tạo campaign_detail.
@@ -11210,7 +11357,7 @@ export class CampaignScheduler {
         else if (status === 'không tồn tại') await this.logCampaignProgress(campaign, `⚠️ Không tìm thấy khách inbox page "${inputDataName}": ${errMsg}`)
         else await this.logCampaignProgress(campaign, `❌ Lỗi ${actionName.toLowerCase()} "${inputDataName}": ${errMsg}`)
         await flushScreenshotLogsForStep(s)
-      } catch (err) { console.error('Failed log message:', err) }
+      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log message:', err) }
     }
 
     for (const step of steps.filter(s => s.blockName === 'fb_add_friend' &&

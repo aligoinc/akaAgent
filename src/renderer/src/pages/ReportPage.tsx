@@ -160,7 +160,8 @@ function makeDetailExportRows(rows: AccountActionReportDetailRow[]) {
     'UID/Link target': row.targetUid || '',
     'Số điện thoại': row.targetPhone || '',
     'Email': row.targetEmail || '',
-    'Trạng thái': row.status,
+    'Trạng thái': row.statusLabel || row.status,
+    'Trạng thái phụ': row.subStatusLabel || '',
     'Chi tiết': row.detailText || '',
     'Link bài viết': row.postUrl || ''
   }))
@@ -955,7 +956,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                           <td title={row.targetEmail || ''}>{row.targetEmail || '-'}</td>
                           <td>
                             <span className={`report-detail-status ${detailModal.statusBucket}`}>
-                              {row.status}
+                              {row.statusLabel || row.status}{row.subStatusLabel && <small style={{ display: 'block' }}>{row.subStatusLabel}</small>}
                             </span>
                           </td>
                           <td title={row.detailText || ''}>{row.detailText || '-'}</td>

@@ -1,3 +1,4 @@
+import { automationSubStatusField } from '../../../shared/automationResultFilters'
 import type {
   Automation,
   AutomationActionOption,
@@ -400,6 +401,8 @@ function mapTriggerCondition(value: unknown): AutomationTriggerCondition | null 
   const actionCode = normalizeTriggerActionCode(firstDefined(row, 'actionCode', 'action_code'))
   return {
     ...(id ? { id } : {}),
+    ...automationSubStatusField(row),
+    subStatusLabels: Array.isArray(row.sub_status_labels) ? row.sub_status_labels.map(String) : null,
     statusMappingId,
     semanticStatusId,
     actionCode,
@@ -600,6 +603,7 @@ function normalizeTriggerConditions(value: unknown): AutomationTriggerCondition[
     if (seen.has(key)) continue
     seen.add(key)
     result.push({
+      ...automationSubStatusField(row),
       statusMappingId,
       semanticStatusId,
       actionCode,
@@ -1083,6 +1087,7 @@ async function saveAutomation(id: number | null, input: AutomationInput): Promis
     p_note: normalized.note ?? null,
     p_is_active: normalized.isActive ?? true,
     p_trigger_statuses: normalized.triggerConditions.map(condition => ({
+      ...automationSubStatusField(condition as unknown as Record<string, unknown>),
       statusMappingId: condition.statusMappingId ?? null,
       actionCode: condition.actionCode || null,
       statusValue: condition.status

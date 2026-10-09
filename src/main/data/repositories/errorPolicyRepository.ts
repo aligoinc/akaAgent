@@ -1,3 +1,4 @@
+import { currentActionResultErrors } from '../../services/actionResultRuntime'
 import { AutoErrorPolicy } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
 import { mapAutoErrorPolicyFromDB } from '../mappers'
@@ -34,6 +35,8 @@ function mapAccountErrorStateFromDB(row: Record<string, unknown>): AccountErrorS
 }
 
 export async function getErrorPolicy(errorCode: string): Promise<AutoErrorPolicy | null> {
+  const captured = currentActionResultErrors()
+  if (captured) return captured.get(errorCode) ?? null
   const { data, error } = await client()
     .from('auto_error')
     .select('*')
@@ -53,6 +56,12 @@ export async function getZaloErrorPolicyByCode(
   const normalizedCode = String(code || '').trim()
   if (!normalizedCode) return null
   const normalizedActionCode = String(actionCode || '').trim()
+  const captured = currentActionResultErrors()
+  if (captured) {
+    const policies = [...captured.values()].filter(p => p.zaloErrorCodes.includes(normalizedCode))
+    return policies.find(p => normalizedActionCode && p.zaloActionCodes.includes(normalizedActionCode))
+      ?? policies.find(p => p.zaloActionCodes.length === 0) ?? null
+  }
 
   const { data, error } = await client()
     .from('auto_error')

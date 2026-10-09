@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V361 đã apply `20261009102331 / migration_v361_action_status_policy_catalog` trên akachat ngày 09/10/2026: schema chuẩn bị policy trạng thái, 9 mặc định/8 ngoại lệ; 104 policy lỗi cũ giữ nguyên. Bốn partial index đã tạo CONCURRENTLY và FK/CHECK đã validate. Chưa kích hoạt runtime mới; không apply lại hoặc phát mã mới cho client cũ. Snapshot/checksum/rollback và giới hạn triển khai: [audit v361](docs/ACTION_STATUS_POLICIES_V361.md).
+
 ## Supabase/Postgres: phải thảo luận trước khi tăng connection
 
 Connection là tài nguyên có giới hạn, dùng chung giữa các service và toàn bộ client của hệ thống. **Không tự ý thêm nguồn connection hoặc tăng ngân sách connection. Phải trình bày đề xuất và chờ người dùng đồng ý trước khi triển khai thay đổi đó.** Yêu cầu làm một tính năng không mặc nhiên cho phép tăng connection.
@@ -677,3 +679,5 @@ KHÔNG update khi:
 Pattern: chỉnh tại đúng section, giữ entry **terse** (1-2 dòng), link `file:line` thay vì paraphrase code. Nếu plan-mode tạo file lớn → reference plan file thay vì duplicate.
 
 - Zalo rich share: friend/group share campaigns retain formatting and send up to 50 targets through nested `msgInfo.rtfProps`; never force normal/plain on rich toggle, templates or quick edit. Chat Sync recognizes `webchat/rtf` and its `params` styles. Preserve media-first/per-target failure behavior. If the whole spin is blank without media, recover a nonblank branch before forwarding; preserve optional blanks when text/media remains. See [ZALO_RICH_SHARE.md](docs/ZALO_RICH_SHARE.md).
+
+V362/V363/V364 đã apply 09/10/2026: reader/Automation/CRM tương thích, writer result theo claim+unit và quyền SELECT(code,is_active,is_delete) của Chat trên catalog action. Không apply lại; audit/checksum/rollback ở [ACTION_STATUS_READERS_V362.md](docs/ACTION_STATUS_READERS_V362.md). Policy nạp một lần/run, detail lưu quyết định đã áp dụng; không tính lại lịch sử, không thêm pool/polling và giữ adapter payload cũ.

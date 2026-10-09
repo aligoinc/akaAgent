@@ -1,3 +1,4 @@
+import { writeManagedActionResult, settleManagedActionInput, settleManagedBadTarget, defersManagedBadTargetReset } from '../../services/actionResultRuntime'
 import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
 import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
 import {
@@ -5352,6 +5353,8 @@ export async function createSmsCampaignInputDataSnapshot(action: Partial<Campaig
 }
 
 export async function updateCampaignInputData(id: number, updates: Partial<CampaignInputData>): Promise<CampaignInputData> {
+  const settled = await settleManagedActionInput(id, updates)
+  if (settled) return settled
   const payloadFields: Array<keyof CampaignInputData> = [
     'campaignId', 'inputId', 'name', 'phone', 'phoneCarrier', 'uid', 'email',
     'info1', 'info2', 'info3', 'info4', 'info5', 'content', 'schedule',
@@ -6031,6 +6034,10 @@ export async function incrementCampaignBadTargetCount(
   inputDataId: number | null | undefined,
   reason: string
 ): Promise<CampaignErrorState> {
+  const managedCount = await settleManagedBadTarget(campaignId, inputDataId, reason)
+  if (managedCount !== null) {
+    return { campaignId, countConsecutiveBadTargets: managedCount } as CampaignErrorState
+  }
   const existing = await getCampaignErrorState(campaignId)
   const now = new Date().toISOString()
   const nextCount = (existing?.countConsecutiveBadTargets || 0) + 1
@@ -6068,6 +6075,7 @@ export async function incrementCampaignBadTargetCount(
 }
 
 export async function resetCampaignBadTargetCount(campaignId: number): Promise<void> {
+  if (defersManagedBadTargetReset(campaignId)) return
   const { error } = await client()
     .from('auto_campaign_error_state')
     .upsert({
@@ -6255,7 +6263,7 @@ export async function listLatestCampaignErrorDetails(
   return (data || []).map(row => mapCampaignDetailFromDB(row))
 }
 
-export async function createCampaignDetail(action: CreateCampaignDetailInput): Promise<CampaignDetail> {
+export async function createCampaignDetail(action: CreateCampaignDetailInput): Promise<CampaignDetail | null> {
   const payload: Record<string, unknown> = {
     input_data_id: action.inputDataId ?? null,
     campaign_id: action.campaignId,
@@ -6270,6 +6278,12 @@ export async function createCampaignDetail(action: CreateCampaignDetailInput): P
   }
   if (action.shouldCountAction !== undefined) {
     payload.counts_toward_limit = action.shouldCountAction
+  }
+
+  const managed = await writeManagedActionResult(action, payload)
+  if (managed !== undefined) {
+    if (managed) recordCampaignEngagementDetail(managed.id, managed.data?.zaloEngagementSource)
+    return managed
   }
 
   // Only this boundary makes the INSERT outcome uncertain on transport failure.
