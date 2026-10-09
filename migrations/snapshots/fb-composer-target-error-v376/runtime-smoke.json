@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-09T20:13:47.514Z",
+  "passed": true,
+  "scenarios": 6,
+  "reproduces_old_stop": true,
+  "next_target_succeeds": true,
+  "no_quota_or_bad_target_increment_for_error": true,
+  "external_operations": 0,
+  "runtime_changes": 0
+}

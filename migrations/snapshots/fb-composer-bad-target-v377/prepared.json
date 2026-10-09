@@ -1,0 +1,9 @@
+{
+  "migration_sha256": "eb2d65a1f15fc95f003cfd071882cb5c9add21fab9fd4880645cc1b14b2bb020",
+  "changed_fields": [
+    "counts_toward_bad_target",
+    "updated_at"
+  ],
+  "id": 94,
+  "code": "err_fb_composer_editor_not_found"
+}
