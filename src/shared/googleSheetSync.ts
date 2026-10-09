@@ -1,5 +1,6 @@
 /** Pure browser/Node/Deno contract shared by Desktop preview and the cloud worker. */
 import { normalizeVietnamMobilePhone } from './phone.ts'
+import { VIETNAM_TIME_ZONE } from './vietnamTime.ts'
 
 export const SHEET_MAX_BYTES = 10 * 1024 * 1024
 export const SHEET_MAX_ROWS = 10_000
@@ -90,7 +91,7 @@ export interface SaveDataGroupExternalSyncSource {
   name: string
   config: GoogleSheetConfig
   everyHours: number
-  endDate: string | null
+  endDate: string
   isEnabled: boolean
 }
 export interface DataGroupExternalSyncPanel {
@@ -108,6 +109,26 @@ export interface DataGroupExternalSyncApi {
 
 export class GoogleSheetError extends Error {
   constructor(message: string, readonly permanent = true) { super(message); this.name = 'GoogleSheetError' }
+}
+
+/** Calendar dates in Vietnam, regardless of the Desktop's timezone. */
+export function getGoogleSheetSyncEndDates(now = new Date()): { defaultEndDate: string; maxEndDate: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: VIETNAM_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(now)
+  const values = new Map(parts.map(part => [part.type, Number(part.value)]))
+  const today = Date.UTC(values.get('year')!, values.get('month')! - 1, values.get('day')!)
+  const afterDays = (days: number) => new Date(today + days * 86_400_000).toISOString().slice(0, 10)
+  return { defaultEndDate: afterDays(7), maxEndDate: afterDays(180) }
+}
+
+/** Apply only when saving; legacy sources with no end date can still run. */
+export function validateGoogleSheetSyncEndDate(value: unknown, now = new Date()): asserts value is string {
+  if (value == null || (typeof value === 'string' && !value.trim())) throw new GoogleSheetError('Vui lòng chọn ngày dừng đồng bộ.')
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < '0001-01-01') throw new GoogleSheetError('Ngày dừng đồng bộ không hợp lệ.')
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new GoogleSheetError('Ngày dừng đồng bộ không hợp lệ.')
+  if (value > getGoogleSheetSyncEndDates(now).maxEndDate) throw new GoogleSheetError('Ngày dừng đồng bộ không được quá 180 ngày kể từ hôm nay.')
 }
 
 export function googleSheetUrl(raw: unknown): { url: string; downloadUrl: string } {

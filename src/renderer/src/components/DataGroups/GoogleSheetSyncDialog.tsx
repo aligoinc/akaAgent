@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRight, Check, FileSpreadsheet, Info, Link2, LoaderCircle, Plus, X } from 'lucide-react'
 import type { DataGroup } from '../../../../shared/types'
-import { SHEET_DATA_TYPES, sheetColumnName, validateSheetConfig, type DataGroupExternalSyncApi, type DataGroupExternalSyncSource, type GoogleSheetConfig, type GoogleSheetInspection, type GoogleSheetPreview, type SheetDataType, type SheetField } from '../../../../shared/googleSheetSync'
+import { SHEET_DATA_TYPES, sheetColumnName, validateSheetConfig, getGoogleSheetSyncEndDates, validateGoogleSheetSyncEndDate, type DataGroupExternalSyncApi, type DataGroupExternalSyncSource, type GoogleSheetConfig, type GoogleSheetInspection, type GoogleSheetPreview, type SheetDataType, type SheetField } from '../../../../shared/googleSheetSync'
 import DataGroupFormDialog from './DataGroupFormDialog'
 
 export default function GoogleSheetSyncDialog({ group, source, api, onClose, onSaved }: {
@@ -22,7 +22,8 @@ export default function GoogleSheetSyncDialog({ group, source, api, onClose, onS
     return { url: '', dataTypeCode: options[0]?.code || 'phone', hasHeader: true, mapping: [], expectedHeaders: [] }
   })
   const [hours, setHours] = useState(String(source?.everyHours || 6))
-  const [endDate, setEndDate] = useState(source?.endDate || '')
+  const [endDate, setEndDate] = useState(() => source?.endDate || getGoogleSheetSyncEndDates().defaultEndDate)
+  const { maxEndDate } = getGoogleSheetSyncEndDates()
   const [enabled, setEnabled] = useState(source?.isEnabled ?? true)
   const [inspection, setInspection] = useState<GoogleSheetInspection | null>(null)
   const [columnsChanged, setColumnsChanged] = useState(false)
@@ -78,9 +79,10 @@ export default function GoogleSheetSyncDialog({ group, source, api, onClose, onS
       if (!connected) throw new Error('Hãy bấm Kết nối để kiểm tra Sheet và các cột trước.')
       validateSheetConfig(config)
       if (save) {
+        validateGoogleSheetSyncEndDate(endDate)
         if (!name.trim()) throw new Error('Vui lòng nhập tên nguồn.')
         if (!Number.isInteger(Number(hours)) || Number(hours) < 1 || Number(hours) > 8760) throw new Error('Chu kỳ phải là số giờ nguyên từ 1 đến 8.760.')
-        const saved = await api.save({ groupId: group.id, id: source?.id, expectedRevision: source?.revision, requestId: requestId.current, name: name.trim(), config, everyHours: Number(hours), endDate: endDate || null, isEnabled: enabled })
+        const saved = await api.save({ groupId: group.id, id: source?.id, expectedRevision: source?.revision, requestId: requestId.current, name: name.trim(), config, everyHours: Number(hours), endDate, isEnabled: enabled })
         await onSaved(saved); onClose()
       } else setPreview(await api.preview(group.id, config, source?.id))
     } catch (err) { setError(err instanceof Error ? err.message : 'Không thể hoàn tất thao tác.') }
@@ -104,7 +106,7 @@ export default function GoogleSheetSyncDialog({ group, source, api, onClose, onS
           <label className="sheet-sync-label">Đồng bộ mỗi (giờ) <span className="sheet-required">*</span><input type="number" min={1} max={8760} step={1} value={hours} onChange={e => setHours(e.target.value)} />
             <span className="sheet-sync-presets">{[1, 3, 6, 12, 24].map(h => <button type="button" className={Number(hours) === h ? 'is-active' : ''} key={h} onClick={() => setHours(String(h))}>{h}h</button>)}</span>
           </label>
-          <label className="sheet-sync-label">Ngày dừng đồng bộ<input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /><small>Để trống = chạy đến khi tắt thủ công</small></label>
+          <label className="sheet-sync-label">Ngày dừng đồng bộ <span className="sheet-required">*</span><input type="date" aria-label="Ngày dừng đồng bộ" required max={maxEndDate} value={endDate} onChange={e => { setEndDate(e.target.value); setError('') }} /><small>Mặc định 7 ngày, tối đa 180 ngày kể từ hôm nay (giờ Việt Nam).</small></label>
         </div>
         <section className="sheet-sync-mapping" aria-label="Cột dữ liệu lấy về">
           <header><strong>Cột dữ liệu lấy về</strong><button type="button" className="sheet-sync-small-button" disabled={!connected || config.mapping.length >= fields.length} onClick={() => {

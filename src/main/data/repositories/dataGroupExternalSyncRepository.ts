@@ -1,5 +1,5 @@
 import type { GoogleSheetConfig, GoogleSheetPreview, SaveDataGroupExternalSyncSource, DataGroupExternalSyncPanel, DataGroupExternalSyncSource, GoogleSheetInspection } from '../../../shared/googleSheetSync'
-import { googleSheetUrl, readGoogleSheet, mapGoogleSheet, validateSheetConfig } from '../../../shared/googleSheetSync'
+import { googleSheetUrl, readGoogleSheet, mapGoogleSheet, validateSheetConfig, validateGoogleSheetSyncEndDate } from '../../../shared/googleSheetSync'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -59,6 +59,7 @@ export async function previewDataGroupSheet(groupId: number, config: GoogleSheet
 }
 
 export async function saveDataGroupExternalSync(input: SaveDataGroupExternalSyncSource): Promise<DataGroupExternalSyncSource> {
+  validateGoogleSheetSyncEndDate(input.endDate)
   validateSheetConfig(input.config)
   const ctx = context()
   await ctx.rpc('check', { groupId: input.groupId })
