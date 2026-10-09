@@ -75,6 +75,12 @@ Zalo Server Windows cũng phải build bằng `npm run build:server:win`; verifi
 
 ## Architecture
 
+V346 đã apply `20261006033730 / migration_v346_fb_email_error_policies` trên akachat: thêm 58 policy FB/Email/chung đang bật, giữ nguyên 46 policy cũ; không sửa app/RPC/block/workflow/schema. Không apply lại. Theo yêu cầu người dùng đã bỏ quét tham chiếu dữ liệu riêng khi rollback, vẫn giữ FK và guard ID/mã/checksum; INSERT/ROLLBACK đạt nhưng hard DELETE thử nghiệm timeout 30 giây tại FK bảng detail. Snapshot/receipt và giới hạn rollback: [audit](docs/FB_EMAIL_ERROR_POLICIES_V346.md).
+
+V347 đã apply `20261006012006 / migration_v347_campaign_status_agent_descriptions` trên akachat: thêm 55 mapping trạng thái và `auto_campaign_action_detail_statuses.description` cho agent; NULL action là wildcard, NULL status_id là chưa có nhóm ngữ nghĩa. Không apply lại; snapshot/rollback có guard runtime và tham chiếu: [audit](docs/CAMPAIGN_STATUS_CATALOG_V347.md).
+
+V349 đã apply `20261006032336 / migration_v349_campaign_detail_status_ids`: thêm 16 trạng thái chuẩn và gán ID cho 120 mapping NULL, giữ nguyên nhóm lựa chọn/điều kiện Automation; không sửa RPC/code hay reload schema. Không apply lại; revert v349 trước khi xét revert v347: [audit và rollback](docs/CAMPAIGN_STATUS_IDS_V349.md).
+
 **Electron 33 + React 19 desktop app** cho automation Facebook/Zalo/Email. Build qua `electron-vite`. State Zustand. Canvas `@xyflow/react`. DB Supabase. Code editor Monaco.
 
 **Supabase production của repo này** là project `akachat`, project ref `cgjbsmqtfhqvttudyjzq`, cũng là ref trong `supabase/.temp/project-ref` và fallback URL trong `src/main/data/supabaseClient.ts`. Project ref `yfkvwgapqmywaoftwuzc` (tên `aka_agent`) là project legacy/khác và tuyệt đối không query hoặc mutate khi làm việc trong repo này. Không chọn project theo tên từ `supabase projects list`; trước mọi thao tác DB phải verify ref và ưu tiên `supabase db query --linked`.

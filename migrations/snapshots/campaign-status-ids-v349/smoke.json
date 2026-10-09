@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-10-06T03:23:18.486Z",
+  "result": [
+    {
+      "result": "passed: separate groups, unchanged rules, exact rollback, unchanged sequences and checksum guards"
+    }
+  ],
+  "migration_sha256": "70c873642edbc5e588f34475b2863ef12f1296e1ae940535a61303522557e041",
+  "catalog_sha256": "e81e97af9d61ed97527cb2a9640594f4c4a1292e969bfc8d004c77775822fd67",
+  "semantic_pairs": 97969,
+  "tables_restored": true,
+  "sequences_unchanged_inside_transaction": true,
+  "drift_guards_passed": true
+}

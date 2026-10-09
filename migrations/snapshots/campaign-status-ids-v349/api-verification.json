@@ -1,0 +1,111 @@
+{
+  "checked_at": "2026-10-06T03:24:18.119Z",
+  "checks": [
+    {
+      "table": "auto_status",
+      "http_status": 200,
+      "data": [
+        {
+          "id": 20,
+          "code": "campaign_detail_success",
+          "name": "Thành công"
+        },
+        {
+          "id": 21,
+          "code": "campaign_detail_failed",
+          "name": "Thất bại"
+        },
+        {
+          "id": 22,
+          "code": "campaign_detail_error",
+          "name": "Lỗi"
+        },
+        {
+          "id": 23,
+          "code": "campaign_detail_clicked",
+          "name": "Đã click"
+        },
+        {
+          "id": 24,
+          "code": "campaign_detail_alias_changed",
+          "name": "Đã đổi tên"
+        },
+        {
+          "id": 25,
+          "code": "campaign_detail_tag_applied",
+          "name": "Đã gắn tag"
+        },
+        {
+          "id": 26,
+          "code": "campaign_detail_sent",
+          "name": "Đã gửi"
+        },
+        {
+          "id": 27,
+          "code": "campaign_detail_invitation_sent",
+          "name": "Đã gửi lời mời"
+        },
+        {
+          "id": 28,
+          "code": "campaign_detail_friend_request_sent",
+          "name": "Đã gửi lời mời kết bạn"
+        },
+        {
+          "id": 29,
+          "code": "campaign_detail_message_sent",
+          "name": "Đã gửi tin nhắn"
+        },
+        {
+          "id": 30,
+          "code": "campaign_detail_already_friend",
+          "name": "Đã là bạn bè"
+        },
+        {
+          "id": 31,
+          "code": "campaign_detail_already_member",
+          "name": "Đã là thành viên"
+        },
+        {
+          "id": 32,
+          "code": "campaign_detail_received",
+          "name": "Đã nhận"
+        },
+        {
+          "id": 33,
+          "code": "campaign_detail_joined",
+          "name": "Đã tham gia"
+        },
+        {
+          "id": 34,
+          "code": "campaign_detail_viewed",
+          "name": "Đã xem"
+        },
+        {
+          "id": 35,
+          "code": "campaign_detail_calling",
+          "name": "Đang gọi"
+        },
+        {
+          "id": 36,
+          "code": "campaign_detail_not_found",
+          "name": "Không tồn tại"
+        },
+        {
+          "id": 37,
+          "code": "campaign_detail_tag_not_found",
+          "name": "Tag không tồn tại"
+        },
+        {
+          "id": 38,
+          "code": "campaign_detail_invalid_parameter",
+          "name": "Tham số không hợp lệ"
+        }
+      ]
+    },
+    {
+      "table": "auto_campaign_action_detail_statuses",
+      "http_status": 200,
+      "data": []
+    }
+  ]
+}

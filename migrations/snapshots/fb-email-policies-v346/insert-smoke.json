@@ -1,0 +1,16 @@
+{
+  "checked_at": "2026-10-06T03:37:17.512Z",
+  "result": [
+    {
+      "result": "smoke-insert: insert, unchanged originals, checksum guards passed; no committed changes"
+    }
+  ],
+  "original_rows_unchanged": true,
+  "transaction_rollback_verified": true,
+  "delete_rollback_verified": false,
+  "rollback_receipt_guard_verified": true,
+  "sequence_unchanged": true,
+  "schema_unchanged": true,
+  "migration_sha256": "acdf350e0d612c80179d419fe619b0b2b4d183fee70d26c766a20e2524cb965e",
+  "desired_sha256": "f2c9d5a17058e5e4e0a88bd642e124f923ff9601568d0f7f31bc05205347e279"
+}

@@ -1,0 +1,233 @@
+{
+  "actions": [
+    {
+      "code": "fb_post_group",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài group",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_post_my_profile",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài trang cá nhân",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_comment",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Comment",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_message_stranger",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin người lạ",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_message_friend",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin bạn bè",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_add_friend",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Kết bạn",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_like_post",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Like post",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_post_page",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Đăng bài fanpage",
+      "platform": "facebook"
+    },
+    {
+      "code": "zalo_find_phone_user",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tìm SĐT",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_add_group_member",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Thêm thành viên vào group",
+      "platform": "zalo"
+    },
+    {
+      "code": "fb_group_invite",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Mời vào group",
+      "platform": "facebook"
+    },
+    {
+      "code": "fb_message_page_inbox_customer",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Nhắn tin khách inbox page",
+      "platform": "facebook"
+    },
+    {
+      "code": "zalo_join_group",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tham gia vào group",
+      "platform": "zalo"
+    },
+    {
+      "code": "voice_call",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Gọi tự động qua SIM",
+      "platform": "sms"
+    },
+    {
+      "code": "email_send",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Email - Gửi email",
+      "platform": "email"
+    },
+    {
+      "code": "zalo_message_group",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến group",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_message_friend",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến bạn bè",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_join_group_link",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Tham gia group",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_message_stranger",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gửi tin nhắn đến người lạ",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_add_friend",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Kết bạn",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_tag_contact",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Gắn tag",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_change_alias",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Đổi tên",
+      "platform": "zalo"
+    },
+    {
+      "code": "zalo_cancel_sent_friend_request",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Zalo - Huỷ lời mời kết bạn đã gửi",
+      "platform": "zalo"
+    },
+    {
+      "code": "fb_join_group",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Tham gia group",
+      "platform": "facebook"
+    },
+    {
+      "code": "sms_send",
+      "is_active": true,
+      "is_delete": false,
+      "name": "Gửi tin nhắn SMS",
+      "platform": "sms"
+    }
+  ],
+  "captured_at": "2026-10-09T03:38:00.921105+00:00",
+  "input_constraints": [
+    {
+      "definition": "CHECK ((status = ANY (ARRAY['chờ xử lý'::text, 'tạm dừng'::text, 'đang chạy'::text, 'hoàn thành'::text, 'lỗi'::text])))",
+      "name": "auto_campaign_inputs_status_check",
+      "table": "auto_campaign_inputs",
+      "validated": true
+    },
+    {
+      "definition": "CHECK ((jsonb_typeof(content_rotation_indexes) = 'object'::text)) NOT VALID",
+      "name": "auto_campaign_input_data_content_rotation_indexes_object",
+      "table": "auto_campaign_input_data",
+      "validated": false
+    },
+    {
+      "definition": "CHECK ((status = ANY (ARRAY['chờ xử lý'::text, 'tạm dừng'::text, 'đang chạy'::text, 'hoàn thành'::text])))",
+      "name": "auto_campaign_input_data_status_check",
+      "table": "auto_campaign_input_data",
+      "validated": true
+    }
+  ],
+  "partial_status_indexes": [
+    {
+      "definition": "CREATE INDEX idx_auto_campaign_details_automation_status ON public.auto_campaign_details USING btree (campaign_id, status, action_code, created_at DESC) WHERE (is_delete = false)",
+      "name": "idx_auto_campaign_details_automation_status",
+      "table": "auto_campaign_details"
+    },
+    {
+      "definition": "CREATE INDEX idx_campaign_details_delivery_cooldown ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE (status = ANY (ARRAY['thành công'::text, 'đã gửi'::text, 'đã nhận'::text, 'đã xem'::text, 'đã click'::text]))",
+      "name": "idx_campaign_details_delivery_cooldown",
+      "table": "auto_campaign_details"
+    },
+    {
+      "definition": "CREATE INDEX idx_sms_input_data_campaign_status_schedule ON public.auto_campaign_input_data USING btree (campaign_id, status, schedule, created_at, id) WHERE (COALESCE(is_delete, false) = false)",
+      "name": "idx_sms_input_data_campaign_status_schedule",
+      "table": "auto_campaign_input_data"
+    },
+    {
+      "definition": "CREATE INDEX idx_campaign_input_data_status ON public.auto_campaign_input_data USING btree (status) WHERE (is_delete = false)",
+      "name": "idx_campaign_input_data_status",
+      "table": "auto_campaign_input_data"
+    },
+    {
+      "definition": "CREATE INDEX idx_campaign_input_data_phone_carrier_status_schedule ON public.auto_campaign_input_data USING btree (campaign_id, phone_carrier, status, schedule) WHERE ((is_delete = false) AND (phone_carrier IS NOT NULL))",
+      "name": "idx_campaign_input_data_phone_carrier_status_schedule",
+      "table": "auto_campaign_input_data"
+    },
+    {
+      "definition": "CREATE INDEX idx_campaign_input_data_progress_live ON public.auto_campaign_input_data USING btree (campaign_id, status) WHERE (is_delete = false)",
+      "name": "idx_campaign_input_data_progress_live",
+      "table": "auto_campaign_input_data"
+    }
+  ],
+  "views": null
+}

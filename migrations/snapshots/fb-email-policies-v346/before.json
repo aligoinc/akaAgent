@@ -1,0 +1,1941 @@
+{
+  "captured_at": "2026-10-06 00:39:55.03713+00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "row_count": 45,
+  "rows": [
+    {
+      "canonical": "{\"id\": 1, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-05-09T04:16:20.5176+00:00\", \"error_code\": \"err_logout\", \"error_desc\": \"Tài khoản bị đăng xuất\", \"error_name\": \"Tài khoản bị đăng xuất\", \"error_type\": \"auth\", \"updated_at\": \"2026-05-09T04:16:20.5176+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": null, \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Tài khoản bị đăng xuất\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "cde204ef721a0709992019c989c9dc74",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-05-09T04:16:20.5176+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_logout",
+        "error_desc": "Tài khoản bị đăng xuất",
+        "error_element": null,
+        "error_name": "Tài khoản bị đăng xuất",
+        "error_type": "auth",
+        "id": 1,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": null,
+        "noti_running_process": "Tài khoản bị đăng xuất",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-05-09T04:16:20.5176+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 2, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-05-09T04:16:20.5176+00:00\", \"error_code\": \"error_limit_in_day\", \"error_desc\": \"Đạt giới hạn trong ngày\", \"error_name\": \"Đạt giới hạn trong ngày\", \"error_type\": \"business rule\", \"updated_at\": \"2026-05-09T04:16:20.5176+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Đạt giới hạn trong ngày là [x]\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Đạt giới hạn trong ngày là [x]\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "39af6d3558fe67d07128427d008d9a69",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-05-09T04:16:20.5176+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "error_limit_in_day",
+        "error_desc": "Đạt giới hạn trong ngày",
+        "error_element": null,
+        "error_name": "Đạt giới hạn trong ngày",
+        "error_type": "business rule",
+        "id": 2,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đạt giới hạn trong ngày là [x]",
+        "noti_running_process": "Đạt giới hạn trong ngày là [x]",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-05-09T04:16:20.5176+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 3, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-05-09T04:16:20.5176+00:00\", \"error_code\": \"error_limit_in_hour\", \"error_desc\": \"Đạt giới hạn trong giờ\", \"error_name\": \"Đạt giới hạn trong giờ\", \"error_type\": \"business rule\", \"updated_at\": \"2026-05-09T04:16:20.5176+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Đạt giới hạn trong giờ là [x]\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Đạt giới hạn trong giờ là [x] tạm nghỉ [t] phút\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "e01a8c709b8ddca5607d99c4f2adb188",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-05-09T04:16:20.5176+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "error_limit_in_hour",
+        "error_desc": "Đạt giới hạn trong giờ",
+        "error_element": null,
+        "error_name": "Đạt giới hạn trong giờ",
+        "error_type": "business rule",
+        "id": 3,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đạt giới hạn trong giờ là [x]",
+        "noti_running_process": "Đạt giới hạn trong giờ là [x] tạm nghỉ [t] phút",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-05-09T04:16:20.5176+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 4, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-05-09T04:16:20.5176+00:00\", \"error_code\": \"err_undefined\", \"error_desc\": \"Lỗi không xác định\", \"error_name\": \"Lỗi không xác định\", \"error_type\": \"system\", \"updated_at\": \"2026-09-25T22:24:28.593743+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Có lỗi xảy ra\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Có lỗi xảy ra\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": 4, \"counts_toward_bad_target\": true}",
+      "md5": "fc1ac8018f6cf18f185875f9ae30c4d6",
+      "row": {
+        "count_consecutive_errors": 4,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-05-09T04:16:20.5176+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_undefined",
+        "error_desc": "Lỗi không xác định",
+        "error_element": null,
+        "error_name": "Lỗi không xác định",
+        "error_type": "system",
+        "id": 4,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Có lỗi xảy ra",
+        "noti_running_process": "Có lỗi xảy ra",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-09-25T22:24:28.593743+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 5, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-05-09T04:16:20.5176+00:00\", \"error_code\": \"err_limit_waiting_message\", \"error_desc\": \"Bạn đã đạt giới hạn về số tin nhắn đang chờ\", \"error_name\": \"Nhắn tin\", \"error_type\": \"external facebook\", \"updated_at\": \"2026-05-09T04:16:20.5176+00:00\", \"detail_status\": null, \"error_element\": \"//span//span[contains(.,\\\"Bạn đã đạt giới hạn về số tin nhắn đang chờ\\\")]\", \"noti_campaign\": \"Bạn đã đạt giới hạn về số tin nhắn đang chờ\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"fb_message_stranger\"], \"noti_running_process\": \"Bạn đã đạt giới hạn về số tin nhắn đang chờ\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "6962d5198d9884f148a8affa8f168dfa",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-05-09T04:16:20.5176+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "fb_message_stranger"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_limit_waiting_message",
+        "error_desc": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+        "error_element": "//span//span[contains(.,\"Bạn đã đạt giới hạn về số tin nhắn đang chờ\")]",
+        "error_name": "Nhắn tin",
+        "error_type": "external facebook",
+        "id": 5,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+        "noti_running_process": "Bạn đã đạt giới hạn về số tin nhắn đang chờ",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-05-09T04:16:20.5176+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 6, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-06T03:32:59.282852+00:00\", \"error_code\": \"err_group_post_frequency_limit\", \"error_desc\": \"Facebook báo giới hạn tần suất bạn đăng bài\", \"error_name\": \"Giới hạn tần suất đăng bài group\", \"error_type\": \"external facebook\", \"updated_at\": \"2026-06-06T03:32:59.282852+00:00\", \"detail_status\": null, \"error_element\": \"//*[contains(.,'giới hạn tần suất bạn đăng bài')]\", \"noti_campaign\": \"Facebook báo giới hạn tần suất bạn đăng bài\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Facebook báo giới hạn tần suất bạn đăng bài\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "ffcac753dd901f0e06905d1a35d2dd0f",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-06T03:32:59.282852+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_group_post_frequency_limit",
+        "error_desc": "Facebook báo giới hạn tần suất bạn đăng bài",
+        "error_element": "//*[contains(.,'giới hạn tần suất bạn đăng bài')]",
+        "error_name": "Giới hạn tần suất đăng bài group",
+        "error_type": "external facebook",
+        "id": 6,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Facebook báo giới hạn tần suất bạn đăng bài",
+        "noti_running_process": "Facebook báo giới hạn tần suất bạn đăng bài",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-06-06T03:32:59.282852+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 7, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_user_not_found\", \"error_desc\": \"Không tìm thấy user Zalo hợp lệ từ SĐT/user id\", \"error_name\": \"Zalo không tồn tại\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-08-17T02:35:46.466147+00:00\", \"detail_status\": \"không tồn tại\", \"error_element\": null, \"noti_campaign\": \"Không tồn tại\", \"zalo_error_codes\": [\"216\", \"214\", \"212\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Không tồn tại\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "e9614ca486fa6faa042914def39234d4",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "không tồn tại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_user_not_found",
+        "error_desc": "Không tìm thấy user Zalo hợp lệ từ SĐT/user id",
+        "error_element": null,
+        "error_name": "Zalo không tồn tại",
+        "error_type": "external zalo",
+        "id": 7,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Không tồn tại",
+        "noti_running_process": "Không tồn tại",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-08-17T02:35:46.466147+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "216",
+          "214",
+          "212"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 8, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_invalid_param\", \"error_desc\": \"Zalo trả lỗi tham số không hợp lệ\", \"error_name\": \"Tham số không hợp lệ\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Tham số không hợp lệ\", \"zalo_error_codes\": [\"114\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Tham số không hợp lệ\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "1900462f4ceb8682c595140a68b00c5b",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_invalid_param",
+        "error_desc": "Zalo trả lỗi tham số không hợp lệ",
+        "error_element": null,
+        "error_name": "Tham số không hợp lệ",
+        "error_type": "external zalo",
+        "id": 8,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Tham số không hợp lệ",
+        "noti_running_process": "Tham số không hợp lệ",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "114"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 9, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_find_phone_limit\", \"error_desc\": \"Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại trong giờ\", \"error_name\": \"Đạt giới hạn tìm SĐT trong giờ\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-07T07:08:42.135721+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Đạt giới hạn tìm kiếm SĐT trong giờ, tạm nghỉ [x] phút\", \"zalo_error_codes\": [\"312\", \"221\"], \"zalo_action_codes\": [\"zalo_find_phone_user\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_find_phone_user\"], \"noti_running_process\": \"Đạt giới hạn tìm kiếm SĐT trong giờ\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "10d8ab73ef809991b40cdf90fdcb930b",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_find_phone_user"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_find_phone_limit",
+        "error_desc": "Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại trong giờ",
+        "error_element": null,
+        "error_name": "Đạt giới hạn tìm SĐT trong giờ",
+        "error_type": "external zalo",
+        "id": 9,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đạt giới hạn tìm kiếm SĐT trong giờ, tạm nghỉ [x] phút",
+        "noti_running_process": "Đạt giới hạn tìm kiếm SĐT trong giờ",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-07T07:08:42.135721+00:00",
+        "zalo_action_codes": [
+          "zalo_find_phone_user"
+        ],
+        "zalo_error_codes": [
+          "312",
+          "221"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 10, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_receiver_blocks_stranger_message\", \"error_desc\": \"Người nhận không nhận tin nhắn từ người lạ\", \"error_name\": \"Người nhận chặn tin nhắn người lạ\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Người nhận chặn tin nhắn từ người lạ\", \"zalo_error_codes\": [\"122\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Người nhận chặn tin nhắn từ người lạ\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "d53de701e30c8bdab611240b5af14927",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_receiver_blocks_stranger_message",
+        "error_desc": "Người nhận không nhận tin nhắn từ người lạ",
+        "error_element": null,
+        "error_name": "Người nhận chặn tin nhắn người lạ",
+        "error_type": "external zalo",
+        "id": 10,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận chặn tin nhắn từ người lạ",
+        "noti_running_process": "Người nhận chặn tin nhắn từ người lạ",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "122"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 11, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_receiver_blocks_message\", \"error_desc\": \"Người nhận không muốn nhận tin nhắn từ tài khoản này\", \"error_name\": \"Người nhận chặn tin nhắn\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Người nhận chặn tin nhắn từ bạn\", \"zalo_error_codes\": [\"119\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Người nhận chặn tin nhắn từ bạn\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "541972c8188d73be665b10eea4a50222",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_receiver_blocks_message",
+        "error_desc": "Người nhận không muốn nhận tin nhắn từ tài khoản này",
+        "error_element": null,
+        "error_name": "Người nhận chặn tin nhắn",
+        "error_type": "external zalo",
+        "id": 11,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận chặn tin nhắn từ bạn",
+        "noti_running_process": "Người nhận chặn tin nhắn từ bạn",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "119"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 12, \"is_active\": false, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_message_stranger_limited\", \"error_desc\": \"Zalo hạn chế tài khoản gửi tin nhắn đến người lạ\", \"error_name\": \"Hạn chế nhắn tin người lạ\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế gửi tin nhắn đến người lạ, tạm nghỉ [x] phút\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_stranger\", \"zalo_add_group_member\"], \"noti_running_process\": \"Zalo hạn chế gửi tin nhắn đến người lạ\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "d0d3d328bea8d8a994df113ea609a231",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_stranger",
+          "zalo_add_group_member"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_message_stranger_limited",
+        "error_desc": "Zalo hạn chế tài khoản gửi tin nhắn đến người lạ",
+        "error_element": null,
+        "error_name": "Hạn chế nhắn tin người lạ",
+        "error_type": "external zalo",
+        "id": 12,
+        "is_active": false,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế gửi tin nhắn đến người lạ, tạm nghỉ [x] phút",
+        "noti_running_process": "Zalo hạn chế gửi tin nhắn đến người lạ",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 13, \"is_active\": false, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_duplicate_or_fast_message\", \"error_desc\": \"Zalo hạn chế do nội dung trùng lặp hoặc gửi quá nhanh\", \"error_name\": \"Tin nhắn trùng lặp hoặc gửi quá nhanh\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_friend\", \"zalo_message_stranger\", \"zalo_message_group\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "7ec0365d5347a58046fcccc48762664b",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_friend",
+          "zalo_message_stranger",
+          "zalo_message_group"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_duplicate_or_fast_message",
+        "error_desc": "Zalo hạn chế do nội dung trùng lặp hoặc gửi quá nhanh",
+        "error_element": null,
+        "error_name": "Tin nhắn trùng lặp hoặc gửi quá nhanh",
+        "error_type": "external zalo",
+        "id": 13,
+        "is_active": false,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 14, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_message_too_long\", \"error_desc\": \"Zalo trả lỗi nội dung quá dài\", \"error_name\": \"Nội dung quá dài\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung quá dài, vui lòng sửa nội dung chiến dịch\", \"zalo_error_codes\": [\"118\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Nội dung quá dài\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "58b5b8c9fbf970a875d62ea6a692d29d",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_message_too_long",
+        "error_desc": "Zalo trả lỗi nội dung quá dài",
+        "error_element": null,
+        "error_name": "Nội dung quá dài",
+        "error_type": "external zalo",
+        "id": 14,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung quá dài, vui lòng sửa nội dung chiến dịch",
+        "noti_running_process": "Nội dung quá dài",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "118"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 15, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_add_friend_failed\", \"error_desc\": \"Zalo trả lỗi yêu cầu kết bạn không thành công\", \"error_name\": \"Yêu cầu kết bạn không thành công\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Yêu cầu kết bạn không thành công\", \"zalo_error_codes\": [\"311\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Yêu cầu kết bạn không thành công\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "1da20c622657be8867245afef9d152d6",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_add_friend_failed",
+        "error_desc": "Zalo trả lỗi yêu cầu kết bạn không thành công",
+        "error_element": null,
+        "error_name": "Yêu cầu kết bạn không thành công",
+        "error_type": "external zalo",
+        "id": 15,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Yêu cầu kết bạn không thành công",
+        "noti_running_process": "Yêu cầu kết bạn không thành công",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "311"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 16, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_session_invalid\", \"error_desc\": \"Zalo session thiếu hoặc sai zpw_sek\", \"error_name\": \"Phiên đăng nhập Zalo không hợp lệ\", \"error_type\": \"auth\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Zalo đã bị đăng xuất. Vui lòng đăng nhập lại để chiến dịch chạy tiếp\", \"zalo_error_codes\": [\"600\"], \"zalo_action_codes\": [], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": \"chưa đăng nhập\", \"disable_action_codes\": [], \"noti_running_process\": \"Zalo đã bị đăng xuất, vui lòng đăng nhập lại\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "23ffa15841f8e53a741ff562040db48d",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_session_invalid",
+        "error_desc": "Zalo session thiếu hoặc sai zpw_sek",
+        "error_element": null,
+        "error_name": "Phiên đăng nhập Zalo không hợp lệ",
+        "error_type": "auth",
+        "id": 16,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo đã bị đăng xuất. Vui lòng đăng nhập lại để chiến dịch chạy tiếp",
+        "noti_running_process": "Zalo đã bị đăng xuất, vui lòng đăng nhập lại",
+        "time_disable_actions": null,
+        "update_login_status": "chưa đăng nhập",
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "600"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 17, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_group_invite_stranger_limit\", \"error_desc\": \"Zalo trả lỗi đạt giới hạn mời người lạ vào group\", \"error_name\": \"Đạt giới hạn mời người lạ vào group\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T16:23:37.179329+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Đạt giới hạn mời người lạ vào group, tạm nghỉ [x] phút\", \"zalo_error_codes\": [\"314\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_add_group_member\"], \"noti_running_process\": \"Đạt giới hạn mời người lạ vào group\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "5cd3f744a1610fdbca4ea38ce4181285",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_group_invite_stranger_limit",
+        "error_desc": "Zalo trả lỗi đạt giới hạn mời người lạ vào group",
+        "error_element": null,
+        "error_name": "Đạt giới hạn mời người lạ vào group",
+        "error_type": "external zalo",
+        "id": 17,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đạt giới hạn mời người lạ vào group, tạm nghỉ [x] phút",
+        "noti_running_process": "Đạt giới hạn mời người lạ vào group",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T16:23:37.179329+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "314"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 18, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T16:06:00.85814+00:00\", \"error_code\": \"err_zalo_api_business_failed\", \"error_desc\": \"Fallback cho lỗi nghiệp vụ Zalo không có mã code\", \"error_name\": \"Thao tác Zalo thất bại\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T17:43:27.301665+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"[a] thất bại: [x]\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"[a] thất bại: [x]\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "620145588f938528e5ce2d384790e59e",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-06-10T16:06:00.85814+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_api_business_failed",
+        "error_desc": "Fallback cho lỗi nghiệp vụ Zalo không có mã code",
+        "error_element": null,
+        "error_name": "Thao tác Zalo thất bại",
+        "error_type": "external zalo",
+        "id": 18,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "[a] thất bại: [x]",
+        "noti_running_process": "[a] thất bại: [x]",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T17:43:27.301665+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 31, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T18:03:47.067016+00:00\", \"error_code\": \"err_zalo_friend_request_sent\", \"error_desc\": \"Zalo báo lời mời kết bạn đã được gửi hoặc đang tồn tại\", \"error_name\": \"Đã gửi lời mời kết bạn\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T18:03:47.067016+00:00\", \"detail_status\": \"đã gửi lời mời\", \"error_element\": null, \"noti_campaign\": \"Đã gửi lời mời\", \"zalo_error_codes\": [\"222\"], \"zalo_action_codes\": [], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Đã gửi lời mời\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "60012afb6d3bdcd81bbde8599a1d099a",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-06-10T18:03:47.067016+00:00",
+        "detail_status": "đã gửi lời mời",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_friend_request_sent",
+        "error_desc": "Zalo báo lời mời kết bạn đã được gửi hoặc đang tồn tại",
+        "error_element": null,
+        "error_name": "Đã gửi lời mời kết bạn",
+        "error_type": "external zalo",
+        "id": 31,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đã gửi lời mời",
+        "noti_running_process": "Đã gửi lời mời",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T18:03:47.067016+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "222"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 32, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-06-10T18:03:47.067016+00:00\", \"error_code\": \"err_zalo_already_friend\", \"error_desc\": \"Zalo báo user đã là bạn bè với tài khoản hiện tại\", \"error_name\": \"Đã là bạn bè\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-06-10T18:03:47.067016+00:00\", \"detail_status\": \"đã là bạn bè\", \"error_element\": null, \"noti_campaign\": \"Đã là bạn bè\", \"zalo_error_codes\": [\"225\"], \"zalo_action_codes\": [], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Đã là bạn bè\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "f284d00d5eb4ac4f7baf7cb2808fad0f",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-06-10T18:03:47.067016+00:00",
+        "detail_status": "đã là bạn bè",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_already_friend",
+        "error_desc": "Zalo báo user đã là bạn bè với tài khoản hiện tại",
+        "error_element": null,
+        "error_name": "Đã là bạn bè",
+        "error_type": "external zalo",
+        "id": 32,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đã là bạn bè",
+        "noti_running_process": "Đã là bạn bè",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-06-10T18:03:47.067016+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "225"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 33, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-07-01T04:21:42.895575+00:00\", \"error_code\": \"err_email_recipient_not_found\", \"error_desc\": \"Địa chỉ email người nhận không tồn tại hoặc domain không nhận mail\", \"error_name\": \"Email không tồn tại\", \"error_type\": \"external email\", \"updated_at\": \"2026-07-01T04:21:42.895575+00:00\", \"detail_status\": \"không tồn tại\", \"error_element\": null, \"noti_campaign\": \"Email không tồn tại\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Email không tồn tại\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "9a995bf015f8664753cc5b702ec8051e",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-07-01T04:21:42.895575+00:00",
+        "detail_status": "không tồn tại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_email_recipient_not_found",
+        "error_desc": "Địa chỉ email người nhận không tồn tại hoặc domain không nhận mail",
+        "error_element": null,
+        "error_name": "Email không tồn tại",
+        "error_type": "external email",
+        "id": 33,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Email không tồn tại",
+        "noti_running_process": "Email không tồn tại",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-07-01T04:21:42.895575+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 34, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-07-01T09:07:05.028889+00:00\", \"error_code\": \"err_comment_frequency_limit\", \"error_desc\": \"Facebook báo giới hạn tần suất comment\", \"error_name\": \"Giới hạn tần suất comment\", \"error_type\": \"external facebook\", \"updated_at\": \"2026-07-01T09:07:05.028889+00:00\", \"detail_status\": null, \"error_element\": \"//*[contains(.,'giới hạn tần suất bạn đăng bài')]\", \"noti_campaign\": \"Facebook báo giới hạn tần suất comment\", \"zalo_error_codes\": [], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Facebook báo giới hạn tần suất comment\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "c11325b983700a4b0ab5819fcab0f182",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": true,
+        "created_at": "2026-07-01T09:07:05.028889+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_comment_frequency_limit",
+        "error_desc": "Facebook báo giới hạn tần suất comment",
+        "error_element": "//*[contains(.,'giới hạn tần suất bạn đăng bài')]",
+        "error_name": "Giới hạn tần suất comment",
+        "error_type": "external facebook",
+        "id": 34,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Facebook báo giới hạn tần suất comment",
+        "noti_running_process": "Facebook báo giới hạn tần suất comment",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-07-01T09:07:05.028889+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": []
+      }
+    },
+    {
+      "canonical": "{\"id\": 35, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-07-09T07:56:39.862784+00:00\", \"error_code\": \"err_zalo_group_member_already_exists\", \"error_desc\": \"Zalo báo target đã là thành viên của group khi thêm thành viên vào group\", \"error_name\": \"Đã là thành viên group\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-07-09T07:56:39.862784+00:00\", \"detail_status\": \"đã là thành viên\", \"error_element\": null, \"noti_campaign\": \"Đã là thành viên của group\", \"zalo_error_codes\": [\"178\"], \"zalo_action_codes\": [], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Đã là thành viên của group\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "ab62f24355de58e938a59903b51eb795",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-07-09T07:56:39.862784+00:00",
+        "detail_status": "đã là thành viên",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_group_member_already_exists",
+        "error_desc": "Zalo báo target đã là thành viên của group khi thêm thành viên vào group",
+        "error_element": null,
+        "error_name": "Đã là thành viên group",
+        "error_type": "external zalo",
+        "id": 35,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đã là thành viên của group",
+        "noti_running_process": "Đã là thành viên của group",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-07-09T07:56:39.862784+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "178"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 36, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-08-04T08:28:18.964306+00:00\", \"error_code\": \"err_zalo_find_phone_day_limit\", \"error_desc\": \"Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại trong ngày\", \"error_name\": \"Đạt giới hạn tìm SĐT trong ngày\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-08-04T11:06:14.877392+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Đạt giới hạn tìm kiếm SĐT trong ngày, tạm nghỉ đến hết ngày\", \"zalo_error_codes\": [\"313\", \"304\"], \"zalo_action_codes\": [], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"end_of_day\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_find_phone_user\"], \"noti_running_process\": \"Đạt giới hạn tìm kiếm SĐT trong ngày\", \"time_disable_actions\": 720, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "b60a31d5fb2821e83073bf583432cde6",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-08-04T08:28:18.964306+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_find_phone_user"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "end_of_day",
+        "disable_action_time": null,
+        "error_code": "err_zalo_find_phone_day_limit",
+        "error_desc": "Zalo trả lỗi đạt giới hạn tìm kiếm số điện thoại trong ngày",
+        "error_element": null,
+        "error_name": "Đạt giới hạn tìm SĐT trong ngày",
+        "error_type": "external zalo",
+        "id": 36,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Đạt giới hạn tìm kiếm SĐT trong ngày, tạm nghỉ đến hết ngày",
+        "noti_running_process": "Đạt giới hạn tìm kiếm SĐT trong ngày",
+        "time_disable_actions": 720,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-08-04T11:06:14.877392+00:00",
+        "zalo_action_codes": [],
+        "zalo_error_codes": [
+          "313",
+          "304"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 41, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-08-25T04:04:14.811788+00:00\", \"error_code\": \"err_zalo_add_friend_limit\", \"error_desc\": \"Zalo giới hạn số request gửi lời mời kết bạn trong giờ\", \"error_name\": \"Đạt giới hạn kết bạn trong giờ\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:52:56.186325+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút\", \"zalo_error_codes\": [\"221\"], \"zalo_action_codes\": [\"zalo_add_friend\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_add_friend\"], \"noti_running_process\": \"Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "36ca53432b5cb02e0da0f1f2d51b90dc",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-08-25T04:04:14.811788+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_add_friend"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_add_friend_limit",
+        "error_desc": "Zalo giới hạn số request gửi lời mời kết bạn trong giờ",
+        "error_element": null,
+        "error_name": "Đạt giới hạn kết bạn trong giờ",
+        "error_type": "external zalo",
+        "id": 41,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút",
+        "noti_running_process": "Zalo hạn chế kết bạn trong giờ. Tạm nghỉ 60 phút",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:52:56.186325+00:00",
+        "zalo_action_codes": [
+          "zalo_add_friend"
+        ],
+        "zalo_error_codes": [
+          "221"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 42, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_120_message_stranger\", \"error_desc\": \"Zalo hạn chế nhắn người lạ (mã 120)\", \"error_name\": \"Zalo hạn chế nhắn người lạ (mã 120)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế nhắn người lạ (mã 120). Tạm khóa nhắn người lạ đến 09:45 ngày mai.\", \"zalo_error_codes\": [\"120\"], \"zalo_action_codes\": [\"zalo_message_stranger\"], \"counts_toward_limit\": false, \"disable_action_days\": 1, \"disable_action_mode\": \"days_at_time\", \"disable_action_time\": \"09:45:00\", \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_stranger\"], \"noti_running_process\": \"Zalo hạn chế nhắn người lạ (mã 120). Tạm khóa nhắn người lạ đến 09:45 ngày mai.\", \"time_disable_actions\": 1440, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "232225b6201be8000a4d6cc283250570",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "disable_action_days": 1,
+        "disable_action_mode": "days_at_time",
+        "disable_action_time": "09:45:00",
+        "error_code": "err_zalo_120_message_stranger",
+        "error_desc": "Zalo hạn chế nhắn người lạ (mã 120)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn người lạ (mã 120)",
+        "error_type": "external zalo",
+        "id": 42,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế nhắn người lạ (mã 120). Tạm khóa nhắn người lạ đến 09:45 ngày mai.",
+        "noti_running_process": "Zalo hạn chế nhắn người lạ (mã 120). Tạm khóa nhắn người lạ đến 09:45 ngày mai.",
+        "time_disable_actions": 1440,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "zalo_error_codes": [
+          "120"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 43, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_120_add_group_member\", \"error_desc\": \"Zalo hạn chế thêm thành viên nhóm (mã 120)\", \"error_name\": \"Zalo hạn chế thêm thành viên nhóm (mã 120)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế thêm thành viên nhóm (mã 120). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mai.\", \"zalo_error_codes\": [\"120\"], \"zalo_action_codes\": [\"zalo_add_group_member\"], \"counts_toward_limit\": false, \"disable_action_days\": 1, \"disable_action_mode\": \"days_at_time\", \"disable_action_time\": \"09:45:00\", \"update_login_status\": null, \"disable_action_codes\": [\"zalo_add_group_member\"], \"noti_running_process\": \"Zalo hạn chế thêm thành viên nhóm (mã 120). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mai.\", \"time_disable_actions\": 1440, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "b2036f71ceaa0a476efd012bae2b2099",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "disable_action_days": 1,
+        "disable_action_mode": "days_at_time",
+        "disable_action_time": "09:45:00",
+        "error_code": "err_zalo_120_add_group_member",
+        "error_desc": "Zalo hạn chế thêm thành viên nhóm (mã 120)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế thêm thành viên nhóm (mã 120)",
+        "error_type": "external zalo",
+        "id": 43,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế thêm thành viên nhóm (mã 120). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mai.",
+        "noti_running_process": "Zalo hạn chế thêm thành viên nhóm (mã 120). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mai.",
+        "time_disable_actions": 1440,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "zalo_error_codes": [
+          "120"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 44, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_802_message_stranger\", \"error_desc\": \"Zalo hạn chế nhắn người lạ (mã 802)\", \"error_name\": \"Zalo hạn chế nhắn người lạ (mã 802)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.\", \"zalo_error_codes\": [\"802\"], \"zalo_action_codes\": [\"zalo_message_stranger\"], \"counts_toward_limit\": false, \"disable_action_days\": 2, \"disable_action_mode\": \"days_at_time\", \"disable_action_time\": \"09:45:00\", \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_stranger\"], \"noti_running_process\": \"Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.\", \"time_disable_actions\": 2880, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "9ea0eb0d38911023c2784b9b092e1640",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "disable_action_days": 2,
+        "disable_action_mode": "days_at_time",
+        "disable_action_time": "09:45:00",
+        "error_code": "err_zalo_802_message_stranger",
+        "error_desc": "Zalo hạn chế nhắn người lạ (mã 802)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn người lạ (mã 802)",
+        "error_type": "external zalo",
+        "id": 44,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.",
+        "noti_running_process": "Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.",
+        "time_disable_actions": 2880,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "zalo_error_codes": [
+          "802"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 45, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_802_add_group_member\", \"error_desc\": \"Zalo hạn chế thêm thành viên nhóm (mã 802)\", \"error_name\": \"Zalo hạn chế thêm thành viên nhóm (mã 802)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Zalo hạn chế thêm thành viên nhóm (mã 802). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mốt.\", \"zalo_error_codes\": [\"802\"], \"zalo_action_codes\": [\"zalo_add_group_member\"], \"counts_toward_limit\": true, \"disable_action_days\": 2, \"disable_action_mode\": \"days_at_time\", \"disable_action_time\": \"09:45:00\", \"update_login_status\": null, \"disable_action_codes\": [\"zalo_add_group_member\"], \"noti_running_process\": \"Zalo hạn chế thêm thành viên nhóm (mã 802). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mốt.\", \"time_disable_actions\": 2880, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "c1b893ee1220f455284f8778390375ac",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "disable_action_days": 2,
+        "disable_action_mode": "days_at_time",
+        "disable_action_time": "09:45:00",
+        "error_code": "err_zalo_802_add_group_member",
+        "error_desc": "Zalo hạn chế thêm thành viên nhóm (mã 802)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế thêm thành viên nhóm (mã 802)",
+        "error_type": "external zalo",
+        "id": 45,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo hạn chế thêm thành viên nhóm (mã 802). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mốt.",
+        "noti_running_process": "Zalo hạn chế thêm thành viên nhóm (mã 802). Tạm khóa thêm thành viên nhóm đến 09:45 ngày mốt.",
+        "time_disable_actions": 2880,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "zalo_error_codes": [
+          "802"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 46, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_123_message_friend\", \"error_desc\": \"Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_name\": \"Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"123\"], \"zalo_action_codes\": [\"zalo_message_friend\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_friend\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "566921b1b5f7c9c712267cd755a49a1f",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_friend"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_123_message_friend",
+        "error_desc": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_type": "external zalo",
+        "id": 46,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_friend"
+        ],
+        "zalo_error_codes": [
+          "123"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 47, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_123_message_stranger\", \"error_desc\": \"Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_name\": \"Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"123\"], \"zalo_action_codes\": [\"zalo_message_stranger\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_stranger\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "9d2d8d548c95da0a50ac26543402a18e",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_123_message_stranger",
+        "error_desc": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_type": "external zalo",
+        "id": 47,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "zalo_error_codes": [
+          "123"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 48, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_123_message_group\", \"error_desc\": \"Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_name\": \"Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"123\"], \"zalo_action_codes\": [\"zalo_message_group\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_group\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "5bd2f85b7c3cbf43cc4b3e51725e7687",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_group"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_123_message_group",
+        "error_desc": "Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn nhóm do gửi nhanh hoặc trùng nội dung (mã 123)",
+        "error_type": "external zalo",
+        "id": 48,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_group"
+        ],
+        "zalo_error_codes": [
+          "123"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 49, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_126_127_message_personal\", \"error_desc\": \"Zalo từ chối tin nhắn cá nhân (mã 126)\", \"error_name\": \"Zalo từ chối tin nhắn cá nhân (mã 126)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-10-01T08:14:04.469482+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Zalo từ chối tin nhắn cá nhân (mã 126)\", \"zalo_error_codes\": [\"126\"], \"zalo_action_codes\": [\"zalo_message_friend\", \"zalo_message_stranger\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Zalo từ chối tin nhắn cá nhân (mã 126)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "5e944cc2bb311335848d0eac36bce708",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_126_127_message_personal",
+        "error_desc": "Zalo từ chối tin nhắn cá nhân (mã 126)",
+        "error_element": null,
+        "error_name": "Zalo từ chối tin nhắn cá nhân (mã 126)",
+        "error_type": "external zalo",
+        "id": 49,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo từ chối tin nhắn cá nhân (mã 126)",
+        "noti_running_process": "Zalo từ chối tin nhắn cá nhân (mã 126)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-01T08:14:04.469482+00:00",
+        "zalo_action_codes": [
+          "zalo_message_friend",
+          "zalo_message_stranger"
+        ],
+        "zalo_error_codes": [
+          "126"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 50, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_126_127_message_group\", \"error_desc\": \"Zalo hạn chế nhắn nhóm (mã 126/127)\", \"error_name\": \"Zalo hạn chế nhắn nhóm (mã 126/127)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"126\", \"127\"], \"zalo_action_codes\": [\"zalo_message_group\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_group\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "453505419a158e99e123365b7aeca991",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_group"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_126_127_message_group",
+        "error_desc": "Zalo hạn chế nhắn nhóm (mã 126/127)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn nhóm (mã 126/127)",
+        "error_type": "external zalo",
+        "id": 50,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_message_group"
+        ],
+        "zalo_error_codes": [
+          "126",
+          "127"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 51, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_126_add_group_member\", \"error_desc\": \"Zalo từ chối lời mời vào nhóm (mã 126)\", \"error_name\": \"Zalo từ chối lời mời vào nhóm (mã 126)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-10-01T08:23:59.092395+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Zalo từ chối lời mời vào nhóm (mã 126)\", \"zalo_error_codes\": [\"126\"], \"zalo_action_codes\": [\"zalo_add_group_member\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Zalo từ chối lời mời vào nhóm (mã 126)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "2a9ecfef77871648eab8ef53faef9d3f",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_126_add_group_member",
+        "error_desc": "Zalo từ chối lời mời vào nhóm (mã 126)",
+        "error_element": null,
+        "error_name": "Zalo từ chối lời mời vào nhóm (mã 126)",
+        "error_type": "external zalo",
+        "id": 51,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Zalo từ chối lời mời vào nhóm (mã 126)",
+        "noti_running_process": "Zalo từ chối lời mời vào nhóm (mã 126)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-01T08:23:59.092395+00:00",
+        "zalo_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "zalo_error_codes": [
+          "126"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 52, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_221_message_group\", \"error_desc\": \"Đạt giới hạn nhắn nhóm (mã 221)\", \"error_name\": \"Đạt giới hạn nhắn nhóm (mã 221)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Tạm khóa nhắn nhóm 60 phút.\", \"zalo_error_codes\": [\"221\"], \"zalo_action_codes\": [\"zalo_message_group\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_group\"], \"noti_running_process\": \"Đạt giới hạn nhắn nhóm (mã 221)\", \"time_disable_actions\": 60, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "f54d268ff3f4e80adc387651161f1c44",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_group"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_221_message_group",
+        "error_desc": "Đạt giới hạn nhắn nhóm (mã 221)",
+        "error_element": null,
+        "error_name": "Đạt giới hạn nhắn nhóm (mã 221)",
+        "error_type": "external zalo",
+        "id": 52,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Tạm khóa nhắn nhóm 60 phút.",
+        "noti_running_process": "Đạt giới hạn nhắn nhóm (mã 221)",
+        "time_disable_actions": 60,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_message_group"
+        ],
+        "zalo_error_codes": [
+          "221"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 53, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_223_add_friend_pause\", \"error_desc\": \"Danh sách yêu cầu kết bạn đã đầy\", \"error_name\": \"Danh sách yêu cầu kết bạn đã đầy\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:11:09.243466+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Chiến dịch tạm dừng vì danh sách yêu cầu kết bạn đã đầy (223).\", \"zalo_error_codes\": [\"223\"], \"zalo_action_codes\": [\"zalo_add_friend\"], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Danh sách yêu cầu kết bạn đã đầy (mã 223)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "5df315bf00971a7fe5a9f864eb37e725",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_223_add_friend_pause",
+        "error_desc": "Danh sách yêu cầu kết bạn đã đầy",
+        "error_element": null,
+        "error_name": "Danh sách yêu cầu kết bạn đã đầy",
+        "error_type": "external zalo",
+        "id": 53,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Chiến dịch tạm dừng vì danh sách yêu cầu kết bạn đã đầy (223).",
+        "noti_running_process": "Danh sách yêu cầu kết bạn đã đầy (mã 223)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-09-26T07:11:09.243466+00:00",
+        "zalo_action_codes": [
+          "zalo_add_friend"
+        ],
+        "zalo_error_codes": [
+          "223"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 54, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_224_add_friend_full\", \"error_desc\": \"Danh bạ Zalo đã đầy (mã 224)\", \"error_name\": \"Danh bạ Zalo đã đầy (mã 224)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Danh bạ Zalo đã đầy; xử lý danh bạ, mở khóa kết bạn và chạy lại chiến dịch thủ công.\", \"zalo_error_codes\": [\"224\"], \"zalo_action_codes\": [\"zalo_add_friend\"], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"indefinite\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_add_friend\"], \"noti_running_process\": \"Danh bạ Zalo đã đầy (mã 224)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "8b4658c17d37f2d5711db3abb525a0e8",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [
+          "zalo_add_friend"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "indefinite",
+        "disable_action_time": null,
+        "error_code": "err_zalo_224_add_friend_full",
+        "error_desc": "Danh bạ Zalo đã đầy (mã 224)",
+        "error_element": null,
+        "error_name": "Danh bạ Zalo đã đầy (mã 224)",
+        "error_type": "external zalo",
+        "id": 54,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Danh bạ Zalo đã đầy; xử lý danh bạ, mở khóa kết bạn và chạy lại chiến dịch thủ công.",
+        "noti_running_process": "Danh bạ Zalo đã đầy (mã 224)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_add_friend"
+        ],
+        "zalo_error_codes": [
+          "224"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 55, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_215_251_add_friend_rejected\", \"error_desc\": \"Người nhận không nhận lời mời kết bạn (mã 215/251)\", \"error_name\": \"Người nhận không nhận lời mời kết bạn (mã 215/251)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Người nhận không nhận lời mời kết bạn (mã 215/251)\", \"zalo_error_codes\": [\"215\", \"251\"], \"zalo_action_codes\": [\"zalo_add_friend\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Người nhận không nhận lời mời kết bạn (mã 215/251)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "8ee1e9c2a56b5f7ffc16e515add1c47e",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_215_251_add_friend_rejected",
+        "error_desc": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+        "error_element": null,
+        "error_name": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+        "error_type": "external zalo",
+        "id": 55,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+        "noti_running_process": "Người nhận không nhận lời mời kết bạn (mã 215/251)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_add_friend"
+        ],
+        "zalo_error_codes": [
+          "215",
+          "251"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 56, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_219_find_phone_invalid\", \"error_desc\": \"Số điện thoại không hợp lệ (mã 219)\", \"error_name\": \"Số điện thoại không hợp lệ (mã 219)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-26T07:44:25.198474+00:00\", \"detail_status\": \"không tồn tại\", \"error_element\": null, \"noti_campaign\": \"Số điện thoại không hợp lệ\", \"zalo_error_codes\": [\"219\"], \"zalo_action_codes\": [\"zalo_find_phone_user\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Số điện thoại không hợp lệ\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "1860997dcc68f749af83d25a81e0e10b",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "không tồn tại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_219_find_phone_invalid",
+        "error_desc": "Số điện thoại không hợp lệ (mã 219)",
+        "error_element": null,
+        "error_name": "Số điện thoại không hợp lệ (mã 219)",
+        "error_type": "external zalo",
+        "id": 56,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Số điện thoại không hợp lệ",
+        "noti_running_process": "Số điện thoại không hợp lệ",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-26T07:44:25.198474+00:00",
+        "zalo_action_codes": [
+          "zalo_find_phone_user"
+        ],
+        "zalo_error_codes": [
+          "219"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 57, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_227_join_group_link_invalid\", \"error_desc\": \"Link nhóm Zalo không hợp lệ (mã 227)\", \"error_name\": \"Link nhóm Zalo không hợp lệ (mã 227)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Link nhóm Zalo không hợp lệ (mã 227)\", \"zalo_error_codes\": [\"227\"], \"zalo_action_codes\": [\"zalo_join_group_link\"], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Link nhóm Zalo không hợp lệ (mã 227)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": true}",
+      "md5": "c85ae290afa882eb3b5b14ca9f8b9004",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": true,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_227_join_group_link_invalid",
+        "error_desc": "Link nhóm Zalo không hợp lệ (mã 227)",
+        "error_element": null,
+        "error_name": "Link nhóm Zalo không hợp lệ (mã 227)",
+        "error_type": "external zalo",
+        "id": 57,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Link nhóm Zalo không hợp lệ (mã 227)",
+        "noti_running_process": "Link nhóm Zalo không hợp lệ (mã 227)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_join_group_link"
+        ],
+        "zalo_error_codes": [
+          "227"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 58, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_210_target_unavailable\", \"error_desc\": \"Người nhận bị Zalo chặn (mã 210)\", \"error_name\": \"Người nhận bị Zalo chặn (mã 210)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": \"không tồn tại\", \"error_element\": null, \"noti_campaign\": \"Người nhận bị Zalo chặn (mã 210)\", \"zalo_error_codes\": [\"210\"], \"zalo_action_codes\": [\"zalo_find_phone_user\", \"zalo_add_friend\"], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Người nhận bị Zalo chặn (mã 210)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "b31a383072a53800c7547736b31a39a1",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": "không tồn tại",
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_210_target_unavailable",
+        "error_desc": "Người nhận bị Zalo chặn (mã 210)",
+        "error_element": null,
+        "error_name": "Người nhận bị Zalo chặn (mã 210)",
+        "error_type": "external zalo",
+        "id": 58,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Người nhận bị Zalo chặn (mã 210)",
+        "noti_running_process": "Người nhận bị Zalo chặn (mã 210)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_find_phone_user",
+          "zalo_add_friend"
+        ],
+        "zalo_error_codes": [
+          "210"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 59, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-09-25T20:27:21.516235+00:00\", \"error_code\": \"err_zalo_264_269_add_group_member_pause\", \"error_desc\": \"Zalo không cho thêm trực tiếp thành viên (mã 264/269)\", \"error_name\": \"Zalo không cho thêm trực tiếp thành viên (mã 264/269)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-09-25T20:27:21.516235+00:00\", \"detail_status\": null, \"error_element\": null, \"noti_campaign\": \"Chiến dịch tạm dừng; kiểm tra nhóm và cách mời thành viên rồi chạy lại thủ công.\", \"zalo_error_codes\": [\"264\", \"269\"], \"zalo_action_codes\": [\"zalo_add_group_member\"], \"counts_toward_limit\": false, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [], \"noti_running_process\": \"Zalo không cho thêm trực tiếp thành viên (mã 264/269)\", \"time_disable_actions\": null, \"update_status_account\": null, \"update_status_campaign\": \"tạm dừng\", \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "7090537926fca2b9ded67c929c2085db",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": false,
+        "created_at": "2026-09-25T20:27:21.516235+00:00",
+        "detail_status": null,
+        "disable_action_codes": [],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_264_269_add_group_member_pause",
+        "error_desc": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+        "error_element": null,
+        "error_name": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+        "error_type": "external zalo",
+        "id": 59,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Chiến dịch tạm dừng; kiểm tra nhóm và cách mời thành viên rồi chạy lại thủ công.",
+        "noti_running_process": "Zalo không cho thêm trực tiếp thành viên (mã 264/269)",
+        "time_disable_actions": null,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": "tạm dừng",
+        "updated_at": "2026-09-25T20:27:21.516235+00:00",
+        "zalo_action_codes": [
+          "zalo_add_group_member"
+        ],
+        "zalo_error_codes": [
+          "264",
+          "269"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 60, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-10-01T08:14:04.469482+00:00\", \"error_code\": \"err_zalo_127_message_friend\", \"error_desc\": \"Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 127)\", \"error_name\": \"Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 127)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-10-01T08:14:04.469482+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"127\"], \"zalo_action_codes\": [\"zalo_message_friend\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_friend\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "7db733c60002587e8b91507c7d690ce7",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-10-01T08:14:04.469482+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_friend"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_127_message_friend",
+        "error_desc": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 127)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn bạn bè do gửi nhanh hoặc trùng nội dung (mã 127)",
+        "error_type": "external zalo",
+        "id": 60,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-01T08:14:04.469482+00:00",
+        "zalo_action_codes": [
+          "zalo_message_friend"
+        ],
+        "zalo_error_codes": [
+          "127"
+        ]
+      }
+    },
+    {
+      "canonical": "{\"id\": 61, \"is_active\": true, \"is_delete\": false, \"created_at\": \"2026-10-01T08:14:04.469482+00:00\", \"error_code\": \"err_zalo_127_message_stranger\", \"error_desc\": \"Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 127)\", \"error_name\": \"Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 127)\", \"error_type\": \"external zalo\", \"updated_at\": \"2026-10-01T08:14:04.469482+00:00\", \"detail_status\": \"thất bại\", \"error_element\": null, \"noti_campaign\": \"Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút\", \"zalo_error_codes\": [\"127\"], \"zalo_action_codes\": [\"zalo_message_stranger\"], \"counts_toward_limit\": true, \"disable_action_days\": null, \"disable_action_mode\": \"fixed_minutes\", \"disable_action_time\": null, \"update_login_status\": null, \"disable_action_codes\": [\"zalo_message_stranger\"], \"noti_running_process\": \"Tin nhắn bị trùng lặp hoặc gửi quá nhanh\", \"time_disable_actions\": 30, \"update_status_account\": null, \"update_status_campaign\": null, \"count_consecutive_errors\": null, \"counts_toward_bad_target\": false}",
+      "md5": "9da26d1c8587fcd7d31539f749f2e8f9",
+      "row": {
+        "count_consecutive_errors": null,
+        "counts_toward_bad_target": false,
+        "counts_toward_limit": true,
+        "created_at": "2026-10-01T08:14:04.469482+00:00",
+        "detail_status": "thất bại",
+        "disable_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "disable_action_days": null,
+        "disable_action_mode": "fixed_minutes",
+        "disable_action_time": null,
+        "error_code": "err_zalo_127_message_stranger",
+        "error_desc": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 127)",
+        "error_element": null,
+        "error_name": "Zalo hạn chế nhắn người lạ do gửi nhanh hoặc trùng nội dung (mã 127)",
+        "error_type": "external zalo",
+        "id": 61,
+        "is_active": true,
+        "is_delete": false,
+        "noti_campaign": "Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút",
+        "noti_running_process": "Tin nhắn bị trùng lặp hoặc gửi quá nhanh",
+        "time_disable_actions": 30,
+        "update_login_status": null,
+        "update_status_account": null,
+        "update_status_campaign": null,
+        "updated_at": "2026-10-01T08:14:04.469482+00:00",
+        "zalo_action_codes": [
+          "zalo_message_stranger"
+        ],
+        "zalo_error_codes": [
+          "127"
+        ]
+      }
+    }
+  ],
+  "schema": {
+    "access": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "aka_agent_chat_api=r/postgres"
+      ],
+      "force_rls": false,
+      "owner": "postgres",
+      "rls": false
+    },
+    "columns": [
+      {
+        "default": "nextval('auto_error_id_seq'::regclass)",
+        "generated": "",
+        "identity": "",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "error_type",
+        "not_null": true,
+        "position": 2,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "error_name",
+        "not_null": true,
+        "position": 3,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "error_desc",
+        "not_null": false,
+        "position": 4,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "error_code",
+        "not_null": true,
+        "position": 5,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "error_element",
+        "not_null": false,
+        "position": 6,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "noti_running_process",
+        "not_null": false,
+        "position": 7,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "noti_campaign",
+        "not_null": false,
+        "position": 8,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "update_status_account",
+        "not_null": false,
+        "position": 9,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "update_status_campaign",
+        "not_null": false,
+        "position": 10,
+        "type": "text"
+      },
+      {
+        "default": "'{}'::text[]",
+        "generated": "",
+        "identity": "",
+        "name": "disable_action_codes",
+        "not_null": true,
+        "position": 11,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "time_disable_actions",
+        "not_null": false,
+        "position": 12,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "count_consecutive_errors",
+        "not_null": false,
+        "position": 13,
+        "type": "integer"
+      },
+      {
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "name": "is_active",
+        "not_null": true,
+        "position": 14,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "is_delete",
+        "not_null": true,
+        "position": 15,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 16,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 17,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "'{}'::text[]",
+        "generated": "",
+        "identity": "",
+        "name": "zalo_error_codes",
+        "not_null": true,
+        "position": 18,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "detail_status",
+        "not_null": false,
+        "position": 19,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "name": "counts_toward_limit",
+        "not_null": true,
+        "position": 20,
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "name": "counts_toward_bad_target",
+        "not_null": true,
+        "position": 21,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "update_login_status",
+        "not_null": false,
+        "position": 22,
+        "type": "text"
+      },
+      {
+        "default": "'fixed_minutes'::text",
+        "generated": "",
+        "identity": "",
+        "name": "disable_action_mode",
+        "not_null": true,
+        "position": 23,
+        "type": "text"
+      },
+      {
+        "default": "'{}'::text[]",
+        "generated": "",
+        "identity": "",
+        "name": "zalo_action_codes",
+        "not_null": true,
+        "position": 24,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "disable_action_days",
+        "not_null": false,
+        "position": 25,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "disable_action_time",
+        "not_null": false,
+        "position": 26,
+        "type": "time without time zone"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "CHECK (((disable_action_mode <> 'days_at_time'::text) OR ((disable_action_days IS NOT NULL) AND (time_disable_actions IS NOT NULL) AND (time_disable_actions > 0) AND ((disable_action_days > 0) OR (disable_action_time IS NOT NULL)))))",
+        "name": "auto_error_days_at_time_config_check"
+      },
+      {
+        "definition": "CHECK (((disable_action_days IS NULL) OR (disable_action_days >= 0)))",
+        "name": "auto_error_disable_action_days_check"
+      },
+      {
+        "definition": "CHECK ((disable_action_mode = ANY (ARRAY['fixed_minutes'::text, 'end_of_day'::text, 'indefinite'::text, 'days_at_time'::text])))",
+        "name": "auto_error_disable_action_mode_check"
+      },
+      {
+        "definition": "CHECK (((disable_action_time IS NULL) OR (disable_action_time < '24:00:00'::time without time zone)))",
+        "name": "auto_error_disable_action_time_check"
+      },
+      {
+        "definition": "UNIQUE (error_code)",
+        "name": "auto_error_error_code_key"
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "auto_error_pkey"
+      }
+    ],
+    "incoming_foreign_keys": [
+      {
+        "definition": "FOREIGN KEY (disabled_error_code) REFERENCES auto_error(error_code)",
+        "name": "auto_account_action_status_disabled_error_code_fkey",
+        "table": "auto_account_action_status"
+      },
+      {
+        "definition": "FOREIGN KEY (error_code) REFERENCES auto_error(error_code)",
+        "name": "auto_account_error_state_error_code_fkey",
+        "table": "auto_account_error_state"
+      },
+      {
+        "definition": "FOREIGN KEY (error_code) REFERENCES auto_error(error_code)",
+        "name": "auto_campaign_details_error_code_fkey",
+        "table": "auto_campaign_details"
+      }
+    ],
+    "indexes": [
+      {
+        "definition": "CREATE UNIQUE INDEX auto_error_error_code_key ON public.auto_error USING btree (error_code)",
+        "name": "auto_error_error_code_key"
+      },
+      {
+        "definition": "CREATE UNIQUE INDEX auto_error_pkey ON public.auto_error USING btree (id)",
+        "name": "auto_error_pkey"
+      },
+      {
+        "definition": "CREATE INDEX idx_auto_error_code ON public.auto_error USING btree (error_code) WHERE (is_delete = false)",
+        "name": "idx_auto_error_code"
+      },
+      {
+        "definition": "CREATE INDEX idx_auto_error_zalo_error_codes ON public.auto_error USING gin (zalo_error_codes) WHERE (is_delete = false)",
+        "name": "idx_auto_error_zalo_error_codes"
+      }
+    ],
+    "policies": null,
+    "sequence_definition": {
+      "cache_size": 1,
+      "cycle": false,
+      "data_type": "bigint",
+      "increment_by": 1,
+      "max_value": 9223372036854776000,
+      "min_value": 1,
+      "schemaname": "public",
+      "sequencename": "auto_error_id_seq",
+      "sequenceowner": "postgres",
+      "start_value": 1
+    },
+    "triggers": null
+  },
+  "schema_canonical": "{\"access\": {\"acl\": [\"postgres=arwdDxtm/postgres\", \"anon=arwdDxtm/postgres\", \"authenticated=arwdDxtm/postgres\", \"service_role=arwdDxtm/postgres\", \"aka_agent_chat_api=r/postgres\"], \"rls\": false, \"owner\": \"postgres\", \"force_rls\": false}, \"columns\": [{\"name\": \"id\", \"type\": \"bigint\", \"default\": \"nextval('auto_error_id_seq'::regclass)\", \"identity\": \"\", \"not_null\": true, \"position\": 1, \"generated\": \"\"}, {\"name\": \"error_type\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": true, \"position\": 2, \"generated\": \"\"}, {\"name\": \"error_name\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": true, \"position\": 3, \"generated\": \"\"}, {\"name\": \"error_desc\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 4, \"generated\": \"\"}, {\"name\": \"error_code\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": true, \"position\": 5, \"generated\": \"\"}, {\"name\": \"error_element\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 6, \"generated\": \"\"}, {\"name\": \"noti_running_process\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 7, \"generated\": \"\"}, {\"name\": \"noti_campaign\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 8, \"generated\": \"\"}, {\"name\": \"update_status_account\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 9, \"generated\": \"\"}, {\"name\": \"update_status_campaign\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 10, \"generated\": \"\"}, {\"name\": \"disable_action_codes\", \"type\": \"text[]\", \"default\": \"'{}'::text[]\", \"identity\": \"\", \"not_null\": true, \"position\": 11, \"generated\": \"\"}, {\"name\": \"time_disable_actions\", \"type\": \"integer\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 12, \"generated\": \"\"}, {\"name\": \"count_consecutive_errors\", \"type\": \"integer\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 13, \"generated\": \"\"}, {\"name\": \"is_active\", \"type\": \"boolean\", \"default\": \"true\", \"identity\": \"\", \"not_null\": true, \"position\": 14, \"generated\": \"\"}, {\"name\": \"is_delete\", \"type\": \"boolean\", \"default\": \"false\", \"identity\": \"\", \"not_null\": true, \"position\": 15, \"generated\": \"\"}, {\"name\": \"created_at\", \"type\": \"timestamp with time zone\", \"default\": \"now()\", \"identity\": \"\", \"not_null\": true, \"position\": 16, \"generated\": \"\"}, {\"name\": \"updated_at\", \"type\": \"timestamp with time zone\", \"default\": \"now()\", \"identity\": \"\", \"not_null\": true, \"position\": 17, \"generated\": \"\"}, {\"name\": \"zalo_error_codes\", \"type\": \"text[]\", \"default\": \"'{}'::text[]\", \"identity\": \"\", \"not_null\": true, \"position\": 18, \"generated\": \"\"}, {\"name\": \"detail_status\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 19, \"generated\": \"\"}, {\"name\": \"counts_toward_limit\", \"type\": \"boolean\", \"default\": \"true\", \"identity\": \"\", \"not_null\": true, \"position\": 20, \"generated\": \"\"}, {\"name\": \"counts_toward_bad_target\", \"type\": \"boolean\", \"default\": \"true\", \"identity\": \"\", \"not_null\": true, \"position\": 21, \"generated\": \"\"}, {\"name\": \"update_login_status\", \"type\": \"text\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 22, \"generated\": \"\"}, {\"name\": \"disable_action_mode\", \"type\": \"text\", \"default\": \"'fixed_minutes'::text\", \"identity\": \"\", \"not_null\": true, \"position\": 23, \"generated\": \"\"}, {\"name\": \"zalo_action_codes\", \"type\": \"text[]\", \"default\": \"'{}'::text[]\", \"identity\": \"\", \"not_null\": true, \"position\": 24, \"generated\": \"\"}, {\"name\": \"disable_action_days\", \"type\": \"integer\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 25, \"generated\": \"\"}, {\"name\": \"disable_action_time\", \"type\": \"time without time zone\", \"default\": null, \"identity\": \"\", \"not_null\": false, \"position\": 26, \"generated\": \"\"}], \"indexes\": [{\"name\": \"auto_error_error_code_key\", \"definition\": \"CREATE UNIQUE INDEX auto_error_error_code_key ON public.auto_error USING btree (error_code)\"}, {\"name\": \"auto_error_pkey\", \"definition\": \"CREATE UNIQUE INDEX auto_error_pkey ON public.auto_error USING btree (id)\"}, {\"name\": \"idx_auto_error_code\", \"definition\": \"CREATE INDEX idx_auto_error_code ON public.auto_error USING btree (error_code) WHERE (is_delete = false)\"}, {\"name\": \"idx_auto_error_zalo_error_codes\", \"definition\": \"CREATE INDEX idx_auto_error_zalo_error_codes ON public.auto_error USING gin (zalo_error_codes) WHERE (is_delete = false)\"}], \"policies\": null, \"triggers\": null, \"constraints\": [{\"name\": \"auto_error_days_at_time_config_check\", \"definition\": \"CHECK (((disable_action_mode <> 'days_at_time'::text) OR ((disable_action_days IS NOT NULL) AND (time_disable_actions IS NOT NULL) AND (time_disable_actions > 0) AND ((disable_action_days > 0) OR (disable_action_time IS NOT NULL)))))\"}, {\"name\": \"auto_error_disable_action_days_check\", \"definition\": \"CHECK (((disable_action_days IS NULL) OR (disable_action_days >= 0)))\"}, {\"name\": \"auto_error_disable_action_mode_check\", \"definition\": \"CHECK ((disable_action_mode = ANY (ARRAY['fixed_minutes'::text, 'end_of_day'::text, 'indefinite'::text, 'days_at_time'::text])))\"}, {\"name\": \"auto_error_disable_action_time_check\", \"definition\": \"CHECK (((disable_action_time IS NULL) OR (disable_action_time < '24:00:00'::time without time zone)))\"}, {\"name\": \"auto_error_error_code_key\", \"definition\": \"UNIQUE (error_code)\"}, {\"name\": \"auto_error_pkey\", \"definition\": \"PRIMARY KEY (id)\"}], \"sequence_definition\": {\"cycle\": false, \"data_type\": \"bigint\", \"max_value\": 9223372036854775807, \"min_value\": 1, \"cache_size\": 1, \"schemaname\": \"public\", \"start_value\": 1, \"increment_by\": 1, \"sequencename\": \"auto_error_id_seq\", \"sequenceowner\": \"postgres\"}, \"incoming_foreign_keys\": [{\"name\": \"auto_account_action_status_disabled_error_code_fkey\", \"table\": \"auto_account_action_status\", \"definition\": \"FOREIGN KEY (disabled_error_code) REFERENCES auto_error(error_code)\"}, {\"name\": \"auto_account_error_state_error_code_fkey\", \"table\": \"auto_account_error_state\", \"definition\": \"FOREIGN KEY (error_code) REFERENCES auto_error(error_code)\"}, {\"name\": \"auto_campaign_details_error_code_fkey\", \"table\": \"auto_campaign_details\", \"definition\": \"FOREIGN KEY (error_code) REFERENCES auto_error(error_code)\"}]}",
+  "schema_md5": "945c03cb00f463cc10642bf0cdb89a63",
+  "sequence_state": {
+    "is_called": true,
+    "last_value": 61
+  },
+  "table_md5": "159646ca3dafb959177c1379c63e573a"
+}

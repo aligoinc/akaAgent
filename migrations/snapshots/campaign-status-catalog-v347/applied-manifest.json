@@ -1,0 +1,427 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "version": "20261006012006",
+  "name": "migration_v347_campaign_status_agent_descriptions",
+  "verified_at": "2026-10-06T01:21:55.655Z",
+  "inserted_rows": [
+    {
+      "id": 3930160,
+      "md5": "706e9ad58ea053164e7e977913dbac33",
+      "action_code": "fb_comment",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_comment_seeding_post"
+    },
+    {
+      "id": 3930161,
+      "md5": "82942663f0f031610dc04843ac04a2b2",
+      "action_code": "fb_comment",
+      "status_value": "thất bại",
+      "campaign_action_id": "facebook_comment_seeding_post"
+    },
+    {
+      "id": 3930162,
+      "md5": "031233ceb4410fc8600e17bdd6b8f099",
+      "action_code": "fb_like_post",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_comment_seeding_post"
+    },
+    {
+      "id": 3930163,
+      "md5": "c51849b0aa866aa8a166077981bfbec4",
+      "action_code": "fb_like_post",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_comment_seeding_post"
+    },
+    {
+      "id": 3930164,
+      "md5": "2a86e01bd16669b8410b861e9a1eb9a6",
+      "action_code": "fb_comment",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_comment_seeding"
+    },
+    {
+      "id": 3930165,
+      "md5": "df331d591505b30f57e5f6522f853afc",
+      "action_code": "fb_like_post",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_comment_seeding"
+    },
+    {
+      "id": 3930166,
+      "md5": "9c5487b9520d8d42ecc93e4f5eb21710",
+      "action_code": "fb_like_post",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_comment_seeding"
+    },
+    {
+      "id": 3930167,
+      "md5": "b26c3ae68331603d975ce59aee2912c0",
+      "action_code": "fb_group_invite",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_group_invite"
+    },
+    {
+      "id": 3930168,
+      "md5": "9ba1b46d7d3d9a02d39cc77db0dbb929",
+      "action_code": "fb_comment",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_group_post"
+    },
+    {
+      "id": 3930169,
+      "md5": "21ed682dd3239e0fdcfd090a30317416",
+      "action_code": "fb_like_post",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_group_post"
+    },
+    {
+      "id": 3930170,
+      "md5": "81433b56f124efa1dccc3eb1a8fd24a1",
+      "action_code": "fb_like_post",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_group_post"
+    },
+    {
+      "id": 3930171,
+      "md5": "b0d68ee4bd6eb5c5fa2311c26567448b",
+      "action_code": "fb_join_group",
+      "status_value": "thất bại",
+      "campaign_action_id": "facebook_join_group"
+    },
+    {
+      "id": 3930172,
+      "md5": "4bbfc16246efeb4848e52971b887ec98",
+      "action_code": "fb_message_friend",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_message_friend"
+    },
+    {
+      "id": 3930173,
+      "md5": "73144fe9a2863dab3462181f2d16c177",
+      "action_code": "fb_message_stranger",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_message_uid"
+    },
+    {
+      "id": 3930174,
+      "md5": "bdaa3c9c670b4f93a60aaa8d14ce2785",
+      "action_code": "fb_comment",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_newsfeed_interaction"
+    },
+    {
+      "id": 3930175,
+      "md5": "b9b672dc217bfd716b573528a8b9f54c",
+      "action_code": "fb_comment",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_newsfeed_interaction"
+    },
+    {
+      "id": 3930176,
+      "md5": "22874d26e1cdb36a88c6e9f6b0ca697d",
+      "action_code": "fb_like_post",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_newsfeed_interaction"
+    },
+    {
+      "id": 3930177,
+      "md5": "0ef4546db3b99e015dc32421d1bb8c17",
+      "action_code": "fb_like_post",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_newsfeed_interaction"
+    },
+    {
+      "id": 3930178,
+      "md5": "372ce2bdbdccdec89b021737cf39b529",
+      "action_code": "fb_comment",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930179,
+      "md5": "1e2d5da1f6d369ccd7dbff01f02d9923",
+      "action_code": "fb_comment",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930180,
+      "md5": "45889ceef8db4fe7ccd3f411f18c7281",
+      "action_code": "fb_comment",
+      "status_value": "thất bại",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930181,
+      "md5": "850824f73e0c9cb0c73e0223308afd50",
+      "action_code": "fb_like_post",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930182,
+      "md5": "2e35c1bf9f926440b97b12521828300c",
+      "action_code": "fb_like_post",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930183,
+      "md5": "ff15c8a37cd3fc936df65ddcb3c1f306",
+      "action_code": "fb_post_my_profile",
+      "status_value": "lỗi",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930184,
+      "md5": "62841fb7969543bf80443c11f1709aac",
+      "action_code": "fb_post_my_profile",
+      "status_value": "thành công",
+      "campaign_action_id": "facebook_timeline_post"
+    },
+    {
+      "id": 3930185,
+      "md5": "660bd0bbb3926e6f0302d7822018026c",
+      "action_code": "sms_send",
+      "status_value": "không tồn tại",
+      "campaign_action_id": "sms_send"
+    },
+    {
+      "id": 3930186,
+      "md5": "d66ae732cd3c8910d15e2fe2e47d2bac",
+      "action_code": "sms_send",
+      "status_value": "thành công",
+      "campaign_action_id": "sms_send"
+    },
+    {
+      "id": 3930187,
+      "md5": "ea94d7c68855f30bb7355c4f122ec260",
+      "action_code": "voice_call",
+      "status_value": "đang gọi",
+      "campaign_action_id": "voice_call"
+    },
+    {
+      "id": 3930188,
+      "md5": "f27a297c522f559ed2a856b93eaac4e5",
+      "action_code": "voice_call",
+      "status_value": "thành công",
+      "campaign_action_id": "voice_call"
+    },
+    {
+      "id": 3930189,
+      "md5": "0f2bfacb7b73d661445bb4c6a3eb52b9",
+      "action_code": "voice_call",
+      "status_value": "thất bại",
+      "campaign_action_id": "voice_call"
+    },
+    {
+      "id": 3930190,
+      "md5": "93f4c4094488d0e3ced754dd8937a2aa",
+      "action_code": "zalo_add_group_member",
+      "status_value": "đã là thành viên",
+      "campaign_action_id": "zalo_add_group_member"
+    },
+    {
+      "id": 3930191,
+      "md5": "ed23ee925f54a53aa86244f457875cf7",
+      "action_code": "zalo_message_friend",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_birthday"
+    },
+    {
+      "id": 3930192,
+      "md5": "c64d8a1bbfb84e580bcc6d914a788d6c",
+      "action_code": "zalo_add_friend",
+      "status_value": "đã gửi lời mời",
+      "campaign_action_id": "zalo_message_friend_recommendation"
+    },
+    {
+      "id": 3930193,
+      "md5": "982e84d26bb8095997458659dd23dc29",
+      "action_code": "zalo_add_friend",
+      "status_value": "không tồn tại",
+      "campaign_action_id": "zalo_message_friend_recommendation"
+    },
+    {
+      "id": 3930194,
+      "md5": "360359c6d64159e9d07ff9fb3d26e3be",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_friend_recommendation"
+    },
+    {
+      "id": 3930195,
+      "md5": "a73d45718abffd1aad9cf91a7c65eb2e",
+      "action_code": "zalo_tag_contact",
+      "status_value": "tag không tồn tại",
+      "campaign_action_id": "zalo_message_friend_recommendation"
+    },
+    {
+      "id": 3930196,
+      "md5": "bb703009d5fafb647a41f1d1370bc8a4",
+      "action_code": "zalo_tag_contact",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_friend_recommendation"
+    },
+    {
+      "id": 3930197,
+      "md5": "e89fc7637ccc9909cdcab2fba5e13c9b",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_friend"
+    },
+    {
+      "id": 3930198,
+      "md5": "42f88f21349bacfe971697ae16df9b2a",
+      "action_code": "zalo_tag_contact",
+      "status_value": "tag không tồn tại",
+      "campaign_action_id": "zalo_message_friend"
+    },
+    {
+      "id": 3930199,
+      "md5": "fbd8a7ae866443c076e4155489afaf87",
+      "action_code": "zalo_tag_contact",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_friend"
+    },
+    {
+      "id": 3930200,
+      "md5": "7bec306a0d99e3169d09c2d05c3829aa",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_group_member"
+    },
+    {
+      "id": 3930201,
+      "md5": "e60708dda12cf8dc1128d7ca5c27c652",
+      "action_code": "zalo_tag_contact",
+      "status_value": "tag không tồn tại",
+      "campaign_action_id": "zalo_message_group_member"
+    },
+    {
+      "id": 3930202,
+      "md5": "42807cebd17cd2af93e6e6f7d3869d84",
+      "action_code": "zalo_add_friend",
+      "status_value": "không tồn tại",
+      "campaign_action_id": "zalo_message_group_realtime"
+    },
+    {
+      "id": 3930203,
+      "md5": "f5176dab268c755cf399454fb4f7e018",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_group_realtime"
+    },
+    {
+      "id": 3930204,
+      "md5": "2779aa713c91cc1e014de77d5763153b",
+      "action_code": "zalo_change_alias",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_group_realtime"
+    },
+    {
+      "id": 3930205,
+      "md5": "59f5037c88383959e9aee3e18c41aeb2",
+      "action_code": "zalo_tag_contact",
+      "status_value": "tag không tồn tại",
+      "campaign_action_id": "zalo_message_group_realtime"
+    },
+    {
+      "id": 3930206,
+      "md5": "23552797bd6696a11f9524e25a653ca6",
+      "action_code": "zalo_tag_contact",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_group_realtime"
+    },
+    {
+      "id": 3930207,
+      "md5": "32022276b894bcf55ba343a076f68fb9",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_phone"
+    },
+    {
+      "id": 3930208,
+      "md5": "3e887c2a1df1d35aab5592cc988e4d77",
+      "action_code": "zalo_add_friend",
+      "status_value": "đã gửi lời mời",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930209,
+      "md5": "89092f9bde7aaa56937cc030410b5a0a",
+      "action_code": "zalo_add_friend",
+      "status_value": "không tồn tại",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930210,
+      "md5": "d50873b3158fbe9f8b7df9db20d416b3",
+      "action_code": "zalo_add_friend",
+      "status_value": "thành công",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930211,
+      "md5": "178f35842aafcd9436ed6150fc26a9dd",
+      "action_code": "zalo_change_alias",
+      "status_value": "tham số không hợp lệ",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930212,
+      "md5": "fc3429af2a452c6fe76f4b8f3e970291",
+      "action_code": "zalo_change_alias",
+      "status_value": "thành công",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930213,
+      "md5": "2c653f5f7f89742a64b0f1b1578d862f",
+      "action_code": "zalo_tag_contact",
+      "status_value": "tag không tồn tại",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    },
+    {
+      "id": 3930214,
+      "md5": "0d6ee1c68cea1ad7fa1a5332b6f747cc",
+      "action_code": "zalo_tag_contact",
+      "status_value": "thất bại",
+      "campaign_action_id": "zalo_message_remarketing_customer"
+    }
+  ],
+  "original_rows": 258,
+  "original_fields_unchanged": true,
+  "automation_conditions_unchanged": true,
+  "runtime_functions_unchanged": true,
+  "auto_error_unchanged": true,
+  "apply_before_sha256": "e0b7e78199dc246d183a9bfb144e4d986ca1bf513cc735a7e32f6d5e06b0f599",
+  "after_sha256": "92da4feab2722e2cac29c83e21de1059cb5bd3ce28b9da2564916ff00d446a97",
+  "migration_sha256": "8721c3ba80009e26d169219d2e1866005113d6b32462183566edd04f1e71bcfa",
+  "rollback_sha256": "08785176ed67bca1a2f9cbb8a65c78a1a372be4de614e846ca03de7d8affd345",
+  "after_table_md5": "fc50085d1ba8be47fe00f343add17301",
+  "allowed_preapply_drift": "updated_at only; every field verified unchanged between locked apply-before and after snapshots",
+  "live_updated_at_drift_ids": [
+    13,
+    81,
+    82,
+    161,
+    1002,
+    1003,
+    1006,
+    1007,
+    1434,
+    7079,
+    8157,
+    12700,
+    27360,
+    62164,
+    62165,
+    67385,
+    80695,
+    150207,
+    150209,
+    162646,
+    293532
+  ]
+}

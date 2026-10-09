@@ -1,0 +1,3141 @@
+{
+  "scope": "Current local source, not proof of deployed binary version",
+  "repositories": [
+    {
+      "repo": "/Users/lequangnhut/Repos/akaAgent",
+      "head": "5bdea8073a32d8dd32c1cde71d3f8b6365a7a079"
+    },
+    {
+      "repo": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "head": "906e40d428a8aea0ea1b313326185e6ecd2686ef"
+    },
+    {
+      "repo": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "head": "0952bdc49ad1ddf06138accf3b426d580bb3c800"
+    }
+  ],
+  "files": [
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/preload/index.ts",
+      "sha256": "ed54c54ab84f4c0836eb1784497d334cb3297a9e1e87650518637d97229adcb8",
+      "matches": [
+        {
+          "line": 349,
+          "text": "status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/shared/types.ts",
+      "sha256": "f9f66f8c38aac1e03ef2f9a712efdb603320ccd8141e74c4e861624cc185d8c2",
+      "matches": [
+        {
+          "line": 466,
+          "text": "countsTowardLimit: boolean"
+        },
+        {
+          "line": 467,
+          "text": "countsTowardBadTarget: boolean"
+        },
+        {
+          "line": 905,
+          "text": "export type CampaignInputStatus = 'chờ xử lý' | 'tạm dừng' | 'đang chạy' | 'hoàn thành' | 'lỗi'"
+        },
+        {
+          "line": 1144,
+          "text": "campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 1167,
+          "text": "campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 1203,
+          "text": "countsTowardLimit?: boolean | null"
+        },
+        {
+          "line": 1430,
+          "text": "status: CampaignDetailStatus | 'chờ xử lý'"
+        },
+        {
+          "line": 2276,
+          "text": "campaignStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/shared/v2Types.ts",
+      "sha256": "8db7a0555f5086ef6b8d791f9d7ef755fc626b4bf24241ef5799e2058e140101",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/services/supabase.ts",
+      "sha256": "54f14f08a68eb207422c426bb228f23874428301a5b2d3ca0770098f8dc0d49e",
+      "matches": [
+        {
+          "line": 34,
+          "text": "console.log(`[Supabase] Resetting \"đang chạy\" statuses to \"chờ xử lý\" for staff ${staffId}...`)"
+        },
+        {
+          "line": 142,
+          "text": "previousStatus: 'chờ xử lý' | 'tạm dừng',"
+        },
+        {
+          "line": 213,
+          "text": "expectedStatus: 'chờ xử lý' | 'đang chạy' = 'đang chạy'"
+        },
+        {
+          "line": 288,
+          "text": "targetStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 368,
+          "text": "bulkUpdateCampaignInputDataStatus(campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) {"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/services/campaignScheduler.ts",
+      "sha256": "873a236b426d8525c5bb5119a952695eec1062cd62ab38c6652f593acefb9fca",
+      "matches": [
+        {
+          "line": 435,
+          "text": "countsTowardLimit?: boolean"
+        },
+        {
+          "line": 1119,
+          "text": "run.payload.campaignStatus = 'tạm dừng'"
+        },
+        {
+          "line": 1120,
+          "text": "run.payload.accountStatus = 'tạm dừng'"
+        },
+        {
+          "line": 1139,
+          "text": "accountStatus: null, eventType: 'runtime_recovered', message: 'Đã dọn lượt chiến dịch lỗi và giải phóng quyền runtime.' })"
+        },
+        {
+          "line": 1182,
+          "text": "const result = await this.supabase.setZaloServerCampaignStatus(campaignId, 'tạm dừng')"
+        },
+        {
+          "line": 1213,
+          "text": "if (campaign.status === 'tạm dừng') {"
+        },
+        {
+          "line": 1220,
+          "text": "if (failed && campaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 1224,
+          "text": "campaignId, { status: 'tạm dừng', note: CAMPAIGN_PAUSE_PENDING_NOTE }, failed.payload.runtimeClaimToken"
+        },
+        {
+          "line": 1226,
+          "text": "if (paused.status === 'tạm dừng') {"
+        },
+        {
+          "line": 1234,
+          "text": "if (campaign.status === 'chờ xử lý') {"
+        },
+        {
+          "line": 1253,
+          "text": "if (latest?.status === 'đang chạy') {"
+        },
+        {
+          "line": 1256,
+          "text": "if (latest?.status === 'chờ xử lý') {"
+        },
+        {
+          "line": 1261,
+          "text": "if (latest?.status === 'tạm dừng') {"
+        },
+        {
+          "line": 1270,
+          "text": "if (campaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 1338,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: stopNote ?? null })"
+        },
+        {
+          "line": 1364,
+          "text": "if (current.status === 'tạm dừng') {"
+        },
+        {
+          "line": 1375,
+          "text": "if (current.status !== 'đang chạy' && current.status !== 'chờ xử lý') {"
+        },
+        {
+          "line": 1520,
+          "text": "if (account.status !== 'chờ xử lý' || account.loginStatus !== 'đã đăng nhập') {"
+        },
+        {
+          "line": 1602,
+          "text": "currentCampaign.status !== 'chờ xử lý' ||"
+        },
+        {
+          "line": 1713,
+          "text": "return finalized.completed && updated.status === 'hoàn thành'"
+        },
+        {
+          "line": 1722,
+          "text": "if (updated.status === 'hoàn thành') return true"
+        },
+        {
+          "line": 1737,
+          "text": "return finalized.completed && updated.status === 'hoàn thành'"
+        },
+        {
+          "line": 1869,
+          "text": "if (detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 1882,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 1897,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 1970,
+          "text": "if (details.some(detail => !detail.isDelete && detail.status === 'chờ xử lý' &&"
+        },
+        {
+          "line": 1973,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 1982,
+          "text": "if (detail.isDelete || detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 1991,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 1995,
+          "text": "if (updated.status === 'chờ xử lý' && updated.schedule &&"
+        },
+        {
+          "line": 2001,
+          "text": "const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length"
+        },
+        {
+          "line": 2070,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2136,
+          "text": "const resettableCount = details.filter(detail => !detail.isDelete && detail.status !== 'tạm dừng').length"
+        },
+        {
+          "line": 2148,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2608,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý' })"
+        },
+        {
+          "line": 2625,
+          "text": "if (result.campaignStatus === 'đang chạy' && result.accountStatus !== 'đang chạy') {"
+        },
+        {
+          "line": 2629,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: null })"
+        },
+        {
+          "line": 2633,
+          "text": "if (currentCampaign?.status === 'tạm dừng') this.pauseRequests.delete(campaign.id)"
+        },
+        {
+          "line": 2748,
+          "text": "if (currentCampaign?.status === 'đang chạy' || currentAccount?.status === 'đang chạy') {"
+        },
+        {
+          "line": 2774,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2820,
+          "text": "if (detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 2840,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2920,
+          "text": "if (!currentCampaign || currentCampaign.status !== 'chờ xử lý') {"
+        },
+        {
+          "line": 3011,
+          "text": "recordCampaignState({ ...campaign, status: claimed.campaignStatus ?? 'đang chạy' },"
+        },
+        {
+          "line": 3012,
+          "text": "{ ...account, status: claimed.accountStatus ?? 'đang chạy' })"
+        },
+        {
+          "line": 3013,
+          "text": "recordAccountState({ ...account, status: claimed.accountStatus ?? 'đang chạy' }, account)"
+        },
+        {
+          "line": 3041,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, {status: 'tạm dừng', note: `Không thể tải cấu hình loại trừ: ${getErrorMessage(error)}`})"
+        },
+        {
+          "line": 3150,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: getErrorMessage(error) })"
+        },
+        {
+          "line": 3164,
+          "text": "if (err instanceof ZaloSendExclusionError) failedRun.payload.campaignStatus = 'tạm dừng'"
+        },
+        {
+          "line": 3185,
+          "text": "failedRun.payload.campaignStatus = 'tạm dừng'"
+        },
+        {
+          "line": 3257,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3271,
+          "text": "!details.some(detail => !detail.isDelete && detail.status === 'chờ xử lý')"
+        },
+        {
+          "line": 3288,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 3346,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 3376,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3393,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 3403,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 3456,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })"
+        },
+        {
+          "line": 3499,
+          "text": "if (detail && detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 3512,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3525,
+          "text": "(cur && cur.status === 'tạm dừng')"
+        },
+        {
+          "line": 3581,
+          "text": "detail.status = 'tạm dừng'"
+        },
+        {
+          "line": 3646,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 3737,
+          "text": "if (pausedDetail) pausedDetail.status = 'tạm dừng'"
+        },
+        {
+          "line": 3986,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3998,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4006,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4021,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4028,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4036,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4043,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4107,
+          "text": "} else if (milestoneSummary.hasSuccess && !friendFailures.some(failure => failure.policy?.countsTowardBadTarget !== false)) {"
+        },
+        {
+          "line": 4118,
+          "text": "const handled = failure.policy?.countsTowardBadTarget === false"
+        },
+        {
+          "line": 4130,
+          "text": "if (!latestCampaign || latestCampaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 4133,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4146,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4207,
+          "text": "if (nextStatus === 'hoàn thành') consumedGroupPostInputDataIds.add(detail.id)"
+        },
+        {
+          "line": 4212,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4298,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4307,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4394,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 4402,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 4424,
+          "text": "if (this.isCampaignPauseRequested(campaign.id) || (cur && cur.status === 'tạm dừng')) {"
+        },
+        {
+          "line": 4439,
+          "text": "detail.status === 'chờ xử lý' && Boolean(detail.schedule)"
+        },
+        {
+          "line": 4446,
+          "text": "if (detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 4807,
+          "text": "status: 'lỗi',"
+        },
+        {
+          "line": 4820,
+          "text": "await this.updateErrorPolicyCampaign(campaign, { status: 'tạm dừng', note })"
+        },
+        {
+          "line": 4861,
+          "text": "const shouldCountAction = status === 'thành công' && raw.countsTowardLimit !== false"
+        },
+        {
+          "line": 4862,
+          "text": "const errorCode = status === 'lỗi' ? 'err_undefined' : undefined"
+        },
+        {
+          "line": 4868,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 4902,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 4904,
+          "text": "note: status === 'thành công' ? '' : message"
+        },
+        {
+          "line": 4908,
+          "text": "if (status === 'thành công') {"
+        },
+        {
+          "line": 4911,
+          "text": "} else if (status === 'đã gửi lời mời') {"
+        },
+        {
+          "line": 4914,
+          "text": "} else if (status === 'đã là thành viên') {"
+        },
+        {
+          "line": 4917,
+          "text": "} else if (status === 'không tồn tại') {"
+        },
+        {
+          "line": 4947,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: message })"
+        },
+        {
+          "line": 4954,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 4967,
+          "text": "if (status === 'thành công') return 'thành công'"
+        },
+        {
+          "line": 4968,
+          "text": "if (status === 'đã gửi lời mời') return 'đã gửi lời mời'"
+        },
+        {
+          "line": 4969,
+          "text": "if (status === 'đã là thành viên') return 'đã là thành viên'"
+        },
+        {
+          "line": 4970,
+          "text": "if (status === 'không tồn tại') return 'không tồn tại'"
+        },
+        {
+          "line": 4971,
+          "text": "if (status === 'selected' && output.submitOk === true) return 'thành công'"
+        },
+        {
+          "line": 4983,
+          "text": "if (status === 'thành công') return `Đã gửi lời mời vào group \"${groupName}\" cho \"${target.name}\"`"
+        },
+        {
+          "line": 4984,
+          "text": "if (status === 'đã gửi lời mời') return `\"${target.name}\" đã gửi lời mời trước đó`"
+        },
+        {
+          "line": 4985,
+          "text": "if (status === 'đã là thành viên') return `\"${target.name}\" đã là thành viên của group`"
+        },
+        {
+          "line": 4986,
+          "text": "if (status === 'không tồn tại') return `Không tìm thấy \"${target.name}\" trong form mời`"
+        },
+        {
+          "line": 5037,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: advancedContentError })"
+        },
+        {
+          "line": 5048,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 5058,
+          "text": "detail.status === 'chờ xử lý' && Boolean(detail.schedule)"
+        },
+        {
+          "line": 5066,
+          "text": "detail.status === 'chờ xử lý' &&"
+        },
+        {
+          "line": 5102,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5113,
+          "text": "(cur && cur.status === 'tạm dừng')"
+        },
+        {
+          "line": 5175,
+          "text": "if (detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 5218,
+          "text": "if (cooldown.pausedInputDataIds.has(candidate.id)) candidate.status = 'tạm dừng'"
+        },
+        {
+          "line": 5260,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5296,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5390,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5402,
+          "text": "const stopStatus = batchResult.pauseAfterBatch ? 'tạm dừng' : 'chờ xử lý'"
+        },
+        {
+          "line": 5702,
+          "text": "if (actionDetail.countsTowardBadTarget !== false && (status === 'thất bại' || status === 'lỗi')) {"
+        },
+        {
+          "line": 5741,
+          "text": "await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý' })"
+        },
+        {
+          "line": 5845,
+          "text": "actionDetail.countsTowardBadTarget !== false &&"
+        },
+        {
+          "line": 5846,
+          "text": "(normalizedFailureStatus === 'thất bại' || normalizedFailureStatus === 'lỗi')"
+        },
+        {
+          "line": 5917,
+          "text": "actionDetail.status !== 'thành công'"
+        },
+        {
+          "line": 5971,
+          "text": "if (createdStatus === 'thành công') {"
+        },
+        {
+          "line": 5978,
+          "text": "actionDetail.countsTowardBadTarget !== false &&"
+        },
+        {
+          "line": 5979,
+          "text": "(normalizedFailureStatus === 'thất bại' || normalizedFailureStatus === 'lỗi')"
+        },
+        {
+          "line": 6055,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 6063,
+          "text": "status: 'chờ xử lý'"
+        },
+        {
+          "line": 6186,
+          "text": "if (!actionDetail.log || actionDetail.status === 'thành công') return"
+        },
+        {
+          "line": 6207,
+          "text": "shouldCountAction: actionDetail.countsTowardLimit === true"
+        },
+        {
+          "line": 6221,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 6231,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 6233,
+          "text": "actionDetail.status === 'thành công' ? '' : (actionDetail.log || ''),"
+        },
+        {
+          "line": 6323,
+          "text": "inputStatus: 'chờ xử lý' | 'đang chạy' = 'chờ xử lý'"
+        },
+        {
+          "line": 6329,
+          "text": "if (!(inputStatus === 'đang chạy' && campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID)) {"
+        },
+        {
+          "line": 6361,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 6371,
+          "text": "detail.status = 'tạm dừng'"
+        },
+        {
+          "line": 6453,
+          "text": "const result = await this.sendExclusionRpc<{changed: boolean}>(account, campaign, 'pause', {inputId: detail.id, expectedStatus: claimed ? 'đang chạy' : 'chờ xử lý', note})"
+        },
+        {
+          "line": 6456,
+          "text": "detail.status = 'tạm dừng'; detail.note = note"
+        },
+        {
+          "line": 6747,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 6792,
+          "text": "return details.length === 0 || details.every(detail => detail.status === 'hoàn thành')"
+        },
+        {
+          "line": 6898,
+          "text": "detail.status === 'chờ xử lý' &&"
+        },
+        {
+          "line": 6914,
+          "text": "if (!detail || detail.isDelete || detail.status !== 'chờ xử lý') return false"
+        },
+        {
+          "line": 7047,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 7688,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 7767,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 7887,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 7995,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 8135,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 8136,
+          "text": "countsTowardBadTarget: false,"
+        },
+        {
+          "line": 8477,
+          "text": "if (campaignStatus && campaignStatus !== 'đang chạy') {"
+        },
+        {
+          "line": 8479,
+          "text": "} else if (accountStatus && accountStatus !== 'đang chạy') {"
+        },
+        {
+          "line": 8490,
+          "text": "return (campaignStatus !== null && campaignStatus !== 'đang chạy') ||"
+        },
+        {
+          "line": 8491,
+          "text": "(accountStatus !== null && accountStatus !== 'đang chạy')"
+        },
+        {
+          "line": 8611,
+          "text": "claim.campaignStatus === 'đang chạy' && claim.accountStatus === 'đang chạy'"
+        },
+        {
+          "line": 8624,
+          "text": "claim.campaignStatus === 'tạm dừng' ||"
+        },
+        {
+          "line": 8625,
+          "text": "claim.accountStatus === 'tạm dừng' ||"
+        },
+        {
+          "line": 8716,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 8806,
+          "text": "if (control?.campaignStatus && control.campaignStatus !== 'đang chạy') boundary = 'campaign'"
+        },
+        {
+          "line": 8807,
+          "text": "else if (!boundary && control?.accountStatus && control.accountStatus !== 'đang chạy') boundary = 'account'"
+        },
+        {
+          "line": 8811,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 8815,
+          "text": "if (updated.status === 'tạm dừng') boundary = 'campaign'"
+        },
+        {
+          "line": 8838,
+          "text": "expectedStatus: 'chờ xử lý' | 'đang chạy'"
+        },
+        {
+          "line": 8895,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: policyNote || reason })"
+        },
+        {
+          "line": 8933,
+          "text": "campaignControlChanged = !current || current.status !== 'đang chạy' || current.isDelete === true"
+        },
+        {
+          "line": 8994,
+          "text": "limitStatus.reason || `Hành động \"${actionName}\" đang tạm dừng`,"
+        },
+        {
+          "line": 9000,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 9012,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 9019,
+          "text": "if (campaign.status === 'chờ xử lý' && campaign.note === message) {"
+        },
+        {
+          "line": 9021,
+          "text": "if (currentCampaign?.status === 'chờ xử lý' && currentCampaign.note === message) return"
+        },
+        {
+          "line": 9023,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 9051,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 9170,
+          "text": "if (status === 'thành công') {"
+        },
+        {
+          "line": 9172,
+          "text": "} else if (status === 'thất bại') {"
+        },
+        {
+          "line": 9177,
+          "text": "} else if (status === 'lỗi') {"
+        },
+        {
+          "line": 9364,
+          "text": "if (options.campaignDecision && status === 'tạm dừng') options.campaignDecision.paused = true"
+        },
+        {
+          "line": 9408,
+          "text": "const campaignStatus = policy.updateStatusCampaign || 'chờ xử lý'"
+        },
+        {
+          "line": 9464,
+          "text": "if (options.explicitOnly && policy?.countsTowardBadTarget) {"
+        },
+        {
+          "line": 9527,
+          "text": "await this.updateErrorPolicyCampaign(campaign, { status: 'chờ xử lý', note: message })"
+        },
+        {
+          "line": 9973,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 9996,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 10069,
+          "text": "shouldCountAction: actionDetail.countsTowardLimit === true"
+        },
+        {
+          "line": 10106,
+          "text": "if (actionDetail.countsTowardBadTarget !== false) {"
+        },
+        {
+          "line": 10114,
+          "text": "} else if (created.status === 'thành công') {"
+        },
+        {
+          "line": 10205,
+          "text": "shouldCountAction: actionDetail.countsTowardLimit === true"
+        },
+        {
+          "line": 10209,
+          "text": "if (actionDetail.countsTowardBadTarget !== false) {"
+        },
+        {
+          "line": 10269,
+          "text": "already_requested: { status: 'đã gửi lời mời', log: `Đã gửi lời mời kết bạn trước đó đến ${name}`, count: false },"
+        },
+        {
+          "line": 10270,
+          "text": "already_friend: { status: 'đã là bạn bè', log: `Đã là bạn bè với ${name}`, count: false },"
+        },
+        {
+          "line": 10272,
+          "text": "accepted: { status: 'thành công', log: `Đã xác nhận kết bạn với ${name}`, count: true },"
+        },
+        {
+          "line": 10273,
+          "text": "request_sent: { status: 'thành công', log: `Đã gửi lời mời kết bạn đến ${name}`, count: true }"
+        },
+        {
+          "line": 10299,
+          "text": "const status = policy?.detailStatus || (step.status === 'error' ? 'lỗi' : 'thất bại')"
+        },
+        {
+          "line": 10307,
+          "text": "shouldCountAction: policy?.countsTowardLimit ?? true,"
+        },
+        {
+          "line": 10551,
+          "text": "status: isSuccess ? 'thành công' : 'lỗi',"
+        },
+        {
+          "line": 10702,
+          "text": "const status: CampaignDetailStatus = isError ? 'lỗi' : isFailure ? 'thất bại' : outcome === 'already_joined' ? 'đã tham gia' : 'thành công'"
+        },
+        {
+          "line": 10703,
+          "text": "const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined"
+        },
+        {
+          "line": 10706,
+          "text": "if (status === 'lỗi') return `Lỗi tham gia group ${groupName}: ${errMsg}`"
+        },
+        {
+          "line": 10707,
+          "text": "if (status === 'thất bại') return `Tham gia group thất bại ${groupName}: ${errMsg}`"
+        },
+        {
+          "line": 10742,
+          "text": "} else if (status === 'lỗi') {"
+        },
+        {
+          "line": 10787,
+          "text": "const status: 'thành công' | 'thất bại' | 'lỗi' ="
+        },
+        {
+          "line": 10788,
+          "text": "s.status === 'error' ? 'lỗi'"
+        },
+        {
+          "line": 10799,
+          "text": "log: status === 'thành công'"
+        },
+        {
+          "line": 10801,
+          "text": ": status === 'thất bại' && !isUiMode"
+        },
+        {
+          "line": 10803,
+          "text": ": status === 'thất bại'"
+        },
+        {
+          "line": 10817,
+          "text": "error: status === 'thành công' ? undefined : failureMessage"
+        },
+        {
+          "line": 10821,
+          "text": "if (status === 'thành công') {"
+        },
+        {
+          "line": 10824,
+          "text": "} else if (status === 'thất bại' && !isUiMode) {"
+        },
+        {
+          "line": 10826,
+          "text": "} else if (status === 'thất bại') {"
+        },
+        {
+          "line": 10849,
+          "text": "const status: 'thành công' | 'thất bại' | 'lỗi' = switchToPageStep.status === 'error' ? 'lỗi' : 'thất bại'"
+        },
+        {
+          "line": 10857,
+          "text": "log: status === 'lỗi'"
+        },
+        {
+          "line": 10905,
+          "text": "const status: 'thành công' | 'thất bại' | 'lỗi' ="
+        },
+        {
+          "line": 10907,
+          "text": ": s.status === 'error' ? 'lỗi'"
+        },
+        {
+          "line": 10909,
+          "text": "const errorCode = status === 'lỗi'"
+        },
+        {
+          "line": 10926,
+          "text": ": status === 'lỗi'"
+        },
+        {
+          "line": 10971,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 10981,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 10995,
+          "text": "} else if (status === 'lỗi') {"
+        },
+        {
+          "line": 11030,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 11102,
+          "text": "status: 'thất bại',"
+        },
+        {
+          "line": 11130,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 11179,
+          "text": "s.status === 'error' ? 'lỗi'"
+        },
+        {
+          "line": 11183,
+          "text": "const errorCode = status === 'lỗi' ? this.normalizeRuntimeError(campaign, [s], errMsg).errorCode : undefined"
+        },
+        {
+          "line": 11184,
+          "text": "const failureData = status === 'thành công' ? undefined : {"
+        },
+        {
+          "line": 11191,
+          "text": "const logText = status === 'thành công'"
+        },
+        {
+          "line": 11193,
+          "text": ": status === 'không tồn tại'"
+        },
+        {
+          "line": 11209,
+          "text": "if (status === 'thành công') await this.logCampaignProgress(campaign, `💬 ${actionName} thành công đến \"${inputDataName}\"`)"
+        },
+        {
+          "line": 11210,
+          "text": "else if (status === 'không tồn tại') await this.logCampaignProgress(campaign, `⚠️ Không tìm thấy khách inbox page \"${inputDataName}\": ${errMsg}`)"
+        },
+        {
+          "line": 11258,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 11306,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 11378,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 12103,
+          "text": "if (detail.actionName !== 'Tìm data' || detail.status !== 'thành công') continue"
+        },
+        {
+          "line": 12121,
+          "text": "if (detail.campaignId !== campaignId || detail.actionName !== 'Tìm data' || detail.status !== 'thành công') continue"
+        },
+        {
+          "line": 12172,
+          "text": "if (status === 'hoàn thành') {"
+        },
+        {
+          "line": 12184,
+          "text": "if (status === 'hoàn thành') {"
+        },
+        {
+          "line": 12348,
+          "text": "if (actionCode === ZALO_FIND_PHONE_ACTION_CODE) return status === 'không tồn tại'"
+        },
+        {
+          "line": 12477,
+          "text": "if (existingCampaign.status === 'hoàn thành') {"
+        },
+        {
+          "line": 12478,
+          "text": "return await this.updateCampaignAndBroadcast(existingCampaign.id, { status: 'chờ xử lý', note: null })"
+        },
+        {
+          "line": 12488,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 12553,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 12702,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 12779,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 12927,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 13042,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 13075,
+          "text": "if (targetCampaign.status === 'hoàn thành') {"
+        },
+        {
+          "line": 13076,
+          "text": "updates.status = 'chờ xử lý'"
+        },
+        {
+          "line": 13089,
+          "text": "if (detail.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 13188,
+          "text": "if (d.status === 'đang chạy') {"
+        },
+        {
+          "line": 13191,
+          "text": "status: 'hoàn thành',"
+        },
+        {
+          "line": 13534,
+          "text": "return !this.isAuxiliaryZaloTargetAction(actionCode) && (policy?.countsTowardBadTarget ?? true)"
+        },
+        {
+          "line": 13685,
+          "text": "countsTowardLimit: policy?.countsTowardLimit ?? true,"
+        },
+        {
+          "line": 13686,
+          "text": "countsTowardBadTarget: policyHandling === 'target-only'"
+        },
+        {
+          "line": 13748,
+          "text": "countsTowardLimit: policy?.countsTowardLimit ?? true,"
+        },
+        {
+          "line": 13749,
+          "text": "countsTowardBadTarget: policyHandling === 'target-only'"
+        },
+        {
+          "line": 13774,
+          "text": "countsTowardLimit?: boolean"
+        },
+        {
+          "line": 13776,
+          "text": "const status = input.status || 'thành công'"
+        },
+        {
+          "line": 13777,
+          "text": "const commitsDelivery = status === 'thành công' && ["
+        },
+        {
+          "line": 13789,
+          "text": "countsTowardLimit: input.countsTowardLimit ?? true,"
+        },
+        {
+          "line": 13790,
+          "text": "countsTowardBadTarget: !this.isAuxiliaryZaloTargetAction(input.actionCode),"
+        },
+        {
+          "line": 14228,
+          "text": "detail.countsTowardLimit = false"
+        },
+        {
+          "line": 14419,
+          "text": "status: 'thất bại',"
+        },
+        {
+          "line": 14421,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 14422,
+          "text": "countsTowardBadTarget: partialSend.mediaTimeout ? detail.countsTowardBadTarget : false,"
+        },
+        {
+          "line": 14658,
+          "text": "detail.countsTowardLimit = false"
+        },
+        {
+          "line": 14684,
+          "text": "status: isAlreadyMember ? 'đã là thành viên' : undefined,"
+        },
+        {
+          "line": 14686,
+          "text": "countsTowardLimit: isAlreadyMember ? false : true,"
+        },
+        {
+          "line": 14710,
+          "text": "detail.countsTowardLimit = false"
+        },
+        {
+          "line": 14790,
+          "text": "status: 'đã tham gia',"
+        },
+        {
+          "line": 14792,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 14806,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 14819,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 14865,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 14877,
+          "text": "ok: Boolean(detail.status) && detailStatus !== 'thất bại' && detailStatus !== 'lỗi',"
+        },
+        {
+          "line": 14930,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 15019,
+          "text": "status: 'tag không tồn tại',"
+        },
+        {
+          "line": 15021,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15063,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15079,
+          "text": "detailStatus: 'tag không tồn tại'"
+        },
+        {
+          "line": 15087,
+          "text": "status: 'tag không tồn tại',"
+        },
+        {
+          "line": 15089,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15095,
+          "text": "detail.countsTowardLimit = false"
+        },
+        {
+          "line": 15136,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15152,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15159,
+          "text": "detail.countsTowardLimit = false"
+        },
+        {
+          "line": 15306,
+          "text": "status: 'thất bại',"
+        },
+        {
+          "line": 15308,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15309,
+          "text": "countsTowardBadTarget: true"
+        },
+        {
+          "line": 15328,
+          "text": "status: 'không tồn tại',"
+        },
+        {
+          "line": 15340,
+          "text": "countsTowardLimit: false,"
+        },
+        {
+          "line": 15341,
+          "text": "countsTowardBadTarget: false"
+        },
+        {
+          "line": 15380,
+          "text": "status: 'thành công',"
+        },
+        {
+          "line": 15387,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 15388,
+          "text": "countsTowardBadTarget: false"
+        },
+        {
+          "line": 15399,
+          "text": "status: 'thất bại',"
+        },
+        {
+          "line": 15402,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 15403,
+          "text": "countsTowardBadTarget: true"
+        },
+        {
+          "line": 15490,
+          "text": "if (result.status === 'success') return `${actionText} thành công${targetSuffix}`"
+        },
+        {
+          "line": 15519,
+          "text": ": (status === 'error' ? 'Lỗi không xác định' : 'Thao tác thất bại')"
+        },
+        {
+          "line": 16247,
+          "text": "const message = finalized.accountStatus === 'tạm dừng'"
+        },
+        {
+          "line": 16254,
+          "text": "const message = finalized.campaignStatus === 'tạm dừng'"
+        },
+        {
+          "line": 16261,
+          "text": "if (updates.status !== undefined && updates.status !== 'đang chạy') await this.restoreFacebookPageIdentity(id)"
+        },
+        {
+          "line": 16263,
+          "text": "if (updates.status === 'hoàn thành' && this.claimedServerZaloCampaignIds.has(id)) {"
+        },
+        {
+          "line": 16266,
+          "text": "} else if (updates.status === 'hoàn thành') {"
+        },
+        {
+          "line": 16307,
+          "text": "if (updates.status !== 'đang chạy') await this.restoreFacebookPageIdentity(id)"
+        },
+        {
+          "line": 16362,
+          "text": "if (updates.status !== undefined && updates.status !== 'đang chạy') {"
+        },
+        {
+          "line": 16384,
+          "text": "if (!account || account.status !== 'đang chạy') return"
+        },
+        {
+          "line": 16396,
+          "text": "await this.updateAccountAndBroadcast(accountId, { status: 'chờ xử lý' })"
+        },
+        {
+          "line": 16403,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: reason })"
+        },
+        {
+          "line": 16435,
+          "text": "if (account?.status === 'đang chạy') {"
+        },
+        {
+          "line": 16436,
+          "text": "await this.supabase.updateAccount(accountId, { status: 'tạm dừng' }).catch(() => {})"
+        },
+        {
+          "line": 16439,
+          "text": "const updated = await this.supabase.updateRunningDesktopCampaign(campaignId, { status: 'tạm dừng', note }).catch(() => null)"
+        },
+        {
+          "line": 16576,
+          "text": "await this.supabase.updateCampaignInputData(detail.id, { status: 'chờ xử lý', note })"
+        },
+        {
+          "line": 16578,
+          "text": "await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note })"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/v2/runtime/blockHelpers.ts",
+      "sha256": "ee3ef200e556ec6da5dd216e24d3b9a896689f5ddacc473dcb91252ed33dee61",
+      "matches": [
+        {
+          "line": 144,
+          "text": "countsTowardLimit?: boolean"
+        },
+        {
+          "line": 145,
+          "text": "countsTowardBadTarget?: boolean"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/renderer/src/stores/campaignStore.ts",
+      "sha256": "15fc953d44f57213b1bf5e03c33d3ac4f23361c3d6bd807b8bb89ca990e7dcfe",
+      "matches": [
+        {
+          "line": 94,
+          "text": "bulkUpdateCampaignInputDataStatus: (campaignId: number, ids: number[], status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>) => Promise<BulkUpdateCampaignInputDataStatusResult>"
+        },
+        {
+          "line": 100,
+          "text": "// Campaign Details (per-milestone log) — status: 'thành công' | 'thất bại' | 'lỗi'"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/ipc/handlers/campaignHandlers.ts",
+      "sha256": "4ce780178740640fd3ee08c2795d57f4f9bc52e62573cb9ddcd63bc1aa17e8c6",
+      "matches": [
+        {
+          "line": 10,
+          "text": "status: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 21,
+          "text": "const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'"
+        },
+        {
+          "line": 22,
+          "text": "const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'"
+        },
+        {
+          "line": 23,
+          "text": "const canResumeCampaign = (status: string) => status === 'tạm dừng'"
+        },
+        {
+          "line": 63,
+          "text": "if (updates.status === 'tạm dừng' && canPauseCampaign(campaign.status)) return"
+        },
+        {
+          "line": 64,
+          "text": "if (updates.status === 'chờ xử lý' && canResumeCampaign(campaign.status)) return"
+        },
+        {
+          "line": 66,
+          "text": "if (updates.status === 'tạm dừng') {"
+        },
+        {
+          "line": 69,
+          "text": "if (updates.status === 'chờ xử lý') {"
+        },
+        {
+          "line": 142,
+          "text": "&& (payload.status === 'tạm dừng' || payload.status === 'chờ xử lý')"
+        },
+        {
+          "line": 147,
+          "text": "payload.status === 'tạm dừng' ? 'campaign-paused' : 'campaign-resumed'"
+        },
+        {
+          "line": 223,
+          "text": "status: Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/repositories/accountActionRepository.ts",
+      "sha256": "276411552510856f937e4fa27edab4940606bb35ec2a524f75a2881e438cacd2",
+      "matches": [
+        {
+          "line": 317,
+          "text": ".is('counts_toward_limit', null)"
+        },
+        {
+          "line": 330,
+          "text": ".eq('counts_toward_limit', true)"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/repositories/campaignRepository.ts",
+      "sha256": "7da3f6e90d3348d6c2b02b8da836d3e1476ec8566fd7acfd3f463c0a67b2ae32",
+      "matches": [
+        {
+          "line": 235,
+          "text": "const CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']"
+        },
+        {
+          "line": 236,
+          "text": "const CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']"
+        },
+        {
+          "line": 237,
+          "text": "const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ["
+        },
+        {
+          "line": 238,
+          "text": "...CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES,"
+        },
+        {
+          "line": 242,
+          "text": "...CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES,"
+        },
+        {
+          "line": 243,
+          "text": "...CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES,"
+        },
+        {
+          "line": 282,
+          "text": "type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 401,
+          "text": "export type ZaloServerControlStatus = 'chờ xử lý' | 'tạm dừng'"
+        },
+        {
+          "line": 880,
+          "text": ".is('counts_toward_limit', null)"
+        },
+        {
+          "line": 892,
+          "text": ".eq('counts_toward_limit', true)"
+        },
+        {
+          "line": 913,
+          "text": ".is('counts_toward_limit', null)"
+        },
+        {
+          "line": 925,
+          "text": ".eq('counts_toward_limit', true)"
+        },
+        {
+          "line": 1258,
+          "text": "if (status !== 'chờ xử lý' && status !== 'tạm dừng') {"
+        },
+        {
+          "line": 1278,
+          "text": "status === 'tạm dừng' ? 'campaign_pause_requested' : 'campaign_resume_requested',"
+        },
+        {
+          "line": 1279,
+          "text": "status === 'tạm dừng' ? 'Đã nhận yêu cầu tạm dừng chiến dịch (dừng mềm).' : 'Đã nhận yêu cầu tiếp tục chiến dịch.',"
+        },
+        {
+          "line": 1419,
+          "text": "expectedStatus: 'chờ xử lý' | 'đang chạy' = 'đang chạy'"
+        },
+        {
+          "line": 1948,
+          "text": ".in('status', ['chờ xử lý', 'đang chạy'])"
+        },
+        {
+          "line": 2118,
+          "text": "status: campaign.status || 'chờ xử lý',"
+        },
+        {
+          "line": 2245,
+          "text": "if (row.status !== 'chờ xử lý' && row.status !== 'tạm dừng') return []"
+        },
+        {
+          "line": 2276,
+          "text": ".in('status', ['chờ xử lý', 'tạm dừng'])"
+        },
+        {
+          "line": 2298,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 2304,
+          "text": ".in('status', ['chờ xử lý', 'đang chạy', 'tạm dừng'])"
+        },
+        {
+          "line": 2497,
+          "text": ".eq('status', 'chờ xử lý')"
+        },
+        {
+          "line": 2535,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 2560,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 2580,
+          "text": "if (updates.status !== 'chờ xử lý' && updates.status !== 'tạm dừng') {"
+        },
+        {
+          "line": 2597,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 2623,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2632,
+          "text": ".eq('status', 'hoàn thành')"
+        },
+        {
+          "line": 2652,
+          "text": "if (campaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 2703,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 2754,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2804,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 2837,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 3246,
+          "text": "targetStatus: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 3256,
+          "text": "if (targetStatus !== 'chờ xử lý' && targetStatus !== 'tạm dừng') {"
+        },
+        {
+          "line": 3461,
+          "text": ".eq('status', 'chờ xử lý')"
+        },
+        {
+          "line": 3486,
+          "text": ".eq('status', 'chờ xử lý')"
+        },
+        {
+          "line": 3527,
+          "text": ".in('status', ['chờ xử lý', 'hoàn thành'])"
+        },
+        {
+          "line": 3594,
+          "text": "&& campaign.status === 'hoàn thành'"
+        },
+        {
+          "line": 3607,
+          "text": "if (campaign.status === 'chờ xử lý') {"
+        },
+        {
+          "line": 3609,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 3632,
+          "text": "if (campaign.status === 'chờ xử lý' && isAtOrAfterDailyDrainTime(nextSchedule)) {"
+        },
+        {
+          "line": 3638,
+          "text": "status: 'tạm dừng',"
+        },
+        {
+          "line": 3658,
+          "text": "updated.status === 'chờ xử lý' &&"
+        },
+        {
+          "line": 3682,
+          "text": "updated.status === 'chờ xử lý' &&"
+        },
+        {
+          "line": 3697,
+          "text": "if (campaign.status !== 'chờ xử lý') continue"
+        },
+        {
+          "line": 3717,
+          "text": "const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')"
+        },
+        {
+          "line": 3726,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3741,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3762,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3776,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3782,
+          "text": ".neq('status', 'tạm dừng')"
+        },
+        {
+          "line": 3788,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 3857,
+          "text": ".update({ status: 'chờ xử lý' })"
+        },
+        {
+          "line": 3860,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 3881,
+          "text": ".update({ status: 'chờ xử lý' })"
+        },
+        {
+          "line": 3883,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 3894,
+          "text": ".update({ status: 'chờ xử lý' })"
+        },
+        {
+          "line": 3896,
+          "text": ".eq('status', 'đang chạy')"
+        },
+        {
+          "line": 3922,
+          "text": "status: input.status || 'chờ xử lý',"
+        },
+        {
+          "line": 4236,
+          "text": "const statuses: CampaignInput['status'][] = ['chờ xử lý', 'đang chạy', 'hoàn thành', 'tạm dừng', 'lỗi']"
+        },
+        {
+          "line": 4915,
+          "text": ".eq('status', 'chờ xử lý')"
+        },
+        {
+          "line": 4970,
+          "text": "return FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES.includes(status)"
+        },
+        {
+          "line": 4972,
+          "text": "return CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES.includes(status)"
+        },
+        {
+          "line": 5026,
+          "text": "if (CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES.includes(detail.status)) {"
+        },
+        {
+          "line": 5034,
+          "text": "if (detail.status === 'lỗi') summary.errorCount += 1"
+        },
+        {
+          "line": 5247,
+          "text": "status: action.status || 'chờ xử lý',"
+        },
+        {
+          "line": 5339,
+          "text": "status: action.status || 'chờ xử lý',"
+        },
+        {
+          "line": 5453,
+          "text": "if (status !== 'chờ xử lý' && status !== 'tạm dừng') {"
+        },
+        {
+          "line": 5468,
+          "text": "const sourceStatuses: CampaignInputStatus[] = status === 'tạm dừng'"
+        },
+        {
+          "line": 5533,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5580,
+          "text": "if (campaignStatus !== 'chờ xử lý' && campaignStatus !== 'tạm dừng') throw new Error('Trạng thái chiến dịch không hợp lệ.')"
+        },
+        {
+          "line": 5606,
+          "text": "if (campaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 5660,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5705,
+          "text": "if (campaignStatus !== 'chờ xử lý' && campaignStatus !== 'tạm dừng') throw new Error('Trạng thái chiến dịch không hợp lệ.')"
+        },
+        {
+          "line": 5808,
+          "text": "if (target.status === 'đang chạy') {"
+        },
+        {
+          "line": 5868,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5915,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 5921,
+          "text": ".neq('status', 'tạm dừng')"
+        },
+        {
+          "line": 6231,
+          "text": ".or('status.eq.lỗi,error_code.not.is.null')"
+        },
+        {
+          "line": 6250,
+          "text": ".or('status.eq.lỗi,error_code.not.is.null')"
+        },
+        {
+          "line": 6265,
+          "text": "status: action.status || 'thành công',"
+        },
+        {
+          "line": 6272,
+          "text": "payload.counts_toward_limit = action.shouldCountAction"
+        },
+        {
+          "line": 6455,
+          "text": "? actionStatus.disabledReason || `Hành động \"${actionName}\" đang tạm dừng, còn khoảng ${Math.ceil(retryAfterMs / 60000)} phút`"
+        },
+        {
+          "line": 6456,
+          "text": ": actionStatus.disabledReason || `Hành động \"${actionName}\" đang tạm dừng`"
+        },
+        {
+          "line": 6566,
+          "text": ".update({ status: 'tạm dừng', note })"
+        },
+        {
+          "line": 6569,
+          "text": ".eq('status', 'chờ xử lý')"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/repositories/reportRepository.ts",
+      "sha256": "674a1ec2a468829b0f7be7a02936b3b1c82050629c5e4642fb5256a9fecf4059",
+      "matches": [
+        {
+          "line": 32,
+          "text": "const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']"
+        },
+        {
+          "line": 33,
+          "text": "const REPORT_FAILURE_DETAIL_STATUSES: CampaignDetailStatus[] = ['thất bại', 'lỗi', 'không tồn tại']"
+        },
+        {
+          "line": 34,
+          "text": "const REPORT_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']"
+        },
+        {
+          "line": 35,
+          "text": "const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ["
+        },
+        {
+          "line": 36,
+          "text": "...REPORT_SKIPPED_DETAIL_STATUSES,"
+        },
+        {
+          "line": 39,
+          "text": "const REPORT_COUNT_DETAIL_STATUSES: CampaignDetailStatus[] = ["
+        },
+        {
+          "line": 40,
+          "text": "...REPORT_SUCCESS_DETAIL_STATUSES,"
+        },
+        {
+          "line": 41,
+          "text": "...REPORT_FAILURE_DETAIL_STATUSES,"
+        },
+        {
+          "line": 42,
+          "text": "...REPORT_SKIPPED_DETAIL_STATUSES"
+        },
+        {
+          "line": 216,
+          "text": "? FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES"
+        },
+        {
+          "line": 217,
+          "text": ": REPORT_SKIPPED_DETAIL_STATUSES"
+        },
+        {
+          "line": 222,
+          "text": "? REPORT_FAILURE_DETAIL_STATUSES.filter(status => !FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES.includes(status))"
+        },
+        {
+          "line": 223,
+          "text": ": REPORT_FAILURE_DETAIL_STATUSES"
+        },
+        {
+          "line": 227,
+          "text": "if (statusBucket === 'success') return REPORT_SUCCESS_DETAIL_STATUSES"
+        },
+        {
+          "line": 233,
+          "text": "if (REPORT_SUCCESS_DETAIL_STATUSES.includes(status)) return 'success'"
+        },
+        {
+          "line": 371,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 421,
+          "text": ".in('campaign_id', ids).eq('is_delete', false).eq('status', 'chờ xử lý')"
+        },
+        {
+          "line": 531,
+          "text": ".in('status', REPORT_COUNT_DETAIL_STATUSES)"
+        },
+        {
+          "line": 682,
+          "text": ".in('campaign_id', partition.campaignIds).eq('is_delete', false).eq('status', 'chờ xử lý')"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/repositories/emailTrackingRepository.ts",
+      "sha256": "d7e1eeba9446aa492c76f17dceb7ffdb0f33ab0c381b6991555a4a8beca13ec9",
+      "matches": [
+        {
+          "line": 170,
+          "text": ".in('status', ['thành công', 'đã xem'])"
+        },
+        {
+          "line": 182,
+          "text": ".eq('status', 'thành công')"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/repositories/zaloApiErrorLogRepository.ts",
+      "sha256": "432d7682e19a8653d2ae381be5539b5155b1219a086959adb1638da4e360a167",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/main/data/mappers.ts",
+      "sha256": "54e366c5e8529ec8a45bd198e6d585dcfab9feb9d5dd6a18eecc916c075b1a3c",
+      "matches": [
+        {
+          "line": 184,
+          "text": "countsTowardLimit: (row.counts_toward_limit as boolean | null | undefined) ?? true,"
+        },
+        {
+          "line": 185,
+          "text": "countsTowardBadTarget: (row.counts_toward_bad_target as boolean | null | undefined) ?? true,"
+        },
+        {
+          "line": 587,
+          "text": "countsTowardLimit: (row.counts_toward_limit as boolean | null | undefined) ?? null,"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/supabase/functions/aka-agent-email-notification-worker/index.ts",
+      "sha256": "d68053ae33de2f2291ea83300e6ccb742234814a0e7898f93b042b0bd7c68ea0",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgent/src/renderer/src/components/CampaignPanels/CampaignPanel.tsx",
+      "sha256": "51d15103a83da37da50a1e5fa3416da4d1d9d6c8dd15d50644c7eeef65b3e984",
+      "matches": [
+        {
+          "line": 91,
+          "text": "type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 691,
+          "text": "const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'"
+        },
+        {
+          "line": 692,
+          "text": "const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'"
+        },
+        {
+          "line": 693,
+          "text": "const canResumeCampaign = (status: string) => status === 'tạm dừng'"
+        },
+        {
+          "line": 694,
+          "text": "const canDeleteCampaign = (status: string) => status !== 'đang chạy'"
+        },
+        {
+          "line": 1064,
+          "text": "if (execution.status === 'lỗi') return { label: 'Lỗi', tone: 'is-error' }"
+        },
+        {
+          "line": 1160,
+          "text": "status: 'chờ xử lý',"
+        },
+        {
+          "line": 1483,
+          "text": "status === 'tạm dừng' || status === 'hoàn thành'"
+        },
+        {
+          "line": 1610,
+          "text": "const [campaignStatus, setCampaignStatus] = useState<InputDataBatchStatus>('chờ xử lý')"
+        },
+        {
+          "line": 1629,
+          "text": "if (campaign.status === 'đang chạy') return false"
+        },
+        {
+          "line": 2063,
+          "text": "campaign.status === 'tạm dừng' ? 'tạm dừng' : 'chờ xử lý'"
+        },
+        {
+          "line": 2086,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus,"
+        },
+        {
+          "line": 2143,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 2156,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 2167,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 2178,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 2189,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 2201,
+          "text": "status: 'chờ xử lý' as CampaignInputStatus"
+        },
+        {
+          "line": 3356,
+          "text": "status: 'tạm dừng'"
+        },
+        {
+          "line": 3421,
+          "text": "await updateCampaign(campaign.id, { status: 'tạm dừng' })"
+        },
+        {
+          "line": 3433,
+          "text": "await updateCampaign(campaign.id, { status: 'chờ xử lý' })"
+        },
+        {
+          "line": 3558,
+          "text": "await bulkUpdateCampaignStatus(eligible, 'tạm dừng')"
+        },
+        {
+          "line": 3579,
+          "text": "await bulkUpdateCampaignStatus(eligible, 'chờ xử lý')"
+        },
+        {
+          "line": 3659,
+          "text": "const eligibleCount = selectedInputDataRows.filter(row => status === 'tạm dừng'"
+        },
+        {
+          "line": 3660,
+          "text": "? row.status === 'chờ xử lý'"
+        },
+        {
+          "line": 3661,
+          "text": ": row.status === 'tạm dừng' || row.status === 'hoàn thành').length"
+        },
+        {
+          "line": 3664,
+          "text": "showAlert(status === 'tạm dừng'"
+        },
+        {
+          "line": 3868,
+          "text": "if (campaign.status === 'đang chạy') {"
+        },
+        {
+          "line": 3889,
+          "text": "if (config.status === 'đang chạy') {"
+        },
+        {
+          "line": 3960,
+          "text": "status === 'thành công' ? '✅ Thành công'"
+        },
+        {
+          "line": 3961,
+          "text": ": status === 'đã gửi' ? 'Đã gửi'"
+        },
+        {
+          "line": 3965,
+          "text": ": status === 'đã gửi lời mời' ? 'Đã gửi lời mời'"
+        },
+        {
+          "line": 3966,
+          "text": ": status === 'đã là thành viên' ? 'Đã là thành viên'"
+        },
+        {
+          "line": 3967,
+          "text": ": status === 'thất bại' ? '⚠️ Thất bại'"
+        },
+        {
+          "line": 3968,
+          "text": ": status === 'không tồn tại' ? '⚠️ Không tồn tại'"
+        },
+        {
+          "line": 3969,
+          "text": ": status === 'lỗi' ? '❌ Lỗi'"
+        },
+        {
+          "line": 4461,
+          "text": "className={`campaign-relation-breakdown-chip ${item.status === 'lỗi' ? 'error' : tone}`}"
+        },
+        {
+          "line": 6295,
+          "text": "title={canEditCampaign(campaign.status) ? 'Sửa chiến dịch' : 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng'}"
+        },
+        {
+          "line": 6330,
+          "text": "title={canEditCampaign(campaign.status) ? 'Cập nhật giới hạn gửi' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}"
+        },
+        {
+          "line": 6344,
+          "text": "title={canEditCampaign(campaign.status) ? 'Cập nhật nội dung + media' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}"
+        },
+        {
+          "line": 6447,
+          "text": "title={canDeleteCampaign(campaign.status) ? 'Xoá chiến dịch' : 'Không thể xoá chiến dịch đang chạy'}"
+        },
+        {
+          "line": 6837,
+          "text": "onClick={() => handleInputDataBatchStatus('chờ xử lý')}"
+        },
+        {
+          "line": 6844,
+          "text": "onClick={() => handleInputDataBatchStatus('tạm dừng')}"
+        },
+        {
+          "line": 7169,
+          "text": "{engagementDisplay(a.zaloEngagement, a.zaloEngagementApplicable ?? (engagementApplicable(a.actionCode) && a.status === 'thành công' && !selectedCampaignAccount.isZaloShowWeb))}"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/packages/control-api/src/contracts.ts",
+      "sha256": "bda12ae9de129a38d475ff4ae6002ab45da3eb3207bb917c12e687ba56a849df",
+      "matches": [
+        {
+          "line": 105,
+          "text": "export type CampaignStatus = 'chờ xử lý' | 'đang chạy' | 'tạm dừng' | 'hoàn thành'"
+        },
+        {
+          "line": 286,
+          "text": "countsTowardLimit: boolean | null"
+        },
+        {
+          "line": 374,
+          "text": "status?: Extract<CampaignStatus, 'chờ xử lý' | 'tạm dừng'>"
+        },
+        {
+          "line": 551,
+          "text": "campaignStatus: 'chờ xử lý' | 'tạm dừng'"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/packages/control-client/src/index.ts",
+      "sha256": "3ae274f9622c8f709d50cf906ae145eaf723abdffb12aaa11b4a64affcc8beda",
+      "matches": [
+        {
+          "line": 942,
+          "text": "const createdPayload = campaignPayload({ ...input, status: 'tạm dừng' }, accountId, [])"
+        },
+        {
+          "line": 971,
+          "text": "campaignStatus: 'tạm dừng',"
+        },
+        {
+          "line": 1082,
+          "text": "status: 'chờ xử lý' | 'tạm dừng',"
+        },
+        {
+          "line": 1161,
+          "text": "updateCampaignInputStatuses: async (id: number, inputIds: number[], status: 'chờ xử lý' | 'tạm dừng') => {"
+        },
+        {
+          "line": 1244,
+          "text": "campaignStatus?: 'chờ xử lý' | 'tạm dừng'"
+        },
+        {
+          "line": 1374,
+          "text": "status?: 'chờ xử lý' | 'tạm dừng'"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.service.ts",
+      "sha256": "fa66db1bf05556b42ee5e9a12a47176813f9e30c8a3b0514fe1074988311062e",
+      "matches": [
+        {
+          "line": 463,
+          "text": "if (status !== \"chờ xử lý\" && status !== \"tạm dừng\") throw badRequest(\"Chỉ hỗ trợ trạng thái chờ xử lý hoặc tạm dừng.\");"
+        },
+        {
+          "line": 482,
+          "text": "const status = input.status as \"chờ xử lý\" | \"tạm dừng\";"
+        },
+        {
+          "line": 507,
+          "text": "if (account.status === \"đang chạy\") {"
+        },
+        {
+          "line": 683,
+          "text": "initialStatus: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 714,
+          "text": "if (current.status !== \"chờ xử lý\" && current.status !== \"tạm dừng\") {"
+        },
+        {
+          "line": 715,
+          "text": "const errorCode = current.status === \"đang chạy\""
+        },
+        {
+          "line": 717,
+          "text": ": current.status === \"hoàn thành\""
+        },
+        {
+          "line": 721,
+          "text": "current.status === \"đang chạy\""
+        },
+        {
+          "line": 871,
+          "text": "if (campaign.status === \"đang chạy\") throw conflict(\"Không thể xoá chiến dịch đang chạy.\", \"campaign_running\");"
+        },
+        {
+          "line": 900,
+          "text": "if (status !== \"chờ xử lý\" && status !== \"tạm dừng\") throw badRequest(\"Chỉ hỗ trợ tiếp tục hoặc tạm dừng chiến dịch.\");"
+        },
+        {
+          "line": 932,
+          "text": "const targetStatus = status as \"chờ xử lý\" | \"tạm dừng\";"
+        },
+        {
+          "line": 974,
+          "text": "if (status !== \"chờ xử lý\" && status !== \"tạm dừng\") {"
+        },
+        {
+          "line": 993,
+          "text": "if (campaign.status === \"đang chạy\") throw conflict(\"Không thể thêm data khi chiến dịch đang chạy.\", \"campaign_running\");"
+        },
+        {
+          "line": 1000,
+          "text": "if (status !== \"chờ xử lý\" && status !== \"tạm dừng\") {"
+        },
+        {
+          "line": 1067,
+          "text": "if (campaign.status !== \"tạm dừng\") {"
+        },
+        {
+          "line": 1615,
+          "text": "function normalizeCampaignCreateStatus(value: unknown): \"chờ xử lý\" | \"tạm dừng\" {"
+        },
+        {
+          "line": 1618,
+          "text": "if (status !== \"chờ xử lý\" && status !== \"tạm dừng\") {"
+        },
+        {
+          "line": 2035,
+          "text": "return targetStatus === \"tạm dừng\""
+        },
+        {
+          "line": 2036,
+          "text": "? currentStatus === \"chờ xử lý\" || currentStatus === \"đang chạy\""
+        },
+        {
+          "line": 2037,
+          "text": ": currentStatus === \"tạm dừng\";"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.types.ts",
+      "sha256": "66bdafc96124f32193b946253691627abf56303f96fb74c033ea0b4b83e2425c",
+      "matches": [
+        {
+          "line": 293,
+          "text": "countsTowardLimit: boolean | null;"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/mobile/app/campaigns/[id].tsx",
+      "sha256": "54fd948efb53dc18a87ba001ff973b23f21479f6948adb2b5713ee87e5dec07f",
+      "matches": [
+        {
+          "line": 66,
+          "text": "const control = (status: 'chờ xử lý' | 'tạm dừng') => {"
+        },
+        {
+          "line": 70,
+          "text": "`${status === 'tạm dừng' ? 'Tạm dừng' : 'Cho phép chạy'} chiến dịch “${campaign?.name}”?`,"
+        },
+        {
+          "line": 176,
+          "text": "title={campaign.status === 'đang chạy' ? 'Tạm dừng' : 'Chạy / tiếp tục'}"
+        },
+        {
+          "line": 178,
+          "text": "campaign.status === 'đang chạy' ? ("
+        },
+        {
+          "line": 185,
+          "text": "onPress={() => control(campaign.status === 'đang chạy' ? 'tạm dừng' : 'chờ xử lý')}"
+        },
+        {
+          "line": 434,
+          "text": "const changeStatuses = (status: 'chờ xử lý' | 'tạm dừng') => {"
+        },
+        {
+          "line": 498,
+          "text": "manual && <Button title=\"Thêm data\" disabled={campaign.status === 'đang chạy'} onPress={onAppend} />"
+        },
+        {
+          "line": 533,
+          "text": "onPress={() => changeStatuses('chờ xử lý')}"
+        },
+        {
+          "line": 539,
+          "text": "onPress={() => changeStatuses('tạm dừng')}"
+        },
+        {
+          "line": 564,
+          "text": "item.status !== 'đang chạy' &&"
+        },
+        {
+          "line": 612,
+          "text": "[status, setStatus] = useState<'chờ xử lý' | 'tạm dừng'>('chờ xử lý'),"
+        },
+        {
+          "line": 685,
+          "text": "if (current.status === 'đang chạy' || current.dataTargetSourceMode === 'data_group')"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.remarketing.ts",
+      "sha256": "7530210a5ded05c7b62203d9c27826e4108c93eab7561fd74e32b99e1336c38e",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.repository.ts",
+      "sha256": "e0422d329c5ec300e70c2355b15ac21b8ae7a501a4237999a85373db8f298bd8",
+      "matches": [
+        {
+          "line": 180,
+          "text": "setZaloServerAccountStatus(staffId: number, accountId: number, status: \"chờ xử lý\" | \"tạm dừng\"): Promise<ZaloServerStatusMutationResult>;"
+        },
+        {
+          "line": 201,
+          "text": "createCampaignAtomic(staffId: number, organizationId: number, idempotencyKey: string, input: ControlCampaignCreateInput, initialStatus?: \"chờ xử lý\" | \"tạm dừng\"): Promise<{ campaignId: number; inputCount: number; created: boolean }>;"
+        },
+        {
+          "line": 204,
+          "text": "setZaloServerCampaignStatus(staffId: number, campaignId: number, status: \"chờ xử lý\" | \"tạm dừng\"): Promise<ZaloServerStatusMutationResult>;"
+        },
+        {
+          "line": 207,
+          "text": "updateCampaignInputStatuses(staffId: number, organizationId: number, campaignId: number, inputIds: number[], status: \"chờ xử lý\" | \"tạm dừng\"): Promise<{ updatedCount: number; skippedCount: number }>;"
+        },
+        {
+          "line": 217,
+          "text": "campaignStatus: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 635,
+          "text": ".eq(\"action_code\", actionCode).eq(\"counts_toward_limit\", true).gte(\"created_at\", timeFrameStart);"
+        },
+        {
+          "line": 638,
+          "text": ".eq(\"action_code\", actionCode).is(\"counts_toward_limit\", null).gte(\"created_at\", timeFrameStart);"
+        },
+        {
+          "line": 639,
+          "text": "if (actionCode !== \"sms_send\" && actionCode !== \"voice_call\") legacyQuery = legacyQuery.in(\"status\", [\"thành công\", \"thất bại\"]);"
+        },
+        {
+          "line": 727,
+          "text": ".eq(\"counts_toward_limit\", true)"
+        },
+        {
+          "line": 733,
+          "text": ".is(\"counts_toward_limit\", null)"
+        },
+        {
+          "line": 735,
+          "text": "if (action.code !== \"sms_send\") legacyQuery = legacyQuery.in(\"status\", [\"thành công\", \"thất bại\"]);"
+        },
+        {
+          "line": 860,
+          "text": "status: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 903,
+          "text": "if (changingProxy && current.status === \"đang chạy\") {"
+        },
+        {
+          "line": 930,
+          "text": "if (changingProxy) request = request.or(\"status.is.null,status.neq.đang chạy\");"
+        },
+        {
+          "line": 942,
+          "text": "if (changingProxy && latest.status === \"đang chạy\") {"
+        },
+        {
+          "line": 1285,
+          "text": "initialStatus: \"chờ xử lý\" | \"tạm dừng\" = \"chờ xử lý\""
+        },
+        {
+          "line": 1405,
+          "text": ".in(\"status\", [\"chờ xử lý\", \"tạm dừng\"])"
+        },
+        {
+          "line": 1436,
+          "text": "status: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 1455,
+          "text": ".neq(\"status\", \"đang chạy\")"
+        },
+        {
+          "line": 1486,
+          "text": "status: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 1541,
+          "text": "campaignStatus: \"chờ xử lý\" | \"tạm dừng\""
+        },
+        {
+          "line": 1612,
+          "text": ".filter(({ row }) => row.status === \"chờ xử lý\" || row.status === \"tạm dừng\");"
+        },
+        {
+          "line": 2294,
+          "text": "countResults(REPORT_SUCCESS_DETAIL_STATUSES, range.todayIso),"
+        },
+        {
+          "line": 2295,
+          "text": "countResults(REPORT_SUCCESS_DETAIL_STATUSES, range.startIso),"
+        },
+        {
+          "line": 2296,
+          "text": "countResults(REPORT_FAILURE_DETAIL_STATUSES, range.startIso)"
+        },
+        {
+          "line": 2327,
+          "text": "totals.runningCampaigns += rows.filter(row => row.status === \"đang chạy\").length;"
+        },
+        {
+          "line": 2388,
+          "text": ".in(\"status\", REPORT_COUNT_DETAIL_STATUSES)"
+        },
+        {
+          "line": 2454,
+          "text": ".in(\"campaign_id\", ids).eq(\"is_delete\", false).eq(\"status\", \"chờ xử lý\")"
+        },
+        {
+          "line": 2669,
+          "text": ".in(\"campaign_id\", partition.campaignIds).eq(\"is_delete\", false).eq(\"status\", \"chờ xử lý\")"
+        },
+        {
+          "line": 2887,
+          "text": "const REPORT_SUCCESS_DETAIL_STATUSES = [\"thành công\", \"đã xem\", \"đã click\", \"đã gửi\", \"đã nhận\"];"
+        },
+        {
+          "line": 2888,
+          "text": "const REPORT_SKIPPED_DETAIL_STATUSES = [\"đã gửi lời mời\", \"đã là thành viên\"];"
+        },
+        {
+          "line": 2889,
+          "text": "const REPORT_FAILURE_DETAIL_STATUSES = [\"thất bại\", \"lỗi\", \"không tồn tại\"];"
+        },
+        {
+          "line": 2890,
+          "text": "const REPORT_COUNT_DETAIL_STATUSES = Array.from(new Set(["
+        },
+        {
+          "line": 2891,
+          "text": "...REPORT_SUCCESS_DETAIL_STATUSES,"
+        },
+        {
+          "line": 2892,
+          "text": "...REPORT_SKIPPED_DETAIL_STATUSES,"
+        },
+        {
+          "line": 2893,
+          "text": "...REPORT_FAILURE_DETAIL_STATUSES"
+        },
+        {
+          "line": 2912,
+          "text": "if (REPORT_SUCCESS_DETAIL_STATUSES.includes(status)) return \"success\";"
+        },
+        {
+          "line": 2913,
+          "text": "if (REPORT_SKIPPED_DETAIL_STATUSES.includes(status)) return \"skipped\";"
+        },
+        {
+          "line": 2914,
+          "text": "if (REPORT_FAILURE_DETAIL_STATUSES.includes(status)) return \"failure\";"
+        },
+        {
+          "line": 2919,
+          "text": "if (bucket === \"success\") return REPORT_SUCCESS_DETAIL_STATUSES;"
+        },
+        {
+          "line": 2920,
+          "text": "if (bucket === \"skipped\") return REPORT_SKIPPED_DETAIL_STATUSES;"
+        },
+        {
+          "line": 2921,
+          "text": "return REPORT_FAILURE_DETAIL_STATUSES;"
+        },
+        {
+          "line": 3031,
+          "text": "status: \"chờ xử lý\","
+        },
+        {
+          "line": 3268,
+          "text": "data: isRecord(row.data) ? row.data : {}, countsTowardLimit: typeof row.counts_toward_limit === \"boolean\" ? row.counts_toward_limit : null,"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.routes.ts",
+      "sha256": "5f48b6e04ce27d472751207739f7a262d2c37c6c6b19b80cd264bcbe72550693",
+      "matches": [
+        {
+          "line": 350,
+          "text": "status: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] },"
+        },
+        {
+          "line": 830,
+          "text": "status: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] }"
+        },
+        {
+          "line": 853,
+          "text": "status: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] }"
+        },
+        {
+          "line": 873,
+          "text": "campaignStatus: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] },"
+        },
+        {
+          "line": 1363,
+          "text": "campaignStatus: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] }"
+        },
+        {
+          "line": 2011,
+          "text": "status: { type: \"string\", enum: [\"chờ xử lý\", \"tạm dừng\"] }"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/api/src/modules/aka-agent-control/aka-agent-control.assistant.ts",
+      "sha256": "c25078989ff32477f15bab19dec1305360ebefa347d21f0e0d0c24335e70a56b",
+      "matches": [
+        {
+          "line": 160,
+          "text": ".or(\"status.eq.lỗi,error_code.not.is.null\")"
+        },
+        {
+          "line": 407,
+          "text": "const errorsToday = todayDetails.filter(detail => detail.status === \"lỗi\");"
+        },
+        {
+          "line": 408,
+          "text": "const failuresToday = todayDetails.filter(detail => detail.status === \"thất bại\");"
+        },
+        {
+          "line": 419,
+          "text": "if (campaign.status === \"tạm dừng\") return { reason: \"campaign_paused\", severity: \"info\", message: \"Chiến dịch đang tạm dừng.\" };"
+        },
+        {
+          "line": 420,
+          "text": "if (campaign.status === \"hoàn thành\") return { reason: \"campaign_completed\", severity: \"info\", message: \"Chiến dịch đã hoàn thành.\" };"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp/apps/web/src/features/CampaignInputDataView.tsx",
+      "sha256": "da9e18f7aceab080fffce5a9d90b1ebb4bf84e34b4d40548e671992e4afc3366",
+      "matches": [
+        {
+          "line": 165,
+          "text": "const updateStatus = async (status: 'chờ xử lý' | 'tạm dừng') => {"
+        },
+        {
+          "line": 171,
+          "text": "const eligibleCount = selectedRows.filter((row) => status === 'tạm dừng'"
+        },
+        {
+          "line": 172,
+          "text": "? row.status === 'chờ xử lý'"
+        },
+        {
+          "line": 173,
+          "text": ": row.status === 'tạm dừng' || row.status === 'hoàn thành').length"
+        },
+        {
+          "line": 176,
+          "text": "setNotice(status === 'tạm dừng'"
+        },
+        {
+          "line": 295,
+          "text": "<button className=\"btn btn-secondary btn-sm\" type=\"button\" disabled={actionsDisabled} onClick={() => void updateStatus('chờ xử lý')} title=\"Tiếp tục hoặc chạy lại đúng input đã chọn\"><Play size={12} /> Tiếp tục / chạy lại</button>"
+        },
+        {
+          "line": 296,
+          "text": "<button className=\"btn btn-secondary btn-sm\" type=\"button\" disabled={actionsDisabled} onClick={() => void updateStatus('tạm dừng')} title=\"Tạm dừng data đã chọn\"><Pause size={12} /> Tạm dừng</button>"
+        },
+        {
+          "line": 415,
+          "text": "campaignStatus: target.status === 'tạm dừng' ? 'tạm dừng' : 'chờ xử lý',"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi/packages/database/src/campaignEngagementRepository.ts",
+      "sha256": "963e2e6819bf66edf8c8a24bf4f6f460fd44ec76d9a08b13acf17d8d471a1a0b",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi/packages/database/src/campaignActionRepository.ts",
+      "sha256": "7500c22d029390ac4b5b775bed09f3bb9b677723468c02d78d9f1ad8f2709459",
+      "matches": []
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi/packages/database/src/campaignRuntimeRepository.ts",
+      "sha256": "be0f563e6153c75a8b9c035335eb49803d8e6c01cf5c8b3f165c9e0f4cab2684",
+      "matches": [
+        {
+          "line": 204,
+          "text": "countsTowardLimit: boolean;"
+        },
+        {
+          "line": 205,
+          "text": "countsTowardBadTarget: boolean;"
+        },
+        {
+          "line": 878,
+          "text": "campaignStatus: \"chờ xử lý\" | \"tạm dừng\" | null;"
+        },
+        {
+          "line": 1183,
+          "text": "WHERE campaign.status = 'chờ xử lý'"
+        },
+        {
+          "line": 1207,
+          "text": "AND account.status = 'chờ xử lý'"
+        },
+        {
+          "line": 1276,
+          "text": "loginStatus: 'đã đăng nhập', accountStatus: 'đang chạy', eventType: 'campaign_claimed',"
+        },
+        {
+          "line": 1389,
+          "text": "SET status = 'tạm dừng',"
+        },
+        {
+          "line": 1393,
+          "text": "AND input_data.status = 'chờ xử lý'"
+        },
+        {
+          "line": 1747,
+          "text": "date_action = CASE WHEN ${fields.status} = 'hoàn thành' THEN now() ELSE date_action END"
+        },
+        {
+          "line": 1761,
+          "text": "countsTowardLimit?: boolean;"
+        },
+        {
+          "line": 1775,
+          "text": "counts_toward_limit"
+        },
+        {
+          "line": 1786,
+          "text": "${input.countsTowardLimit ?? true}"
+        },
+        {
+          "line": 1790,
+          "text": "if (input.countsTowardLimit !== false) {"
+        },
+        {
+          "line": 1867,
+          "text": "await this.releaseAccount(campaign, row?.account_status === \"tạm dừng\" ? \"tạm dừng\" : \"chờ xử lý\", claimToken);"
+        },
+        {
+          "line": 1892,
+          "text": "SET status = 'chờ xử lý',"
+        },
+        {
+          "line": 1901,
+          "text": "AND status = 'đang chạy'"
+        },
+        {
+          "line": 1922,
+          "text": "// preserve the newer campaign status instead of writing \"chờ xử lý\"."
+        },
+        {
+          "line": 1948,
+          "text": "const previousStatus = account.rows[0]?.status === \"tạm dừng\" ? \"tạm dừng\" : \"chờ xử lý\";"
+        },
+        {
+          "line": 1967,
+          "text": "SET status = CASE WHEN status = 'đang chạy' THEN 'tạm dừng' ELSE status END,"
+        },
+        {
+          "line": 1968,
+          "text": "note = CASE WHEN status = 'đang chạy' THEN ${note.slice(0, 2_000)} ELSE note END,"
+        },
+        {
+          "line": 2014,
+          "text": "if (row.campaign_status !== \"đang chạy\" || row.account_claim_token !== claimToken) {"
+        },
+        {
+          "line": 2018,
+          "text": "return row.campaign_status === \"đang chạy\" ? fallbackNote : null;"
+        },
+        {
+          "line": 2035,
+          "text": "updateStatusAccount: row.account_status === \"đang chạy\" ? policy.updateStatusAccount : null,"
+        },
+        {
+          "line": 2036,
+          "text": "updateStatusCampaign: policy.updateStatusCampaign || \"chờ xử lý\""
+        },
+        {
+          "line": 2211,
+          "text": "const boundary = row.campaign_status === \"tạm dừng\""
+        },
+        {
+          "line": 2213,
+          "text": ": row.account_status === \"tạm dừng\""
+        },
+        {
+          "line": 2223,
+          "text": "WHEN ${boundary === \"account\"}::boolean AND status = 'đang chạy' THEN 'chờ xử lý'"
+        },
+        {
+          "line": 2227,
+          "text": "WHEN ${boundary === \"account\"}::boolean AND status = 'đang chạy' THEN ${stopNote?.slice(0, 2_000) ?? null}"
+        },
+        {
+          "line": 2248,
+          "text": "${row.account_status === \"tạm dừng\" ? \"tạm dừng\" : \"chờ xử lý\"}::text,"
+        },
+        {
+          "line": 2290,
+          "text": "await this.releaseAccount(campaign, row.account_status === \"tạm dừng\" ? \"tạm dừng\" : \"chờ xử lý\", claimToken);"
+        },
+        {
+          "line": 2462,
+          "text": "AND campaign.status IN ('chờ xử lý', 'hoàn thành')"
+        },
+        {
+          "line": 2497,
+          "text": "if (dailyBirthday && campaign.status === \"hoàn thành\") return false;"
+        },
+        {
+          "line": 2501,
+          "text": "if (campaign.status === \"chờ xử lý\") {"
+        },
+        {
+          "line": 2504,
+          "text": "SET status = 'tạm dừng',"
+        },
+        {
+          "line": 2508,
+          "text": "AND status = 'chờ xử lý'"
+        },
+        {
+          "line": 2548,
+          "text": "if (campaign.status === \"chờ xử lý\" && nextParts.hour * 60 + nextParts.minute >= 23 * 60 + 59) {"
+        },
+        {
+          "line": 2551,
+          "text": "SET status = 'tạm dừng',"
+        },
+        {
+          "line": 2555,
+          "text": "AND status = 'chờ xử lý'"
+        },
+        {
+          "line": 2585,
+          "text": "AND status = 'chờ xử lý'"
+        },
+        {
+          "line": 2592,
+          "text": "if (campaign.status !== \"chờ xử lý\") return false;"
+        },
+        {
+          "line": 2599,
+          "text": "AND status = 'chờ xử lý'"
+        },
+        {
+          "line": 2634,
+          "text": "AND status = 'hoàn thành'"
+        },
+        {
+          "line": 2694,
+          "text": "SET status = 'chờ xử lý', note = '', date_action = NULL"
+        },
+        {
+          "line": 2697,
+          "text": "AND status <> 'tạm dừng'"
+        },
+        {
+          "line": 2702,
+          "text": "SET status = CASE WHEN ${clearMaterialized || resetInputs} THEN 'chờ xử lý' ELSE status END,"
+        },
+        {
+          "line": 2716,
+          "text": "AND status IN ('chờ xử lý', 'hoàn thành')"
+        },
+        {
+          "line": 2739,
+          "text": "previousStatus: \"chờ xử lý\" | \"tạm dừng\","
+        },
+        {
+          "line": 2773,
+          "text": "counts_toward_limit: boolean | null;"
+        },
+        {
+          "line": 2817,
+          "text": "countsTowardLimit: row.counts_toward_limit ?? true,"
+        },
+        {
+          "line": 2818,
+          "text": "countsTowardBadTarget: row.counts_toward_bad_target ?? true"
+        },
+        {
+          "line": 2934,
+          "text": "AND status = 'đang chạy'"
+        },
+        {
+          "line": 2945,
+          "text": "AND status = 'đang chạy'"
+        },
+        {
+          "line": 3036,
+          "text": "SET status = ${policy.updateStatusCampaign || \"chờ xử lý\"},"
+        },
+        {
+          "line": 3040,
+          "text": "AND status = 'đang chạy'"
+        },
+        {
+          "line": 3481,
+          "text": "AND detail.counts_toward_limit = true"
+        },
+        {
+          "line": 3489,
+          "text": "AND detail.counts_toward_limit = true"
+        },
+        {
+          "line": 3520,
+          "text": "AND status = 'chờ xử lý'"
+        },
+        {
+          "line": 3553,
+          "text": "AND detail.counts_toward_limit = true"
+        },
+        {
+          "line": 3561,
+          "text": "AND detail.counts_toward_limit = true"
+        }
+      ]
+    },
+    {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts",
+      "sha256": "80a3921e503390bdbb43ffe62e2378713541ef0204d66b9f7425d7ce4fdfaeef",
+      "matches": [
+        {
+          "line": 458,
+          "text": "const result = await this.repository.sendExclusionRuntime<{changed: boolean}>(campaign, run.claimToken, \"pause\", {inputId: input.id, expectedStatus: claimed ? \"đang chạy\" : \"chờ xử lý\", note});"
+        },
+        {
+          "line": 461,
+          "text": "input.status = \"tạm dừng\"; input.note = note;"
+        },
+        {
+          "line": 704,
+          "text": "await this.repository.updateInput(input.id, { status: \"tạm dừng\", note: ZALO_MESSAGE_OPT_OUT_NOTE });"
+        },
+        {
+          "line": 719,
+          "text": "inputStatus = \"chờ xử lý\""
+        },
+        {
+          "line": 801,
+          "text": "for (const input of inputs) await this.repository.updateInput(input.id, { status: \"chờ xử lý\", note });"
+        },
+        {
+          "line": 808,
+          "text": "for (const input of inputs) await this.repository.updateInput(input.id, { status: \"chờ xử lý\", note });"
+        },
+        {
+          "line": 887,
+          "text": "actionCode, actionName, countsTowardLimit: true,"
+        },
+        {
+          "line": 895,
+          "text": "status: \"hoàn thành\","
+        },
+        {
+          "line": 988,
+          "text": "status: \"chờ xử lý\","
+        },
+        {
+          "line": 999,
+          "text": "actionCode, actionName, countsTowardLimit: true,"
+        },
+        {
+          "line": 1007,
+          "text": "status: \"hoàn thành\","
+        },
+        {
+          "line": 1020,
+          "text": "status: \"chờ xử lý\","
+        },
+        {
+          "line": 1036,
+          "text": "actionCode, actionName, countsTowardLimit: true,"
+        },
+        {
+          "line": 1046,
+          "text": "status: requeue ? \"chờ xử lý\" : \"hoàn thành\","
+        },
+        {
+          "line": 1068,
+          "text": "actionCode, actionName, countsTowardLimit: true,"
+        },
+        {
+          "line": 1084,
+          "text": "status: requeue ? \"chờ xử lý\" : \"hoàn thành\","
+        },
+        {
+          "line": 1104,
+          "text": "status: \"thành công\","
+        },
+        {
+          "line": 1111,
+          "text": "countsTowardLimit: true"
+        },
+        {
+          "line": 1117,
+          "text": "status: \"hoàn thành\","
+        },
+        {
+          "line": 1192,
+          "text": "await this.repository.updateInput(input.id, { status: \"hoàn thành\", note });"
+        },
+        {
+          "line": 1277,
+          "text": "await this.repository.updateInput(input.id, { status: \"hoàn thành\", note });"
+        },
+        {
+          "line": 1311,
+          "text": "await this.repository.updateInput(input.id, { status: \"hoàn thành\", note });"
+        },
+        {
+          "line": 1320,
+          "text": "await this.repository.updateInput(input.id, { status: \"hoàn thành\", note });"
+        },
+        {
+          "line": 1334,
+          "text": "await this.repository.updateInput(input.id, { status: requeueInput ? \"chờ xử lý\" : \"hoàn thành\", note });"
+        },
+        {
+          "line": 1342,
+          "text": "await this.repository.updateInput(input.id, { status: requeueInput ? \"chờ xử lý\" : \"hoàn thành\", note });"
+        },
+        {
+          "line": 1359,
+          "text": "status: requeueInput ? \"chờ xử lý\" : \"hoàn thành\","
+        },
+        {
+          "line": 1377,
+          "text": "countsTowardLimit: true"
+        },
+        {
+          "line": 1390,
+          "text": "status: requeueInput ? \"chờ xử lý\" : \"hoàn thành\","
+        },
+        {
+          "line": 1710,
+          "text": "status: \"thành công\", log: `Đã tìm thấy SĐT ${phone}: ${target.displayName || target.uid}.`,"
+        },
+        {
+          "line": 1711,
+          "text": "data: { phone, target, attempts }, countsTowardLimit: true"
+        },
+        {
+          "line": 1715,
+          "text": "status: \"đang chạy\","
+        },
+        {
+          "line": 1768,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 1771,
+          "text": "if (handled.detailStatus?.toLocaleLowerCase(\"vi-VN\") === \"không tồn tại\") return null;"
+        },
+        {
+          "line": 1937,
+          "text": "campaign, inputDataId: input.id, actionCode, actionName, status: \"thành công\","
+        },
+        {
+          "line": 1945,
+          "text": "}, countsTowardLimit: true"
+        },
+        {
+          "line": 1954,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 1986,
+          "text": "campaign, inputDataId: input.id, actionCode, actionName: \"Kết bạn\", status: \"thành công\","
+        },
+        {
+          "line": 1988,
+          "text": "data: { target, zaloEngagementSource: makeEngagementSource(campaign.accountZaloUid, target.uid, 'friend_request', sentAt, null, revision) }, countsTowardLimit: true"
+        },
+        {
+          "line": 1991,
+          "text": "const handled = await this.recordFailure(campaign, input, error, { actionCode, actionName: \"Kết bạn\", countsTowardLimit: true, data: { target } });"
+        },
+        {
+          "line": 1993,
+          "text": "if (detailStatus && detailStatus !== \"thất bại\" && detailStatus !== \"lỗi\") return;"
+        },
+        {
+          "line": 2039,
+          "text": "status: \"tag không tồn tại\","
+        },
+        {
+          "line": 2042,
+          "text": "countsTowardLimit: false"
+        },
+        {
+          "line": 2073,
+          "text": "actionName: \"Gắn tag Zalo\", status: \"thành công\","
+        },
+        {
+          "line": 2075,
+          "text": "data: { target, labelId }, countsTowardLimit: false });"
+        },
+        {
+          "line": 2083,
+          "text": "status: \"tag không tồn tại\","
+        },
+        {
+          "line": 2086,
+          "text": "countsTowardLimit: false"
+        },
+        {
+          "line": 2090,
+          "text": "const handled = await this.recordFailure(campaign, input, error, { actionCode: \"zalo_tag_contact\", actionName: \"Gắn tag Zalo\", countsTowardLimit: false });"
+        },
+        {
+          "line": 2110,
+          "text": "countsTowardLimit: false"
+        },
+        {
+          "line": 2118,
+          "text": "actionName: \"Đổi tên Zalo\", status: \"thành công\", log: `Đã đổi tên ${target.displayName || target.uid} thành \"${alias}\".`,"
+        },
+        {
+          "line": 2119,
+          "text": "data: { target, alias }, countsTowardLimit: false });"
+        },
+        {
+          "line": 2121,
+          "text": "const handled = await this.recordFailure(campaign, input, error, { actionCode: \"zalo_change_alias\", actionName: \"Đổi tên Zalo\", countsTowardLimit: false });"
+        },
+        {
+          "line": 2189,
+          "text": "status: already ? \"đã là thành viên\" : \"thành công\","
+        },
+        {
+          "line": 2191,
+          "text": "data: { target, groupId, result }, countsTowardLimit: !already });"
+        },
+        {
+          "line": 2194,
+          "text": "actionCode, actionName, countsTowardLimit: false, data: { target, groupId }"
+        },
+        {
+          "line": 2230,
+          "text": "status: already ? \"đã tham gia\" : \"thành công\","
+        },
+        {
+          "line": 2233,
+          "text": "data: { link, result }, countsTowardLimit: !already });"
+        },
+        {
+          "line": 2236,
+          "text": "actionCode, actionName, countsTowardLimit: true, data: { link }"
+        },
+        {
+          "line": 2251,
+          "text": "actionName, status: \"thành công\","
+        },
+        {
+          "line": 2252,
+          "text": "log: `Đã huỷ lời mời kết bạn đã gửi đến ${input.name || uid}.`, data: { uid }, countsTowardLimit: true });"
+        },
+        {
+          "line": 2255,
+          "text": "actionCode, actionName, countsTowardLimit: true, data: { uid }"
+        },
+        {
+          "line": 2292,
+          "text": "countsTowardLimit: boolean;"
+        },
+        {
+          "line": 2352,
+          "text": ": text(mapped.detailStatus) || (policyHandling === \"target-only\" ? \"thất bại\" : null);"
+        },
+        {
+          "line": 2367,
+          "text": "countsTowardLimit: context.partialSend"
+        },
+        {
+          "line": 2369,
+          "text": ": context.countsTowardLimit && mapped.countsTowardLimit"
+        },
+        {
+          "line": 2416,
+          "text": "const countsTowardBadTarget = context.countBadTarget ?? ("
+        },
+        {
+          "line": 2417,
+          "text": "policyHandling === \"full\" && mapped.countsTowardBadTarget"
+        },
+        {
+          "line": 2424,
+          "text": "badTarget: countsTowardBadTarget &&"
+        },
+        {
+          "line": 2427,
+          "text": "(normalizedDetailStatus === \"thất bại\" || normalizedDetailStatus === \"lỗi\"),"
+        },
+        {
+          "line": 2472,
+          "text": "policy.countsTowardBadTarget &&"
+        },
+        {
+          "line": 2473,
+          "text": "(detailStatus === \"thất bại\" || detailStatus === \"lỗi\")"
+        },
+        {
+          "line": 2518,
+          "text": "detailStatus: \"thất bại\","
+        },
+        {
+          "line": 2519,
+          "text": "countsTowardLimit: true,"
+        },
+        {
+          "line": 2520,
+          "text": "countsTowardBadTarget: true"
+        }
+      ]
+    }
+  ]
+}
