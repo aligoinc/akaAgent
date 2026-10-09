@@ -1,0 +1,224 @@
+{
+  "captured_at": "2026-10-09T12:11:20.852899+00:00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "source_commits": {
+    "akaAgent": "479a319",
+    "akaAgentChatApi": "59420f7",
+    "akaAgentWebApp": "efcf389"
+  },
+  "machine_changes": [
+    {
+      "app": "aka-agent-web-app",
+      "machine_id": "48ee749f357398",
+      "state": "started",
+      "before_image": "registry.fly.io/aka-agent-web-app:engagement-marks-only-20261003@sha256:58669f8c42d7d659f1aa1f1336de21b2d45bec596223cd7d368b5296e2c5976b",
+      "after_image": "registry.fly.io/aka-agent-web-app:action-status-20261009-efcf389@sha256:ede1b221fd75abbc684582e64c5d1993b9f076ae6bb8e3185e4258337aa06524",
+      "changed_config_fields": [
+        "image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 1,
+        "memory_mb": 256
+      },
+      "before_config_sha256": "c38fa1adbaf42b0543b55ce8e66a8583cd304ffaeffd0f29cd54b3b6d01e559e",
+      "after_config_sha256": "3b19d14cb23589584bb9cb64869edd1ae0ecd11df704967334cf41fc6e92bcb3",
+      "non_image_config_sha256": "66ca41321d2f8933d66a4e8241c77b5942e63f3891f569c901e75c1db5e0a315",
+      "health_checks": [
+        {
+          "name": "servicecheck-00-http-8080",
+          "status": "passing",
+          "output": "ok",
+          "updated_at": "2026-10-09T12:06:47.218Z"
+        }
+      ]
+    },
+    {
+      "app": "aka-agent-chat-api",
+      "machine_id": "784574da214578",
+      "state": "started",
+      "before_image": "registry.fly.io/aka-agent-chat-api:partial-send-log-20261007-0952bdc-u5dxq2hz@sha256:491dac713825fd541bbb8c307be3aa6ce5a7158052ed2c572c05752976ef66bf",
+      "after_image": "registry.fly.io/aka-agent-chat-api:action-status-20261009-59420f7@sha256:e9a872b0fef3e01411d83f8c85cb85788dc96c26ff7195451824e7a1831637fd",
+      "changed_config_fields": [
+        "image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "before_config_sha256": "966de037c72724ee19b8ae8cee40d405040e77ebb2246ea8232f8bc228ea0eca",
+      "after_config_sha256": "6e1008fd190202fbb7bdf2f9ce621406f3f8ed878d253dd965af1f78fe9f8569",
+      "non_image_config_sha256": "d5ab8e82c0838058c348df024e12d64475c30818a6503330a92e0b7cf98e720d",
+      "health_checks": []
+    },
+    {
+      "app": "aka-agent-chat-api",
+      "machine_id": "7845747fe073e8",
+      "state": "started",
+      "before_image": "registry.fly.io/aka-agent-chat-api:qr-admin-20261009-1638@sha256:fbf6df94f55d1b24fdcfa566c90b0df4a27c1a7083ee3f484b878acdeac16c4d",
+      "after_image": "registry.fly.io/aka-agent-chat-api:qr-admin-20261009-1638@sha256:fbf6df94f55d1b24fdcfa566c90b0df4a27c1a7083ee3f484b878acdeac16c4d",
+      "changed_config_fields": [],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "before_config_sha256": "774fdd92d7f726cbedca216c95adda2281e9ea1841247de1d6f63be6edf90ca7",
+      "after_config_sha256": "774fdd92d7f726cbedca216c95adda2281e9ea1841247de1d6f63be6edf90ca7",
+      "non_image_config_sha256": "054fdc6448ed78c5569ef4da10d5dfee4fb586a9f3e6d7b4afc42900fd2444b5",
+      "health_checks": [
+        {
+          "name": "servicecheck-00-http-8080",
+          "status": "passing",
+          "output": "{\"status\":\"ok\"}",
+          "updated_at": "2026-10-09T09:43:06.364Z"
+        }
+      ]
+    },
+    {
+      "app": "aka-agent-chat-api",
+      "machine_id": "0803139f1d1058",
+      "state": "started",
+      "before_image": "registry.fly.io/aka-agent-chat-api:media-timeout-20261005-144337-5015320@sha256:49059809646f68d8691966bf02eacf22b9c46b3ede0092dc15e1cfeada381e74",
+      "after_image": "registry.fly.io/aka-agent-chat-api:media-timeout-20261005-144337-5015320@sha256:49059809646f68d8691966bf02eacf22b9c46b3ede0092dc15e1cfeada381e74",
+      "changed_config_fields": [],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 1,
+        "memory_mb": 1024
+      },
+      "before_config_sha256": "b7e7b9a81c58b9fa84196244fc6ce6c532abcad59244441e7913ca7f9bcbb2cf",
+      "after_config_sha256": "b7e7b9a81c58b9fa84196244fc6ce6c532abcad59244441e7913ca7f9bcbb2cf",
+      "non_image_config_sha256": "6a51c2017f4e1a32429f9aa0c4ca040dffa1caeb0db71ca6e490f4cbb972276e",
+      "health_checks": []
+    }
+  ],
+  "worker_stop": {
+    "signal": "SIGTERM",
+    "requested_timeout_seconds": 220,
+    "exit_event": {
+      "exit_code": 143,
+      "guest_signal": -1,
+      "requested_stop": true,
+      "signal": -1,
+      "exited_at": "2026-10-09T12:07:07.486Z"
+    },
+    "drain_completion_verified": false,
+    "note": "The npm parent exited with SIGTERM. Machine was stopped before image replacement; application drain completion cannot be proven from this exit. Existing startup recovery retained."
+  },
+  "worker_observation": {
+    "from": "2026-10-09T12:08:38Z",
+    "to": "2026-10-09T12:10:42.536526562Z",
+    "reserved_connection_timeouts": [
+      {
+        "at": "2026-10-09T12:09:18.195912539Z",
+        "event": "postgres_reserved_pool_client_timeout",
+        "errorName": "Error",
+        "errorCode": "PG_RESERVED_CONNECTION_TIMEOUT"
+      },
+      {
+        "at": "2026-10-09T12:09:20.871454822Z",
+        "event": "postgres_reserved_pool_client_timeout",
+        "errorName": "Error",
+        "errorCode": "PG_RESERVED_CONNECTION_TIMEOUT"
+      }
+    ],
+    "stats": [
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-10-09T12:08:42.280Z",
+        "intervalEndedAt": "2026-10-09T12:09:42.410Z",
+        "normalize": {
+          "claimed": 558,
+          "completed": 551,
+          "failed": 7,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 525,
+          "completed": 523,
+          "failed": 2,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 28,
+          "deleted": 399,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 8,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-10-09T12:09:42.410Z",
+        "intervalEndedAt": "2026-10-09T12:10:42.536Z",
+        "normalize": {
+          "claimed": 234,
+          "completed": 233,
+          "failed": 1,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 219,
+          "completed": 219,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 29,
+          "deleted": 213,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 1,
+          "projectPending": 9,
+          "retryScheduled": 0
+        }
+      }
+    ],
+    "single_node_worker_verified": true,
+    "new_pool_or_connection_budget": false,
+    "business_pool_max_unchanged": 10
+  },
+  "compiled_worker_sha256": {
+    "packages/database/dist/campaignActionResults.js": "e4b5992bd8da83a34de18291d2fbcf8c71cccf181a05ea9639cdff24951cf514",
+    "packages/database/dist/result-policy/actionStatusPolicy.js": "9dcb7da6a6af1ab81d8d85745587669b7ba1eaa38e9b841600c7065193de5962"
+  },
+  "http_checks": {
+    "web_health": 200,
+    "web_index": 200,
+    "web_bundle": 200,
+    "web_bundle_sha256": "0974b9e1c8cc05f1c944055d2423b68bfa0e846a77f87971fa118d7123c8c6d3",
+    "chat_api_health_live": 200,
+    "incorrect_chat_healthz_probe": 404
+  },
+  "database_verification": {
+    "checked_at": "2026-10-09 12:09:34.278904+00",
+    "errors": 104,
+    "managed_results": 11,
+    "policies": 19,
+    "project_ref": "cgjbsmqtfhqvttudyjzq",
+    "original_error_rows_unchanged": 104
+  },
+  "release_scope": {
+    "web_reader_deployed": true,
+    "chat_worker_deployed": true,
+    "chat_api_and_zalo_runtime_images_unchanged": true,
+    "desktop_and_packaged_server_builds_passed": true,
+    "desktop_installers_published": false,
+    "updater_setting_changed": false,
+    "real_outbound_tests": 0
+  }
+}

@@ -37,6 +37,6 @@ No real message, friend request, or group action was performed. No new SQL conne
 
 ## Runtime rollout
 
-The preparation schema is live. The generic resolver, reader metadata, and catalog loader are being implemented in the isolated task worktrees. **Runtime integration and deployment are not complete yet.** Existing running applications continue to use their existing writer and policy behavior. Do not emit newly configured main status codes to an old client merely because the catalog now exists.
+At the V361 preparation checkpoint, only the additive schema was live. Runtime integration is now complete; Web/API readers and the Chat worker were deployed on 9 October. Desktop/packaged Server are built but not published. See [the completed runtime and rollout audit](ACTION_STATUS_READERS_V362.md). Existing installed applications continue to use their legacy writer and policy behavior. Do not emit newly configured main status codes to an old client merely because the catalog now exists.
 
 Keep reader deployment before new writers/output. Results already processed must retain their stored decisions; edits to a default apply to future catalog loads, not historical counters. A missing policy is a contract/configuration failure, not an implicit secondary status and not a deferred-recovery queue.

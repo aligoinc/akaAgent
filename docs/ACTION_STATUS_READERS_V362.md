@@ -13,6 +13,20 @@ Only akachat, `cgjbsmqtfhqvttudyjzq`. Existing connections/pools are reused. No 
 
 V361 is the additive schema/catalog preparation described in [its audit](ACTION_STATUS_POLICIES_V361.md). V362 upgrades existing readers, Automation, CRM and Email/SMS observations from captured live definitions. V363 adds an atomic owned-unit writer and target settlement. V364 grants Chat SELECT on only auto_account_actions.code/is_active/is_delete, with no configuration write privilege. Do not reapply any of these migrations.
 
+### Application rollout completed on 9 October 2026
+
+Web/API readers were deployed first at approximately 19:06 Vietnam time to the existing Web machine `48ee749f357398`, image `action-status-20261009-efcf389`. The public health check and the exact new JavaScript bundle return 200; the downloaded bundle matches the local build byte for byte. Source commit: WebApp `efcf389`.
+
+The existing Chat worker `784574da214578` was updated to image `action-status-20261009-59420f7` and started at 19:08 Vietnam time. Source commit: ChatApi `59420f7`. The API and Zalo runtime machine images were not changed. All four machines retain exactly their previous configuration except the image field on the two updated machines; replica counts, guest resources, environment, commands, restart settings and connection limits are unchanged. The running worker has exactly one Node process and its compiled policy modules match the local build hashes.
+
+The worker stop used SIGTERM with a 220-second allowance. The npm parent exited with signal 15 (exit 143), rather than an application exit-0/drain acknowledgement; therefore full task drain is **not verified**. The machine was confirmed stopped before the new image was started, and the existing startup recovery was retained. The observation window through 19:10:42 recorded two reserved-connection timeouts during startup, with no further such event in the following worker-stat interval. Both intervals report zero infrastructure errors and continued processing. A read-only DB check found no blocked backend. These observations do not prove every production action path or absence of transient impact.
+
+At 19:09:34, production contained 11 naturally created managed results and 19 policies; all original values on the 104 pre-existing error-policy rows still matched the verified backup. No outbound action was initiated for verification. Because new result metadata is now in use, keep the schema, catalogs and readers for history; an operational revert must switch future execution back to the previous worker image, not remove these DB objects.
+
+Desktop and packaged Server production builds and both Desktop typechecks passed from source commit `479a319`; installers have **not** been published and the updater setting is unchanged. Existing installed clients continue their legacy path until their normal release. Shared blocks/workflows have not been changed to emit new codes to old clients. Source commits are local to the isolated worktrees; they have not been merged or pushed.
+
+Exact old/new image digests, config hashes, stop event, sanitized worker statistics and DB verification are in [the rollout receipt](../migrations/snapshots/action-status-policies-v364/deployment-receipt.json). The previous worker image in that receipt is the future-execution rollback target; retain the new Web/DB readers after use.
+
 ## Effective behavior
 
 Desktop and packaged Server acquire a catalog once per campaign run; Chat uses one query on the existing business pool. There is no polling, revision or per-target catalog read. Restart/recovery loads current policy for work that has not completed. Existing clients keep their legacy insert/RPC payloads.
