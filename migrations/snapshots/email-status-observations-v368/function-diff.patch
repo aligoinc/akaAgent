@@ -1,0 +1,35 @@
+--- aka_agent_mark_email_click before
++++ aka_agent_mark_email_click after
+@@ -71,7 +71,7 @@
+     SET sub_status_id=s.id
+     FROM public.auto_status s
+     WHERE d.id=v_message.campaign_detail_id AND d.action_code='email_send'
+-      AND d.status_id IS NOT NULL AND d.report_group='success' AND NOT d.is_delete
++      AND d.status_id IS NOT NULL AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete
+       AND s.code='campaign_detail_clicked' AND s.component_type='campaign_detail'
+       AND d.sub_status_id IS DISTINCT FROM s.id
+       ;
+
+--- aka_agent_mark_email_open before
++++ aka_agent_mark_email_open after
+@@ -46,7 +46,7 @@
+     SET sub_status_id=s.id
+     FROM public.auto_status s
+     WHERE d.id=v_message.campaign_detail_id AND d.action_code='email_send'
+-      AND d.status_id IS NOT NULL AND d.report_group='success' AND NOT d.is_delete
++      AND d.status_id IS NOT NULL AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete
+       AND s.code='campaign_detail_viewed' AND s.component_type='campaign_detail'
+       AND d.sub_status_id IS DISTINCT FROM s.id
+       AND NOT EXISTS (SELECT 1 FROM public.auto_status old WHERE old.id=d.sub_status_id AND old.code='campaign_detail_clicked');
+
+--- aka_agent_project_linked_email_status_v366 before
++++ aka_agent_project_linked_email_status_v366 after
+@@ -13,7 +13,7 @@
+     AND d.account_id IS NOT DISTINCT FROM NEW.account_id
+     AND d.input_data_id IS NOT DISTINCT FROM NEW.input_data_id
+     AND d.action_code='email_send' AND d.status_id IS NOT NULL
+-    AND d.report_group='success' AND NOT d.is_delete
++    AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete
+     AND s.code=CASE WHEN NEW.click_count>0 THEN 'campaign_detail_clicked' ELSE 'campaign_detail_viewed' END
+     AND s.component_type='campaign_detail'
+     AND d.sub_status_id IS DISTINCT FROM s.id

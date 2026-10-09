@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-09T16:22:54.611Z",
+  "checks": 203,
+  "external_operations": 0,
+  "production_touched": false,
+  "migration_sha256": "ef99c53de21cbfab0ede6754318e22a2a93e8269927dd99878b5ff186f745fda",
+  "rollback_sha256": "526a8ec8072669ac2340076ef01ec12b71febd81bd3d4979de7541a0554d18ab"
+}
