@@ -33,7 +33,7 @@ async function harness(zca, actionId = 'facebook_newsfeed_interaction', platform
     ['fb_like_post', 'fb_comment', 'fb_post_group', 'fb_add_friend', 'zalo_message_friend', 'email_send'])
   runtime.beginActionResultUnit(1, unit, [1, 2])
   const input = { id: 1, name: 'Fixture group' }
-  return { ...f, db, runtime, input, logs, writes,
+  return { ...f, db, runtime, load, input, logs, writes,
     realtime: s => f.scheduler.logNewsfeedMilestoneStep(f.campaign, input, 1, s),
     final: steps => f.scheduler.logMilestonesV2(f.campaign, input, 1, steps, true),
     details: async () => (await db.query('SELECT * FROM auto_campaign_details ORDER BY id')).rows,
@@ -213,4 +213,5 @@ async function main() {
   await context(zca)
   console.log(JSON.stringify({ scenarios, external_operations: 0 }))
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { harness, result, step }
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })

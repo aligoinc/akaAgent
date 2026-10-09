@@ -69,6 +69,7 @@ interface NodeState {
   completedAt?: string
   durationMs?: number
   stepDbId?: number
+  actionResultSourceKeys?: (string | null)[]
 }
 
 const RUNTIME_NODE_CONFIG_KEYS = new Set([
@@ -159,6 +160,7 @@ export class WorkflowEngineV2 {
     // allSteps: track MỌI lần execute của mọi node (loop body có thể chạy lại nhiều lần
     // → cần history đầy đủ cho scheduler logging, không chỉ snapshot cuối)
     const allSteps: RunStepV2[] = []
+    const resultSources = new WorkflowActionResultSources()
 
     const signal = ctx.signal ?? new AbortController().signal
 
@@ -174,7 +176,7 @@ export class WorkflowEngineV2 {
       // Run cohort song song
       await drainWorkflowCohort(ready.map(node => this.executeNode({
         node, blockMap, workflow, graph, nodeStates, variables,
-        page, signal, runId, ctx, allSteps
+        page, signal, runId, ctx, allSteps, resultSources
       })))
 
       if (signal.aborted) { cancelled = true; break }
@@ -215,6 +217,7 @@ export class WorkflowEngineV2 {
           status: s.status,
           input: {},
           output: s.output,
+          actionResultSourceKeys: s.actionResultSourceKeys,
           error: s.error,
           durationMs: s.durationMs,
           startedAt: s.startedAt,
@@ -254,14 +257,15 @@ export class WorkflowEngineV2 {
     runId?: number
     ctx: RunContext
     allSteps: RunStepV2[]
+    resultSources: WorkflowActionResultSources
   }): Promise<void> {
-    const { node, blockMap, workflow, graph, nodeStates, variables, page, signal, runId, ctx, allSteps } = args
+    const { node, blockMap, workflow, graph, nodeStates, variables, page, signal, runId, ctx, allSteps, resultSources } = args
     const state = nodeStates.get(node.id)!
     state.status = 'running'
     state.startedAt = new Date().toISOString()
 
     // Build input (merge node.config + outputs từ parents)
-    const input = this.buildInput(node, graph, nodeStates)
+    const input = resultSources.copyInput(this.buildInput(node, graph, nodeStates))
 
     // Persist running step
     let stepDbId: number | undefined
@@ -294,7 +298,7 @@ export class WorkflowEngineV2 {
       if (node.systemType === 'ifElse') {
         result = await this.execIfElse(node, input, variables)
       } else if (node.systemType === 'loop') {
-        result = await this.execLoop(node, input, variables, workflow, graph, nodeStates, blockMap, page, signal, runId, ctx, allSteps)
+        result = await this.execLoop(node, input, variables, workflow, graph, nodeStates, blockMap, page, signal, runId, ctx, allSteps, resultSources)
       } else if (node.systemType === 'merge' || node.systemType === 'parallel') {
         result = await this.execMergeOrParallel(node, input)
       } else {
@@ -337,7 +341,9 @@ export class WorkflowEngineV2 {
 
     state.completedAt = new Date().toISOString()
     state.durationMs = result.durationMs
-    state.output = result.output
+    const captured = resultSources.capture(result.output)
+    state.output = captured.output
+    state.actionResultSourceKeys = captured.keys
     if (result.success) {
       state.status = 'success'
     } else {
@@ -392,6 +398,7 @@ export class WorkflowEngineV2 {
     ctx.onStepProgress?.({
       runId, nodeId: node.id, blockId: node.blockId, blockName: node.blockName,
       status: state.status, input, output: state.output,
+      actionResultSourceKeys: state.actionResultSourceKeys,
       error: state.error, durationMs: state.durationMs,
       startedAt: state.startedAt, completedAt: state.completedAt
     })
@@ -405,6 +412,7 @@ export class WorkflowEngineV2 {
       status: state.status,
       input,
       output: state.output,
+      actionResultSourceKeys: state.actionResultSourceKeys,
       error: state.error,
       durationMs: state.durationMs,
       startedAt: state.startedAt,
@@ -479,7 +487,8 @@ export class WorkflowEngineV2 {
     signal: AbortSignal,
     runId: number | undefined,
     ctx: RunContext,
-    allSteps: RunStepV2[]
+    allSteps: RunStepV2[],
+    resultSources: WorkflowActionResultSources
   ): Promise<BlockResult> {
     const startTime = Date.now()
     const cfg = node.config ?? {}
@@ -544,7 +553,7 @@ export class WorkflowEngineV2 {
         if (ready.length === 0) break
         await drainWorkflowCohort(ready.map(n => this.executeNode({
           node: n, blockMap, workflow, graph, nodeStates,
-          variables: iterVars, page, signal, runId, ctx, allSteps
+          variables: iterVars, page, signal, runId, ctx, allSteps, resultSources
         })))
       }
       // Iteration coi như completed nếu không có body node nào lỗi
@@ -868,3 +877,49 @@ interface Graph {
 
 // Re-export type for consumer
 export type { RunV2 }
+
+// Serializable origin markers survive merge, object spread and JSON copies.
+// Only markers issued by this run are inherited; equal fresh results remain
+// separate operations. A producer must return a fresh result for a new action.
+let workflowResultRunSequence = 0
+class WorkflowActionResultSources {
+  private readonly runKey = `workflow:${++workflowResultRunSequence}`
+  private readonly issued = new Set<string>()
+  private sequence = 0
+
+  copyInput(input: Record<string, unknown>): Record<string, unknown> {
+    // Result rows are JSON contracts. Isolate them from downstream in-place
+    // edits so a relay cannot rewrite an earlier progress/finalization snapshot.
+    if (Array.isArray(input.actionResults)) {
+      return { ...input, actionResults: JSON.parse(JSON.stringify(input.actionResults)) }
+    }
+    if (input.actionResult && typeof input.actionResult === 'object') {
+      return { ...input, actionResult: JSON.parse(JSON.stringify(input.actionResult)) }
+    }
+    if ('actionCode' in input && 'statusCode' in input && input.data && typeof input.data === 'object') {
+      return { ...input, data: JSON.parse(JSON.stringify(input.data)) }
+    }
+    return input
+  }
+
+  capture(output: Record<string, unknown>): { output: Record<string, unknown>; keys?: (string | null)[] } {
+    const batch = 'actionResults' in output
+    const envelope = 'actionResult' in output
+    if (!batch && !envelope && !('actionCode' in output && 'statusCode' in output)) return { output }
+    const rows = batch ? output.actionResults : [output.actionResult ?? output]
+    // Keep invalid contracts intact for the existing validation/cleanup path.
+    if (!Array.isArray(rows)) return { output }
+    const keys: (string | null)[] = []
+    const captured = rows.map(row => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) { keys.push(null); return row }
+      const inherited = row.__akaActionResultSource
+      const key = typeof inherited === 'string' && this.issued.has(inherited)
+        ? inherited : `${this.runKey}:${++this.sequence}`
+      this.issued.add(key)
+      keys.push(key)
+      return { ...row, __akaActionResultSource: key }
+    })
+    return { output: batch ? { ...output, actionResults: captured }
+      : envelope ? { ...output, actionResult: captured[0] } : captured[0], keys }
+  }
+}

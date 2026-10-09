@@ -759,7 +759,7 @@ export class CampaignScheduler {
   private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
-    signature: string; write: Promise<(CampaignDetail | null)[]>
+    signature: string; write: Promise<CampaignDetail | null>
   }>>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
@@ -10085,36 +10085,52 @@ export class CampaignScheduler {
   private async logExplicitActionResultStep(
     campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2, summary: MilestoneSummary
   ): Promise<void> {
-    const key = JSON.stringify([step.runId, step.id, step.nodeId, step.startedAt])
     const outputs = 'actionResults' in step.output ? step.output.actionResults : [step.output.actionResult ?? step.output]
     if (!Array.isArray(outputs) || !outputs.length) throw new ResultContractError('output_invalid', '', 'batch_empty')
-    const signature = JSON.stringify(outputs)
     let writes = this.explicitMilestoneWrites.get(campaign.id)
     if (!writes) { writes = new Map(); this.explicitMilestoneWrites.set(campaign.id, writes) }
-    const previous = writes.get(key)
-    if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', '', key)
-    let write = previous?.write
-    if (!write) {
-      // Realtime and finalization share one write/policy attempt for this step.
-      // Keep rejected attempts too: uncertain outcomes go through run cleanup.
-      write = (async () => {
-        const rows: (CampaignDetail | null)[] = []
-        const newsfeed = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
-          ? this.newsfeedMilestonePayload(campaign, detail, accountId, step) : null
-        let newsfeedLogged = false
-        for (const [index, raw] of outputs.entries()) {
-          const output = parseActionResultOutput(raw)
-          if (!output) throw new ResultContractError('output_invalid', '', '')
-          const row = raw as Record<string, unknown>
-          const inputDataId = row.inputDataId == null ? detail?.id : Number(row.inputDataId)
+    const newsfeed = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+      ? this.newsfeedMilestonePayload(campaign, detail, accountId, step) : null
+    const emailDetail = this.getZaloActionDetailFromStep(step)
+    let newsfeedLogged = false
+    for (const [index, raw] of outputs.entries()) {
+      const output = parseActionResultOutput(raw)
+      if (!output) throw new ResultContractError('output_invalid', '', '')
+      const row = raw as Record<string, unknown>
+      const inputDataId = row.inputDataId == null ? detail?.id : Number(row.inputDataId)
+      const sourceKey = step.actionResultSourceKeys?.[index]
+        ?? JSON.stringify([step.runId, step.id ?? step.nodeId, step.startedAt, index])
+      // Compare only result fields, not arbitrary context a merge adds to a
+      // direct output. The origin belongs to the operation, not its relay node.
+      const signature = JSON.stringify({ actionCode: output.actionCode, statusCode: output.statusCode,
+        subStatusCode: output.subStatusCode, errorCode: output.errorCode, operationState: output.operationState,
+        inputDataId, actionName: row.actionName, message: row.message, data: row.data,
+        emailTrackingMessageId: row.emailTrackingMessageId })
+      const previous = writes.get(sourceKey)
+      if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', output.actionCode, sourceKey)
+      let write = previous?.write
+      if (!write) {
+        // Share even failed attempts across progress/finalization and relays.
+        // An uncertain write remains owned by the existing run cleanup path.
+        write = (async () => {
           const legacy = newsfeed?.action.actionCode === output.actionCode ? newsfeed : null
+          const emailLegacy = output.actionCode === 'email_send' && emailDetail?.actionCode === output.actionCode
+            && inputDataId === detail?.id ? emailDetail : null
           const created = await this.supabase.createCampaignDetail({ ...legacy?.action, campaignId: campaign.id, accountId,
             inputDataId, actionCode: output.actionCode,
-            actionName: String(row.actionName || legacy?.action.actionName || this.getAccountActionName(output.actionCode)),
-            resultOutput: output, resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}:${index}`,
-            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : legacy?.action.log,
-            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : legacy?.action.data })
-          rows.push(created)
+            actionName: String(row.actionName || legacy?.action.actionName || emailLegacy?.actionName || this.getAccountActionName(output.actionCode)),
+            resultOutput: output, resultSourceKey: sourceKey,
+            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : legacy?.action.log ?? emailLegacy?.log,
+            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : legacy?.action.data ?? emailLegacy?.data })
+          if (created && output.actionCode === 'email_send') {
+            // A batch must identify tracking per result; a wrapper ID cannot
+            // be linked to several recipients or overwrite a previous link.
+            await this.linkEmailResultTracking(campaign, detail, accountId, step, created,
+              row.emailTrackingMessageId ?? (outputs.length === 1 ? step.output.emailTrackingMessageId : undefined))
+            if (created.log) await this.logCampaignProgress(campaign, this.formatZaloProgressLog({
+              actionName: created.actionName || emailLegacy?.actionName, log: created.log
+            }))
+          }
           if (output.errorCode) {
             const account = await this.supabase.getAccount(accountId)
             if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
@@ -10124,12 +10140,11 @@ export class CampaignScheduler {
             await this.logCampaignProgress(campaign, legacy.progress)
             newsfeedLogged = true
           }
-        }
-        return rows
-      })()
-      writes.set(key, { signature, write })
-    }
-    for (const created of await write) {
+          return created
+        })()
+        writes.set(sourceKey, { signature, write })
+      }
+      const created = await write
       if (created) this.recordMilestoneSummary(summary, created.status, created.log, created.actionName)
     }
   }
@@ -10175,6 +10190,44 @@ export class CampaignScheduler {
     return lowerLog.startsWith(lowerAction)
       ? log
       : `${actionName}: ${log}`
+  }
+
+  private async linkEmailResultTracking(
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number,
+    step: RunStepV2, created: CampaignDetail, rawTrackingMessageId: unknown
+  ): Promise<void> {
+    const trackingMessageId = Number(rawTrackingMessageId)
+    if (Number.isFinite(trackingMessageId) && trackingMessageId > 0) {
+      await this.supabase.linkEmailMessageTrackingToDetail(trackingMessageId, created.id).catch(err => {
+        const message = err instanceof Error ? err.message : String(err)
+        console.warn('[EmailRuntime] failed to link campaign detail to tracking row:', err)
+        return campaignRunEventRepo.createCampaignRunEvents([{
+          campaignId: campaign.id,
+          campaignActionId: campaign.actionId,
+          campaignInputId: detail?.inputId ?? null,
+          campaignInputDataId: detail?.id ?? null,
+          accountId,
+          runId: step.runId ?? null,
+          runStepId: step.id ?? null,
+          nodeId: step.nodeId ?? null,
+          blockId: step.blockId ?? null,
+          blockName: step.blockName ?? null,
+          eventType: 'email_tracking_link_failed',
+          eventName: 'email_tracking_link_failed',
+          targetType: 'email',
+          status: 'warning',
+          isUserVisible: false,
+          message: 'Email đã gửi nhưng không gắn được tracking với lịch sử hành động',
+          debugData: {
+            trackingMessageId,
+            campaignDetailId: created.id,
+            error: message
+          }
+        }]).catch(eventErr => {
+          console.warn('[EmailRuntime] failed to log email tracking link warning:', eventErr)
+        })
+      })
+    }
   }
 
   private async logEmailSendMilestones(
@@ -10223,39 +10276,7 @@ export class CampaignScheduler {
         if (actionDetail.log) await this.logCampaignProgress(campaign, `⚠️ ${this.formatZaloProgressLog(actionDetail)}`)
         continue
       }
-      const output = (step.output || {}) as Record<string, unknown>
-      const trackingMessageId = Number(output.emailTrackingMessageId)
-      if (Number.isFinite(trackingMessageId) && trackingMessageId > 0) {
-        await this.supabase.linkEmailMessageTrackingToDetail(trackingMessageId, created.id).catch(err => {
-          const message = err instanceof Error ? err.message : String(err)
-          console.warn('[EmailRuntime] failed to link campaign detail to tracking row:', err)
-          return campaignRunEventRepo.createCampaignRunEvents([{
-            campaignId: campaign.id,
-            campaignActionId: campaign.actionId,
-            campaignInputId: detail?.inputId ?? null,
-            campaignInputDataId: detail?.id ?? null,
-            accountId,
-            runId: step.runId ?? null,
-            runStepId: step.id ?? null,
-            nodeId: step.nodeId ?? null,
-            blockId: step.blockId ?? null,
-            blockName: step.blockName ?? null,
-            eventType: 'email_tracking_link_failed',
-            eventName: 'email_tracking_link_failed',
-            targetType: 'email',
-            status: 'warning',
-            isUserVisible: false,
-            message: 'Email đã gửi nhưng không gắn được tracking với lịch sử hành động',
-            debugData: {
-              trackingMessageId,
-              campaignDetailId: created.id,
-              error: message
-            }
-          }]).catch(eventErr => {
-            console.warn('[EmailRuntime] failed to log email tracking link warning:', eventErr)
-          })
-        })
-      }
+      await this.linkEmailResultTracking(campaign, detail, accountId, step, created, step.output?.emailTrackingMessageId)
 
       if (actionDetail.countsTowardBadTarget !== false) {
         this.recordMilestoneSummary(
