@@ -758,6 +758,9 @@ export class CampaignScheduler {
   private pauseRequests = new Set<number>()
   private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
+  private explicitMilestoneWrites = new Map<number, Map<string, {
+    signature: string; write: Promise<(CampaignDetail | null)[]>
+  }>>()
   private internalSmsPushedDetailKeys = new Set<string>()
   private externalSmsPushedDetailKeys = new Set<string>()
   private backgroundPages = new BackgroundPageManager()
@@ -3234,6 +3237,7 @@ export class CampaignScheduler {
         this.claimedServerZaloAccountIds.delete(account.id)
       }
       endActionResultRun(campaign.id)
+      this.explicitMilestoneWrites.delete(campaign.id)
       if (unitSettled) this.activeCampaignRunUnits.delete(campaign.id)
       if (!this.failedCampaignRuns.has(campaign.id)) {
         this.campaignRunBoundaries.delete(campaign.id)
@@ -8697,6 +8701,7 @@ export class CampaignScheduler {
         throw new Error('DB trả unit lease không khớp với lượt chạy hiện tại.')
       }
       beginActionResultUnit(campaign.id, runtimeUnitToken, inputDataIds)
+      this.explicitMilestoneWrites.delete(campaign.id)
       this.activeCampaignRunUnits.set(campaign.id, {
         runtimeUnitToken,
         inputDataIds: [...inputDataIds],
@@ -10043,78 +10048,109 @@ export class CampaignScheduler {
     }
   }
 
-  private async logNewsfeedMilestoneStep(
-    campaign: Campaign,
-    detail: CampaignInputData | null,
-    accountId: number,
-    step: RunStepV2
-  ): Promise<void> {
-    if (step.status !== 'success') return
-    if (step.blockName !== 'fb_newsfeed_like_post' && step.blockName !== 'fb_newsfeed_comment_submit') return
+  private hasExplicitActionResult(step: RunStepV2): boolean {
+    const out = step.output
+    // Raw legacy statusCode alone does not claim the new result contract.
+    return !!out && ('actionResult' in out || 'actionResults' in out || ('actionCode' in out && 'statusCode' in out))
+  }
 
-    const out = (step.output as any) || {}
-    const isLike = step.blockName === 'fb_newsfeed_like_post'
-    const isComment = step.blockName === 'fb_newsfeed_comment_submit'
-    if (isLike && out.liked !== true) return
-    if (isComment && out.commented !== true) return
-
-    const key = [
-      campaign.id,
-      step.runId ?? 'run',
-      step.nodeId || step.blockName,
-      step.startedAt || step.completedAt || JSON.stringify(out)
-    ].join(':')
-    if (this.loggedNewsfeedMilestoneKeys.has(key)) return
-    this.loggedNewsfeedMilestoneKeys.add(key)
-
+  private newsfeedMilestonePayload(
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2
+  ): { action: import('../../shared/types').CreateCampaignDetailInput; progress: string } | null {
+    if (step.status !== 'success') return null
+    const out = step.output || {}
+    const isLike = step.blockName === 'fb_newsfeed_like_post' && out.liked === true
+    const isComment = step.blockName === 'fb_newsfeed_comment_submit' && out.commented === true
+    if (!isLike && !isComment) return null
     const targetName = String(out.targetName || 'bài viết newsfeed').trim()
     const postContent = String(out.postContent || '').trim()
-
-    try {
-      if (isLike) {
-        const preview = postContent.length > 50 ? postContent.substring(0, 50) + '...' : postContent
-        await this.supabase.createCampaignDetail({
-          inputDataId: detail?.id,
-          campaignId: campaign.id,
-          accountId,
-          actionCode: 'fb_like_post',
-          actionName: 'Like post',
-          status: 'thành công',
-          log: preview ? `Đã like bài newsfeed của ${targetName}: "${preview}"` : `Đã like bài newsfeed của ${targetName}`,
-          data: {
-            targetName,
-            targetUid: out.targetUid || undefined,
-            postContent: postContent || undefined,
-            source: 'newsfeed',
-            runId: step.runId,
-            nodeId: step.nodeId
-          }
-        })
-        await this.logCampaignProgress(campaign, `👍 Đã like bài newsfeed của "${targetName}"`)
-        return
-      }
-
-      const text = String(out.text || '').trim()
-      const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
-      await this.supabase.createCampaignDetail({
-        inputDataId: detail?.id,
-        campaignId: campaign.id,
-        accountId,
-        actionCode: 'fb_comment',
-        actionName: 'Comment',
+    const text = String(out.text || '').trim()
+    const content = isLike ? postContent : text
+    const preview = content.length > 50 ? content.substring(0, 50) + '...' : content
+    return {
+      action: {
+        inputDataId: detail?.id, campaignId: campaign.id, accountId,
+        actionCode: isLike ? 'fb_like_post' : 'fb_comment', actionName: isLike ? 'Like post' : 'Comment',
         status: 'thành công',
-        log: preview ? `Đã comment bài newsfeed của ${targetName}: "${preview}"` : `Đã comment bài newsfeed của ${targetName}`,
-        data: {
-          targetName,
-          targetUid: out.targetUid || undefined,
-          postContent: postContent || undefined,
-          commentContent: text || undefined,
-          source: 'newsfeed',
-          runId: step.runId,
-          nodeId: step.nodeId
+        log: isLike
+          ? (preview ? `Đã like bài newsfeed của ${targetName}: "${preview}"` : `Đã like bài newsfeed của ${targetName}`)
+          : (preview ? `Đã comment bài newsfeed của ${targetName}: "${preview}"` : `Đã comment bài newsfeed của ${targetName}`),
+        data: { targetName, targetUid: out.targetUid || undefined, postContent: postContent || undefined,
+          ...(isComment ? { commentContent: text || undefined } : {}), source: 'newsfeed', runId: step.runId, nodeId: step.nodeId }
+      },
+      progress: isLike ? `👍 Đã like bài newsfeed của "${targetName}"` : `💬 Đã comment bài newsfeed của "${targetName}"`
+    }
+  }
+
+  private async logExplicitActionResultStep(
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2, summary: MilestoneSummary
+  ): Promise<void> {
+    const key = JSON.stringify([step.runId, step.id, step.nodeId, step.startedAt])
+    const outputs = 'actionResults' in step.output ? step.output.actionResults : [step.output.actionResult ?? step.output]
+    if (!Array.isArray(outputs) || !outputs.length) throw new ResultContractError('output_invalid', '', 'batch_empty')
+    const signature = JSON.stringify(outputs)
+    let writes = this.explicitMilestoneWrites.get(campaign.id)
+    if (!writes) { writes = new Map(); this.explicitMilestoneWrites.set(campaign.id, writes) }
+    const previous = writes.get(key)
+    if (previous && previous.signature !== signature) throw new ResultContractError('result_key_conflict', '', key)
+    let write = previous?.write
+    if (!write) {
+      // Realtime and finalization share one write/policy attempt for this step.
+      // Keep rejected attempts too: uncertain outcomes go through run cleanup.
+      write = (async () => {
+        const rows: (CampaignDetail | null)[] = []
+        const newsfeed = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+          ? this.newsfeedMilestonePayload(campaign, detail, accountId, step) : null
+        let newsfeedLogged = false
+        for (const [index, raw] of outputs.entries()) {
+          const output = parseActionResultOutput(raw)
+          if (!output) throw new ResultContractError('output_invalid', '', '')
+          const row = raw as Record<string, unknown>
+          const inputDataId = row.inputDataId == null ? detail?.id : Number(row.inputDataId)
+          const legacy = newsfeed?.action.actionCode === output.actionCode ? newsfeed : null
+          const created = await this.supabase.createCampaignDetail({ ...legacy?.action, campaignId: campaign.id, accountId,
+            inputDataId, actionCode: output.actionCode,
+            actionName: String(row.actionName || legacy?.action.actionName || this.getAccountActionName(output.actionCode)),
+            resultOutput: output, resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}:${index}`,
+            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : legacy?.action.log,
+            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : legacy?.action.data })
+          rows.push(created)
+          if (output.errorCode) {
+            const account = await this.supabase.getAccount(accountId)
+            if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
+              { message: typeof row.message === 'string' ? row.message : undefined }, { explicitOnly: true })
+          }
+          if (legacy && !newsfeedLogged) {
+            await this.logCampaignProgress(campaign, legacy.progress)
+            newsfeedLogged = true
+          }
         }
-      })
-      await this.logCampaignProgress(campaign, `💬 Đã comment bài newsfeed của "${targetName}"`)
+        return rows
+      })()
+      writes.set(key, { signature, write })
+    }
+    for (const created of await write) {
+      if (created) this.recordMilestoneSummary(summary, created.status, created.log, created.actionName)
+    }
+  }
+
+  private async logNewsfeedMilestoneStep(
+    campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2
+  ): Promise<void> {
+    if (step.status !== 'success') return
+    if (this.hasExplicitActionResult(step)) {
+      await this.logExplicitActionResultStep(campaign, detail, accountId, step, this.createMilestoneSummary())
+      return
+    }
+    const milestone = this.newsfeedMilestonePayload(campaign, detail, accountId, step)
+    if (!milestone) return
+    const key = [campaign.id, step.runId ?? 'run', step.nodeId || step.blockName,
+      step.startedAt || step.completedAt || JSON.stringify(step.output || {})].join(':')
+    if (this.loggedNewsfeedMilestoneKeys.has(key)) return
+    this.loggedNewsfeedMilestoneKeys.add(key)
+    try {
+      await this.supabase.createCampaignDetail(milestone.action)
+      await this.logCampaignProgress(campaign, milestone.progress)
     } catch (err) {
       this.loggedNewsfeedMilestoneKeys.delete(key)
       if (err instanceof ResultContractError) throw err
@@ -10145,9 +10181,9 @@ export class CampaignScheduler {
     campaign: Campaign,
     detail: CampaignInputData | null,
     accountId: number,
-    steps: RunStepV2[]
+    steps: RunStepV2[],
+    summary: MilestoneSummary = this.createMilestoneSummary()
   ): Promise<MilestoneSummary> {
-    const summary = this.createMilestoneSummary()
     const loggedBlocks = new Set<string>()
 
     for (const step of steps) {
@@ -10249,9 +10285,9 @@ export class CampaignScheduler {
     campaign: Campaign,
     detail: CampaignInputData | null,
     accountId: number,
-    steps: RunStepV2[]
+    steps: RunStepV2[],
+    summary: MilestoneSummary = this.createMilestoneSummary()
   ): Promise<MilestoneSummary> {
-    const summary = this.createMilestoneSummary()
     const loggedBlocks = new Set<string>()
     const smsPushDetails: CampaignDetail[] = []
 
@@ -10460,10 +10496,12 @@ export class CampaignScheduler {
     steps: RunStepV2[],
     overallSuccess: boolean,
     screenshotProgressLogs: BlockScreenshotProgressLog[] = [],
-    consumedGroupPostInputDataIds?: Set<number>
+    consumedGroupPostInputDataIds?: Set<number>,
+    legacyPass?: { step: RunStepV2; summary: MilestoneSummary }
   ): Promise<MilestoneSummary> {
     void overallSuccess
-    const summary = this.createMilestoneSummary()
+    const summary = legacyPass?.summary ?? this.createMilestoneSummary()
+    const emits = (step: RunStepV2 | undefined): boolean => !!step && (!legacyPass || legacyPass.step === step)
     const createCampaignDetail = async (action: import('../../shared/types').CreateCampaignDetailInput) => {
       const created = await this.supabase.createCampaignDetail(action)
       if (!created) return null
@@ -10510,49 +10548,35 @@ export class CampaignScheduler {
       }
     }
 
-    // Legacy Facebook outputs already have raw statusCode fields. Only the
-    // explicit envelope or the complete action/status pair claims this contract.
-    const explicitSteps = steps.filter(step => step.output && (
-      'actionResult' in step.output || 'actionResults' in step.output
-      || ('actionCode' in step.output && 'statusCode' in step.output)
-    ))
-    if (explicitSteps.length) {
-      const legacySteps = steps.filter(step => !explicitSteps.includes(step))
-      const combined = legacySteps.length ? await this.logMilestonesV2(campaign, detail, accountId,
-        legacySteps, overallSuccess, [], consumedGroupPostInputDataIds) : summary
-      for (const step of explicitSteps) {
-        const outputs = Array.isArray(step.output.actionResults) ? step.output.actionResults : [step.output.actionResult ?? step.output]
-        for (const [index, raw] of outputs.entries()) {
-          const output = parseActionResultOutput(raw)
-          if (!output) throw new ResultContractError('output_invalid', '', '')
-          const row = raw as Record<string, unknown>
-          const inputDataId = row.inputDataId == null ? detail?.id : Number(row.inputDataId)
-          const created = await this.supabase.createCampaignDetail({ campaignId: campaign.id, accountId,
-            inputDataId, actionCode: output.actionCode, actionName: String(row.actionName || this.getAccountActionName(output.actionCode)),
-            resultOutput: output, resultSourceKey: `${step.id ?? step.nodeId}:${step.startedAt ?? ''}:${index}`,
-            errorCode: output.errorCode, log: typeof row.message === 'string' ? row.message : undefined,
-            data: row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : undefined })
-          if (created) this.recordMilestoneSummary(combined, created.status, created.log, created.actionName)
-          if (output.errorCode) {
-            const account = await this.supabase.getAccount(accountId)
-            if (account) await this.applyRuntimeErrorPolicy(account, campaign, output.errorCode, output.actionCode,
-              { message: typeof row.message === 'string' ? row.message : undefined }, { explicitOnly: true })
+    if (!legacyPass && steps.some(step => this.hasExplicitActionResult(step))) {
+      // Keep result order, but retain all steps as read-only context for the
+      // legacy adapters (post verification/link/pending checks and ordinals).
+      for (const step of steps) {
+        if (this.hasExplicitActionResult(step)) {
+          await this.logExplicitActionResultStep(campaign, detail, accountId, step, summary)
+        } else if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          await this.logNewsfeedMilestoneStep(campaign, detail, accountId, step)
+          if (this.newsfeedMilestonePayload(campaign, detail, accountId, step)) {
+            this.recordMilestoneSummary(summary, 'thành công', 'Tương tác newsfeed thành công')
           }
+        } else {
+          await this.logMilestonesV2(campaign, detail, accountId, steps, overallSuccess, [],
+            consumedGroupPostInputDataIds, { step, summary })
         }
         await flushScreenshotLogsForStep(step)
       }
       await flushRemainingScreenshotLogs()
-      return combined
+      return summary
     }
 
     if (this.isZaloBrowserlessCampaign(campaign)) {
       await flushRemainingScreenshotLogs()
-      return this.logZaloMessagePhoneMilestones(campaign, detail, accountId, steps)
+      return this.logZaloMessagePhoneMilestones(campaign, detail, accountId, steps.filter(emits), summary)
     }
 
     if (campaign.actionId === EMAIL_SEND_ACTION_ID) {
       await flushRemainingScreenshotLogs()
-      return this.logEmailSendMilestones(campaign, detail, accountId, steps)
+      return this.logEmailSendMilestones(campaign, detail, accountId, steps.filter(emits), summary)
     }
 
     // Tìm kiếm data — 1 milestone tổng kết, dữ liệu chi tiết nằm trong JSONB data.
@@ -10560,6 +10584,7 @@ export class CampaignScheduler {
       const isFindDataSearch = campaign.actionId === FIND_DATA_SEARCH_ACTION_ID
       const summaryStep = steps.find(s => s.blockName === (isFindDataSearch ? 'fb_find_search_data_summary' : 'fb_find_group_data_summary'))
       const errorStep = steps.find(s => s.status === 'error')
+      if (legacyPass && !emits(summaryStep || errorStep)) return summary
       const out = ((summaryStep?.output as any) || {}) as {
         phones?: unknown[]
         linkGroupZalos?: unknown[]
@@ -10832,8 +10857,8 @@ export class CampaignScheduler {
     }
 
     if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
-      for (const s of steps) await this.logNewsfeedMilestoneStep(campaign, detail, accountId, s)
-      const hasNewsfeedSuccess = steps.some(s => {
+      for (const s of steps.filter(emits)) await this.logNewsfeedMilestoneStep(campaign, detail, accountId, s)
+      const hasNewsfeedSuccess = steps.filter(emits).some(s => {
         const out = (s.output as any) || {}
         return (
           (s.blockName === 'fb_newsfeed_like_post' && out.liked === true) ||
@@ -10851,6 +10876,7 @@ export class CampaignScheduler {
         (s.status === 'success' || s.status === 'error')
       )
       for (const s of joinGroupSteps) {
+        if (!emits(s)) continue
         try {
           const out = (s.output as any) || {}
           const outcome = String(out.joinOutcome || '').trim()
@@ -10927,6 +10953,7 @@ export class CampaignScheduler {
       ? [...steps].reverse().find(s => s.nodeId === 'restore_original_identity' && s.blockName === 'fb_switch_identity_by_name')
       : undefined
     for (const s of pagePostSteps) {
+      if (!emits(s)) continue
       try {
         const out = (s.output as any) || {}
         const graphError = (out.graphError && typeof out.graphError === 'object') ? out.graphError : {}
@@ -10994,7 +11021,7 @@ export class CampaignScheduler {
       } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log page post:', err) }
     }
 
-    if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostSteps.length === 0 && switchToPageStep) {
+    if (campaign.actionId === PAGE_POST_ACTION_ID && pagePostSteps.length === 0 && switchToPageStep && emits(switchToPageStep)) {
       try {
         const out = (switchToPageStep.output as any) || {}
         if (switchToPageStep.status === 'error' || out.ok !== true) {
@@ -11038,6 +11065,7 @@ export class CampaignScheduler {
       ? steps.filter(s => s.blockName === 'fb_verify_group_post_form_closed' && (s.status === 'success' || s.status === 'error'))
       : []
     for (const s of groupPostVerifySteps) {
+      if (!emits(s)) continue
       try {
         const out = (s.output as any) || {}
         const posted = s.status === 'success' && (out.posted === true || out.ok === true)
@@ -11177,6 +11205,7 @@ export class CampaignScheduler {
           (campaign.actionId === 'facebook_timeline_post' && s.blockName === 'fb_post_reels')
         ) && s.status === 'success' && (s.output?.posted === true || s.output?.ok === true))
     for (const s of postSteps) {
+      if (!emits(s)) continue
       try {
         const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
           isPending?: unknown
@@ -11218,7 +11247,7 @@ export class CampaignScheduler {
       ? (groupPostCommentAdjustOutput.isPending === true || steps.find(x => x.blockName === 'fb_detect_pending_post')?.output?.isPending === true)
       : false
 
-    if (groupPostCommentAdjustOutput.skippedByGroupMode === true) {
+    if (groupPostCommentAdjustOutput.skippedByGroupMode === true && emits(groupPostCommentAdjustStep)) {
       const reason = String(groupPostCommentAdjustOutput.skipReason || 'Bỏ qua comment vì group không khớp điều kiện comment')
       try {
         await this.logCampaignProgress(campaign, `⚠️ ${reason}${detail ? ` tại "${inputDataName}"` : ''}`)
@@ -11257,6 +11286,7 @@ export class CampaignScheduler {
         target = position === 1 ? 'bài của mình' : this.formatOrdinalPost(position)
       }
       if (commentFailed) {
+        if (!emits(s)) continue
         const errMsg = String(out.error || s.error || 'Không comment được bài').trim() || 'Không comment được bài'
         try {
           await createCampaignDetail({
@@ -11283,6 +11313,7 @@ export class CampaignScheduler {
       }
 
       loggedCommentCount++
+      if (!emits(s)) continue
       const logText = text.trim().length > 0
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
@@ -11307,7 +11338,7 @@ export class CampaignScheduler {
       const prepareStep = steps.find(s => s.blockName === 'fb_prepare_seeding_iterations')
       const out = (prepareStep?.output as any) || {}
       const matchedCount = Number(out.matchedCount ?? 0)
-      if (prepareStep?.status === 'success' && matchedCount === 0) {
+      if (prepareStep?.status === 'success' && matchedCount === 0 && emits(prepareStep)) {
         const totalCount = Number(out.totalCount ?? 0)
         const extra = campaign.extraSettings || {}
         const keyword = extra.isFindPostByKeywords === true ? String(extra.postKeywords || '').trim() : ''
@@ -11333,6 +11364,7 @@ export class CampaignScheduler {
       (s.status === 'success' || s.status === 'error')
     )
     for (const s of msgSteps) {
+      if (!emits(s)) continue
       const out = (s.output as any) || {}
       const errMsg = out.error || s.error || 'Lỗi không xác định'
       const isPageInboxMessage = s.blockName === 'fb_send_page_inbox_message' || campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
@@ -11381,6 +11413,7 @@ export class CampaignScheduler {
 
     for (const step of steps.filter(s => s.blockName === 'fb_add_friend' &&
       (s.status === 'success' || s.status === 'error'))) {
+      if (!emits(step)) continue
       await this.logFacebookFriendMilestone(campaign, detail, accountId, step, summary)
       await flushScreenshotLogsForStep(step)
     }

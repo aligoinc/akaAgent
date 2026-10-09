@@ -9,6 +9,7 @@ const start = source.indexOf('    const groupPostVerifySteps =')
 const end = source.indexOf('    // Timeline/Reels only report success', start)
 assert(start > 0 && end > start)
 const compiled = ts.transpileModule(`module.exports = async function({steps,campaign,accountId,detail,inputDataName,createCampaignDetail,flushScreenshotLogsForStep}) {
+ const emits = () => true
  ${source.slice(start, end)}
 }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
 const context = { module: { exports: null }, ResultContractError: class extends Error {}, console: { error: (...args) => { throw new Error(args.join(' ')) } } }
