@@ -46,7 +46,8 @@ const service = load('src/main/services/campaignPendingReasonService.ts', {
     canUseAccountWithEntitlementsAndCapabilities: () => authorized, getUserZaloAccountCapabilities: () => ({}) },
   '../data/repositories/staffManagementRepository': { readStaffAccess: async () => access },
   '../data/repositories/browserRunLimitsRepository': { getBrowserRunLimits: async () => ({ facebookMax: null, zaloWebMax: null }) },
-  '../data/repositories/campaignPendingReasonRepository': reads
+  '../data/repositories/campaignPendingReasonRepository': reads,
+  '../data/repositories/campaignPendingChatLimitRepository': { readChatPendingLimitReason: () => { throw new Error('Unexpected akaChat path') } }
 })
 const runtime = { busyReason: () => null, readinessReason: () => null, configurationReason: () => null,
   limitReason: async () => { trace.push('limit-read'); return null } }

@@ -914,8 +914,8 @@ export class CampaignScheduler {
         if (account.flatformType === 'zalo' && !this.zaloRuntime) return 'Zalo runtime chưa sẵn sàng'
         return null
       },
-      configurationReason: (campaign, action) => {
-        if (!MOBILE_MANAGED_SMS_ACTION_IDS.has(campaign.actionId)) {
+      configurationReason: (campaign, action, requiresWorkflow) => {
+        if (requiresWorkflow) {
           const workflow = this.resolveCampaignWorkflow(action)
           if (!workflow.workflowId) return workflow.missingNote
         }

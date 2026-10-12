@@ -5,7 +5,7 @@ import { mapAccountFromDB, mapCampaignActionFromDB, mapCampaignFromDB } from '..
 
 // On-demand diagnostics use the existing HTTP client. Never load log/session/password fields.
 const campaignFields = 'id,name,account_id,action_id,status,note,is_delete,staff_id,organization_id,schedule,original_schedule,schedule_type,schedule_days,schedule_week_days,schedule_end_date,daily_stop_time,continue_next_day,extra_settings,data_target_source_mode,data_group_id,provisioning_state,updated_at,runtime_claim_token,runtime_unit_token'
-const accountFields = 'id,name,flatform_type,status,login_status,is_active,is_delete,is_zalo_show_web,is_zalo_server,facebook_login_managed,staff_id,organization_id,rate_limit_minutes,runtime_operation_claim_token,auto_account_groups(settings)'
+const accountFields = 'id,name,flatform_type,status,login_status,is_active,is_delete,is_zalo_show_web,is_zalo_server,facebook_login_managed,staff_id,organization_id,rate_limit_minutes,runtime_operation_claim_token,auto_account_groups(organization_id,is_active,is_delete,settings)'
 
 export async function readPendingReasonCampaign(id: number, signal: AbortSignal): Promise<{ campaign: Campaign; hasClaim: boolean } | null> {
   signal.throwIfAborted()
@@ -18,14 +18,23 @@ export async function readPendingReasonCampaign(id: number, signal: AbortSignal)
   return { campaign: mapCampaignFromDB({ ...data, log: '' }), hasClaim: !!(data.runtime_claim_token || data.runtime_unit_token) }
 }
 
-export async function readPendingReasonAccount(id: number, signal: AbortSignal): Promise<{ account: AutoAccount; hasOperation: boolean } | null> {
+export async function readPendingReasonAccount(id: number, signal: AbortSignal): Promise<{ account: AutoAccount; hasOperation: boolean; isChatManaged: boolean } | null> {
   signal.throwIfAborted()
   const user = requireCurrentUser()
   const { data, error } = await getSupabaseClient().from('auto_accounts').select(accountFields)
     .eq('id', id).eq('staff_id', user.staffId)
     .or(`organization_id.is.null,organization_id.eq.${user.organizationId}`).abortSignal(signal).maybeSingle()
   if (error) throw error
-  return data ? { account: mapAccountFromDB(data), hasOperation: !!data.runtime_operation_claim_token } : null
+  if (!data) return null
+  const account = mapAccountFromDB(data)
+  const isChatManaged = user.isChatSync === true && Number(data.organization_id) === user.organizationId
+    && account.flatformType === 'zalo' && account.isZaloServer === true && !account.isZaloShowWeb
+  const group = data.auto_account_groups as unknown as Record<string, unknown> | null
+  // akaChat's executor only joins active, nondeleted groups from the same tenant.
+  // Leave the legacy scheduler's diagnostic snapshot unchanged.
+  if (isChatManaged && (!group || group.is_active !== true || group.is_delete === true
+    || Number(group.organization_id) !== user.organizationId)) account.accountGroupSettings = null
+  return { account, hasOperation: !!data.runtime_operation_claim_token, isChatManaged }
 }
 
 export async function readPendingReasonAction(id: string, signal: AbortSignal): Promise<CampaignAction | null> {
