@@ -5745,7 +5745,7 @@ export default function CampaignFormModal({
 
   const validateCommentMediaPool = (label: string, option: string, images: CampaignMediaInput[]): boolean => {
     if (option !== 'all' || images.length <= 1) return true
-    showAlert(`${label} ở chế độ "Gửi media đã chọn" chỉ được chọn tối đa 1 ảnh hoặc video. Vui lòng xoá bớt media hoặc chuyển sang gửi ngẫu nhiên.`, 'error')
+    showAlert(`${label} ở chế độ "Gửi ảnh/video (png, jpg, mp4,...)" chỉ được chọn tối đa 1 ảnh hoặc video. Vui lòng xoá bớt media hoặc chuyển sang gửi ngẫu nhiên.`, 'error')
     return false
   }
 
@@ -5852,7 +5852,7 @@ export default function CampaignFormModal({
         return false
       }
       if (item.mediaOption === 'all' && mediaItems.length !== 1) {
-        showAlert(`${label} ở chế độ "Đăng video đã chọn" chỉ được chọn đúng 1 video. Hãy xoá bớt hoặc chuyển sang ngẫu nhiên.`, 'error')
+        showAlert(`${label} ở chế độ "Đăng video (mp4, mov,...)" chỉ được chọn đúng 1 video. Hãy xoá bớt hoặc chuyển sang ngẫu nhiên.`, 'error')
         return false
       }
     }
@@ -9158,7 +9158,7 @@ export default function CampaignFormModal({
     )
   }
 
-  const renderImagePicker = (target: 'post' | 'comment', title: string) => {
+  const renderImagePicker = (target: 'post' | 'comment') => {
     const isComment = target === 'comment'
     const isZaloMedia = isZaloMessageCampaign && !isComment
     const isEmailAttachment = isEmailCampaign && !isComment
@@ -9166,6 +9166,7 @@ export default function CampaignFormModal({
     const mediaSelectionMode = getMediaSelectionMode(target)
     const isFacebookImageVideoMedia = mediaSelectionMode === 'image-video'
     const isVideoOnlyMedia = mediaSelectionMode === 'video'
+    const mediaTitle = isComment ? 'Ảnh/Video (png, jpg, mp4,...)' : isEmailAttachment ? 'Tệp đính kèm (mọi định dạng)' : isZaloMedia ? 'File (mọi định dạng)' : isVideoOnlyMedia ? 'Video (mp4, mov,...)' : isFacebookImageVideoMedia ? 'Ảnh/Video (png, jpg, mp4,...)' : 'Ảnh (png, jpg,...)'
     const option = isComment ? formData.commentImageOption : formData.imageOption
     const randomCount = isComment ? 1 : formData.randomImageCount
     const images = isComment ? formData.commentImages : formData.images
@@ -9173,11 +9174,11 @@ export default function CampaignFormModal({
 
     const setOption = (value: ImageOption) => {
       if (isComment && value === 'all' && images.length > 1) {
-        showAlert('Chế độ "Gửi media đã chọn" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Gửi ảnh/video (png, jpg, mp4,...)" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
       if (!isComment && isReelsMediaMode && value === 'all' && images.length > 1) {
-        showAlert('Chế độ "Đăng video đã chọn" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Đăng video (mp4, mov,...)" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
       setFormData(p => isComment
@@ -9200,10 +9201,10 @@ export default function CampaignFormModal({
 
     return (
       <div style={{ marginTop: 24, borderTop: '1px solid var(--border-default)', paddingTop: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>{title}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>{mediaTitle}</div>
         {isComment && (
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: -8, marginBottom: 16 }}>
-            Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi media đã chọn dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.
+            Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi ảnh/video dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.
           </div>
         )}
         {!isComment && isPostBackgroundActive && (
@@ -9255,7 +9256,7 @@ export default function CampaignFormModal({
                   checked={option === 'all'}
                   onChange={() => setOption('all')}
                 />
-                <span>{isComment ? 'Gửi media đã chọn' : isEmailAttachment ? 'Đính kèm file đã chọn' : isZaloMedia ? 'Gửi file đã chọn' : isVideoOnlyMedia ? 'Đăng video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ảnh/video đã chọn' : 'Gửi ảnh đã chọn'}</span>
+                <span>{isComment ? 'Gửi ảnh/video (png, jpg, mp4,...)' : isEmailAttachment ? 'Đính kèm file (mọi định dạng)' : isZaloMedia ? 'Gửi file (mọi định dạng)' : isVideoOnlyMedia ? 'Đăng video (mp4, mov,...)' : isFacebookImageVideoMedia ? 'Gửi ảnh/video (png, jpg, mp4,...)' : 'Gửi ảnh (png, jpg,...)'}</span>
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <label className="schedule-radio-label">
@@ -9283,7 +9284,7 @@ export default function CampaignFormModal({
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>
-              {isComment ? 'Kho ảnh/video đã chọn' : isEmailAttachment ? 'Tệp đính kèm đã chọn' : isZaloMedia ? 'File đã chọn' : isVideoOnlyMedia ? 'Video đã chọn' : isFacebookImageVideoMedia ? 'Ảnh/video đã chọn' : 'Ảnh đã chọn'}
+              {mediaTitle}
             </div>
             <div className="stepper-grid-container" style={{ margin: 0, maxHeight: 300, overflowY: 'auto' }}>
               <table className="campaign-grid">
@@ -12976,7 +12977,7 @@ export default function CampaignFormModal({
             </div>
           </div>
 
-          {renderImagePicker('comment', 'Media comment')}
+          {renderImagePicker('comment')}
         </div>
       )}
     </div>
@@ -13290,7 +13291,7 @@ export default function CampaignFormModal({
       const currentItem = formData.advancedContentItems.find(item => item.id === itemId)
       const mediaItems = patch.mediaItems || currentItem?.mediaItems || []
       if (mediaItems.length > 1) {
-        showAlert('Chế độ "Gửi media đã chọn" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Gửi ảnh/video (png, jpg, mp4,...)" chỉ dùng tối đa 1 ảnh hoặc video cho mỗi comment. Vui lòng xoá bớt còn 1 media hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
     }
@@ -13298,7 +13299,7 @@ export default function CampaignFormModal({
       const currentItem = formData.advancedContentItems.find(item => item.id === itemId)
       const mediaItems = patch.mediaItems || currentItem?.mediaItems || []
       if (mediaItems.length > 1) {
-        showAlert('Chế độ "Đăng video đã chọn" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
+        showAlert('Chế độ "Đăng video (mp4, mov,...)" chỉ dùng đúng 1 video cho mỗi lượt. Vui lòng xoá bớt còn 1 video hoặc tiếp tục dùng chế độ ngẫu nhiên.', 'info')
         return
       }
     }
@@ -13768,7 +13769,7 @@ export default function CampaignFormModal({
     const mediaSelectionMode = getMediaSelectionMode({ kind: 'advanced', itemId: item.id })
     const isFacebookImageVideoMedia = mediaSelectionMode === 'image-video'
     const isVideoOnlyMedia = mediaSelectionMode === 'video'
-    const mediaTitle = isCommentSeedingCampaign ? 'Kho ảnh/video đã chọn' : isEmailCampaign ? 'Tệp đính kèm đã chọn' : isZaloMessageCampaign ? 'File đã chọn' : isVideoOnlyMedia ? 'Video đã chọn' : isFacebookImageVideoMedia ? 'Ảnh/video đã chọn' : 'Ảnh đã chọn'
+    const mediaTitle = isCommentSeedingCampaign ? 'Ảnh/Video (png, jpg, mp4,...)' : isEmailCampaign ? 'Tệp đính kèm (mọi định dạng)' : isZaloMessageCampaign ? 'File (mọi định dạng)' : isVideoOnlyMedia ? 'Video (mp4, mov,...)' : isFacebookImageVideoMedia ? 'Ảnh/Video (png, jpg, mp4,...)' : 'Ảnh (png, jpg,...)'
 
     return (
       <div className={`campaign-advanced-media-panel${mediaBlocked ? ' is-blocked' : ''}`}>
@@ -13778,7 +13779,7 @@ export default function CampaignFormModal({
           </div>
         )}
         {isCommentSeedingCampaign && (
-          <div className="schedule-hint">Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi media đã chọn dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.</div>
+          <div className="schedule-hint">Mỗi comment gửi tối đa 1 ảnh hoặc video. Chế độ gửi ảnh/video dùng 1 media; chế độ ngẫu nhiên chọn 1 media từ kho.</div>
         )}
         <div className="campaign-advanced-media-layout">
           <div className="campaign-advanced-media-options">
@@ -13821,7 +13822,7 @@ export default function CampaignFormModal({
                 disabled={mediaBlocked}
                 onChange={() => setAdvancedContentItem(item.id, { mediaOption: 'all' })}
               />
-              <span>{isCommentSeedingCampaign ? 'Gửi media đã chọn' : isEmailCampaign ? 'Đính kèm file đã chọn' : isZaloMessageCampaign ? 'Gửi file đã chọn' : isVideoOnlyMedia ? 'Đăng video đã chọn' : isFacebookImageVideoMedia ? 'Gửi ảnh/video đã chọn' : 'Gửi ảnh đã chọn'}</span>
+              <span>{isCommentSeedingCampaign ? 'Gửi ảnh/video (png, jpg, mp4,...)' : isEmailCampaign ? 'Đính kèm file (mọi định dạng)' : isZaloMessageCampaign ? 'Gửi file (mọi định dạng)' : isVideoOnlyMedia ? 'Đăng video (mp4, mov,...)' : isFacebookImageVideoMedia ? 'Gửi ảnh/video (png, jpg, mp4,...)' : 'Gửi ảnh (png, jpg,...)'}</span>
             </label>
             <div className="campaign-advanced-random-media-row">
               <label className="schedule-radio-label">
@@ -14633,7 +14634,7 @@ export default function CampaignFormModal({
         {renderRewriteCommentContentEachRunOption()}
       </div>
 
-      {renderImagePicker('comment', 'Media comment')}
+      {renderImagePicker('comment')}
 
     </div>
   )
@@ -16759,7 +16760,7 @@ export default function CampaignFormModal({
                                 </div>
                               )}
 
-                              {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post', 'Media')}
+                              {!isMobileManagedSmsCampaign && !isFacebookJoinGroupCampaign && renderImagePicker('post')}
                             </>
                           )}
                         </>

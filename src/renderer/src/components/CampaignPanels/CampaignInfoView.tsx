@@ -234,7 +234,7 @@ const formatImageOption = (extra: CampaignExtraSettings, images?: CampaignMediaI
 
 const formatCommentImageOption = (extra: CampaignExtraSettings) => {
   if (extra.commentImageOption === 'random') return 'Ngẫu nhiên 1 ảnh/video'
-  if (extra.commentImageOption === 'all') return 'Gửi media đã chọn'
+  if (extra.commentImageOption === 'all') return 'Gửi ảnh/video (png, jpg, mp4,...)'
   return 'Không gửi media'
 }
 
@@ -519,7 +519,7 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           if (item.mediaOption === 'all' && mediaItems.length > 0) {
             return mediaItems.length > 1
               ? `${index + 1}. Gửi media đầu tiên (1 trong ${mediaItems.length} media)`
-              : `${index + 1}. Gửi media đã chọn`
+              : `${index + 1}. Gửi ảnh/video (png, jpg, mp4,...)`
           }
           return `${index + 1}. Không gửi media`
         }).join('\n')
