@@ -10139,7 +10139,7 @@ export class CampaignScheduler {
 
   private newsfeedMilestonePayload(
     campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2
-  ): { action: import('../../shared/types').CreateCampaignDetailInput; progress: string } | null {
+  ): { action: import('../../shared/types').CreateCampaignDetailInput; progress: string; linkProgress?: string } | null {
     if (step.status !== 'success') return null
     const out = step.output || {}
     const isLike = step.blockName === 'fb_newsfeed_like_post' && out.liked === true
@@ -10148,6 +10148,7 @@ export class CampaignScheduler {
     const targetName = String(out.targetName || 'bài viết newsfeed').trim()
     const postContent = String(out.postContent || '').trim()
     const text = String(out.text || '').trim()
+    const commentUrl = isComment ? String(out.commentUrl || '').trim() : ''
     const content = isLike ? postContent : text
     const preview = content.length > 50 ? content.substring(0, 50) + '...' : content
     return {
@@ -10155,13 +10156,15 @@ export class CampaignScheduler {
         inputDataId: detail?.id, campaignId: campaign.id, accountId,
         actionCode: isLike ? 'fb_like_post' : 'fb_comment', actionName: isLike ? 'Like post' : 'Comment',
         status: 'thành công',
+        postUrl: commentUrl || undefined,
         log: isLike
           ? (preview ? `Đã like bài newsfeed của ${targetName}: "${preview}"` : `Đã like bài newsfeed của ${targetName}`)
           : (preview ? `Đã comment bài newsfeed của ${targetName}: "${preview}"` : `Đã comment bài newsfeed của ${targetName}`),
         data: { targetName, targetUid: out.targetUid || undefined, postContent: postContent || undefined,
-          ...(isComment ? { commentContent: text || undefined } : {}), source: 'newsfeed', runId: step.runId, nodeId: step.nodeId }
+          ...(isComment ? { commentContent: text || undefined, commentUrl: commentUrl || undefined } : {}), source: 'newsfeed', runId: step.runId, nodeId: step.nodeId }
       },
-      progress: isLike ? `👍 Đã like bài newsfeed của "${targetName}"` : `💬 Đã comment bài newsfeed của "${targetName}"`
+      progress: isLike ? `👍 Đã like bài newsfeed của "${targetName}"` : `💬 Đã comment bài newsfeed của "${targetName}"`,
+      linkProgress: commentUrl ? `🔗 Link comment: ${commentUrl}` : undefined
     }
   }
 
@@ -10407,6 +10410,7 @@ export class CampaignScheduler {
           // The legacy newsfeed payload is a success-only adapter. An explicit
           // failure must not inherit its success text from leftover DOM flags.
           const legacy = newsfeed?.action.actionCode === output.actionCode
+            && inputDataId === detail?.id
             && output.statusCode === 'campaign_detail_success' && !output.errorCode ? newsfeed : null
           const group = isGroupVerify && output.actionCode === 'fb_post_group' && inputDataId === detail?.id
             ? this.groupPostMilestonePayload(campaign, detail, accountId, step, steps, output) : null
@@ -10507,6 +10511,7 @@ export class CampaignScheduler {
           }
           if (legacy && !failure && !newsfeedLogged) {
             await this.logCampaignProgress(campaign, legacy.progress)
+            if (legacy.linkProgress) await this.logCampaignProgress(campaign, legacy.linkProgress)
             newsfeedLogged = true
           }
           return created
@@ -10573,6 +10578,7 @@ export class CampaignScheduler {
     try {
       await this.supabase.createCampaignDetail(milestone.action)
       await this.logCampaignProgress(campaign, milestone.progress)
+      if (milestone.linkProgress) await this.logCampaignProgress(campaign, milestone.linkProgress)
     } catch (err) {
       this.loggedNewsfeedMilestoneKeys.delete(key)
       if (err instanceof ResultContractError) throw err
@@ -11602,6 +11608,8 @@ export class CampaignScheduler {
 
       loggedCommentCount++
       if (!emits(s)) continue
+      // Keep comment_id/reply_comment_id intact; the post URL cleaner removes them.
+      const commentUrl = String(out.commentUrl || '').trim()
       const logText = text.trim().length > 0
         ? `Đã comment vào ${target}: "${preview}"`
         : `Đã comment vào ${target}`
@@ -11614,9 +11622,11 @@ export class CampaignScheduler {
           actionName: 'Comment',
           status: 'thành công',
           log: logText,
-          data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount }
+          postUrl: commentUrl || undefined,
+          data: { commentPosition: position, iteration: loggedCommentCount, commentType: commentType || undefined, commentContent: text, commentImageCount: imageCount, commentUrl: commentUrl || undefined }
         })
         await this.logCampaignProgress(campaign, `💬 Đã comment vào ${target}${detail ? ` tại "${inputDataName}"` : ''}`)
+        if (commentUrl) await this.logCampaignProgress(campaign, `🔗 Link comment: ${commentUrl}`)
         await flushScreenshotLogsForStep(s)
       } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log comment:', err) }
     }
