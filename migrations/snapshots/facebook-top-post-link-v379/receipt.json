@@ -1,0 +1,32 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "verified_at": "2026-10-12T21:08:20.051Z",
+  "history": [
+    {
+      "name": "migration_v379_facebook_top_post_link",
+      "version": "20261012210755"
+    }
+  ],
+  "block_id": 2832,
+  "migration_sha256": "977f8275a9afcb05ebdb18f2167822c884784e3650e2538ed81ae80c11c47ec7",
+  "rollback_sha256": "4d477f9086abc23967b279d52af74bb865c80695777745c07584ab6162415993",
+  "after_sha256": "fd9890590d1abc5d957d68a8d2dca1490e0e9bf904a0acac08ed4e2e658097c0",
+  "preflight_sha256": "b5a39e5eb738cf8dceee6c1e8fbc6c053b8608453b9d9c65ac77474c91e04104",
+  "apply_version": "20261012210755",
+  "verification": {
+    "workflow_ids": [
+      2,
+      251
+    ],
+    "page_block_id": 2672,
+    "unchanged_page_workflow_ids": [
+      226,
+      250
+    ],
+    "unchanged_group_block_id": 2626,
+    "checks": "Changed rows and unchanged snapshot rows verified against prepared source",
+    "smoke_scenarios": 38,
+    "live_facebook_post_test": false
+  },
+  "schema_reload": false
+}

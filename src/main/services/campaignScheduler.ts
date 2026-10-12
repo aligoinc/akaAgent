@@ -11480,6 +11480,14 @@ export class CampaignScheduler {
     for (const s of postSteps) {
       if (!emits(s)) continue
       try {
+        // The profile link belongs to this publish, never a prior loop iteration.
+        const followingSteps = steps.slice(steps.indexOf(s) + 1)
+        const nextPublish = followingSteps.findIndex(x => x.blockName === 'fb_click_post_button' || x.blockName === 'fb_post_reels')
+        const linkStep = campaign.actionId === 'facebook_timeline_post' && s.blockName === 'fb_click_post_button'
+          ? followingSteps.slice(0, nextPublish < 0 ? undefined : nextPublish)
+            .find(x => x.blockName === 'fb_get_first_profile_post_link' && x.status === 'success')
+          : undefined
+        const postUrl = this.cleanPostLinkForStorage(String(linkStep?.output?.postUrl || ''))
         const detectOut = ((steps.find(x => x.blockName === 'fb_detect_pending_post')?.output as any) || {}) as {
           isPending?: unknown
           pendingCheckConclusive?: unknown
@@ -11502,9 +11510,11 @@ export class CampaignScheduler {
             operationState: 'committed'
           } : undefined,
           log: detail ? `Đăng bài thành công vào ${inputDataName}${isPending ? ' (chờ duyệt)' : ''}` : 'Đăng bài thành công',
-          data: isPending ? { isPending: true } : undefined
+          postUrl: postUrl || undefined,
+          data: isPending ? { isPending: true } : postUrl ? { postUrl } : undefined
         })
         await this.logCampaignProgress(campaign, `📝 Đăng bài thành công${detail ? ` vào "${inputDataName}"` : ''}`)
+        if (postUrl) await this.logCampaignProgress(campaign, `🔗 Link bài post: ${postUrl}`)
         if (campaign.actionId === 'facebook_group_post') {
           await this.logCampaignProgress(campaign, this.formatGroupPendingProgressLog(isPending, pendingCheckConclusive))
         }
