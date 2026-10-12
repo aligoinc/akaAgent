@@ -1,0 +1,77 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "actions": [
+    {
+      "id": "facebook_page_post",
+      "test_workflow_id": 250,
+      "workflow_id": 226
+    },
+    {
+      "id": "facebook_timeline_post",
+      "test_workflow_id": 251,
+      "workflow_id": 2
+    }
+  ],
+  "checked_at": "2026-10-12 21:07:52.809102+00",
+  "checksums": [
+    {
+      "id": 5,
+      "md5": "1a7caeb6f3a5f6371910dc4832d61af4",
+      "table_name": "auto_blocks"
+    },
+    {
+      "id": 20,
+      "md5": "b783209cb9604117179ce7c8a3b82f67",
+      "table_name": "auto_blocks"
+    },
+    {
+      "id": 30,
+      "md5": "9fa594892a4cf9b5783a6b9a4ec812a9",
+      "table_name": "auto_blocks"
+    },
+    {
+      "id": 2626,
+      "md5": "2f0cd602c45bc32b9789d2bf5bb12cb3",
+      "table_name": "auto_blocks"
+    },
+    {
+      "id": 2672,
+      "md5": "63a67d2e73ea6a07329be058964dd4a1",
+      "table_name": "auto_blocks"
+    },
+    {
+      "id": 1551,
+      "md5": "2df7ef049ab7821a4016e7478b3e6f39",
+      "table_name": "auto_elements"
+    },
+    {
+      "id": 1552,
+      "md5": "a061b734049ac401e9498ce6695ea57d",
+      "table_name": "auto_elements"
+    },
+    {
+      "id": 2,
+      "md5": "73831ab572c9c9272f181d957aff97a7",
+      "table_name": "auto_workflows"
+    },
+    {
+      "id": 226,
+      "md5": "f1d58ed05b9ca3f6a0cf38d209d47026",
+      "table_name": "auto_workflows"
+    },
+    {
+      "id": 250,
+      "md5": "5cd8533576b5d1bd1606fb11dd8fcf34",
+      "table_name": "auto_workflows"
+    },
+    {
+      "id": 251,
+      "md5": "47a74098cc7019b28b386d40e23e363e",
+      "table_name": "auto_workflows"
+    }
+  ],
+  "existing_link_block": 0,
+  "history": null,
+  "migration_sha256": "977f8275a9afcb05ebdb18f2167822c884784e3650e2538ed81ae80c11c47ec7",
+  "rollback_sha256": "4d477f9086abc23967b279d52af74bb865c80695777745c07584ab6162415993"
+}
