@@ -1,0 +1,104 @@
+{
+  "version": "8.3.0",
+  "source_commit": "6591c260d5d8a5869a753cf175e20d482dbdd3dc",
+  "started_at": "2026-10-12T22:21:07.459464+00:00",
+  "old_artifacts_archive": "/Users/lequangnhut/Repos/akaAgent/dist/archive/before-8.3.0-20261013-052106",
+  "host_native_sha256": "ced697fcad5f7ba0b9599d0a95f552a22e9f1d05bdbebb0c3f4164c9990724a2",
+  "electron_version": "33.4.11",
+  "results": [
+    {
+      "target": "windows-desktop",
+      "script": "build:win",
+      "started_at": "2026-10-12T22:21:37.668387+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.3.0-logs/windows-desktop.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent-Setup-8.3.0.exe",
+      "finished_at": "2026-10-12T22:22:56.441713+00:00",
+      "elapsed_seconds": 78.77,
+      "exit_code": 0,
+      "bytes": 118303912,
+      "sha256": "f715b22a2c353c6b20ad8a86cf6e78ef02f80cfabed1d777e887ede16ec91a6a",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "4096cdb5029ce0c31d8b671fd6e8b91ea36bced6fc1d36264d35a98c66a628b8",
+        "version": "8.3.0",
+        "compiled_files_matched": 110,
+        "installer_payload_matches_unpacked": true,
+        "application_arch": "PE x64",
+        "sqlite_arch": "PE x64"
+      }
+    },
+    {
+      "target": "mac-arm64",
+      "script": "build:mac",
+      "started_at": "2026-10-12T22:22:56.553320+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.3.0-logs/mac-arm64.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent.dmg",
+      "finished_at": "2026-10-12T22:23:50.932370+00:00",
+      "elapsed_seconds": 54.38,
+      "exit_code": 0,
+      "bytes": 144053245,
+      "sha256": "631632044e8e6f68842c671a18748f01228fe34160ee080f9e7229ff2e51833d",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "03b53423526a4679d22f7f052657a2f2d01f10c7721dada9ea61fa0e94844c43",
+        "version": "8.3.0",
+        "compiled_files_matched": 110,
+        "application_arch": "arm64",
+        "sqlite_arch": "arm64",
+        "adhoc_signature_valid": true,
+        "packaged_sqlite_smoke_passed": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true
+      }
+    },
+    {
+      "target": "mac-intel",
+      "script": "build:mac:intel",
+      "started_at": "2026-10-12T22:23:51.096623+00:00",
+      "log": "/Users/lequangnhut/Repos/akaAgent/dist/build-8.3.0-logs/mac-intel.log",
+      "artifact": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgentIntel.dmg",
+      "finished_at": "2026-10-12T22:24:49.947032+00:00",
+      "elapsed_seconds": 58.85,
+      "exit_code": 0,
+      "bytes": 151257481,
+      "sha256": "33feefe4c11bb7d51127adf006a2ef95c24457538605cfb729dff84eb8a998f2",
+      "compiled_files": 110,
+      "verification": {
+        "asar_sha256": "8220143ed0fe97ddca702bbf60af25c6e8523f94a4c085b0ceef5fa24841aa45",
+        "version": "8.3.0",
+        "compiled_files_matched": 110,
+        "application_arch": "x86_64",
+        "sqlite_arch": "x86_64",
+        "adhoc_signature_valid": true,
+        "packaged_sqlite_smoke_passed": true,
+        "dmg_verified": true,
+        "mounted_payload_matches_app": true
+      }
+    }
+  ],
+  "published": false,
+  "server_build_required": false,
+  "server_8_2_0_sha256": "f98624566755fab38a3f190a7e44ca02ddd8dea7582ee8406a203d43563f6744",
+  "version_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "typecheck_node": "passed",
+  "typecheck_renderer": "passed",
+  "finished_at": "2026-10-12T22:24:50.059456+00:00",
+  "host_native_restored": true,
+  "verified_at": "2026-10-12T22:26:01.410Z",
+  "source_and_existing_local_files_unchanged": true,
+  "installer_runtime_launch_tested_on_windows": false,
+  "signing": {
+    "windows": "unsigned, existing packaging configuration",
+    "macos": "ad-hoc signed, not notarized"
+  },
+  "documentation_updated_after_verification": [
+    "AGENTS.md",
+    "docs/FACEBOOK_TOP_POST_LINK_V379.md",
+    "docs/FACEBOOK_FIRST_COMMENT_LINK_V380.md",
+    "docs/AKAAGENT_8_3_0_BUILD_20261013.md"
+  ]
+}

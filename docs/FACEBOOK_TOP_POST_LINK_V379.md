@@ -1,6 +1,6 @@
 # Link bài trên cùng sau khi đăng trang cá nhân/fanpage
 
-Trạng thái: **V379 đã apply trên akachat ngày 13/10/2026 lúc 04:07 Việt Nam**, history `20261012210755 / migration_v379_facebook_top_post_link`; block lấy link mới `2832`. Đã đọc lại và xác minh các row sau apply. **Không apply lại khi merge/phát hành. Desktop mới chưa đóng gói/phát hành.** [Receipt](../migrations/snapshots/facebook-top-post-link-v379/receipt.json), [preflight](../migrations/snapshots/facebook-top-post-link-v379/preflight.json), [snapshot sau apply](../migrations/snapshots/facebook-top-post-link-v379/after.json).
+Trạng thái: **V379 đã apply trên akachat ngày 13/10/2026 lúc 04:07 Việt Nam**, history `20261012210755 / migration_v379_facebook_top_post_link`; block lấy link mới `2832`. Đã đọc lại và xác minh các row sau apply. **Không apply lại khi merge/phát hành. Desktop mới đã đóng gói trong 8.3.0 local, chưa phát hành.** [Receipt](../migrations/snapshots/facebook-top-post-link-v379/receipt.json), [preflight](../migrations/snapshots/facebook-top-post-link-v379/preflight.json), [snapshot sau apply](../migrations/snapshots/facebook-top-post-link-v379/after.json).
 
 Theo yêu cầu người dùng: sau khi xác nhận đăng thành công, lấy permalink đầu tiên theo thứ tự DOM như logic group. Không đối chiếu nội dung, thời gian, snapshot trước đăng hoặc loại bài ghim. Chấp nhận link bài trên cùng có thể là bài cũ/bài ghim. Thiếu link vẫn giữ kết quả đăng thành công, không retry đăng.
 
