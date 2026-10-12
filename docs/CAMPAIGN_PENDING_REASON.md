@@ -29,8 +29,15 @@ cũ. Không lưu note tạm vào `campaign.note`, localStorage hay sessionStorag
   khác đang chiếm account, cleanup/đăng nhập/quét data, trạng thái và readiness,
   workflow/nội dung nâng cao, giới hạn đồng thời/quota, data chưa đến giờ hoặc
   nguồn data chưa có dữ liệu. Trả nguyên nhân đầu tiên xác minh được.
-- Quota tái sử dụng preclaim **read-only** của scheduler và settings nhóm tài
-  khoản. Không tạo/reset quota, claim, khôi phục phiên hoặc sửa lịch/status.
+- Chiến dịch local/legacy Server tái sử dụng preclaim **read-only** của scheduler.
+  Với account Zalo Server cùng org và `isChatSync=true`, chẩn đoán theo akaChat:
+  action catalog phải active/chưa xóa, không yêu cầu workflow Desktop; nhóm tài
+  khoản chỉ có hiệu lực khi active/chưa xóa/cùng org; cửa sổ quota chỉ đếm detail
+  có `counts_toward_limit=true`. Khi bật tiếp tục hành động khác, xét toàn bộ
+  hành động được bật, kể cả hành động không bật kiểm tra quota; tìm SĐT chỉ là
+  bước phụ, không đủ để kết luận còn hành động có thể chạy.
+  Không sửa logic thực thi scheduler local/legacy Server (lỗi continuation cũ
+  được hoãn riêng). Không tạo/reset quota, claim, khôi phục phiên hoặc sửa lịch/status.
   Không thêm polling, SQL pool, connection, migration hay reload schema.
 - Danh sách input rỗng chưa đủ để kết luận lỗi: nhiều loại tự tạo data lúc chạy.
   Realtime chỉ báo chờ data khi còn trong hạn nhận. Mobile/Zalo Server không
@@ -44,6 +51,7 @@ cũ. Không lưu note tạm vào `campaign.note`, localStorage hay sessionStorag
 
 ```bash
 node scripts/campaign-pending-reason-smoke.cjs
+node scripts/campaign-pending-reason-chat-smoke.cjs
 node scripts/run-campaign-pending-reason-ui-smoke.cjs
 npx tsc --noEmit -p tsconfig.node.json
 npx tsc --noEmit -p tsconfig.web.json
@@ -56,6 +64,12 @@ request/deadline và phản hồi cũ. Smoke Electron dùng CampaignPanel/hook/C
 thật với IPC giả và chặn HTTP: kiểm tra label, phạm vi nút, style giống note
 thật, TTL sau response, không ghi campaign note, ưu tiên/xóa note tạm khi có
 note thật, phản hồi đến muộn và không có mutation/request lúc hết hạn.
+
+Smoke akaChat chạy service và repository thật với HTTP client giả chỉ hỗ trợ
+đọc: continuation hai chiều trên năm loại kết hợp, nhóm tắt/xóa/khác org, catalog
+không có workflow, đếm true/false/NULL, package cap, ngày quota, lỗi/cancel và
+phân tuyến akaChat so với local/legacy Server. Metadata nhóm lấy kèm request
+account hiện có; trạng thái các action gom một lần và chỉ đếm quota được bật.
 
 Ngày 12/10/2026 đã thử các projection/filter REST trên linked production
 `cgjbsmqtfhqvttudyjzq` bằng staff/campaign ID không tồn tại: campaign, account

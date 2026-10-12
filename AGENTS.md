@@ -351,6 +351,8 @@ Các cập nhật `auto_accounts.status` do scheduler thực hiện phải đi q
 
 Nút **Tại sao CD không chạy?** dùng [campaignPendingReasonService](src/main/services/campaignPendingReasonService.ts:56) chỉ đọc; note tạm RAM 5 phút, note thật luôn thắng và hủy note tạm. Không ghi `campaign.note`, claim/reset quota hay thêm polling/connection; [luồng và smoke](docs/CAMPAIGN_PENDING_REASON.md).
 
+Chẩn đoán Zalo Server cùng org có `isChatSync=true` theo akaChat: action catalog phải active/chưa xóa, không yêu cầu workflow Desktop; chỉ áp nhóm active/chưa xóa/cùng org và chỉ đếm detail `counts_toward_limit=true`. Dùng [campaignPendingChatLimitRepository](src/main/data/repositories/campaignPendingChatLimitRepository.ts) chỉ đọc; local/legacy Server giữ adapter quota và workflow thường/test hiện có. Smoke: `node scripts/campaign-pending-reason-chat-smoke.cjs`.
+
 `facebook_group_post` có `enablePostBump`: sau post thành công và detect pending không phải true, scheduler thêm tổng `postBumpCount` input rows vào các campaign `facebook_comment_seeding_post` theo round-robin; mode tạo mới lazy-create 1 campaign/comment account ([campaignScheduler.ts](src/main/services/campaignScheduler.ts), [CampaignFormModal.tsx](src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx)).
 
 `facebook_page_post` đăng lên data `contact_type='page'` và count `fb_post_page`. Mode API dùng Graph API trong block `fb_page_post_api`; mode UI dùng các block nhỏ lấy identity gốc → switch page → `fb_post_current_identity_ui` → restore profile, không dùng lại block wrapper tổng.
@@ -513,6 +515,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Pending reason theo bộ chạy**: akaChat xét mọi hành động nghiệp vụ đang bật khi tiếp tục sau quota, kể cả hành động không kiểm tra quota; tìm SĐT không đủ để tiếp tục một mình. Không áp quy tắc này cho scheduler local/legacy Server: lỗi continuation cũ đang được hoãn, note phải phản ánh bộ chạy hiện tại.
 - **Explicit result progress**: `✅ Hoàn thành` là hoàn thành data và phải giữ nguyên kể cả action lỗi. Kết quả explicit Facebook vẫn cần log lỗi độc lập với việc policy dừng hoặc suppress detail; dùng thông báo đã render/cached và receipt để không lặp khi relay/finalization. Email/Zalo giữ helper log khi detail.log trống; thiếu cả message/errorCode thì kết quả failure vẫn dùng câu dự phòng hiện có cho tiến trình, không viết vào detail hoặc thêm log Thành công/Bỏ qua. Không dùng cờ newsfeed thành công legacy để ghi đè explicit failure. Xem [bản sửa và smoke](docs/ACTION_RESULT_PROGRESS_LOGS_20261010.md).
 - **Composer result contract**: block `fb_open_composer` phải return `actionResult`, kèm `vars.inputDataId` cho lượt giữ nhiều input; không gắn result vào exception vì executor hiện có bỏ output khi throw. Gate cả hai nhánh đăng/share, nhánh lỗi group đi qua `merge_join` rồi cleanup Page. Chỉ bắt timeout của hai bước mở composer; không đổi cancellation hoặc suy đoán loại group. Smoke: `node scripts/fb-composer-policy-smoke.cjs`.
 - **Catalog refresh và trạng thái phụ**: tải catalog lỗi được dùng bản cũ, nhưng catalog mới tải thành công có policy tắt/thiếu vẫn phải bị preflight chặn. Chỉ gán Đã duyệt bài khi detector hiện có trả `pendingCheckConclusive=true` và không pending; kết quả chưa rõ giữ sub-status NULL. Không tính lại detail cũ.

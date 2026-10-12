@@ -6,12 +6,13 @@ import { canUseCampaignActionWithEntitlements, canUseAccountWithEntitlementsAndC
 import { readStaffAccess } from '../data/repositories/staffManagementRepository'
 import { getBrowserRunLimits } from '../data/repositories/browserRunLimitsRepository'
 import * as reads from '../data/repositories/campaignPendingReasonRepository'
+import { readChatPendingLimitReason } from '../data/repositories/campaignPendingChatLimitRepository'
 
 export interface PendingReasonRuntime {
   /** RAM-only observations; never start/claim/recover a runtime from this endpoint. */
   busyReason(account: AutoAccount): string | null
   readinessReason(account: AutoAccount, campaign: Campaign): string | null
-  configurationReason(campaign: Campaign, action: CampaignAction): string | null
+  configurationReason(campaign: Campaign, action: CampaignAction, requiresWorkflow: boolean): string | null
   limitReason(account: AutoAccount, campaign: Campaign, action: CampaignAction): Promise<string | null>
 }
 
@@ -77,7 +78,7 @@ export async function inspectPendingCampaign(
   if (!access.timeAllowed) return finish('Tài khoản nhân viên đã hết hạn sử dụng.')
   const accountState = await reads.readPendingReasonAccount(campaign.accountId, signal)
   if (!accountState) return finish('Không tìm thấy tài khoản của chiến dịch.')
-  const { account } = accountState
+  const { account, isChatManaged } = accountState
   if (!canUseCampaignActionWithEntitlements(campaign.actionId, account.flatformType, user.entitlements)
     || !canUseAccountWithEntitlementsAndCapabilities(account, user.entitlements, getUserZaloAccountCapabilities(user))) {
     return finish(`Chưa có quyền sử dụng ${account.isZaloServer ? 'Zalo Server' : account.isZaloShowWeb ? 'Zalo trình duyệt' : account.flatformType}, hoặc gói sử dụng đã hết hạn.`)
@@ -102,10 +103,13 @@ export async function inspectPendingCampaign(
   if (readiness) return finish(readiness)
 
   const action = await reads.readPendingReasonAction(campaign.actionId, signal)
-  if (!action) return finish('Loại chiến dịch chưa có cấu hình chạy hợp lệ.')
-  const configuration = runtime.configurationReason(campaign, action)
+  if (!action || isChatManaged && (!action.isActive || action.isDelete || action.flatformType !== 'zalo')) {
+    return finish('Loại chiến dịch chưa có cấu hình chạy hợp lệ.')
+  }
+  const requiresWorkflow = !mobileManaged(campaign) && !isChatManaged
+  const configuration = runtime.configurationReason(campaign, action, requiresWorkflow)
   if (configuration) return finish(configuration)
-  if (!mobileManaged(campaign)) {
+  if (requiresWorkflow) {
     const workflowId = user.useTestWorkflow ? action.testWorkflowId : action.workflowId
     if (!workflowId || !await reads.hasPendingReasonWorkflow(workflowId, signal)) return finish('Loại chiến dịch chưa có cấu hình chạy hợp lệ.')
   }
@@ -117,7 +121,9 @@ export async function inspectPendingCampaign(
       return finish(`Đã đạt giới hạn ${maximum} tài khoản ${account.flatformType === 'facebook' ? 'Facebook' : 'Zalo trình duyệt'} chạy đồng thời. Đang chờ có chỗ.`)
     }
   }
-  const limit = await runtime.limitReason(account, campaign, action)
+  const limit = isChatManaged
+    ? await readChatPendingLimitReason(account, campaign, action, clock.dbNow, signal)
+    : await runtime.limitReason(account, campaign, action)
   signal.throwIfAborted()
   if (limit) return finish(limit)
   const inputs = await reads.readPendingInputAvailability(campaign.id, clock.dbNow, signal)
