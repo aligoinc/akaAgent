@@ -1,5 +1,7 @@
 import { engagementDisplay, engagementApplicable, type EngagementFilter } from '../../../../shared/zaloCampaignEngagement'
 import { useCampaignRunLog } from '../../hooks/useCampaignRunLog'
+import { useCampaignPendingReasons } from '../../hooks/useCampaignPendingReasons'
+import { canCheckCampaignPendingReason } from '../../../../shared/campaignPendingReason'
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -2524,6 +2526,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     loadCampaignInputData, refreshCampaignInputData, loadCampaignDetails, loadCampaignDetailPage, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
   const campaignSourceScope = useAuthStore(s => s.user ? `${s.user.organizationId}:${s.user.staffId}` : null)
+  const pendingReasons = useCampaignPendingReasons(campaigns, campaignSourceScope)
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
   const entitlements = useAuthStore(s => s.user?.entitlements)
   const canManageCampaignActions = isAdminAkabiz
@@ -6198,6 +6201,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 const dataGroupTitle = campaign.dataGroupIsDelete
                   ? `${dataGroupName}\nNhóm đã xoá`
                   : dataGroupName
+                const displayedNote = pendingReasons.displayedNote(campaign)
 
                 return (
                   <div
@@ -6206,7 +6210,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                     onClick={() => handleRowClick(campaign)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <div className="campaign-col col-campaign" title={[campaign.name, actionLabel, campaign.note || ''].filter(Boolean).join('\n')}>
+                    <div className="campaign-col col-campaign" title={[campaign.name, actionLabel, displayedNote].filter(Boolean).join('\n')}>
                       <div className="campaign-row-select" onClick={e => e.stopPropagation()}>
                         <input
                           className="campaign-list-select-checkbox"
@@ -6220,7 +6224,17 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                       <div className="campaign-main-cell">
                         <div className="campaign-name-line">{campaign.name}</div>
                         <div className="campaign-meta-line">{actionLabel}</div>
-                        {campaign.note && <div className="campaign-note-line">{campaign.note}</div>}
+                        {displayedNote ? <div className="campaign-note-line">{displayedNote}</div> : canCheckCampaignPendingReason(campaign) && (
+                          <button
+                            type="button"
+                            className="campaign-pending-reason-button"
+                            disabled={pendingReasons.checkingId !== null}
+                            onClick={event => { event.stopPropagation(); void pendingReasons.check(campaign) }}
+                          >
+                            <Search size={12} aria-hidden="true" />
+                            {pendingReasons.checkingId === campaign.id ? 'Đang kiểm tra…' : 'Tại sao CD không chạy?'}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="campaign-col col-toggle" onClick={e => e.stopPropagation()}>

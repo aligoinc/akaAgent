@@ -39,6 +39,14 @@ export class AccountOperationRegistry {
 
   has(accountId: number): boolean { return this.records.has(accountId) }
 
+  /** Non-owning, process-local diagnostic view; never expose claim tokens. */
+  peek(accountId: number, staffId: number): { operationName: string; phase: AccountOperationRecord['phase'] } | null {
+    const record = this.records.get(accountId)
+    return record?.context.staffId === staffId
+      ? { operationName: record.context.operationName, phase: record.phase }
+      : null
+  }
+
   listRecoverable(staffId: number, operationName: string): AccountOperationContext[] {
     return [...this.records.values()].filter(record => record.phase === 'recovery' &&
       record.context.staffId === staffId && record.context.operationName === operationName)

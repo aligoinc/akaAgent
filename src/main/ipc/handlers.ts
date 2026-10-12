@@ -28,6 +28,7 @@ import { startAccountPoller, type AccountPollerController } from '../domain/acco
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
+import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers } from './handlers/authHandlers'
@@ -1404,6 +1405,7 @@ export function registerIpcHandlers(
       zaloRuntime.detachWebSession(accountId)
     }
   })
+  registerCampaignPendingReasonHandlers(mainWindow, campaignScheduler)
   registerCampaignHandlers(supabase, {
     requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)

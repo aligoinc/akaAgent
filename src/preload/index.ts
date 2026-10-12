@@ -19,6 +19,8 @@ import { IPC_EVENTS, ZaloFriendBlocklistPageQuery, ZaloFriendBlocklistPage, Zalo
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
+import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
+
 export type ElectronAPI = typeof electronAPI
 
 
@@ -278,6 +280,9 @@ const electronAPI = {
 
   getCampaignConfig: (id: number): Promise<CampaignConfig | null> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_GET_CAMPAIGN_CONFIG, id),
+
+  checkCampaignPendingReason: (id: number): Promise<CampaignPendingReasonResult> =>
+    ipcRenderer.invoke(CAMPAIGN_PENDING_REASON_IPC, id),
 
   getCampaignLog: (id: number): Promise<CampaignLogSnapshot | null> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_GET_CAMPAIGN_LOG, id),

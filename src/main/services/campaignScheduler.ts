@@ -10,6 +10,8 @@ import { renderCampaignTemplateText } from '../../shared/campaignContentTemplate
 import { CAMPAIGN_MEDIA_TIMEOUT_CODE } from './campaignMediaExecution'
 import { stageCampaignEngagementSource, beginCampaignEngagementSend, abandonCampaignEngagementSend, type EngagementSendContext } from './zaloCampaignEngagement'
 import { browserRunLimitWaitNote } from '../../shared/browserRunLimits'
+import { inspectPendingCampaign } from './campaignPendingReasonService'
+import type { CampaignPendingReasonResult } from '../../shared/campaignPendingReason'
 import { makeEngagementSource } from '../../shared/zaloCampaignEngagement'
 import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
@@ -876,6 +878,60 @@ export class CampaignScheduler {
     if (targetField === 'findZaloGroupLinkJoinTargetCampaignIds') return sourceCampaign.extraSettings?.isFindLinkGroupZalo === true
     if (!isFindDataSearch) return false
     return sourceCampaign.extraSettings?.isFindFacebookGroup === true
+  }
+
+  /** Read-only user diagnostic. Never enter tick/maintenance/claim/session verification here. */
+  inspectPendingReason(campaignId: number, signal: AbortSignal): Promise<CampaignPendingReasonResult> {
+    const isRemote = (account: AutoAccount) => account.flatformType === 'sms'
+      || account.flatformType === 'zalo' && account.isZaloServer
+    return inspectPendingCampaign(campaignId, {
+      busyReason: account => {
+        if (this.isAccountStartupPending?.(account)) return 'Đang chờ kiểm tra hoặc khôi phục đăng nhập cho tài khoản.'
+        if (this.hasFailedAccountRun(account.id)) return 'Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.'
+        const operation = accountOperationRegistry.peek(account.id, getCurrentUser()?.staffId ?? 0)
+        if (operation) {
+          if (operation.phase === 'cleanup' || operation.phase === 'recovery') return 'Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.'
+          const label = /login|verify|session/.test(operation.operationName) ? 'đăng nhập'
+            : /scan|contact/.test(operation.operationName) ? 'quét data' : 'tác vụ khác'
+          return `Tài khoản đang bận ${label}. Vui lòng chờ tác vụ hoàn tất.`
+        }
+        return this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)
+          ? 'Tài khoản đang bận, chưa thể chạy chiến dịch.' : null
+      },
+      readinessReason: (account, campaign) => {
+        if (isRemote(account)) return null
+        if (account.flatformType === 'zalo' && this.zaloRuntimeBlockedForRestart) return 'Chế độ chạy Zalo đã thay đổi. Vui lòng khởi động lại ứng dụng.'
+        if (!this.running || this.startDelayTimeoutId || account.flatformType === 'zalo' && this.zaloRuntimeStopRequested) {
+          return 'Ứng dụng đang chuẩn bị bộ chạy chiến dịch. Vui lòng chờ hoàn tất.'
+        }
+        if (this.isRealtimeCampaignDisabledForRuntime(account, campaign)) return 'Chiến dịch này không hỗ trợ tài khoản Zalo chạy bằng trình duyệt.'
+        if ((!this.isBrowserlessCampaign(campaign) || account.isZaloShowWeb) && !this.webviewRegistry.isRegistered(account.id)) {
+          return 'Tài khoản chưa mở tab trình duyệt. Vui lòng mở trình duyệt của tài khoản.'
+        }
+        if (account.flatformType === 'zalo' && account.isZaloShowWeb && !this.zaloRuntime?.hasVerifiedWebSession(account.id)) {
+          return 'Phiên Zalo trên trình duyệt chưa được xác minh sẵn sàng.'
+        }
+        if (account.flatformType === 'zalo' && !this.zaloRuntime) return 'Zalo runtime chưa sẵn sàng'
+        return null
+      },
+      configurationReason: (campaign, action) => {
+        if (!MOBILE_MANAGED_SMS_ACTION_IDS.has(campaign.actionId)) {
+          const workflow = this.resolveCampaignWorkflow(action)
+          if (!workflow.workflowId) return workflow.missingNote
+        }
+        const extra = campaign.extraSettings || {}
+        const background = !this.isFormattedContentCampaign(campaign) && extra.postWithBackground === true && (
+          campaign.actionId === 'facebook_timeline_post' || campaign.actionId === GROUP_POST_ACTION_ID
+          || campaign.actionId === PAGE_POST_ACTION_ID && (extra.pagePostMode || 'api') === 'ui')
+        return this.getAdvancedContentConfigError(campaign, !background)
+      },
+      limitReason: async (account, campaign, action) => {
+        signal.throwIfAborted()
+        const limit = await this.getCampaignPreclaimLimitStatus(account, campaign, action)
+        signal.throwIfAborted()
+        return limit ? this.buildLimitPreflightNote(limit) : null
+      }
+    }, signal)
   }
 
   start(options: SchedulerStartOptions = {}): void {
