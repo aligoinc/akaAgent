@@ -349,6 +349,8 @@ Scheduler dispatch nhiều account song song bằng hàng đợi theo `account_i
 Scheduler tự start sau `AUTH_LOGIN` và stop nội bộ khi `AUTH_LOGOUT`; UI không có nút bật/tắt scheduler, muốn dừng thì pause campaign/account.
 Các cập nhật `auto_accounts.status` do scheduler thực hiện phải đi qua `updateAccountAndBroadcast()`/`releaseRunningAccount()` để UI tài khoản refresh realtime và không ghi đè trạng thái do user/policy đổi.
 
+Nút **Tại sao CD không chạy?** dùng [campaignPendingReasonService](src/main/services/campaignPendingReasonService.ts:56) chỉ đọc; note tạm RAM 5 phút, note thật luôn thắng và hủy note tạm. Không ghi `campaign.note`, claim/reset quota hay thêm polling/connection; [luồng và smoke](docs/CAMPAIGN_PENDING_REASON.md).
+
 `facebook_group_post` có `enablePostBump`: sau post thành công và detect pending không phải true, scheduler thêm tổng `postBumpCount` input rows vào các campaign `facebook_comment_seeding_post` theo round-robin; mode tạo mới lazy-create 1 campaign/comment account ([campaignScheduler.ts](src/main/services/campaignScheduler.ts), [CampaignFormModal.tsx](src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx)).
 
 `facebook_page_post` đăng lên data `contact_type='page'` và count `fb_post_page`. Mode API dùng Graph API trong block `fb_page_post_api`; mode UI dùng các block nhỏ lấy identity gốc → switch page → `fb_post_current_identity_ui` → restore profile, không dùng lại block wrapper tổng.
