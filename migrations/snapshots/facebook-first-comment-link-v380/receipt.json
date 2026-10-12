@@ -1,0 +1,19 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "verified_at": "2026-10-12 22:02:00.876715+00",
+  "history": [
+    {
+      "name": "migration_v380_facebook_first_comment_link",
+      "version": "20261012220158"
+    }
+  ],
+  "element_id": 1784,
+  "block_ids": [
+    34,
+    2616,
+    2710
+  ],
+  "migration_sha256": "2584498f86be078aee881da319ee3370ae1771193665cf23bc301830a662e434",
+  "rollback_sha256": "888df532995e9d3660f8cecb6d1df878c03ad0a304ed92af95f0ac0f1db8453e",
+  "after_sha256": "40bef2bbe59f062261430966c146f239081382fb7fa4ebf6ba66a1396f70df8d"
+}
