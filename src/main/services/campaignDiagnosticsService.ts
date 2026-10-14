@@ -183,7 +183,9 @@ export async function collectCampaignDiagnostics(id: number, runtime: PendingRea
   checks.push(scheduleCheck, contentCheck, inputCheck)
   if (!evidence) checks.push(unknown('history', 'Lịch sử và kết quả gần đây'))
   else {
-    const errors = evidence.results.filter(row => row.report_group === 'failure' || ['lỗi', 'thất bại'].includes(String(row.status)))
+    // The stored policy outcome wins; only legacy rows without it use status text.
+    const errors = evidence.results.filter(row => row.report_group === 'failure'
+      || row.report_group == null && ['lỗi', 'thất bại'].includes(String(row.status)))
     checks.push(issue('history', 'Lịch sử và kết quả gần đây', errors.length ? 'warning' : 'info',
       evidence.results.length ? `${errors.length} kết quả lỗi/thất bại trong ${evidence.results.length} kết quả gần nhất.` : 'Chưa có kết quả chạy để đối chiếu.',
       errors.length ? 'Có kết quả cần đối chiếu thông báo và quy tắc xử lý; chưa đủ để kết luận lỗi liên tiếp.'
