@@ -14,13 +14,15 @@ import { readDiagnosticsCampaign, readDiagnosticsEvidence, readDiagnosticsQuotas
 import { pendingCampaignScheduleReason, pendingCampaignInputReason, type PendingReasonRuntime } from './campaignPendingReasonService'
 import { callAiUsing } from './aiRuntimeService'
 import { describeDiagnosticSchedule } from './campaignDiagnosticsSchedule'
+import { webEnrichmentRevision } from './webEnrichmentControl'
 import { checkFacebookRandomConfiguration, type FacebookRandomConfigurationCheck } from '../../shared/facebookRandomRunDiagnostics'
 
 export function diagnosticCampaignVersion(c: Campaign & { diagnosticHasClaim?: boolean }, randomRun: unknown = null): string {
   return createHash('sha256').update(JSON.stringify([c.id, c.accountId, c.secondaryAccountId, c.actionId, c.status, c.note, c.isDelete,
     c.schedule, c.originalSchedule, c.scheduleType, c.scheduleDays, c.scheduleWeekDays, c.scheduleEndDate,
     c.dailyStopTime, c.continueNextDay, c.refreshData, c.extraSettings, c.content, c.images, c.dataTargetSourceMode, c.dataGroupId, c.provisioningState, c.diagnosticHasClaim,
-    c.actionId.startsWith('facebook_') ? randomRun : null])).digest('hex')
+    c.actionId.startsWith('facebook_') ? randomRun : null,
+    c.actionId.startsWith('facebook_') ? webEnrichmentRevision(c.accountId) : null])).digest('hex')
 }
 export async function readDiagnosticVersion(campaign: Campaign & { diagnosticHasClaim?: boolean }, signal: AbortSignal): Promise<string> {
   const account = campaign.actionId.startsWith('facebook_') ? await reads.readPendingReasonAccount(campaign.accountId, signal) : null
@@ -198,10 +200,16 @@ export async function collectCampaignDiagnostics(id: number, runtime: PendingRea
   signal.throwIfAborted()
   const headline = terminal ? terminalMessage : checks.find(check => check.severity === 'blocking')?.problem
     || (running ? 'Chiến dịch đang được ghi nhận chạy; xem các mục kiểm tra bên dưới.' : 'Chiến dịch đang chờ; xem các điều kiện và lịch bên dưới.')
+  const accountFacts = account ? { ...account } : null
+  if (accountFacts) {
+    // This projection does not read enrichment settings; mapper defaults are not evidence.
+    delete accountFacts.facebookWebEnrichmentEnabled
+    delete accountFacts.facebookWebEnrichmentRevision
+  }
   return sanitizeCampaignDiagnosticsSnapshot({ id: randomUUID(), campaignId: id, accountId: campaign.accountId, version,
     checkedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + DIAGNOSTICS_TTL_MS).toISOString(),
     campaignStatus: campaign.status, headline, complete: checks.every(check => check.severity !== 'unknown'), checks, quotas,
-    facts: { schedule: scheduleContext, facebookRandomRun: randomRun, campaign: record(campaign), account: account ? record({ ...account, permissions: { access, entitlements: user.entitlements, zaloCapabilities: getUserZaloAccountCapabilities(user) }, executionTarget: accountState?.isChatManaged ? 'akaChat' : account.isZaloServer ? 'legacy Server' : account.isZaloShowWeb ? 'Zalo trình duyệt' : account.flatformType === 'zalo' ? 'Zalo QR' : account.flatformType }) : null, action: action ? record(action) : null,
+    facts: { schedule: scheduleContext, facebookRandomRun: randomRun, campaign: record(campaign), account: account ? record({ ...accountFacts, permissions: { access, entitlements: user.entitlements, zaloCapabilities: getUserZaloAccountCapabilities(user) }, executionTarget: accountState?.isChatManaged ? 'akaChat' : account.isZaloServer ? 'legacy Server' : account.isZaloShowWeb ? 'Zalo trình duyệt' : account.flatformType === 'zalo' ? 'Zalo QR' : account.flatformType }) : null, action: action ? record(action) : null,
       accountHistory: evidence?.accountHistory ?? null, campaignHistory: evidence?.campaignHistory ?? null,
       results: evidence?.results ?? null, inputSummary: evidence?.inputSummary ?? null, inputs: evidence?.inputs ?? null }
   })

@@ -923,6 +923,9 @@ export class CampaignScheduler {
             : /scan|contact/.test(operation.operationName) ? 'quét data' : 'tác vụ khác'
           return `Tài khoản đang bận ${label}. Vui lòng chờ tác vụ hoàn tất.`
         }
+        if (account.flatformType === 'facebook' && this.webEnrichment?.isActive(account.id)) {
+          return 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
+        }
         return this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)
           ? 'Tài khoản đang bận, chưa thể chạy chiến dịch.' : null
       },

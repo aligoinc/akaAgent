@@ -6823,7 +6823,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
                 active={detailTab === 'diagnostics'}
                 accountConfigVersion={selectedCampaignAccount?.flatformType === 'facebook'
                   ? `${selectedCampaignAccount.id}:${selectedCampaignAccount.facebookRandomRunEnabled}:${selectedCampaignAccount.facebookRandomRunRevision}` : ''}
-                key={selectedCampaignSummary.id} campaignId={selectedCampaignSummary.id}
+                key={selectedCampaignSummary.id} campaignId={selectedCampaignSummary.id} accountId={selectedCampaignSummary.accountId}
                 canResume={canResumeCampaign(selectedCampaignSummary.status)} onResume={() => handleResume(selectedCampaignSummary)}
                 revision={diagnosticRevision + diagnosticsRevision} onAction={handleDiagnosticAction} />}
               {detailTab === 'info' && (

@@ -31,6 +31,7 @@ async function main(){
  const imports={'node:crypto':require('node:crypto'),'../../shared/campaignDiagnostics':shared,'../data/currentUser':{requireCurrentUser:()=>({organizationId:1})},'./aiRuntimeService':runtime,'./campaignDiagnosticsSchedule':scheduleRules}
  for(const id of ['../data/repositories/staffManagementRepository','../data/repositories/runtimeClockRepository','../data/repositories/browserRunLimitsRepository','../data/repositories/entitlementRepository','../data/repositories/campaignPendingReasonRepository','../data/repositories/campaignPendingChatLimitRepository','../data/repositories/campaignDiagnosticsRepository','./campaignPendingReasonService'])imports[id]={}
  imports['../../shared/facebookRandomRunDiagnostics']=load('src/shared/facebookRandomRunDiagnostics.ts',{'./facebookRandomRun':load('src/shared/facebookRandomRun.ts')})
+ imports['./webEnrichmentControl']=load('src/main/services/webEnrichmentControl.ts')
  const service=load('src/main/services/campaignDiagnosticsService.ts',imports)
  if(process.argv.includes('--schedule'))return scheduleRegression(service,shared,scheduleRules,logs,config)
  const snapshot={id:require('node:crypto').randomUUID(),campaignId:0,accountId:0,version:'synthetic',checkedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+300000).toISOString(),campaignStatus:'chờ xử lý',headline:'Đã dùng đủ quota trong 65 phút.',complete:false,

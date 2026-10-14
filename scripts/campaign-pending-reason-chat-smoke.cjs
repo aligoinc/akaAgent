@@ -118,6 +118,21 @@ async function verifySchedulerAdapter() {
   const Adapter = new Function('inspectPendingCampaign', 'getCurrentUser', 'accountOperationRegistry',
     `${javascript}; return Adapter`)(service.inspectPendingCampaign, () => user, { peek: () => null })
   const adapter = new Adapter()
+  let browsingAccount = 2
+  adapter.webEnrichment = { isActive: id => id === browsingAccount }
+  adapter.hasFailedAccountRun = () => false
+  adapter.activeAccountRuns = new Set(); adapter.externalAccountRuns = new Set()
+  const observer = adapter.getDiagnosticRuntime(new AbortController().signal)
+  const webNote = 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
+  assert.equal(observer.busyReason({ id: 2, flatformType: 'facebook' }), webNote)
+  adapter.activeAccountRuns.add(2)
+  assert.equal(observer.busyReason({ id: 2, flatformType: 'facebook' }), webNote, 'Browsing between queue turns keeps its specific note')
+  adapter.activeAccountRuns.clear()
+  assert.equal(observer.busyReason({ id: 3, flatformType: 'facebook' }), null)
+  assert.equal(observer.busyReason({ id: 2, flatformType: 'zalo' }), null)
+  browsingAccount = null
+  assert.equal(observer.busyReason({ id: 2, flatformType: 'facebook', facebookWebEnrichmentEnabled: true }), null)
+  console.log('PASS actual scheduler web-enrichment busy note: active account only, queue handoff, ended/enabled-only and other channels')
   let workflowResolutions = 0, contentChecks = 0
   Object.assign(adapter, { hasFailedAccountRun: () => false, activeAccountRuns: new Set(), externalAccountRuns: new Set(),
     resolveCampaignWorkflow: action => { workflowResolutions++; return { workflowId: action.workflowId, missingNote: 'Workflow missing' } },

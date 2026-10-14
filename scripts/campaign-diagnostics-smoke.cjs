@@ -132,6 +132,10 @@ async function campaignReadRegression() {
 }
 async function boundary() {
   const handlers = {}, pending = []
+  const webControl = load('src/main/services/webEnrichmentControl.ts')
+  const webRun = { accountId: 4, runId: 'boundary-web-run' }
+  let webChangeDuringAi = false
+  const version = c => `${c.version}:${randomRevision}:${webControl.webEnrichmentRevision(4)}`
   let reads = 0, analyses = 0, timeout = 1000, changed = false, live = true, randomRevision = 1, changeDuringAi = false
   const win = { webContents: { mainFrame: {} } }, event = { sender: win.webContents, senderFrame: win.webContents.mainFrame }
   const module = load('src/main/ipc/handlers/campaignDiagnosticsHandlers.ts', {
@@ -141,9 +145,11 @@ async function boundary() {
     '../../data/repositories/staffManagementRepository': { readStaffAccess: async () => ({ isActive: live }) },
     '../../data/repositories/campaignDiagnosticsRepository': { readDiagnosticsCampaign: async () => ({ version: changed ? 'v2' : 'v1' }) },
     '../../services/campaignDiagnosticsService': {
-      readDiagnosticVersion: async c => `${c.version}:${randomRevision}`,
-      collectCampaignDiagnostics: async id => { reads++; return new Promise(resolve => pending.push(() => resolve({...sample(id),version:`${changed?'v2':'v1'}:${randomRevision}`}))) },
-      analyzeDiagnosticsSnapshot: async (snapshot) => { analyses++; if(changeDuringAi)randomRevision++; return { snapshot, summary: 'fixture' } }
+      readDiagnosticVersion: async c => version(c),
+      collectCampaignDiagnostics: async id => { reads++; return new Promise(resolve => pending.push(() => resolve({...sample(id),version:version({version:changed?'v2':'v1'})}))) },
+      analyzeDiagnosticsSnapshot: async (snapshot) => { analyses++; if(changeDuringAi)randomRevision++;
+        if(webChangeDuringAi){webControl.setWebEnrichmentState(webRun,true);webControl.setWebEnrichmentState(webRun,false)}
+        return { snapshot, summary: 'fixture' } }
     }
   })
   const service = module.registerCampaignDiagnosticsHandlers(win, { getDiagnosticRuntime: () => ({}) })
@@ -161,8 +167,16 @@ async function boundary() {
   const wrongOwner = { ...snapshot, campaignId: 2 }; await assert.rejects(ai(wrongOwner))
   randomRevision++
   const refreshedAi=ai(snapshot);await nextTick();assert.equal(reads,2,'Changed account settings must refresh a still-live snapshot')
-  pending.shift()();const refreshed=await refreshedAi;assert.equal(refreshed.snapshot.version,'v1:2')
-  changeDuringAi=true;await assert.rejects(ai(refreshed.snapshot));changeDuringAi=false
+  pending.shift()();const refreshed=await refreshedAi;assert.equal(refreshed.snapshot.version,'v1:2:0')
+  webControl.setWebEnrichmentState(webRun,true)
+  const webAi=ai(refreshed.snapshot);await nextTick();assert.equal(reads,3)
+  pending.shift()();const webResult=await webAi;assert.equal(webResult.snapshot.version,'v1:2:1')
+  webChangeDuringAi=true;await assert.rejects(ai(webResult.snapshot));webChangeDuringAi=false
+  console.log('PASS cached AI refreshes after web-session changes and rejects transitions during analysis, including start/end')
+  const stableRead=read(1);await nextTick();pending.shift()();const stable=await stableRead
+  webChangeDuringAi=true;await assert.rejects(ai(stable));webChangeDuringAi=false
+  const idleRead=read(1);await nextTick();pending.shift()();const idle=await idleRead
+  changeDuringAi=true;await assert.rejects(ai(idle));changeDuringAi=false
   console.log('PASS AI refreshes changed account configuration and rejects a change during analysis')
   const burst = [1,2,3,4].map(id => read(id)); await nextTick(); await assert.rejects(read(5))
   while(pending.length) pending.shift()(); await Promise.all(burst)
@@ -177,6 +191,10 @@ async function boundary() {
   console.log('PASS IPC owner/frame/ID validation, dedup leases, cap, timeout, cancellation, relogin, expiry refresh, no implicit AI')
 }
 async function rules() {
+  const webControl = load('src/main/services/webEnrichmentControl.ts')
+  const webNote = 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
+  const webRun = {accountId:2,runId:'rules-web-run'}
+  let webChangeDuringRead = false
   let platform='facebook', quotaFail=false, logsFail=false, configChange=null, historyLog=historyLogs[0], dbNow='2026-10-14T03:00:00Z'
   const campaign = { id:1,accountId:2,actionId:'facebook_message_uid',status:'chờ xử lý',extraSettings:{headers:{Authorization:authorizationValues[0]}},schedule:'2026-10-14T02:00:00Z',scheduleType:'weekly',scheduleWeekDays:'4,5',dataTargetSourceMode:'direct',refreshData:true,content:credentialText+'\n'+authorizationText }
   let campaignReads=0, aiCalls=0
@@ -193,6 +211,7 @@ async function rules() {
     }
   })
   const imports={
+    './webEnrichmentControl':webControl,
     '../../shared/facebookRandomRunDiagnostics':randomChecks,
     'node:crypto':crypto, '../../shared/campaignDiagnostics':shared,
     '../data/currentUser':auth,
@@ -201,7 +220,7 @@ async function rules() {
     '../data/repositories/browserRunLimitsRepository':{getBrowserRunLimits:async()=>({})},
     '../data/repositories/entitlementRepository':{canUseCampaignActionWithEntitlements:()=>true,canUseAccountWithEntitlementsAndCapabilities:()=>true,getUserZaloAccountCapabilities:()=>({})},
     '../data/repositories/campaignPendingReasonRepository':{
-      readPendingReasonAccount:async()=>({account:{id:2,flatformType:platform,isZaloServer:platform==='zalo',isActive:true,status:'chờ xử lý',loginStatus:'đã đăng nhập'},randomRun: ++accountReads % 2 === 0 && randomChange ? randomChange : randomRun}),
+      readPendingReasonAccount:async()=>({account:{id:2,flatformType:platform,isZaloServer:platform==='zalo',isActive:true,status:'chờ xử lý',loginStatus:'đã đăng nhập',facebookWebEnrichmentEnabled:false,facebookWebEnrichmentRevision:0},randomRun: ++accountReads % 2 === 0 && randomChange ? randomChange : randomRun}),
       readPendingReasonAction:async()=>({id:campaign.actionId,name:'Nhắn tin UID',workflowId:3}),readBusyCampaign:async()=>null,countBusyBrowserAccounts:async()=>0,
       hasPendingReasonWorkflow:async()=>true,readPendingInputAvailability:async()=>({state:'due'}),hasPendingFindDataSource:async()=>false
     },
@@ -209,7 +228,7 @@ async function rules() {
     '../data/repositories/campaignDiagnosticsRepository':{
       readDiagnosticsCampaign:async()=>{campaignReads++;return {...campaign,note:configChange==='note'&&campaignReads%2===0?'changed':null,refreshData:!(configChange==='refreshData'&&campaignReads%2===0)}},
       readDiagnosticsEvidence:async()=>{if(logsFail)throw Error('private');return {accountHistory:[{password:'never',details:{cookie:'never'},message:credentialText+'\n'+authorizationText}],campaignHistory:rpcHistory(historyLog),results:[{status:'lỗi',log:authorizationText}],inputSummary:{},inputs:[{content:authorizationText,headers:{Authorization:authorizationValues[0]}}]}},
-      readDiagnosticsQuotas:async()=>{if(quotaFail)throw Error('private');return[{code:'fixture',name:'fixture',checked:true,dayUsed:1,dayLimit:30,windowUsed:1,windowLimit:9,windowMinutes:65}]}
+      readDiagnosticsQuotas:async()=>{if(quotaFail)throw Error('private');if(webChangeDuringRead){webControl.setWebEnrichmentState(webRun,true);webControl.setWebEnrichmentState(webRun,false)}return[{code:'fixture',name:'fixture',checked:true,dayUsed:1,dayLimit:30,windowUsed:1,windowLimit:9,windowMinutes:65}]}
     },
     './campaignDiagnosticsSchedule':scheduleRules,
     './aiRuntimeService':{callAiUsing:async(code,payload,meta,options)=>{aiCalls++;assert.equal(code,'app_campaign_diagnostics');assert.equal(options.expectedModel,'gpt-6.1-sol');assert(!Object.hasOwn(options,'systemInstructions'));assert(!Object.hasOwn(payload,'systemPromptOverride'));assert.equal(payload.bodyOverrides.reasoning.effort,'medium');assertNoCredentials(payload);assert.equal(JSON.parse(payload.diagnosticContext).facts.campaign.refreshData,true);return aiRuntime.callAiUsing(code,payload,meta,options)}}
@@ -220,7 +239,32 @@ async function rules() {
   })
   const service=load('src/main/services/campaignDiagnosticsService.ts',imports)
   assert.notEqual(service.diagnosticCampaignVersion(campaign), service.diagnosticCampaignVersion({...campaign,refreshData:false}), 'Changing refreshData must invalidate the snapshot')
-  const runtime={busyReason:()=>null,readinessReason:()=>null,configurationReason:()=>null,limitReason:async()=>null}
+  const runtime={busyReason:()=>webControl.webEnrichmentSnapshot().some(row=>row.accountId===2)?webNote:null,readinessReason:()=>null,configurationReason:()=>null,limitReason:async()=>null}
+  const beforeWeb=service.diagnosticCampaignVersion(campaign)
+  webControl.setWebEnrichmentState({accountId:3,runId:'other'},true)
+  assert.equal(service.diagnosticCampaignVersion(campaign),beforeWeb,'Other accounts must not invalidate this snapshot')
+  webControl.setWebEnrichmentState(webRun,true)
+  const browsing=await service.collectCampaignDiagnostics(1,runtime,new AbortController().signal)
+  assert.equal(browsing.checks.find(row=>row.id==='runtime').problem,webNote)
+  assert.equal(browsing.checks.find(row=>row.id==='runtime').severity,'info')
+  assert.equal(browsing.checks.filter(row=>row.problem===webNote).length,1)
+  assert(!Object.hasOwn(browsing.facts.account,'facebookWebEnrichmentEnabled'),'Unselected config must not contradict the active runtime evidence')
+  assert(!Object.hasOwn(browsing.facts.account,'facebookWebEnrichmentRevision'))
+  webControl.setWebEnrichmentState({accountId:2,runId:'obsolete-run'},false)
+  assert.equal(await service.readDiagnosticVersion(campaign,new AbortController().signal),browsing.version,'Old session cleanup must not invalidate or clear the current session')
+  for (const status of ['tạm dừng','hoàn thành','đang chạy']) {
+    campaign.status=status
+    const result=await service.collectCampaignDiagnostics(1,runtime,new AbortController().signal)
+    assert.notEqual(result.checks.find(row=>row.id==='runtime').problem,webNote)
+  }
+  campaign.status='chờ xử lý';webControl.setWebEnrichmentState(webRun,false)
+  assert.notEqual(service.diagnosticCampaignVersion(campaign),beforeWeb,'Start/end must not restore an old snapshot version')
+  const ended=await service.collectCampaignDiagnostics(1,runtime,new AbortController().signal)
+  assert.notEqual(ended.checks.find(row=>row.id==='runtime').problem,webNote)
+  webChangeDuringRead=true
+  await assert.rejects(service.collectCampaignDiagnostics(1,runtime,new AbortController().signal),/vừa thay đổi/)
+  webChangeDuringRead=false
+  console.log('PASS web-enrichment runtime card, terminal/running guards, per-account versions and transitions during collection')
   const configured = { version:1, revision:1, rules:[{ campaignActionId:campaign.actionId, quantity:3, unit:'data' }] }
   for (const [settings, expected] of [
     [{ enabled:true, config:null },'missing'],
