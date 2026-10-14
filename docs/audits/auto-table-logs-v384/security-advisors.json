@@ -1,0 +1,30 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_at": "2026-10-14T02:58:54.753Z",
+  "scope": "Only auto_table_logs and aka_agent_capture_table_change; unrelated advisories omitted",
+  "lints": [
+    {
+      "name": "rls_enabled_no_policy",
+      "title": "RLS Enabled No Policy",
+      "level": "INFO",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "count": 178,
+      "findings": [
+        {
+          "detail": "Table \\`public.auto_table_logs\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "auto_table_logs",
+            "type": "table",
+            "schema": "public"
+          },
+          "observed_at": "2026-10-14T02:58:23.001Z"
+        }
+      ]
+    }
+  ]
+}

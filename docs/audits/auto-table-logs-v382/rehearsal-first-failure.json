@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-14T02:16:22.929Z",
+  "committed": false,
+  "error_sqlstate": "42501",
+  "reason": "Management API postgres cannot SET ROLE aka_agent_chat_api. No grants changed; real Chat role execution stays covered on isolated PostgreSQL.",
+  "remedy": "Conditional live role test based on pg_has_role SET, always validate ACLs; retain all other live role tests."
+}

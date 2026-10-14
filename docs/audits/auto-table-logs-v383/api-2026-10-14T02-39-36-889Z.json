@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-14T02:39:36.890Z",
+  "results": [
+    {
+      "table": "auto_campaigns",
+      "status": 200,
+      "customer_rows": 0
+    },
+    {
+      "table": "auto_error",
+      "status": 200,
+      "customer_rows": 0
+    }
+  ]
+}

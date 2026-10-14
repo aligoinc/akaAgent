@@ -1,0 +1,11 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "e3564158f391db620db183e6e71db2270cf149a0f70eafe5e7403d2341673bbc",
+  "smoke_sha256": "d07bf22ba63e100cb038521f06f792aba633ff12d26ae59c6d6f94fa43bb7a77",
+  "before_sha256": "d68fdaf5baee03fd4127e07ef4beafa2629405140fc4821bf980465a55b2c8a6",
+  "applied": true,
+  "duration": "00:00:00.020689",
+  "log_id_boundary": 35694,
+  "history_version": "20261014023921",
+  "at": "2026-10-14T02:39:23.532Z"
+}

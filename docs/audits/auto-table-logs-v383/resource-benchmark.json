@@ -1,0 +1,328 @@
+{
+  "at": "2026-10-14T02:44:42.925607+00:00",
+  "environment": "isolated local PostgreSQL 16.15; 1 backend, no production load",
+  "function_md5": "1cd8e9bc61b39e7ac7f8e6020ba3e953",
+  "method": "Five trials, each 20 warmup + 300 single-row updates. CPU user+system from server log_statement_stats; backend RSS is whole-process high-water, not per-trigger memory. Full JSON config sizes synthetic; unchanged log 256 KiB.",
+  "results": [
+    {
+      "case": "small_runtime",
+      "config_fixture_bytes": 512,
+      "trigger_enabled": false,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.009653333333333335,
+          "elapsed_ms_per_update": 0.009853333333333334,
+          "backend_max_rss_kib": 11344,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.010046666666666666,
+          "elapsed_ms_per_update": 0.010283333333333334,
+          "backend_max_rss_kib": 11344,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.010679999999999999,
+          "elapsed_ms_per_update": 0.011396666666666666,
+          "backend_max_rss_kib": 11424,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.009386666666666668,
+          "elapsed_ms_per_update": 0.009583333333333333,
+          "backend_max_rss_kib": 11424,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.010233333333333334,
+          "elapsed_ms_per_update": 0.01048,
+          "backend_max_rss_kib": 11376,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.010046666666666666,
+      "median_elapsed_ms_per_update": 0.010283333333333334
+    },
+    {
+      "case": "small_runtime",
+      "config_fixture_bytes": 512,
+      "trigger_enabled": true,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.024813333333333333,
+          "elapsed_ms_per_update": 0.025053333333333334,
+          "backend_max_rss_kib": 12416,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.024636666666666668,
+          "elapsed_ms_per_update": 0.024946666666666666,
+          "backend_max_rss_kib": 12352,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.02525,
+          "elapsed_ms_per_update": 0.02563333333333333,
+          "backend_max_rss_kib": 12352,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.024739999999999998,
+          "elapsed_ms_per_update": 0.02502333333333333,
+          "backend_max_rss_kib": 12352,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.024929999999999997,
+          "elapsed_ms_per_update": 0.02520666666666667,
+          "backend_max_rss_kib": 12416,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.024813333333333333,
+      "median_elapsed_ms_per_update": 0.025053333333333334
+    },
+    {
+      "case": "16KiB_config_runtime",
+      "config_fixture_bytes": 16384,
+      "trigger_enabled": false,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.007513333333333334,
+          "elapsed_ms_per_update": 0.007743333333333333,
+          "backend_max_rss_kib": 11216,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.007213333333333334,
+          "elapsed_ms_per_update": 0.007373333333333334,
+          "backend_max_rss_kib": 11216,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.007643333333333334,
+          "elapsed_ms_per_update": 0.00782,
+          "backend_max_rss_kib": 11152,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.007073333333333334,
+          "elapsed_ms_per_update": 0.007273333333333333,
+          "backend_max_rss_kib": 11152,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.006966666666666666,
+          "elapsed_ms_per_update": 0.007096666666666667,
+          "backend_max_rss_kib": 11152,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.007213333333333334,
+      "median_elapsed_ms_per_update": 0.007373333333333334
+    },
+    {
+      "case": "16KiB_config_runtime",
+      "config_fixture_bytes": 16384,
+      "trigger_enabled": true,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.03751333333333333,
+          "elapsed_ms_per_update": 0.037803333333333335,
+          "backend_max_rss_kib": 12512,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.03630666666666667,
+          "elapsed_ms_per_update": 0.036526666666666666,
+          "backend_max_rss_kib": 12512,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.037029999999999993,
+          "elapsed_ms_per_update": 0.03732666666666667,
+          "backend_max_rss_kib": 12480,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.03678666666666667,
+          "elapsed_ms_per_update": 0.03717666666666667,
+          "backend_max_rss_kib": 12512,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.03770666666666667,
+          "elapsed_ms_per_update": 0.03836,
+          "backend_max_rss_kib": 12480,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.037029999999999993,
+      "median_elapsed_ms_per_update": 0.03732666666666667
+    },
+    {
+      "case": "256KiB_config_runtime",
+      "config_fixture_bytes": 262144,
+      "trigger_enabled": false,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.007856666666666668,
+          "elapsed_ms_per_update": 0.00804,
+          "backend_max_rss_kib": 11168,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.008000000000000002,
+          "elapsed_ms_per_update": 0.008323333333333334,
+          "backend_max_rss_kib": 11152,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.00832,
+          "elapsed_ms_per_update": 0.008719999999999999,
+          "backend_max_rss_kib": 11184,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.008503333333333333,
+          "elapsed_ms_per_update": 0.00899,
+          "backend_max_rss_kib": 11136,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.008063333333333334,
+          "elapsed_ms_per_update": 0.008243333333333333,
+          "backend_max_rss_kib": 11184,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.008063333333333334,
+      "median_elapsed_ms_per_update": 0.008323333333333334
+    },
+    {
+      "case": "256KiB_config_runtime",
+      "config_fixture_bytes": 262144,
+      "trigger_enabled": true,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.15332666666666667,
+          "elapsed_ms_per_update": 0.1567,
+          "backend_max_rss_kib": 17472,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.15070666666666668,
+          "elapsed_ms_per_update": 0.15663666666666667,
+          "backend_max_rss_kib": 17408,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.15022999999999997,
+          "elapsed_ms_per_update": 0.1529633333333333,
+          "backend_max_rss_kib": 18032,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.14525666666666667,
+          "elapsed_ms_per_update": 0.14630666666666667,
+          "backend_max_rss_kib": 18048,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.16027999999999998,
+          "elapsed_ms_per_update": 0.16999,
+          "backend_max_rss_kib": 18000,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.15070666666666668,
+      "median_elapsed_ms_per_update": 0.15663666666666667
+    },
+    {
+      "case": "16KiB_config_edit",
+      "config_fixture_bytes": 16384,
+      "trigger_enabled": false,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.00856,
+          "elapsed_ms_per_update": 0.009399999999999999,
+          "backend_max_rss_kib": 11120,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.009166666666666668,
+          "elapsed_ms_per_update": 0.009696666666666668,
+          "backend_max_rss_kib": 11088,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.008933333333333333,
+          "elapsed_ms_per_update": 0.00928,
+          "backend_max_rss_kib": 11136,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.00815,
+          "elapsed_ms_per_update": 0.008466666666666667,
+          "backend_max_rss_kib": 11136,
+          "created_logs_including_warmup": 0
+        },
+        {
+          "cpu_ms_per_update": 0.007813333333333334,
+          "elapsed_ms_per_update": 0.007983333333333334,
+          "backend_max_rss_kib": 11104,
+          "created_logs_including_warmup": 0
+        }
+      ],
+      "median_cpu_ms_per_update": 0.00856,
+      "median_elapsed_ms_per_update": 0.00928
+    },
+    {
+      "case": "16KiB_config_edit",
+      "config_fixture_bytes": 16384,
+      "trigger_enabled": true,
+      "updates_per_trial": 300,
+      "trials": [
+        {
+          "cpu_ms_per_update": 0.6540366666666666,
+          "elapsed_ms_per_update": 0.7583866666666667,
+          "backend_max_rss_kib": 29088,
+          "created_logs_including_warmup": 320
+        },
+        {
+          "cpu_ms_per_update": 0.6284733333333333,
+          "elapsed_ms_per_update": 0.72881,
+          "backend_max_rss_kib": 29040,
+          "created_logs_including_warmup": 320
+        },
+        {
+          "cpu_ms_per_update": 0.6305066666666668,
+          "elapsed_ms_per_update": 0.7549566666666666,
+          "backend_max_rss_kib": 29024,
+          "created_logs_including_warmup": 320
+        },
+        {
+          "cpu_ms_per_update": 0.6421,
+          "elapsed_ms_per_update": 0.79995,
+          "backend_max_rss_kib": 28992,
+          "created_logs_including_warmup": 320
+        },
+        {
+          "cpu_ms_per_update": 0.6748999999999999,
+          "elapsed_ms_per_update": 0.9419200000000001,
+          "backend_max_rss_kib": 29104,
+          "created_logs_including_warmup": 320
+        }
+      ],
+      "median_cpu_ms_per_update": 0.6421,
+      "median_elapsed_ms_per_update": 0.7583866666666667
+    }
+  ]
+}

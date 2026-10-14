@@ -1,0 +1,9 @@
+{
+  "measured_at": "2026-10-14 02:39:56.946238+00",
+  "new_logs": null,
+  "remaining_fixture_tables": 0,
+  "source_update_stat": 13902807,
+  "total_bytes_including_retained_v382": 1498447872,
+  "log_id_boundary": 35694,
+  "applied_at": "2026-10-14T02:39:23.532Z"
+}

@@ -1,0 +1,7 @@
+{
+  "at": "2026-10-14T02:19:23.012Z",
+  "committed": false,
+  "error_sqlstate": "40P01",
+  "reason": "Rollback detach test attempted SHARE ROW EXCLUSIVE to ACCESS EXCLUSIVE upgrade on busy source relation.",
+  "remedy": "Detach test now isolated-only. Rollback script acquires ACCESS EXCLUSIVE up front with 2s lock timeout. Migration still uses CREATE TRIGGER required SHARE ROW EXCLUSIVE."
+}

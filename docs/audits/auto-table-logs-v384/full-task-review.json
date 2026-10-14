@@ -1,0 +1,51 @@
+{
+  "reviewed_at": "2026-10-14T03:09:52.145182+00:00",
+  "scope": "Entire table-log task: migrations V382, V383, V384; smoke tests, rollout/rollback scripts, audit evidence and configuration field classification against application writers.",
+  "production_writes": 0,
+  "history_verified": [
+    "20261014022053 / migration_v382_auto_table_logs",
+    "20261014023921 / migration_v383_auto_table_config_logs",
+    "20261014025805 / migration_v384_auto_table_logs_public"
+  ],
+  "live_function": {
+    "signature": "private.aka_agent_capture_table_change()",
+    "md5": "96858661d7d592a9cdc22c67fd853c62"
+  },
+  "isolated_chain": {
+    "migrations": [
+      382,
+      383,
+      384
+    ],
+    "each_version_smoke": "PASS",
+    "legacy_rows_retained": "PASS",
+    "reverse_v384_then_detach_v383": "PASS"
+  },
+  "classification": {
+    "campaign_columns": 43,
+    "configuration_columns": 22,
+    "excluded_runtime_columns": 21,
+    "unclassified": [],
+    "observed_post_v383_logs": 145,
+    "inspection": "Only aggregate changed field/key names; no customer snapshots persisted."
+  },
+  "findings": [
+    {
+      "priority": 2,
+      "file": "scripts/auto-table-logs-v382.cjs",
+      "line": 219,
+      "problem": "The documented local command completes tests but exits 1 with EEXIST because local-verification.json is already committed and write uses flag wx. Reproduced during full review. Preserve the deployment receipt and write repeatable test results to a fresh receipt."
+    },
+    {
+      "priority": 3,
+      "file": "migrations/migration_v383_auto_table_config_logs.sql",
+      "line": 157,
+      "problem": "V383 changes TG_ARGV to profile then PK columns but leaves V382 database comments claiming full snapshots and PK-only arguments. A registration copied from the live function comment is rejected and silently skips logging. Update live comments in a new guarded migration; do not rewrite applied SQL."
+    }
+  ],
+  "limitations": [
+    "No concurrent load test on production.",
+    "V382 local runner exit 1 is a receipt collision, not a failed SQL assertion.",
+    "Findings remain open in the draft PR; production was not changed during review."
+  ]
+}

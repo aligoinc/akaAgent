@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-14T02:21:04.189Z",
+  "verified": true,
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "target_md5": "15a067168000fe73c96edae98fa85422",
+  "history_version": "20261014022053",
+  "after_sha256": "d68fdaf5baee03fd4127e07ef4beafa2629405140fc4821bf980465a55b2c8a6",
+  "catalog": {
+    "columns": [
+      {
+        "name": "id",
+        "not_null": true,
+        "type": "bigint"
+      },
+      {
+        "name": "created_at",
+        "not_null": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "name": "table_name",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "name": "record_pk",
+        "not_null": true,
+        "type": "jsonb"
+      },
+      {
+        "name": "operation",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "name": "old_data",
+        "not_null": false,
+        "type": "jsonb"
+      },
+      {
+        "name": "new_data",
+        "not_null": true,
+        "type": "jsonb"
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX auto_table_logs_pkey ON private.auto_table_logs USING btree (id)",
+      "CREATE INDEX idx_auto_table_logs_record_time ON private.auto_table_logs USING btree (table_name, record_pk, created_at DESC, id DESC)"
+    ],
+    "owner": "postgres",
+    "relacl": null,
+    "relrowsecurity": true
+  }
+}
