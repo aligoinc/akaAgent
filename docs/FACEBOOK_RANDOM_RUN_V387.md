@@ -33,6 +33,8 @@ JSON sau chỉ là định dạng lưu dữ liệu nội bộ, không phải gia
 
 Mục **Xem tiến trình chạy ngẫu nhiên** ở menu tài khoản mở **modal** xem toàn bộ tài khoản, không mở hoặc đổi tab ở vùng chi tiết bên dưới. Tab **Chạy ngẫu nhiên** trong chi tiết chiến dịch vẫn giữ để xem theo chiến dịch. Hai nơi dùng chung bảng với ngày theo giờ Việt Nam, danh sách ngày có lịch sử và phân trang 100 đợt; tab chiến dịch cho đổi phạm vi toàn tài khoản/chiến dịch đang xem. Thứ tự, tên chiến dịch, chỉ tiêu, đã xử lý, trạng thái và lý do lấy từ output đã lưu; hover thứ tự xem vòng/dòng/revision. Chỉ tiêu/tiến độ đầu vào hiển thị **data**, thời lượng newsfeed hiển thị `mm:ss`. Không có nút tải file hoặc trình xem JSON output.
 
+Tab **Chạy ngẫu nhiên** chỉ hiện khi tài khoản của chiến dịch Facebook đang bật chế độ này. Nếu tắt chế độ khi đang xem tab, chuyển về **Thông tin** và ngừng đọc tiến trình trong tab. Menu **Xem tiến trình chạy ngẫu nhiên** vẫn mở được lịch sử trong modal khi chế độ đã tắt.
+
 Modal hỗ trợ nút Đóng và Escape, giữ focus bên trong bằng dialog native. Đóng modal hoặc ẩn trang thì gỡ panel và subscription; khi modal đang mở, tab chạy ngẫu nhiên phía sau tạm ngừng đọc. Vẫn dùng coordinator UI hiện có, không thêm polling.
 
 Bộ lọc tab/modal dùng style chung của bộ lọc chi tiết: nhãn phía trên, control cao 30px, màu nền/viền theo theme, mũi tên và nút Làm mới có icon. Đã kiểm tra giao diện tối/sáng ở chiều rộng 850/1250px; giữ nguyên hành vi ngày, lịch sử, phạm vi và điều kiện hiện tab.

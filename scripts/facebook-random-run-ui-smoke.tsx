@@ -9,7 +9,7 @@ import { vietnamRunDate } from '../src/shared/facebookRandomRun'
 import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
 import '../src/renderer/src/styles/global.css'
 const state: any = { reads: [], saves: [], toggles: [], errors: [], pending: [], hold: false, failSave: false }
-const account: any = { id: 42, name: 'Nguyễn Văn A', flatformType: 'facebook', isActive:true, isDelete:false, staffId:7, organizationId:9, loginStatus:'đã đăng nhập', status:'chờ xử lý' }
+const account: any = { id: 42, name: 'Nguyễn Văn A', flatformType: 'facebook', isActive:true, isDelete:false, staffId:7, organizationId:9, loginStatus:'đã đăng nhập', status:'chờ xử lý', facebookRandomRunEnabled:true }
 const actions: any = ['facebook_group_post','facebook_timeline_post','facebook_newsfeed_interaction'].map((id,i)=>({ id,name:['Đăng bài vào group','Đăng bài trang cá nhân','Lướt newsfeed và tương tác'][i],isActive:true,isDelete:false,flatformType:'facebook' }))
 const config: any = { version:1,revision:1,rules:actions.map((a:any,i:number)=>({campaignActionId:a.id,quantity:[3,1,5][i],unit:['data','run','minute'][i]})) }
 const day = (q:any) => ({ date:q.date,accountId:42,status:'open',page:q.page,total:q.campaignId?1:3,turns:[
