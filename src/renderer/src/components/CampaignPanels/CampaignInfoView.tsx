@@ -692,7 +692,16 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Comment bài post có tính chất', value: textOrDash(extra.newsfeedCommentKind), hidden: !extra.enableComment },
     { label: 'Comment tối đa', value: extra.newsfeedCommentLimit ?? 0, hidden: !extra.enableComment },
     { label: 'AI tạo comment', value: onOff(extra.newsfeedCommentUseAI), hidden: !extra.enableComment },
-    { label: 'Nội dung comment', value: textOrDash(extra.newsfeedCommentContent), fullWidth: true, hidden: !extra.enableComment }
+    { label: 'Nội dung comment', value: textOrDash(extra.newsfeedCommentContent), fullWidth: true, hidden: !extra.enableComment },
+    { label: 'Kiểm tra tin nhắn chờ', value: onOff(extra.newsfeedCheckMessageRequests) },
+    { label: 'Phản hồi tin nhắn chờ theo từ khóa', value: onOff(extra.newsfeedReplyMessageRequests), hidden: !extra.newsfeedCheckMessageRequests },
+    ...(extra.newsfeedMessageRequestRules || []).map((rule, index) => ({
+      label: `Phản hồi tin nhắn chờ ${index + 1}`,
+      value: <><strong>{textOrDash(rule.keyword)}</strong><div style={{ whiteSpace: 'pre-wrap' }}>{textOrDash(rule.replyContent)}</div></>,
+      fullWidth: true,
+      hidden: !extra.newsfeedCheckMessageRequests || !extra.newsfeedReplyMessageRequests
+    })),
+    { label: 'Trạng thái tính năng tin nhắn chờ', value: 'Chỉ lưu cài đặt, chưa hoạt động', hidden: !extra.newsfeedCheckMessageRequests }
   ]
 
   const findDataRows: InfoRow[] = [

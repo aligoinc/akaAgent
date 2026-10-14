@@ -5,6 +5,7 @@ import type { LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
 import { getDailyTimeSlotMinutes, parseDailyTimeSlots } from '../../../../shared/campaignTimeSlots'
 import { applyScheduleAiPatch, scheduleAiSnapshot, formatScheduleVietnam, scheduleVietnamToIso } from '../../../../shared/campaignScheduleAi'
 import FacebookRestBrowseSettings from './FacebookRestBrowseSettings'
+import NewsfeedMessageRequestSettings from './NewsfeedMessageRequestSettings'
 import { facebookRestBrowseSettings, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../../../shared/facebookRestBrowse'
 import { supportsSendExclusion, validateExclusionGroup, type SendExclusionsByAccount } from '../../../../shared/campaignSendExclusion'
 import ZaloCampaignTagSettings from './ZaloCampaignTagSettings'
@@ -1011,7 +1012,8 @@ const NEWSFEED_SETTINGS_STEP: StepDef = {
     { key: 'enableComment', label: 'Thực hiện comment' },
     { key: 'newsfeedCommentKind', label: 'Comment bài post có tính chất' },
     { key: 'newsfeedCommentContent', label: 'Nội dung comment' },
-    { key: 'newsfeedCommentLimit', label: 'Comment tối đa' }
+    { key: 'newsfeedCommentLimit', label: 'Comment tối đa' },
+    { key: 'newsfeedMessageRequests', label: 'Tin nhắn chờ' }
   ]
 }
 
@@ -1919,6 +1921,9 @@ export default function CampaignFormModal({
     newsfeedCommentLimit: campaign?.extraSettings?.newsfeedCommentLimit ?? 10,
     newsfeedCommentContent: campaign?.extraSettings?.newsfeedCommentContent || '',
     newsfeedCommentUseAI: campaign?.extraSettings?.newsfeedCommentUseAI ?? false,
+    newsfeedCheckMessageRequests: campaign?.extraSettings?.newsfeedCheckMessageRequests ?? false,
+    newsfeedReplyMessageRequests: campaign?.extraSettings?.newsfeedReplyMessageRequests ?? false,
+    newsfeedMessageRequestRules: (campaign?.extraSettings?.newsfeedMessageRequestRules || []).map(rule => ({ ...rule })),
     dailyLimit: campaign?.extraSettings?.actionLimits?.dailyLimit ?? 30,
     rateLimitCount: campaign?.extraSettings?.actionLimits?.rateLimitCount ?? 9,
     rateLimitMinutes: campaign?.extraSettings?.actionLimits?.rateLimitMinutes
@@ -4851,6 +4856,11 @@ export default function CampaignFormModal({
       case 'postsPerTarget': return formData.postsPerTarget > 0
       case 'commentPostSearchConditions': return true
       case 'enablePostLike': return true
+      case 'newsfeedMessageRequests':
+        return !formData.newsfeedCheckMessageRequests || !formData.newsfeedReplyMessageRequests || (
+          formData.newsfeedMessageRequestRules.length > 0 &&
+          formData.newsfeedMessageRequestRules.every(rule => rule.keyword.trim() && rule.replyContent.trim())
+        )
       case 'sharePost': return true  // optional, always "complete"
       case 'pagePostMode': return true
       case 'enableComment': return true  // optional
@@ -6380,6 +6390,11 @@ export default function CampaignFormModal({
             newsfeedCommentLimit: isNewsfeedInteractionCampaign ? Math.max(0, Number(formData.newsfeedCommentLimit) || 0) : 0,
             newsfeedCommentContent: isNewsfeedInteractionCampaign ? formData.newsfeedCommentContent : '',
             newsfeedCommentUseAI: isNewsfeedInteractionCampaign ? formData.newsfeedCommentUseAI : false,
+            newsfeedCheckMessageRequests: isNewsfeedInteractionCampaign ? formData.newsfeedCheckMessageRequests : undefined,
+            newsfeedReplyMessageRequests: isNewsfeedInteractionCampaign ? formData.newsfeedReplyMessageRequests : undefined,
+            newsfeedMessageRequestRules: isNewsfeedInteractionCampaign
+              ? formData.newsfeedMessageRequestRules.map(rule => ({ ...rule }))
+              : undefined,
             actionLimits: {
               sleepBetweenActions: formData.sleepBetweenActions,
               enabledActionCodes,
@@ -6957,6 +6972,17 @@ export default function CampaignFormModal({
       if (formData.enableComment && !formData.newsfeedCommentUseAI && !formData.newsfeedCommentContent.trim()) {
         showAlert('Vui lòng nhập nội dung comment hoặc bật AI tạo nội dung comment.', 'error')
         return
+      }
+      if (formData.newsfeedCheckMessageRequests && formData.newsfeedReplyMessageRequests) {
+        if (formData.newsfeedMessageRequestRules.length === 0) {
+          showAlert('Vui lòng thêm ít nhất một phản hồi theo từ khóa cho tin nhắn chờ.', 'error')
+          return
+        }
+        const incompleteIndex = formData.newsfeedMessageRequestRules.findIndex(rule => !rule.keyword.trim() || !rule.replyContent.trim())
+        if (incompleteIndex >= 0) {
+          showAlert(`Vui lòng nhập đủ từ khóa và nội dung phản hồi tin nhắn chờ ở dòng ${incompleteIndex + 1}.`, 'error')
+          return
+        }
       }
     }
     if (requiresSourceLinks && !hasSourceLinks) {
@@ -8776,6 +8802,7 @@ export default function CampaignFormModal({
           </label>
         </div>
       </div>
+      <NewsfeedMessageRequestSettings value={formData} onChange={patch => setFormData(prev => ({ ...prev, ...patch }))} />
     </div>
   )
 
