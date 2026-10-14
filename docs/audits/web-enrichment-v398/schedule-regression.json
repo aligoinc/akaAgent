@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-14T15:51:07.510Z",
+  "migration_sha256": "06406002d999170d7bc3a3f5d6c7530e543064692b4c6093841081f126d67a96",
+  "before_after_rpc_cases": 30,
+  "policy_cases": 1440,
+  "scheduler_queue_cases": 6,
+  "ts_sql_parity": 18,
+  "changed_after_plan": 2,
+  "scheduler_to_sql_pass": true,
+  "external_facebook_operations": 0
+}

@@ -25042,6 +25042,11 @@ body.theme-light :is(
   display: block;
 }
 
+.browser-background-preview-loading {
+  height: 100%;
+  color: #cbd5e1;
+}
+
 .browser-background-preview-gradient {
   position: absolute;
   left: 0;

@@ -1,0 +1,32 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "history": "20261014155154 / migration_v398_facebook_web_enrichment",
+  "migrationSha256": "a5df8418f9d559822da1d1c09a5b034439eb5d077c7068535da8e3dcf0c4e09f",
+  "newRpcMd5": "4505f7334baa90908454c354dd091db5",
+  "typecheckNode": "pass",
+  "typecheckWeb": "pass",
+  "productionBuild": "pass; existing dynamic-import/chunk warnings",
+  "runtimeSmokeChecks": 55,
+  "workflowSmoke": "pass: 30-60s Google / 180-300s page, total budget, CAPTCHA and exhausted URLs",
+  "electronBrowserSmoke": "pass: isolated fixture profile, shared partition, real DOM selectors, native navigation timeout, HTTP error, renderer crash, late call fence",
+  "uiSmoke": "pass: menu, configuration, validation, chips, overlap, conflict, disable, reload, desktop and 390px",
+  "sqlBeforeApply": "pass; transaction rolled back with negative catalog IDs",
+  "sqlAfterApply": "pass; transaction rolled back",
+  "api": "pass; credential rejection and new column projection with limit(0)",
+  "rollbackDryRun": "pass; guards verified, ROLLBACK, zero enabled rows at verification",
+  "businessRpcChecksumsUnchanged": true,
+  "enabledAccountsAfterApply": 0,
+  "configuredAccountsAfterApply": 0,
+  "workflowRunsAfterApply": 0,
+  "regressions": {
+    "facebookRandomRuntimeChecks": 30,
+    "facebookRandomStopReasonCases": 4,
+    "sharedSchedulePolicyCases": 1440,
+    "sharedScheduleRpcCases": 30,
+    "accountOperationChecks": 41,
+    "facebookRestBrowse": "pass"
+  },
+  "customerBrowserSessionsExecuted": 0,
+  "desktopPackaged": false,
+  "desktopPublished": false
+}

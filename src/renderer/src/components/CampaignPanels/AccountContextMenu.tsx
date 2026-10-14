@@ -40,6 +40,7 @@ interface AccountContextMenuProps {
   onRandomToggle: (account: AutoAccount) => void
   onRandomConfig: (account: AutoAccount) => void
   onRandomPlan: (account: AutoAccount) => void
+  onWebEnrichment: (account: AutoAccount) => void
   onFilterCampaigns: (accountId: number) => void
 }
 
@@ -64,7 +65,7 @@ export default function AccountContextMenu({
   onEdit,
   onChangeGroup,
   onDelete,
-  onFilterCampaigns, onRandomToggle, onRandomConfig, onRandomPlan
+  onFilterCampaigns, onRandomToggle, onRandomConfig, onRandomPlan, onWebEnrichment
 }: AccountContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -288,6 +289,11 @@ export default function AccountContextMenu({
       </div>}
 
       {/* Campaign Group */}
+      {account.flatformType === 'facebook' && <div className="context-menu-group">
+        <button className="context-menu-item" onClick={() => handleAction(() => onWebEnrichment(account))}>
+          <Globe size={14}/><span>Làm giàu lịch sử Web</span>
+        </button>
+      </div>}
       <div className="context-menu-group">
         <button
           className="context-menu-item"

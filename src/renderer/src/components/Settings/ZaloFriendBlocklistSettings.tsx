@@ -339,6 +339,7 @@ export default function ZaloFriendBlocklistSettings({ initialAccountId, onBusyCh
                       onChange={event => setEditingName(event.target.value)}
                       onClick={event => event.stopPropagation()}
                       onKeyDown={event => {
+                        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
                         if (event.key === 'Enter') void handleRenameBlocklist(group)
                         if (event.key === 'Escape') {
                           setEditingId(null)

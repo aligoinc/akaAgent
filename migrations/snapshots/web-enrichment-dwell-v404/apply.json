@@ -1,0 +1,13 @@
+{
+  "block": {
+    "id": 2833,
+    "md5": "8d1223574f8fc342317da3ce63db240b",
+    "name": "fb_web_enrichment_browse",
+    "updated_at": "2026-10-14T18:22:24.537159+00:00"
+  },
+  "history": {
+    "name": "migration_v404_web_enrichment_dwell",
+    "version": "20261014182224",
+    "statement_md5": "90a15fd109d750a7780787d87c438425"
+  }
+}

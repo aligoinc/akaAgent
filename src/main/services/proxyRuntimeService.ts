@@ -1,6 +1,7 @@
 import { app, session, type Session } from 'electron'
 import { createHash } from 'node:crypto'
 import { AutoAccount, AutoProxy, ProxyProtocol, ProxyTestResult } from '../../shared/types'
+import { preemptWebEnrichment, webEnrichmentSnapshot } from './webEnrichmentControl'
 
 type ProxyCredential = {
   host: string
@@ -31,16 +32,40 @@ export class ProxyRuntimeService {
   private credentialsByEndpoint = new Map<string, ProxyCredential>()
   private proxyStateBySession = new WeakMap<Session, { revision: number; pending: number; applied?: string }>()
   private loginHandlerRegistered = false
+  private preparedAccounts = new Map<number, number | null>()
+  private preparationRevision = 0
 
   constructor(private readonly getProxyById: (id: number) => Promise<AutoProxy | null>) {}
 
   async prepareAccountSession(account: AutoAccount, options: { reuseApplied?: boolean } = {}): Promise<void> {
+    const revision = this.preparationRevision
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
     await this.applyProxyToPartition(this.getAccountPartition(account.id), proxy, options)
+    if (revision === this.preparationRevision) this.preparedAccounts.set(account.id, account.proxyId ?? null)
+  }
+
+  isAccountSessionPrepared(account: AutoAccount): boolean {
+    if (!this.preparedAccounts.has(account.id) || this.preparedAccounts.get(account.id) !== (account.proxyId ?? null)) return false
+    const state = this.proxyStateBySession.get(session.fromPartition(this.getAccountPartition(account.id)))
+    return !!state?.applied && state.pending === 0
+  }
+
+  invalidatePreparedProxy(proxyId: number): void {
+    this.preparationRevision++
+    for (const [accountId, id] of this.preparedAccounts) {
+      if (id !== proxyId) continue
+      preemptWebEnrichment(accountId)
+      this.preparedAccounts.delete(accountId)
+    }
   }
 
   async applyProxyToPartition(partition: string, proxy: AutoProxy | Partial<AutoProxy> | null | undefined,
     options: { reuseApplied?: boolean } = {}): Promise<void> {
+    const accountId = /^persist:account_(\d+)$/.exec(partition)?.[1]
+    if (accountId) {
+      if (webEnrichmentSnapshot().some(s => s.accountId === Number(accountId))) preemptWebEnrichment(Number(accountId))
+      this.preparedAccounts.delete(Number(accountId))
+    }
     const ses = session.fromPartition(partition)
     const normalized = proxy && proxy.isActive !== false ? this.normalizeProxy(proxy) : null
     const key = createHash('sha256').update(JSON.stringify(normalized)).digest('hex')

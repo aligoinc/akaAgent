@@ -1,0 +1,7 @@
+{
+  "rpcReachable": true,
+  "credentialGuards": true,
+  "newColumnsVisible": true,
+  "accountDataRead": 0,
+  "accountWrites": 0
+}

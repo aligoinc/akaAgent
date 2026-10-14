@@ -1,0 +1,7 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "signature": "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)",
+  "source_md5": "4505f7334baa90908454c354dd091db5",
+  "target_md5": "df426447a1fd533e052437699bb8dd5d",
+  "live_body_matches_v398": true
+}

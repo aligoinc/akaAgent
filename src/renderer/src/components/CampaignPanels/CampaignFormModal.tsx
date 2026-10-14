@@ -10007,6 +10007,7 @@ export default function CampaignFormModal({
                       setIsFacebookGroupInviteGroupDropdownOpen(true)
                     }}
                     onKeyDown={e => {
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
                       if (e.key === 'Escape') {
                         setFacebookGroupInviteGroupSearch('')
                         setIsFacebookGroupInviteGroupDropdownOpen(false)
@@ -10178,6 +10179,7 @@ export default function CampaignFormModal({
                       setIsZaloAddGroupMemberGroupDropdownOpen(true)
                     }}
                     onKeyDown={e => {
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
                       if (e.key === 'Escape') {
                         setZaloAddGroupMemberGroupSearch('')
                         setIsZaloAddGroupMemberGroupDropdownOpen(false)

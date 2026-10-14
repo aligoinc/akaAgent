@@ -21,6 +21,8 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
     facebookLoginManaged: row.facebook_login_managed === true,
     facebookRandomRunEnabled: row.facebook_random_run_enabled === true,
     facebookRandomRunRevision: Number(row.facebook_random_run_revision ?? 0),
+    facebookWebEnrichmentEnabled: row.facebook_web_enrichment_enabled === true,
+    facebookWebEnrichmentRevision: Number(row.facebook_web_enrichment_revision ?? 0),
     facebookLoginClaimGeneration: row.facebook_login_claim_generation == null ? undefined : Number(row.facebook_login_claim_generation),
     isZaloShowWeb: flatformType === 'zalo' && row.is_zalo_show_web === true,
     isZaloServer: flatformType === 'zalo' && row.is_zalo_show_web !== true && row.is_zalo_server === true,

@@ -2,6 +2,8 @@ import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type Campaig
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
 import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomReadQuery } from '../shared/facebookRandomRun'
+import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, type WebEnrichmentState } from '../shared/facebookWebEnrichment'
+import type { BrowserPreview } from '../shared/browserPreview'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
@@ -501,6 +503,16 @@ const electronAPI = {
     ipcRenderer.on(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
   },
+  webEnrichment: {
+    get: (accountId: number): Promise<WebEnrichmentSettings> => ipcRenderer.invoke(WEB_ENRICHMENT_IPC, 'get', accountId),
+    save: (accountId: number, settings: WebEnrichmentSettings): Promise<WebEnrichmentSettings> => ipcRenderer.invoke(WEB_ENRICHMENT_IPC, 'save', accountId, settings),
+    state: (): Promise<WebEnrichmentState[]> => ipcRenderer.invoke(WEB_ENRICHMENT_IPC, 'state'),
+    onState: (callback: (states: WebEnrichmentState[]) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, states: WebEnrichmentState[]) => callback(states)
+      ipcRenderer.on(WEB_ENRICHMENT_STATE, handler)
+      return () => ipcRenderer.removeListener(WEB_ENRICHMENT_STATE, handler)
+    }
+  },
   facebookRandomRun: {
     get: (accountId: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'get', accountId),
     save: (accountId: number, config: FacebookRandomConfig): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'save', accountId, config),
@@ -594,27 +606,11 @@ const electronAPI = {
   },
 
   onCampaignBrowserPreview: (
-    callback: (payload: {
-      accountId: number
-      campaignId?: number
-      context?: 'campaign' | 'contact-scan'
-      active: boolean
-      image?: string
-      title?: string
-      timestamp: string
-    }) => void
+    callback: (payload: BrowserPreview) => void
   ): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
-      payload: {
-        accountId: number
-        campaignId?: number
-        context?: 'campaign' | 'contact-scan'
-        active: boolean
-        image?: string
-        title?: string
-        timestamp: string
-      }
+      payload: BrowserPreview
     ): void => callback(payload)
     ipcRenderer.on(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, handler)

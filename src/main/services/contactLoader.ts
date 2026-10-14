@@ -2842,11 +2842,13 @@ export class ContactLoader {
     if (this.backgroundPreviewTimers.has(accountId)) return
 
     const capture = async (): Promise<void> => {
-      if (this.backgroundPreviewCapturing.has(accountId)) return
+      if (this.backgroundPreviewTimers.get(accountId) !== timer || this.backgroundPreviewCapturing.has(accountId)) return
       this.backgroundPreviewCapturing.add(accountId)
       try {
         if (!page.isConnected()) return
         const image = await page.screenshot()
+        // Stop/restart may have handed this account to another operation while capturing.
+        if (this.backgroundPreviewTimers.get(accountId) !== timer) return
         this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, {
           accountId,
           campaignId: 0,
@@ -2859,12 +2861,13 @@ export class ContactLoader {
       } catch {
         // Preview is best-effort; workflow output remains the source of truth.
       } finally {
-        this.backgroundPreviewCapturing.delete(accountId)
+        if (this.backgroundPreviewTimers.get(accountId) === timer) this.backgroundPreviewCapturing.delete(accountId)
       }
     }
 
+    const timer = setInterval(() => void capture(), 2000)
+    this.backgroundPreviewTimers.set(accountId, timer)
     void capture()
-    this.backgroundPreviewTimers.set(accountId, setInterval(() => void capture(), 2000))
   }
 
   private stopBackgroundPreview(accountId: number): void {

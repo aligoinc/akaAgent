@@ -1,0 +1,26 @@
+{
+  "verified_at": "2026-10-14T16:19:43.705Z",
+  "scope": "Desktop fixes for stale campaign handoff and same-session slot replay after account reactivation",
+  "production_database_changed": false,
+  "desktop_packaged_or_released": false,
+  "validations": {
+    "npx tsc --noEmit -p tsconfig.node.json": "PASS",
+    "npx tsc --noEmit -p tsconfig.web.json": "PASS",
+    "npm run build": "PASS",
+    "node scripts/web-enrichment-handoff-smoke.cjs": "PASS 28 cases",
+    "node scripts/web-enrichment-runtime-smoke.cjs": "PASS 55 checks",
+    "node scripts/web-enrichment-workflow-smoke.cjs": "PASS",
+    "node scripts/run-web-enrichment-browser-smoke.cjs": "PASS; isolated Electron profile and local HTTP fixture",
+    "node scripts/facebook-random-run-runtime-smoke.cjs": "PASS 30 checks",
+    "node scripts/facebook-random-run-stop-reason-smoke.cjs": "PASS 4 cases",
+    "node scripts/account-operation-cleanup-smoke-test.cjs": "PASS 41 checks",
+    "node scripts/campaign-shared-schedule-smoke.cjs": "PASS; receipt redirected to review-shared-schedule.json",
+    "git diff --check": "PASS"
+  },
+  "sha256": {
+    "src/main/services/campaignScheduler.ts": "785e5dc6d7d3cf126c3290ccc05cb6f2f2a3e9e250d0305d3a9f1193945380ab",
+    "src/main/services/webEnrichmentService.ts": "fdd967dc0e3ce550ec635bdd9169b10b8053ee265c4ad485b0aceb93d4cf610b",
+    "scripts/web-enrichment-handoff-smoke.cjs": "3c6039110931797ab4f3c7e2443a3d8be545bb7447ff137e43c648228cb1220d",
+    "scripts/web-enrichment-runtime-smoke.cjs": "5c3d541ccafa5655a82c6a631e4289cbe11cd078866168474953c99288a62e26"
+  }
+}

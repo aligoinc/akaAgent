@@ -19,6 +19,8 @@ interface BackgroundPageEntry {
 interface TemporaryPageEntry {
   page: PageController
   destroy: () => void
+  navigationFailed?: () => boolean
+  onClosed?: (listener: () => void) => () => void
 }
 
 /**
@@ -74,7 +76,7 @@ export class BackgroundPageManager {
     return page
   }
 
-  createTemporary(accountId: number, platformType: string): TemporaryPageEntry {
+  createTemporary(accountId: number, platformType: string, webOnly = false): TemporaryPageEntry {
     if (String(platformType || '').toLowerCase() === 'zalo') {
       throw new Error('Zalo chỉ chạy qua API của phiên tài khoản; không được mở trang tạm thứ hai')
     }
@@ -109,9 +111,25 @@ export class BackgroundPageManager {
         win.destroy()
       } catch {}
     }
+    let navigationFailed = false
+
+    if (webOnly) {
+      win.webContents.on('did-navigate', (_event, _url, code) => { navigationFailed = code >= 400 })
+      win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      const guard = (event: Electron.Event, url: string) => { if (!/^https?:\/\//i.test(url)) event.preventDefault() }
+      win.webContents.on('will-navigate', guard)
+      win.webContents.on('will-redirect', guard)
+      const download = (event: Electron.Event, _item: Electron.DownloadItem, contents: Electron.WebContents) => {
+        if (contents === win.webContents) event.preventDefault()
+      }
+      const ses = win.webContents.session
+      ses.on('will-download', download)
+      win.once('closed', () => ses.removeListener('will-download', download))
+    }
 
     win.webContents.on('render-process-gone', destroy)
-    return { page, destroy }
+    return { page, destroy, navigationFailed: () => navigationFailed,
+      onClosed: listener => { win.once('closed', listener); return () => { win.removeListener('closed', listener) } } }
   }
 
   destroy(accountId: number): void {
