@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "committed": false,
+  "result": [
+    {
+      "result": {
+        "mapping": 149,
+        "restored_rows": 66
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "config_version": 3,
+    "is_active": false,
+    "trigger_statuses": [
+      {
+        "action_code": "zalo_add_friend",
+        "action_name": "Zalo - Kết bạn",
+        "id": 78,
+        "is_wildcard": false,
+        "semantic_status_id": 30,
+        "status_label": "đã là bạn bè",
+        "status_mapping_id": 91258,
+        "status_value": "đã là bạn bè",
+        "sub_status_ids": null,
+        "sub_status_labels": null
+      }
+    ]
+  }
+]

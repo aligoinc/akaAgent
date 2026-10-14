@@ -1,0 +1,15 @@
+{
+  "apply_history": 1,
+  "catalog_rows": 195,
+  "condition": {
+    "action": "zalo_add_friend",
+    "mapping": 91258,
+    "status": "đã là bạn bè"
+  },
+  "fr": {
+    "active": false,
+    "config_version": 3
+  },
+  "removed_status_rows": 0,
+  "undo_history": 0
+}
