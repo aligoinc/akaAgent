@@ -546,6 +546,12 @@ export interface FindDataTargetDataGroup {
   groupName: string
 }
 
+export interface NewsfeedMessageRequestRule {
+  id: string
+  keyword: string
+  replyContent: string
+}
+
 export interface CampaignExtraSettings {
   facebookRestBrowse?: import('./facebookRestBrowse').FacebookRestBrowseSettings
   zaloSendExclusionsByAccountId?: SendExclusionsByAccount
@@ -587,6 +593,10 @@ export interface CampaignExtraSettings {
   newsfeedCommentLimit?: number
   newsfeedCommentContent?: string
   newsfeedCommentUseAI?: boolean
+  // Settings only; message-request runtime is not implemented yet.
+  newsfeedCheckMessageRequests?: boolean
+  newsfeedReplyMessageRequests?: boolean
+  newsfeedMessageRequestRules?: NewsfeedMessageRequestRule[]
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   recentDeliveryCooldownEnabled?: boolean // chặn gửi/đăng lại cùng target theo ngày Việt Nam
   recentDeliveryCooldownDays?: number // số ngày lịch phải chênh, từ 1 đến 3650

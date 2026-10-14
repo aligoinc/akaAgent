@@ -1,0 +1,71 @@
+.newsfeed-message-requests .schedule-hint {
+  margin: 0;
+}
+
+.newsfeed-message-request-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.newsfeed-message-request-rule {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) 32px;
+  align-items: start;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-default);
+}
+
+.newsfeed-message-request-rule .stepper-form-group {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.newsfeed-message-request-rule .stepper-textarea {
+  min-height: 80px;
+}
+
+.newsfeed-message-request-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-top: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.newsfeed-message-request-remove:hover:not(:disabled) {
+  color: var(--accent-danger, #ef4444);
+}
+
+.newsfeed-message-request-add {
+  align-self: flex-start;
+}
+
+.newsfeed-message-request-remove:disabled,
+.newsfeed-message-request-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .newsfeed-message-request-rule {
+    grid-template-columns: minmax(0, 1fr) 32px;
+  }
+
+  .newsfeed-message-request-rule .stepper-form-group {
+    grid-column: 1;
+  }
+
+  .newsfeed-message-request-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
