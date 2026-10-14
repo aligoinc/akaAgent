@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-14T13:35:23.461Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "account_api_status": 200,
+  "rpc_status": 400,
+  "rpc_error": "automation_auth_required",
+  "api_metadata_unchanged": true
+}

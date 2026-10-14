@@ -1,3 +1,4 @@
+import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
 import { registerSendExclusionHandlers } from './handlers/campaignSendExclusionHandlers'
 import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
@@ -1385,6 +1386,7 @@ export function registerIpcHandlers(
   registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
   registerDesktopUiHandlers()
+  registerFacebookRandomRunHandlers(mainWindow)
   registerAppNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerAutomationHandlers(mainWindow)

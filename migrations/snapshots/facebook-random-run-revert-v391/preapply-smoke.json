@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-14T09:07:52.678Z",
+  "result": [
+    {
+      "result": "PASS v391 rollback: real anon role, auth/tenant/CAS, snapshot, old-client guard, claim replay, unit ownership, atomic progress and RLS"
+    }
+  ],
+  "migration_sha256": "9c73969b16a9804dc9d00bb56287b6d6ab8198e1be0353423bc7a8b4f11de194",
+  "external_operations": 0
+}

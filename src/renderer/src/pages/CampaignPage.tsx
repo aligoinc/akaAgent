@@ -18,6 +18,7 @@ interface CampaignPageProps {
 export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [randomPlanRequest, setRandomPlanRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<CampaignAssistantOpenRequest | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -81,6 +82,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           onNavigateToBrowser={onNavigateToBrowser}
           onFilterCampaigns={handleFilterCampaigns}
           onOpenAccountInfo={handleOpenAccountInfo}
+          onOpenRandomPlan={accountId => setRandomPlanRequest(old => ({ accountId, requestId: (old?.requestId ?? 0) + 1 }))}
         />
       </div>
 
@@ -101,6 +103,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
           onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}
           accountInfoOpenRequest={accountInfoOpenRequest}
+          randomPlanRequest={randomPlanRequest}
           dataGroupCampaignRequest={dataGroupCampaignRequest}
           onDataGroupCampaignRequestHandled={onDataGroupCampaignRequestHandled}
         />

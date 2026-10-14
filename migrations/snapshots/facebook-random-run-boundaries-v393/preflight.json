@@ -1,0 +1,70 @@
+{
+  "history": [
+    {
+      "name": "migration_v392_restore_facebook_random_run_lifecycle",
+      "version": "20261014094452"
+    },
+    {
+      "name": "migration_v391_revert_facebook_random_run_lifecycle",
+      "version": "20261014091058"
+    },
+    {
+      "name": "migration_v390_campaign_diagnostics",
+      "version": "20261014085205"
+    },
+    {
+      "name": "migration_v389_facebook_random_run_lifecycle",
+      "version": "20261014085101"
+    },
+    {
+      "name": "migration_v387_facebook_random_run",
+      "version": "20261014082051"
+    }
+  ],
+  "trigger": {
+    "md5": "dd0ac9f39049a53820c839a62d85cac2",
+    "enabled": "O"
+  },
+  "day_rows": 0,
+  "event_triggers": [
+    {
+      "name": "issue_pg_graphql_access",
+      "tags": [
+        "CREATE FUNCTION"
+      ],
+      "enabled": "O"
+    },
+    {
+      "name": "issue_graphql_placeholder",
+      "tags": [
+        "DROP EXTENSION"
+      ],
+      "enabled": "O"
+    },
+    {
+      "name": "pgrst_ddl_watch",
+      "tags": null,
+      "enabled": "O"
+    },
+    {
+      "name": "pgrst_drop_watch",
+      "tags": null,
+      "enabled": "O"
+    },
+    {
+      "name": "issue_pg_cron_access",
+      "tags": [
+        "CREATE EXTENSION"
+      ],
+      "enabled": "O"
+    },
+    {
+      "name": "issue_pg_net_access",
+      "tags": [
+        "CREATE EXTENSION"
+      ],
+      "enabled": "O"
+    }
+  ],
+  "enabled_accounts": 0
+}

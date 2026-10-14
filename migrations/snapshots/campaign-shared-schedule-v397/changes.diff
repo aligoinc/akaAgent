@@ -1,0 +1,55 @@
+--- aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text) before
++++ aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text) after
+@@ -145,20 +145,17 @@
+       AND NOT COALESCE(v_capabilities.qr_enabled, false))
+   ) THEN RETURN QUERY SELECT false, 'claim_rejected'::text; RETURN; END IF;
+ 
+-  IF v_campaign.data_target_source_mode = 'data_group'
+-    AND v_campaign.schedule_end_date IS NOT NULL
+-    AND v_campaign.schedule_end_date <= now()
+-  THEN
+-    -- Expiry can race the pre-claim sweep. Do not call a privileged finalizer
+-    -- while executing as anon/authenticated and do not change either row. The
+-    -- next tenant sweep completes the hard-end cleanup under its narrow RPC.
++  IF NOT private.campaign_dispatch_schedule_allowed(
++    v_campaign.schedule, v_campaign.data_target_source_mode,
++    v_campaign.schedule_end_date, v_campaign.daily_stop_time, now(), true
++  ) THEN
++    -- Shared with random planning; retain the legacy cutoff contract and locks.
++    -- The tenant sweep, not this eligibility check, finalizes hard-ended sources.
+     RETURN QUERY SELECT false, 'claim_rejected'::text; RETURN;
+   END IF;
+ 
+   IF COALESCE(v_campaign.is_delete, false)
+     OR v_campaign.status <> 'chờ xử lý'
+-    OR v_campaign.schedule IS NULL
+-    OR v_campaign.schedule > now()
+     OR COALESCE(v_campaign.provisioning_state, 'ready') <> 'ready'
+     OR (
+       v_campaign.data_target_source_mode = 'data_group'
+@@ -171,8 +168,6 @@
+           AND (input_data.schedule IS NULL OR input_data.schedule <= now())
+       )
+     )
+-    OR (v_campaign.daily_stop_time IS NOT NULL
+-      AND v_campaign.daily_stop_time < (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::time)
+     OR COALESCE(v_account.is_delete, false)
+     OR v_account.is_active IS NOT TRUE
+     OR v_account.status <> 'chờ xử lý'
+
+--- aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb) before
++++ aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb) after
+@@ -137,10 +137,10 @@
+    idx:=(choice->>'ruleIndex')::int;rule:=cfg->'rules'->idx;
+    IF idx<0 OR rule IS NULL OR EXISTS(SELECT 1 FROM jsonb_array_elements(turns) x WHERE (x->>'ruleIndex')::int=idx) THEN RAISE EXCEPTION 'random_invalid_choice'; END IF;
+    SELECT cc.* INTO c FROM public.auto_campaigns cc WHERE cc.id=(choice->>'campaignId')::bigint AND cc.account_id=p_account_id AND cc.staff_id=p_staff_id AND cc.organization_id=p_organization_id
+-     AND cc.action_id=rule->>'campaignActionId' AND NOT cc.is_delete AND cc.status='chờ xử lý' AND cc.schedule<=clock_timestamp()
++     AND cc.action_id=rule->>'campaignActionId' AND NOT cc.is_delete AND cc.status='chờ xử lý'
+      AND coalesce(cc.provisioning_state,'ready')='ready'
+-     AND timezone('Asia/Ho_Chi_Minh',clock_timestamp())::time<least(coalesce(cc.daily_stop_time,time '23:59'),time '23:59')
+-     AND (cc.data_target_source_mode IS DISTINCT FROM 'data_group' OR cc.schedule_end_date IS NULL OR cc.schedule_end_date>clock_timestamp());
++     AND private.campaign_dispatch_schedule_allowed(
++       cc.schedule,cc.data_target_source_mode,cc.schedule_end_date,cc.daily_stop_time,clock_timestamp(),false);
+    IF FOUND THEN
+      row_no:=row_no+1;
+      turns:=turns||jsonb_build_array(rule||jsonb_build_object('id',gen_random_uuid(),'order',row_no,'round',round_no,'ruleIndex',idx,'revision',rev,'campaignId',c.id,'campaignName',c.name,'processed',0,'elapsedSeconds',0,'status','planned'));

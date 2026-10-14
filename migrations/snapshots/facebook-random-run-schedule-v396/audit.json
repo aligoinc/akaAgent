@@ -1,0 +1,20 @@
+{
+  "at": "2026-10-14T13:33:04.879Z",
+  "migration_sha256": "597ffddf828a4696db3064c34181e918b7062baf9bb0a68079555856d0240330",
+  "attributes_preserved": true,
+  "support_unchanged": true,
+  "rollback": true,
+  "results": [
+    [
+      {
+        "result": "PASS v395: 10 planner cases with actual anon role; direct/group end date, start time, daily cutoff, status/delete/action guards"
+      }
+    ],
+    [
+      {
+        "result": "PASS v393 rollback: partial restart both reset RPCs/mode off/context restore/late pause/new owner, real anon auth/RLS, atomic finish, competing plan, pause winner, disabled recovery, token replay and ownership"
+      }
+    ]
+  ],
+  "external_operations": 0
+}

@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-14T08:51:49.957Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "rpc": {
+    "status": 400,
+    "code": "P0001",
+    "message": "automation_auth_invalid"
+  },
+  "account_projection": {
+    "status": 200,
+    "rows": 0
+  },
+  "direct_history_read": {
+    "status": 401,
+    "code": "42501"
+  },
+  "external_facebook_operations": 0
+}

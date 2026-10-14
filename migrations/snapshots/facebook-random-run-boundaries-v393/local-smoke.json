@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-14T14:19:49.095Z",
+  "pauses": [
+    "none",
+    "before",
+    "during",
+    "after-commit",
+    "after-finish",
+    "new-owner",
+    "resume-after-pause"
+  ],
+  "sql": [
+    "reset_desktop_running_statuses_no_retry/true/false",
+    "reset_desktop_running_statuses_no_retry/true/true",
+    "reset_desktop_running_statuses_no_retry/false/false",
+    "reset_desktop_running_statuses_no_retry/false/true",
+    "reset_desktop_running_statuses/true/false",
+    "reset_desktop_running_statuses/true/true",
+    "reset_desktop_running_statuses/false/false",
+    "reset_desktop_running_statuses/false/true",
+    "normal-release-1-of-3",
+    "normal-release-3-of-3",
+    "prior-context-restored-and-new-owner-guard",
+    "reset-failure-rolls-back-context"
+  ],
+  "externalFacebookOperations": 0
+}

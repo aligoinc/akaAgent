@@ -1,0 +1,74 @@
+[
+  {
+    "md5": "bc35534b174333a0012c3bf84ca81ef2",
+    "signature": "aka_agent_claim_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,date,uuid,bigint[])"
+  },
+  {
+    "md5": "015ca302742b88e140913a978c0156b5",
+    "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)"
+  },
+  {
+    "md5": "0fdbb44da58b3ef82bdd85224922c428",
+    "signature": "aka_agent_claim_campaign_runtime_v2(bigint,bigint,bigint,text,uuid)"
+  },
+  {
+    "md5": "f506f8695e3e874642e3c845e103e42d",
+    "signature": "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)"
+  },
+  {
+    "md5": "048ea7194cd77589ffeb1820353f500c",
+    "signature": "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)"
+  },
+  {
+    "md5": "5ebb1d085d5a70a1dde3ad85268349f4",
+    "signature": "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)"
+  },
+  {
+    "md5": "5a9a503db72b965eb644739f5f60905d",
+    "signature": "auto_assert_automation_identity(bigint,bigint,text,text)"
+  },
+  {
+    "md5": "e204dc76d6ca7fe8806d135b53201902",
+    "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)"
+  },
+  {
+    "md5": "3c2bbb2182f0b293361b02c5efcbfd2a",
+    "signature": "private.facebook_random_finalize_on_release()"
+  },
+  {
+    "md5": "687fc3efe8378dd175f88f852bc47a51",
+    "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)"
+  },
+  {
+    "md5": "ea0c365929e5731b4e6436bfc1c58883",
+    "signature": "private.facebook_random_orphan_turns(bigint,bigint)"
+  },
+  {
+    "md5": "172635824af6f7a3a0cae242c0d1d978",
+    "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)"
+  },
+  {
+    "md5": "39c1403afa099c706b38f2850adf52ec",
+    "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)"
+  },
+  {
+    "md5": "0aea61ae267927a82b4f3e921ba468cf",
+    "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)"
+  },
+  {
+    "md5": "865b74966309d70fbb81f9e76dd491a0",
+    "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)"
+  },
+  {
+    "md5": "62ffac318d74ac671a5a1b9e51630c4a",
+    "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)"
+  },
+  {
+    "md5": "bfda9371f3964c1e3a0d3bccb58167b9",
+    "signature": "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)"
+  },
+  {
+    "md5": "dc304ed20a0b6cab0824f9bbfbcb30c8",
+    "signature": "reset_desktop_running_statuses(bigint,boolean,boolean)"
+  }
+]

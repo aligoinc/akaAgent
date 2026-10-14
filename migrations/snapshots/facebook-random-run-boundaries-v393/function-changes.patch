@@ -1,0 +1,72 @@
+--- live/private.facebook_random_finalize_on_release()
++++ v393/private.facebook_random_finalize_on_release()
+@@ -4,6 +4,11 @@
+  SET search_path TO 'pg_catalog', 'public'
+ AS $function$
+ BEGIN
++ -- Only this staff's startup reset defers finalization. The reset restores the
++ -- previous transaction-local setting immediately after its campaign update.
++ IF current_setting('aka_agent.facebook_random_reset_staff', true) = NEW.staff_id::text THEN
++   RETURN NEW;
++ END IF;
+  PERFORM private.facebook_random_finalize_turn(NEW.id,NEW.account_id,OLD.runtime_claim_token,OLD.runtime_unit_token);
+  RETURN NEW;
+ END $function$
+--- live/reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)
++++ v393/reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)
+@@ -13,6 +13,7 @@
+   v_interrupted_note constant text := 'Dừng đột ngột, không xác định kết quả; không tự thực hiện lại';
+   v_organization_id bigint;
+   v_campaign_id bigint;
++  v_previous_random_reset_staff text;
+ BEGIN
+   IF p_staff_id IS NULL OR p_staff_id <= 0 THEN
+     RAISE EXCEPTION 'Staff ID must be a positive integer';
+@@ -112,6 +113,10 @@
+     AND lower(btrim(COALESCE(account.flatform_type, ''))) IN ('facebook', 'email')
+     AND COALESCE(account.is_delete, false) = false;
+ 
++  -- Startup reset is not a successful random-turn release. Defer output to
++  -- the existing lease/orphan recovery, including when random mode is off.
++  v_previous_random_reset_staff := current_setting('aka_agent.facebook_random_reset_staff', true);
++  PERFORM set_config('aka_agent.facebook_random_reset_staff', p_staff_id::text, true);
+   UPDATE public.auto_campaigns AS campaign
+   SET status = 'chờ xử lý', note = NULL, updated_at = now()
+   FROM public.auto_accounts AS account
+@@ -124,6 +129,7 @@
+     AND lower(btrim(COALESCE(account.flatform_type, ''))) IN ('facebook', 'email')
+     AND COALESCE(account.is_delete, false) = false;
+   GET DIAGNOSTICS v_non_zalo_campaigns_reset = ROW_COUNT;
++  PERFORM set_config('aka_agent.facebook_random_reset_staff', COALESCE(v_previous_random_reset_staff, ''), true);
+ 
+   UPDATE public.auto_accounts AS account
+   SET status = 'chờ xử lý', updated_at = now()
+--- live/reset_desktop_running_statuses(bigint,boolean,boolean)
++++ v393/reset_desktop_running_statuses(bigint,boolean,boolean)
+@@ -14,6 +14,7 @@
+   v_handoff_note constant text := 'Dừng do thay đổi chế độ runtime, không xác định kết quả; không tự thực hiện lại';
+   v_organization_id bigint;
+   v_campaign_id bigint;
++  v_previous_random_reset_staff text;
+ BEGIN
+   IF p_staff_id IS NULL OR p_staff_id <= 0 THEN
+     RAISE EXCEPTION 'Staff ID must be a positive integer';
+@@ -139,6 +140,10 @@
+       OR COALESCE(account.is_zalo_server, false) = false
+     );
+ 
++  -- Startup reset is not a successful random-turn release. Defer output to
++  -- the existing lease/orphan recovery, including when random mode is off.
++  v_previous_random_reset_staff := current_setting('aka_agent.facebook_random_reset_staff', true);
++  PERFORM set_config('aka_agent.facebook_random_reset_staff', p_staff_id::text, true);
+   UPDATE public.auto_campaigns AS campaign
+   SET status = 'chờ xử lý', note = NULL, updated_at = now()
+   FROM public.auto_accounts AS account
+@@ -155,6 +160,7 @@
+       OR COALESCE(account.is_zalo_server, false) = false
+     );
+   GET DIAGNOSTICS v_campaigns_reset = ROW_COUNT;
++  PERFORM set_config('aka_agent.facebook_random_reset_staff', COALESCE(v_previous_random_reset_staff, ''), true);
+ 
+   UPDATE public.auto_accounts AS account
+   SET status = 'chờ xử lý', updated_at = now()

@@ -28,6 +28,8 @@ const ACCOUNT_SELECT = [
   'flatform_type',
   'facebook_uid',
   'facebook_login_managed',
+  'facebook_random_run_enabled',
+  'facebook_random_run_revision:facebook_random_run_config->>revision',
   'facebook_login_claim_generation',
   'is_zalo_show_web',
   'is_zalo_server',

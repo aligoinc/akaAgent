@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-14T13:37:43.009Z",
+  "migration_sha256": "597ffddf828a4696db3064c34181e918b7062baf9bb0a68079555856d0240330",
+  "old_body_reproduces_failure": true,
+  "schedule_cases": 10,
+  "scheduler_to_sql_pass": true,
+  "external_facebook_operations": 0
+}

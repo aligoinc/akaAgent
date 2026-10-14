@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-14T09:13:32.132Z",
+  "migration_sha256": "9c73969b16a9804dc9d00bb56287b6d6ab8198e1be0353423bc7a8b4f11de194",
+  "files": {
+    "src/main/services/campaignScheduler.ts": "904c37145a817691ce97a1490b10ec77c756b0084239c761f177618bc4e45759",
+    "scripts/campaign-failure-cleanup-smoke-test.cjs": "6d5d3de8ab2cbb568826b1b796fb204ff045cd2e00b0fa81220563e6df5f6702",
+    "scripts/facebook-page-content-rotation-smoke-test.cjs": "737a0308a0c8b911ec52bf24b743f027191d311291fd9dfee186da67189b266f",
+    "scripts/facebook-random-run-revert-smoke.cjs": "e2dd22a603d62334031b8ec77f3848eb6a53333540eb9b6cf38d4a42993cfd1c",
+    "scripts/facebook-random-run-revert-migration.cjs": "cc30844787dc8eee70baf8bfae4ccf2fff8a2afc9ffad790db45b1d45c53a3dd"
+  },
+  "checks": {
+    "node_typecheck": "PASS",
+    "web_typecheck": "PASS",
+    "production_build": "PASS",
+    "revert_smoke": {
+      "status": "PASS",
+      "checks": 10
+    },
+    "v387_sql_smoke": {
+      "status": "PASS",
+      "checks": 61
+    },
+    "runtime_smoke": {
+      "status": "PASS",
+      "checks": 21
+    },
+    "campaign_failure_cleanup_smoke": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "external_facebook_operations": 0,
+  "installer_packaged": false,
+  "published": false
+}

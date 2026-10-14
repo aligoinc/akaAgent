@@ -1,3 +1,5 @@
+import FacebookRandomRunPanel from './FacebookRandomRunPanel'
+import FacebookRandomRunPlanModal from './FacebookRandomRunPlanModal'
 import { engagementDisplay, engagementApplicable, type EngagementFilter } from '../../../../shared/zaloCampaignEngagement'
 import { useCampaignRunLog } from '../../hooks/useCampaignRunLog'
 import { useCampaignPendingReasons } from '../../hooks/useCampaignPendingReasons'
@@ -74,6 +76,7 @@ import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 interface CampaignPanelProps {
   isActive: boolean
   filterAccountId?: number | null
+  randomPlanRequest?: { accountId: number; requestId: number } | null
   accountInfoOpenRequest?: { accountId: number; requestId: number } | null
   onClearFilter?: () => void
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
@@ -84,7 +87,7 @@ interface CampaignPanelProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-type DetailTab = 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
@@ -2509,7 +2512,7 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
+export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, randomPlanRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions, campaignPage, campaignPageError, campaignPageResultKey, campaignSourcesRevision, campaignCatalog, loadCampaignCatalog, configureCampaignPage, setCampaignPageActive,
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
@@ -2551,6 +2554,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [navigationLoadCompletedRequestId, setNavigationLoadCompletedRequestId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
+  const [randomView, setRandomView] = useState<{ accountId: number; campaignId?: number } | null>(null)
+  const [randomPlanAccountId, setRandomPlanAccountId] = useState<number | null>(null)
+  const randomPlanAccount = accounts.find(account => account.id === randomPlanAccountId)
+  useEffect(() => {
+    if (!randomPlanRequest) return
+    setRandomPlanAccountId(randomPlanRequest.accountId)
+  }, [randomPlanRequest?.accountId, randomPlanRequest?.requestId])
   const [accountInfoAccountId, setAccountInfoAccountId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [campaignPageNumber, setCampaignPageNumber] = useState(1)
@@ -2692,6 +2702,12 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const initialCampaignLoadSettledRef = useRef(false)
   const handledNavigationRequestRef = useRef<number | null>(null)
   const selectedCampaignSummary = campaigns.find(campaign => campaign.id === selectedCampaignId)
+  useEffect(() => {
+    if (detailTab !== 'randomRun' || randomView?.campaignId === undefined || selectedCampaignId === randomView.campaignId) return
+    if (selectedCampaignSummary?.actionId.startsWith('facebook_')) {
+      setRandomView({ accountId: selectedCampaignSummary.accountId, campaignId: selectedCampaignSummary.id })
+    } else if (selectedCampaignSummary) setDetailTab('info')
+  }, [detailTab, randomView?.campaignId, selectedCampaignId, selectedCampaignSummary?.id, selectedCampaignSummary?.accountId, selectedCampaignSummary?.actionId])
   const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
   const selectedContentPreview = useMemo(
     () => selectedCampaignConfig ? buildCampaignContentPreview(selectedCampaignConfig) : null,
@@ -6003,6 +6019,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             campaignDrafts.closeDraft()
             void loadCampaigns({ silent: true })
           }} />}
+        {isActive && randomPlanAccount && <FacebookRandomRunPlanModal key={randomPlanAccount.id}
+          account={randomPlanAccount} onClose={() => setRandomPlanAccountId(null)} />}
         {showForm && (
           <CampaignFormModal
             campaign={editingCampaign}
@@ -6600,7 +6618,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
           )}
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
-              {detailTab === 'accountInfo'
+              {detailTab === 'randomRun'
+                ? <>Chạy ngẫu nhiên · <strong>{accounts.find(a => a.id === randomView?.accountId)?.name}</strong></>
+                : detailTab === 'accountInfo'
                 ? accountInfoAccount
                   ? <>Tài khoản: <strong>{accountInfoAccount.name}</strong></>
                   : 'Tài khoản'
@@ -6615,7 +6635,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
           {detailDockOpen && (
             <div className="detail-dock-body">
-              {!selectedCampaignSummary && detailTab !== 'accountInfo' ? (
+              {!selectedCampaignSummary && detailTab !== 'accountInfo' && detailTab !== 'randomRun' ? (
                 <div className="campaign-detail-empty-state">Chọn một chiến dịch để xem chi tiết.</div>
               ) : (
                 <>
@@ -6635,6 +6655,10 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 >
                   Tài khoản
                 </button>
+                {(selectedCampaignSummary?.actionId.startsWith('facebook_') || randomView) && <button className={`detail-dock-tab ${detailTab === 'randomRun' ? 'active' : ''}`} onClick={() => {
+                  if (selectedCampaignSummary?.actionId.startsWith('facebook_')) setRandomView({ accountId: selectedCampaignSummary.accountId, campaignId: selectedCampaignSummary.id })
+                  setDetailTab('randomRun')
+                }}>Chạy ngẫu nhiên</button>}
                 {selectedCampaignSummary && (
                   <>
                 <button
@@ -7841,7 +7865,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
               )}
 
               {/* Tab: Account info from the latest account or campaign focus */}
-              {detailTab === 'accountInfo' && (
+              {detailTab === 'randomRun' && randomView && (() => {
+                  const randomAccount = accounts.find(a => a.id === randomView.accountId)
+                  return randomAccount ? <FacebookRandomRunPanel key={`${randomView.accountId}:${randomView.campaignId ?? 'all'}`} account={randomAccount} campaignId={randomView.campaignId} active={isActive && detailDockOpen && !randomPlanAccount}/> : <div className="campaign-detail-empty-state">Không tìm thấy tài khoản.</div>
+                })()}
+                {detailTab === 'accountInfo' && (
                 accountInfoAccount ? (
                   <AccountInfoView key={accountInfoAccount.id} account={accountInfoAccount} mode="dock" />
                 ) : (

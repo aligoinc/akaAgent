@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-14T09:38:15.112Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "helpers": null,
+  "history": [
+    {
+      "name": "migration_v391_revert_facebook_random_run_lifecycle",
+      "version": "20261014091058"
+    },
+    {
+      "name": "migration_v390_campaign_diagnostics",
+      "version": "20261014085205"
+    },
+    {
+      "name": "migration_v389_facebook_random_run_lifecycle",
+      "version": "20261014085101"
+    },
+    {
+      "name": "migration_v387_facebook_random_run",
+      "version": "20261014082051"
+    },
+    {
+      "name": "migration_v386_automation_wildcard_cleanup",
+      "version": "20261014051723"
+    },
+    {
+      "name": "migration_v385_auto_table_log_comments",
+      "version": "20261014032129"
+    }
+  ],
+  "shape": {
+    "day_rows": 0,
+    "enabled_accounts": 0,
+    "running_turns": 0
+  },
+  "triggers": null
+}

@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-14T09:50:08.730Z",
+  "result": [
+    {
+      "result": "PASS v389 rollback: real anon auth/RLS, atomic finish, competing plan, pause winner, disabled recovery, token replay and ownership"
+    }
+  ],
+  "migration_sha256": "235b82b990efa477618b01be4d2a5c5c8e9bb975ffd0c128ad263d67edc99b4f",
+  "external_operations": 0,
+  "verification_transport": "existing Supabase connector"
+}

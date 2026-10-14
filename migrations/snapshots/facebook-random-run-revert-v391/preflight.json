@@ -1,0 +1,37 @@
+{
+  "history": [
+    {
+      "name": "migration_v390_campaign_diagnostics",
+      "version": "20261014085205"
+    },
+    {
+      "name": "migration_v389_facebook_random_run_lifecycle",
+      "version": "20261014085101"
+    },
+    {
+      "name": "migration_v387_facebook_random_run",
+      "version": "20261014082051"
+    },
+    {
+      "name": "migration_v386_automation_wildcard_cleanup",
+      "version": "20261014051723"
+    },
+    {
+      "name": "migration_v385_auto_table_log_comments",
+      "version": "20261014032129"
+    }
+  ],
+  "shape": {
+    "days": 0,
+    "enabled_accounts": 0,
+    "running_turns": 0
+  },
+  "trigger": [
+    {
+      "definition": "CREATE TRIGGER facebook_random_finalize_on_release AFTER UPDATE OF status, runtime_claim_token, runtime_unit_token ON public.auto_campaigns FOR EACH ROW WHEN (((new.runtime_claim_token IS NULL) AND (new.runtime_unit_token IS NULL) AND ((old.runtime_claim_token IS NOT NULL) OR (old.runtime_unit_token IS NOT NULL)))) EXECUTE FUNCTION private.facebook_random_finalize_on_release()",
+      "enabled": "O",
+      "md5": "dd0ac9f39049a53820c839a62d85cac2",
+      "name": "facebook_random_finalize_on_release"
+    }
+  ]
+}

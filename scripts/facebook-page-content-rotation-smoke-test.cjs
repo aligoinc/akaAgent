@@ -19,7 +19,7 @@ const advanced = loadShared('src/shared/advancedContent.ts')
 const source = ts.createSourceFile('scheduler.ts', read('src/main/services/campaignScheduler.ts'), ts.ScriptTarget.Latest, true)
 const schedulerClass = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
 const methodNames = [
-  'executeCampaignV2', 'buildVariablesV2', 'resolveCampaignContentRotation', 'advanceCampaignContentRotation',
+  'randomBatchRemaining', 'finishRandomBudget', 'executeCampaignV2', 'buildVariablesV2', 'resolveCampaignContentRotation', 'advanceCampaignContentRotation',
   'isAdvancedContentEnabled', 'shouldUseAdvancedContent', 'shouldUseAdvancedCommentContent',
   'campaignUsesMainContent', 'campaignUsesMainMedia', 'campaignUsesMessageMedia', 'campaignUsesCommentIterations',
   'getRawCampaignContentForIndex', 'resolveCampaignMediaForIndex'
@@ -30,6 +30,11 @@ const methods = methodNames.map(name => {
   return method.getText(source)
 }).join('\n')
 const globals = {
+  ActionResultBoundary: class { observe() {} accepted(steps) { return steps } },
+  managedTargetEffects: () => null,
+  ResultContractError: class extends Error {},
+  CampaignRunUnitOwnershipLostError: class extends Error {},
+  ...loadShared('src/shared/facebookRandomRun.ts'),
   MOBILE_MANAGED_SMS_ACTION_IDS: new Set(['sms_send', 'voice_call']),
   getWorkflow: async () => ({ defaultVariables: {} }),
   ...advanced, ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
@@ -57,7 +62,7 @@ const sanitizeClone = new Function('shouldSkipCloneCampaignInputData',
 function fixture(options = {}) {
   const items = Array.from({ length: 42 }, (_, i) => ({ id: `item-${i}`, content: `Content ${i + 1}`,
     mediaOption: 'all', mediaItems: [{ url: `https://fixture.invalid/${i + 1}.jpg` }] }))
-  let saved = { id: 1, name: 'Page rotation', actionId: options.actionId || 'facebook_page_post', status: 'đang chạy',
+  let saved = { id: 1, accountId: 2, staffId: 1, name: 'Page rotation', actionId: options.actionId || 'facebook_page_post', status: 'đang chạy',
     content: options.simple ? 'First | Second | Third' : '', extraSettings: {
       advancedContentEnabled: !options.simple, advancedContentItems: items,
       pagePostMode: options.mode || 'api', contentRotationIndex: 0, ...options.extra
@@ -78,9 +83,12 @@ function fixture(options = {}) {
   for (const name of [
     'logCampaignProgress', 'logSkippedLimitActionsOnce', 'releaseRunningAccount', 'handleCampaignCompletion',
     'resetCampaignBadTargetCount', 'completePauseAtBoundary', 'cleanupCampaignMediaTempFiles',
-    'startBackgroundPreview', 'stopBackgroundPreview', 'markCampaignRunUnitStarted', 'logRecentDeliveryCooldownPauses'
+    'startBackgroundPreview', 'stopBackgroundPreview', 'markCampaignRunUnitStarted', 'logRecentDeliveryCooldownPauses',
+    'broadcastClaimedRuntimeState'
   ]) scheduler[name] = async () => {}
   Object.assign(scheduler, {
+    facebookRandomTurns: new Map(),
+    campaignRunBoundaries: new Map([[1, { runtimeClaimToken: 'fixture-parent' }]]),
     campaignContentPreparationRuns: new Set(), campaignContentMediaPaths: new Map(),
     running: true, activeV2Aborts: new Map(), serverZaloPauseBoundaries: new Map(), sendExclusionLabels: new Map(),
     facebookPageIdentities: new Map(), attemptedRunErrorPolicies: new Set(), zaloMessageOptOutContexts: new Map(), pauseRequests: new Set(),
@@ -89,6 +97,7 @@ function fixture(options = {}) {
     firstNonEmptyString: value => value || '',
     resolveMediaSelection: async media => media.map(item => item.url),
     supabase: {
+      cleanupFailedCampaignRuntime: async payload => { saved.status = payload.campaignStatus; return { ok: true, reason: 'cleaned' } },
       listCampaignInputData: async () => details,
       getCampaign: async () => structuredClone(saved),
       updateCampaignInputData: async (id, patch) => Object.assign(details.find(item => item.id === id), patch)
@@ -107,6 +116,7 @@ function fixture(options = {}) {
     beginCampaignRunUnit: async () => { stats.claimed = true; return true },
     settleActiveCampaignRunUnit: async () => { stats.claimed = false; return true },
     getInputDataDisplayName: (_campaign, detail) => detail.name, createBlockRuntimeHelpers: () => ({}),
+    finalizeExplicitResultPolicies: async () => ({ triggered: false, coversBadTarget: false }),
     logMilestonesV2: async () => ({}), withZaloMessageOptOutWarnings: value => value,
     zaloMessageOptOutContextKey: (campaignId, inputId) => `${campaignId}:${inputId}`,
     getEffectiveSleepBetweenActions: () => 0,
@@ -200,4 +210,5 @@ async function main() {
 
   console.log('PASS: 42-variant Fanpage rotation, content/media pairing, restart, multiple Pages/source links, API/UI success and failure, cooldown, cursor edits and other actions')
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { fixture, loadShared }
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })

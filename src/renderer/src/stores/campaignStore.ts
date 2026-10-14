@@ -180,7 +180,7 @@ const mergeLoadedAccountsPreservingNewest = (current: AutoAccount[], loaded: Aut
     // metadata even when a newer status update arrived during the request.
     const result = { ...account }
     const runtimeKeys = ['status', 'loginStatus', 'updatedAt', 'mobileDeviceLastSeenAt', 'mobileDeviceInfo',
-      'facebookLoginClaimGeneration', 'hasZaloSession', 'zaloSessionUpdatedAt', 'zaloSessionLastVerifiedAt',
+      'facebookRandomRunEnabled', 'facebookRandomRunRevision', 'facebookLoginClaimGeneration', 'hasZaloSession', 'zaloSessionUpdatedAt', 'zaloSessionLastVerifiedAt',
       'zaloSessionLastError', 'hasEmailSession', 'emailSessionUpdatedAt', 'emailSessionLastVerifiedAt', 'emailSessionLastError'] as const
     for (const key of runtimeKeys) (result as any)[key] = existing[key]
     return result

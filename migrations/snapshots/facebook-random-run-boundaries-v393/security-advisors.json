@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-14T10:04:56.426Z",
+  "comparison": "Individual findings excluding observed_at timestamps",
+  "before": {
+    "ERROR": 259,
+    "INFO": 179,
+    "WARN": 523
+  },
+  "after": {
+    "ERROR": 259,
+    "INFO": 179,
+    "WARN": 523
+  },
+  "added": [],
+  "removed": [],
+  "unchanged": true
+}

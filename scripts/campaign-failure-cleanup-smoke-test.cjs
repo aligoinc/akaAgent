@@ -49,7 +49,7 @@ function load(relative, overrides = {}) {
   return exports
 }
 const cleanupModule = load('src/main/services/campaignFailureCleanup.ts', { './runtimeCleanupRetry': load('src/main/services/runtimeCleanupRetry.ts') })
-const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { './campaignFailureCleanup': cleanupModule, './accountOperationRegistry': { accountOperationRegistry: { has: () => false } }, '../../shared/campaignSendExclusion': load('src/shared/campaignSendExclusion.ts') })
+const { CampaignScheduler } = load('src/main/services/campaignScheduler.ts', { '../data/repositories/facebookRandomRunRepository': { randomRunRpc: async () => { throw Error('random_account_not_found') } }, './campaignFailureCleanup': cleanupModule, './accountOperationRegistry': { accountOperationRegistry: { has: () => false } }, '../../shared/campaignSendExclusion': load('src/shared/campaignSendExclusion.ts') })
 const parent = '10000000-0000-4000-8000-000000000001'
 const unit = '20000000-0000-4000-8000-000000000001'
 const temporary = () => Object.assign(new Error('schema cache unavailable'), { code: 'PGRST002' })
@@ -448,7 +448,65 @@ async function verifyPhoneExclusionFailure() {
   console.log('PASS: Desktop/Server phone exclusion RPC failure/lost response keeps successful lookup quota, skips actions and generic input writes, pauses through token-CAS cleanup')
 }
 
+async function verifyRandomBudgetPauseControlFailure() {
+  for (const failure of ['control-before-commit', 'control-response', 'refresh', 'none']) {
+    const f = fixture()
+    let owner, controlCalls = 0, badTargetIncrements = 0, failRefresh = false
+    f.db.getCampaign = async () => {
+      if (failRefresh) { failRefresh = false; throw temporary() }
+      return { ...f.campaign }
+    }
+    f.db.claimCampaignRuntimeV2 = async (_c, _a, _t, token) => {
+      owner = token; f.campaign.status = 'đang chạy'; f.stats.claims++
+      return { ok: true, runtimeClaimToken: token, runtimeClaimVietnamDateKey: '2026-09-09', vietnamDateKey: '2026-09-09', dbNow: '2026-09-09T01:00:00Z' }
+    }
+    f.db.cleanupFailedCampaignRuntime = async payload => {
+      f.stats.cleanup++; f.stats.payloads.push(payload)
+      if (!owner) return { ok: true, reason: 'already_cleaned' }
+      assert.equal(payload.runtimeClaimToken, owner)
+      assert.equal(payload.campaignStatus, 'chờ xử lý')
+      // Pause arrives after the budget's false snapshot; release is confirmed.
+      f.scheduler.pauseRequests.add(2)
+      f.campaign.status = payload.campaignStatus; owner = null
+      return { ok: true, reason: 'cleaned' }
+    }
+    f.db.setDesktopCampaignStatusV2 = async () => {
+      controlCalls++
+      if (failure === 'control-before-commit') throw temporary()
+      f.campaign.status = 'tạm dừng'
+      if (failure === 'control-response') throw temporary()
+      failRefresh = failure === 'refresh'
+      return { ok: true, reason: 'updated' }
+    }
+    f.db.getErrorPolicy = async () => {
+      f.stats.policy++
+      return { countConsecutiveErrors: 4, countsTowardBadTarget: true, errorName: 'generic', disableActionCodes: [] }
+    }
+    f.db.incrementCampaignBadTargetCount = async () => ({ countConsecutiveBadTargets: ++badTargetIncrements })
+    f.scheduler.renderPolicyMessage = () => 'Generic failure'
+    f.scheduler.addActionContextToMessage = message => message
+    f.scheduler.executeCampaignV2 = async () => f.scheduler.finishRandomBudget(f.account, f.campaign)
+
+    await f.scheduler.executeCampaign(f.account, f.campaign)
+    assert.equal(controlCalls, 1, failure)
+    assert.equal(badTargetIncrements, 0, `${failure}: control failure is not a bad target`)
+    assert.equal(f.stats.policy, 0, failure)
+    assert.equal(f.stats.cleanup, 1, `${failure}: never clean up the released parent again`)
+    assert.equal(f.stats.settle, 0, failure)
+    assert.equal(f.scheduler.failedCampaignRuns.size, 0, failure)
+    assert.equal(f.scheduler.campaignRunBoundaries.size, 0, failure)
+    assert.equal(clock.tasks.size, 0, `${failure}: no extra retry timer`)
+    assert.equal(f.campaign.status, failure === 'control-before-commit' ? 'chờ xử lý' : 'tạm dừng', failure)
+    assert.equal(f.scheduler.pauseRequests.has(2), failure === 'control-before-commit' || failure === 'control-response',
+      `${failure}: retain unconfirmed intent, do not re-latch confirmed pause after refresh failure`)
+    assert.equal(f.stats.logs.filter(message => message.includes('Chưa xác nhận được yêu cầu tạm dừng')).length,
+      failure === 'none' ? 0 : 1, failure)
+  }
+  console.log('PASS: random-budget pause control errors do not count bad targets, repeat cleanup or create retries; pending intent and confirmed pause are preserved')
+}
+
 async function run() {
+  await verifyRandomBudgetPauseControlFailure()
   await verifyPhoneExclusionLogReason()
   await verifyPhoneExclusionFailure()
   await verifyNestedPauseFailureHandoff()
@@ -733,6 +791,23 @@ async function run() {
   await flush(); assert.equal(returned, false)
   releaseSend(); await drain; assert.equal(returned, true)
 
+  // A confirmed random unit must not be settled again when progress read fails.
+  for (const position of ['executor', 'finally']) {
+    const f = fixture()
+    f.scheduler.facebookRandomTurns.set(2, { id: 'turn', claimToken: parent })
+    f.scheduler.executeCampaignV2 = async () => {
+      f.scheduler.activeCampaignRunUnits.set(2, { runtimeUnitToken: unit, inputDataIds: [10], unstartedInputDataIds: new Set(), aggregateOutcomeUnknown: false, requeueRemainingOnSettle: false })
+      if (position === 'executor') await f.scheduler.settleActiveCampaignRunUnit(f.account, f.campaign)
+    }
+    await f.scheduler.executeCampaign(f.account, f.campaign)
+    assert.equal(f.stats.settle, 1, position)
+    assert.equal(f.stats.cleanup, 1, position)
+    assert.equal(f.stats.policy, 0, 'progress read failure is not a target error')
+    assert.equal(f.stats.payloads[0].runtimeUnitToken, null, 'confirmed lease removed before parent cleanup')
+    assert.equal(f.scheduler.activeCampaignRunUnits.size, 0)
+    assert.equal(f.scheduler.failedCampaignRuns.size, 0)
+  }
+
   // Normal retry loops are compared to the checked-in implementation, not a copy.
   const file = 'src/main/services/campaignScheduler.ts'
   const baseline = execFileSync('git', ['show', `HEAD:${file}`], { cwd: root, encoding: 'utf8' })
@@ -742,7 +817,12 @@ async function run() {
     const klass = source.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'CampaignScheduler')
     return new Map(klass.members.filter(ts.isMethodDeclaration).map(m => [m.name.getText(source), { m, source }]))
   }
-  const before = methods(baseline), after = methods(current)
+  // Remove the random feature hooks and V389 post-settle progress handling only.
+  const withoutRandomHooks = text => text
+    .replace(/          this\.activeCampaignRunUnits\.delete\(campaign\.id\)\n          const randomTurn = this\.facebookRandomTurns\.get\(campaign\.id\)\n          if \(randomTurn\?\.claimToken\) \{[\s\S]*?\n          \}\n/, '          this.activeCampaignRunUnits.delete(campaign.id)\n')
+    .replace('        if (error instanceof FacebookRandomProgressReadError) throw error\n', '')
+    .replace('runtimeClaimToken,\n            this.facebookRandomTurns.get(campaign.id)?.id', 'runtimeClaimToken')
+  const before = methods(baseline), after = methods(withoutRandomHooks(current))
   // Account release now awaits Page identity cleanup; its behavior is covered
   // by facebook-page-identity-smoke-test instead of a source-text equality check.
   for (const name of ['settleActiveCampaignRunUnit']) {

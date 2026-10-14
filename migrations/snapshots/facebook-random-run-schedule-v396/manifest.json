@@ -1,0 +1,20 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "signature": "public.aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+  "source_md5": "d82e1fa2561ca34c2e365a41a58b8ca4",
+  "target_md5": "ece8bf67bdf300722e17b7d1cf6b99f4",
+  "live_matches_v392": true,
+  "replacement_count": 1,
+  "preserved": [
+    "V392 lifecycle and token/ownership guards",
+    "staff/organization/account/action scope",
+    "schedule start, daily cutoff, provisioning/status guards",
+    "owner, ACL, security definer, search_path, timeout, volatility"
+  ],
+  "explicit_schema_reload": false,
+  "migration_sha256": "597ffddf828a4696db3064c34181e918b7062baf9bb0a68079555856d0240330",
+  "canonical_version": 396,
+  "canonical_file": "migrations/migration_v396_facebook_random_run_schedule.sql",
+  "applied_history_name": "migration_v395_facebook_random_run_schedule",
+  "numbering_note": "Concurrent diagnostics task used V395 during testing; preserve committed SQL and history, rename only canonical repo files to V396."
+}

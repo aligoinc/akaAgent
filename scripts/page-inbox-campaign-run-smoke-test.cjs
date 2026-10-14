@@ -51,6 +51,8 @@ const openBlock = new AsyncFunction('page', 'helpers', 'vars', 'input', 'signal'
 
 function fixture(options = {}) {
   const scheduler = new CampaignRunHarness()
+  scheduler.facebookRandomTurns = new Map()
+  scheduler.randomBatchRemaining = () => Infinity
   const account = { id: 1, flatformType: 'facebook' }
   const campaign = { id: 100, name: 'Inbox test', actionId: options.actionId || 'facebook_page_to_message', extraSettings: {}, status: 'đang chạy' }
   const stats = { flags: [], navigations: [], sends: 0, claimed: false }

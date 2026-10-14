@@ -1,0 +1,43 @@
+{
+  "at": "2026-10-14T14:04:18.245688+00:00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "type": "security",
+  "total_existing_project_findings_returned": 782,
+  "findings_for_changed_functions": [
+    {
+      "name": "anon_security_definer_function_executable",
+      "title": "Public Can Execute SECURITY DEFINER Function",
+      "level": "WARN",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Detects `SECURITY DEFINER` functions that are callable without signing in. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if it is not meant to be public.",
+      "detail": "Function `public.aka_agent_facebook_random_run(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_account_id bigint, p_operation text, p_input jsonb)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_facebook_random_run`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+      "metadata": {
+        "name": "aka_agent_facebook_random_run",
+        "schema": "public"
+      },
+      "cache_key": "anon_security_definer_function_executable_public_aka_agent_facebook_random_run_p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_account_id bigint, p_operation text, p_input jsonb"
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "title": "Signed-In Users Can Execute SECURITY DEFINER Function",
+      "level": "WARN",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Detects `SECURITY DEFINER` functions that are callable by signed-in users. Revoke `EXECUTE`, switch the function to `SECURITY INVOKER`, or move it out of your exposed API schema if signed-in users should not call it.",
+      "detail": "Function `public.aka_agent_facebook_random_run(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_account_id bigint, p_operation text, p_input jsonb)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_facebook_random_run`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "metadata": {
+        "name": "aka_agent_facebook_random_run",
+        "schema": "public"
+      },
+      "cache_key": "authenticated_security_definer_function_executable_public_aka_agent_facebook_random_run_p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_account_id bigint, p_operation text, p_input jsonb"
+    }
+  ],
+  "assessment": "Both findings concern the unchanged anon/authenticated EXECUTE grants on the pre-existing SECURITY DEFINER random RPC. Captured source/target security and ACL attributes match; credential/staff/tenant guard remains first, and unauthenticated API and tenant smoke checks pass. The new private INVOKER helper has no finding."
+}
