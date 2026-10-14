@@ -1,0 +1,118 @@
+.web-enrichment-overlay{position:fixed;inset:0;z-index:1200;background:rgba(15,23,42,.42);display:flex;justify-content:center;align-items:flex-start;padding:36px 16px 16px;box-sizing:border-box;color:#0f172a}
+.web-enrichment-modal{width:640px;max-width:100%;max-height:calc(100dvh - 52px);background:#fff;border-radius:16px;box-shadow:0 30px 80px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;font-size:13px;outline:none;text-align:left}
+.web-enrichment-modal *{box-sizing:border-box}.web-enrichment-modal button,.web-enrichment-modal input,.web-enrichment-modal textarea{font:inherit}.web-enrichment-modal button{cursor:pointer}.web-enrichment-modal button:disabled{cursor:default;opacity:.55}.web-enrichment-modal button:focus-visible,.web-enrichment-modal input:focus-visible,.web-enrichment-modal textarea:focus-visible{outline:2px solid #818cf8;outline-offset:2px}
+.web-enrichment-modal header{display:flex;align-items:center;gap:10px;padding:18px 20px 15px;border-bottom:1px solid #eef2f7;flex-shrink:0}.web-enrichment-icon{width:36px;height:36px;display:grid;place-items:center;background:#eef0ff;color:#4f46e5;border-radius:10px;flex-shrink:0}.web-enrichment-heading{flex:1;min-width:0}.web-enrichment-heading h2{font-size:17px;font-weight:700;margin:0;line-height:1.4}.web-enrichment-heading p{font-size:12.5px;color:#64748b;margin:3px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.web-enrichment-toggle{display:flex;align-items:center;gap:5px;font-size:12px;background:#f1f5f9;color:#64748b;padding:6px 8px;border-radius:20px;white-space:nowrap}.web-enrichment-toggle.enabled{background:#e8f7ef;color:#16803c}.web-enrichment-toggle input{accent-color:#22a06b}.web-enrichment-close{border:0;background:none;color:#64748b;padding:4px;display:flex}
+.web-enrichment-body{padding:18px 20px;overflow-y:auto;max-height:600px}.web-enrichment-body fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:18px;min-width:0}.web-enrichment-body section>label{display:flex;align-items:center;gap:7px;font-weight:600;color:#334155;margin-bottom:8px;font-size:13px;flex-wrap:wrap}.web-enrichment-body label b{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:#eef0ff;color:#5b57e8;font-size:11px}.web-enrichment-body label em{color:#ef4444;font-style:normal}.web-enrichment-body label small{margin-left:auto;font-size:11.5px;color:#94a3b8;font-weight:400}.web-enrichment-body input:not([type=checkbox]),.web-enrichment-body textarea{border:1px solid #dbe3ec;border-radius:10px;padding:10px 12px;color:#334155;background:#fff;font-size:13.5px;min-width:0}.web-enrichment-body textarea{width:100%;resize:vertical;line-height:1.55}.web-enrichment-body input::placeholder,.web-enrichment-body textarea::placeholder{color:#94a3b8}.web-enrichment-hint{margin:6px 0 0;font-size:11.5px;color:#94a3b8;line-height:1.5}
+.web-enrichment-chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border:1px solid #dbe3ec;border-radius:10px;padding:8px;min-height:42px}.web-enrichment-chips>span{background:#eef0ff;color:#5753c8;border:1px solid #e0e3ff;border-radius:6px;padding:4px 7px;display:flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere}.web-enrichment-chips.orange>span{background:#fff4e8;border-color:#ffe3c1;color:#c67620}.web-enrichment-modal .web-enrichment-chips input{border:0;padding:4px;flex:1;min-width:180px;font-size:12px}.web-enrichment-chips button,.web-enrichment-websites button{border:0;background:transparent;color:inherit;padding:1px;display:flex}.web-enrichment-add{display:flex;gap:8px;align-items:center}.web-enrichment-add input{flex:1}.web-enrichment-add button{display:flex;align-items:center;gap:5px;border:1px solid #dbe3ec;background:#f8fafc;color:#475569;border-radius:9px;padding:9px 12px;white-space:nowrap}.web-enrichment-websites{display:flex;flex-direction:column;gap:6px}.web-enrichment-websites>div{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e8edf4;border-radius:9px;padding:7px 10px}.web-enrichment-websites:not(:empty){margin-bottom:8px}.website-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#e0e7ff;color:#4f46e5;font-weight:600;flex-shrink:0}.website-icon.color-1{background:#ffedd5;color:#ea580c}.website-icon.color-2{background:#dcfce7;color:#16a34a}.website-icon.color-3{background:#fce7f3;color:#db2777}.website-icon.color-4{background:#e0f2fe;color:#0284c7}.website-url{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475569;font-size:12.5px}.web-enrichment-duration{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.web-enrichment-stepper{height:38px;display:flex;align-items:center;border:1px solid #dbe3ec;border-radius:9px;overflow:hidden;gap:5px}.web-enrichment-stepper button{border:0;background:#f8fafc;color:#64748b;height:36px;width:30px;display:grid;place-items:center}.web-enrichment-modal .web-enrichment-stepper input{border:0;width:45px;text-align:center;padding:0;appearance:textfield}.web-enrichment-stepper input::-webkit-inner-spin-button{appearance:none}.web-enrichment-stepper span{color:#64748b;font-size:12px}.web-enrichment-presets{display:flex;gap:5px;flex-wrap:wrap}.web-enrichment-presets button{border:1px solid #e2e8f0;background:#fff;border-radius:20px;padding:5px 9px;color:#64748b;font-size:11.5px}.web-enrichment-presets button[aria-pressed=true]{background:#eef0ff;color:#5b57e8;border-color:#c7cbff}.web-enrichment-chips.times{border:0;padding:8px 0 0;min-height:0}.web-enrichment-warning{font-size:12px;color:#a16207;background:#fffbeb;border:1px solid #fef3c7;padding:9px 11px;line-height:1.55;border-radius:9px;margin:9px 0 0}.web-enrichment-note{display:flex;gap:8px;padding:12px 13px;background:#f6f8fb;border:1px solid #e8edf4;border-radius:11px;color:#64748b;line-height:1.6;font-size:12px}.web-enrichment-note svg{flex-shrink:0;margin-top:2px}.web-enrichment-note p{margin:0}.web-enrichment-note strong{display:block;color:#475569;margin-bottom:3px}.web-enrichment-error{background:#fef2f2;color:#b91c1c;padding:10px;border-radius:9px;margin-top:12px;line-height:1.5}.web-enrichment-error button{display:block;border:0;background:none;color:#4f46e5;text-decoration:underline;margin-top:6px}.web-enrichment-loading{display:flex;justify-content:center;gap:8px;padding:30px;color:#64748b}.web-enrichment-modal footer{display:flex;justify-content:flex-end;gap:10px;padding:13px 20px;background:#fbfcfe;border-top:1px solid #eef2f7;flex-shrink:0}.web-enrichment-modal footer button{height:38px;padding:0 17px;border-radius:10px;background:#fff;border:1px solid #dbe3ec;color:#475569;display:flex;align-items:center;gap:6px;font-weight:600}.web-enrichment-modal footer .primary{background:#5b57e8;border-color:#5b57e8;color:#fff}.web-enrichment-modal .spin{animation:web-enrichment-spin 1s linear infinite}@keyframes web-enrichment-spin{to{transform:rotate(360deg)}}
+@media(max-width:480px){.web-enrichment-overlay{padding:12px 8px}.web-enrichment-modal{max-height:calc(100dvh - 24px)}.web-enrichment-modal header{padding:14px 12px;gap:7px}.web-enrichment-heading h2{font-size:15px}.web-enrichment-body{padding:16px 12px}.web-enrichment-toggle{font-size:0;gap:0;padding:6px}.web-enrichment-modal footer{padding:12px}.web-enrichment-duration{gap:8px}}
+
+/* Follow the app's body.theme-light switch, including native date/time controls. */
+.web-enrichment-modal { color-scheme: light; }
+body:not(.theme-light) .web-enrichment-overlay {
+  background: var(--modal-backdrop);
+  color: var(--text-primary);
+}
+body:not(.theme-light) .web-enrichment-modal {
+  color-scheme: dark;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg);
+}
+body:not(.theme-light) .web-enrichment-modal header,
+body:not(.theme-light) .web-enrichment-modal footer,
+body:not(.theme-light) .web-enrichment-body input:not([type=checkbox]),
+body:not(.theme-light) .web-enrichment-body textarea,
+body:not(.theme-light) .web-enrichment-chips,
+body:not(.theme-light) .web-enrichment-add button,
+body:not(.theme-light) .web-enrichment-websites > div,
+body:not(.theme-light) .web-enrichment-stepper,
+body:not(.theme-light) .web-enrichment-presets button,
+body:not(.theme-light) .web-enrichment-note,
+body:not(.theme-light) .web-enrichment-modal footer button {
+  border-color: var(--border-default);
+}
+body:not(.theme-light) .web-enrichment-body section > label,
+body:not(.theme-light) .web-enrichment-body input:not([type=checkbox]),
+body:not(.theme-light) .web-enrichment-body textarea,
+body:not(.theme-light) .website-url,
+body:not(.theme-light) .web-enrichment-note strong {
+  color: var(--text-primary);
+}
+body:not(.theme-light) .web-enrichment-heading p,
+body:not(.theme-light) .web-enrichment-toggle,
+body:not(.theme-light) .web-enrichment-close,
+body:not(.theme-light) .web-enrichment-body label small,
+body:not(.theme-light) .web-enrichment-body input::placeholder,
+body:not(.theme-light) .web-enrichment-body textarea::placeholder,
+body:not(.theme-light) .web-enrichment-hint,
+body:not(.theme-light) .web-enrichment-stepper span,
+body:not(.theme-light) .web-enrichment-note,
+body:not(.theme-light) .web-enrichment-loading {
+  color: var(--text-secondary);
+}
+body:not(.theme-light) .web-enrichment-body input:not([type=checkbox]),
+body:not(.theme-light) .web-enrichment-body textarea,
+body:not(.theme-light) .web-enrichment-chips,
+body:not(.theme-light) .web-enrichment-stepper,
+body:not(.theme-light) .web-enrichment-modal footer {
+  background: var(--bg-primary);
+}
+body:not(.theme-light) .web-enrichment-toggle,
+body:not(.theme-light) .web-enrichment-websites > div,
+body:not(.theme-light) .web-enrichment-note {
+  background: var(--bg-tertiary);
+}
+body:not(.theme-light) .web-enrichment-add button,
+body:not(.theme-light) .web-enrichment-stepper button,
+body:not(.theme-light) .web-enrichment-presets button,
+body:not(.theme-light) .web-enrichment-modal footer button {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+body:not(.theme-light) .web-enrichment-icon,
+body:not(.theme-light) .web-enrichment-body label b,
+body:not(.theme-light) .web-enrichment-chips > span,
+body:not(.theme-light) .web-enrichment-presets button[aria-pressed=true] {
+  background: var(--bg-accent-subtle);
+  color: var(--accent-primary-hover);
+  border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
+}
+body:not(.theme-light) .web-enrichment-chips.orange > span {
+  background: color-mix(in srgb, var(--cat-utility) 12%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--cat-utility) 35%, var(--border-default));
+  color: var(--cat-utility);
+}
+body:not(.theme-light) .web-enrichment-chips.times { background: transparent; }
+body:not(.theme-light) .web-enrichment-toggle.enabled {
+  background: color-mix(in srgb, var(--accent-success) 12%, var(--bg-secondary));
+  color: var(--accent-success);
+}
+body:not(.theme-light) .website-icon { --website-accent: var(--accent-primary-hover); }
+body:not(.theme-light) .website-icon.color-1 { --website-accent: var(--cat-utility); }
+body:not(.theme-light) .website-icon.color-2 { --website-accent: var(--accent-success); }
+body:not(.theme-light) .website-icon.color-3 { --website-accent: color-mix(in srgb, var(--accent-error) 70%, var(--text-primary)); }
+body:not(.theme-light) .website-icon.color-4 { --website-accent: var(--accent-info); }
+body:not(.theme-light) .web-enrichment-websites .website-icon {
+  background: color-mix(in srgb, var(--website-accent) 15%, var(--bg-secondary));
+  color: var(--website-accent);
+}
+body:not(.theme-light) .web-enrichment-warning {
+  background: color-mix(in srgb, var(--accent-warning) 10%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent-warning) 35%, var(--border-default));
+  color: var(--accent-warning);
+}
+body:not(.theme-light) .web-enrichment-error {
+  background: color-mix(in srgb, var(--accent-error) 12%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--accent-error) 70%, var(--text-primary));
+}
+body:not(.theme-light) .web-enrichment-error button { color: var(--accent-primary-hover); }
+body:not(.theme-light) .web-enrichment-modal footer .primary {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+body:not(.theme-light) .web-enrichment-modal button:enabled:hover { filter: brightness(1.12); }
+body:not(.theme-light) .web-enrichment-modal button:focus-visible,
+body:not(.theme-light) .web-enrichment-modal input:focus-visible,
+body:not(.theme-light) .web-enrichment-modal textarea:focus-visible {
+  outline-color: var(--accent-primary-hover);
+}

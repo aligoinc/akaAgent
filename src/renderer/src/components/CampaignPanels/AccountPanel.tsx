@@ -1,4 +1,6 @@
 import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
+import WebEnrichmentModal from './WebEnrichmentModal'
+import { useWebEnrichmentState } from '../../hooks/useWebEnrichmentState'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { FolderCog, Loader2, Play, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -218,6 +220,8 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   const [verifyingEmail, setVerifyingEmail] = useState(false)
   const [loginStatusFilter, setLoginStatusFilter] = useState('all')
   const [runStatusFilter, setRunStatusFilter] = useState<AccountRunFilter>('all')
+  const [webEnrichmentAccount, setWebEnrichmentAccount] = useState<AutoAccount | null>(null)
+  const webEnrichmentIds = useWebEnrichmentState()
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -524,9 +528,9 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
 
     switch (runStatusFilter) {
       case 'ready':
-        return getAccountVisualState(account) === 'ready'
+        return !webEnrichmentIds.has(account.id) && getAccountVisualState(account) === 'ready'
       case 'running':
-        return account.isActive && account.status === 'đang chạy'
+        return account.isActive && (account.status === 'đang chạy' || webEnrichmentIds.has(account.id))
       case 'paused':
         return account.isActive && account.status === 'tạm dừng'
       case 'disabled':
@@ -534,7 +538,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
       default:
         return true
     }
-  }), [accounts, loginStatusFilter, runStatusFilter])
+  }), [accounts, loginStatusFilter, runStatusFilter, webEnrichmentIds])
 
   const runningCampaignNamesByAccountId = useMemo(() => {
     const namesByAccountId = new Map<number, string[]>()
@@ -1317,7 +1321,8 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
           filteredAccounts.map(account => {
             const isSmsAccount = account.flatformType === 'sms'
             const showSecondaryMeta = !isSmsAccount || account.accountGroupName || account.proxyName
-            const visualState = getAccountVisualState(account)
+            const isBrowsing = account.isActive && account.status !== 'tạm dừng' && webEnrichmentIds.has(account.id)
+            const visualState = isBrowsing ? 'running' : getAccountVisualState(account)
             const visualClass = `status-${visualState}`
             const runningCampaignNames = runningCampaignNamesByAccountId.get(account.id) || []
             const runningCampaignLabel = runningCampaignNames.length > 1
@@ -1365,7 +1370,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
                     <div className="account-card-meta">
                       {!isSmsAccount && (
                         <span className="account-card-status">
-                          {account.isActive ? account.status : 'vô hiệu hóa'}
+                          {isBrowsing ? 'đang chạy' : account.isActive ? account.status : 'vô hiệu hóa'}
                         </span>
                       )}
                       {account.hasDisabledActions && account.isActive && (
@@ -1382,13 +1387,13 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
                     </div>
                   )}
                   {account.facebookRandomRunEnabled && <span className="random-mode-badge">Chạy ngẫu nhiên</span>}
-                  {runningCampaignNames.length > 0 && (
+                  {(isBrowsing || runningCampaignNames.length > 0) && (
                     <div
                       className="account-card-running-campaign"
-                      title={`Đang chạy: ${runningCampaignNames.join(', ')}`}
+                      title={`Đang chạy: ${isBrowsing ? 'Làm giàu lịch sử Web' : runningCampaignNames.join(', ')}`}
                     >
                       <Play size={10} fill="currentColor" aria-hidden="true" />
-                      <strong>{runningCampaignLabel}</strong>
+                      <strong>{isBrowsing ? 'Làm giàu lịch sử Web' : runningCampaignLabel}</strong>
                     </div>
                   )}
                 </div>
@@ -1410,6 +1415,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
           onRandomToggle={account => void toggleRandom(account)}
           onRandomConfig={account => setRandomConfig({ account, enable: false })}
           onRandomPlan={account => onOpenRandomPlan(account.id)}
+          onWebEnrichment={setWebEnrichmentAccount}
           onFacebookCredentials={setFacebookCredentialsAccount}
           onFacebookRestore={async account => {
             try {
@@ -1434,6 +1440,8 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
         />
       )}
 
+      {webEnrichmentAccount && <WebEnrichmentModal key={webEnrichmentAccount.id} account={webEnrichmentAccount}
+        onClose={() => { setWebEnrichmentAccount(null); void loadAccounts() }}/>}
       {randomConfig && <FacebookRandomRunConfigModal key={randomConfig.account.id} account={randomConfig.account} enableAfterSave={randomConfig.enable}
         onClose={() => { setRandomConfig(null); void loadAccounts() }}/>}
       {showFacebookImport && <FacebookImportModal accountGroupId={formData.accountGroupId} proxyId={formData.proxyId}

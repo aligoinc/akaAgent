@@ -1,4 +1,5 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
+import { preemptWebEnrichment } from '../../services/webEnrichmentControl'
 import { AutoAccount, AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { WebviewRegistry } from '../../playwright/webviewController'
@@ -227,6 +228,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
+    preemptWebEnrichment(id)
     const normalizedUpdates = updates || {}
     const existing = await supabase.getAccount(id)
     const updateKeys = Object.keys(normalizedUpdates)
@@ -406,6 +408,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
+    preemptWebEnrichment(id)
     const existing = await supabase.getAccount(id)
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
@@ -444,10 +447,12 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_PROXY, async (_, id: number, updates) => {
+    proxyRuntime.invalidatePreparedProxy(id)
     return supabase.updateProxy(id, updates)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_PROXY, async (_, id: number) => {
+    proxyRuntime.invalidatePreparedProxy(id)
     return supabase.deleteProxy(id)
   })
 
@@ -681,6 +686,7 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_CHECK_FB_LOGIN, async (_, accountId: number) => {
+    preemptWebEnrichment(accountId)
     let usesAutomaticLogin = false
     try {
       const account = await supabase.getAccount(accountId)

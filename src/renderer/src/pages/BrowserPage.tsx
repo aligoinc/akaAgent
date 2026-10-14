@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
 import { useCampaignStore } from '../stores/campaignStore'
 import { AutoAccount } from '../../../shared/types'
+import { mergeBrowserPreview, type BrowserPreview } from '../../../shared/browserPreview'
 import { getAccountPlatformLabel, isZaloWebAccount } from '../utils/accountLabels'
 
 const PLATFORM_URLS: Record<string, string> = {
@@ -35,13 +36,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     canGoBack: boolean
     canGoForward: boolean
   }>>(new Map())
-  const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, {
-    active: boolean
-    image?: string
-    context?: 'campaign' | 'contact-scan'
-    title?: string
-    timestamp: string
-  }>>(new Map())
+  const [backgroundPreviews, setBackgroundPreviews] = useState<Map<number, BrowserPreview>>(new Map())
   const webviewRefs = useRef<Map<number, Electron.WebviewTag>>(new Map())
   const webviewDomReadyHandlers = useRef<Map<number, EventListener>>(new Map())
   const webviewNavigationHandlers = useRef<Map<number, EventListener>>(new Map())
@@ -142,15 +137,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     return window.electronAPI.onCampaignBrowserPreview((preview) => {
       setBackgroundPreviews(prev => {
         const next = new Map(prev)
-        const existing = next.get(preview.accountId)
-        const active = preview.active === true
-        next.set(preview.accountId, {
-          active,
-          context: preview.context || 'campaign',
-          image: active ? (preview.image || existing?.image) : undefined,
-          title: active ? preview.title : undefined,
-          timestamp: preview.timestamp
-        })
+        next.set(preview.accountId, mergeBrowserPreview(next.get(preview.accountId), preview))
         return next
       })
     })
@@ -323,7 +310,9 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   const previewTitle = activeBackgroundPreview?.title || (activeBackgroundPreview?.context === 'contact-scan' ? 'Đang quét data nền' : 'Đang chạy nền')
   const previewDescription = activeBackgroundPreview?.context === 'contact-scan'
     ? 'Quét data đang chạy trong trình duyệt nền.'
-    : 'Automation đang chạy trong trình duyệt nền.'
+    : activeBackgroundPreview?.context === 'web-enrichment'
+      ? 'Theo dõi phiên tìm kiếm Google và lướt web của tài khoản. Hình ảnh cập nhật mỗi 2 giây.'
+      : 'Automation đang chạy trong trình duyệt nền.'
 
   useEffect(() => {
     if (!pendingOpenRequest) return
@@ -482,9 +471,11 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
           </div>
         )}
 
-        {activeBackgroundPreview?.active && activeBackgroundPreview.image && (
+        {activeBackgroundPreview?.active && (
           <div className="browser-background-preview">
-            <img src={activeBackgroundPreview.image} alt="Background campaign preview" className="browser-background-preview-image" />
+            {activeBackgroundPreview.image
+              ? <img src={activeBackgroundPreview.image} alt={previewTitle} className="browser-background-preview-image" />
+              : <div className="empty-state browser-background-preview-loading" role="status">Đang tải hình ảnh trình duyệt...</div>}
             <div className="browser-background-preview-gradient top" />
             <div className="browser-background-preview-gradient bottom" />
             <div className="browser-background-preview-toolbar">
