@@ -216,9 +216,12 @@ function local() {
       END $t$;`)
     const func = JSON.parse(psql(`SELECT json_build_object('md5',md5(pg_get_functiondef(${quote(signature)}::regprocedure)));`).trim())
     const benchmark = localBenchmark(psql,temp)
-    write('local-verification.json', { at: new Date().toISOString(), verified: true, migration_sha256: hash(migration()), smoke_sha256: hash(smokeSQL()),
+    // Keep the original deployment receipt immutable; every rerun gets its own
+    // result, including concurrent runs that finish within the same millisecond.
+    const receipt = `local-verification-${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}.json`
+    write(receipt, { at: new Date().toISOString(), verified: true, migration_sha256: hash(migration()), smoke_sha256: hash(smokeSQL()),
       postgres: psql('SHOW server_version;').trim(), target_md5: func.md5, source_preflight: 'verified separately on linked rollback rehearsal', benchmark })
-    console.log({ verified: true, ...func, storage: benchmark.storage,
+    console.log({ verified: true, receipt, ...func, storage: benchmark.storage,
       timings: benchmark.results.map(r => ({ size:r.size,enabled:r.enabled,
         milliseconds:r.trials.map(t=>t['Execution Time']),wal_bytes:r.trials.map(t=>t.total_wal_bytes) })) })
   } finally {

@@ -78,3 +78,15 @@ Security advisor finds only the expected INFO for this table: [RLS enabled witho
 The checksum-guarded [rollback.sql](audits/auto-table-logs-v384/rollback.sql) moves the same table/sequence/indexes back to `private` and restores the captured V383 function. It preserves all rows and configuration-only logging; it does not restore high-volume V382 capture, detach triggers or delete migration history. Verified in isolated PostgreSQL, not applied to production. Check current schema/checksums before any operational rollback; do not relax the guards after a mismatch.
 
 Receipts are timestamped and immutable. Apply requires matching local and live rehearsal evidence, writes a single-attempt intent before dispatch, and refuses blind retries after an unknown outcome.
+
+## V385 metadata correction
+
+Applied at **10:21 Vietnam time, 14/10/2026**, history `20261014032129 / migration_v385_auto_table_log_comments`. Do not reapply. [V385 SQL](../migrations/migration_v385_auto_table_log_comments.sql) changes only the table and capture-function comments, which previously still described V382 full-row snapshots and PK-only trigger arguments.
+
+Current registrations pass the configuration profile before PK column names: `auto_campaigns` uses `('campaign_config_v1', 'id')`; `auto_error` uses `('error_config_v1', 'id')`. INSERT stores a configuration baseline; UPDATE stores only normalized configuration differences. Another source needs a supported configuration profile as well as a trigger. Old V382 full-row history is retained.
+
+The exact live signature **`private.aka_agent_capture_table_change()`** was captured before the migration. Its source and target definition MD5 are both **`96858661d7d592a9cdc22c67fd853c62`**. Function body, owner, security attributes, ACLs, both source registrations and the log catalog are unchanged. Historical V382–V384 SQL files were not edited.
+
+Preflight rejects catalog, function, comment or DDL-watcher drift. The linked rehearsal applied V385, checked its [SQL smoke](../migrations/tests/migration_v385_auto_table_log_comments_smoke.sql), reversed both comments and verified exact restoration before rolling back (28.325 ms). The committed migration and smoke passed in 23.809 ms. Post-apply verification matched the expected comments and otherwise identical snapshot, with exactly one history entry containing the canonical SQL. No customer rows were written by these checks.
+
+Existing DDL watchers handle the COMMENT metadata; no extra NOTIFY or history-preparation DDL was added. [Post-apply API checks](audits/auto-table-logs-v384/api-2026-10-14T03-21-52-469Z.json) returned HTTP 200 for both source tables and HTTP 401 / SQLSTATE `42501` for anonymous log access. [V385 evidence](audits/auto-table-logs-v385/) includes the fresh snapshot, checksums, rehearsal and apply receipts. Its guarded [rollback](audits/auto-table-logs-v385/rollback.sql) restores only the two previous comments and keeps all data and function behavior.

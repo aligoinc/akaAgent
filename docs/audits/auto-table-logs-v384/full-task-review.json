@@ -34,18 +34,29 @@
       "priority": 2,
       "file": "scripts/auto-table-logs-v382.cjs",
       "line": 219,
-      "problem": "The documented local command completes tests but exits 1 with EEXIST because local-verification.json is already committed and write uses flag wx. Reproduced during full review. Preserve the deployment receipt and write repeatable test results to a fresh receipt."
+      "problem": "The documented local command completes tests but exits 1 with EEXIST because local-verification.json is already committed and write uses flag wx. Reproduced during full review. Preserve the deployment receipt and write repeatable test results to a fresh receipt.",
+      "status": "resolved",
+      "resolution": "Local runs now write timestamp/UUID receipts and print their path. Two consecutive runs passed; the original deployment receipt SHA-256 remains b9ba6af7578031a80ec4ca6fe06e415b74f0c91560482dc44ef5d29d5aa1eccb.",
+      "evidence": "../auto-table-logs-v385/v382-repeatability.json"
     },
     {
       "priority": 3,
       "file": "migrations/migration_v383_auto_table_config_logs.sql",
       "line": 157,
-      "problem": "V383 changes TG_ARGV to profile then PK columns but leaves V382 database comments claiming full snapshots and PK-only arguments. A registration copied from the live function comment is rejected and silently skips logging. Update live comments in a new guarded migration; do not rewrite applied SQL."
+      "problem": "V383 changes TG_ARGV to profile then PK columns but leaves V382 database comments claiming full snapshots and PK-only arguments. A registration copied from the live function comment is rejected and silently skips logging. Update live comments in a new guarded migration; do not rewrite applied SQL.",
+      "status": "resolved",
+      "resolution": "Guarded comment-only V385 applied as 20261014032129 / migration_v385_auto_table_log_comments. Both live comments now describe configuration snapshots and profile-then-PK arguments. Function definition MD5, security attributes, registrations and table catalog unchanged.",
+      "evidence": "../auto-table-logs-v385/verification-2026-10-14T03-21-51-564Z.json"
     }
   ],
   "limitations": [
     "No concurrent load test on production.",
-    "V382 local runner exit 1 is a receipt collision, not a failed SQL assertion.",
-    "Findings remain open in the draft PR; production was not changed during review."
-  ]
+    "The original review was read-only; the follow-up fix applied only V385 metadata comments, with forward/reverse transactional rehearsal and post-apply API checks."
+  ],
+  "follow_up": {
+    "resolved_at": "2026-10-14T03:21:51.564Z",
+    "open_findings": 0,
+    "historical_migrations_edited": false,
+    "customer_writes": 0
+  }
 }

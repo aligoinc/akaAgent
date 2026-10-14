@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V385 đã apply trên akachat ngày 14/10/2026 (`20261014032129 / migration_v385_auto_table_log_comments`): chỉ sửa comment bảng/function cho đúng hợp đồng cấu hình và tham số profile rồi PK. Function MD5 vẫn `96858661d7d592a9cdc22c67fd853c62`; không đổi logic/quyền/dữ liệu. Không apply lại; [audit và rollback comment](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md#v385-metadata-correction).
+
 V384 đã apply trên akachat ngày 14/10/2026 (`20261014025805 / migration_v384_auto_table_logs_public`): chuyển nguyên bảng log sang `public.auto_table_logs`, giữ dữ liệu/index/sequence và quyền admin-only/RLS; function vẫn ở `private`, giữ lọc cấu hình V383. Không sửa app/thêm connection; không apply lại. [Audit, tra cứu và rollback chuyển schema](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
 
 V383 đã apply trên akachat ngày 14/10/2026 (`20261014023921 / migration_v383_auto_table_config_logs`): thay V382 bằng log cấu hình; bỏ log/updated_at/trạng thái/claim và tiến độ runtime, snapshot chỉ chứa cấu hình trước/sau. Giữ lịch sử V382, không dọn dữ liệu cũ; không sửa app/thêm connection. Không apply lại; [phân loại cột, smoke, audit và rollback](docs/AUTO_TABLE_CONFIG_LOGS_V383.md).
@@ -524,7 +526,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
-- **Log thay đổi bảng**: bảng hiện tại là `public.auto_table_logs`, vẫn admin-only/RLS. V382–V384 đã apply; không chạy lại khi merge. Trigger nhận profile rồi mới đến PK (`campaign_config_v1` / `error_config_v1`, `id`); cột cấu hình campaign mới cần bổ sung allowlist bằng migration. Giữ loại bỏ log/timestamp/trạng thái/claim/cursor runtime và không dọn lịch sử cũ nếu chưa được yêu cầu. Xem [hợp đồng hiện tại](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
+- **Log thay đổi bảng**: bảng hiện tại là `public.auto_table_logs`, vẫn admin-only/RLS. V382–V385 đã apply; không chạy lại khi merge. Trigger nhận profile rồi mới đến PK (`campaign_config_v1` / `error_config_v1`, `id`); cột cấu hình campaign mới cần bổ sung allowlist bằng migration. Giữ loại bỏ log/timestamp/trạng thái/claim/cursor runtime và không dọn lịch sử cũ nếu chưa được yêu cầu. Test V382 `local` tạo receipt có timestamp/UUID, giữ nguyên receipt triển khai gốc. Xem [hợp đồng hiện tại](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
 
 - **Pending reason theo bộ chạy**: akaChat xét mọi hành động nghiệp vụ đang bật khi tiếp tục sau quota, kể cả hành động không kiểm tra quota; tìm SĐT không đủ để tiếp tục một mình. Không áp quy tắc này cho scheduler local/legacy Server: lỗi continuation cũ đang được hoãn, note phải phản ánh bộ chạy hiện tại.
 - **Explicit result progress**: `✅ Hoàn thành` là hoàn thành data và phải giữ nguyên kể cả action lỗi. Kết quả explicit Facebook vẫn cần log lỗi độc lập với việc policy dừng hoặc suppress detail; dùng thông báo đã render/cached và receipt để không lặp khi relay/finalization. Email/Zalo giữ helper log khi detail.log trống; thiếu cả message/errorCode thì kết quả failure vẫn dùng câu dự phòng hiện có cho tiến trình, không viết vào detail hoặc thêm log Thành công/Bỏ qua. Không dùng cờ newsfeed thành công legacy để ghi đè explicit failure. Xem [bản sửa và smoke](docs/ACTION_RESULT_PROGRESS_LOGS_20261010.md).

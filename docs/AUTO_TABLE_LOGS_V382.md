@@ -51,7 +51,7 @@ LIMIT 100;
 
 For an error policy, use `table_name = 'auto_error'` and its ID. Use a time bound/keyset cursor for deeper history. Do not search by `public.auto_campaigns`: schema prefixes are not stored.
 
-To register another **public** table, capture its live schema/primary key/triggers and this function's checksum first, then add a separately versioned migration with a guarded AFTER INSERT OR UPDATE ROW trigger calling this function with the exact primary-key column names. Composite keys pass each column as a separate argument. Do not attach to non-public tables or configure non-key/nullable columns as keys. This does not require an app change or new connection. Adding a column to a registered source automatically includes it in subsequent full snapshots.
+The original V382 function accepted PK-only arguments. **The current contract is profile first, then primary-key columns**, for example `('campaign_config_v1', 'id')` or `('error_config_v1', 'id')`. Another public source requires a reviewed configuration profile and a guarded migration based on the live function/schema/triggers; a trigger registration alone is not sufficient. New campaign configuration columns must be added to the explicit allowlist. See [the current contract and V385 metadata correction](AUTO_TABLE_LOGS_PUBLIC_V384.md). No app change or new connection is needed.
 
 ## Verification and performance
 
@@ -66,7 +66,9 @@ node scripts/auto-table-logs-v382.cjs post-smoke
 node scripts/auto-table-logs-v382.cjs api
 ```
 
-Receipts are write-once. These are initial-deployment commands, not an instruction to reapply V382. `apply` requires matching successful local and linked rehearsal receipts, writes an intent before dispatch and refuses a second attempt after an unknown outcome. Inspect history and live objects instead of retrying. No bulk push, setup DDL for migration history, or duplicate timestamp SQL file is used.
+`local` remains repeatable: each run writes a fresh `local-verification-<timestamp>-<UUID>.json` and prints its path. The original `local-verification.json` deployment receipt remains immutable. Two consecutive reruns passed after this fix, with the original receipt checksum unchanged; see [repeatability evidence](audits/auto-table-logs-v385/v382-repeatability.json).
+
+The other commands describe the initial deployment, not an instruction to reapply V382. `apply` requires matching successful original local and linked rehearsal receipts, writes an intent before dispatch and refuses a second attempt after an unknown outcome. Inspect history and live objects instead of retrying. No bulk push, setup DDL for migration history, or duplicate timestamp SQL file is used.
 
 The isolated PostgreSQL fixture uses captured source column types/defaults and original trigger function definitions; unrelated source dependencies/FKs are intentionally omitted. Tests cover INSERT/UPDATE, full JSONB/NULL/Unicode snapshots, no-op updates, changed/composite keys, multi-row writes, upsert, rollback, retained history after DELETE, and actual anon/authenticated/service_role/Chat SQL roles. A deliberately oversized audit index key forces real log INSERT failure while source INSERT and UPDATE succeed. Existing server-pause claim preservation, claim clearing, completed-at population and the error-policy component guard are exercised on isolated data. Adversarial custom default grants are removed.
 
