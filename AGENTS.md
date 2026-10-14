@@ -2,6 +2,8 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V386 đã apply trên akachat ngày 14/10/2026 (`20261014051723 / migration_v386_automation_wildcard_cleanup`): xóa đúng 66 wildcard trạng thái Zalo mang nghĩa hành động; chuyển điều kiện `fr` 149→91258 (`zalo_add_friend`), giữ tắt, config_version 2→3. Không thêm trạng thái/sửa RPC/runtime/reload schema; không apply lại. [Backup, kiểm chứng và rollback](docs/AUTOMATION_WILDCARD_CLEANUP_V386.md).
+
 V385 đã apply trên akachat ngày 14/10/2026 (`20261014032129 / migration_v385_auto_table_log_comments`): chỉ sửa comment bảng/function cho đúng hợp đồng cấu hình và tham số profile rồi PK. Function MD5 vẫn `96858661d7d592a9cdc22c67fd853c62`; không đổi logic/quyền/dữ liệu. Không apply lại; [audit và rollback comment](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md#v385-metadata-correction).
 
 V384 đã apply trên akachat ngày 14/10/2026 (`20261014025805 / migration_v384_auto_table_logs_public`): chuyển nguyên bảng log sang `public.auto_table_logs`, giữ dữ liệu/index/sequence và quyền admin-only/RLS; function vẫn ở `private`, giữ lọc cấu hình V383. Không sửa app/thêm connection; không apply lại. [Audit, tra cứu và rollback chuyển schema](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
