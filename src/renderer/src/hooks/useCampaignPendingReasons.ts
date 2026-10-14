@@ -4,8 +4,8 @@ import { CAMPAIGN_PENDING_REASON_TTL_MS, CAMPAIGN_PENDING_REASON_UNAVAILABLE, ca
 import { useAuthStore } from '../stores/authStore'
 import { useCampaignStore } from '../stores/campaignStore'
 
-interface TemporaryReason { message: string; version: string; expiresAt: number }
-interface PendingRequest { id: number; version: string; scope: string | null }
+interface TemporaryReason { accountId: number; message: string; version: string; expiresAt: number }
+interface PendingRequest { id: number; accountId: number; version: string; scope: string | null }
 
 /** Session-only UI cache. Its single expiry timer never reads or writes campaign data. */
 export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: string | null) {
@@ -44,6 +44,22 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
     const unsubscribe = useAuthStore.subscribe((next, previous) => {
       if (authScope(next.user) !== authScope(previous.user)) clear()
     })
+    const unsubscribeAccounts = useCampaignStore.subscribe((next, previous) => {
+      if (next.accounts === previous.accounts) return
+      const before = new Map(previous.accounts.map(account => [account.id, account]))
+      const changed = new Set<number>()
+      for (const account of next.accounts) {
+        const old = before.get(account.id)
+        if (account.flatformType === 'facebook' && (old?.facebookRandomRunEnabled !== account.facebookRandomRunEnabled
+          || old?.facebookRandomRunRevision !== account.facebookRandomRunRevision)) changed.add(account.id)
+        before.delete(account.id)
+      }
+      for (const account of Array.from(before.values())) if (account.flatformType === 'facebook') changed.add(account.id)
+      let invalidated = false
+      for (const [id, entry] of Array.from(entries.current)) if (changed.has(entry.accountId)) { entries.current.delete(id); invalidated = true }
+      if (request.current && changed.has(request.current.accountId)) { request.current = null; invalidated = true }
+      if (invalidated) { armExpiry(); render() }
+    })
     const onVisible = () => { if (document.visibilityState === 'visible') expire() }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', expire)
@@ -51,6 +67,7 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
       live.current.mounted = false
       clear()
       unsubscribe()
+      unsubscribeAccounts()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', expire)
     }
@@ -81,7 +98,7 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
 
   const check = async (campaign: CampaignListItem) => {
     if (request.current || !live.current.scope || !canCheckCampaignPendingReason(campaign) || displayedNote(campaign)) return
-    const pending = { id: campaign.id, version: campaignPendingReasonVersion(campaign), scope: live.current.scope }
+    const pending = { id: campaign.id, accountId: campaign.accountId, version: campaignPendingReasonVersion(campaign), scope: live.current.scope }
     request.current = pending
     render()
     const stillCurrent = () => {
@@ -96,10 +113,10 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
         void useCampaignStore.getState().loadCampaigns().catch(() => {})
         return
       }
-      entries.current.set(campaign.id, { message: result.message, version: pending.version, expiresAt: Date.now() + CAMPAIGN_PENDING_REASON_TTL_MS })
+      entries.current.set(campaign.id, { accountId: campaign.accountId, message: result.message, version: pending.version, expiresAt: Date.now() + CAMPAIGN_PENDING_REASON_TTL_MS })
     } catch {
       if (stillCurrent()) entries.current.set(campaign.id, {
-        message: CAMPAIGN_PENDING_REASON_UNAVAILABLE, version: pending.version, expiresAt: Date.now() + CAMPAIGN_PENDING_REASON_TTL_MS
+        accountId: campaign.accountId, message: CAMPAIGN_PENDING_REASON_UNAVAILABLE, version: pending.version, expiresAt: Date.now() + CAMPAIGN_PENDING_REASON_TTL_MS
       })
     } finally {
       if (request.current === pending) request.current = null

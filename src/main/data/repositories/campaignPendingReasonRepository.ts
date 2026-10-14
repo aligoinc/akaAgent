@@ -1,11 +1,12 @@
 import type { AutoAccount, Campaign, CampaignAction } from '../../../shared/types'
+import type { FacebookRandomDiagnosticSettings } from '../../../shared/facebookRandomRunDiagnostics'
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser } from '../currentUser'
 import { mapAccountFromDB, mapCampaignActionFromDB, mapCampaignFromDB } from '../mappers'
 
 // On-demand diagnostics use the existing HTTP client. Never load log/session/password fields.
 const campaignFields = 'id,name,account_id,action_id,status,note,is_delete,staff_id,organization_id,schedule,original_schedule,schedule_type,schedule_days,schedule_week_days,schedule_end_date,daily_stop_time,continue_next_day,extra_settings,data_target_source_mode,data_group_id,provisioning_state,updated_at,runtime_claim_token,runtime_unit_token'
-const accountFields = 'id,name,flatform_type,status,login_status,is_active,is_delete,is_zalo_show_web,is_zalo_server,facebook_login_managed,staff_id,organization_id,rate_limit_minutes,runtime_operation_claim_token,auto_account_groups(organization_id,is_active,is_delete,settings)'
+const accountFields = 'id,name,flatform_type,status,login_status,is_active,is_delete,is_zalo_show_web,is_zalo_server,facebook_login_managed,facebook_random_run_enabled,facebook_random_run_config,staff_id,organization_id,rate_limit_minutes,runtime_operation_claim_token,auto_account_groups(organization_id,is_active,is_delete,settings)'
 
 export async function readPendingReasonCampaign(id: number, signal: AbortSignal): Promise<{ campaign: Campaign; hasClaim: boolean } | null> {
   signal.throwIfAborted()
@@ -18,7 +19,7 @@ export async function readPendingReasonCampaign(id: number, signal: AbortSignal)
   return { campaign: mapCampaignFromDB({ ...data, log: '' }), hasClaim: !!(data.runtime_claim_token || data.runtime_unit_token) }
 }
 
-export async function readPendingReasonAccount(id: number, signal: AbortSignal): Promise<{ account: AutoAccount; hasOperation: boolean; isChatManaged: boolean } | null> {
+export async function readPendingReasonAccount(id: number, signal: AbortSignal): Promise<{ account: AutoAccount; hasOperation: boolean; isChatManaged: boolean; randomRun: FacebookRandomDiagnosticSettings | null } | null> {
   signal.throwIfAborted()
   const user = requireCurrentUser()
   const { data, error } = await getSupabaseClient().from('auto_accounts').select(accountFields)
@@ -26,7 +27,7 @@ export async function readPendingReasonAccount(id: number, signal: AbortSignal):
     .or(`organization_id.is.null,organization_id.eq.${user.organizationId}`).abortSignal(signal).maybeSingle()
   if (error) throw error
   if (!data) return null
-  const account = mapAccountFromDB(data)
+  const account = mapAccountFromDB({ ...data, facebook_random_run_revision: data.facebook_random_run_config?.revision })
   const isChatManaged = user.isChatSync === true && Number(data.organization_id) === user.organizationId
     && account.flatformType === 'zalo' && account.isZaloServer === true && !account.isZaloShowWeb
   const group = data.auto_account_groups as unknown as Record<string, unknown> | null
@@ -34,7 +35,8 @@ export async function readPendingReasonAccount(id: number, signal: AbortSignal):
   // Leave the legacy scheduler's diagnostic snapshot unchanged.
   if (isChatManaged && (!group || group.is_active !== true || group.is_delete === true
     || Number(group.organization_id) !== user.organizationId)) account.accountGroupSettings = null
-  return { account, hasOperation: !!data.runtime_operation_claim_token, isChatManaged }
+  return { account, hasOperation: !!data.runtime_operation_claim_token, isChatManaged,
+    randomRun: account.flatformType === 'facebook' ? { enabled: data.facebook_random_run_enabled, config: data.facebook_random_run_config } : null }
 }
 
 export async function readPendingReasonAction(id: string, signal: AbortSignal): Promise<CampaignAction | null> {

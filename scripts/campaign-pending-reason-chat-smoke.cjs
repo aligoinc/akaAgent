@@ -84,6 +84,7 @@ const chatLimits = load('src/main/data/repositories/campaignPendingChatLimitRepo
   '../supabaseClient': supabase, './entitlementRepository': entitlements
 })
 const service = load('src/main/services/campaignPendingReasonService.ts', {
+  '../../shared/facebookRandomRunDiagnostics': load('src/shared/facebookRandomRunDiagnostics.ts', { './facebookRandomRun': load('src/shared/facebookRandomRun.ts') }),
   '../../shared/campaignPendingReason': load('src/shared/campaignPendingReason.ts'), '../data/currentUser': auth,
   '../data/repositories/runtimeClockRepository': { getDatabaseRuntimeClock: async () => ({ dbNow: now }) },
   '../data/repositories/entitlementRepository': { canUseCampaignActionWithEntitlements: () => true,
@@ -110,8 +111,8 @@ async function verifySchedulerAdapter() {
   const source = ts.createSourceFile('campaignScheduler.ts', readFileSync(resolve(__dirname,
     '../src/main/services/campaignScheduler.ts'), 'utf8'), ts.ScriptTarget.Latest, true)
   const declaration = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
-  const method = declaration.members.find(node => node.name?.getText(source) === 'inspectPendingReason')
-  const javascript = ts.transpileModule(`class Adapter { ${method.getText(source)} }`, {
+  const methods = declaration.members.filter(node => ['inspectPendingReason', 'getDiagnosticRuntime'].includes(node.name?.getText(source)))
+  const javascript = ts.transpileModule(`class Adapter { ${methods.map(method => method.getText(source)).join("\n")} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 }
   }).outputText
   const Adapter = new Function('inspectPendingCampaign', 'getCurrentUser', 'accountOperationRegistry',

@@ -66,6 +66,15 @@ async function main() {
     assert.equal(await checks(), 1)
     console.log('PASS eligibility, label, dedup, exact note style, RAM-only TTL from completion, no expiry requests')
 
+    await button(91).dispatchEvent('click'); await release(); await note(91).waitFor()
+    const beforeRandomChange = await checks()
+    await page.evaluate(() => window.pendingSmoke.store.setState(s => ({accounts:s.accounts.map(a=>({...a,facebookRandomRunEnabled:true,facebookRandomRunRevision:1}))})))
+    await button(91).waitFor(); assert.equal(await note(91).count(),0); assert.equal(await checks(),beforeRandomChange)
+    await button(91).dispatchEvent('click')
+    await page.evaluate(() => window.pendingSmoke.store.setState(s => ({accounts:s.accounts.map(a=>({...a,facebookRandomRunRevision:2}))})))
+    await release(); await button(91).waitFor(); assert.equal(await note(91).count(),0)
+    console.log('PASS random configuration invalidates cached and in-flight notes without new requests')
+
     await button(91).dispatchEvent('click'); await release(); await waitNote(91, 'Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc 11:00 12/10/2026.')
     await patch(91, { note: 'Note thật vừa xuất hiện.' }); await waitNote(91, 'Note thật vừa xuất hiện.')
     await patch(91, { note: null }); await button(91).waitFor()

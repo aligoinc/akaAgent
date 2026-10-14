@@ -29,8 +29,8 @@ window.electronAPI = new Proxy({
   getDesktopCampaignPage:async(q:any)=>({items:campaigns,selected:campaigns.find(c=>c.id===q.selectedId)||null,
     order:campaigns.map(c=>({kind:'campaign',id:String(c.id)})),total:3,campaignTotal:3,page:1,pageSize:100,actionOptions:[]}),
   facebookRandomRun:{
-  get:async()=>({enabled:true,config:structuredClone(config)}),
-  save:async(_id:number,cfg:any)=>{state.saves.push(cfg);if(state.failSave)throw Error('Cấu hình đã thay đổi trên máy khác. Hãy tải lại trước khi lưu.');return {enabled:true,config:{...cfg,revision:cfg.revision+1}}},
+  get:async()=>({enabled:true,config:structuredClone(Object.hasOwn(state,'configOverride')?state.configOverride:config)}),
+  save:async(_id:number,cfg:any)=>{state.saves.push(cfg);if(state.failSave)throw Error('Cấu hình đã thay đổi trên máy khác. Hãy tải lại trước khi lưu.');return {enabled:true,config:state.badSaveResponse?{version:1,revision:cfg.revision+1}:{...cfg,revision:cfg.revision+1}}},
   toggle:async(...args:any[])=>{state.toggles.push(args);return {enabled:true,config}},
   dates:async()=>[vietnamRunDate(),'2026-10-13'],
   day:async(_id:number,q:any)=>{state.reads.push(q);if(state.hold)return new Promise(resolve=>state.pending.push(()=>resolve({...day(q),turns:[{...day(q).turns[0],campaignName:'PHẢN HỒI CŨ'}]})));return day(q)}

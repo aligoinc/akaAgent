@@ -29,6 +29,7 @@ import { startAccountPoller, type AccountPollerController } from '../domain/acco
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
+import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
@@ -319,6 +320,7 @@ export function registerIpcHandlers(
     { runtimeTarget: 'desktop', maintenanceCoordinator: dailyMaintenance,
       isAccountStartupPending: account => facebookLogin.isStartupPending(account) }
   )
+  const campaignDiagnostics = registerCampaignDiagnosticsHandlers(mainWindow, campaignScheduler)
   const automationProcessor = new AutomationProcessor({
     runtimeTarget: 'desktop',
     onUpdated: event => emitAutomationUpdated(mainWindow, event)
@@ -758,6 +760,7 @@ export function registerIpcHandlers(
     if (!user) return
 
     campaignSupport.stop()
+    campaignDiagnostics.stop()
     const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     await facebookStopped
@@ -1164,6 +1167,7 @@ export function registerIpcHandlers(
   let quitCleanupCompleted = false
   app.on('before-quit', (event) => {
     campaignSupport.stop()
+    campaignDiagnostics.stop()
     if (quitCleanupCompleted) return
     if (quitCleanupStarted) {
       event.preventDefault()
@@ -1254,6 +1258,7 @@ export function registerIpcHandlers(
   // Register domain handlers
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
+      campaignDiagnostics.stop()
       await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1344,6 +1349,7 @@ export function registerIpcHandlers(
     },
     beforeLogout: async () => {
       campaignSupport.stop()
+      campaignDiagnostics.stop()
       const facebookStopped = facebookLogin.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)

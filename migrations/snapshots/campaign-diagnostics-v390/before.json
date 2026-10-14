@@ -1,0 +1,968 @@
+{
+  "columns": {
+    "ai_model": [
+      {
+        "default": null,
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "code",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "provider",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "model",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "endpoint",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "api_key",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "default_body",
+        "nullable": "NO",
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "false",
+        "name": "is_system",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      }
+    ],
+    "ai_prompt": [
+      {
+        "default": null,
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "code",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "prompt_system",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "''::text",
+        "name": "prompt_user",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_reasoning",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "false",
+        "name": "is_system",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      }
+    ],
+    "ai_using": [
+      {
+        "default": null,
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "code",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "description",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "prompt_id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "model_id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "false",
+        "name": "is_system",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "120000",
+        "name": "timeout_ms",
+        "nullable": "NO",
+        "type": "integer"
+      },
+      {
+        "default": "'auto'::text",
+        "name": "response_parser",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "response_path",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "request_options",
+        "nullable": "NO",
+        "type": "jsonb"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      }
+    ],
+    "auto_account_action_status": [
+      {
+        "default": "nextval('auto_account_action_status_id_seq'::regclass)",
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "action_code",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": "0",
+        "name": "count_action_in_day",
+        "nullable": "NO",
+        "type": "integer"
+      },
+      {
+        "default": "(timezone('Asia/Ho_Chi_Minh'::text, now()))::date",
+        "name": "count_date",
+        "nullable": "NO",
+        "type": "date"
+      },
+      {
+        "default": "false",
+        "name": "is_disable",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "date_enable",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "disabled_error_code",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "disabled_reason",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "disabled_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      }
+    ],
+    "auto_account_logs": [
+      {
+        "default": null,
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "campaign_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "login_status",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "account_status",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "source",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "event_type",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "message",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "details",
+        "nullable": "NO",
+        "type": "jsonb"
+      }
+    ],
+    "auto_campaign_details": [
+      {
+        "default": "nextval('auto_campaign_details_id_seq'::regclass)",
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "input_data_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "campaign_id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "action_name",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": "'thành công'::text",
+        "name": "status",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "log",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "data",
+        "nullable": "YES",
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "post_url",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "nullable": "NO",
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "NO",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "action_code",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "error_code",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "counts_toward_limit",
+        "nullable": "YES",
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "auto_automation_detail_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "status_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "sub_status_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "action_status_policy_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "report_group",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "policy_snapshot",
+        "nullable": "YES",
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "result_key",
+        "nullable": "YES",
+        "type": "text"
+      }
+    ],
+    "auto_campaign_input_data": [
+      {
+        "default": "nextval('auto_campaign_input_data_id_seq'::regclass)",
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "campaign_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "input_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "uid",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "email",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "'chờ xử lý'::text",
+        "name": "status",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "date_action",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "nullable": "YES",
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "info1",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info2",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info3",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info4",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info5",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone_carrier",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "control_append_idempotency_key",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "control_append_row_index",
+        "nullable": "YES",
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "auto_automation_detail_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "canonical_target_key",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "data_type_category_item_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "content_rotation_indexes",
+        "nullable": "NO",
+        "type": "jsonb"
+      }
+    ],
+    "auto_campaigns": [
+      {
+        "default": null,
+        "name": "id",
+        "nullable": "NO",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "action_id",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "'chờ xử lý'::text",
+        "name": "status",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "''::text",
+        "name": "log",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "nullable": "YES",
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "''::text",
+        "name": "content",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "'daily'::text",
+        "name": "schedule_type",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule_end_date",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "schedule_days",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule_week_days",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "continue_next_day",
+        "nullable": "YES",
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "refresh_data",
+        "nullable": "YES",
+        "type": "boolean"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "extra_settings",
+        "nullable": "YES",
+        "type": "jsonb"
+      },
+      {
+        "default": "'[]'::jsonb",
+        "name": "images",
+        "nullable": "YES",
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "staff_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "daily_stop_time",
+        "nullable": "YES",
+        "type": "time without time zone"
+      },
+      {
+        "default": null,
+        "name": "original_schedule",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "completed_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "last_run_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "time_sleep_between_2",
+        "nullable": "YES",
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "control_idempotency_key",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": "'direct'::text",
+        "name": "data_target_source_mode",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "data_group_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": "'ready'::text",
+        "name": "provisioning_state",
+        "nullable": "NO",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "creation_bundle_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "creation_bundle_child_index",
+        "nullable": "YES",
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "secondary_account_id",
+        "nullable": "YES",
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_token",
+        "nullable": "YES",
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_target",
+        "nullable": "YES",
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_vietnam_date",
+        "nullable": "YES",
+        "type": "date"
+      },
+      {
+        "default": null,
+        "name": "runtime_claimed_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_token",
+        "nullable": "YES",
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_vietnam_date",
+        "nullable": "YES",
+        "type": "date"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_claimed_at",
+        "nullable": "YES",
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_input_data_ids",
+        "nullable": "YES",
+        "type": "ARRAY"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "content_rotation_indexes",
+        "nullable": "NO",
+        "type": "jsonb"
+      }
+    ]
+  },
+  "functions": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "md5": "5a9a503db72b965eb644739f5f60905d",
+      "owner": "postgres",
+      "security_definer": true,
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "volatility": "s"
+    }
+  ],
+  "logAcl": [
+    "postgres=arwdDxtm/postgres",
+    "service_role=arwdDxtm/postgres"
+  ],
+  "logIndexes": [
+    "CREATE UNIQUE INDEX auto_account_logs_pkey ON public.auto_account_logs USING btree (id)",
+    "CREATE INDEX idx_auto_account_logs_account_time ON public.auto_account_logs USING btree (account_id, created_at DESC)"
+  ],
+  "modelCredentialMd5": "f249e27e8d39c056475f9673056064c5",
+  "models": [
+    {
+      "code": "openai_luna",
+      "created_at": "2026-08-02T15:40:04.766768+00:00",
+      "default_body": {
+        "model": "gpt-6-luna",
+        "reasoning": {
+          "effort": "medium"
+        }
+      },
+      "endpoint": "https://api.openai.com/v1/responses",
+      "id": 16,
+      "is_active": true,
+      "is_system": true,
+      "model": "gpt-6-luna",
+      "organization_id": null,
+      "provider": "openai",
+      "updated_at": "2026-08-02T15:40:04.766768+00:00"
+    }
+  ],
+  "newPrompt": null,
+  "newUsing": null
+}

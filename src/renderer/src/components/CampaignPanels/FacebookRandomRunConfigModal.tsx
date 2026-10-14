@@ -5,21 +5,52 @@ import { randomRuleUnit, validateFacebookRandomConfig, type FacebookRandomConfig
 import { useCampaignStore } from '../../stores/campaignStore'
 import './facebookRandomRun.css'
 
+function prepareConfigDraft(value: unknown): { config: FacebookRandomConfig; notice: string } {
+  if (value === null) return { config: { version: 1, revision: 0, rules: [] }, notice: '' }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Không đọc được phiên bản cấu hình đã lưu. Vui lòng tải lại; chưa thể lưu thay đổi.')
+  }
+  const stored = value as Record<string, unknown>
+  // Never invent a revision for damaged data: the save RPC still needs the real CAS value.
+  if (typeof stored.revision !== 'number' || !Number.isSafeInteger(stored.revision) || stored.revision < 0) {
+    throw new Error('Không đọc được phiên bản cấu hình đã lưu. Vui lòng tải lại; chưa thể lưu thay đổi.')
+  }
+  if (stored.version != null && stored.version !== 1) {
+    throw new Error('Ứng dụng chưa hỗ trợ định dạng cấu hình này. Vui lòng cập nhật ứng dụng hoặc tải lại.')
+  }
+  let repaired = stored.version !== 1 || !Array.isArray(stored.rules)
+  const rules = (Array.isArray(stored.rules) ? stored.rules : []).map(value => {
+    const row = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+    const campaignActionId = typeof row.campaignActionId === 'string' ? row.campaignActionId : ''
+    const unit = randomRuleUnit(campaignActionId)
+    const quantity = unit === 'run' ? 1 : typeof row.quantity === 'number' && Number.isFinite(row.quantity) ? row.quantity : NaN
+    if (row.campaignActionId !== campaignActionId || row.unit !== unit || row.quantity !== quantity) repaired = true
+    // Keep every position (including broken rows) so repairing does not silently remove rules.
+    return { campaignActionId, unit, quantity }
+  })
+  const config: FacebookRandomConfig = { version: 1, revision: stored.revision, rules }
+  try { validateFacebookRandomConfig(config, rules.map(rule => rule.campaignActionId)) } catch { repaired = true }
+  return { config, notice: !Array.isArray(stored.rules)
+    ? 'Không đọc được danh sách loại chiến dịch đã lưu. Hãy nhập lại danh sách trước khi lưu.'
+    : repaired ? 'Cấu hình đã lưu có dữ liệu không hợp lệ. Hãy kiểm tra các dòng trước khi lưu; thay đổi chưa được áp dụng.' : '' }
+}
+
 export default function FacebookRandomRunConfigModal({ account, enableAfterSave, onClose }: {
   account: AutoAccount; enableAfterSave: boolean; onClose: () => void
 }) {
   const actions = useCampaignStore(state => state.campaignActions).filter(a => a.flatformType === 'facebook' && a.isActive && !a.isDelete)
   const [config, setConfig] = useState<FacebookRandomConfig | null>(null)
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
   const view = useRef(0)
   const load = async () => {
     const generation = ++view.current
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setConfig(null); setNotice('')
     try {
       const settings = await window.electronAPI.facebookRandomRun.get(account.id)
       if (view.current !== generation) return
-      const next: FacebookRandomConfig = settings.config ?? { version: 1, revision: 0, rules: [] }
-      setConfig(next)
+      const draft = prepareConfigDraft(settings?.config)
+      setConfig(draft.config); setNotice(draft.notice)
     } catch (e) { if (view.current === generation) setError(String(e instanceof Error ? e.message : e)) }
     finally { if (view.current === generation) setBusy(false) }
   }
@@ -33,9 +64,10 @@ export default function FacebookRandomRunConfigModal({ account, enableAfterSave,
       if (!config.rules.length) throw new Error('Hãy thêm ít nhất một loại chiến dịch.')
       const next = validateFacebookRandomConfig(config, actions.map(a => a.id))
       const saved = await window.electronAPI.facebookRandomRun.save(account.id, next)
+      const savedConfig = validateFacebookRandomConfig(saved?.config, actions.map(a => a.id))
       // Retain the new revision if enabling fails, so retry doesn't overwrite another writer.
-      if (view.current === generation && saved.config) update(saved.config)
-      if (enableAfterSave) await window.electronAPI.facebookRandomRun.toggle(account.id, true, saved.config!.revision)
+      if (view.current === generation) update(savedConfig)
+      if (enableAfterSave) await window.electronAPI.facebookRandomRun.toggle(account.id, true, savedConfig.revision)
       if (view.current === generation) { await useCampaignStore.getState().loadAccounts(); onClose() }
     } catch (e) { if (view.current === generation) setError(e instanceof Error ? e.message : String(e)) }
     finally { if (view.current === generation) setBusy(false) }
@@ -45,6 +77,7 @@ export default function FacebookRandomRunConfigModal({ account, enableAfterSave,
       <button className="btn-icon" aria-label="Đóng" onClick={onClose}><X size={18}/></button></header>
     <div className="modal-body">
       <p>Chọn loại và chỉ tiêu mỗi đợt. Khi chạy, hệ thống mới chọn chiến dịch phù hợp và thực hiện theo thứ tự bên dưới.</p>
+      {notice && <p className="random-error" role="status">{notice}</p>}
       <div className="random-toolbar">
         <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load()}>Tải lại</button>
       </div>
@@ -53,7 +86,7 @@ export default function FacebookRandomRunConfigModal({ account, enableAfterSave,
             const actionId = e.target.value, unit = randomRuleUnit(actionId)
             update({ ...config, rules: config.rules.map((r, i) => i === index ? { campaignActionId: actionId, quantity: unit === 'run' ? 1 : r.quantity, unit } : r) })
           }}>
-            {!actions.some(a => a.id === rule.campaignActionId) && <option value={rule.campaignActionId}>{rule.campaignActionId} (không còn khả dụng)</option>}
+            {!actions.some(a => a.id === rule.campaignActionId) && <option value={rule.campaignActionId}>{rule.campaignActionId ? `${rule.campaignActionId} (không còn khả dụng)` : 'Chọn loại chiến dịch'}</option>}
             {actions.map(a => <option value={a.id} key={a.id}>{a.name}</option>)}</select></td>
             <td><div className="random-quantity">{rule.unit === 'run' ? <span>1 lượt</span> : <><input type="number" min="1" step="1" aria-label={`Chỉ tiêu dòng ${index + 1}`} value={Number.isNaN(rule.quantity) ? '' : rule.quantity} disabled={busy} onChange={e => update({ ...config, rules: config.rules.map((r, i) => i === index ? { ...r, quantity: e.target.valueAsNumber } : r) })}/><span>{rule.unit === 'minute' ? 'phút' : 'data'}</span></>}</div></td>
             <td><div className="random-row-actions">{([-1, 1] as const).map(delta => <button key={delta} className="btn-icon" aria-label={delta < 0 ? `Chuyển dòng ${index + 1} lên` : `Chuyển dòng ${index + 1} xuống`} disabled={busy || index + delta < 0 || index + delta >= config.rules.length} onClick={() => {

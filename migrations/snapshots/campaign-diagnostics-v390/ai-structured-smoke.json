@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-14T08:57:05.528Z",
+  "ok": true,
+  "model": "gpt-6.1-sol",
+  "structuredIssues": 1,
+  "summary": "Snapshot ghi nhận chiến dịch đang chờ xử lý và đã dùng đủ quota nhắn tin Facebook: 9/9 lượt trong khung 65 phút. Đây là nguyên nhân chặn hiện tại theo dữ liệu ghi nhận, không phải bằng chứng tài khoản bị nền tảng hạn chế. Quota ngày mới dùng 9/30 lượt. Chưa có xác minh trực tiếp; lịch sử tài khoản không có dữ liệu và danh sách kết quả trống nên không đủ cơ sở đánh giá lỗi chạy trước đó.",
+  "systemSnapshot": true,
+  "secretsRemoved": true,
+  "literalContentPreserved": true,
+  "requests": 1,
+  "productionLogWrites": 0
+}

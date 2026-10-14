@@ -1,0 +1,11 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-10-14T13:30:19.543Z",
+  "prompt_id": 47,
+  "using_id": 45,
+  "model_id": 21,
+  "before_sha256": "84b3144f6530b20e22c45a3645bd02e2971e432ee19aeb1dd9989fddf0802e23",
+  "target_sha256": "3fc6e8d374d760f0bd361ed7f42623908937cdc744a792d6038b351a067e93b9",
+  "migration_sha256": "49a8d97f745a0c1720151f4045e616fa6b212ecc41b818ba9db4b2becf9007d3",
+  "rollback_sha256": "7f3e731af8ff9835c60de0e9c42ea4c2d2af0706a3e553dbe5f69532538c0b03"
+}

@@ -891,9 +891,14 @@ export class CampaignScheduler {
 
   /** Read-only user diagnostic. Never enter tick/maintenance/claim/session verification here. */
   inspectPendingReason(campaignId: number, signal: AbortSignal): Promise<CampaignPendingReasonResult> {
+    return inspectPendingCampaign(campaignId, this.getDiagnosticRuntime(signal), signal)
+  }
+
+  /** Shared read-only observers for the diagnostics tab and the pending-reason button. */
+  getDiagnosticRuntime(signal: AbortSignal): import('./campaignPendingReasonService').PendingReasonRuntime {
     const isRemote = (account: AutoAccount) => account.flatformType === 'sms'
       || account.flatformType === 'zalo' && account.isZaloServer
-    return inspectPendingCampaign(campaignId, {
+    return {
       busyReason: account => {
         if (this.isAccountStartupPending?.(account)) return 'Đang chờ kiểm tra hoặc khôi phục đăng nhập cho tài khoản.'
         if (this.hasFailedAccountRun(account.id)) return 'Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.'
@@ -940,7 +945,7 @@ export class CampaignScheduler {
         signal.throwIfAborted()
         return limit ? this.buildLimitPreflightNote(limit) : null
       }
-    }, signal)
+    }
   }
 
   start(options: SchedulerStartOptions = {}): void {

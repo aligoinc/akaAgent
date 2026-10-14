@@ -12,7 +12,7 @@ async function main(){
   const page=await app.firstWindow();page.setDefaultTimeout(10000)
   await page.getByText('02:30',{exact:true}).waitFor();assert.equal(await page.locator('tbody tr').count(),3)
   await page.getByText('Hành động đăng nhóm bị khóa',{exact:true}).waitFor()
-  const screenshots=resolve(__dirname,'../docs/audits/facebook-random-run-v387');mkdirSync(screenshots,{recursive:true})
+  const screenshots=process.env.AKA_RANDOM_UI_OUTPUT_DIR||resolve(__dirname,'../docs/audits/facebook-random-run-v387');mkdirSync(screenshots,{recursive:true})
   await page.evaluate(()=>window.randomUi.show('plan',101));await page.getByLabel('Phạm vi kế hoạch').selectOption('campaign');await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===1)
   await page.getByLabel('Phạm vi kế hoạch').selectOption('account');await page.waitForFunction(()=>document.querySelectorAll('tbody tr').length===3)
   await page.evaluate(()=>window.randomUi.active(false));const reads=await page.evaluate(()=>window.randomUi.state.reads.length)
@@ -44,6 +44,60 @@ async function main(){
    {campaignActionId:'facebook_group_post',quantity:3,unit:'data'},
    {campaignActionId:'facebook_timeline_post',quantity:1,unit:'run'},
    {campaignActionId:'facebook_newsfeed_interaction',quantity:5,unit:'minute'}]})
+
+  // Repair real stored-shape failures through the actual modal; never write on load.
+  const openConfig=async value=>{await page.evaluate(value=>{window.randomUi.state.configOverride=value;window.randomUi.show('config')},value);await page.getByRole('dialog').waitFor()}
+  const saveConfig=()=>page.getByRole('button',{name:'Lưu cấu hình',exact:true})
+  const closeConfig=async()=>{await page.getByRole('button',{name:'Đóng',exact:true}).last().click();await page.getByRole('dialog').waitFor({state:'detached'})}
+  const saveCount=await page.evaluate(()=>window.randomUi.state.saves.length)
+  await openConfig({version:1,revision:7})
+  await page.getByRole('status').getByText(/Không đọc được danh sách/).waitFor()
+  assert.equal(await page.locator('tbody tr').count(),0)
+  assert.equal(await page.evaluate(()=>window.randomUi.state.saves.length),saveCount)
+  await page.getByRole('button',{name:'Thêm loại chiến dịch',exact:true}).click()
+  await page.getByLabel('Chỉ tiêu dòng 1').fill('4')
+  await page.evaluate(()=>window.randomUi.state.failSave=true);await saveConfig().click()
+  await page.getByRole('alert').getByText(/Cấu hình đã thay đổi trên máy khác/).waitFor()
+  assert.equal(await page.evaluate(()=>window.randomUi.state.saves.at(-1).revision),7)
+  await page.evaluate(()=>window.randomUi.state.failSave=false);await saveConfig().click();await page.getByRole('dialog').waitFor({state:'detached'})
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1)),{version:1,revision:7,rules:[{campaignActionId:'facebook_group_post',quantity:4,unit:'data'}]})
+
+  await openConfig({version:1,revision:8,rules:[{campaignActionId:'facebook_group_post',quantity:3,unit:'data'},null,
+    {campaignActionId:{broken:true},quantity:{broken:true},unit:'invalid'}, {campaignActionId:'facebook_group_post',quantity:7,unit:'data'}]})
+  await page.getByRole('status').getByText(/Cấu hình đã lưu có dữ liệu không hợp lệ/).waitFor()
+  assert.equal(await page.locator('tbody tr').count(),4)
+  assert.equal(await page.getByLabel('Chỉ tiêu dòng 1').inputValue(),'3');assert.equal(await page.getByLabel('Chỉ tiêu dòng 4').inputValue(),'7')
+  assert.equal(await page.getByLabel('Loại chiến dịch dòng 2').inputValue(),'');assert.equal(await page.getByLabel('Chỉ tiêu dòng 2').inputValue(),'')
+  const beforeInvalidSave=await page.evaluate(()=>window.randomUi.state.saves.length)
+  await saveConfig().click();await page.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>window.randomUi.state.saves.length),beforeInvalidSave)
+  await page.getByLabel('Loại chiến dịch dòng 2').selectOption('facebook_group_post');await page.getByLabel('Chỉ tiêu dòng 2').fill('4')
+  await page.getByLabel('Loại chiến dịch dòng 3').selectOption('facebook_newsfeed_interaction');await page.getByLabel('Chỉ tiêu dòng 3').fill('2')
+  await saveConfig().click();await page.getByRole('dialog').waitFor({state:'detached'})
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1)),{version:1,revision:8,rules:[
+    {campaignActionId:'facebook_group_post',quantity:3,unit:'data'},{campaignActionId:'facebook_group_post',quantity:4,unit:'data'},
+    {campaignActionId:'facebook_newsfeed_interaction',quantity:2,unit:'minute'},{campaignActionId:'facebook_group_post',quantity:7,unit:'data'}]})
+
+  await openConfig({revision:9,rules:[{campaignActionId:'facebook_timeline_post',quantity:9,unit:'data'},{campaignActionId:'facebook_newsfeed_interaction',quantity:5,unit:'data'}]})
+  await page.getByRole('status').waitFor();await saveConfig().click();await page.getByRole('dialog').waitFor({state:'detached'})
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1)),{version:1,revision:9,rules:[
+    {campaignActionId:'facebook_timeline_post',quantity:1,unit:'run'},{campaignActionId:'facebook_newsfeed_interaction',quantity:5,unit:'minute'}]})
+
+  for(const broken of [{version:1,rules:[]},{version:1,revision:-1,rules:[]},{version:1,revision:'7',rules:[]},{version:2,revision:7,rules:[]},[],false]){
+    await openConfig(broken);await page.getByRole('alert').waitFor();assert.equal(await saveConfig().isDisabled(),true)
+    assert.equal(await page.locator('tbody tr').count(),0);await closeConfig()
+  }
+  await page.evaluate(()=>{delete window.randomUi.state.configOverride;window.randomUi.show('config')})
+  await page.getByLabel('Chỉ tiêu dòng 3').waitFor()
+  // A bad reload must clear the previous editable draft, not leave a stale Save button.
+  await page.evaluate(()=>window.randomUi.state.configOverride={version:1,rules:[]});await page.getByRole('button',{name:'Tải lại',exact:true}).click()
+  await page.getByRole('alert').waitFor();assert.equal(await saveConfig().isDisabled(),true)
+  await page.evaluate(()=>delete window.randomUi.state.configOverride);await page.getByRole('button',{name:'Tải lại',exact:true}).click()
+  await page.getByLabel('Chỉ tiêu dòng 3').waitFor();assert.equal(await saveConfig().isEnabled(),true)
+  await page.evaluate(()=>window.randomUi.state.badSaveResponse=true);await saveConfig().click();await page.getByRole('alert').waitFor()
+  assert.equal(await page.getByRole('dialog').count(),1);assert.deepEqual(await page.evaluate(()=>window.randomUi.state.errors),[])
+  await page.evaluate(()=>window.randomUi.state.badSaveResponse=false);await closeConfig()
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.toggles),[])
+  console.log('PASS malformed rules/null rows repair, valid order and duplicates retained, original revision/CAS, unsupported revisions blocked, bad reload/save responses safe; no automatic save/toggle')
 
   // Exercise the actual account-plan request path in CampaignPanel, without Facebook or DB I/O.
   await page.evaluate(()=>window.randomUi.show('integration'))

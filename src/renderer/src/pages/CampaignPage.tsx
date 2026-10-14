@@ -18,6 +18,8 @@ interface CampaignPageProps {
 export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
+  const [editAccountRequest, setEditAccountRequest] = useState<{ accountId: number; requestId: number } | null>(null)
+  const [diagnosticsRevision, setDiagnosticsRevision] = useState(0)
   const [randomPlanRequest, setRandomPlanRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<CampaignAssistantOpenRequest | null>(null)
@@ -79,6 +81,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
       {/* Account Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[0], minWidth: 180 }}>
         <AccountPanel
+          editAccountRequest={editAccountRequest}
+          onAccountFormClosed={() => setDiagnosticsRevision(value => value + 1)}
           onNavigateToBrowser={onNavigateToBrowser}
           onFilterCampaigns={handleFilterCampaigns}
           onOpenAccountInfo={handleOpenAccountInfo}
@@ -95,6 +99,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
       {/* Campaign Panel (takes remaining space) */}
       <div className="campaign-page-panel" style={{ flex: 1, minWidth: 300 }}>
         <CampaignPanel
+          diagnosticsRevision={diagnosticsRevision}
+          onOpenAccountSettings={accountId => setEditAccountRequest(previous => ({ accountId, requestId: (previous?.requestId ?? 0) + 1 }))}
           isActive={isActive}
           filterAccountId={filterAccountId}
           onClearFilter={() => setFilterAccountId(null)}
