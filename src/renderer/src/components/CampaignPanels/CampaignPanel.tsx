@@ -1,3 +1,7 @@
+import CampaignDiagnosticsTab from './CampaignDiagnosticsTab'
+import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
+import FacebookCredentialsModal from './FacebookCredentialsModal'
+import type { DiagnosticAction } from '../../../../shared/campaignDiagnostics'
 import FacebookRandomRunPanel from './FacebookRandomRunPanel'
 import FacebookRandomRunPlanModal from './FacebookRandomRunPlanModal'
 import { engagementDisplay, engagementApplicable, type EngagementFilter } from '../../../../shared/zaloCampaignEngagement'
@@ -74,6 +78,8 @@ import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
 import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 
 interface CampaignPanelProps {
+  onOpenAccountSettings?: (accountId: number) => void
+  diagnosticsRevision?: number
   isActive: boolean
   filterAccountId?: number | null
   randomPlanRequest?: { accountId: number; requestId: number } | null
@@ -87,7 +93,7 @@ interface CampaignPanelProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'diagnostics' | 'randomRun' | 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
@@ -2512,7 +2518,7 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ isActive, filterAccountId, accountInfoOpenRequest, randomPlanRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
+export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevision = 0, isActive, filterAccountId, accountInfoOpenRequest, randomPlanRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
   const {
     accounts, campaigns, campaignActions, campaignPage, campaignPageError, campaignPageResultKey, campaignSourcesRevision, campaignCatalog, loadCampaignCatalog, configureCampaignPage, setCampaignPageActive,
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
@@ -2540,6 +2546,11 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
   const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
+  const [diagnosticRevision, setDiagnosticRevision] = useState(0)
+  const [diagnosticAccount, setDiagnosticAccount] = useState<AutoAccount | null>(null)
+  const [diagnosticFacebookAccount, setDiagnosticFacebookAccount] = useState<AutoAccount | null>(null)
+  const [diagnosticRandomAccount, setDiagnosticRandomAccount] = useState<AutoAccount | null>(null)
+  const [campaignFormSection, setCampaignFormSection] = useState<'schedule' | undefined>()
   const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<CampaignConfig | null>(null)
   const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<CampaignConfig | null>(null)
   const campaignDrafts = useCampaignDrafts(isActive)
@@ -2853,6 +2864,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
       setZaloLoginEvent(event)
       if (event.status === 'success') {
+        setDiagnosticRevision(value => value + 1)
         setZaloLoginAccount(null)
         setZaloLoginEvent(null)
         loadAccounts()
@@ -3325,7 +3337,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     }
   }
 
-  const handleEdit = async (campaign: CampaignListItem) => {
+  const handleEdit = async (campaign: CampaignListItem, section?: 'schedule') => {
     if (!canEditCampaign(campaign.status)) {
       showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
       return
@@ -3340,8 +3352,32 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
     setCampaignFormInitialActionId(undefined)
     setCampaignFormInitialDetails(undefined)
     setEditingCampaign(config)
+    setCampaignFormSection(section)
     setCloneFromId(undefined)
     setShowForm(true)
+  }
+
+  const handleDiagnosticAction = (action: DiagnosticAction) => {
+    const campaign = selectedCampaignSummary
+    if (!campaign) return
+    const account = accounts.find(item => item.id === campaign.accountId)
+    if (action === 'schedule') { void handleEdit(campaign, 'schedule'); return }
+    if (action === 'limits') { void handleOpenLimitUpdate(campaign); return }
+    if (action === 'content') { void handleOpenContentMediaUpdate(campaign); return }
+    if (action === 'data') { setDetailTab('data'); return }
+    if (action === 'importData') { void handleOpenAddDataToCurrentCampaignModal(campaign); return }
+    if (action === 'results') { setDetailTab('actions'); void handleLoadCampaignDetails(); return }
+    if (action === 'history') { setDetailTab('runLog'); return }
+    if (!account) { showAlert('Chưa tải được tài khoản. Vui lòng kiểm tra lại.', 'info'); return }
+    if (action === 'randomSettings') {
+      if (account.flatformType === 'facebook') setDiagnosticRandomAccount(account)
+      return
+    }
+    if (action === 'accountActions') { setDiagnosticAccount(account); return }
+    if (action === 'account') { onOpenAccountSettings?.(account.id); return }
+    if (account.flatformType === 'facebook') setDiagnosticFacebookAccount(account)
+    else if (account.flatformType === 'zalo') void handleZaloLogin(campaign, account)
+    else onOpenAccountSettings?.(account.id)
   }
 
   const handleDelete = (campaign: CampaignListItem) => {
@@ -3446,12 +3482,14 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   const handleResume = async (campaign: CampaignListItem) => {
     if (!canResumeCampaign(campaign.status)) {
       showAlert('Chỉ có thể tiếp tục chiến dịch khi trạng thái là "tạm dừng".', 'info')
-      return
+      return false
     }
     try {
       await updateCampaign(campaign.id, { status: 'chờ xử lý' })
+      return true
     } catch (err) {
       showAlert(formatIpcErrorMessage(err, 'Không thể tiếp tục chiến dịch.'), 'error')
+      return false
     }
   }
 
@@ -5257,6 +5295,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
   }
 
   const handleCloseZaloLogin = async () => {
+    setDiagnosticRevision(value => value + 1)
     const accountId = zaloLoginAccount?.id
     const shouldCancel = !!accountId && zaloLoginEvent?.status !== 'success' && zaloLoginEvent?.status !== 'error'
     setZaloLoginAccount(null)
@@ -6019,10 +6058,19 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             campaignDrafts.closeDraft()
             void loadCampaigns({ silent: true })
           }} />}
+        {diagnosticRandomAccount && <FacebookRandomRunConfigModal key={diagnosticRandomAccount.id} account={diagnosticRandomAccount} enableAfterSave={false}
+          onClose={() => { setDiagnosticRandomAccount(null); setDiagnosticRevision(value => value + 1) }} />}
+        {diagnosticAccount && <AccountInfoView account={diagnosticAccount} mode="modal" onClose={() => {
+          setDiagnosticAccount(null); setDiagnosticRevision(value => value + 1)
+        }} />}
+        {diagnosticFacebookAccount && <FacebookCredentialsModal account={diagnosticFacebookAccount} onClose={() => {
+          setDiagnosticFacebookAccount(null); setDiagnosticRevision(value => value + 1); void loadAccounts()
+        }} />}
         {isActive && randomPlanAccount && <FacebookRandomRunPlanModal key={randomPlanAccount.id}
           account={randomPlanAccount} onClose={() => setRandomPlanAccountId(null)} />}
         {showForm && (
           <CampaignFormModal
+            initialSection={campaignFormSection}
             campaign={editingCampaign}
             cloneFromId={cloneFromId}
             lockedActionId={campaignFormInitialActionId}
@@ -6034,6 +6082,8 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             onClose={() => {
               const openedFromDataGroup = campaignFormModalZIndex !== undefined
               setShowForm(false)
+              setCampaignFormSection(undefined)
+              setDiagnosticRevision(value => value + 1)
               campaignDrafts.refresh()
               setEditingCampaign(null)
               setCloneFromId(undefined)
@@ -6055,6 +6105,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             campaign={limitUpdateCampaign}
             action={actionById.get(limitUpdateCampaign.actionId)}
             onClose={() => {
+              setDiagnosticRevision(value => value + 1)
               setLimitUpdateCampaign(null)
               loadCampaigns()
               if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
@@ -6068,6 +6119,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
             action={actionById.get(contentMediaUpdateCampaign.actionId)}
             onOpenContentTemplates={onOpenContentTemplates}
             onClose={() => {
+              setDiagnosticRevision(value => value + 1)
               setContentMediaUpdateCampaign(null)
               loadCampaigns()
               if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
@@ -6101,7 +6153,7 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 await refreshCampaignInputData(campaignId)
               }
             }}
-            onClose={() => setAddDataCampaign(null)}
+            onClose={() => { setAddDataCampaign(null); setDiagnosticRevision(value => value + 1) }}
           />
         )}
 
@@ -6655,6 +6707,9 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
                 >
                   Tài khoản
                 </button>
+                {selectedCampaignSummary && /^(facebook|zalo|email)_/.test(selectedCampaignSummary.actionId) && <button
+                  className={`detail-dock-tab ${detailTab === 'diagnostics' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('diagnostics')}>Chẩn đoán</button>}
                 {(selectedCampaignSummary?.actionId.startsWith('facebook_') || randomView) && <button className={`detail-dock-tab ${detailTab === 'randomRun' ? 'active' : ''}`} onClick={() => {
                   if (selectedCampaignSummary?.actionId.startsWith('facebook_')) setRandomView({ accountId: selectedCampaignSummary.accountId, campaignId: selectedCampaignSummary.id })
                   setDetailTab('randomRun')
@@ -6768,6 +6823,13 @@ export default function CampaignPanel({ isActive, filterAccountId, accountInfoOp
 
               <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : ''}`}>
               {/* Tab: Campaign info */}
+              {isActive && selectedCampaignSummary && /^(facebook|zalo|email)_/.test(selectedCampaignSummary.actionId) && <CampaignDiagnosticsTab
+                active={detailTab === 'diagnostics'}
+                accountConfigVersion={selectedCampaignAccount?.flatformType === 'facebook'
+                  ? `${selectedCampaignAccount.id}:${selectedCampaignAccount.facebookRandomRunEnabled}:${selectedCampaignAccount.facebookRandomRunRevision}` : ''}
+                key={selectedCampaignSummary.id} campaignId={selectedCampaignSummary.id}
+                canResume={canResumeCampaign(selectedCampaignSummary.status)} onResume={() => handleResume(selectedCampaignSummary)}
+                revision={diagnosticRevision + diagnosticsRevision} onAction={handleDiagnosticAction} />}
               {detailTab === 'info' && (
                 selectedCampaignConfig ? (
                   <CampaignInfoView

@@ -7,6 +7,7 @@ import { readStaffAccess } from '../data/repositories/staffManagementRepository'
 import { getBrowserRunLimits } from '../data/repositories/browserRunLimitsRepository'
 import * as reads from '../data/repositories/campaignPendingReasonRepository'
 import { readChatPendingLimitReason } from '../data/repositories/campaignPendingChatLimitRepository'
+import { checkFacebookRandomConfiguration } from '../../shared/facebookRandomRunDiagnostics'
 
 export interface PendingReasonRuntime {
   /** RAM-only observations; never start/claim/recover a runtime from this endpoint. */
@@ -55,6 +56,21 @@ export function pendingCampaignScheduleReason(campaign: Campaign, dbNow: string)
   return null
 }
 
+export function pendingCampaignInputReason(campaign: Campaign, inputs: reads.PendingInputAvailability, hasSource: boolean, dbNow: string): string | null {
+  if (inputs.state === 'future') return (`Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc ${formatTime(inputs.scheduledAt)}.`)
+  // Pending but paused recipients are distinct from an empty list auto-filled at run time.
+  if (inputs.state === 'paused') return ('Các data chưa xử lý đều đang tạm dừng. Vui lòng tiếp tục data cần chạy.')
+  if (inputs.state !== 'due' && campaign.dataTargetSourceMode === 'data_group') return ('Đang chờ data mới từ Nhóm data.')
+  if (inputs.state === 'empty' && hasSource) return ('Đang chờ data từ chiến dịch tìm data.')
+  if (inputs.state !== 'due' && campaign.actionId === 'zalo_message_group_realtime') {
+    const rawEnd = String(campaign.extraSettings?.zaloRealtimeEndDate || '').trim()
+    const vietnamDay = (value: string) => new Date(Date.parse(value) + 7 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const endDay = /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) ? rawEnd : Number.isFinite(Date.parse(rawEnd)) ? vietnamDay(rawEnd) : ''
+    if (endDay && vietnamDay(dbNow) <= endDay) return ('Đang chờ data theo thời gian thực từ group Zalo.')
+  }
+  return null
+}
+
 export async function inspectPendingCampaign(
   campaignId: number, runtime: PendingReasonRuntime, signal: AbortSignal
 ): Promise<CampaignPendingReasonResult> {
@@ -63,10 +79,16 @@ export async function inspectPendingCampaign(
   if (!observed || !canCheckCampaignPendingReason(observed.campaign)) return result(null)
   const { campaign } = observed
   const version = campaignPendingReasonVersion(campaign)
+  let randomVersion: string | undefined
   const finish = async (message: string): Promise<CampaignPendingReasonResult> => {
     signal.throwIfAborted()
     const latest = await reads.readPendingReasonCampaign(campaignId, signal)
     if (!latest || !canCheckCampaignPendingReason(latest.campaign) || campaignPendingReasonVersion(latest.campaign) !== version) return result(null)
+    if (randomVersion !== undefined) {
+      const latestAccount = await reads.readPendingReasonAccount(campaign.accountId, signal)
+      signal.throwIfAborted()
+      if (!latestAccount || JSON.stringify(latestAccount.randomRun) !== randomVersion) return result(null)
+    }
     return result(message, version)
   }
 
@@ -127,16 +149,12 @@ export async function inspectPendingCampaign(
   signal.throwIfAborted()
   if (limit) return finish(limit)
   const inputs = await reads.readPendingInputAvailability(campaign.id, clock.dbNow, signal)
-  if (inputs.state === 'future') return finish(`Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc ${formatTime(inputs.scheduledAt)}.`)
-  // Pending but paused recipients are distinct from an empty list auto-filled at run time.
-  if (inputs.state === 'paused') return finish('Các data chưa xử lý đều đang tạm dừng. Vui lòng tiếp tục data cần chạy.')
-  if (inputs.state !== 'due' && campaign.dataTargetSourceMode === 'data_group') return finish('Đang chờ data mới từ Nhóm data.')
-  if (inputs.state === 'empty' && await reads.hasPendingFindDataSource(campaign, signal)) return finish('Đang chờ data từ chiến dịch tìm data.')
-  if (inputs.state !== 'due' && campaign.actionId === 'zalo_message_group_realtime') {
-    const rawEnd = String(campaign.extraSettings?.zaloRealtimeEndDate || '').trim()
-    const vietnamDay = (value: string) => new Date(Date.parse(value) + 7 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const endDay = /^\d{4}-\d{2}-\d{2}$/.test(rawEnd) ? rawEnd : Number.isFinite(Date.parse(rawEnd)) ? vietnamDay(rawEnd) : ''
-    if (endDay && vietnamDay(clock.dbNow) <= endDay) return finish('Đang chờ data theo thời gian thực từ group Zalo.')
+  const inputReason = pendingCampaignInputReason(campaign, inputs, inputs.state === 'empty' && campaign.dataTargetSourceMode !== 'data_group' && await reads.hasPendingFindDataSource(campaign, signal), clock.dbNow)
+  if (inputReason) return finish(inputReason)
+  if (account.flatformType === 'facebook') {
+    const random = checkFacebookRandomConfiguration(accountState.randomRun, action)
+    randomVersion = JSON.stringify(accountState.randomRun)
+    if (random.reason) return finish(random.reason)
   }
   if (mobileManaged(campaign)) return finish('Chiến dịch được thực hiện trên điện thoại. Chưa xác minh được trạng thái xử lý trên thiết bị.')
   if (account.flatformType === 'zalo' && account.isZaloServer) {

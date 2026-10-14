@@ -25,6 +25,8 @@ import type { ZaloServerOperationSnapshot } from '../../../../shared/zaloServerP
 import { campaignHasLocalOnlyMedia } from './localCampaignMedia'
 
 interface AccountPanelProps {
+  editAccountRequest?: { accountId: number; requestId: number } | null
+  onAccountFormClosed?: () => void
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onFilterCampaigns?: (accountId: number | null) => void
   onOpenRandomPlan: (accountId: number) => void
@@ -139,7 +141,7 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
   }
 }
 
-export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo, onOpenRandomPlan }: AccountPanelProps) {
+export default function AccountPanel({ editAccountRequest, onAccountFormClosed, onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo, onOpenRandomPlan }: AccountPanelProps) {
   const [randomConfig, setRandomConfig] = useState<{ account: AutoAccount; enable: boolean } | null>(null)
   const toggleRandom = async (account: AutoAccount) => {
     try {
@@ -777,6 +779,20 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
     }
     setShowForm(true)
   }
+
+  const lastEditRequest = useRef<number | null>(null)
+  useEffect(() => {
+    if (!editAccountRequest || editAccountRequest.requestId === lastEditRequest.current) return
+    const account = accounts.find(item => item.id === editAccountRequest.accountId)
+    if (!account) return
+    lastEditRequest.current = editAccountRequest.requestId
+    handleEdit(account)
+  }, [editAccountRequest, accounts])
+  const wasAccountFormOpen = useRef(false)
+  useEffect(() => {
+    if (wasAccountFormOpen.current && !showForm) onAccountFormClosed?.()
+    wasAccountFormOpen.current = showForm
+  }, [showForm, onAccountFormClosed])
 
   const handleDelete = (account: AutoAccount) => {
     useUiStore.getState().showConfirm(

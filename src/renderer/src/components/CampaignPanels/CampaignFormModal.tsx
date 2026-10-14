@@ -376,6 +376,8 @@ interface InternalCampaignDraft {
 }
 
 interface CampaignFormModalProps {
+  initialSection?: 'schedule'
+
   savedDraft?: CampaignDraft
 
   campaign: CampaignConfig | null
@@ -1718,6 +1720,7 @@ const GROUP_POST_BUMP_STEP: StepDef = {
 }
 
 export default function CampaignFormModal({
+  initialSection,
   campaign: providedCampaign,
   savedDraft,
   cloneFromId: providedCloneFromId,
@@ -4137,6 +4140,16 @@ export default function CampaignFormModal({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  const initialSectionOpened = useRef(false)
+  useEffect(() => {
+    if (!initialSection || initialSectionOpened.current || !STEPS.some(step => step.id === initialSection)) return
+    initialSectionOpened.current = true
+    setActiveStep(initialSection)
+    setCollapsedSections(previous => ({ ...previous, [initialSection]: false }))
+    const frame = requestAnimationFrame(() => sectionRefs.current[initialSection]?.scrollIntoView({ block: 'start' }))
+    return () => cancelAnimationFrame(frame)
+  }, [initialSection, stepIdsKey])
 
   useEffect(() => {
     if (!STEPS.some(step => step.id === activeStep)) {

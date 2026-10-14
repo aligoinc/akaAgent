@@ -1,3 +1,4 @@
+import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomReadQuery } from '../shared/facebookRandomRun'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
@@ -282,6 +283,9 @@ const electronAPI = {
   getCampaignConfig: (id: number): Promise<CampaignConfig | null> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_GET_CAMPAIGN_CONFIG, id),
 
+  getCampaignDiagnostics: (request: CampaignDiagnosticsRequest): Promise<CampaignDiagnosticsSnapshot> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.read, request),
+  analyzeCampaignDiagnostics: (request: CampaignDiagnosticsAiRequest): Promise<CampaignDiagnosticsAiResult> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.ai, request),
+  cancelCampaignDiagnostics: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.cancel, requestId),
   checkCampaignPendingReason: (id: number): Promise<CampaignPendingReasonResult> =>
     ipcRenderer.invoke(CAMPAIGN_PENDING_REASON_IPC, id),
 

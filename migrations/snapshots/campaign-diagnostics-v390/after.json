@@ -1,0 +1,74 @@
+{
+  "directLogSelect": {
+    "anon": false,
+    "authenticated": false
+  },
+  "function": {
+    "acl": [
+      "postgres=X/postgres",
+      "anon=X/postgres",
+      "authenticated=X/postgres",
+      "service_role=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_campaign_diagnostics_evidence(p_staff_id bigint, p_organization_id bigint, p_campaign_id bigint, p_auth_username text, p_auth_password text)\n RETURNS jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '15s'\nAS $function$\nDECLARE\n  v_account_id bigint;\n  v_log text;\n  v_account_history jsonb;\n  v_campaign_history jsonb;\n  v_results jsonb;\n  v_summary jsonb;\n  v_inputs jsonb;\nBEGIN\n  PERFORM public.auto_assert_automation_identity(p_staff_id, p_organization_id, p_auth_username, p_auth_password);\n  -- Explicit credentials and tenant ownership are required even for a service-role caller.\n  IF p_staff_id IS NULL OR p_organization_id IS NULL OR p_campaign_id IS NULL\n    OR NOT EXISTS (SELECT 1 FROM public.org_staff s JOIN public.org_organization o ON o.id=s.organization_id\n      WHERE s.id=p_staff_id AND s.organization_id=p_organization_id AND s.is_active\n        AND s.username=p_auth_username AND s.password=p_auth_password) THEN\n    RAISE EXCEPTION 'diagnostics_access_denied' USING ERRCODE='42501';\n  END IF;\n  SELECT c.account_id, c.log INTO v_account_id, v_log\n  FROM public.auto_campaigns c JOIN public.auto_accounts a ON a.id=c.account_id\n  WHERE c.id=p_campaign_id AND c.staff_id=p_staff_id AND NOT c.is_delete\n    AND (c.organization_id=p_organization_id OR c.organization_id IS NULL)\n    AND a.staff_id=p_staff_id AND (a.organization_id=p_organization_id OR a.organization_id IS NULL)\n    AND a.flatform_type IN ('facebook','zalo','email');\n  IF NOT FOUND THEN RAISE EXCEPTION 'diagnostics_access_denied' USING ERRCODE='42501'; END IF;\n\n  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.created_at DESC,x.id DESC),'[]') INTO v_account_history FROM (\n    SELECT id,created_at,login_status,account_status,source,event_type,left(message,8000) AS message,details\n    FROM public.auto_account_logs WHERE account_id=v_account_id\n    ORDER BY created_at DESC,id DESC LIMIT 30\n  ) x;\n  -- Campaign log is append-only chronological text. Transfer only the last 30 nonempty lines.\n  SELECT coalesce(jsonb_agg(left(x.line,8000) ORDER BY x.n DESC),'[]') INTO v_campaign_history FROM (\n    SELECT line,n FROM unnest(string_to_array(coalesce(v_log,''),E'\\n')) WITH ORDINALITY AS lines(line,n)\n    WHERE btrim(line)<>'' ORDER BY n DESC LIMIT 30\n  ) x;\n  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.created_at DESC,x.id DESC),'[]') INTO v_results FROM (\n    SELECT id,input_data_id,created_at,action_name,action_code,status,left(log,8000) AS log,\n      error_code,status_id,sub_status_id,action_status_policy_id,report_group,policy_snapshot,counts_toward_limit,post_url\n    FROM public.auto_campaign_details WHERE campaign_id=p_campaign_id AND account_id=v_account_id AND NOT is_delete\n    ORDER BY created_at DESC,id DESC LIMIT 30\n  ) x;\n  SELECT coalesce(jsonb_object_agg(x.status,x.total),'{}') INTO v_summary FROM (\n    SELECT coalesce(status,'chưa xác minh') AS status,count(*) AS total FROM public.auto_campaign_input_data\n    WHERE campaign_id=p_campaign_id AND NOT is_delete GROUP BY status\n  ) x;\n  WITH pending AS MATERIALIZED (\n    SELECT id,input_id,name,phone,uid,email,status,schedule,note,content,info1,info2,info3,info4,info5,created_at\n    FROM public.auto_campaign_input_data WHERE campaign_id=p_campaign_id AND NOT is_delete AND status='chờ xử lý'\n    ORDER BY created_at DESC,id DESC LIMIT 30\n  ), others AS (\n    SELECT id,input_id,name,phone,uid,email,status,schedule,note,content,info1,info2,info3,info4,info5,created_at\n    FROM public.auto_campaign_input_data WHERE campaign_id=p_campaign_id AND NOT is_delete AND status IS DISTINCT FROM 'chờ xử lý'\n    ORDER BY created_at DESC,id DESC LIMIT (SELECT 30-count(*) FROM pending)\n  ), sample AS (SELECT * FROM pending UNION ALL SELECT * FROM others)\n  SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY (x.status='chờ xử lý') DESC NULLS LAST,x.created_at DESC,x.id DESC),'[]') INTO v_inputs FROM sample x;\n  RETURN jsonb_build_object('accountHistory',v_account_history,'campaignHistory',v_campaign_history,\n    'results',v_results,'inputSummary',v_summary,'inputs',v_inputs);\nEND;\n$function$\n",
+    "md5": "2b0ba11c25cc61f111f5ed068a31626c",
+    "owner": "postgres",
+    "security": true,
+    "signature": "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+    "volatility": "s"
+  },
+  "helper_md5": "5a9a503db72b965eb644739f5f60905d",
+  "history": [
+    {
+      "name": "migration_v390_campaign_diagnostics",
+      "version": "20261014085205"
+    }
+  ],
+  "model": {
+    "code": "openai_campaign_diagnostics_sol61",
+    "created_at": "2026-10-14T08:52:05.6477+00:00",
+    "default_body": {
+      "model": "gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "store": false
+    },
+    "endpoint": "https://api.openai.com/v1/responses",
+    "id": 21,
+    "is_active": true,
+    "is_system": true,
+    "model": "gpt-6.1-sol",
+    "organization_id": null,
+    "provider": "openai",
+    "updated_at": "2026-10-14T08:52:05.6477+00:00"
+  },
+  "using": {
+    "code": "app_campaign_diagnostics",
+    "created_at": "2026-10-14T08:52:05.6477+00:00",
+    "description": "Phân tích theo yêu cầu trong tab Chuẩn đoán; không tự gọi AI.",
+    "id": 45,
+    "is_active": true,
+    "is_system": true,
+    "model_id": 21,
+    "name": "Chuẩn đoán chiến dịch",
+    "organization_id": null,
+    "prompt_id": 47,
+    "request_options": {
+      "max_output_tokens": 8000,
+      "reasoning": {
+        "effort": "medium"
+      },
+      "store": false
+    },
+    "response_parser": "auto",
+    "response_path": null,
+    "timeout_ms": 120000,
+    "updated_at": "2026-10-14T08:52:05.6477+00:00"
+  },
+  "migration_sha256": "1b404c0f3b29a7b153e46e6d7d8e926e7802faf784854a8c5809585ed99b3ebc"
+}

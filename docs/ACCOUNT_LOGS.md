@@ -85,3 +85,8 @@ Chấp nhận thiếu log do mất mạng, timeout, DB từ chối kết nối, 
 - Đã thấy log `source=chat_api` mới ghi vào DB từ hoạt động hiện hữu; không tự tạo sự kiện/hành động Zalo để test.
 - Trước deploy: toàn bộ 1.139 test Chat và typecheck/build đạt; synthetic local 1.500/1.500 event ACK; Desktop/Server typecheck/build đạt. Hai migration đã apply trước đó, không chạy lại khi deploy.
 - Chưa phát hành installer Desktop/Zalo Server cũ. Chi tiết baseline rollback ở `akaAgentChatApi/docs/ACCOUNT_LOG_DEPLOYMENT.md`.
+
+
+## Đọc trong tab Chuẩn đoán (v390)
+
+Desktop đọc tối đa 30 log tài khoản qua `aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)`. RPC xác thực credential, staff/tenant và quyền sở hữu chiến dịch/tài khoản; không cấp SELECT trực tiếp cho anon/authenticated. Main lọc secret trước IPC/prompt/log AI. Dữ liệu này vẫn là best effort, chỉ giải thích sự cố, không tham gia quyết định chạy hoặc quota. Xem [triển khai v390](CAMPAIGN_DIAGNOSTICS_V390.md).

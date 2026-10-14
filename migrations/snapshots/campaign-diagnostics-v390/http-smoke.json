@@ -1,0 +1,47 @@
+[
+  {
+    "channel": "email",
+    "http": 200,
+    "seconds": 0.307,
+    "counts": {
+      "accountHistory": 30,
+      "campaignHistory": 30,
+      "results": 30,
+      "inputs": 30
+    },
+    "badCredentialHttp": 400,
+    "wrongCampaignHttp": 401,
+    "newestFirst": true,
+    "pendingFirst": true
+  },
+  {
+    "channel": "facebook",
+    "http": 200,
+    "seconds": 0.262,
+    "counts": {
+      "accountHistory": 30,
+      "campaignHistory": 3,
+      "results": 0,
+      "inputs": 30
+    },
+    "badCredentialHttp": 400,
+    "wrongCampaignHttp": 401,
+    "newestFirst": true,
+    "pendingFirst": true
+  },
+  {
+    "channel": "zalo",
+    "http": 200,
+    "seconds": 0.24,
+    "counts": {
+      "accountHistory": 13,
+      "campaignHistory": 0,
+      "results": 0,
+      "inputs": 30
+    },
+    "badCredentialHttp": 400,
+    "wrongCampaignHttp": 401,
+    "newestFirst": true,
+    "pendingFirst": true
+  }
+]

@@ -36,8 +36,8 @@ function renderTemplate(template: string, payload: Record<string, unknown>): str
     const text = toText(value)
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     output = output
-      .replace(new RegExp(`\\[${escapedKey}\\]`, 'gi'), text)
-      .replace(new RegExp(`\\{\\{\\s*${escapedKey}\\s*\\}\\}`, 'gi'), text)
+      .replace(new RegExp(`\\[${escapedKey}\\]`, 'gi'), () => text)
+      .replace(new RegExp(`\\{\\{\\s*${escapedKey}\\s*\\}\\}`, 'gi'), () => text)
   }
   return output
 }
@@ -284,7 +284,11 @@ async function createAiLogSafe(input: Parameters<typeof aiRepo.createAiLog>[0]):
 export async function callAiUsing(
   code: string,
   payload: Record<string, unknown> = {},
-  metadata: AiCallMetadata = {}
+  metadata: AiCallMetadata = {},
+  options: {
+    signal?: AbortSignal
+    expectedModel?: string
+  } = {}
 ): Promise<AiCallResult> {
   const usingCode = String(code || '').trim()
   const generatedAt = new Date().toISOString()
@@ -327,6 +331,8 @@ export async function callAiUsing(
     }
   }
 
+  options.signal?.throwIfAborted()
+  if (options.expectedModel && config.model.model !== options.expectedModel) throw new Error('Cấu hình model AI không khớp.')
   const provider = config.model.provider
   const model = config.model.model
   const endpoint = config.model.endpoint
@@ -378,10 +384,11 @@ export async function callAiUsing(
         authorization: `Bearer ${config.model.apiKey}`
       },
       body: JSON.stringify(request.body),
-      signal: AbortSignal.timeout(timeoutMs)
+      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
     })
     const durationMs = Date.now() - startedAt
     const responseText = await response.text()
+    options.signal?.throwIfAborted()
     let rawResponse: unknown = responseText
     try {
       rawResponse = responseText ? JSON.parse(responseText) : {}
@@ -480,6 +487,7 @@ export async function callAiUsing(
       rawResponse
     }
   } catch (err) {
+    options.signal?.throwIfAborted()
     const durationMs = Date.now() - startedAt
     const error = err instanceof Error ? err.message : String(err)
     const logId = await createAiLogSafe({

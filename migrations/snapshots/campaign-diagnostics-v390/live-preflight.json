@@ -1,0 +1,73 @@
+{
+  "account_columns": [
+    "id",
+    "name",
+    "flatform_type",
+    "login_status",
+    "status",
+    "is_active",
+    "is_delete",
+    "created_at",
+    "updated_at",
+    "sleep_between_actions",
+    "daily_limit",
+    "rate_limit_count",
+    "rate_limit_minutes",
+    "staff_id",
+    "organization_id",
+    "account_group_id",
+    "proxy_id",
+    "zalo_account_id",
+    "zalo_session",
+    "zalo_session_updated_at",
+    "zalo_session_last_verified_at",
+    "zalo_session_last_error",
+    "email_session",
+    "email_session_updated_at",
+    "email_session_last_verified_at",
+    "email_session_last_error",
+    "username",
+    "password",
+    "mobile_device_id",
+    "mobile_device_info",
+    "mobile_device_registered_at",
+    "mobile_device_last_seen_at",
+    "is_zalo_show_web",
+    "runtime_operation_claim_token",
+    "is_zalo_server",
+    "facebook_uid",
+    "facebook_login_managed",
+    "facebook_login_claim_generation",
+    "is_gom",
+    "facebook_random_run_enabled",
+    "facebook_random_run_config"
+  ],
+  "ai_constraints": [
+    "UNIQUE (code)",
+    "PRIMARY KEY (id)",
+    "UNIQUE (code)",
+    "PRIMARY KEY (id)",
+    "UNIQUE (code)",
+    "FOREIGN KEY (model_id) REFERENCES ai_model(id)",
+    "PRIMARY KEY (id)",
+    "FOREIGN KEY (prompt_id) REFERENCES ai_prompt(id)"
+  ],
+  "existing": null,
+  "helper": {
+    "acl": [
+      "postgres=X/postgres",
+      "service_role=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+    "md5": "5a9a503db72b965eb644739f5f60905d",
+    "owner": "postgres",
+    "security": true,
+    "volatility": "s"
+  },
+  "log_sample_shape": {
+    "lines": 2
+  }
+}

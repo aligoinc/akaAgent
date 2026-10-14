@@ -15,6 +15,7 @@ function load(file, imports = {}) {
   return mod.exports
 }
 const shared = load('src/shared/campaignPendingReason.ts')
+const randomChecks = load('src/shared/facebookRandomRunDiagnostics.ts', { './facebookRandomRun': load('src/shared/facebookRandomRun.ts') })
 const base = { id: 1, name: 'Pending', actionId: 'facebook_message_uid', accountId: 2,
   status: 'chờ xử lý', note: null, isDelete: false, schedule: '2026-10-12T02:00:00Z',
   scheduleType: 'daily', updatedAt: '2026-10-12T01:00:00.123456Z', extraSettings: {} }
@@ -22,15 +23,17 @@ const accountBase = { id: 2, name: 'Account', flatformType: 'facebook', status: 
   isActive: true, isDelete: false, isZaloServer: false, isZaloShowWeb: false }
 const user = { staffId: 9, organizationId: 1, entitlements: {}, useTestWorkflow: false }
 let campaign, account, hasClaim, hasOperation, input, busy, source, clock, authorized, access, readCount, changeOnFinish, trace, action
+let randomRun, randomChange, accountReads
 function reset() {
   campaign = { ...base }; account = { ...accountBase }; hasClaim = hasOperation = source = false
   input = 'due'; busy = null; clock = '2026-10-12T03:00:00Z'; authorized = true
   access = { isActive: true, timeAllowed: true }; readCount = 0; changeOnFinish = null; trace = []
-  action = { id: base.actionId, workflowId: 12 }
+  action = { id: base.actionId, name: 'Nhắn tin UID', workflowId: 12 }
+  randomRun = { enabled: false, config: null }; randomChange = null; accountReads = 0
 }
 const reads = {
   readPendingReasonCampaign: async () => { readCount++; return { campaign: readCount > 1 && changeOnFinish ? { ...campaign, ...changeOnFinish } : campaign, hasClaim } },
-  readPendingReasonAccount: async () => ({ account, hasOperation }),
+  readPendingReasonAccount: async () => ({ account, hasOperation, randomRun: ++accountReads > 1 && randomChange ? randomChange : randomRun }),
   readPendingReasonAction: async () => action,
   readBusyCampaign: async () => busy,
   readPendingInputAvailability: async () => input === 'future' ? { state: input, scheduledAt: '2026-10-12T04:00:00Z' } : { state: input },
@@ -40,6 +43,7 @@ const reads = {
 }
 const service = load('src/main/services/campaignPendingReasonService.ts', {
   '../../shared/campaignPendingReason': shared,
+  '../../shared/facebookRandomRunDiagnostics': randomChecks,
   '../data/currentUser': { requireCurrentUser: () => user, requireCurrentUserCredentials: () => ({ username: 'fixture', password: 'fixture' }) },
   '../data/repositories/runtimeClockRepository': { getDatabaseRuntimeClock: async () => ({ dbNow: clock }) },
   '../data/repositories/entitlementRepository': { canUseCampaignActionWithEntitlements: () => authorized,
@@ -130,6 +134,32 @@ async function main() {
   reset(); campaign.actionId = 'voice_call'; action = { id: 'voice_call' }; account.flatformType = 'sms'; assert.match((await inspect()).message, /điện thoại/)
   reset(); authorized = false; assert.match((await inspect()).message, /Chưa có quyền/)
   reset(); access.timeAllowed = false; assert.match((await inspect()).message, /nhân viên đã hết hạn/)
+  const configured = { version: 1, revision: 1, rules: [{ campaignActionId: base.actionId, unit: 'data', quantity: 3 }] }
+  reset(); randomRun.enabled = true
+  assert.equal((await inspect()).message, 'Tài khoản đang bật chạy ngẫu nhiên nhưng chưa có cấu hình. Vui lòng kiểm tra cài đặt chạy ngẫu nhiên.')
+  reset(); randomRun = { enabled: true, config: { ...configured, rules: [] } }
+  assert.match((await inspect()).message, /^Cấu hình chạy ngẫu nhiên chưa hợp lệ:/)
+  randomRun.config = { ...configured, rules: [{ campaignActionId: 'facebook_group_post', unit: 'data', quantity: 2 }] }
+  assert.equal((await inspect()).message, 'Loại chiến dịch “Nhắn tin UID” chưa có trong cấu hình chạy ngẫu nhiên của tài khoản.')
+  reset(); randomRun = { enabled: true, config: configured }; assert.match((await inspect()).message, /Chưa phát hiện điều kiện chặn/)
+  reset(); randomRun = { enabled: false, config: { broken: true } }; assert.match((await inspect()).message, /Chưa phát hiện điều kiện chặn/)
+  reset(); randomRun = null; await assert.rejects(inspect(), /Chưa đủ dữ liệu/)
+  reset(); randomRun = { enabled: true, config: null }; busy = 'Other campaign'
+  assert.equal((await inspect()).message, 'Tài khoản đang bận chạy chiến dịch “Other campaign”. Chiến dịch này đang chờ đến lượt.')
+  reset(); randomRun.enabled = true; input = 'paused'; assert.match((await inspect()).message, /data chưa xử lý đều đang tạm dừng/)
+  reset(); randomRun.enabled = true; campaign.schedule = '2026-10-12T04:00:00Z'; assert.match((await inspect()).message, /Chưa đến lịch chạy/)
+  reset(); randomRun.enabled = true; randomChange = { enabled: false, config: null }; assert.equal((await inspect()).message, null)
+  reset(); randomRun = { enabled: true, config: configured }; randomChange = { enabled: true, config: { ...configured, revision: 2 } }; assert.equal((await inspect()).message, null)
+  reset(); account.flatformType = 'email'; randomRun = undefined; assert.match((await inspect()).message, /Chưa phát hiện điều kiện chặn/)
+  for (const config of [[], {}, { ...configured, revision: -1 }, { ...configured, rules: [null] },
+    { ...configured, rules: [{ campaignActionId: 'zalo_message_phone', unit: 'data', quantity: 1 }] },
+    { ...configured, rules: [{ ...configured.rules[0], quantity: 0 }] },
+    { ...configured, rules: [{ campaignActionId: 'facebook_timeline_post', quantity: 2, unit: 'run' }] },
+    { ...configured, rules: Array(101).fill(configured.rules[0]) }]) {
+    assert.equal(randomChecks.checkFacebookRandomConfiguration({ enabled: true, config }, { id: base.actionId, name: 'Nhắn tin UID' }).state, 'invalid')
+  }
+  assert.equal(randomChecks.checkFacebookRandomConfiguration({ enabled: true, config: { ...configured, rules: Array(100).fill(configured.rules[0]) } }, { id: base.actionId, name: 'Nhắn tin UID' }).state, 'included')
+  console.log('PASS three random configuration notes, disabled/unknown, busy/schedule/data priority, changed configuration and invalid/duplicate rules')
   reset(); await assert.rejects(service.inspectPendingCampaign(1, runtime, AbortSignal.abort()))
   console.log('PASS read-only diagnosis: DB time/cutoff, no-data rules, mobile/server, busy/permissions, real-note and configuration races')
   await verifyIpcBoundary()

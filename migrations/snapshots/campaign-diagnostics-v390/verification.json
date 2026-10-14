@@ -1,0 +1,29 @@
+{
+  "checkedAt": "2026-10-14T09:04:31.191080+00:00",
+  "typecheckNode": "PASS",
+  "typecheckWeb": "PASS",
+  "diagnosticsSmoke": "PASS",
+  "pendingReasonSmoke": "PASS",
+  "pendingReasonChatQuotaSmoke": "PASS",
+  "diagnosticsUI": {
+    "status": "PASS",
+    "widths": [
+      850,
+      1024,
+      1600
+    ],
+    "limitsForm": true,
+    "inputForm": true,
+    "automaticAiCalls": false
+  },
+  "pendingReasonUI": "PASS",
+  "gitDiffCheck": "PASS",
+  "installerPackaged": false,
+  "installerReleased": false,
+  "additionalUnrelatedSmoke": {
+    "script": "facebook-message-waiting-limit-smoke.cjs",
+    "status": "HARNESS_ERROR",
+    "message": "managedTargetEffects is not defined"
+  },
+  "productionBuild": "PASS"
+}

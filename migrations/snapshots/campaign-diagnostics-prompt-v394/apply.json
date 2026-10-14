@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-14T13:23:17.841Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history_version": "20261014132316",
+  "name": "migration_v394_campaign_diagnostics_prompt",
+  "migration_sha256": "f75624c0dc8bf970cd910e6e6c394a0f0812441a0fb8b2718122d202097918a6",
+  "prompt_id": 47,
+  "applied": true
+}

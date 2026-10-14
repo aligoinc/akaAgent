@@ -1,0 +1,111 @@
+{
+  "at": "2026-10-14T13:35:24.420Z",
+  "model": "gpt-6.1-sol",
+  "requests": 7,
+  "productionLogWrites": 0,
+  "promptSource": "ai_prompt",
+  "promptId": 47,
+  "promptSha256": "06144a956f4bf78778308b23b24e20b4359b000f2440e816cc962d53d296f60e",
+  "receipts": [
+    {
+      "name": "direct_paused",
+      "summary": "Chiến dịch đang tạm dừng nên chưa xử lý 2 data đang chờ. Chưa đủ bằng chứng xác định nguyên nhân tạm dừng.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chiến dịch đang tạm dừng, chưa rõ nguyên nhân",
+          "severity": "info",
+          "problem": "Chiến dịch không nhận lượt thực thi mới dù còn 2 data trực tiếp đã đến giờ chạy.",
+          "cause": "Trạng thái tạm dừng đang ngăn chiến dịch nhận lượt mới; chưa xác định được điều gì dẫn đến trạng thái này.",
+          "explanation": "Lịch sử ghi nhận chiến dịch bắt đầu lúc 19:40:36 và tạm dừng lúc 19:40:45 ngày 14/10/2026, theo giờ Việt Nam. Nhật ký này không cho biết ai đã dừng hoặc có lỗi hay chính sách nào gây dừng.",
+          "solution": "Xem lịch sử chạy để kiểm tra sự kiện quanh thời điểm tạm dừng. Nếu muốn tiếp tục, hãy xác nhận lý do dừng và chủ động tiếp tục chiến dịch trên giao diện quản lý.",
+          "actions": [
+            "history"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "direct_paused_legacy",
+      "summary": "Chiến dịch đang tạm dừng nên chưa xử lý 2 data còn chờ. Chưa đủ bằng chứng xác định nguyên nhân tạm dừng.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chiến dịch đang tạm dừng, chưa rõ nguyên nhân",
+          "severity": "unknown",
+          "problem": "Chiến dịch không nhận lượt chạy mới dù còn 2 data chờ đã đến giờ chạy.",
+          "cause": "Trạng thái tạm dừng đang ngăn nhận lượt mới; chưa xác định được lý do chuyển sang trạng thái này.",
+          "explanation": "Nhật ký ghi nhận bắt đầu chiến dịch lúc 19:40:36 và tạm dừng lúc 19:40:45 ngày 14/10/2026, nhưng không nêu ai dừng hoặc sự kiện, lỗi cụ thể dẫn đến việc dừng.",
+          "solution": "Kiểm tra lịch sử chạy quanh thời điểm tạm dừng để tìm sự kiện hoặc thông báo liên quan. Nếu muốn tiếp tục, xác nhận lý do dừng và chủ động chuyển chiến dịch sang trạng thái chạy trong ứng dụng.",
+          "actions": [
+            "history"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "direct_pending",
+      "summary": "Chiến dịch đang chờ xử lý, có 2 data đã đến giờ chạy. Snapshot chưa ghi nhận vấn đề cần xử lý, nhưng chưa đủ bằng chứng xác định vì sao lượt chạy chưa bắt đầu.",
+      "issues": []
+    },
+    {
+      "name": "data_group_expired",
+      "summary": "Chiến dịch đang chờ xử lý nhưng đã hết hạn chạy với nguồn Nhóm data. Ngày kết thúc đang chặn lượt thực thi mới dù còn 2 data chờ.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Nhóm data đã hết hạn chạy",
+          "severity": "blocking",
+          "problem": "Chiến dịch không nhận lượt thực thi mới vì đã qua ngày kết thúc, dù còn 2 data chờ đã đến giờ chạy.",
+          "cause": "Ngày kết thúc là 23:59 ngày 12/10/2026; thời điểm kiểm tra theo giờ cơ sở dữ liệu là 19:42 ngày 14/10/2026, múi giờ Việt Nam.",
+          "explanation": "Với nguồn Nhóm data, ngày kết thúc là mốc dừng nhận lượt thực thi mới. Trạng thái đang chờ xử lý không có nghĩa chiến dịch vẫn được phép chạy sau mốc này.",
+          "solution": "Nếu muốn tiếp tục xử lý data còn chờ, mở lịch chạy để điều chỉnh ngày kết thúc và kiểm tra lịch phù hợp, sau đó lưu thay đổi. Nếu không cần tiếp tục, không cần gia hạn.",
+          "actions": [
+            "schedule"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "direct_future",
+      "summary": "Chiến dịch đang chờ đến lịch chạy lúc 22:00 ngày 14/10/2026 (giờ Việt Nam).",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chưa đến lịch chạy",
+          "severity": "info",
+          "problem": "Chiến dịch chưa chạy dù có 2 data trực tiếp đang chờ.",
+          "cause": "Lịch chạy tiếp theo là 22:00 ngày 14/10/2026, trong khi thời điểm kiểm tra theo giờ DB là 19:42 cùng ngày.",
+          "explanation": "Data đã đến giờ xử lý nhưng chiến dịch vẫn phải chờ đến lịch chạy đang được bộ chạy sử dụng. Đây là trạng thái chờ lịch, không phải lỗi.",
+          "solution": "Chờ đến 22:00 ngày 14/10/2026. Nếu muốn thay đổi thời điểm chạy, mở lịch chạy để điều chỉnh và lưu; đến lịch, chiến dịch vẫn cần đáp ứng các điều kiện thực thi khác.",
+          "actions": [
+            "schedule"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "healthy_running",
+      "summary": "Chiến dịch đang chạy và đã ghi nhận kết quả đăng bài thành công mới. Không phát hiện vấn đề cần xử lý trong snapshot này.",
+      "issues": []
+    },
+    {
+      "name": "quota_exhausted",
+      "summary": "Chiến dịch đang chờ xử lý vì đã dùng đủ 9/9 lượt đăng bài nhóm trong khung 65 phút.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Đã đạt giới hạn đăng bài nhóm trong 65 phút",
+          "severity": "blocking",
+          "problem": "Chiến dịch chưa thể xử lý tiếp 2 data đang chờ dù đã đến giờ chạy.",
+          "cause": "Tài khoản đã dùng đủ 9/9 lượt đăng bài nhóm trong khung giới hạn 65 phút.",
+          "explanation": "Giới hạn theo khung 65 phút đang chặn lượt thực thi mới. Snapshot chưa có thời điểm cụ thể có thể chạy lại; cần chờ các lượt đã dùng ra khỏi khung tính giới hạn.",
+          "solution": "Chờ khung giới hạn có lượt trống để chiến dịch được xét chạy tiếp. Nếu cần thay đổi cấu hình, mở mục giới hạn để xem và cân nhắc điều chỉnh; việc điều chỉnh không bảo đảm chiến dịch chạy ngay.",
+          "actions": [
+            "limits"
+          ]
+        }
+      ]
+    }
+  ]
+}

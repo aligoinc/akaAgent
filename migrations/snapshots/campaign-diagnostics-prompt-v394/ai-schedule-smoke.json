@@ -1,0 +1,183 @@
+{
+  "at": "2026-10-14T13:25:45.309Z",
+  "model": "gpt-6.1-sol",
+  "requests": 5,
+  "productionLogWrites": 0,
+  "promptSource": "ai_prompt",
+  "promptId": 47,
+  "promptSha256": "704bcdb72f999b26b503479d5352bc07b50752f52f8be469fe7972be36f35d35",
+  "receipts": [
+    {
+      "name": "direct_paused",
+      "summary": "Theo snapshot, chiến dịch đăng bài nhóm Facebook đang tạm dừng nên không nhận lượt chạy mới, dù còn 2 data chờ đã đến giờ. Chưa đủ bằng chứng xác định ai hoặc điều kiện nào đã gây tạm dừng. Kiểm tra lịch không ghi nhận điều kiện chặn; ngày kết thúc đã qua không tự chặn data trực tiếp còn chờ. Tài khoản đã đăng nhập, hành động đang bật và quota chưa hết. Đây là phân tích dữ liệu đã ghi nhận, không phải xác minh trực tiếp trạng thái hiện tại.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chiến dịch đang tạm dừng, chưa rõ nguyên nhân",
+          "severity": "info",
+          "problem": "Chiến dịch không nhận lượt chạy mới dù còn 2 data chờ đã đến giờ.",
+          "cause": "Trạng thái tạm dừng đang ngăn chiến dịch nhận lượt mới; chưa xác định được nguyên nhân dẫn đến trạng thái này.",
+          "explanation": "Nhật ký ghi nhận bắt đầu chiến dịch lúc 19:40:36 và tạm dừng lúc 19:40:45 ngày 14/10/2026. Các dòng này không cho biết ai dừng hoặc có lỗi, chính sách nào yêu cầu dừng. Mẫu kết quả trống cũng không đủ để kết luận có lỗi thực thi.",
+          "solution": "Xem lịch sử để tìm sự kiện hoặc thông báo cụ thể quanh thời điểm tạm dừng. Nếu muốn tiếp tục, hãy kiểm tra lý do dừng rồi chủ động chuyển chiến dịch sang chạy trong giao diện quản lý.",
+          "actions": [
+            "history",
+            "results"
+          ]
+        },
+        {
+          "id": "ai-1",
+          "title": "Lịch chạy không chặn data trực tiếp còn chờ",
+          "severity": "info",
+          "problem": "Ngày kết thúc sớm hơn lịch chạy đang sử dụng, nhưng điều này không phải lỗi cấu hình đối với data trực tiếp.",
+          "cause": "Với data trực tiếp, ngày kết thúc được xét khi chuyển kỳ và hoàn tất chiến dịch, không phải mốc tự chặn thực thi data còn chờ.",
+          "explanation": "Tại giờ kiểm tra từ cơ sở dữ liệu là 19:42:25 ngày 14/10/2026, múi giờ Việt Nam, lịch chạy là 17:37 ngày 14/10 và ngày kết thúc là 23:59:59 ngày 12/10. Kiểm tra lịch không ghi nhận điều kiện chặn. Điều này tương thích với trạng thái tạm dừng: đủ điều kiện về lịch không có nghĩa chiến dịch chắc chắn chạy. Nhật ký bắt đầu sau ngày kết thúc cũng không chứng minh bộ chạy sai.",
+          "solution": "Không cần sửa ngày kết thúc chỉ để xử lý việc tạm dừng hoặc chạy phần data trực tiếp còn chờ. Chỉ cân nhắc đổi ngày nếu cần mở rộng các kỳ chạy tiếp theo; trước khi tiếp tục vẫn cần xét trạng thái chiến dịch và các điều kiện thực thi khác.",
+          "actions": []
+        },
+        {
+          "id": "ai-2",
+          "title": "Chưa ghi nhận vướng mắc về tài khoản, quota hoặc data",
+          "severity": "ok",
+          "problem": "Snapshot chưa cho thấy các mục này là nguyên nhân ngăn chạy.",
+          "cause": "Tài khoản được ghi nhận hoạt động và đã đăng nhập; hành động đăng bài nhóm đang bật, còn quota và có data chờ.",
+          "explanation": "Mức sử dụng là 1/30 lượt trong ngày và 1/9 lượt trong khung 65 phút. Có 2 data chờ đã đến giờ. Nội dung có chữ và không yêu cầu media; chưa ghi nhận hạn chế hành động. Những thông tin này không thay thế điều kiện chiến dịch phải ở trạng thái chạy.",
+          "solution": "Chưa cần tăng giới hạn, bổ sung data hoặc đăng nhập lại chỉ dựa trên snapshot này. Ưu tiên làm rõ trạng thái tạm dừng.",
+          "actions": []
+        }
+      ]
+    },
+    {
+      "name": "direct_paused_legacy",
+      "summary": "Theo snapshot, chiến dịch Facebook đang tạm dừng dù còn 2 data chờ đã đến giờ chạy. Kiểm tra đã ghi nhận lịch không chặn, tài khoản đã đăng nhập, hành động được bật và chưa hết quota: 1/30 lượt trong ngày, 1/9 lượt trong 65 phút. Chưa có bằng chứng xác định nguyên nhân tạm dừng; không nên quy nguyên nhân cho ngày kết thúc.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chiến dịch đang tạm dừng",
+          "severity": "info",
+          "problem": "Chiến dịch không nhận lượt thực thi mới khi đang tạm dừng, dù còn 2 data chờ.",
+          "cause": "Trạng thái tạm dừng trực tiếp ngăn nhận lượt mới; chưa xác định được điều gì đã làm chiến dịch chuyển sang trạng thái này.",
+          "explanation": "Nhật ký ghi nhận bắt đầu lúc 19:40:36 và tạm dừng lúc 19:40:45 ngày 14/10/2026, nhưng không có sự kiện hoặc lỗi cho biết ai dừng hay vì sao dừng. Danh sách kết quả trống không chứng minh chiến dịch đã chạy thành công hoặc không gặp lỗi.",
+          "solution": "Xem lịch sử để tìm sự kiện hoặc thông báo liên quan đến lần tạm dừng. Nếu muốn tiếp tục, kiểm tra lại trạng thái và các điều kiện thực thi rồi chủ động chọn tiếp tục trong ứng dụng; chưa có căn cứ yêu cầu sửa lịch hoặc tăng giới hạn.",
+          "actions": [
+            "history",
+            "results"
+          ]
+        },
+        {
+          "id": "ai-1",
+          "title": "Ngày kết thúc không chặn data trực tiếp còn chờ",
+          "severity": "info",
+          "problem": "Ngày kết thúc được lưu sớm hơn lịch chạy, nhưng riêng điều này không phải lỗi cấu hình của chiến dịch dùng data trực tiếp.",
+          "cause": "Với data trực tiếp, ngày kết thúc được xét khi chuyển kỳ và hoàn tất chiến dịch, không phải mốc tự chặn thực thi data còn chờ.",
+          "explanation": "Theo giờ Việt Nam, ngày kết thúc được lưu là 23:59:59 ngày 12/10/2026, còn lịch chạy là 17:37 ngày 14/10/2026. Kết quả kiểm tra lịch đã ghi nhận không có điều kiện về lịch chặn lượt chạy; điều này tương thích với việc chiến dịch đang tạm dừng. Snapshot không có giờ DB để đối chiếu hiện tại, và việc thiếu kết quả kiểm tra lịch bổ sung không tự tạo thành lỗi cấu hình. Nhật ký bắt đầu sau ngày kết thúc cũng không chứng minh bộ chạy sai.",
+          "solution": "Không cần đổi ngày kết thúc chỉ để xử lý 2 data trực tiếp còn chờ. Chỉ cân nhắc đổi ngày nếu muốn mở rộng các kỳ chạy tiếp theo. Ưu tiên làm rõ lần tạm dừng trước khi quyết định tiếp tục.",
+          "actions": []
+        }
+      ]
+    },
+    {
+      "name": "direct_pending",
+      "summary": "Theo snapshot, chiến dịch Facebook đang chờ xử lý, có 2 data chờ đã đến giờ chạy và chưa ghi nhận điều kiện chặn từ lịch, tài khoản, đăng nhập, hành động hoặc quota. Chưa có lỗi cần sửa được xác định. Ngày kết thúc đã qua nhưng không tự chặn data trực tiếp còn chờ. Đây là đánh giá từ dữ liệu đã ghi nhận, không phải xác minh chiến dịch đang thực thi.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chưa xác định lý do chiến dịch vẫn chờ xử lý",
+          "severity": "unknown",
+          "problem": "Chiến dịch và tài khoản đang ở trạng thái chờ xử lý dù có 2 data đã đến giờ chạy.",
+          "cause": "Chưa đủ bằng chứng để xác định nguyên nhân chờ; snapshot không có nhật ký chiến dịch, nhật ký tài khoản hoặc kết quả chạy.",
+          "explanation": "Các kiểm tra ghi nhận tài khoản hoạt động, đã đăng nhập, hành động được bật và chưa có hạn chế. Quota mới dùng 1/30 lượt trong ngày và 1/9 lượt trong khung 65 phút. Những điều kiện này chưa chặn lượt chạy, nhưng không chứng minh bộ chạy đã nhận hoặc đang thực thi chiến dịch. Trạng thái chờ xử lý tự nó không phải lỗi.",
+          "solution": "Nếu chiến dịch tiếp tục chờ, xem lịch sử chạy để tìm sự kiện bộ chạy nhận chiến dịch hoặc thông báo lỗi cụ thể; xem kết quả để đối chiếu lượt thực thi mới. Chưa có căn cứ để yêu cầu sửa lịch, tăng giới hạn hay đăng nhập lại.",
+          "actions": [
+            "history",
+            "results"
+          ]
+        },
+        {
+          "id": "ai-1",
+          "title": "Ngày kết thúc không chặn data trực tiếp còn chờ",
+          "severity": "info",
+          "problem": "Ngày kết thúc là 12/10/2026 lúc 23:59:59, trước lịch chạy 14/10/2026 lúc 17:37, theo giờ Việt Nam.",
+          "cause": "Chiến dịch dùng data trực tiếp; ngày kết thúc được xét khi chuyển kỳ và hoàn tất chiến dịch, không phải hạn tự chặn thực thi data còn chờ.",
+          "explanation": "Tại thời điểm kiểm tra bằng giờ DB là 14/10/2026 lúc 19:42:25, ngày kết thúc đã qua. Tuy nhiên, với nguồn data này, kết quả kiểm tra lịch không chặn là phù hợp và không mâu thuẫn với trạng thái chờ xử lý. Không có căn cứ quy nguyên nhân chờ cho ngày kết thúc.",
+          "solution": "Không cần sửa ngày kết thúc chỉ để xử lý 2 data đang chờ. Chỉ cân nhắc đổi ngày nếu muốn mở rộng các kỳ chạy tiếp theo.",
+          "actions": []
+        }
+      ]
+    },
+    {
+      "name": "data_group_expired",
+      "summary": "Chiến dịch Facebook đang chờ xử lý nhưng đã qua ngày kết thúc của nguồn Nhóm data, nên không nhận lượt thực thi mới dù còn 2 data chờ đã đến giờ chạy. Theo snapshot, tài khoản đã đăng nhập, hành động được bật và chưa hết quota. Đây là phân tích dữ liệu đã ghi nhận, không phải xác minh trực tiếp trạng thái hiện tại.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Ngày kết thúc đang chặn lượt thực thi mới",
+          "severity": "blocking",
+          "problem": "Chiến dịch không nhận lượt thực thi mới dù còn 2 data chờ đã đến giờ chạy.",
+          "cause": "Chiến dịch sử dụng Nhóm data và đã qua ngày kết thúc: 23:59:59 ngày 12/10/2026, theo giờ Việt Nam.",
+          "explanation": "Thời điểm kiểm tra theo giờ cơ sở dữ liệu là 19:42:25 ngày 14/10/2026, theo múi giờ Asia/Ho_Chi_Minh. Với Nhóm data, ngày kết thúc là hạn dừng nhận lượt thực thi mới, kể cả khi còn data chờ. Trạng thái “chờ xử lý” không làm mất hiệu lực của hạn này; kết quả kiểm tra lịch ghi nhận đang chờ cập nhật trạng thái.",
+          "solution": "Nếu muốn tiếp tục xử lý 2 data còn chờ, mở lịch chạy để điều chỉnh ngày kết thúc và kiểm tra các kỳ chạy tiếp theo, rồi lưu nếu phù hợp. Việc đổi lịch không đồng nghĩa chiến dịch chắc chắn chạy ngay; các điều kiện khác vẫn cần được đáp ứng.",
+          "actions": [
+            "schedule"
+          ]
+        },
+        {
+          "id": "ai-1",
+          "title": "Chưa ghi nhận trở ngại khác trong snapshot",
+          "severity": "info",
+          "problem": "Chưa có bằng chứng cho thấy đăng nhập, quota, nội dung hoặc thiếu data là nguyên nhân chặn thêm.",
+          "cause": "Tài khoản được ghi nhận hoạt động và đã đăng nhập; hành động đăng bài nhóm đang bật; còn 2 data chờ. Mức sử dụng là 1/30 lượt trong ngày và 1/9 lượt trong khung 65 phút.",
+          "explanation": "Các kiểm tra đã ghi nhận không có hạn chế hành động, nội dung có chữ và không yêu cầu media. Tuy nhiên, lịch sử và kết quả trong snapshot đều trống, nên không đủ dữ liệu để kết luận về các lần chạy trước hoặc xác nhận bộ chạy sẽ thực thi ngay sau khi đổi lịch.",
+          "solution": "Chưa cần đổi giới hạn hay bổ sung data chỉ từ snapshot này. Sau khi xử lý hạn ngày kết thúc, nếu chiến dịch vẫn chờ, kiểm tra lịch sử và kết quả chạy để tìm sự kiện hoặc lỗi cụ thể.",
+          "actions": [
+            "history",
+            "results"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "direct_future",
+      "summary": "Chiến dịch đăng bài nhóm Facebook đang chờ lịch chạy lúc 22:00 ngày 14/10/2026. Tại thời điểm kiểm tra theo giờ cơ sở dữ liệu là 19:42:25 cùng ngày, chưa đến lịch chạy. Có 2 data trực tiếp đang chờ; ngày kết thúc đã qua không tự chặn các data này. Chưa ghi nhận vấn đề bắt buộc phải sửa về tài khoản, đăng nhập, hành động, nội dung hoặc quota. Đây là đánh giá từ snapshot, không phải xác minh trực tiếp hay bảo đảm chiến dịch sẽ chạy khi đến giờ.",
+      "issues": [
+        {
+          "id": "ai-0",
+          "title": "Chưa đến lịch chạy",
+          "severity": "info",
+          "problem": "Chiến dịch đang chờ xử lý, chưa đến lịch chạy lúc 22:00 ngày 14/10/2026.",
+          "cause": "Thời điểm kiểm tra theo giờ cơ sở dữ liệu là 19:42:25 ngày 14/10/2026, sớm hơn lịch chạy đang được sử dụng.",
+          "explanation": "Hai data đã sẵn sàng không có nghĩa chiến dịch được chạy ngay; vẫn phải đáp ứng lịch chạy. Lịch cấu hình ban đầu khác lịch đang được bộ chạy sử dụng không tự chứng minh cấu hình hỏng. Snapshot chưa ghi nhận giờ dừng hằng ngày hoặc điều kiện khác chặn bộ chạy, nhưng kết quả kiểm tra lịch không bảo đảm chiến dịch chắc chắn thực thi.",
+          "solution": "Chờ đến lịch đã ghi nhận. Nếu sau 22:00 chiến dịch vẫn chưa chạy, kiểm tra lịch sử và kết quả để xác định điều kiện chờ hoặc lỗi mới. Chỉ thay đổi lịch nếu muốn đổi thời gian thực thi.",
+          "actions": [
+            "history",
+            "results",
+            "schedule"
+          ]
+        },
+        {
+          "id": "ai-1",
+          "title": "Ngày kết thúc không tự chặn data trực tiếp còn chờ",
+          "severity": "info",
+          "problem": "Ngày kết thúc đã qua, nhưng đây không phải lỗi cấu hình hay nguyên nhân chặn 2 data trực tiếp còn chờ.",
+          "cause": "Chiến dịch sử dụng data trực tiếp; ngày kết thúc được xét khi chuyển kỳ và hoàn tất chiến dịch.",
+          "explanation": "Ngày kết thúc tương ứng 23:59:59 ngày 12/10/2026 theo giờ Việt Nam. Với nguồn data này, việc ngày kết thúc sớm hơn lịch chạy không tự ngăn thực thi data còn chờ và không mâu thuẫn với trạng thái đang chờ lịch.",
+          "solution": "Không cần sửa ngày kết thúc chỉ để xử lý các data còn chờ. Chỉ cân nhắc đổi ngày nếu muốn mở rộng các kỳ chạy tiếp theo.",
+          "actions": []
+        },
+        {
+          "id": "ai-2",
+          "title": "Chưa ghi nhận chặn từ quota và các điều kiện khác",
+          "severity": "ok",
+          "problem": "Snapshot chưa cho thấy vấn đề cần xử lý về tài khoản, đăng nhập, quyền thực hiện hành động, nội dung hoặc quota.",
+          "cause": "Tài khoản được ghi nhận hoạt động và đã đăng nhập; hành động đăng bài nhóm đang bật. Đã dùng 1/30 lượt trong ngày và 1/9 lượt trong khung 65 phút.",
+          "explanation": "Nội dung có chữ và không yêu cầu media; có 2 data chờ, không có hạn chế hành động được ghi nhận. Lịch sử và kết quả hiện trống nên chưa đủ bằng chứng đánh giá các lần chạy trước hoặc xác định lỗi thực thi.",
+          "solution": "Không cần bổ sung data hay tăng giới hạn dựa trên snapshot này. Theo dõi lịch sử và kết quả sau thời điểm chạy để xác nhận diễn biến thực tế.",
+          "actions": [
+            "history",
+            "results"
+          ]
+        }
+      ]
+    }
+  ],
+  "passed": true
+}
