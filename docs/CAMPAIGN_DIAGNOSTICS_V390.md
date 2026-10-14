@@ -21,6 +21,10 @@ Rà soát câu chữ ngày 14/10/2026: thống nhất **Chẩn đoán**, **Nội
 
 ## Nguồn và quy tắc
 
+Bổ sung ngày 15/10/2026: khi phiên **Làm giàu lịch sử Web** thực sự đang chạy trên đúng tài khoản Facebook, observer bận dùng chung trả **“Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.”**. Pending reason giữ ưu tiên note cũ; Chẩn đoán hiển thị tại **Bộ chạy chiến dịch**, không thêm box hoặc suy từ cờ bật/lịch/cấu hình của tác vụ phụ. Chiến dịch tạm dừng/hoàn thành/đang chạy vẫn giữ diễn giải trạng thái hiện có.
+
+Trạng thái và phiên bản chuyển phiên đọc trong RAM; kiểm tra lại trước trả note/snapshot, trước/sau AI, kể cả phiên bắt đầu rồi kết thúc trong lúc phân tích. Sự kiện IPC sẵn có xóa note tạm và bỏ phản hồi cũ của đúng tài khoản; Chẩn đoán đánh dấu kết quả kiểm tra/AI cũ và cho bấm kiểm tra lại. Không tự tải lại DB hoặc gọi AI khi có sự kiện, không sửa prompt/migration, thêm pool hay polling. Smoke pending reason, adapter scheduler, diagnostics và hai UI smoke bao phủ note, tài khoản khác, bật nhưng chưa chạy, kết thúc, phản hồi muộn và giữ trạng thái chiến dịch.
+
 `campaignDiagnosticsRepository` đọc qua singleton Supabase HTTP hiện có. `collectCampaignDiagnostics` dùng cùng observer `CampaignScheduler.getDiagnosticRuntime`, schedule/input reason, entitlement, browser admission và quota preflight như nút **Tại sao CD không chạy?**. Nút cũ giữ điều kiện hiển thị và hành vi ghi chú tạm.
 
 - Snapshot cấu hình chiến dịch chứa chữ, media và snapshot mẫu nội dung/biến trong `extraSettings`, quyền/gói tài khoản và nơi thực thi. Không gửi password/session hoặc token claim; chỉ ghi nhận boolean đang có ownership.

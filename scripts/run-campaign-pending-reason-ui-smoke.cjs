@@ -75,6 +75,22 @@ async function main() {
     await release(); await button(91).waitFor(); assert.equal(await note(91).count(),0)
     console.log('PASS random configuration invalidates cached and in-flight notes without new requests')
 
+    const webNote = 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
+    await page.evaluate(message => {window.pendingSmoke.state.message=message;window.pendingSmoke.web([{accountId:41,runId:'web-1'}])},webNote)
+    await button(91).dispatchEvent('click'); await release(); await waitNote(91,webNote)
+    const beforeWebChange=await checks()
+    await page.evaluate(()=>window.pendingSmoke.web([{accountId:41,runId:'web-1'},{accountId:99,runId:'other'}]))
+    await waitNote(91,webNote)
+    await page.evaluate(()=>window.pendingSmoke.web([{accountId:99,runId:'other'}]))
+    await button(91).waitFor();assert.equal(await checks(),beforeWebChange)
+    await page.evaluate(()=>window.pendingSmoke.web([{accountId:41,runId:'web-2'}]))
+    await button(91).dispatchEvent('click')
+    await page.evaluate(()=>window.pendingSmoke.web([]));await release();await button(91).waitFor()
+    assert.equal(await note(91).count(),0,'Late busy reply must not return after the web session ends')
+    await page.evaluate(()=>{window.pendingSmoke.state.message=null;window.pendingSmoke.web([{accountId:41,runId:'web-3'}]);window.pendingSmoke.web([])})
+    assert.equal(await checks(),beforeWebChange+1,'Transitions never request another pending reason')
+    console.log('PASS web-session end clears temporary notes and late replies, leaves other-account notes, no automatic request')
+
     await button(91).dispatchEvent('click'); await release(); await waitNote(91, 'Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc 11:00 12/10/2026.')
     await patch(91, { note: 'Note thật vừa xuất hiện.' }); await waitNote(91, 'Note thật vừa xuất hiện.')
     await patch(91, { note: null }); await button(91).waitFor()

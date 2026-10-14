@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { AlertTriangle, BrainCircuit, CalendarClock, CheckCircle2, ChevronDown, CircleHelp, Clock3, Database, FileText, History, Info, ListChecks, LogIn, Play, RefreshCw, Settings2, SlidersHorizontal, Upload, UserRound, XCircle } from 'lucide-react'
 import { DIAGNOSTICS_ACTIONS, formatDiagnosticTime, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult, type DiagnosticAction, type DiagnosticIssue, type DiagnosticQuota, type DiagnosticSeverity } from '../../../../shared/campaignDiagnostics'
 import { useAuthStore } from '../../stores/authStore'
+import { observeWebEnrichmentChanges } from '../../utils/observeWebEnrichmentChanges'
 import './campaignDiagnostics.css'
 
 const statusMeta = {
@@ -74,8 +75,8 @@ function Restrictions({ quotas }: { quotas: DiagnosticQuota[] }) {
     <tbody>{restricted.map(quota => <tr key={quota.code}><td>{quota.name}</td><td><span className="diagnostic-reopen"><CalendarClock size={13} aria-hidden="true" />{formatDiagnosticTime(quota.enableAt)}</span></td><td>{quota.reason || 'Chưa có thông báo nguyên nhân.'}</td></tr>)}</tbody>
   </table></div>
 }
-export default function CampaignDiagnosticsTab({ campaignId, active = true, revision = 0, accountConfigVersion = '', canResume, onResume, onAction }: {
-  campaignId: number; active?: boolean; revision?: number; accountConfigVersion?: string; canResume: boolean
+export default function CampaignDiagnosticsTab({ campaignId, accountId, active = true, revision = 0, accountConfigVersion = '', canResume, onResume, onAction }: {
+  campaignId: number; accountId: number; active?: boolean; revision?: number; accountConfigVersion?: string; canResume: boolean
   onResume: () => Promise<boolean>; onAction: (action: DiagnosticAction) => void
 }) {
   const staffId = useAuthStore(state => state.user?.staffId), organizationId = useAuthStore(state => state.user?.organizationId)
@@ -84,6 +85,7 @@ export default function CampaignDiagnosticsTab({ campaignId, active = true, revi
   const [ai, setAi] = useState<CampaignDiagnosticsAiResult | null>(null)
   const [busy, setBusy] = useState<'read' | 'ai' | 'resume' | null>(null), [error, setError] = useState('')
   const [stale, setStale] = useState(false)
+  const [runtimeStale, setRuntimeStale] = useState(false)
   const root = useRef<HTMLElement>(null)
   const activeRequest = useRef<string | null>(null), generation = useRef(0)
   const resuming = useRef(false)
@@ -103,11 +105,11 @@ export default function CampaignDiagnosticsTab({ campaignId, active = true, revi
       if (analyze && snapshot) {
         const result = await window.electronAPI.analyzeCampaignDiagnostics({ campaignId, snapshotId: snapshot.id, requestId })
         if (generation.current !== owner) return
-        setSnapshot(result.snapshot); setAi(result); setStale(false)
+        setSnapshot(result.snapshot); setAi(result); setStale(false); setRuntimeStale(false)
       } else {
         const result = await window.electronAPI.getCampaignDiagnostics({ campaignId, requestId })
         if (generation.current !== owner) return
-        setSnapshot(result)
+        setSnapshot(result); setRuntimeStale(false)
       }
     } catch {
       if (generation.current === owner) setError(analyze ? 'Chưa thể phân tích bằng AI. Bấm Chẩn đoán AI để thử lại. Kết quả kiểm tra hiện tại vẫn được giữ.' : 'Chưa tải được đầy đủ dữ liệu. Bấm Kiểm tra lại để thử lại.')
@@ -136,9 +138,14 @@ export default function CampaignDiagnosticsTab({ campaignId, active = true, revi
     }
   }), [])
   useEffect(() => {
-    setSnapshot(null); setAi(null)
+    setSnapshot(null); setAi(null); setRuntimeStale(false)
     return () => cancel()
   }, [campaignId, staffId, organizationId, authRevision])
+  useEffect(() => observeWebEnrichmentChanges(changed => {
+    if (changed && !changed.has(accountId)) return
+    if (activeRequest.current) { cancel(); setBusy(null) }
+    setStale(true); setRuntimeStale(true)
+  }), [accountId, staffId, organizationId, authRevision])
   useEffect(() => {
     if (active) root.current?.closest('.detail-dock-tab-content')?.scrollTo({ top: 0 })
     if (staffId && active) void run(false)
@@ -163,6 +170,7 @@ export default function CampaignDiagnosticsTab({ campaignId, active = true, revi
         </div>
       </div>
       {error && <div role="alert" className="diagnostic-notice diagnostic-warning"><AlertTriangle size={16} aria-hidden="true" /><span>{error}</span></div>}
+      {runtimeStale && <div role="status" className="diagnostic-notice diagnostic-warning"><Info size={16} aria-hidden="true" /><span>Trạng thái làm giàu lịch sử Web đã thay đổi. Bấm Kiểm tra lại để cập nhật kết quả.</span></div>}
       {(ai || busy === 'ai') && <section className="diagnostic-ai" aria-label="Phân tích AI">
         <div className="diagnostic-ai-header"><span className="diagnostic-ai-icon"><BrainCircuit size={18} aria-hidden="true" /></span>
           <div><h3>Trợ lý akaBiz <span className="diagnostic-ai-tag">Phân tích AI</span></h3>

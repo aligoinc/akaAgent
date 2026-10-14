@@ -24,12 +24,14 @@ const accountBase = { id: 2, name: 'Account', flatformType: 'facebook', status: 
 const user = { staffId: 9, organizationId: 1, entitlements: {}, useTestWorkflow: false }
 let campaign, account, hasClaim, hasOperation, input, busy, source, clock, authorized, access, readCount, changeOnFinish, trace, action
 let randomRun, randomChange, accountReads
+let runtimeBusy, runtimeBusyAfter
 function reset() {
   campaign = { ...base }; account = { ...accountBase }; hasClaim = hasOperation = source = false
   input = 'due'; busy = null; clock = '2026-10-12T03:00:00Z'; authorized = true
   access = { isActive: true, timeAllowed: true }; readCount = 0; changeOnFinish = null; trace = []
   action = { id: base.actionId, name: 'Nhắn tin UID', workflowId: 12 }
   randomRun = { enabled: false, config: null }; randomChange = null; accountReads = 0
+  runtimeBusy = null; runtimeBusyAfter = undefined
 }
 const reads = {
   readPendingReasonCampaign: async () => { readCount++; return { campaign: readCount > 1 && changeOnFinish ? { ...campaign, ...changeOnFinish } : campaign, hasClaim } },
@@ -53,7 +55,7 @@ const service = load('src/main/services/campaignPendingReasonService.ts', {
   '../data/repositories/campaignPendingReasonRepository': reads,
   '../data/repositories/campaignPendingChatLimitRepository': { readChatPendingLimitReason: () => { throw new Error('Unexpected akaChat path') } }
 })
-const runtime = { busyReason: () => null, readinessReason: () => null, configurationReason: () => null,
+const runtime = { busyReason: () => readCount > 1 && runtimeBusyAfter !== undefined ? runtimeBusyAfter : runtimeBusy, readinessReason: () => null, configurationReason: () => null,
   limitReason: async () => { trace.push('limit-read'); return null } }
 const inspect = () => service.inspectPendingCampaign(1, runtime, new AbortController().signal)
 
@@ -126,6 +128,12 @@ async function main() {
   reset(); busy = 'Other campaign'; assert.equal((await inspect()).message, 'Tài khoản đang bận chạy chiến dịch “Other campaign”. Chiến dịch này đang chờ đến lượt.'); assert.deepEqual(trace, [])
   reset(); hasOperation = true; assert.equal((await inspect()).message, 'Tài khoản đang bận, chưa thể chạy chiến dịch.')
   reset(); hasClaim = true; assert.match((await inspect()).message, /lượt chạy hoặc tác vụ trước/)
+  const webNote = 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
+  reset(); runtimeBusy = webNote; assert.equal((await inspect()).message, webNote); assert.deepEqual(trace, [])
+  reset(); runtimeBusy = webNote; runtimeBusyAfter = null; assert.equal((await inspect()).message, null)
+  reset(); runtimeBusyAfter = webNote; assert.equal((await inspect()).message, null)
+  reset(); runtimeBusy = webNote; campaign.schedule = '2026-10-12T04:00:00Z'; assert.match((await inspect()).message, /Chưa đến lịch chạy/)
+  console.log('PASS web-enrichment note, existing schedule priority and session changes before returning pending reasons')
   reset(); campaign.note = 'Real note'; assert.equal((await inspect()).message, null); assert.equal(readCount, 1)
   reset(); changeOnFinish = { note: 'New real note' }; assert.equal((await inspect()).message, null)
   reset(); changeOnFinish = { status: 'đang chạy' }; assert.equal((await inspect()).message, null)

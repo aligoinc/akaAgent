@@ -80,6 +80,7 @@ export async function inspectPendingCampaign(
   const { campaign } = observed
   const version = campaignPendingReasonVersion(campaign)
   let randomVersion: string | undefined
+  let busyObservation: { account: AutoAccount; reason: string | null } | undefined
   const finish = async (message: string): Promise<CampaignPendingReasonResult> => {
     signal.throwIfAborted()
     const latest = await reads.readPendingReasonCampaign(campaignId, signal)
@@ -89,6 +90,7 @@ export async function inspectPendingCampaign(
       signal.throwIfAborted()
       if (!latestAccount || JSON.stringify(latestAccount.randomRun) !== randomVersion) return result(null)
     }
+    if (busyObservation && runtime.busyReason(busyObservation.account) !== busyObservation.reason) return result(null)
     return result(message, version)
   }
 
@@ -117,6 +119,7 @@ export async function inspectPendingCampaign(
   if (otherCampaign) return finish(`Tài khoản đang bận chạy chiến dịch “${otherCampaign}”. Chiến dịch này đang chờ đến lượt.`)
   if (observed.hasClaim) return finish('Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.')
   const busy = runtime.busyReason(account)
+  busyObservation = { account, reason: busy }
   if (busy) return finish(busy)
   if (account.status === 'tạm dừng') return finish('Tài khoản đang tạm dừng. Vui lòng tiếp tục tài khoản để chạy chiến dịch.')
   if (account.status !== 'chờ xử lý' || accountState.hasOperation) return finish('Tài khoản đang bận, chưa thể chạy chiến dịch.')

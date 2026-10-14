@@ -8,7 +8,8 @@ import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
 import { campaignPendingReasonVersion } from '../src/shared/campaignPendingReason'
 import '../src/renderer/src/styles/global.css'
 
-const state: any = { calls: [], errors: [], pending: [], reject: false }
+const state: any = { calls: [], errors: [], pending: [], reject: false, webStates: [], message: null }
+const webListeners = new Set<(states: any[]) => void>()
 const now = new Date().toISOString()
 let campaigns: any[] = [91, 92, 93, 94].map(id => ({ id, name: `Chiến dịch ${id}`, actionId: 'facebook_message_uid',
   accountId: 41, accountName: 'Tài khoản kiểm thử', staffId: 41, organizationId: 1, schedule: now,
@@ -17,6 +18,8 @@ let campaigns: any[] = [91, 92, 93, 94].map(id => ({ id, name: `Chiến dịch $
 const user = { staffId: 41, organizationId: 1, entitlements: normalizeEntitlements({ facebookCore: true }),
   zaloAccountCapabilities: { qr: false, web: false, server: false } } as any
 const handlers: Record<string, any> = {
+  webEnrichment: { state: async () => state.webStates,
+    onState: (callback: (states: any[]) => void) => { webListeners.add(callback); return () => webListeners.delete(callback) } },
   platform: 'darwin', listCampaignDrafts: () => ({ items: [], total: 0 }),
   listAutomations: () => ({ items: [], total: 0, pageSize: 100 }),
   listAutomationExecutions: () => ({ items: [], total: 0, pageSize: 100 }),
@@ -30,8 +33,9 @@ const handlers: Record<string, any> = {
   checkCampaignPendingReason: (id: number) => {
     if (state.reject) throw new Error('Private transport failure must not reach the note')
     const version = campaignPendingReasonVersion(campaigns.find(row => row.id === id))
+    const message = state.message || 'Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc 11:00 12/10/2026.'
     return new Promise(resolve => state.pending.push(() => resolve({ campaignId: id, version,
-      message: 'Chưa có data đến giờ chạy. Data gần nhất được hẹn lúc 11:00 12/10/2026.' })))
+      message })))
   }
 }
 window.electronAPI = new Proxy(handlers, { get(target, key: string) {
@@ -52,6 +56,7 @@ useCampaignStore.setState({ campaigns, campaignConfigs: Object.fromEntries(campa
   loadAccounts: async () => {}, loadAccountGroups: async () => {}, loadCampaignActions: async () => {}
 })
 ;(window as any).pendingSmoke = { state, store: useCampaignStore,
+  web: (states: any[]) => { state.webStates = states; for (const listener of webListeners) listener(states) },
   release: () => state.pending.shift()?.(),
   patch: (id: number, patch: any) => {
     campaigns = campaigns.map(row => row.id === id ? { ...row, ...patch } : row)

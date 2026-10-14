@@ -3,6 +3,7 @@ import type { CampaignListItem } from '../../../shared/types'
 import { CAMPAIGN_PENDING_REASON_TTL_MS, CAMPAIGN_PENDING_REASON_UNAVAILABLE, canCheckCampaignPendingReason, campaignPendingReasonVersion } from '../../../shared/campaignPendingReason'
 import { useAuthStore } from '../stores/authStore'
 import { useCampaignStore } from '../stores/campaignStore'
+import { observeWebEnrichmentChanges } from '../utils/observeWebEnrichmentChanges'
 
 interface TemporaryReason { accountId: number; message: string; version: string; expiresAt: number }
 interface PendingRequest { id: number; accountId: number; version: string; scope: string | null }
@@ -44,6 +45,12 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
     const unsubscribe = useAuthStore.subscribe((next, previous) => {
       if (authScope(next.user) !== authScope(previous.user)) clear()
     })
+    const invalidateAccounts = (changed: ReadonlySet<number> | null) => {
+      let invalidated = false
+      for (const [id, entry] of Array.from(entries.current)) if (!changed || changed.has(entry.accountId)) { entries.current.delete(id); invalidated = true }
+      if (request.current && (!changed || changed.has(request.current.accountId))) { request.current = null; invalidated = true }
+      if (invalidated) { armExpiry(); render() }
+    }
     const unsubscribeAccounts = useCampaignStore.subscribe((next, previous) => {
       if (next.accounts === previous.accounts) return
       const before = new Map(previous.accounts.map(account => [account.id, account]))
@@ -55,11 +62,9 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
         before.delete(account.id)
       }
       for (const account of Array.from(before.values())) if (account.flatformType === 'facebook') changed.add(account.id)
-      let invalidated = false
-      for (const [id, entry] of Array.from(entries.current)) if (changed.has(entry.accountId)) { entries.current.delete(id); invalidated = true }
-      if (request.current && changed.has(request.current.accountId)) { request.current = null; invalidated = true }
-      if (invalidated) { armExpiry(); render() }
+      invalidateAccounts(changed)
     })
+    const unsubscribeBrowsing = observeWebEnrichmentChanges(invalidateAccounts)
     const onVisible = () => { if (document.visibilityState === 'visible') expire() }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', expire)
@@ -68,6 +73,7 @@ export function useCampaignPendingReasons(campaigns: CampaignListItem[], scope: 
       clear()
       unsubscribe()
       unsubscribeAccounts()
+      unsubscribeBrowsing()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', expire)
     }
