@@ -1,0 +1,96 @@
+{
+  "at": "2026-10-14T17:34:26.824Z",
+  "passed": true,
+  "model": "gpt-6.1-sol",
+  "migration_sha256": "10773b15a31bb2687a805313c8a316df3f4a1f64cdd58b4df2f323d76d098fad",
+  "results": [
+    {
+      "name": "limits-repeat-user-report",
+      "attempt": 1,
+      "description": "Mỗi ngày gửi tối đa 100 tin, mỗi giờ gửi không quá 15 tin",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 100,
+              "rateLimitCount": 15,
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "limits-repeat-user-report",
+      "attempt": 2,
+      "description": "Mỗi ngày gửi tối đa 100 tin, mỗi giờ gửi không quá 15 tin",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 100,
+              "rateLimitCount": 15,
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "limits-unclear",
+      "attempt": 1,
+      "description": "Đặt một trong hai loại nhắn tin thành 40 tin mỗi ngày, tôi chưa chọn loại nào.",
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Chưa hiểu yêu cầu của bạn. Vui lòng mô tả rõ hơn giới hạn muốn đặt. Bạn muốn đặt 40 tin mỗi ngày cho nhắn tin bạn bè hay nhắn tin người lạ?"
+      },
+      "passed": true
+    },
+    {
+      "name": "schedule-repeat",
+      "attempt": 1,
+      "description": "Gửi vào thứ 2, 4, 6 hàng tuần lúc 8h.",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:00",
+          "scheduleWeekDays": "2,4,6"
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "schedule-repeat",
+      "attempt": 2,
+      "description": "Gửi vào thứ 2, 4, 6 hàng tuần lúc 8h.",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:00",
+          "scheduleWeekDays": "2,4,6"
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "schedule-unclear",
+      "attempt": 1,
+      "description": "Chỉ chạy lúc 8h sáng hoặc 8h tối, tôi chưa chọn giờ nào.",
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Chưa hiểu yêu cầu của bạn. Vui lòng mô tả rõ hơn lịch muốn chạy. Bạn muốn chạy lúc 08:00 sáng hay 20:00 tối?"
+      },
+      "passed": true
+    }
+  ]
+}

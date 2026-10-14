@@ -1,0 +1,34 @@
+[
+  {
+    "name": "migration_v399_campaign_schedule_ai",
+    "version": "20261014160107"
+  },
+  {
+    "name": "migration_v398_facebook_web_enrichment",
+    "version": "20261014155154"
+  },
+  {
+    "name": "migration_v397_campaign_shared_schedule",
+    "version": "20261014140159"
+  },
+  {
+    "name": "migration_v395_facebook_random_run_schedule",
+    "version": "20261014133356"
+  },
+  {
+    "name": "migration_v395_campaign_diagnostics_focus",
+    "version": "20261014133137"
+  },
+  {
+    "name": "migration_v394_campaign_diagnostics_prompt",
+    "version": "20261014132316"
+  },
+  {
+    "name": "migration_v393_facebook_random_run_boundaries",
+    "version": "20261014100217"
+  },
+  {
+    "name": "migration_v392_restore_facebook_random_run_lifecycle",
+    "version": "20261014094452"
+  }
+]

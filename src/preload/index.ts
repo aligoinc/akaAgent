@@ -1,4 +1,6 @@
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
+import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
+import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
 import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomReadQuery } from '../shared/facebookRandomRun'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
@@ -286,6 +288,10 @@ const electronAPI = {
   getCampaignDiagnostics: (request: CampaignDiagnosticsRequest): Promise<CampaignDiagnosticsSnapshot> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.read, request),
   analyzeCampaignDiagnostics: (request: CampaignDiagnosticsAiRequest): Promise<CampaignDiagnosticsAiResult> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.ai, request),
   cancelCampaignDiagnostics: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.cancel, requestId),
+  generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
+  cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
+  generateCampaignLimitsAi: (request: LimitsAiRequest): Promise<LimitsAiResult> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.generate, request),
+  cancelCampaignLimitsAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.cancel, requestId),
   checkCampaignPendingReason: (id: number): Promise<CampaignPendingReasonResult> =>
     ipcRenderer.invoke(CAMPAIGN_PENDING_REASON_IPC, id),
 

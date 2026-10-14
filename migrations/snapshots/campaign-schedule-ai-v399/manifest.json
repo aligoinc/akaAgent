@@ -1,0 +1,16 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history_version": "20261014160107",
+  "migration": "migration_v399_campaign_schedule_ai",
+  "files_sha256": {
+    "migrations/migration_v399_campaign_schedule_ai.sql": "2c8e893078eb70948205830f4db647e876e6bce6a736f637af49d127a91067d3",
+    "migrations/tests/migration_v399_campaign_schedule_ai_disable.sql": "cfa43bf43fc8b9622abc479f6f4e9eab3b85c3c9eba258d5ecdb0d5a2a74b3e6",
+    "migrations/snapshots/campaign-schedule-ai-v399/after.json": "622265e593970c1de45ebf37a10b095b9560958b3e1a0a7d967cb65c24aa1576",
+    "migrations/snapshots/campaign-schedule-ai-v399/api.json": "3c92067ad82af0c7b54dcffae46ea9b0b7dca0b93b4643ce2c93f96f877447ab",
+    "migrations/snapshots/campaign-schedule-ai-v399/apply.json": "af908151a159756bb8733296ea622906c430f5cfd2d06961d623e5fe71129905",
+    "migrations/snapshots/campaign-schedule-ai-v399/before.json": "6f385c8cbe70beae78b315d4c819020a304001feeadbb316e66f49a06264461a",
+    "migrations/snapshots/campaign-schedule-ai-v399/live-ai.json": "b36adcc5543fe53ee3717979344008f49b88c7f818fff3d947d70181c7ba6c74",
+    "migrations/snapshots/campaign-schedule-ai-v399/rollback-smoke.json": "318353d795d48f8c13d759115b83a492cb52243ff4e033ffc567f13a2a021547",
+    "migrations/snapshots/campaign-schedule-ai-v399/smoke.json": "f64b76279dfdbf832c268c4fd47ee173d4096b722c4bb8c67d431de5b686caec"
+  }
+}

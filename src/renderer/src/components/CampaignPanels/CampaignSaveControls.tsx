@@ -21,6 +21,7 @@ export const waitForNextBrowserPaint = (): Promise<void> => (
 )
 
 interface CampaignSaveControlsProps {
+  saveDisabled?: boolean
   starting: boolean
   saving: boolean
   ref: Ref<CampaignSaveControlsHandle>
@@ -31,6 +32,7 @@ interface CampaignSaveControlsProps {
 }
 
 export default function CampaignSaveControls({
+  saveDisabled = false,
   starting,
   saving,
   ref,
@@ -51,7 +53,7 @@ export default function CampaignSaveControls({
       : null
 
   const startSave = async (): Promise<void> => {
-    if (saveInFlightRef.current || saving) return
+    if (saveInFlightRef.current || saving || saveDisabled) return
 
     saveInFlightRef.current = true
     setProgress(null)
@@ -105,7 +107,7 @@ export default function CampaignSaveControls({
         type="button"
         className="btn btn-primary"
         onClick={() => { void startSave() }}
-        disabled={busy}
+        disabled={busy || saveDisabled}
         aria-busy={busy}
       >
         {busy ? (

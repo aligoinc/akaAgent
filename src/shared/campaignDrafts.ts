@@ -1,12 +1,24 @@
 import type { CampaignConfig } from './types'
+import { formatScheduleVietnam, getScheduleAiCapabilities, isScheduleDate, scheduleVietnamToIso } from './campaignScheduleAi'
+import { parseDailyTimeSlots } from './campaignTimeSlots'
 
 export const CAMPAIGN_DRAFT_VERSION = 1
+export const CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 /** Business state only. New form fields are captured without a DB column migration. */
 export interface CampaignDraftPayload {
   version: number
   values: Record<string, unknown>
+  /** Missing on legacy drafts, whose start date/time was interpreted in the host timezone. */
+  scheduleTimeZone?: typeof CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE
+  /** Exact legacy instants retained only while their corresponding controls are unchanged. */
+  preservedSchedule?: CampaignDraftPreservedSchedule
   baseCampaign?: Partial<CampaignConfig>
   cloneSourceCampaignId?: number
+}
+
+export interface CampaignDraftPreservedSchedule {
+  multiSlotStart?: { iso: string; schedule: string; actionId: string; slots: string[] }
+  end?: { iso: string; date: string }
 }
 
 export interface CampaignDraftSummary {
@@ -46,6 +58,75 @@ export interface CompleteCampaignDraftRequest {
 
 export function isDraftRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function activeDraftTimeSlots(form: Record<string, unknown>): string[] {
+  const cap = getScheduleAiCapabilities({ actionId: String(form.actionId || ''),
+    dataTargetSourceMode: form.dataTargetSourceMode === 'data_group' ? 'data_group' : 'direct' })
+  if (!cap.multiSlots || form.multiDailyTimeSlotsEnabled !== true) return []
+  const parsed = parseDailyTimeSlots(String(form.multiDailyTimeSlots || ''))
+  return parsed.invalidItems.length ? [] : parsed.slots
+}
+
+/** A date control cannot represent an existing cutoff that is not Vietnam end-of-day. */
+export function preserveCampaignEndDate(value?: string | null): CampaignDraftPreservedSchedule['end'] {
+  if (!value) return undefined
+  const parsed = new Date(value)
+  if (!Number.isFinite(parsed.getTime())) return undefined
+  const iso = parsed.toISOString(), date = formatScheduleVietnam(parsed).slice(0, 10)
+  return iso === scheduleVietnamToIso(`${date}T23:59:59`) ? undefined : { iso, date }
+}
+
+export function preserveCampaignSchedule(
+  form: Record<string, unknown>, startIso?: string | null, endIso?: string | null
+): CampaignDraftPreservedSchedule | undefined {
+  const slots = activeDraftTimeSlots(form)
+  const start = startIso ? new Date(startIso) : undefined
+  const schedule = start ? formatScheduleVietnam(start) : ''
+  const multiSlotStart = schedule && form.schedule === schedule && slots.length
+    && start!.toISOString() !== scheduleVietnamToIso(`${schedule.split('T')[0]}T${slots[0]}`)
+    ? { iso: start!.toISOString(), schedule, actionId: String(form.actionId), slots } : undefined
+  const end = preserveCampaignEndDate(endIso)
+  return multiSlotStart || end ? { multiSlotStart, end } : undefined
+}
+
+/** Drop obsolete overrides when dates, times, slots, action or source are edited. */
+export function getPreservedCampaignDraftSchedule(
+  saved: CampaignDraftPreservedSchedule | undefined,
+  form: Record<string, unknown>
+): CampaignDraftPreservedSchedule | undefined {
+  if (!saved) return undefined
+  const start = saved.multiSlotStart
+  const slots = activeDraftTimeSlots(form)
+  const multiSlotStart = start && slots.length > 0 && start.actionId === form.actionId
+    && start.schedule === form.schedule && start.slots.join(',') === slots.join(',') ? start : undefined
+  const end = saved.end?.date === form.scheduleEndDate ? saved.end : undefined
+  return multiSlotStart || end ? { multiSlotStart, end } : undefined
+}
+
+/** Normalize once at form initialization; never mutate or automatically persist the saved draft. */
+export function restoreCampaignDraftSchedule(payload: CampaignDraftPayload | undefined): CampaignDraftPayload | undefined {
+  if (!payload || payload.scheduleTimeZone === CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE) return payload
+  const form = payload.values.formData
+  if (!isDraftRecord(form) || typeof form.schedule !== 'string' || !form.schedule.trim()) return payload
+  // Match the old form's conversion before rendering the same instant in Vietnam time.
+  // Legacy drafts did not record their originating timezone; retain the existing host-local interpretation.
+  const slots = activeDraftTimeSlots(form)
+  // The old Save path replaced the displayed time with the first slot before converting to ISO.
+  const legacyStart = slots.length ? `${form.schedule.split('T')[0]}T${slots[0]}` : form.schedule
+  const startDate = new Date(legacyStart)
+  const schedule = formatScheduleVietnam(startDate)
+  if (!schedule) return payload
+  const oldEnd = typeof form.scheduleEndDate === 'string' && isScheduleDate(form.scheduleEndDate)
+    ? new Date(`${form.scheduleEndDate}T23:59:59`) : undefined
+  const restored = { ...form, schedule,
+    ...(oldEnd ? { scheduleEndDate: formatScheduleVietnam(oldEnd).slice(0, 10) } : {}) }
+  return {
+    ...payload,
+    scheduleTimeZone: CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE,
+    preservedSchedule: preserveCampaignSchedule(restored, startDate.toISOString(), oldEnd?.toISOString()),
+    values: { ...payload.values, formData: restored }
+  }
 }
 
 /** Merge missing nested defaults; arrays and explicit false/0/empty/null are preserved. */

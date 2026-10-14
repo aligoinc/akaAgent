@@ -1,0 +1,64 @@
+{
+  "at": "2026-10-14T17:23:17.792Z",
+  "passed": true,
+  "model": "gpt-6.1-sol",
+  "migration_sha256": "b27de91543f411120ece5311c717a8a9e781c1f12d5e58fc32a811c5cf81f048",
+  "results": [
+    {
+      "name": "daily-hour-rest",
+      "description": "Mỗi ngày gửi tối đa năm mươi tin, mỗi giờ mười tin, nghỉ nửa phút giữa hai lần gửi.",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 50,
+              "rateLimitCount": 10,
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "partial-day-preserves-window",
+      "description": "Chỉ tăng giới hạn ngày lên 80, các mục khác giữ nguyên.",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 80
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "continue-other-actions",
+      "description": "Nếu một hành động chạm giới hạn thì vẫn tiếp tục các hành động còn lại.",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [],
+          "continueWhenActionLimitReached": true
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "clarify-action",
+      "description": "Đặt một trong hai loại nhắn tin thành 40 tin mỗi ngày, tôi chưa chọn loại nào.",
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Chưa hiểu yêu cầu của bạn. Vui lòng mô tả rõ hơn giới hạn muốn đặt. Bạn muốn đặt 40 tin mỗi ngày cho nhắn tin bạn bè hay nhắn tin người lạ?"
+      },
+      "passed": true
+    }
+  ]
+}

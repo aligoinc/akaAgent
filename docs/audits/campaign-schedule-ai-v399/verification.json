@@ -1,0 +1,59 @@
+{
+  "at": "2026-10-14T16:04:04.319466+00:00",
+  "shared_ipc_smoke": "passed",
+  "real_form_smoke": "passed",
+  "live_ai_cases": 6,
+  "live_ai_logs_success": 6,
+  "node_typecheck": "passed",
+  "web_typecheck": "passed",
+  "production_build": "passed",
+  "packaged": false,
+  "released": false,
+  "draft_timezone_fix": {
+    "legacy_and_tagged_draft_smoke": "passed",
+    "real_form_draft_save_reopen_create": "passed",
+    "timezones": ["UTC", "Asia/Ho_Chi_Minh", "America/Los_Angeles"],
+    "ai_ipc_regression": "passed",
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "database_migration": false
+  },
+  "multi_slot_and_cutoff_preservation_fix": {
+    "real_form_timezone_cases": 15,
+    "legacy_multislot_weekly_monthly_roundtrip": "passed",
+    "direct_create_edits_clear_and_obsolete_overrides": "passed",
+    "reopen_created_campaign": "passed",
+    "ai_summary_and_retained_cutoff": "passed",
+    "draft_smoke_dst_and_date_boundaries": "passed",
+    "ai_ipc_regression": "passed",
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "database_migration": false
+  },
+  "advanced_slot_recurrence_anchor_fix": {
+    "real_form_unchanged_daily_weekly_monthly": "passed",
+    "repository_next_schedule_keeps_first_slot": "passed",
+    "explicit_date_slot_and_single_hour_edits": "passed",
+    "unrelated_ai_fill_preserves_both_instants": "passed",
+    "draft_and_ai_ipc_regression": "passed",
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "database_migration": false
+  },
+  "popover_submit_and_close": {
+    "enter_submits_without_newline": "passed",
+    "empty_ime_repeat_and_duplicate_guards": "passed",
+    "success_closes_popover_without_preview_or_autosave": "passed",
+    "focus_returns_without_reopening": "passed",
+    "errors_retain_prompt_and_unlock_form": "passed",
+    "draft_and_recurrence_regression": "passed",
+    "shared_ipc_smoke": "passed",
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "database_migration": false
+  }
+}

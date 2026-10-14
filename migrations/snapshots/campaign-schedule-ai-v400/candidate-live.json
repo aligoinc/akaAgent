@@ -1,0 +1,319 @@
+{
+  "at": "2026-10-14T17:05:23.007Z",
+  "model": "gpt-6.1-sol",
+  "migration_sha256": "c1f53c43e2fa9f67e3ed3253a1215c6acd55409f40ffa16e2e8dd6fa164a677e",
+  "passed": true,
+  "results": [
+    {
+      "name": "noon-start-middle-month",
+      "description": "chạy vào buổi trưa, vào đầu và giữa tháng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "monthly",
+          "startTime": "12:00",
+          "scheduleDays": "1,15"
+        }
+      },
+      "logId": 640674,
+      "passed": true
+    },
+    {
+      "name": "noon-explicit-time",
+      "description": "chạy vào 11h30 trưa đầu tháng và giữa tháng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "monthly",
+          "startTime": "11:30",
+          "scheduleDays": "1,15"
+        }
+      },
+      "logId": 640676,
+      "passed": true
+    },
+    {
+      "name": "today-replaces-monthly",
+      "description": "chạy vào 7h30 sáng hôm nay",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "daily",
+          "startDate": "2026-10-14",
+          "startTime": "07:30"
+        }
+      },
+      "logId": 640678,
+      "passed": true
+    },
+    {
+      "name": "hour-only-keeps-monthly",
+      "description": "chỉ đổi giờ chạy thành 7h30 sáng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startTime": "07:30"
+        }
+      },
+      "logId": 640679,
+      "passed": true
+    },
+    {
+      "name": "start-only-keeps-monthly",
+      "description": "đổi ngày bắt đầu sang hôm nay",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startDate": "2026-10-14"
+        }
+      },
+      "logId": 640681,
+      "passed": true
+    },
+    {
+      "name": "explicit-keep-cycle",
+      "description": "giữ nguyên lịch hàng tháng, bắt đầu từ ngày mai lúc 9h",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startDate": "2026-10-15",
+          "startTime": "09:00"
+        }
+      },
+      "logId": 640686,
+      "passed": true
+    },
+    {
+      "name": "tomorrow-year-boundary",
+      "description": "ngày mai lúc 9h",
+      "currentDateTime": "2026-12-31T23:58",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "daily",
+          "startDate": "2027-01-01",
+          "startTime": "09:00"
+        }
+      },
+      "logId": 640688,
+      "passed": true
+    },
+    {
+      "name": "next-month-noon",
+      "description": "chạy trưa đầu tháng sau",
+      "currentDateTime": "2026-12-31T23:58",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "daily",
+          "startDate": "2027-01-01",
+          "startTime": "12:00"
+        }
+      },
+      "logId": 640690,
+      "passed": true
+    },
+    {
+      "name": "weekly-no-refresh",
+      "description": "gửi vào thứ 2,4,6 hàng tuần lúc 8h",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:00",
+          "scheduleWeekDays": "2,4,6"
+        }
+      },
+      "logId": 640693,
+      "passed": true
+    },
+    {
+      "name": "weekend-data-group",
+      "description": "chạy cuối tuần lúc 8h",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:00",
+          "scheduleWeekDays": "7,8"
+        }
+      },
+      "logId": 640694,
+      "passed": true
+    },
+    {
+      "name": "single-time-disables-slots",
+      "description": "chỉ đổi giờ chạy thành 7h30 sáng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startTime": "07:30",
+          "multiDailyTimeSlotsEnabled": false
+        }
+      },
+      "logId": 640697,
+      "passed": true
+    },
+    {
+      "name": "multiple-times",
+      "description": "đầu và giữa tháng chạy lúc 8h sáng và 8h tối",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "monthly",
+          "startTime": "08:00",
+          "scheduleDays": "1,15",
+          "multiDailyTimeSlotsEnabled": true,
+          "multiDailyTimeSlots": "08:00, 20:00"
+        }
+      },
+      "logId": 640702,
+      "passed": true
+    },
+    {
+      "name": "business-conflicts-still-fill",
+      "description": "chỉ đổi giờ chạy thành 23:59 và giờ dừng thành 18h, ngày kết thúc thành 01/10/2026",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startTime": "23:59",
+          "scheduleEndDate": "2026-10-01",
+          "useDailyStopTime": true,
+          "dailyStopTime": "18:00"
+        }
+      },
+      "logId": 640704,
+      "passed": true
+    },
+    {
+      "name": "unsupported-realtime",
+      "description": "chạy buổi trưa đầu và giữa tháng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Lịch bạn yêu cầu chưa được hỗ trợ cho loại chiến dịch này. Yêu cầu chạy buổi trưa vào đầu và giữa mỗi tháng cần lịch tháng, nhưng chiến dịch này chỉ hỗ trợ lịch ngày."
+      },
+      "logId": 640705,
+      "passed": true
+    },
+    {
+      "name": "unsupported-once-only",
+      "description": "chỉ chạy đúng một lần hôm nay lúc 7h30, không bao giờ tiếp tục ngày sau",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Lịch bạn yêu cầu chưa được hỗ trợ cho loại chiến dịch này. Form không hỗ trợ bảo đảm chỉ chạy đúng một lần trong hôm nay; tắt tiếp tục hôm sau cũng không bảo đảm giới hạn này."
+      },
+      "logId": 640708,
+      "passed": true
+    },
+    {
+      "name": "unsupported-last-day",
+      "description": "chạy ngày cuối cùng mỗi tháng vào buổi trưa",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Lịch bạn yêu cầu chưa được hỗ trợ cho loại chiến dịch này. Lịch chỉ hỗ trợ ngày cố định trong tháng, không hỗ trợ tự xác định ngày cuối cùng của từng tháng."
+      },
+      "logId": 640711,
+      "passed": true
+    },
+    {
+      "name": "general-morning-intent",
+      "description": "chạy buổi sáng đầu và giữa tháng",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "monthly",
+          "startTime": "08:00",
+          "scheduleDays": "1,15"
+        }
+      },
+      "logId": 640712,
+      "passed": true
+    },
+    {
+      "name": "spoken-weekday-and-hour",
+      "description": "Tuần nào cũng gửi vào thứ ba với thứ năm nhé, tầm tám giờ rưỡi sáng.",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:30",
+          "scheduleWeekDays": "3,5"
+        }
+      },
+      "logId": 640713,
+      "passed": true
+    },
+    {
+      "name": "early-afternoon-unseen-phrasing",
+      "description": "Cứ đầu giờ chiều các ngày từ thứ hai tới thứ sáu thì gửi.",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "13:00",
+          "scheduleWeekDays": "2,3,4,5,6"
+        }
+      },
+      "logId": 640716,
+      "passed": true
+    },
+    {
+      "name": "partial-relative-shift",
+      "description": "Lịch như cũ, chỉ lùi ngày bắt đầu thêm hai ngày.",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startDate": "2026-10-16"
+        }
+      },
+      "logId": 640718,
+      "passed": true
+    },
+    {
+      "name": "negation-and-partial-edit",
+      "description": "Không cần dừng theo giờ nữa, lịch với giờ gửi cứ để vậy.",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": true,
+        "patch": {
+          "useDailyStopTime": false
+        }
+      },
+      "logId": 640722,
+      "passed": true
+    },
+    {
+      "name": "clarify-unselected-alternative",
+      "description": "Chạy lúc 8h sáng hoặc 8h tối, tôi chưa chọn giờ nào; chỉ chạy ở một giờ thôi.",
+      "currentDateTime": "2026-10-14T23:48",
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Chưa hiểu yêu cầu của bạn. Vui lòng mô tả rõ hơn lịch muốn chạy. Bạn muốn chạy vào 08:00 sáng hay 20:00 tối?"
+      },
+      "logId": 640724,
+      "passed": true
+    }
+  ]
+}

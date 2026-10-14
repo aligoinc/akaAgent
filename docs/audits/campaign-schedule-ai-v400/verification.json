@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-14T17:06:35.921569+00:00",
+  "shared_ipc_smoke": "passed",
+  "real_form_smoke": "passed",
+  "real_form_monthly_to_daily_and_partial_edit": "passed",
+  "clarification_keeps_prompt_and_schedule": "passed",
+  "enter_close_cancel_timeout_auth_regression": "passed",
+  "draft_timezone_and_recurrence_regression": "passed",
+  "node_typecheck": "passed",
+  "web_typecheck": "passed",
+  "production_build": "passed",
+  "packaged": false,
+  "released": false,
+  "candidate_live_cases": 22,
+  "applied_live_cases": 4,
+  "live_prompt_model_binding_history": "passed",
+  "sql_transaction_smoke": "passed",
+  "rollback_rehearsal": "passed",
+  "history_version": "20261014170529",
+  "migration_sha256": "c1f53c43e2fa9f67e3ed3253a1215c6acd55409f40ffa16e2e8dd6fa164a677e"
+}

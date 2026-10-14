@@ -1,4 +1,9 @@
 import CampaignSendExclusions from './CampaignSendExclusions'
+import CampaignScheduleAi from './CampaignScheduleAi'
+import CampaignLimitsAi from './CampaignLimitsAi'
+import type { LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
+import { getDailyTimeSlotMinutes, parseDailyTimeSlots } from '../../../../shared/campaignTimeSlots'
+import { applyScheduleAiPatch, scheduleAiSnapshot, formatScheduleVietnam, scheduleVietnamToIso } from '../../../../shared/campaignScheduleAi'
 import FacebookRestBrowseSettings from './FacebookRestBrowseSettings'
 import { facebookRestBrowseSettings, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../../../shared/facebookRestBrowse'
 import { supportsSendExclusion, validateExclusionGroup, type SendExclusionsByAccount } from '../../../../shared/campaignSendExclusion'
@@ -7,7 +12,7 @@ import './ZaloAuxiliaryActions.css'
 import ZaloTagMultiSelector from './ZaloTagMultiSelector'
 import { normalizeZaloAccountTagSettings, pickZaloAccountTagSettings, resolveZaloAccountTagSettings, type ZaloTagSettingsByAccountId } from '../../../../shared/zaloAuxiliaryActions'
 import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
-import { CAMPAIGN_DRAFT_VERSION, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
+import { CAMPAIGN_DRAFT_VERSION, CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE, getPreservedCampaignDraftSchedule, preserveCampaignSchedule, restoreCampaignDraftSchedule, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useCampaignDraftField } from './useCampaignDraftField'
 import FacebookPageIdentitySettings from './FacebookPageIdentitySettings'
 import { supportsFacebookPageIdentity, validateFacebookPageIdentitySettings } from '../../../../shared/facebookPageIdentity'
@@ -1099,10 +1104,8 @@ const MESSAGE_DATE_OPTIONS: { value: MessageDateOption; label: string; token: st
 ]
 const MESSAGE_DATE_FORMATS: MessageDateFormat[] = ['DD/MM/YYYY', 'MM/DD/YYYY']
 
-const formatDateTimeLocal = (date: Date): string => {
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
+// Schedule controls are Vietnam wall time, including on machines in other zones.
+const formatDateTimeLocal = formatScheduleVietnam
 
 const getVietnamDayMonthLabel = (): string => {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -1121,72 +1124,13 @@ const formatDateTimeLocalValue = (value?: string | null): string | null => {
 }
 
 const toIsoDateTimeValue = (value?: string | null): string | undefined => {
-  if (!value) return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+  return scheduleVietnamToIso(value || '')
 }
 
 const normalizeTimeInput = (value?: string | null): string => {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/)
   if (!match) return ''
   return `${match[1].padStart(2, '0')}:${match[2]}`
-}
-
-const parseDailyTimeSlot = (value: string): string | null => {
-  const raw = value.trim().toLowerCase().replace(/\s+/g, '')
-  if (!raw) return null
-
-  const match = raw.match(/^(\d{1,2})(?::(\d{1,2})|h(\d{1,2})?|h)?$/)
-  if (!match) return null
-
-  const hour = Number(match[1])
-  const minute = Number(match[2] ?? match[3] ?? 0)
-  if (
-    !Number.isInteger(hour) ||
-    !Number.isInteger(minute) ||
-    hour < 0 ||
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
-    return null
-  }
-
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-}
-
-const getDailyTimeSlotMinutes = (value: string): number | null => {
-  const slot = parseDailyTimeSlot(value)
-  if (!slot) return null
-  const [hour, minute] = slot.split(':').map(Number)
-  return hour * 60 + minute
-}
-
-const parseDailyTimeSlots = (value: string): { slots: string[]; invalidItems: string[] } => {
-  const items = String(value || '')
-    .split(/[,\r\n]+/)
-    .map(item => item.trim())
-    .filter(Boolean)
-  const invalidItems: string[] = []
-  const slotMinutes = new Map<string, string>()
-
-  for (const item of items) {
-    const slot = parseDailyTimeSlot(item)
-    if (!slot) {
-      invalidItems.push(item)
-      continue
-    }
-    const [hour, minute] = slot.split(':').map(Number)
-    slotMinutes.set(String(hour * 60 + minute), slot)
-  }
-
-  const slots = Array.from(slotMinutes.values()).sort((a, b) => {
-    const [aHour, aMinute] = a.split(':').map(Number)
-    const [bHour, bMinute] = b.split(':').map(Number)
-    return (aHour * 60 + aMinute) - (bHour * 60 + bMinute)
-  })
-
-  return { slots, invalidItems }
 }
 
 const normalizeDailyTimeSlotsText = (value?: string | null): string =>
@@ -1741,7 +1685,7 @@ export default function CampaignFormModal({
   onClose
 }: CampaignFormModalProps) {
   const [persistentDraft, setPersistentDraft] = useState(savedDraft)
-  const draftPayload = savedDraft?.payload
+  const [draftPayload] = useState(() => restoreCampaignDraftSchedule(savedDraft?.payload))
   const cloneFromId = providedCloneFromId ?? draftPayload?.cloneSourceCampaignId
   const draftValuesRef = useRef<Record<string, unknown>>({})
   const draftIdRef = useRef(savedDraft?.id || crypto.randomUUID())
@@ -1778,6 +1722,9 @@ export default function CampaignFormModal({
   const [saveStarting, setSaveStarting] = useState(false)
   const [savingCampaign, setSavingCampaign] = useState(false)
   const saveBusy = saveStarting || savingCampaign
+  const [scheduleAiBusy, setScheduleAiBusy] = useState(false)
+  const [limitsAiBusy, setLimitsAiBusy] = useState(false)
+  const formAiBusy = scheduleAiBusy || limitsAiBusy
   const saveControlsRef = useRef<CampaignSaveControlsHandle>(null)
   const setSaveProgress: CampaignSaveControlsHandle['setProgress'] = progress => {
     saveControlsRef.current?.setProgress(progress)
@@ -1808,15 +1755,10 @@ export default function CampaignFormModal({
 
   const initEndDate = () => {
     if (campaign?.scheduleEndDate) {
-      const d = new Date(campaign.scheduleEndDate)
-      const pad = (n: number) => n.toString().padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      return formatScheduleVietnam(new Date(campaign.scheduleEndDate)).slice(0, 10)
     }
     // Default to 7 days from now
-    const d = new Date()
-    d.setDate(d.getDate() + 7)
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    return formatScheduleVietnam(new Date(Date.now() + 7 * 86_400_000)).slice(0, 10)
   }
 
   const initRealtimeEndDate = () => {
@@ -2128,6 +2070,9 @@ export default function CampaignFormModal({
       ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
     } as FindDataTargetDataGroups
   })
+  const [preservedScheduleSnapshot] = useState(() => draftPayload ? draftPayload.preservedSchedule
+    : preserveCampaignSchedule(formData, cloneFromId ? undefined : campaign?.schedule, campaign?.scheduleEndDate))
+  const preservedDraftSchedule = getPreservedCampaignDraftSchedule(preservedScheduleSnapshot, formData)
   const [advancedContentSourceMode, setAdvancedContentSourceMode] = useCampaignDraftField<AdvancedContentSourceMode>(draftPayload, draftValuesRef, 'advancedContentSourceMode',
     initialAdvancedContentSourceMode
   )
@@ -6209,10 +6154,16 @@ export default function CampaignFormModal({
       const scheduleInput = normalizedMultiDailySlots.length > 0
         ? setDateTimeLocalTime(formData.schedule, normalizedMultiDailySlots[0])
         : formData.schedule
-      const formSchedule = toIsoDateTimeValue(scheduleInput)
+      const formSchedule = (usesMultiDailyTimeSlots ? preservedDraftSchedule?.multiSlotStart?.iso : undefined)
+        ?? toIsoDateTimeValue(scheduleInput)
+      // The retained schedule may be a later runtime slot; it must not replace the recurrence anchor.
+      const formOriginalSchedule = isEditingSavedCampaign && usesMultiDailyTimeSlots && preservedDraftSchedule?.multiSlotStart
+        ? (campaign?.originalSchedule ?? formSchedule)
+        : formSchedule
       const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
         ? null
-        : (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59').toISOString() : null)
+        : (preservedDraftSchedule?.end?.iso
+          ?? (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59+07:00').toISOString() : null))
       const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign ? 'daily' : formData.scheduleType
       const normalizedScheduleDays = normalizedScheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = normalizedScheduleType === 'weekly' ? formData.scheduleWeekDays : ''
@@ -6379,7 +6330,7 @@ export default function CampaignFormModal({
           dataGroupId: isDataGroupSource ? formData.dataGroupId : null,
           ...(cloneFromId ? { status: 'tạm dừng' } : {}),
           schedule: formSchedule,
-          originalSchedule: formSchedule,
+          originalSchedule: formOriginalSchedule,
           scheduleType: normalizedScheduleType,
           scheduleEndDate: normalizedScheduleEndDate,
           dailyStopTime: isMobileManagedSmsCampaign ? null : (formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null),
@@ -6659,6 +6610,8 @@ export default function CampaignFormModal({
   const collectPersistentDraftPayload = (): CampaignDraftPayload => {
     const payload: CampaignDraftPayload = {
       version: CAMPAIGN_DRAFT_VERSION,
+      scheduleTimeZone: CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE,
+      preservedSchedule: preservedDraftSchedule,
       values: {
         ...draftValuesRef.current,
         manualAdvancedContentItems: manualAdvancedContentItemsRef.current,
@@ -6683,7 +6636,7 @@ export default function CampaignFormModal({
   }
 
   const handleSavePersistentDraft = async (): Promise<void> => {
-    if (saveBusy || generalSettingsOpen || loadingDetails || isEditingSavedCampaign || draftMode) return
+    if (formAiBusy || saveBusy || generalSettingsOpen || loadingDetails || isEditingSavedCampaign || draftMode) return
     setSavingCampaign(true)
     setSaveProgress({ percent: 15, label: 'Đang lưu bản nháp...' })
     try {
@@ -6699,7 +6652,7 @@ export default function CampaignFormModal({
   }
 
   const handleSave = async () => {
-    if (generalSettingsOpen || exclusionEditing) return
+    if (formAiBusy || generalSettingsOpen || exclusionEditing) return
     if (savingCampaign) return
     if (canUseSendExclusions) {
       try {
@@ -12701,6 +12654,38 @@ export default function CampaignFormModal({
     </div>
   )
 
+  const getDisplayedActionLimit = (actionCode: string): ActionLimitForm => {
+    const value = formData.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, {
+      dailyLimit: formData.dailyLimit, rateLimitCount: formData.rateLimitCount, rateLimitMinutes: formData.rateLimitMinutes
+    })
+    return { ...value, rateLimitMinutes: campaign?.id || cloneFromId || editedRateLimitMinuteActions[actionCode]
+      ? normalizeRateLimitMinutes(value.rateLimitMinutes)
+      : selectedRateLimitMinuteValues.length === 1 ? selectedRateLimitMinuteValues[0] : normalizeRateLimitMinutes(formData.rateLimitMinutes) }
+  }
+  const applyLimitsAiPatch = (patch: LimitsAiPatch) => {
+    if (patch.actions.some(item => !generalLimitActionCodes.includes(item.actionCode))
+      || patch.sleepBetweenActions !== undefined && !canUseSleepBetweenActions
+      || patch.postsPerTarget !== undefined && !isCommentSeedingFeedCampaign) throw new Error('Limits form changed')
+    // Same entitlement clamp as manual editing. Mark minute overrides explicitly, including new drafts.
+    const actions = patch.actions.map(({ actionCode, ...values }) => ({ actionCode, values }))
+    const editedMinutes = Object.fromEntries(actions.filter(item => item.values.rateLimitMinutes !== undefined).map(item => [item.actionCode, true]))
+    setEditedRateLimitMinuteActions(current => ({ ...current, ...editedMinutes }))
+    setExpandedRateLimitMinuteActions(current => ({ ...current, ...editedMinutes }))
+    setFormData(current => {
+      const next = { ...current, actionLimitsByCode: { ...current.actionLimitsByCode } }
+      if (patch.sleepBetweenActions !== undefined) next.sleepBetweenActions = patch.sleepBetweenActions
+      if (patch.continueWhenActionLimitReached !== undefined) next.continueWhenActionLimitReached = patch.continueWhenActionLimitReached
+      if (patch.postsPerTarget !== undefined) next.postsPerTarget = Math.max(1, patch.postsPerTarget)
+      for (const { actionCode, values } of actions) {
+        next.actionLimitsByCode[actionCode] = {
+          ...(current.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, current)), ...values,
+          ...(values.dailyLimit === undefined ? {} : { dailyLimit: clampDailyLimitToEntitlement(values.dailyLimit, getActionDailyLimitCap(actionCode)) })
+        }
+      }
+      return next
+    })
+  }
+
   const renderActionLimitCard = (actionCode: string) => {
     const limit = formData.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, {
       dailyLimit: formData.dailyLimit,
@@ -12710,12 +12695,7 @@ export default function CampaignFormModal({
     const dailyLimitCap = getActionDailyLimitCap(actionCode)
     const hasSavedRateLimitMinutes = Boolean(campaign?.id || cloneFromId)
     const hasEditedRateLimitMinutes = hasSavedRateLimitMinutes || editedRateLimitMinuteActions[actionCode]
-    const defaultRateLimitMinutes = selectedRateLimitMinuteValues.length === 1
-      ? selectedRateLimitMinuteValues[0]
-      : normalizeRateLimitMinutes(formData.rateLimitMinutes)
-    const actionRateLimitMinutes = hasEditedRateLimitMinutes
-      ? normalizeRateLimitMinutes(limit.rateLimitMinutes)
-      : defaultRateLimitMinutes
+    const actionRateLimitMinutes = getDisplayedActionLimit(actionCode).rateLimitMinutes
     const actionRateLimitMinutesLabel = hasEditedRateLimitMinutes || selectedRateLimitMinuteValues.length === 1
       ? String(actionRateLimitMinutes)
       : rateLimitMinutesLabel
@@ -15462,7 +15442,7 @@ export default function CampaignFormModal({
         </div>
 
         {/* Keep editors mounted while saving so validation alerts preserve their UI state. */}
-          <div className="stepper-layout" inert={saveBusy || undefined} aria-busy={saveBusy}>
+          <div className="stepper-layout" inert={saveBusy || formAiBusy || undefined} aria-busy={saveBusy || formAiBusy}>
           {/* Left Sidebar - Stepper Navigation */}
           <div className="stepper-sidebar">
             {STEPS.map((step, stepIndex) => {
@@ -16844,6 +16824,15 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('schedule')}</span>
                   <span className="stepper-section-title">Lịch chạy</span>
+                  <CampaignScheduleAi
+                    context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
+                    schedule={scheduleAiSnapshot(formData)}
+                    disabled={saveBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
+                    zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
+                    onBusyChange={setScheduleAiBusy}
+                    onApply={patch => setFormData(current => applyScheduleAiPatch(current, patch))}
+                  />
                 </div>
                 {collapsedSections['schedule'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
@@ -16898,6 +16887,9 @@ export default function CampaignFormModal({
                           onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
                           className="stepper-input"
                         />
+                        {preservedDraftSchedule?.end && <span className="schedule-hint">
+                          Giữ thời điểm kết thúc: {new Date(preservedDraftSchedule.end.iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (giờ Việt Nam).
+                        </span>}
                       </div>
                     )}
                     {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && (
@@ -17047,6 +17039,17 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('limits')}</span>
                     <span className="stepper-section-title">Giới hạn hành động</span>
+                    <CampaignLimitsAi
+                      context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
+                        accountGroupOverrides: selectedAccountGroupNames.length > 0 }}
+                      limits={{ sleepBetweenActions: formData.sleepBetweenActions, continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
+                        postsPerTarget: formData.postsPerTarget, actions: generalLimitActionCodes.map(actionCode => ({ actionCode,
+                          label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode) })) }}
+                      disabled={saveBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
+                      authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
+                      zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
+                      onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}
+                    />
                   </div>
                   {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
@@ -17313,10 +17316,11 @@ export default function CampaignFormModal({
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">
           {!draftMode && !isEditingSavedCampaign && <button type="button" className="btn btn-secondary"
-            disabled={saveBusy || loadingDetails} onClick={() => { void handleSavePersistentDraft() }}>
+            disabled={formAiBusy || saveBusy || loadingDetails} onClick={() => { void handleSavePersistentDraft() }}>
             Lưu nháp
           </button>}
           <CampaignSaveControls
+            saveDisabled={formAiBusy}
             starting={saveStarting}
             saving={savingCampaign}
             ref={saveControlsRef}
