@@ -526,10 +526,16 @@ export default function AutomationFormModal({
     return Array.from(unique.values())
   }, [options.triggerOptions, sourceCampaign])
 
+  const showWildcardTriggers = mode === 'edit'
+    && sourceCampaign?.id === automation?.sourceCampaignId
+    && Boolean(automation?.triggerConditions.some(isAutomationTriggerWildcard))
+
   const triggerGroups = useMemo(() => {
     const groups = new Map<string, { key: string; label: string; options: AutomationTriggerOption[] }>()
     triggerOptions.forEach(option => {
-      const key = isAutomationTriggerWildcard(option) ? 'wildcard' : `action:${option.actionCode}`
+      const isWildcard = isAutomationTriggerWildcard(option)
+      if (isWildcard && !showWildcardTriggers) return
+      const key = isWildcard ? 'wildcard' : `action:${option.actionCode}`
       const group = groups.get(key)
       if (group) {
         group.options.push(option)
@@ -538,7 +544,7 @@ export default function AutomationFormModal({
       }
     })
     return Array.from(groups.values())
-  }, [triggerOptions])
+  }, [triggerOptions, showWildcardTriggers])
 
   const triggerOptionByKey = useMemo(() => new Map(
     triggerOptions.map(item => [triggerKey(item), item])
@@ -1169,7 +1175,7 @@ export default function AutomationFormModal({
                   <span>Trạng thái kết quả là <b>*</b> <small>(có thể chọn nhiều)</small></span>
                   {!sourceCampaign ? (
                     <div className="automation-inline-empty">Chọn chiến dịch A để xem trạng thái kết quả.</div>
-                  ) : triggerOptions.length === 0 ? (
+                  ) : triggerGroups.length === 0 ? (
                     <div className="automation-inline-empty is-warning">Loại chiến dịch này chưa có trạng thái kết quả khả dụng.</div>
                   ) : (
                     <div className="automation-status-groups">
