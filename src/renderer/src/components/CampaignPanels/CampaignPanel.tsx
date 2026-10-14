@@ -2565,7 +2565,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
   const [navigationLoadCompletedRequestId, setNavigationLoadCompletedRequestId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
-  const [randomView, setRandomView] = useState<{ accountId: number; campaignId?: number } | null>(null)
   const [randomPlanAccountId, setRandomPlanAccountId] = useState<number | null>(null)
   const randomPlanAccount = accounts.find(account => account.id === randomPlanAccountId)
   useEffect(() => {
@@ -2713,12 +2712,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
   const initialCampaignLoadSettledRef = useRef(false)
   const handledNavigationRequestRef = useRef<number | null>(null)
   const selectedCampaignSummary = campaigns.find(campaign => campaign.id === selectedCampaignId)
+  const randomRunAccount = selectedCampaignSummary?.actionId.startsWith('facebook_')
+    ? accounts.find(account => account.id === selectedCampaignSummary.accountId && account.facebookRandomRunEnabled)
+    : undefined
   useEffect(() => {
-    if (detailTab !== 'randomRun' || randomView?.campaignId === undefined || selectedCampaignId === randomView.campaignId) return
-    if (selectedCampaignSummary?.actionId.startsWith('facebook_')) {
-      setRandomView({ accountId: selectedCampaignSummary.accountId, campaignId: selectedCampaignSummary.id })
-    } else if (selectedCampaignSummary) setDetailTab('info')
-  }, [detailTab, randomView?.campaignId, selectedCampaignId, selectedCampaignSummary?.id, selectedCampaignSummary?.accountId, selectedCampaignSummary?.actionId])
+    if (detailTab === 'randomRun' && !randomRunAccount) setDetailTab('info')
+  }, [detailTab, randomRunAccount])
   const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
   const selectedContentPreview = useMemo(
     () => selectedCampaignConfig ? buildCampaignContentPreview(selectedCampaignConfig) : null,
@@ -6671,7 +6670,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
           <div className="detail-dock-header" onClick={() => setDetailDockOpen(!detailDockOpen)}>
             <span className="detail-dock-title">
               {detailTab === 'randomRun'
-                ? <>Chạy ngẫu nhiên · <strong>{accounts.find(a => a.id === randomView?.accountId)?.name}</strong></>
+                ? <>Chạy ngẫu nhiên · <strong>{randomRunAccount?.name}</strong></>
                 : detailTab === 'accountInfo'
                 ? accountInfoAccount
                   ? <>Tài khoản: <strong>{accountInfoAccount.name}</strong></>
@@ -6710,10 +6709,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
                 {selectedCampaignSummary && /^(facebook|zalo|email)_/.test(selectedCampaignSummary.actionId) && <button
                   className={`detail-dock-tab ${detailTab === 'diagnostics' ? 'active' : ''}`}
                   onClick={() => setDetailTab('diagnostics')}>Chẩn đoán</button>}
-                {(selectedCampaignSummary?.actionId.startsWith('facebook_') || randomView) && <button className={`detail-dock-tab ${detailTab === 'randomRun' ? 'active' : ''}`} onClick={() => {
-                  if (selectedCampaignSummary?.actionId.startsWith('facebook_')) setRandomView({ accountId: selectedCampaignSummary.accountId, campaignId: selectedCampaignSummary.id })
-                  setDetailTab('randomRun')
-                }}>Chạy ngẫu nhiên</button>}
+                {randomRunAccount && <button className={`detail-dock-tab ${detailTab === 'randomRun' ? 'active' : ''}`} onClick={() => setDetailTab('randomRun')}>Chạy ngẫu nhiên</button>}
                 {selectedCampaignSummary && (
                   <>
                 <button
@@ -7927,10 +7923,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
               )}
 
               {/* Tab: Account info from the latest account or campaign focus */}
-              {detailTab === 'randomRun' && randomView && (() => {
-                  const randomAccount = accounts.find(a => a.id === randomView.accountId)
-                  return randomAccount ? <FacebookRandomRunPanel key={`${randomView.accountId}:${randomView.campaignId ?? 'all'}`} account={randomAccount} campaignId={randomView.campaignId} active={isActive && detailDockOpen && !randomPlanAccount}/> : <div className="campaign-detail-empty-state">Không tìm thấy tài khoản.</div>
-                })()}
+              {detailTab === 'randomRun' && randomRunAccount && selectedCampaignSummary && <FacebookRandomRunPanel
+                key={`${randomRunAccount.id}:${selectedCampaignSummary.id}`} account={randomRunAccount} campaignId={selectedCampaignSummary.id}
+                active={isActive && detailDockOpen && !randomPlanAccount}/>
+              }
                 {detailTab === 'accountInfo' && (
                 accountInfoAccount ? (
                   <AccountInfoView key={accountInfoAccount.id} account={accountInfoAccount} mode="dock" />
