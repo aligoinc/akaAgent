@@ -1,3 +1,5 @@
+import * as randomRuns from '../data/repositories/facebookRandomRunRepository'
+import { chooseRandomRound, randomRemaining, type FacebookRandomTurn } from '../../shared/facebookRandomRun'
 import { actionResultSignature, parseActionResultOutput } from '../../shared/actionResultSession'
 import { beginActionResultRun, beginActionResultUnit, endActionResultRun, withActionResultRunContext, managedTargetEffects, managesActionResult, finishActionResultUnit, ActionResultBoundary } from './actionResultRuntime'
 import { ResultContractError } from '../../shared/actionStatusPolicy'
@@ -342,6 +344,13 @@ class CampaignRunUnitOwnershipLostError extends Error {
   constructor(campaignId: number) {
     super(`Campaign ${campaignId} no longer owns its run-unit lease`)
     this.name = 'CampaignRunUnitOwnershipLostError'
+  }
+}
+
+class FacebookRandomProgressReadError extends Error {
+  constructor(campaignId: number, public readonly causeError: unknown) {
+    super(`Không đọc được tiến độ chạy ngẫu nhiên của chiến dịch ${campaignId}: ${getErrorMessage(causeError)}`)
+    this.name = 'FacebookRandomProgressReadError'
   }
 }
 
@@ -1604,7 +1613,7 @@ export class CampaignScheduler {
         if (account.flatformType === 'zalo' && account.isZaloShowWeb && this.zaloRuntime
           && !this.zaloRuntime.hasVerifiedWebSession(account.id)) continue
 
-        if (campaigns.length === 0) continue
+        if (campaigns.length === 0 && !account.facebookRandomRunEnabled) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
         const hasBrowserCampaigns = campaigns.some(campaign => !this.isBrowserlessCampaign(campaign))
@@ -1663,8 +1672,158 @@ export class CampaignScheduler {
       })
   }
 
+  private readonly facebookRandomTurns = new Map<number, FacebookRandomTurn>()
+
+  /** Shared dispatch timing for ordinary and random queues. Hard-end finalization
+   * stays in the existing Data Group lifecycle (isDataGroupCampaignHardEnded).
+   */
+  private isWithinCampaignDispatchSchedule(campaign: Campaign, now: Date): boolean {
+    if (!campaign.schedule) return false
+    return !(new Date(campaign.schedule).getTime() > now.getTime())
+      && !this.isAtOrAfterCampaignDispatchCutoff(now, campaign.dailyStopTime)
+  }
+
+  private async randomCampaignBlockedReason(account: AutoAccount, campaign: Campaign): Promise<string | null> {
+    const clock = await this.getReadyRuntimeClock()
+    const businessNow = new Date(clock.dbNow)
+    if (campaign.isDelete || campaign.status !== 'chờ xử lý') return 'Chiến dịch không còn chờ xử lý'
+    if (!this.isWithinCampaignDispatchSchedule(campaign, businessNow)) return 'Ngoài lịch chạy'
+    if (this.isDataGroupCampaignHardEnded(campaign, businessNow)) return 'Chiến dịch đã hết hạn'
+    try { await ensureCurrentUserCanUseCampaignAction(campaign.actionId) } catch (error) { return getErrorMessage(error) }
+    const action = await this.supabase.getCampaignAction(campaign.actionId)
+    if (!action || !action.isActive || action.isDelete) return 'Loại chiến dịch không còn hoạt động'
+    if (!this.resolveCampaignWorkflow(action).workflowId) return 'Chưa có workflow phù hợp'
+    const blocked = await this.getCampaignPreclaimLimitStatus(account, campaign, action)
+    if (blocked) return this.buildLimitPreflightNote(blocked)
+    if (!['facebook_timeline_post', NEWSFEED_INTERACTION_ACTION_ID].includes(campaign.actionId)) {
+      const data = await this.supabase.listCampaignInputData(campaign.id)
+      if (!data.some(row => !row.isDelete && row.status === 'chờ xử lý'
+        && (!row.schedule || new Date(row.schedule).getTime() <= new Date(clock.dbNow).getTime()))
+        && !(data.length === 0 && this.shouldUseSuggestedFriends(campaign))) return 'Chưa có data đến lịch chạy'
+    }
+    return null
+  }
+
+  private async runFacebookRandomQueue(account: AutoAccount): Promise<void> {
+    while (this.running) {
+      const currentAccount = await this.supabase.getAccount(account.id)
+      if (!currentAccount || !currentAccount.isActive || currentAccount.status !== 'chờ xử lý'
+        || currentAccount.loginStatus !== 'đã đăng nhập' || accountOperationRegistry.has(account.id)) return
+      const settings = await randomRuns.getRandomSettings(account.id)
+      if (!settings.config) return
+      const clock = await this.getReadyRuntimeClock()
+      const candidates: Campaign[] = []
+      if (settings.enabled) {
+        const types = new Set(settings.config.rules.map(rule => rule.campaignActionId))
+        for (const candidate of await this.supabase.getPendingCampaigns(account.id, clock.dbNow)) {
+          if (!this.running) return
+          if (types.has(candidate.actionId) && !await this.randomCampaignBlockedReason(currentAccount, candidate)) candidates.push(candidate)
+        }
+      }
+      const plan = await randomRuns.planRandomRound(account.id, settings.config, chooseRandomRound(settings.config.rules, candidates))
+      if (!plan.enabled || !plan.turns.length) return
+      let progressed = false
+      for (const planned of plan.turns) {
+        if (!this.running) return
+        const liveAccount = await this.supabase.getAccount(account.id)
+        if (!liveAccount || liveAccount.status !== 'chờ xử lý' || !liveAccount.isActive || liveAccount.loginStatus !== 'đã đăng nhập') return
+        const fresh = await randomRuns.getRandomSettings(account.id)
+        if (!fresh.enabled || fresh.config?.revision !== planned.revision) break
+        const campaign = await this.supabase.getCampaign(planned.campaignId)
+        const reason = campaign ? await this.randomCampaignBlockedReason(currentAccount, campaign) : 'Chiến dịch đã bị xóa'
+        if (reason || !campaign) {
+          await randomRuns.finishRandomTurn(account.id, planned, reason ?? 'Không còn chiến dịch')
+          continue
+        }
+        this.facebookRandomTurns.set(campaign.id, { ...planned })
+        try {
+          const outcome = await this.executeCampaign(currentAccount, campaign)
+          if (outcome === 'concurrency_wait') return
+          if (this.hasFailedAccountRun(account.id) || this.activeCampaignRunUnits.has(campaign.id)) return
+          let turn = this.facebookRandomTurns.get(campaign.id)!
+          if (turn.claimToken) {
+            const progress = await randomRuns.randomRunRpc<FacebookRandomTurn>(account.id, 'progress', { turnId: turn.id, claimToken: turn.claimToken })
+            turn = { ...progress, reason: turn.reason || progress.reason }
+          }
+          const after = await this.supabase.getCampaign(campaign.id)
+          const stoppedReason = turn.reason || (after?.status === 'tạm dừng' ? after.note || 'Chiến dịch đã tạm dừng'
+            : after?.note || (turn.processed === 0 ? 'Đợt chưa thực hiện được đối tượng nào' : undefined))
+          const finished = await randomRuns.finishRandomTurn(account.id, turn, stoppedReason)
+          if (finished.status === 'completed' && finished.unit === 'data' && finished.processed > 0) {
+            await this.logCampaignProgress(campaign,
+              `✅ Hoàn tất đợt chạy ngẫu nhiên: đã xử lý ${finished.processed}/${finished.quantity} data.`)
+          }
+          progressed ||= turn.processed > 0
+        } finally {
+          this.facebookRandomTurns.delete(campaign.id)
+        }
+        if (this.boundaryStoppedAccountQueues.delete(account.id)) return
+      }
+      // No eligible progress: return to the existing scheduler tick, never spin.
+      if (!progressed) return
+    }
+  }
+
+  private randomBatchRemaining(campaignId: number): number {
+    const turn = this.facebookRandomTurns.get(campaignId)
+    return turn ? randomRemaining(turn) : Number.POSITIVE_INFINITY
+  }
+
+  private async finishRandomBudget(account: AutoAccount, campaign: Campaign, stopReason = ''): Promise<void> {
+    const claimToken = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
+    if (!claimToken) throw new CampaignRunUnitOwnershipLostError(campaign.id)
+    const pauseRequested = this.isCampaignPauseRequested(campaign.id)
+    const result = await this.supabase.cleanupFailedCampaignRuntime({
+      campaignId: campaign.id,
+      accountId: account.id,
+      staffId: Number(campaign.staffId ?? account.staffId ?? getCurrentUser()?.staffId),
+      runtimeTarget: this.runtimeTarget,
+      runtimeClaimToken: claimToken,
+      runtimeUnitToken: null,
+      unstartedInputDataIds: [],
+      // Release finalizes the turn in DB; its reason must be present before that trigger runs.
+      note: pauseRequested ? CAMPAIGN_PAUSE_PENDING_NOTE : stopReason,
+      pauseUnknownOutcome: false,
+      campaignStatus: pauseRequested ? 'tạm dừng' : 'chờ xử lý',
+      accountStatus: 'chờ xử lý'
+    }, new AbortController().signal)
+    if (result.reason === 'not_owner') {
+      this.boundaryStoppedAccountQueues.add(account.id)
+      throw new CampaignRunUnitOwnershipLostError(campaign.id)
+    }
+    if (!result.ok) throw new Error(`Không thể kết thúc đợt chạy ngẫu nhiên: ${result.reason}`)
+    await this.broadcastClaimedRuntimeState(campaign.id)
+    // A pause can arrive while cleanup is releasing this parent. Its old-token
+    // note write can lose that race, so finish the latched request with the
+    // existing guarded transition after release (never overwrite a new owner).
+    if (!pauseRequested && this.isCampaignPauseRequested(campaign.id)) {
+      try {
+        await this.completeReleasedDesktopCampaignPause(campaign)
+      } catch (error) {
+        // The run is already released. A control/refresh failure must not
+        // enter target-error policy or cleanup again with the old parent token.
+        // Leave the helper's pause latch unchanged: only an unconfirmed request
+        // remains pending; a confirmed pause must not be latched again.
+        console.warn(`Failed late pause after random budget release for campaign ${campaign.id}:`, error)
+        this.sendLog(
+          `⚠️ Chưa xác nhận được yêu cầu tạm dừng chiến dịch "${campaign.name}". Vui lòng kiểm tra trạng thái và thử lại nếu cần.`,
+          undefined,
+          { accountId: account.id, campaignId: campaign.id, campaignName: campaign.name }
+        )
+      }
+    }
+  }
+
   private async runAccountCampaignQueue(account: AutoAccount, campaigns: Campaign[]): Promise<void> {
+    if (account.flatformType === 'facebook' && account.facebookRandomRunEnabled) {
+      await this.runFacebookRandomQueue(account)
+      return
+    }
     for (const campaign of campaigns) {
+      if (account.flatformType === 'facebook' && (await this.supabase.getAccount(account.id))?.facebookRandomRunEnabled) {
+        await this.runFacebookRandomQueue(account)
+        return
+      }
       if (!this.running) break
       const runtimeClock = await this.getReadyRuntimeClock()
       if (!this.running) break
@@ -1678,9 +1837,7 @@ export class CampaignScheduler {
         this.isRealtimeCampaignDisabledForRuntime(account, currentCampaign) ||
         currentCampaign.status !== 'chờ xử lý' ||
         currentCampaign.isDelete ||
-        !currentCampaign.schedule ||
-        new Date(currentCampaign.schedule).getTime() > businessNow.getTime() ||
-        this.isAtOrAfterCampaignDispatchCutoff(businessNow, currentCampaign.dailyStopTime)
+        !this.isWithinCampaignDispatchSchedule(currentCampaign, businessNow)
       ) {
         continue
       }
@@ -3026,7 +3183,8 @@ export class CampaignScheduler {
             campaign.id,
             account.id,
             this.runtimeTarget,
-            runtimeClaimToken
+            runtimeClaimToken,
+            this.facebookRandomTurns.get(campaign.id)?.id
           )
         } catch (error) {
           // The client-generated token makes a retry idempotent when PostgreSQL
@@ -3094,6 +3252,8 @@ export class CampaignScheduler {
       recordAccountState({ ...account, status: claimed.accountStatus ?? 'đang chạy' }, account)
       runtimeClaimed = true
       ownedClaimToken = runtimeClaimToken
+      const randomTurn = this.facebookRandomTurns.get(campaign.id)
+      if (randomTurn) randomTurn.claimToken = runtimeClaimToken
       this.attemptedRunErrorPolicies.delete(campaign.id)
       this.failedRunErrorPolicies.delete(campaign.id)
       if (this.runtimeTarget === 'server' && isZaloCampaign) {
@@ -3264,7 +3424,7 @@ export class CampaignScheduler {
       // All nested producers/resources have unwound. Policy is attempted once;
       // its status writes are deferred into the same token-checked transaction.
       try {
-        if (!(err instanceof ZaloSendExclusionError) && !(err instanceof ResultContractError) && !failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
+        if (!(err instanceof FacebookRandomProgressReadError) && !(err instanceof ZaloSendExclusionError) && !(err instanceof ResultContractError) && !failedRun.cleanup.controller.signal.aborted && !this.facebookPageRestoreFailures.has(campaign.id) && !this.attemptedRunErrorPolicies.has(campaign.id)) {
           if (this.isNewsfeedDailyCampaign(campaign)) {
             this.attemptedRunErrorPolicies.add(campaign.id)
             // Unknown aggregate progress is paused by cleanup, never replayed.
@@ -3289,8 +3449,15 @@ export class CampaignScheduler {
       this.sendExclusionLabels.delete(campaign.id)
       await this.restoreFacebookPageIdentity(campaign.id).catch(() => {})
       const unitSettled = failedRun ? !this.failedCampaignRuns.has(campaign.id) : runtimeClaimed
-        ? await this.settleActiveCampaignRunUnit(account, campaign).catch(error => {
+        ? await this.settleActiveCampaignRunUnit(account, campaign).catch(async error => {
           console.error(`Failed final unit settlement for campaign ${campaign.id}:`, error)
+          if (error instanceof FacebookRandomProgressReadError) {
+            failedRun = this.rememberFailedCampaignRun(account, campaign, error, ownedClaimToken)
+            if (this.runtimeTarget === 'desktop' && this.isCampaignPauseRequested(campaign.id)) {
+              failedRun.payload.campaignStatus = 'tạm dừng'
+            }
+            await this.cleanupFailedCampaignRun(failedRun)
+          }
           return false
         })
         : true
@@ -3572,6 +3739,11 @@ export class CampaignScheduler {
       ? (((Number(extra.sourceLinkIndex || 0) % sourceLinks.length) + sourceLinks.length) % sourceLinks.length)
       : 0
 
+    if (this.facebookRandomTurns.get(campaign.id)?.unit === 'data' && !details.length) {
+      await this.releaseClaimedCampaignPreflight(account, campaign, 'Chưa có data để chạy')
+      return
+    }
+
     const runOnce = details.length === 0
     const targets = runOnce ? [null] : details
 
@@ -3598,6 +3770,10 @@ export class CampaignScheduler {
       // instead of issuing multiple queries for every previously handled row.
       if (detail && consumedGroupPostInputDataIds.has(detail.id)) continue
       if (detail && detail.status !== 'chờ xử lý') continue
+      if (this.randomBatchRemaining(campaign.id) === 0) {
+        await this.finishRandomBudget(account, campaign)
+        return
+      }
 
       if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
         return
@@ -3811,12 +3987,12 @@ export class CampaignScheduler {
       const mediaTempPaths: string[] = []
       try {
         // Build variables
-        const groupPostShareMaxCount = await this.resolveGroupPostShareQuotaCapacity(
+        const groupPostShareMaxCount = Math.min(Math.max(0, this.randomBatchRemaining(campaign.id) - 1), await this.resolveGroupPostShareQuotaCapacity(
           account,
           campaign,
           limitConfig,
           groupPostApproval.skipPostByKnownApproval
-        )
+        ))
         if (this.isServerZaloCampaign(account, campaign) && !this.running) return
         let groupPostShareTargets = await this.buildGroupPostShareTargets(
           campaign,
@@ -4464,7 +4640,7 @@ export class CampaignScheduler {
       if (zaloOptOutContext?.blocked) continue
 
       // Sleep between details
-      if (i < targets.length - 1) {
+      if (i < targets.length - 1 || this.facebookRandomTurns.has(campaign.id)) {
         const sleepTime = this.getEffectiveSleepBetweenActions(account, limitConfig)
         if (sleepTime > 0) {
           await this.logCampaignProgress(campaign, `⏳ Nghỉ ${sleepTime}s trước khi xử lý mục tiếp theo...`)
@@ -4590,6 +4766,10 @@ export class CampaignScheduler {
       }
 
       if (pendingTargets.length === 0) break
+      if (this.randomBatchRemaining(campaign.id) === 0) {
+        await this.finishRandomBudget(account, campaign)
+        return
+      }
 
       if (await this.stopCampaignAtRunBoundaryIfNeeded(account, campaign)) {
         return
@@ -4624,7 +4804,7 @@ export class CampaignScheduler {
         return
       }
 
-      const batch = pendingTargets.slice(0, FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE)
+      const batch = pendingTargets.slice(0, Math.min(FACEBOOK_GROUP_INVITE_BATCH_MAX_SIZE, this.randomBatchRemaining(campaign.id)))
       batchIndex += 1
       const outcome = await this.runFacebookGroupInviteBatch(
         account,
@@ -8743,6 +8923,17 @@ export class CampaignScheduler {
     // still stopping; only a reconciled runtime may claim the next unit.
     if (this.isServerZaloCampaign(account, campaign) && !this.running) return false
 
+    const randomTurn = this.facebookRandomTurns.get(campaign.id)
+    if (randomTurn) {
+      const action = await this.supabase.getCampaignAction(campaign.actionId)
+      const blocked = action ? await this.getCampaignPreclaimLimitStatus(account, campaign, action) : null
+      if (!action || !action.isActive || action.isDelete || blocked) {
+        randomTurn.reason = blocked ? await this.buildLimitPreflightNote(blocked) : 'Loại chiến dịch không còn hoạt động'
+        await this.releaseClaimedCampaignPreflight(account, campaign, randomTurn.reason)
+        return false
+      }
+    }
+
     const runtimeUnitToken = randomUUID()
     let claim: Awaited<ReturnType<SupabaseService['claimCampaignRunUnitV2']>>
     let retryLogged = false
@@ -8828,6 +9019,14 @@ export class CampaignScheduler {
         return false
       }
       return true
+    }
+
+    if (claim.reason === 'random_mode_changed' || claim.reason === 'random_budget_exhausted') {
+      const turn = this.facebookRandomTurns.get(campaign.id)
+      const stopReason = turn && claim.reason === 'random_mode_changed' ? 'Đã dừng chạy ngẫu nhiên' : ''
+      if (turn && stopReason) turn.reason = stopReason
+      await this.finishRandomBudget(account, campaign, stopReason)
+      return false
     }
 
     if (
@@ -8961,6 +9160,16 @@ export class CampaignScheduler {
           result.reason === 'unit_lease_not_found'
         ) {
           this.activeCampaignRunUnits.delete(campaign.id)
+          const randomTurn = this.facebookRandomTurns.get(campaign.id)
+          if (randomTurn?.claimToken) {
+            try {
+              const progress = await randomRuns.randomRunRpc<FacebookRandomTurn>(account.id, 'progress', { turnId: randomTurn.id, claimToken: randomTurn.claimToken })
+              this.facebookRandomTurns.set(campaign.id, progress)
+            } catch (error) {
+              this.boundaryStoppedAccountQueues.add(account.id)
+              throw new FacebookRandomProgressReadError(campaign.id, error)
+            }
+          }
           return true
         }
         if (result.reason === 'unit_lease_mismatch' || result.reason === 'runtime_not_owner') {
@@ -8971,6 +9180,7 @@ export class CampaignScheduler {
         }
         throw new Error(`Unit settlement rejected: ${result.reason}`)
       } catch (error) {
+        if (error instanceof FacebookRandomProgressReadError) throw error
         console.error(`Failed to settle v2 unit lease for campaign ${campaign.id}:`, error)
         this.boundaryStoppedAccountQueues.add(account.id)
         if (!retryLogged) {
@@ -9999,7 +10209,7 @@ export class CampaignScheduler {
       isFindPostByContentAI: canUsePostContentConditions ? (extra.isFindPostByContentAI ?? false) : false,
       postContentAI: canUsePostContentConditions ? (extra.postContentAI ?? '') : '',
       // Newsfeed interaction extras
-      newsfeedTimeMinutes: extra.newsfeedTimeMinutes ?? 20,
+      newsfeedTimeMinutes: this.facebookRandomTurns.get(campaign.id)?.quantity ?? extra.newsfeedTimeMinutes ?? 20,
       newsfeedLikeKind: extra.newsfeedLikeKind || '',
       newsfeedLikeLimit: extra.newsfeedLikeLimit ?? 10,
       newsfeedCommentKind: extra.newsfeedCommentKind || '',

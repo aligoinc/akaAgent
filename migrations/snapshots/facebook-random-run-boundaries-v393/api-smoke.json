@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-14T10:02:54.409Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "rpc": "reset_desktop_running_statuses",
+      "status": 400,
+      "code": "P0001",
+      "message": "Staff ID must be a positive integer"
+    },
+    {
+      "rpc": "reset_desktop_running_statuses_no_retry",
+      "status": 400,
+      "code": "P0001",
+      "message": "Staff ID must be a positive integer"
+    },
+    {
+      "projection": 200
+    },
+    {
+      "direct_history_read": 401,
+      "code": "42501"
+    }
+  ],
+  "external_facebook_operations": 0
+}

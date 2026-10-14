@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-14T10:00:55.819395+00:00",
+  "migration_sha256": "bed87e486fe227ae0f88a1d3a193d287bd0ed183d703de0f319a57095f56597a",
+  "source_captured_live": true,
+  "attributes_preserved": true,
+  "rollback": true,
+  "support_functions_unchanged": true
+}

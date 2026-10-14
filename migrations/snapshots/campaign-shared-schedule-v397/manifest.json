@@ -1,0 +1,29 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration": "migrations/migration_v397_campaign_shared_schedule.sql",
+  "migration_sha256": "06406002d999170d7bc3a3f5d6c7530e543064692b4c6093841081f126d67a96",
+  "applied_version": "20261014140159",
+  "applied_name": "migration_v397_campaign_shared_schedule",
+  "functions": [
+    {
+      "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+      "source_md5": "015ca302742b88e140913a978c0156b5",
+      "target_md5": "dc5d650ca0f8e63c00ce97c4606ef245"
+    },
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "source_md5": "ece8bf67bdf300722e17b7d1cf6b99f4",
+      "target_md5": "2c7b2243ebe72dbd544a270dd56310fc"
+    },
+    {
+      "signature": "private.campaign_dispatch_schedule_allowed(timestamp with time zone,text,timestamp with time zone,time without time zone,timestamp with time zone,boolean)",
+      "source_md5": null,
+      "target_md5": "e5789c4bc40cd46f6dc0417097bd2723"
+    }
+  ],
+  "preserved_support_count": 17,
+  "public_rpc_contract_unchanged": true,
+  "helper_is_private_pure_invoker": true,
+  "external_facebook_operations": 0,
+  "desktop_published": false
+}

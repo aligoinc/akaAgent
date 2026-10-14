@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-14T14:00:57.714Z",
+  "migration_sha256": "06406002d999170d7bc3a3f5d6c7530e543064692b4c6093841081f126d67a96",
+  "attributes_preserved": true,
+  "support_unchanged": true,
+  "rollback": true,
+  "results": [
+    [
+      {
+        "result": "PASS v397: 1440 schedule cases, real anon helper access, no PUBLIC grant or security definer"
+      }
+    ],
+    [
+      {
+        "result": "PASS v395: 10 planner cases with actual anon role; direct/group end date, start time, daily cutoff, status/delete/action guards"
+      }
+    ],
+    [
+      {
+        "result": "PASS v393 rollback: partial restart both reset RPCs/mode off/context restore/late pause/new owner, real anon auth/RLS, atomic finish, competing plan, pause winner, disabled recovery, token replay and ownership"
+      }
+    ]
+  ],
+  "external_operations": 0
+}

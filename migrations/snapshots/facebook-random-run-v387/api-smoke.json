@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-14T08:21:28.507Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "rpc": {
+    "status": 400,
+    "code": "P0001",
+    "message": "automation_auth_required"
+  },
+  "account_projection": {
+    "status": 200,
+    "rows": 0
+  },
+  "external_facebook_operations": 0
+}

@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-14T08:53:24.633134+00:00",
+  "migration_sha256": "2fc3a5cf9d6e3154c71d107193cace596f0b0187171aed43cb318b2f855c4f36",
+  "lifecycle_checks": 48,
+  "runtime_checks": 21,
+  "cleanup_smoke": "PASS, including executor/finalizer progress-read failure",
+  "page_rotation_smoke": "PASS",
+  "typecheck_node": "PASS",
+  "typecheck_web": "PASS",
+  "production_build": "PASS",
+  "external_facebook_operations": 0,
+  "desktop_released": false
+}

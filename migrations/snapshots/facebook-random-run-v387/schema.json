@@ -1,0 +1,1219 @@
+[
+  {
+    "cols": [
+      {
+        "default": "nextval('auto_account_action_status_id_seq'::regclass)",
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "action_code",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "0",
+        "name": "count_action_in_day",
+        "notNull": true,
+        "type": "integer"
+      },
+      {
+        "default": "(timezone('Asia/Ho_Chi_Minh'::text, now()))::date",
+        "name": "count_date",
+        "notNull": true,
+        "type": "date"
+      },
+      {
+        "default": "false",
+        "name": "is_disable",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "date_enable",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "disabled_error_code",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "disabled_reason",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "disabled_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      }
+    ],
+    "name": "auto_account_action_status"
+  },
+  {
+    "cols": [
+      {
+        "default": null,
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "'facebook'::text",
+        "name": "flatform_type",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "'chưa đăng nhập'::text",
+        "name": "login_status",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "'chờ xử lý'::text",
+        "name": "status",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "60",
+        "name": "sleep_between_actions",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "30",
+        "name": "daily_limit",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "9",
+        "name": "rate_limit_count",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "65",
+        "name": "rate_limit_minutes",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "staff_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "account_group_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "proxy_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "zalo_account_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "zalo_session",
+        "notNull": false,
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "zalo_session_updated_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "zalo_session_last_verified_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "zalo_session_last_error",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "email_session",
+        "notNull": false,
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "email_session_updated_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "email_session_last_verified_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "email_session_last_error",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "username",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "password",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "mobile_device_id",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "mobile_device_info",
+        "notNull": true,
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "mobile_device_registered_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "mobile_device_last_seen_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "false",
+        "name": "is_zalo_show_web",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "runtime_operation_claim_token",
+        "notNull": false,
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "name": "is_zalo_server",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "facebook_uid",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "facebook_login_managed",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "0",
+        "name": "facebook_login_claim_generation",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": "false",
+        "name": "is_gom",
+        "notNull": true,
+        "type": "boolean"
+      }
+    ],
+    "name": "auto_accounts"
+  },
+  {
+    "cols": [
+      {
+        "default": null,
+        "name": "id",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "flatform_type",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "workflow_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "'{}'::text[]",
+        "name": "limit_check_action_codes",
+        "notNull": true,
+        "type": "text[]"
+      },
+      {
+        "default": null,
+        "name": "test_workflow_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "false",
+        "name": "allow_multiple_accounts",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "allow_secondary_account",
+        "notNull": true,
+        "type": "boolean"
+      }
+    ],
+    "name": "auto_campaign_actions"
+  },
+  {
+    "cols": [
+      {
+        "default": "nextval('auto_campaign_input_data_id_seq'::regclass)",
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "campaign_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "input_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "uid",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "email",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "'chờ xử lý'::text",
+        "name": "status",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "date_action",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "info1",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info2",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info3",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info4",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "info5",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "content",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone_carrier",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "control_append_idempotency_key",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "control_append_row_index",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "auto_automation_detail_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "canonical_target_key",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "data_type_category_item_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "content_rotation_indexes",
+        "notNull": true,
+        "type": "jsonb"
+      }
+    ],
+    "name": "auto_campaign_input_data"
+  },
+  {
+    "cols": [
+      {
+        "default": null,
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "action_id",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "account_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "'chờ xử lý'::text",
+        "name": "status",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "''::text",
+        "name": "log",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_delete",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "''::text",
+        "name": "content",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "'daily'::text",
+        "name": "schedule_type",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule_end_date",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "schedule_days",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "schedule_week_days",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "continue_next_day",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "refresh_data",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "extra_settings",
+        "notNull": false,
+        "type": "jsonb"
+      },
+      {
+        "default": "'[]'::jsonb",
+        "name": "images",
+        "notNull": false,
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "staff_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "note",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "daily_stop_time",
+        "notNull": false,
+        "type": "time without time zone"
+      },
+      {
+        "default": null,
+        "name": "original_schedule",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "completed_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "last_run_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "time_sleep_between_2",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "control_idempotency_key",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "'direct'::text",
+        "name": "data_target_source_mode",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "data_group_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "'ready'::text",
+        "name": "provisioning_state",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "creation_bundle_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "creation_bundle_child_index",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "secondary_account_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_token",
+        "notNull": false,
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_target",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "runtime_claim_vietnam_date",
+        "notNull": false,
+        "type": "date"
+      },
+      {
+        "default": null,
+        "name": "runtime_claimed_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_token",
+        "notNull": false,
+        "type": "uuid"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_vietnam_date",
+        "notNull": false,
+        "type": "date"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_claimed_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "runtime_unit_input_data_ids",
+        "notNull": false,
+        "type": "bigint[]"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "content_rotation_indexes",
+        "notNull": true,
+        "type": "jsonb"
+      }
+    ],
+    "name": "auto_campaigns"
+  },
+  {
+    "cols": [
+      {
+        "default": null,
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "customer_id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "email",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "sql_account_id",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "staff_admin_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": "1",
+        "name": "max_staff",
+        "notNull": true,
+        "type": "integer"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "false",
+        "name": "is_admin_akabiz",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "staff_id_created",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "staff_id_owner",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "demo_created_by",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "first_sale_by",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "demo_created_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "first_sale_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "staff_duration_days",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "false",
+        "name": "use_staff_expiration",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "true",
+        "name": "use_new_zalo_runtime",
+        "notNull": true,
+        "type": "boolean"
+      }
+    ],
+    "name": "org_organization"
+  },
+  {
+    "cols": [
+      {
+        "default": null,
+        "name": "id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "organization_id",
+        "notNull": true,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "customer_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "phone",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "email",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "username",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "'123456'::text",
+        "name": "password",
+        "notNull": true,
+        "type": "text"
+      },
+      {
+        "default": "true",
+        "name": "is_active",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "now()",
+        "name": "created_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": "now()",
+        "name": "updated_at",
+        "notNull": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "device_fingerprint_hash",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "device_label",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "device_platform",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "device_bound_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "device_last_seen_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "is_admin",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "is_created_demo",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "sql_staff_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "name_akabiz",
+        "notNull": false,
+        "type": "character varying"
+      },
+      {
+        "default": null,
+        "name": "is_update_product_package",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "chat_staff_id",
+        "notNull": false,
+        "type": "uuid"
+      },
+      {
+        "default": "'{}'::jsonb",
+        "name": "akabiz_integrations",
+        "notNull": true,
+        "type": "jsonb"
+      },
+      {
+        "default": null,
+        "name": "is_super_admin",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "is_data_division",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "pancake",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "is_data_division_support",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "pancake_staff_id",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_admin_akabiz",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "use_test_workflow",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "pancake_staff_name",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "false",
+        "name": "is_zalo_server",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "is_cskh_expired",
+        "notNull": false,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "kh_hh_chia_toi_da",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "false",
+        "name": "is_chia_kh_hh_staff_owner",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": "false",
+        "name": "is_policy_accepted",
+        "notNull": true,
+        "type": "boolean"
+      },
+      {
+        "default": null,
+        "name": "policy_accepted_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "deleted_at",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "deleted_by_org_staff_id",
+        "notNull": false,
+        "type": "bigint"
+      },
+      {
+        "default": null,
+        "name": "app_notification",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": "5",
+        "name": "device_changes_remaining",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "aka_agent_device_fingerprint_hash",
+        "notNull": false,
+        "type": "text"
+      },
+      {
+        "default": null,
+        "name": "expiration_date",
+        "notNull": false,
+        "type": "timestamp with time zone"
+      },
+      {
+        "default": null,
+        "name": "max_running_zalo_web_accounts",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": null,
+        "name": "max_running_facebook_accounts",
+        "notNull": false,
+        "type": "integer"
+      },
+      {
+        "default": "0",
+        "name": "browser_run_limits_revision",
+        "notNull": true,
+        "type": "bigint"
+      }
+    ],
+    "name": "org_staff"
+  }
+]

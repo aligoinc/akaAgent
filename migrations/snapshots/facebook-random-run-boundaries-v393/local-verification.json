@@ -1,0 +1,23 @@
+{
+  "at": "2026-10-14T10:04:56.638210+00:00",
+  "checks": {
+    "new_pause_scenarios": 7,
+    "new_sql_scenarios": 12,
+    "lifecycle": 48,
+    "runtime": 21,
+    "cleanup": "PASS",
+    "page_rotation": 42,
+    "typecheck_node": "PASS",
+    "typecheck_web": "PASS",
+    "production_build": "PASS",
+    "diff_check": "PASS"
+  },
+  "sha256": {
+    "src/main/services/campaignScheduler.ts": "d37295ee16b550f3849678ee743a89e8a1cdddc0312ccd1c2bf2a21432e9ec19",
+    "migrations/migration_v393_facebook_random_run_boundaries.sql": "bed87e486fe227ae0f88a1d3a193d287bd0ed183d703de0f319a57095f56597a",
+    "scripts/facebook-random-run-boundaries-smoke.cjs": "2cd16dbd92e2081e32d4a71e0c589de0c074c057421068c5665e064c4229cd87"
+  },
+  "external_facebook_operations": 0,
+  "packaged": false,
+  "published": false
+}

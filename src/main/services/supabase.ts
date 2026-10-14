@@ -230,13 +230,15 @@ export class SupabaseService {
     campaignId: number,
     accountId: number,
     runtimeTarget: campaignRepo.CampaignRuntimeTarget,
-    runtimeClaimToken: string
+    runtimeClaimToken: string,
+    randomTurnId?: string
   ) {
     return campaignRepo.claimCampaignRuntimeV2(
       campaignId,
       accountId,
       runtimeTarget,
-      runtimeClaimToken
+      runtimeClaimToken,
+      randomTurnId
     )
   }
   claimCampaignRunUnitV2(

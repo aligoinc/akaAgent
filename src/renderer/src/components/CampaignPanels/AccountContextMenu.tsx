@@ -37,6 +37,9 @@ interface AccountContextMenuProps {
   onEdit: (account: AutoAccount) => void
   onChangeGroup: (account: AutoAccount) => void
   onDelete: (account: AutoAccount) => void
+  onRandomToggle: (account: AutoAccount) => void
+  onRandomConfig: (account: AutoAccount) => void
+  onRandomPlan: (account: AutoAccount) => void
   onFilterCampaigns: (accountId: number) => void
 }
 
@@ -61,7 +64,7 @@ export default function AccountContextMenu({
   onEdit,
   onChangeGroup,
   onDelete,
-  onFilterCampaigns
+  onFilterCampaigns, onRandomToggle, onRandomConfig, onRandomPlan
 }: AccountContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -277,6 +280,12 @@ export default function AccountContextMenu({
           <span>Xoá tài khoản</span>
         </button>
       </div>
+
+      {account.flatformType === 'facebook' && <div className="context-menu-group">
+        <button className="context-menu-item" onClick={() => handleAction(() => onRandomToggle(account))}>{account.facebookRandomRunEnabled ? <Pause size={14}/> : <Play size={14}/>}<span>{account.facebookRandomRunEnabled ? 'Dừng chạy ngẫu nhiên' : 'Chạy ngẫu nhiên'}</span></button>
+        <button className="context-menu-item" onClick={() => handleAction(() => onRandomConfig(account))}><FolderCog size={14}/><span>Cài đặt chạy ngẫu nhiên…</span></button>
+        <button className="context-menu-item" onClick={() => handleAction(() => onRandomPlan(account))}><Info size={14}/><span>Xem kế hoạch chạy ngẫu nhiên</span></button>
+      </div>}
 
       {/* Campaign Group */}
       <div className="context-menu-group">

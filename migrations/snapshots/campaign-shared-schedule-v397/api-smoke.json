@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-14T14:03:33.911048+00:00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "account_api_status": 200,
+  "random_rpc_status": 400,
+  "random_rpc_error": "automation_auth_required",
+  "checked_rpc_status": 400,
+  "checked_rpc_error": "Campaign, account and staff IDs must be positive integers",
+  "public_rpc_contract_unchanged": true,
+  "external_operations": 0
+}

@@ -1,0 +1,47 @@
+[
+  {
+    "data": {
+      "vn_now": "2026-10-14T20:35:23.433451"
+    },
+    "kind": "clock"
+  },
+  {
+    "data": {
+      "facebook_random_run_enabled": true,
+      "id": 135,
+      "login_status": "đã đăng nhập",
+      "status": "chờ xử lý"
+    },
+    "kind": "account"
+  },
+  {
+    "data": {
+      "claimed": false,
+      "id": 31113,
+      "last_run_at": null,
+      "note": null,
+      "status": "chờ xử lý",
+      "unit_claimed": false,
+      "updated_at": "2026-10-14T13:23:38.032336+00:00"
+    },
+    "kind": "campaign"
+  },
+  {
+    "data": [],
+    "kind": "turns"
+  },
+  {
+    "data": [
+      {
+        "last_action": null,
+        "status": "chờ xử lý",
+        "total": 2
+      }
+    ],
+    "kind": "data"
+  },
+  {
+    "data": [],
+    "kind": "results"
+  }
+]

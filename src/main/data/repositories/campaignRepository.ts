@@ -1,3 +1,4 @@
+import { randomRunRpc } from './facebookRandomRunRepository'
 import { writeManagedActionResult, settleManagedActionInput, settleManagedBadTarget, defersManagedBadTargetReset } from '../../services/actionResultRuntime'
 import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
 import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
@@ -2995,7 +2996,8 @@ export async function claimCampaignRuntimeV2(
   campaignId: number,
   accountId: number,
   runtimeTarget: CampaignRuntimeTarget,
-  runtimeClaimToken: string
+  runtimeClaimToken: string,
+  randomTurnId?: string
 ): Promise<CampaignRuntimeClaimV2Result> {
   const normalizedCampaignId = Math.floor(Number(campaignId))
   const normalizedAccountId = Math.floor(Number(accountId))
@@ -3011,7 +3013,9 @@ export async function claimCampaignRuntimeV2(
   }
 
   const u = requireCurrentUser()
-  const { data, error } = await client().rpc('aka_agent_claim_campaign_runtime_v2', {
+  const { data, error } = randomTurnId
+    ? { data: await randomRunRpc(accountId, 'claim', { campaignId, claimToken: normalizedRuntimeClaimToken, turnId: randomTurnId }), error: null }
+    : await client().rpc('aka_agent_claim_campaign_runtime_v2', {
     p_campaign_id: normalizedCampaignId,
     p_account_id: normalizedAccountId,
     p_staff_id: u.staffId,

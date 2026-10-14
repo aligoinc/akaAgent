@@ -61,6 +61,8 @@ export interface AutoAccount {
   /** Last verified Facebook identity; retained after logout. Not unique. */
   facebookUid?: string | null
   facebookLoginManaged?: boolean
+  facebookRandomRunEnabled?: boolean
+  facebookRandomRunRevision?: number
   /** DB fence for cancellable Facebook login claims; never a Facebook UID. */
   facebookLoginClaimGeneration?: number
   /** Zalo runtime subtype. Always false for non-Zalo accounts. */

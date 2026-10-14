@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-14T09:48:06.286Z",
+  "before": {
+    "ERROR": 259,
+    "WARN": 523
+  },
+  "after": {
+    "ERROR": 259,
+    "WARN": 523
+  },
+  "added": [],
+  "removed": [],
+  "unchanged": true
+}

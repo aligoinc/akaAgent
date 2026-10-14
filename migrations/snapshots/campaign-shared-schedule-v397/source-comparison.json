@@ -1,0 +1,14 @@
+[
+  {
+    "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+    "live_md5": "015ca302742b88e140913a978c0156b5",
+    "matches": "migration_v387_facebook_random_run.sql",
+    "db_only_patches": false
+  },
+  {
+    "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+    "live_md5": "ece8bf67bdf300722e17b7d1cf6b99f4",
+    "matches": "migration_v396_facebook_random_run_schedule.sql",
+    "db_only_patches": false
+  }
+]

@@ -1,3 +1,4 @@
+import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { FolderCog, Loader2, Play, Plus, ServerCog, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -26,6 +27,7 @@ import { campaignHasLocalOnlyMedia } from './localCampaignMedia'
 interface AccountPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onFilterCampaigns?: (accountId: number | null) => void
+  onOpenRandomPlan: (accountId: number) => void
   onOpenAccountInfo: (accountId: number) => void
 }
 
@@ -137,7 +139,16 @@ const mapServerQrOperation = (operation: ZaloServerOperationSnapshot): ZaloLogin
   }
 }
 
-export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo }: AccountPanelProps) {
+export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, onOpenAccountInfo, onOpenRandomPlan }: AccountPanelProps) {
+  const [randomConfig, setRandomConfig] = useState<{ account: AutoAccount; enable: boolean } | null>(null)
+  const toggleRandom = async (account: AutoAccount) => {
+    try {
+      const settings = await window.electronAPI.facebookRandomRun.get(account.id)
+      if (!settings.enabled && !settings.config) { setRandomConfig({ account, enable: true }); return }
+      await window.electronAPI.facebookRandomRun.toggle(account.id, !settings.enabled, settings.config?.revision ?? 0)
+      await loadAccounts()
+    } catch (error) { useUiStore.getState().showAlert(getErrorMessage(error, 'Không thể đổi chế độ chạy ngẫu nhiên.'), 'error') }
+  }
   const {
     accounts,
     campaignPage,
@@ -1354,6 +1365,7 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
                       )}
                     </div>
                   )}
+                  {account.facebookRandomRunEnabled && <span className="random-mode-badge">Chạy ngẫu nhiên</span>}
                   {runningCampaignNames.length > 0 && (
                     <div
                       className="account-card-running-campaign"
@@ -1379,6 +1391,9 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
           onViewBrowser={handleViewBrowser}
           onReloadPage={handleReloadPage}
           onCheckLogin={handleCheckLogin}
+          onRandomToggle={account => void toggleRandom(account)}
+          onRandomConfig={account => setRandomConfig({ account, enable: false })}
+          onRandomPlan={account => onOpenRandomPlan(account.id)}
           onFacebookCredentials={setFacebookCredentialsAccount}
           onFacebookRestore={async account => {
             try {
@@ -1403,6 +1418,8 @@ export default function AccountPanel({ onNavigateToBrowser, onFilterCampaigns, o
         />
       )}
 
+      {randomConfig && <FacebookRandomRunConfigModal key={randomConfig.account.id} account={randomConfig.account} enableAfterSave={randomConfig.enable}
+        onClose={() => { setRandomConfig(null); void loadAccounts() }}/>}
       {showFacebookImport && <FacebookImportModal accountGroupId={formData.accountGroupId} proxyId={formData.proxyId}
         onClose={() => { setShowFacebookImport(false); void loadAccounts() }}/>}
       {facebookCredentialsAccount && <FacebookCredentialsModal account={facebookCredentialsAccount}

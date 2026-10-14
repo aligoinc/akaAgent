@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-14T09:44:36.344Z",
+  "findings": [
+    {
+      "finding": "late_pause_after_budget_cleanup_started",
+      "expected": "tạm dừng",
+      "actual": "chờ xử lý",
+      "pauseLatchRetained": true
+    },
+    {
+      "finding": "restart_reset_finalizes_before_recovery",
+      "expected": "stopped",
+      "actual": "completed",
+      "processed": 1,
+      "quantity": 3,
+      "pendingInputs": 3,
+      "reason": null
+    }
+  ],
+  "externalFacebookOperations": 0
+}

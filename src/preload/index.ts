@@ -1,3 +1,4 @@
+import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomReadQuery } from '../shared/facebookRandomRun'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
 import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
@@ -489,6 +490,13 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, payload: { id: number }) => callback(payload)
     ipcRenderer.on(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CAMPAIGN_LOG_UPDATED, handler)
+  },
+  facebookRandomRun: {
+    get: (accountId: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'get', accountId),
+    save: (accountId: number, config: FacebookRandomConfig): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'save', accountId, config),
+    toggle: (accountId: number, enabled: boolean, revision: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'toggle', accountId, { enabled, revision }),
+    dates: (accountId: number, before?: string): Promise<string[]> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'dates', accountId, before),
+    day: (accountId: number, query: FacebookRandomReadQuery): Promise<FacebookRandomDay> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'day', accountId, query)
   },
   getDesktopPollingSettings: (): Promise<DesktopPollingSettings> => ipcRenderer.invoke(DESKTOP_UI_IPC.settings),
   getDesktopCampaignPage: (query: DesktopCampaignPageQuery): Promise<DesktopCampaignPage> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignPage, query),

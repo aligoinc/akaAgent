@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-14T08:52:01.391507+00:00",
+  "before_count": 780,
+  "after_count": 780,
+  "before_levels": {
+    "ERROR": 259,
+    "WARN": 521
+  },
+  "after_levels": {
+    "ERROR": 259,
+    "WARN": 521
+  },
+  "added": [],
+  "removed": []
+}
