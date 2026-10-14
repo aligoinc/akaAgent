@@ -1,4 +1,5 @@
 import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
+import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
 import { registerSendExclusionHandlers } from './handlers/campaignSendExclusionHandlers'
 import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
@@ -1399,6 +1400,7 @@ export function registerIpcHandlers(
   registerEmailNotificationHandlers(supabase)
   registerDesktopUiHandlers()
   registerFacebookRandomRunHandlers(mainWindow)
+  registerWebEnrichmentHandlers(mainWindow, campaignScheduler.webEnrichment)
   registerAppNotificationHandlers(supabase)
   registerReportHandlers(supabase)
   registerAutomationHandlers(mainWindow)

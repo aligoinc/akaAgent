@@ -1,0 +1,31 @@
+{
+  "block": {
+    "id": 2833,
+    "md5": "8d1223574f8fc342317da3ce63db240b",
+    "code": "\nconst config = vars.webConfig;\nconst selectors = vars.webSelectors;\nconst remaining = () => Math.max(0, Number(vars.webUntil) - Date.now());\nconst random = (min, max) => min + Math.floor(Math.random() * (max - min + 1));\nconst sleep = ms => helpers.sleep(Math.min(ms, remaining()), signal);\nfunction bag(values) {\n  let pool = [], last = '';\n  return failed => {\n    pool = pool.filter(v => !failed.has(v));\n    if (!pool.length) {\n      pool = values.filter(v => !failed.has(v));\n      for (let i = pool.length - 1; i > 0; i--) { const j = random(0, i); [pool[i], pool[j]] = [pool[j], pool[i]]; }\n      if (pool.length > 1 && pool[pool.length - 1] === last) [pool[0], pool[pool.length - 1]] = [pool[pool.length - 1], pool[0]];\n    }\n    return last = pool.pop() || '';\n  };\n}\nconst website = bag(config.websites), keyword = bag(config.keywords), hobby = bag(config.hobbies);\nconst failedWeb = new Set(), failedSearch = new Set();\nlet searchEnabled = true, nextSearch = true, lastPage = '', lastQuery = '';\nasync function read(ms) {\n  const until = Math.min(Date.now() + ms, Number(vars.webUntil));\n  while (!signal.aborted && Date.now() < until) {\n    await helpers.sleep(Math.min(random(8000, 18000), until - Date.now()), signal);\n    if (signal.aborted || Date.now() >= until) break;\n    await page.evaluate('window.scrollBy({top:__args[0],behavior:\"smooth\"});', random(220, 650));\n  }\n}\nasync function results() {\n  return page.evaluate(`\n    const selectors = __args[0];\n    const first = xpath => document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n    if (location.pathname.startsWith('/sorry') || first(selectors.fb_web_enrichment_captcha)) return {captcha:true,links:[]};\n    const nodes = document.evaluate(selectors.fb_web_enrichment_result, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    const links=[];\n    for(let i=0;i<nodes.snapshotLength;i++) {\n      try {\n        let url=new URL(nodes.snapshotItem(i).href);\n        if(url.pathname==='/url' && /(^|\\\\.)google\\\\./i.test(url.hostname)) url=new URL(url.searchParams.get('q')||url.searchParams.get('url'));\n        if(['http:','https:'].includes(url.protocol) && !url.username && !url.password && !/(^|\\\\.)(google\\\\.[a-z.]+|googleadservices\\\\.com|doubleclick\\\\.net)$/i.test(url.hostname)) links.push(url.href);\n      } catch {}\n    }\n    return {captcha:false,links:[...new Set(links)]};\n  `, selectors);\n}\nwhile (!signal.aborted && remaining() > 0) {\n  const availableKeywords = [...config.keywords,...config.hobbies].some(x => !failedSearch.has(x));\n  const canSearch = searchEnabled && availableKeywords;\n  const canDirect = config.websites.some(x => !failedWeb.has(x));\n  if (!canSearch && !canDirect) break;\n  const searching = canSearch && (nextSearch || !canDirect);\n  nextSearch = !searching;\n  let item = '';\n  try {\n    if (searching) {\n      const excluded = new Set(failedSearch);\n      if ([...config.keywords,...config.hobbies].filter(x => !failedSearch.has(x)).length > 1) excluded.add(lastQuery);\n      item = (config.hobbies.length && Math.random() < 0.2 ? hobby(excluded) : keyword(excluded)) || keyword(excluded) || hobby(excluded);\n      lastQuery = item;\n      await page.navigate('https://www.google.com/search?q=' + encodeURIComponent(item));\n      let found = await results();\n      if (found.captcha) { searchEnabled = false; continue; }\n      await read(random(10000,30000));\n      if (signal.aborted || remaining() <= 0) break;\n      found = await results();\n      if (found.captcha) { searchEnabled = false; continue; }\n      const links = found.links.filter(url => !failedWeb.has(url) && url !== lastPage);\n      if (!links.length) { failedSearch.add(item); continue; }\n      item = links[random(0,links.length-1)];\n    } else {\n      item = website(failedWeb);\n      if (item === lastPage && config.websites.filter(x => !failedWeb.has(x)).length > 1) item = website(failedWeb);\n    }\n    if (!item) break;\n    lastPage = item;\n    await page.navigate(item);\n    if (!signal.aborted && remaining() > 0) await read(random(60000,180000));\n  } catch {\n    if (signal.aborted) break;\n    if (/^https?:\\/\\//i.test(item)) failedWeb.add(item); else failedSearch.add(item);\n  }\n}\nreturn {ok:true};\n",
+    "name": "fb_web_enrichment_browse",
+    "updated_at": "2026-10-14T18:22:24.537159+00:00"
+  },
+  "history": {
+    "name": "migration_v404_web_enrichment_dwell",
+    "version": "20261014182224",
+    "statement_md5": "90a15fd109d750a7780787d87c438425"
+  },
+  "workflow": {
+    "id": 315,
+    "name": "fb_web_enrichment",
+    "edges": [],
+    "nodes": [
+      {
+        "id": "browse",
+        "config": {},
+        "blockId": 2833,
+        "position": {
+          "x": 80,
+          "y": 100
+        },
+        "blockName": "fb_web_enrichment_browse"
+      }
+    ]
+  }
+}

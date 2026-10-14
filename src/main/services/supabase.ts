@@ -52,7 +52,7 @@ export class SupabaseService {
   }
 
   // =========== ACCOUNTS ===========
-  getAccount(id: number) { return accountRepo.getAccount(id) }
+  getAccount(id: number, signal?: AbortSignal) { return accountRepo.getAccount(id, signal) }
   getAccountIgnoringCapability(id: number) { return accountRepo.getAccountIgnoringCapability(id) }
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }

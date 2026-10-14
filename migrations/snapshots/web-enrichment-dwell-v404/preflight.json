@@ -1,0 +1,153 @@
+{
+  "block": {
+    "id": 2833,
+    "md5": "d106492c55706db94fbc8daa44514d8b",
+    "code": "\nconst config = vars.webConfig;\nconst selectors = vars.webSelectors;\nconst remaining = () => Math.max(0, Number(vars.webUntil) - Date.now());\nconst random = (min, max) => min + Math.floor(Math.random() * (max - min + 1));\nconst sleep = ms => helpers.sleep(Math.min(ms, remaining()), signal);\nfunction bag(values) {\n  let pool = [], last = '';\n  return failed => {\n    pool = pool.filter(v => !failed.has(v));\n    if (!pool.length) {\n      pool = values.filter(v => !failed.has(v));\n      for (let i = pool.length - 1; i > 0; i--) { const j = random(0, i); [pool[i], pool[j]] = [pool[j], pool[i]]; }\n      if (pool.length > 1 && pool[pool.length - 1] === last) [pool[0], pool[pool.length - 1]] = [pool[pool.length - 1], pool[0]];\n    }\n    return last = pool.pop() || '';\n  };\n}\nconst website = bag(config.websites), keyword = bag(config.keywords), hobby = bag(config.hobbies);\nconst failedWeb = new Set(), failedSearch = new Set();\nlet searchEnabled = true, nextSearch = true, lastPage = '', lastQuery = '';\nasync function read(ms) {\n  const until = Math.min(Date.now() + ms, Number(vars.webUntil));\n  while (!signal.aborted && Date.now() < until) {\n    await helpers.sleep(Math.min(random(8000, 18000), until - Date.now()), signal);\n    if (signal.aborted || Date.now() >= until) break;\n    await page.evaluate('window.scrollBy({top:__args[0],behavior:\"smooth\"});', random(220, 650));\n  }\n}\nasync function results() {\n  return page.evaluate(`\n    const selectors = __args[0];\n    const first = xpath => document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n    if (location.pathname.startsWith('/sorry') || first(selectors.fb_web_enrichment_captcha)) return {captcha:true,links:[]};\n    const nodes = document.evaluate(selectors.fb_web_enrichment_result, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    const links=[];\n    for(let i=0;i<nodes.snapshotLength;i++) {\n      try {\n        let url=new URL(nodes.snapshotItem(i).href);\n        if(url.pathname==='/url' && /(^|\\\\.)google\\\\./i.test(url.hostname)) url=new URL(url.searchParams.get('q')||url.searchParams.get('url'));\n        if(['http:','https:'].includes(url.protocol) && !url.username && !url.password && !/(^|\\\\.)(google\\\\.[a-z.]+|googleadservices\\\\.com|doubleclick\\\\.net)$/i.test(url.hostname)) links.push(url.href);\n      } catch {}\n    }\n    return {captcha:false,links:[...new Set(links)]};\n  `, selectors);\n}\nwhile (!signal.aborted && remaining() > 0) {\n  const availableKeywords = [...config.keywords,...config.hobbies].some(x => !failedSearch.has(x));\n  const canSearch = searchEnabled && availableKeywords;\n  const canDirect = config.websites.some(x => !failedWeb.has(x));\n  if (!canSearch && !canDirect) break;\n  const searching = canSearch && (nextSearch || !canDirect);\n  nextSearch = !searching;\n  let item = '';\n  try {\n    if (searching) {\n      const excluded = new Set(failedSearch);\n      if ([...config.keywords,...config.hobbies].filter(x => !failedSearch.has(x)).length > 1) excluded.add(lastQuery);\n      item = (config.hobbies.length && Math.random() < 0.2 ? hobby(excluded) : keyword(excluded)) || keyword(excluded) || hobby(excluded);\n      lastQuery = item;\n      await page.navigate('https://www.google.com/search?q=' + encodeURIComponent(item));\n      let found = await results();\n      if (found.captcha) { searchEnabled = false; continue; }\n      await read(random(30000,60000));\n      if (signal.aborted || remaining() <= 0) break;\n      found = await results();\n      if (found.captcha) { searchEnabled = false; continue; }\n      const links = found.links.filter(url => !failedWeb.has(url) && url !== lastPage);\n      if (!links.length) { failedSearch.add(item); continue; }\n      item = links[random(0,links.length-1)];\n    } else {\n      item = website(failedWeb);\n      if (item === lastPage && config.websites.filter(x => !failedWeb.has(x)).length > 1) item = website(failedWeb);\n    }\n    if (!item) break;\n    lastPage = item;\n    await page.navigate(item);\n    if (!signal.aborted && remaining() > 0) await read(random(180000,300000));\n  } catch {\n    if (signal.aborted) break;\n    if (/^https?:\\/\\//i.test(item)) failedWeb.add(item); else failedSearch.add(item);\n  }\n}\nreturn {ok:true};\n",
+    "name": "fb_web_enrichment_browse",
+    "updated_at": "2026-10-14T15:51:54.97391+00:00"
+  },
+  "workflow": {
+    "id": 315,
+    "name": "fb_web_enrichment",
+    "edges": [],
+    "nodes": [
+      {
+        "id": "browse",
+        "config": {},
+        "blockId": 2833,
+        "position": {
+          "x": 80,
+          "y": 100
+        },
+        "blockName": "fb_web_enrichment_browse"
+      }
+    ]
+  },
+  "block_columns": [
+    {
+      "name": "id",
+      "type": "bigint"
+    },
+    {
+      "name": "name",
+      "type": "text"
+    },
+    {
+      "name": "description",
+      "type": "text"
+    },
+    {
+      "name": "icon",
+      "type": "text"
+    },
+    {
+      "name": "category",
+      "type": "text"
+    },
+    {
+      "name": "kind",
+      "type": "text"
+    },
+    {
+      "name": "system_type",
+      "type": "text"
+    },
+    {
+      "name": "code",
+      "type": "text"
+    },
+    {
+      "name": "config_schema",
+      "type": "jsonb"
+    },
+    {
+      "name": "output_schema",
+      "type": "jsonb"
+    },
+    {
+      "name": "default_config",
+      "type": "jsonb"
+    },
+    {
+      "name": "is_builtin",
+      "type": "boolean"
+    },
+    {
+      "name": "staff_id",
+      "type": "bigint"
+    },
+    {
+      "name": "organization_id",
+      "type": "bigint"
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone"
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone"
+    }
+  ],
+  "block_triggers": null,
+  "history_columns": [
+    {
+      "name": "version",
+      "type": "text"
+    },
+    {
+      "name": "statements",
+      "type": "ARRAY"
+    },
+    {
+      "name": "name",
+      "type": "text"
+    },
+    {
+      "name": "created_by",
+      "type": "text"
+    },
+    {
+      "name": "idempotency_key",
+      "type": "text"
+    },
+    {
+      "name": "rollback",
+      "type": "ARRAY"
+    }
+  ],
+  "latest_migrations": [
+    {
+      "name": "migration_v403_campaign_form_ai_repeat",
+      "version": "20261014173351"
+    },
+    {
+      "name": "migration_v402_campaign_action_limits_ai",
+      "version": "20261014172226"
+    },
+    {
+      "name": "migration_v401_web_enrichment_defaults",
+      "version": "20261014171635"
+    },
+    {
+      "name": "migration_v400_campaign_schedule_natural_language",
+      "version": "20261014170529"
+    },
+    {
+      "name": "migration_v399_campaign_schedule_ai",
+      "version": "20261014160107"
+    },
+    {
+      "name": "migration_v398_facebook_web_enrichment",
+      "version": "20261014155154"
+    },
+    {
+      "name": "migration_v397_campaign_shared_schedule",
+      "version": "20261014140159"
+    },
+    {
+      "name": "migration_v395_facebook_random_run_schedule",
+      "version": "20261014133356"
+    }
+  ]
+}

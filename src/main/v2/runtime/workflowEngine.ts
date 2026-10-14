@@ -29,6 +29,8 @@ export interface RunContext {
   persist?: boolean
   /** Optional synchronous VM budget for bounded auxiliary workflows. */
   blockTimeoutMs?: number
+  /** Main-only immutable cache for optional, non-persisted workflows. Never used by campaigns. */
+  preparedBlocks?: ReadonlyMap<number, BlockDef>
 }
 
 export interface BlockScreenshotCaptureRequest {
@@ -128,7 +130,8 @@ export class WorkflowEngineV2 {
     if (!workflow) throw new Error(`Workflow không tồn tại: ${workflowOrId}`)
 
     // Pre-load tất cả block definitions cần thiết để tránh round-trip DB trong vòng lặp
-    const blockMap = await this.loadBlocks(workflow.nodes)
+    const blockMap = ctx.persist === false && ctx.preparedBlocks
+      ? new Map(ctx.preparedBlocks) : await this.loadBlocks(workflow.nodes)
 
     // Tạo run record
     const persist = ctx.persist ?? true

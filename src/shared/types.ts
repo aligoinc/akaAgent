@@ -63,6 +63,8 @@ export interface AutoAccount {
   facebookLoginManaged?: boolean
   facebookRandomRunEnabled?: boolean
   facebookRandomRunRevision?: number
+  facebookWebEnrichmentEnabled?: boolean
+  facebookWebEnrichmentRevision?: number
   /** DB fence for cancellable Facebook login claims; never a Facebook UID. */
   facebookLoginClaimGeneration?: number
   /** Zalo runtime subtype. Always false for non-Zalo accounts. */

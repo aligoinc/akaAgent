@@ -23,6 +23,8 @@ import { accountOperationRegistry } from './accountOperationRegistry'
 import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
 import { getWorkflow, getWorkflowByName } from '../data/repositories/workflowV2Repository'
+import { WebEnrichmentService } from './webEnrichmentService'
+import { attachWebEnrichmentPreview } from './webEnrichmentPreview'
 import { FACEBOOK_REST_BROWSE_WORKFLOW, facebookRestBrowseSettings, facebookRestBrowseTarget, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../shared/facebookRestBrowse'
 import { runFacebookRestBrowse } from './facebookRestBrowse'
 import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
@@ -820,6 +822,7 @@ export class CampaignScheduler {
   private sendExclusionLabels = new Map<number, CampaignLabelContext>()
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
+  readonly webEnrichment?: WebEnrichmentService
 
   constructor(
     supabase: SupabaseService,
@@ -842,6 +845,17 @@ export class CampaignScheduler {
     this.logSink = options.logSink
     this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
     this.isAccountStartupPending = options.isAccountStartupPending
+    if (this.runtimeTarget === 'desktop' && this.proxyRuntime) this.webEnrichment = new WebEnrichmentService({
+      ready: account => this.running && !this.isAccountStartupPending?.(account)
+        && !accountOperationRegistry.has(account.id) && !this.externalAccountRuns.has(account.id)
+        && !this.hasFailedAccountRun(account.id) && !!this.proxyRuntime?.isAccountSessionPrepared(account),
+      createPage: (account, runId) => attachWebEnrichmentPreview(
+        this.backgroundPages.createTemporary(account.id, 'facebook', true),
+        { accountId: account.id, runId },
+        preview => this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_BROWSER_PREVIEW, preview)
+      ),
+      wake: () => setImmediate(() => this.wakeNow('web-enrichment-finished'))
+    })
   }
 
   setPageRegistry(reg: PageControllerRegistry): void {
@@ -972,6 +986,7 @@ export class CampaignScheduler {
   }
 
   stop(): void {
+    this.webEnrichment?.stop()
     this.requestZaloRuntimeStop('shutdown')
     this.cancelFailureCleanups()
     this.running = false
@@ -1012,6 +1027,7 @@ export class CampaignScheduler {
    * current target settle and prevents the next target from starting.
    */
   stopAcceptingNewZaloWork(): void {
+    this.webEnrichment?.stop()
     this.cancelFailureCleanups()
     this.running = false
     this.wakeRequested = false
@@ -1029,6 +1045,7 @@ export class CampaignScheduler {
 
   private startPolling(): void {
     if (!this.running || this.intervalId) return
+    this.webEnrichment?.start()
     this.intervalId = setInterval(() => this.wakeNow('interval'), 30000)
     if (this.runtimeTarget !== 'server') {
       this.sendLog('📋 Scheduler đã bắt đầu. Kiểm tra mỗi 30 giây.')
@@ -1253,6 +1270,7 @@ export class CampaignScheduler {
   }
 
   tryReserveExternalAccount(accountId: number, reservationToken = randomUUID()): boolean {
+    this.webEnrichment?.preempt(accountId)
     if (accountOperationRegistry.has(accountId) || this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)) return false
     this.externalAccountRuns.set(accountId, reservationToken)
     return true
@@ -1570,6 +1588,8 @@ export class CampaignScheduler {
 
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
+      // Cache-only scheduling of optional work; background loads never delay campaigns.
+      this.webEnrichment?.observe(accounts)
 
       for (const account of accounts) {
         if (!this.running) break
@@ -1607,7 +1627,8 @@ export class CampaignScheduler {
         if (!this.running) break
 
         if (this.isAccountStartupPending?.(account) || accountOperationRegistry.has(account.id)
-          || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)) {
+          || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)
+          || this.webEnrichment?.isActive(account.id)) {
           continue
         }
 
@@ -1621,6 +1642,9 @@ export class CampaignScheduler {
         if (account.flatformType === 'zalo' && account.isZaloShowWeb && this.zaloRuntime
           && !this.zaloRuntime.hasVerifiedWebSession(account.id)) continue
 
+        const hasScheduledCampaign = campaigns.some(c => this.isWithinCampaignDispatchSchedule(c, new Date(accountClock.dbNow)))
+        const browsing = this.webEnrichment?.tryRun(account, hasScheduledCampaign)
+        if (browsing) { void browsing; continue }
         if (campaigns.length === 0 && !account.facebookRandomRunEnabled) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
@@ -1713,6 +1737,7 @@ export class CampaignScheduler {
   }
 
   private async runFacebookRandomQueue(account: AutoAccount): Promise<void> {
+    let completedCampaignId: number | undefined
     while (this.running) {
       const currentAccount = await this.supabase.getAccount(account.id)
       if (!currentAccount || !currentAccount.isActive || currentAccount.status !== 'chờ xử lý'
@@ -1729,12 +1754,20 @@ export class CampaignScheduler {
         }
       }
       const plan = await randomRuns.planRandomRound(account.id, settings.config, chooseRandomRound(settings.config.rules, candidates))
-      if (!plan.enabled || !plan.turns.length) return
+      if (!plan.enabled) return
+      if (!plan.turns.length) {
+        if (settings.enabled && plan.config?.revision === settings.config.revision) {
+          await this.browseAfterEmptyRandomPlan(currentAccount, settings.config.revision)
+        }
+        return
+      }
       let progressed = false
       for (const planned of plan.turns) {
         if (!this.running) return
         const liveAccount = await this.supabase.getAccount(account.id)
         if (!liveAccount || liveAccount.status !== 'chờ xử lý' || !liveAccount.isActive || liveAccount.loginStatus !== 'đã đăng nhập') return
+        await this.browseAfterCampaign(liveAccount, completedCampaignId)
+        completedCampaignId = undefined
         const fresh = await randomRuns.getRandomSettings(account.id)
         if (!fresh.enabled || fresh.config?.revision !== planned.revision) break
         const campaign = await this.supabase.getCampaign(planned.campaignId)
@@ -1766,6 +1799,8 @@ export class CampaignScheduler {
           this.facebookRandomTurns.delete(campaign.id)
         }
         if (this.boundaryStoppedAccountQueues.delete(account.id)) return
+        this.webEnrichment?.campaignFinished(account.id)
+        completedCampaignId = campaign.id
       }
       // No eligible progress: return to the existing scheduler tick, never spin.
       if (!progressed) return
@@ -1827,11 +1862,15 @@ export class CampaignScheduler {
       await this.runFacebookRandomQueue(account)
       return
     }
+    let completedCampaignId: number | undefined
     for (const campaign of campaigns) {
-      if (account.flatformType === 'facebook' && (await this.supabase.getAccount(account.id))?.facebookRandomRunEnabled) {
+      const liveAccount = account.flatformType === 'facebook' ? await this.supabase.getAccount(account.id) : null
+      if (liveAccount?.facebookRandomRunEnabled) {
         await this.runFacebookRandomQueue(account)
         return
       }
+      if (liveAccount) await this.browseAfterCampaign(liveAccount, completedCampaignId)
+      completedCampaignId = undefined
       if (!this.running) break
       const runtimeClock = await this.getReadyRuntimeClock()
       if (!this.running) break
@@ -1853,6 +1892,42 @@ export class CampaignScheduler {
       const outcome = await this.executeCampaign(account, currentCampaign)
       if (outcome === 'concurrency_wait') break
       if (this.boundaryStoppedAccountQueues.delete(account.id) || this.hasFailedAccountRun(account.id)) break
+      if (!this.activeCampaignRunUnits.has(campaign.id)) {
+        this.webEnrichment?.campaignFinished(account.id)
+        completedCampaignId = campaign.id
+      }
+    }
+    // At queue exit, only the existing scheduler tick may offer optional work
+    // using a fresh account snapshot. A stopped/denied run is not a handoff.
+  }
+
+  private async browseAfterCampaign(account: AutoAccount, completedCampaignId?: number): Promise<void> {
+    if (completedCampaignId === undefined || !this.running || this.boundaryStoppedAccountQueues.has(account.id)
+      || this.hasFailedAccountRun(account.id) || this.activeCampaignRunUnits.has(completedCampaignId)) return
+    // The caller reuses its existing account read AFTER the previous campaign
+    // and cleanup. Never reuse the account captured before executeCampaign.
+    await this.webEnrichment?.tryRun(account, false)
+  }
+
+  private async browseAfterEmptyRandomPlan(account: AutoAccount, revision: number): Promise<void> {
+    // A scheduled campaign is not necessarily runnable. Only a confirmed empty
+    // plan may offer this due slot; never remember an idle result for later ticks.
+    if (!this.running || this.boundaryStoppedAccountQueues.has(account.id)
+      || this.hasFailedAccountRun(account.id) || !this.webEnrichment?.canRun(account, false)) return
+    try {
+      const controller = new AbortController()
+      let liveAccount: AutoAccount | null
+      try {
+        // The planner may have waited on IO. Refresh only for a due, cache-ready
+        // browsing slot, using the existing client and a bounded, abortable read.
+        liveAccount = await this.withTimeout(this.supabase.getAccount(account.id, controller.signal),
+          5_000, 'Timeout xác minh tài khoản trước khi lướt web')
+      } finally { controller.abort() }
+      if (!this.running || this.boundaryStoppedAccountQueues.has(account.id) || this.hasFailedAccountRun(account.id)
+        || !liveAccount?.facebookRandomRunEnabled || liveAccount.facebookRandomRunRevision !== revision) return
+      await this.webEnrichment?.tryRun(liveAccount, false)
+    } catch {
+      // Optional work must not enter campaign error handling or hold the queue.
     }
   }
 

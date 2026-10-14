@@ -218,7 +218,10 @@ export default function CampaignSupportTab({ campaign, startRequestId, variant =
       </div>}
       <textarea ref={questionInput} className="assistant-chat-textarea" aria-label="Câu hỏi chẩn đoán" value={question} rows={3} maxLength={CAMPAIGN_SUPPORT_MAX_QUESTION}
         disabled={!canSend} placeholder={last ? 'Nhập câu hỏi tiếp hoặc dán ảnh lỗi...' : 'Nhập nội dung cần hỏi hoặc dán ảnh...'} onChange={event => setQuestion(event.target.value)} onPaste={onPaste}
-        onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send() } }} />
+        onKeyDown={event => {
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); send() }
+        }} />
       <div className="campaign-support-composer-actions">
         <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={event => {
           void addImages(Array.from(event.target.files ?? [])); event.target.value = ''

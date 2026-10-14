@@ -1,6 +1,7 @@
 import { isTemporaryCleanupError, RuntimeCleanupRetry, waitForRetry } from './runtimeCleanupRetry'
 import type { RuntimeCleanupOutcome, RuntimeCleanupResult } from './runtimeCleanupRetry'
 import { withRequestDeadline } from './requestDeadline'
+import { preemptWebEnrichment } from './webEnrichmentControl'
 
 export interface AccountOperationContext {
   readonly accountId: number
@@ -81,6 +82,7 @@ export class AccountOperationRegistry {
     requestCleanup: AccountOperationRecord['requestCleanup'],
     retrySignal?: AbortSignal
   ): Promise<AccountOperationClaimResult> {
+    if (context.platform === 'facebook') preemptWebEnrichment(context.accountId)
     const rejected = (reason: string): AccountOperationClaimResult => ({
       claimed: false, accountId: context.accountId, staffId: context.staffId,
       previousStatus: null, claimToken: null, reason
