@@ -1,0 +1,18 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "4b553bdebecb67043cbf2f19eb49682092a678a19805edfdfad18b1152735238",
+  "smoke_sha256": "93ddbf040595775b14859cd077a044d69f63ca06568cb55f61a650cecf911cea",
+  "before_sha256": "0d3d1c298d49a6de0a7dec26b464165554288a492806392a47a4cf3db040bd67",
+  "at": "2026-10-14T02:56:55.126Z",
+  "verified": true,
+  "target_md5": "96858661d7d592a9cdc22c67fd853c62",
+  "rollback_sha256": "c2360679e4d0bedf3cc3bce6e5537d7ba0505fa23e25ddffd877c549c0f1466a",
+  "checks": [
+    "configuration filtering",
+    "SQL roles",
+    "history retained",
+    "cached statement invalidation",
+    "self-recursion guard",
+    "reverse move and capture"
+  ]
+}

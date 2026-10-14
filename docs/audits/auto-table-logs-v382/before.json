@@ -1,0 +1,1095 @@
+{
+  "ddl_triggers": [
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.set_graphql_placeholder()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\n    DECLARE\n    graphql_is_dropped bool;\n    BEGIN\n    graphql_is_dropped = (\n        SELECT ev.schema_name = 'graphql_public'\n        FROM pg_event_trigger_dropped_objects() AS ev\n        WHERE ev.schema_name = 'graphql_public'\n    );\n\n    IF graphql_is_dropped\n    THEN\n        create or replace function graphql_public.graphql(\n            \"operationName\" text default null,\n            query text default null,\n            variables jsonb default null,\n            extensions jsonb default null\n        )\n            returns jsonb\n            language plpgsql\n            set search_path to ''\n        as $$\n            DECLARE\n                server_version float;\n            BEGIN\n                server_version = (SELECT (SPLIT_PART((select version()), ' ', 2))::float);\n\n                IF server_version >= 14 THEN\n                    RETURN jsonb_build_object(\n                        'errors', jsonb_build_array(\n                            jsonb_build_object(\n                                'message', 'pg_graphql extension is not enabled.'\n                            )\n                        )\n                    );\n                ELSE\n                    RETURN jsonb_build_object(\n                        'errors', jsonb_build_array(\n                            jsonb_build_object(\n                                'message', 'pg_graphql is only available on projects running Postgres 14 onwards.'\n                            )\n                        )\n                    );\n                END IF;\n            END;\n        $$;\n    END IF;\n\n    END;\n$function$\n",
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "8da9dff6b2ae47498209d341acaeb60b",
+      "name": "issue_graphql_placeholder",
+      "signature": "set_graphql_placeholder()",
+      "tags": [
+        "DROP EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_cron_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT\n    FROM pg_event_trigger_ddl_commands() AS ev\n    JOIN pg_extension AS ext\n    ON ev.objid = ext.oid\n    WHERE ext.extname = 'pg_cron'\n  )\n  THEN\n    grant usage on schema cron to postgres with grant option;\n\n    alter default privileges in schema cron grant all on tables to postgres with grant option;\n    alter default privileges in schema cron grant all on functions to postgres with grant option;\n    alter default privileges in schema cron grant all on sequences to postgres with grant option;\n\n    alter default privileges for user supabase_admin in schema cron grant all\n        on sequences to postgres with grant option;\n    alter default privileges for user supabase_admin in schema cron grant all\n        on tables to postgres with grant option;\n    alter default privileges for user supabase_admin in schema cron grant all\n        on functions to postgres with grant option;\n\n    grant all privileges on all tables in schema cron to postgres with grant option;\n    revoke all on table cron.job from postgres;\n    grant select on table cron.job to postgres with grant option;\n    revoke trigger on cron.job_run_details from postgres;\n  END IF;\nEND;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "53a44336da0ac1dd62d89dbd988e6d1d",
+      "name": "issue_pg_cron_access",
+      "signature": "grant_pg_cron_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_graphql_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n    if not exists (\n        select 1\n        from pg_catalog.pg_event_trigger_ddl_commands() ev\n        join pg_catalog.pg_extension e on ev.objid = e.oid\n        where e.extname = 'pg_graphql'\n    ) then\n        return;\n    end if;\n\n    drop function if exists graphql_public.graphql;\n    create or replace function graphql_public.graphql(\n        \"operationName\" text default null,\n        query text default null,\n        variables jsonb default null,\n        extensions jsonb default null\n    )\n        returns jsonb\n        language sql\n    as $$\n        select graphql.resolve(\n            query := query,\n            variables := coalesce(variables, '{}'),\n            \"operationName\" := \"operationName\",\n            extensions := extensions\n        );\n    $$;\n\n    -- Attach the wrapper to the extension so DROP EXTENSION cascades to it,\n    -- which in turn triggers set_graphql_placeholder to reinstall the \"not enabled\" stub.\n    alter extension pg_graphql add function graphql_public.graphql(text, text, jsonb, jsonb);\n\n    grant usage on schema graphql to postgres, anon, authenticated, service_role;\n    grant execute on function graphql.resolve to postgres, anon, authenticated, service_role;\n    grant usage on schema graphql to postgres with grant option;\n    grant usage on schema graphql_public to postgres with grant option;\nend;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "4e6d7efe4aed1b3b92063b648aa7a0cf",
+      "name": "issue_pg_graphql_access",
+      "signature": "grant_pg_graphql_access()",
+      "tags": [
+        "CREATE FUNCTION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_net_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT 1\n    FROM pg_event_trigger_ddl_commands() AS ev\n    JOIN pg_extension AS ext\n    ON ev.objid = ext.oid\n    WHERE ext.extname = 'pg_net'\n  )\n  THEN\n    IF NOT EXISTS (\n      SELECT 1\n      FROM pg_roles\n      WHERE rolname = 'supabase_functions_admin'\n    )\n    THEN\n      CREATE USER supabase_functions_admin NOINHERIT CREATEROLE LOGIN NOREPLICATION;\n    END IF;\n\n    GRANT USAGE ON SCHEMA net TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n\n    IF EXISTS (\n      SELECT FROM pg_extension\n      WHERE extname = 'pg_net'\n      -- all versions in use on existing projects as of 2025-02-20\n      -- version 0.12.0 onwards don't need these applied\n      AND extversion IN ('0.2', '0.6', '0.7', '0.7.1', '0.8.0', '0.10.0', '0.11.0')\n    ) THEN\n      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;\n      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;\n\n      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;\n      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;\n\n      REVOKE ALL ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;\n      REVOKE ALL ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;\n\n      GRANT EXECUTE ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n      GRANT EXECUTE ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n    END IF;\n  END IF;\nEND;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "1d06ef4fb47bb0ab6e6f8818a62013bb",
+      "name": "issue_pg_net_access",
+      "signature": "grant_pg_net_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.pgrst_ddl_watch()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nDECLARE\n  cmd record;\nBEGIN\n  FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()\n  LOOP\n    IF cmd.command_tag IN (\n      'CREATE SCHEMA', 'ALTER SCHEMA'\n    , 'CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO', 'ALTER TABLE'\n    , 'CREATE FOREIGN TABLE', 'ALTER FOREIGN TABLE'\n    , 'CREATE VIEW', 'ALTER VIEW'\n    , 'CREATE MATERIALIZED VIEW', 'ALTER MATERIALIZED VIEW'\n    , 'CREATE FUNCTION', 'ALTER FUNCTION'\n    , 'CREATE TRIGGER'\n    , 'CREATE TYPE', 'ALTER TYPE'\n    , 'CREATE RULE'\n    , 'COMMENT'\n    )\n    -- don't notify in case of CREATE TEMP table or other objects created on pg_temp\n    AND cmd.schema_name is distinct from 'pg_temp'\n    THEN\n      NOTIFY pgrst, 'reload schema';\n    END IF;\n  END LOOP;\nEND; $function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "afaad7193dcf8f81e728d2bedb85e43e",
+      "name": "pgrst_ddl_watch",
+      "signature": "pgrst_ddl_watch()",
+      "tags": null
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.pgrst_drop_watch()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nDECLARE\n  obj record;\nBEGIN\n  FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()\n  LOOP\n    IF obj.object_type IN (\n      'schema'\n    , 'table'\n    , 'foreign table'\n    , 'view'\n    , 'materialized view'\n    , 'function'\n    , 'trigger'\n    , 'type'\n    , 'rule'\n    )\n    AND obj.is_temporary IS false -- no pg_temp objects\n    THEN\n      NOTIFY pgrst, 'reload schema';\n    END IF;\n  END LOOP;\nEND; $function$\n",
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "4357772baf5cfcd5c6d7049585b3a537",
+      "name": "pgrst_drop_watch",
+      "signature": "pgrst_drop_watch()",
+      "tags": null
+    }
+  ],
+  "executing_role": "postgres",
+  "recent_migrations": [
+    {
+      "name": "migration_v381_facebook_comment_link_tracking",
+      "version": "20261012221138"
+    },
+    {
+      "name": "migration_v380_facebook_first_comment_link",
+      "version": "20261012220158"
+    },
+    {
+      "name": "migration_v379_facebook_top_post_link",
+      "version": "20261012210755"
+    },
+    {
+      "name": "migration_v378_zalo_222_accepted",
+      "version": "20261009213548"
+    },
+    {
+      "name": "migration_v377_fb_composer_bad_target",
+      "version": "20261009202253"
+    },
+    {
+      "name": "migration_v376_fb_composer_target_error",
+      "version": "20261009201357"
+    },
+    {
+      "name": "migration_v375_fb_composer_db_result",
+      "version": "20261009194359"
+    },
+    {
+      "name": "migration_v374_fb_composer_error_policy",
+      "version": "20261009193333"
+    }
+  ],
+  "server_version": "17.6",
+  "sources": [
+    {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "aka_agent_chat_api=rw/postgres"
+      ],
+      "columns": [
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "a",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "name",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "action_id",
+          "not_null": false,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "account_id",
+          "not_null": false,
+          "position": 4,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": "'chờ xử lý'::text",
+          "generated": "",
+          "identity": "",
+          "name": "status",
+          "not_null": true,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "schedule",
+          "not_null": false,
+          "position": 6,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": "''::text",
+          "generated": "",
+          "identity": "",
+          "name": "log",
+          "not_null": false,
+          "position": 8,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": false,
+          "position": 9,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": false,
+          "position": 10,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": false,
+          "position": 11,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": "''::text",
+          "generated": "",
+          "identity": "",
+          "name": "content",
+          "not_null": false,
+          "position": 12,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "'daily'::text",
+          "generated": "",
+          "identity": "",
+          "name": "schedule_type",
+          "not_null": false,
+          "position": 13,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "schedule_end_date",
+          "not_null": false,
+          "position": 14,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "schedule_days",
+          "not_null": false,
+          "position": 15,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "schedule_week_days",
+          "not_null": false,
+          "position": 16,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "continue_next_day",
+          "not_null": false,
+          "position": 17,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "refresh_data",
+          "not_null": false,
+          "position": 18,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "'{}'::jsonb",
+          "generated": "",
+          "identity": "",
+          "name": "extra_settings",
+          "not_null": false,
+          "position": 19,
+          "type": "jsonb"
+        },
+        {
+          "acl": null,
+          "default": "'[]'::jsonb",
+          "generated": "",
+          "identity": "",
+          "name": "images",
+          "not_null": false,
+          "position": 20,
+          "type": "jsonb"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "staff_id",
+          "not_null": false,
+          "position": 21,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "organization_id",
+          "not_null": false,
+          "position": 22,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "note",
+          "not_null": false,
+          "position": 23,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "daily_stop_time",
+          "not_null": false,
+          "position": 24,
+          "type": "time without time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "original_schedule",
+          "not_null": false,
+          "position": 25,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "completed_at",
+          "not_null": false,
+          "position": 26,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "last_run_at",
+          "not_null": false,
+          "position": 27,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "time_sleep_between_2",
+          "not_null": false,
+          "position": 28,
+          "type": "integer"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "control_idempotency_key",
+          "not_null": false,
+          "position": 29,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "'direct'::text",
+          "generated": "",
+          "identity": "",
+          "name": "data_target_source_mode",
+          "not_null": true,
+          "position": 30,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "data_group_id",
+          "not_null": false,
+          "position": 31,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": "'ready'::text",
+          "generated": "",
+          "identity": "",
+          "name": "provisioning_state",
+          "not_null": true,
+          "position": 32,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "creation_bundle_id",
+          "not_null": false,
+          "position": 33,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "creation_bundle_child_index",
+          "not_null": false,
+          "position": 34,
+          "type": "integer"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "secondary_account_id",
+          "not_null": false,
+          "position": 36,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_claim_token",
+          "not_null": false,
+          "position": 37,
+          "type": "uuid"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_claim_target",
+          "not_null": false,
+          "position": 38,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_claim_vietnam_date",
+          "not_null": false,
+          "position": 39,
+          "type": "date"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_claimed_at",
+          "not_null": false,
+          "position": 40,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_unit_token",
+          "not_null": false,
+          "position": 41,
+          "type": "uuid"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_unit_vietnam_date",
+          "not_null": false,
+          "position": 42,
+          "type": "date"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_unit_claimed_at",
+          "not_null": false,
+          "position": 43,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "runtime_unit_input_data_ids",
+          "not_null": false,
+          "position": 44,
+          "type": "bigint[]"
+        },
+        {
+          "acl": null,
+          "default": "'{}'::jsonb",
+          "generated": "",
+          "identity": "",
+          "name": "content_rotation_indexes",
+          "not_null": true,
+          "position": 45,
+          "type": "jsonb"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "FOREIGN KEY (account_id) REFERENCES auto_accounts(id)",
+          "name": "auto_campaigns_account_id_fkey"
+        },
+        {
+          "definition": "FOREIGN KEY (action_id) REFERENCES auto_campaign_actions(id)",
+          "name": "auto_campaigns_action_id_fkey"
+        },
+        {
+          "definition": "CHECK (jsonb_typeof(content_rotation_indexes) = 'object'::text) NOT VALID",
+          "name": "auto_campaigns_content_rotation_indexes_object"
+        },
+        {
+          "definition": "FOREIGN KEY (creation_bundle_id) REFERENCES auto_campaign_creation_bundles(id) ON DELETE SET NULL",
+          "name": "auto_campaigns_creation_bundle_id_fkey"
+        },
+        {
+          "definition": "FOREIGN KEY (data_group_id) REFERENCES auto_account_contact_groups(id) ON DELETE SET NULL",
+          "name": "auto_campaigns_data_group_id_fkey"
+        },
+        {
+          "definition": "CHECK (data_target_source_mode = ANY (ARRAY['direct'::text, 'data_group'::text]))",
+          "name": "auto_campaigns_data_target_source_mode_check"
+        },
+        {
+          "definition": "FOREIGN KEY (organization_id) REFERENCES org_organization(id)",
+          "name": "auto_campaigns_organization_id_fkey"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_campaigns_pkey"
+        },
+        {
+          "definition": "CHECK (provisioning_state = ANY (ARRAY['staged'::text, 'ready'::text, 'failed'::text]))",
+          "name": "auto_campaigns_provisioning_state_check"
+        },
+        {
+          "definition": "CHECK (secondary_account_id IS NULL OR secondary_account_id IS DISTINCT FROM account_id)",
+          "name": "auto_campaigns_secondary_account_diff_check"
+        },
+        {
+          "definition": "FOREIGN KEY (staff_id) REFERENCES org_staff(id)",
+          "name": "auto_campaigns_staff_id_fkey"
+        }
+      ],
+      "force_rls": false,
+      "kind": "r",
+      "name": "auto_campaigns",
+      "owner": "postgres",
+      "rls": false,
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER aka_agent_clear_campaign_runtime_claim_metadata BEFORE UPDATE OF status ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_clear_campaign_runtime_claim_metadata()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "postgres=X/postgres",
+              "anon=X/postgres",
+              "authenticated=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": [
+              "search_path=pg_catalog, public"
+            ],
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_clear_campaign_runtime_claim_metadata()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF NEW.status IS DISTINCT FROM OLD.status THEN\n    IF OLD.status = 'đang chạy'\n      AND NEW.status = 'tạm dừng'\n      AND OLD.runtime_claim_target = 'server'\n    THEN\n      -- Server run control is DB-first. A pause can commit after the executor's\n      -- top-level claim committed but before that response reached the caller.\n      -- Preserve the exact ownership tuple so the caller can recover the lost\n      -- response, observe the paused status, and release the account only from\n      -- its normal safe cleanup boundary.\n      NEW.runtime_claim_token := OLD.runtime_claim_token;\n      NEW.runtime_claim_target := OLD.runtime_claim_target;\n      NEW.runtime_claim_vietnam_date := OLD.runtime_claim_vietnam_date;\n      NEW.runtime_claimed_at := OLD.runtime_claimed_at;\n    ELSE\n      NEW.runtime_claim_token := NULL;\n      NEW.runtime_claim_target := NULL;\n      NEW.runtime_claim_vietnam_date := NULL;\n      NEW.runtime_claimed_at := NULL;\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+            "md5": "dacc6362ba94f2f62c9e4cb43f965510",
+            "owner": "postgres",
+            "security_definer": false,
+            "signature": "aka_agent_clear_campaign_runtime_claim_metadata()",
+            "volatility": "v"
+          },
+          "name": "aka_agent_clear_campaign_runtime_claim_metadata"
+        },
+        {
+          "definition": "CREATE TRIGGER auto_validate_campaign_send_exclusion BEFORE INSERT OR UPDATE OF extra_settings, account_id, staff_id, organization_id ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION auto_validate_campaign_send_exclusion()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "postgres=X/postgres"
+            ],
+            "config": [
+              "search_path=pg_catalog, public"
+            ],
+            "definition": "CREATE OR REPLACE FUNCTION public.auto_validate_campaign_send_exclusion()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n IF TG_OP='UPDATE' AND NEW.extra_settings->'zaloSendExclusionsByAccountId' IS NOT DISTINCT FROM OLD.extra_settings->'zaloSendExclusionsByAccountId'\n AND NEW.account_id IS NOT DISTINCT FROM OLD.account_id AND NEW.staff_id IS NOT DISTINCT FROM OLD.staff_id AND NEW.organization_id IS NOT DISTINCT FROM OLD.organization_id THEN RETURN NEW; END IF;\n PERFORM public.aka_agent_internal_validate_send_exclusion_selection(NEW.extra_settings->'zaloSendExclusionsByAccountId',NEW.staff_id,NEW.organization_id,NEW.account_id);\n RETURN NEW;\nEND;\n$function$\n",
+            "md5": "8dd9a7ee0baafd762154de59cb2bd953",
+            "owner": "postgres",
+            "security_definer": true,
+            "signature": "auto_validate_campaign_send_exclusion()",
+            "volatility": "v"
+          },
+          "name": "auto_validate_campaign_send_exclusion"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_close_terminal_campaign_data_group_source AFTER UPDATE OF is_delete, status, schedule_end_date ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_close_terminal_campaign_data_group_source()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "postgres=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": [
+              "search_path=pg_catalog, public"
+            ],
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_close_terminal_campaign_data_group_source()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF NEW.data_target_source_mode = 'data_group' AND (\n    (COALESCE(NEW.is_delete, false) AND NOT COALESCE(OLD.is_delete, false))\n    OR (NEW.status = 'hoàn thành' AND OLD.status IS DISTINCT FROM 'hoàn thành')\n    OR (NEW.schedule_end_date IS NOT NULL AND NEW.schedule_end_date <= now()\n      AND OLD.schedule_end_date IS DISTINCT FROM NEW.schedule_end_date)\n  ) THEN\n    UPDATE public.auto_campaign_data_group_sources\n    SET status = 'stopped', stopped_at = COALESCE(stopped_at, now()),\n        stop_reason = CASE\n          WHEN COALESCE(NEW.is_delete, false) THEN 'campaign_deleted'\n          WHEN NEW.schedule_end_date IS NOT NULL AND NEW.schedule_end_date <= now() THEN 'hard_end_reached'\n          ELSE 'campaign_completed'\n        END,\n        updated_at = now()\n    WHERE campaign_id = NEW.id AND status IN ('baselining', 'active');\n\n    IF COALESCE(NEW.is_delete, false)\n      OR (NEW.schedule_end_date IS NOT NULL AND NEW.schedule_end_date <= now()) THEN\n      UPDATE public.auto_campaign_input_data\n      SET status = 'hoàn thành',\n          note = COALESCE(note, 'Hết hạn nguồn Nhóm data'),\n          date_action = COALESCE(date_action, now())\n      WHERE campaign_id = NEW.id AND COALESCE(is_delete, false) = false\n        AND status = 'chờ xử lý';\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+            "md5": "139c06853af9872e2f55a3a3e9006015",
+            "owner": "postgres",
+            "security_definer": true,
+            "signature": "aka_agent_close_terminal_campaign_data_group_source()",
+            "volatility": "v"
+          },
+          "name": "trg_aka_agent_close_terminal_campaign_data_group_source"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_enqueue_campaign_completed_email AFTER UPDATE OF status ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_enqueue_campaign_completed_email()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "=X/postgres",
+              "postgres=X/postgres",
+              "anon=X/postgres",
+              "authenticated=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": null,
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_enqueue_campaign_completed_email()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_inserted integer := 0;\nBEGIN\n  IF NEW.status = 'hoàn thành'\n    AND OLD.status IS DISTINCT FROM NEW.status\n    AND NEW.staff_id IS NOT NULL\n  THEN\n    INSERT INTO public.auto_email_notification_deliveries (\n      staff_id,\n      type,\n      dedupe_key,\n      payload\n    )\n    SELECT\n      NEW.staff_id,\n      'campaign_completed',\n      'completion:' || NEW.id::text || ':' || COALESCE(NEW.completed_at, now())::text,\n      jsonb_build_object(\n        'campaignId', NEW.id,\n        'completedAt', COALESCE(NEW.completed_at, now()),\n        'staffId', NEW.staff_id\n      )\n    FROM public.auto_email_notification_settings s\n    WHERE s.staff_id = NEW.staff_id\n      AND s.is_delete = false\n      AND s.is_enabled = true\n      AND s.notify_campaign_completed = true\n      AND array_length(s.recipient_emails, 1) > 0\n    ON CONFLICT (dedupe_key) DO NOTHING;\n\n    GET DIAGNOSTICS v_inserted = ROW_COUNT;\n    IF v_inserted > 0 THEN\n      PERFORM public.aka_agent_call_email_notification_worker('process', 'campaign-completed');\n    END IF;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n",
+            "md5": "0523c07b0878e3aaa53efb0bc97a74b8",
+            "owner": "postgres",
+            "security_definer": false,
+            "signature": "aka_agent_enqueue_campaign_completed_email()",
+            "volatility": "v"
+          },
+          "name": "trg_aka_agent_enqueue_campaign_completed_email"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_data_group_identity BEFORE UPDATE OF data_target_source_mode, data_group_id ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_data_group_identity()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "postgres=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": [
+              "search_path=public"
+            ],
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_campaign_data_group_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF (NEW.data_target_source_mode IS DISTINCT FROM OLD.data_target_source_mode\n      OR NEW.data_group_id IS DISTINCT FROM OLD.data_group_id)\n    AND EXISTS (\n      SELECT 1 FROM public.auto_campaign_input_data AS input_data\n      WHERE input_data.campaign_id = OLD.id\n        AND input_data.canonical_target_key IS NOT NULL\n        AND COALESCE(input_data.is_delete, false) = false\n    ) THEN\n    RAISE EXCEPTION 'campaign_data_group_identity_immutable_after_intake';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+            "md5": "e568cbb810ac056428c131162dfb80de",
+            "owner": "postgres",
+            "security_definer": false,
+            "signature": "aka_agent_guard_campaign_data_group_identity()",
+            "volatility": "v"
+          },
+          "name": "trg_aka_agent_guard_campaign_data_group_identity"
+        },
+        {
+          "definition": "CREATE TRIGGER trg_aka_agent_set_campaign_completed_at BEFORE UPDATE OF status ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_set_campaign_completed_at()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "=X/postgres",
+              "postgres=X/postgres",
+              "anon=X/postgres",
+              "authenticated=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": null,
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_set_campaign_completed_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF NEW.status = 'hoàn thành' AND OLD.status IS DISTINCT FROM NEW.status THEN\n    NEW.completed_at = now();\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+            "md5": "1b346c7a6b25dfb7057ee0c5a32adde7",
+            "owner": "postgres",
+            "security_definer": false,
+            "signature": "aka_agent_set_campaign_completed_at()",
+            "volatility": "v"
+          },
+          "name": "trg_aka_agent_set_campaign_completed_at"
+        }
+      ]
+    },
+    {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "aka_agent_chat_api=r/postgres"
+      ],
+      "columns": [
+        {
+          "acl": null,
+          "default": "nextval('auto_error_id_seq'::regclass)",
+          "generated": "",
+          "identity": "",
+          "name": "id",
+          "not_null": true,
+          "position": 1,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "error_type",
+          "not_null": true,
+          "position": 2,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "error_name",
+          "not_null": true,
+          "position": 3,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "error_desc",
+          "not_null": false,
+          "position": 4,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "error_code",
+          "not_null": true,
+          "position": 5,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "error_element",
+          "not_null": false,
+          "position": 6,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "noti_running_process",
+          "not_null": false,
+          "position": 7,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "noti_campaign",
+          "not_null": false,
+          "position": 8,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "update_status_account",
+          "not_null": false,
+          "position": 9,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "update_status_campaign",
+          "not_null": false,
+          "position": 10,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "'{}'::text[]",
+          "generated": "",
+          "identity": "",
+          "name": "disable_action_codes",
+          "not_null": true,
+          "position": 11,
+          "type": "text[]"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "time_disable_actions",
+          "not_null": false,
+          "position": 12,
+          "type": "integer"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "count_consecutive_errors",
+          "not_null": false,
+          "position": 13,
+          "type": "integer"
+        },
+        {
+          "acl": null,
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "is_active",
+          "not_null": true,
+          "position": 14,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "false",
+          "generated": "",
+          "identity": "",
+          "name": "is_delete",
+          "not_null": true,
+          "position": 15,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "created_at",
+          "not_null": true,
+          "position": 16,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": "now()",
+          "generated": "",
+          "identity": "",
+          "name": "updated_at",
+          "not_null": true,
+          "position": 17,
+          "type": "timestamp with time zone"
+        },
+        {
+          "acl": null,
+          "default": "'{}'::text[]",
+          "generated": "",
+          "identity": "",
+          "name": "zalo_error_codes",
+          "not_null": true,
+          "position": 18,
+          "type": "text[]"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "detail_status",
+          "not_null": false,
+          "position": 19,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "counts_toward_limit",
+          "not_null": true,
+          "position": 20,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": "true",
+          "generated": "",
+          "identity": "",
+          "name": "counts_toward_bad_target",
+          "not_null": true,
+          "position": 21,
+          "type": "boolean"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "update_login_status",
+          "not_null": false,
+          "position": 22,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "'fixed_minutes'::text",
+          "generated": "",
+          "identity": "",
+          "name": "disable_action_mode",
+          "not_null": true,
+          "position": 23,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": "'{}'::text[]",
+          "generated": "",
+          "identity": "",
+          "name": "zalo_action_codes",
+          "not_null": true,
+          "position": 24,
+          "type": "text[]"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "disable_action_days",
+          "not_null": false,
+          "position": 25,
+          "type": "integer"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "disable_action_time",
+          "not_null": false,
+          "position": 26,
+          "type": "time without time zone"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "detail_status_id",
+          "not_null": false,
+          "position": 27,
+          "type": "bigint"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "detail_mode",
+          "not_null": false,
+          "position": 28,
+          "type": "text"
+        },
+        {
+          "acl": null,
+          "default": null,
+          "generated": "",
+          "identity": "",
+          "name": "input_effect",
+          "not_null": false,
+          "position": 29,
+          "type": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "definition": "CHECK (disable_action_mode <> 'days_at_time'::text OR disable_action_days IS NOT NULL AND time_disable_actions IS NOT NULL AND time_disable_actions > 0 AND (disable_action_days > 0 OR disable_action_time IS NOT NULL))",
+          "name": "auto_error_days_at_time_config_check"
+        },
+        {
+          "definition": "CHECK (detail_mode = ANY (ARRAY['inherit'::text, 'override'::text, 'suppress'::text]))",
+          "name": "auto_error_detail_mode_check"
+        },
+        {
+          "definition": "CHECK (detail_mode IS DISTINCT FROM 'override'::text OR detail_status_id IS NOT NULL)",
+          "name": "auto_error_detail_override_check"
+        },
+        {
+          "definition": "FOREIGN KEY (detail_status_id) REFERENCES auto_status(id) ON DELETE RESTRICT",
+          "name": "auto_error_detail_status_id_fkey"
+        },
+        {
+          "definition": "CHECK (disable_action_days IS NULL OR disable_action_days >= 0)",
+          "name": "auto_error_disable_action_days_check"
+        },
+        {
+          "definition": "CHECK (disable_action_mode = ANY (ARRAY['fixed_minutes'::text, 'end_of_day'::text, 'indefinite'::text, 'days_at_time'::text]))",
+          "name": "auto_error_disable_action_mode_check"
+        },
+        {
+          "definition": "CHECK (disable_action_time IS NULL OR disable_action_time < '24:00:00'::time without time zone)",
+          "name": "auto_error_disable_action_time_check"
+        },
+        {
+          "definition": "UNIQUE (error_code)",
+          "name": "auto_error_error_code_key"
+        },
+        {
+          "definition": "CHECK (input_effect = ANY (ARRAY['complete'::text, 'pause'::text, 'requeue'::text, 'none'::text]))",
+          "name": "auto_error_input_effect_check"
+        },
+        {
+          "definition": "PRIMARY KEY (id)",
+          "name": "auto_error_pkey"
+        }
+      ],
+      "force_rls": false,
+      "kind": "r",
+      "name": "auto_error",
+      "owner": "postgres",
+      "rls": false,
+      "triggers": [
+        {
+          "definition": "CREATE TRIGGER auto_error_result_component_guard BEFORE INSERT OR UPDATE OF detail_status_id ON auto_error FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_catalog_v361()",
+          "enabled": "O",
+          "function": {
+            "acl": [
+              "postgres=X/postgres",
+              "service_role=X/postgres"
+            ],
+            "config": [
+              "search_path=\"\""
+            ],
+            "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_result_catalog_v361()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nDECLARE ids bigint[];\nBEGIN\n IF TG_TABLE_NAME='auto_account_action_status_policies' THEN ids:=ARRAY[NEW.status_id];\n ELSIF TG_TABLE_NAME='auto_error' THEN ids:=CASE WHEN NEW.detail_status_id IS NULL THEN NULL ELSE ARRAY[NEW.detail_status_id] END;\n ELSE ids:=NEW.sub_status_ids;\n END IF;\n IF ids IS NOT NULL AND EXISTS (SELECT 1 FROM unnest(ids) i LEFT JOIN public.auto_status s ON s.id=i WHERE s.id IS NULL OR s.component_type<>'campaign_detail') THEN\n   RAISE EXCEPTION USING ERRCODE='23514', MESSAGE='result_status_component_invalid';\n END IF;\n RETURN NEW;\nEND $function$\n",
+            "md5": "c84a0510e6f1cfd5b62df9da39270cba",
+            "owner": "postgres",
+            "security_definer": true,
+            "signature": "aka_agent_guard_result_catalog_v361()",
+            "volatility": "v"
+          },
+          "name": "auto_error_result_component_guard"
+        }
+      ]
+    }
+  ],
+  "target_overloads": [],
+  "target_sequence": null,
+  "target_signature": null,
+  "target_table": null
+}

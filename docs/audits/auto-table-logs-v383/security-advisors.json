@@ -1,0 +1,76 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "relevant": [
+    {
+      "name": "rls_enabled_no_policy",
+      "title": "RLS Enabled No Policy",
+      "level": "INFO",
+      "facing": "EXTERNAL",
+      "categories": [
+        "SECURITY"
+      ],
+      "description": "Detects cases where row level security (RLS) has been enabled on a table but no RLS policies have been created.",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "count": 178,
+      "findings": [
+        {
+          "detail": "Table \\`private.auto_table_logs\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "auto_table_logs",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-10-14T02:39:31.861Z"
+        }
+      ]
+    }
+  ],
+  "unrelated_categories": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "level": "ERROR",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 178
+    },
+    {
+      "name": "security_definer_view",
+      "level": "ERROR",
+      "count": 8
+    },
+    {
+      "name": "function_search_path_mutable",
+      "level": "WARN",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "level": "ERROR",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "level": "WARN",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "count": 194
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "count": 194
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "level": "WARN",
+      "count": 1
+    }
+  ],
+  "note": "Existing INFO RLS without policies is intentional admin-only access; unrelated findings are outside V383."
+}

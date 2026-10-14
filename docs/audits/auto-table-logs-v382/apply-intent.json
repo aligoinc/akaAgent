@@ -1,0 +1,10 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "before_sha256": "4daadded948105dcc94aa672101afa6f0a7b8e346b45f73bbf6f05afc33e8485",
+  "snapshot_sha256": "56f944bac61dae4a9a02fb439874d0e8874ef629cbdad773af760e6bb68c495f",
+  "migration_sha256": "ecc27b247c77a17aa6a53e0762218d9e2f881edc5e84e6354622c1fc3c195724",
+  "smoke_sha256": "c78d354071e9b9d5a033c39a41c513005b30da70a0646395f93f0bf09047d9c0",
+  "rollback_sha256": "303881a1016bdd686ffcd12de7ce16b22682af4ca851a148b3053d1ff52526b3",
+  "at": "2026-10-14T02:20:53.680Z",
+  "history_version": "20261014022053"
+}

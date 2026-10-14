@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-14T02:22:10.897Z",
+  "observation": {
+    "fixture_tables_remaining": 0,
+    "latest_capture": "2026-10-14T02:22:10.13498+00:00",
+    "log_rows": 2458,
+    "source_names": [
+      "auto_campaigns"
+    ],
+    "total_bytes": 100876288
+  }
+}

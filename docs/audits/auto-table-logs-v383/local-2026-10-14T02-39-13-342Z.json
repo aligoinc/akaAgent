@@ -1,0 +1,74 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration_sha256": "e3564158f391db620db183e6e71db2270cf149a0f70eafe5e7403d2341673bbc",
+  "smoke_sha256": "d07bf22ba63e100cb038521f06f792aba633ff12d26ae59c6d6f94fa43bb7a77",
+  "before_sha256": "d68fdaf5baee03fd4127e07ef4beafa2629405140fc4821bf980465a55b2c8a6",
+  "at": "2026-10-14T02:39:13.416Z",
+  "verified": true,
+  "target_md5": "1cd8e9bc61b39e7ac7f8e6020ba3e953",
+  "benchmark": [
+    {
+      "mode": "v382_runtime",
+      "execution_ms": [
+        16.296,
+        14.656,
+        15.508,
+        16.238,
+        18.388
+      ],
+      "wal_bytes": [
+        852392,
+        852880,
+        852096,
+        852080,
+        852080
+      ],
+      "totals": {
+        "log_count": 6,
+        "payload_bytes": 3158996
+      }
+    },
+    {
+      "mode": "v383_runtime",
+      "execution_ms": [
+        6.165,
+        6.288,
+        6.268,
+        6.415,
+        5.979
+      ],
+      "wal_bytes": [
+        287976,
+        288816,
+        287976,
+        288736,
+        287976
+      ],
+      "totals": {
+        "log_count": 0,
+        "payload_bytes": 0
+      }
+    },
+    {
+      "mode": "v383_config",
+      "execution_ms": [
+        0.092,
+        0.087,
+        0.066,
+        0.069,
+        0.099
+      ],
+      "wal_bytes": [
+        1472,
+        1472,
+        1504,
+        1480,
+        1488
+      ],
+      "totals": {
+        "log_count": 6,
+        "payload_bytes": 6008
+      }
+    }
+  ]
+}

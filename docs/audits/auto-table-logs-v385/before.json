@@ -1,0 +1,195 @@
+{
+  "capture_function": {
+    "acl": [
+      "postgres=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "definition": "CREATE OR REPLACE FUNCTION private.aka_agent_capture_table_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\nDECLARE\n  v_new jsonb;\n  v_old jsonb;\n  v_pk jsonb := '{}'::jsonb;\n  v_column text;\nBEGIN\n  -- No schema is stored. Restrict registration to public source tables,\n  -- excluding the audit table itself. No catalog query is needed per row.\n  IF TG_TABLE_SCHEMA <> 'public' OR TG_TABLE_NAME='auto_table_logs' OR TG_WHEN <> 'AFTER' OR TG_LEVEL <> 'ROW'\n     OR TG_OP NOT IN ('INSERT','UPDATE') OR TG_NARGS<2\n     OR TG_ARGV[0] NOT IN ('campaign_config_v1','error_config_v1') THEN\n    RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid table log trigger configuration';\n  END IF;\n  -- Explicit campaign projection never reads/serializes the large log column.\n  -- original_schedule is configured time; schedule is the next runtime slot.\n  -- Empty/NULL settings and runtime-only settings have the same config value.\n  IF TG_ARGV[0]='campaign_config_v1' THEN\n    v_new := jsonb_build_object(\n      'id',NEW.id,\n      'name',NEW.name,\n      'action_id',NEW.action_id,\n      'account_id',NEW.account_id,\n      'secondary_account_id',NEW.secondary_account_id,\n      'is_delete',NEW.is_delete,\n      'content',NEW.content,\n      'original_schedule',NEW.original_schedule,\n      'schedule_type',NEW.schedule_type,\n      'schedule_end_date',NEW.schedule_end_date,\n      'schedule_days',NEW.schedule_days,\n      'schedule_week_days',NEW.schedule_week_days,\n      'continue_next_day',NEW.continue_next_day,\n      'refresh_data',NEW.refresh_data,\n      'extra_settings',CASE WHEN jsonb_typeof(NEW.extra_settings)='object' THEN nullif(NEW.extra_settings - ARRAY['sourceLinkIndex','contentRotationIndex','postBumpRotationIndex','internalSmsCreatedCampaignIdsByAccount','postBumpCreatedCampaignIdsByAccount','zaloFriendDataMaterializedAt','zaloFriendMaterializedCount','zaloBirthdayDataMaterializedDate','zaloBirthdayMaterializedCount','zaloFriendRecommendationDataMaterializedAt','zaloFriendRecommendationMaterializedCount','zaloCancelFriendRequestDataMaterializedAt','zaloCancelFriendRequestMaterializedCount'], '{}'::jsonb) ELSE NEW.extra_settings END,\n      'images',NEW.images,\n      'staff_id',NEW.staff_id,\n      'organization_id',NEW.organization_id,\n      'daily_stop_time',NEW.daily_stop_time,\n      'time_sleep_between_2',NEW.time_sleep_between_2,\n      'data_target_source_mode',NEW.data_target_source_mode,\n      'data_group_id',NEW.data_group_id\n    );\n    IF TG_OP='UPDATE' THEN\n      v_old := jsonb_build_object(\n      'id',OLD.id,\n      'name',OLD.name,\n      'action_id',OLD.action_id,\n      'account_id',OLD.account_id,\n      'secondary_account_id',OLD.secondary_account_id,\n      'is_delete',OLD.is_delete,\n      'content',OLD.content,\n      'original_schedule',OLD.original_schedule,\n      'schedule_type',OLD.schedule_type,\n      'schedule_end_date',OLD.schedule_end_date,\n      'schedule_days',OLD.schedule_days,\n      'schedule_week_days',OLD.schedule_week_days,\n      'continue_next_day',OLD.continue_next_day,\n      'refresh_data',OLD.refresh_data,\n      'extra_settings',CASE WHEN jsonb_typeof(OLD.extra_settings)='object' THEN nullif(OLD.extra_settings - ARRAY['sourceLinkIndex','contentRotationIndex','postBumpRotationIndex','internalSmsCreatedCampaignIdsByAccount','postBumpCreatedCampaignIdsByAccount','zaloFriendDataMaterializedAt','zaloFriendMaterializedCount','zaloBirthdayDataMaterializedDate','zaloBirthdayMaterializedCount','zaloFriendRecommendationDataMaterializedAt','zaloFriendRecommendationMaterializedCount','zaloCancelFriendRequestDataMaterializedAt','zaloCancelFriendRequestMaterializedCount'], '{}'::jsonb) ELSE OLD.extra_settings END,\n      'images',OLD.images,\n      'staff_id',OLD.staff_id,\n      'organization_id',OLD.organization_id,\n      'daily_stop_time',OLD.daily_stop_time,\n      'time_sleep_between_2',OLD.time_sleep_between_2,\n      'data_target_source_mode',OLD.data_target_source_mode,\n      'data_group_id',OLD.data_group_id\n    );\n    END IF;\n  ELSE\n    -- auto_error is a policy catalog, not an error-event stream.\n    v_new := to_jsonb(NEW) - ARRAY['created_at','updated_at'];\n    IF TG_OP='UPDATE' THEN\n      v_old := to_jsonb(OLD) - ARRAY['created_at','updated_at'];\n    END IF;\n  END IF;\n  IF TG_OP='UPDATE' AND v_old IS NOT DISTINCT FROM v_new THEN\n    RETURN NULL;\n  END IF;\n  -- Profile first, then the primary-key column names (including composite keys).\n  FOREACH v_column IN ARRAY TG_ARGV[1:TG_NARGS-1] LOOP\n    IF v_column IS NULL OR NOT (v_new ? v_column) OR v_new->v_column='null'::jsonb THEN\n      RAISE EXCEPTION USING ERRCODE='22023', MESSAGE='invalid table log primary key column';\n    END IF;\n    v_pk := v_pk || jsonb_build_object(v_column,v_new->v_column);\n  END LOOP;\n  INSERT INTO public.auto_table_logs(table_name,record_pk,operation,old_data,new_data)\n    VALUES (TG_TABLE_NAME,v_pk,TG_OP,v_old,v_new);\n  RETURN NULL; -- ignored for AFTER ROW triggers\nEXCEPTION WHEN OTHERS THEN\n  -- Do not include SQLERRM/DETAIL/row values (they can contain credentials).\n  -- Cancellation/assertion failures remain PostgreSQL errors; no retry/queue.\n  RAISE WARNING 'auto_table_logs: capture skipped (SQLSTATE %)', SQLSTATE;\n  RETURN NULL;\nEND;\n$function$\n",
+    "md5": "96858661d7d592a9cdc22c67fd853c62",
+    "owner": "postgres",
+    "security_definer": true,
+    "signature": "private.aka_agent_capture_table_change()",
+    "volatility": "v"
+  },
+  "ddl_triggers": [
+    {
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "8da9dff6b2ae47498209d341acaeb60b",
+      "name": "issue_graphql_placeholder",
+      "signature": "set_graphql_placeholder()",
+      "tags": [
+        "DROP EXTENSION"
+      ]
+    },
+    {
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "53a44336da0ac1dd62d89dbd988e6d1d",
+      "name": "issue_pg_cron_access",
+      "signature": "grant_pg_cron_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "4e6d7efe4aed1b3b92063b648aa7a0cf",
+      "name": "issue_pg_graphql_access",
+      "signature": "grant_pg_graphql_access()",
+      "tags": [
+        "CREATE FUNCTION"
+      ]
+    },
+    {
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "1d06ef4fb47bb0ab6e6f8818a62013bb",
+      "name": "issue_pg_net_access",
+      "signature": "grant_pg_net_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "afaad7193dcf8f81e728d2bedb85e43e",
+      "name": "pgrst_ddl_watch",
+      "signature": "pgrst_ddl_watch()",
+      "tags": null
+    },
+    {
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "4357772baf5cfcd5c6d7049585b3a537",
+      "name": "pgrst_drop_watch",
+      "signature": "pgrst_drop_watch()",
+      "tags": null
+    }
+  ],
+  "function_comment": "AFTER INSERT OR UPDATE ROW trigger. TG_ARGV lists primary-key columns. Owner-only internal definer; handles ordinary logging errors without retry. Does not identify the human actor.",
+  "registrations": [
+    {
+      "definition": "CREATE TRIGGER trg_auto_table_log AFTER INSERT OR UPDATE ON auto_campaigns FOR EACH ROW EXECUTE FUNCTION private.aka_agent_capture_table_change('campaign_config_v1', 'id')",
+      "enabled": "O",
+      "name": "trg_auto_table_log",
+      "table": "auto_campaigns"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_auto_table_log AFTER INSERT OR UPDATE ON auto_error FOR EACH ROW EXECUTE FUNCTION private.aka_agent_capture_table_change('error_config_v1', 'id')",
+      "enabled": "O",
+      "name": "trg_auto_table_log",
+      "table": "auto_error"
+    }
+  ],
+  "table_catalog": {
+    "acl": null,
+    "columns": [
+      {
+        "acl": null,
+        "default": null,
+        "identity": "a",
+        "name": "id",
+        "not_null": true,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": "clock_timestamp()",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "type": "timestamp with time zone"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "identity": "",
+        "name": "table_name",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "identity": "",
+        "name": "record_pk",
+        "not_null": true,
+        "type": "jsonb"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "identity": "",
+        "name": "operation",
+        "not_null": true,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "identity": "",
+        "name": "old_data",
+        "not_null": false,
+        "type": "jsonb"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "identity": "",
+        "name": "new_data",
+        "not_null": true,
+        "type": "jsonb"
+      }
+    ],
+    "constraints": [
+      {
+        "def": "CHECK (jsonb_typeof(new_data) = 'object'::text)",
+        "name": "auto_table_logs_new_data_check"
+      },
+      {
+        "def": "CHECK (operation = 'INSERT'::text AND old_data IS NULL OR operation = 'UPDATE'::text AND old_data IS NOT NULL AND jsonb_typeof(old_data) = 'object'::text)",
+        "name": "auto_table_logs_old_data_check"
+      },
+      {
+        "def": "CHECK (operation = ANY (ARRAY['INSERT'::text, 'UPDATE'::text]))",
+        "name": "auto_table_logs_operation_check"
+      },
+      {
+        "def": "PRIMARY KEY (id)",
+        "name": "auto_table_logs_pkey"
+      },
+      {
+        "def": "CHECK (jsonb_typeof(record_pk) = 'object'::text AND record_pk <> '{}'::jsonb)",
+        "name": "auto_table_logs_record_pk_check"
+      }
+    ],
+    "force_rls": false,
+    "indexes": [
+      {
+        "definition": "CREATE UNIQUE INDEX auto_table_logs_pkey ON public.auto_table_logs USING btree (id)",
+        "file": "39736847",
+        "oid": "39736847"
+      },
+      {
+        "definition": "CREATE INDEX idx_auto_table_logs_record_time ON public.auto_table_logs USING btree (table_name, record_pk, created_at DESC, id DESC)",
+        "file": "39736849",
+        "oid": "39736849"
+      }
+    ],
+    "name": "auto_table_logs",
+    "oid": "39736837",
+    "owner": "postgres",
+    "policies": [],
+    "relfilenode": "39736837",
+    "rls": true,
+    "schema": "public",
+    "sequence": "public.auto_table_logs_id_seq",
+    "toast_oid": "39736845"
+  },
+  "table_comment": "Best-effort full INSERT/UPDATE snapshots for explicitly registered public tables. table_name has no schema prefix. Admin-only read; no automatic retention, source FKs, DELETE logging or historical backfill. Rolled-back writes leave no log."
+}

@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-14T02:58:23.028Z",
+  "results": [
+    {
+      "table": "auto_campaigns",
+      "status": 200,
+      "customer_rows": 0
+    },
+    {
+      "table": "auto_error",
+      "status": 200,
+      "customer_rows": 0
+    },
+    {
+      "table": "auto_table_logs",
+      "status": 401,
+      "customer_rows": 0,
+      "code": "42501"
+    }
+  ]
+}

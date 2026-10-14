@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-14T03:16:14.233Z",
+  "runs": 2,
+  "exit_codes": [
+    0,
+    0
+  ],
+  "canonical_sha256": "b9ba6af7578031a80ec4ca6fe06e415b74f0c91560482dc44ef5d29d5aa1eccb",
+  "canonical_unchanged": true,
+  "new_receipts": [
+    "local-verification-2026-10-14T03-16-12-648Z-73bd0498-da77-439c-a4a2-dcd3f3bdcf93.json",
+    "local-verification-2026-10-14T03-16-14-041Z-5e2bd45d-f6c1-49c1-b131-92aa35afac51.json"
+  ]
+}

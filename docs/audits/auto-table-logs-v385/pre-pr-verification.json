@@ -1,0 +1,39 @@
+{
+  "at": "2026-10-14T03:23:23.322807+00:00",
+  "checks": [
+    {
+      "check": "tsc-node",
+      "exit_code": 0,
+      "seconds": 1.9
+    },
+    {
+      "check": "tsc-web",
+      "exit_code": 0,
+      "seconds": 1.42
+    },
+    {
+      "check": "build",
+      "exit_code": 0,
+      "seconds": 26.95,
+      "output_bytes": 38562858
+    }
+  ],
+  "historical_migrations": [
+    {
+      "file": "migrations/migration_v382_auto_table_logs.sql",
+      "sha256": "ecc27b247c77a17aa6a53e0762218d9e2f881edc5e84e6354622c1fc3c195724",
+      "unchanged": true
+    },
+    {
+      "file": "migrations/migration_v383_auto_table_config_logs.sql",
+      "sha256": "e3564158f391db620db183e6e71db2270cf149a0f70eafe5e7403d2341673bbc",
+      "unchanged": true
+    },
+    {
+      "file": "migrations/migration_v384_auto_table_logs_public.sql",
+      "sha256": "d679eafab0d125e603de5196eaec20c4f11b2c361b75bd62899844da5052fa1b",
+      "unchanged": true
+    }
+  ],
+  "agents_updated": true
+}

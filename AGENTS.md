@@ -2,6 +2,14 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+V385 đã apply trên akachat ngày 14/10/2026 (`20261014032129 / migration_v385_auto_table_log_comments`): chỉ sửa comment bảng/function cho đúng hợp đồng cấu hình và tham số profile rồi PK. Function MD5 vẫn `96858661d7d592a9cdc22c67fd853c62`; không đổi logic/quyền/dữ liệu. Không apply lại; [audit và rollback comment](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md#v385-metadata-correction).
+
+V384 đã apply trên akachat ngày 14/10/2026 (`20261014025805 / migration_v384_auto_table_logs_public`): chuyển nguyên bảng log sang `public.auto_table_logs`, giữ dữ liệu/index/sequence và quyền admin-only/RLS; function vẫn ở `private`, giữ lọc cấu hình V383. Không sửa app/thêm connection; không apply lại. [Audit, tra cứu và rollback chuyển schema](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
+
+V383 đã apply trên akachat ngày 14/10/2026 (`20261014023921 / migration_v383_auto_table_config_logs`): thay V382 bằng log cấu hình; bỏ log/updated_at/trạng thái/claim và tiến độ runtime, snapshot chỉ chứa cấu hình trước/sau. Giữ lịch sử V382, không dọn dữ liệu cũ; không sửa app/thêm connection. Không apply lại; [phân loại cột, smoke, audit và rollback](docs/AUTO_TABLE_CONFIG_LOGS_V383.md).
+
+V382 đã apply trên akachat ngày 14/10/2026 (`20261014022053 / migration_v382_auto_table_logs`): `private.auto_table_logs` ghi full INSERT/UPDATE của `auto_campaigns` và `auto_error`, tên bảng không kèm schema, best effort, admin-only, chưa tự xóa; không sửa app/thêm connection. Không apply lại; [audit, tra cứu và rollback giữ lịch sử](docs/AUTO_TABLE_LOGS_V382.md).
+
 V378 đã apply trên akachat ngày 10/10/2026 (`20261009213548 / migration_v378_zalo_222_accepted`): mã Zalo `222` chỉ áp dụng `zalo_add_friend`, ghi Thành công / “Đã chấp nhận lời mời kết bạn”, tính lượt, không tăng/reset target lỗi và không dừng chiến dịch. Giữ mã nội bộ `err_zalo_friend_request_sent`; không apply lại hoặc sửa detail lịch sử; [snapshot và rollback](migrations/snapshots/zalo-222-accepted-v378/manifest.json), smoke `node scripts/zalo-222-accepted-v378-smoke.cjs`.
 
 V376/V377 đã apply trên akachat ngày 10/10/2026 (`20261009201357` / `20261009202253`); không apply lại khi merge. Riêng `err_fb_composer_editor_not_found`: `update_status_campaign=NULL`, `counts_toward_bad_target=true`, `counts_toward_limit=false`; không dừng ngay, vẫn theo ngưỡng target lỗi chung hiện có của `err_undefined` (4 tại thời điểm apply). `chờ xử lý` ở cột campaign kết thúc lượt hiện tại, không phải bỏ qua target. Giữ nguyên năm policy UI/media chưa có producer theo yêu cầu người dùng. Không cần build lại; catalog đã nạp giữ suốt lượt. Snapshot/rollback và kiểm chứng: [V376](docs/FB_COMPOSER_TARGET_ERROR_V376.md), [V377](docs/FB_COMPOSER_BAD_TARGET_V377.md).
@@ -517,6 +525,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Log thay đổi bảng**: bảng hiện tại là `public.auto_table_logs`, vẫn admin-only/RLS. V382–V385 đã apply; không chạy lại khi merge. Trigger nhận profile rồi mới đến PK (`campaign_config_v1` / `error_config_v1`, `id`); cột cấu hình campaign mới cần bổ sung allowlist bằng migration. Giữ loại bỏ log/timestamp/trạng thái/claim/cursor runtime và không dọn lịch sử cũ nếu chưa được yêu cầu. Test V382 `local` tạo receipt có timestamp/UUID, giữ nguyên receipt triển khai gốc. Xem [hợp đồng hiện tại](docs/AUTO_TABLE_LOGS_PUBLIC_V384.md).
 
 - **Pending reason theo bộ chạy**: akaChat xét mọi hành động nghiệp vụ đang bật khi tiếp tục sau quota, kể cả hành động không kiểm tra quota; tìm SĐT không đủ để tiếp tục một mình. Không áp quy tắc này cho scheduler local/legacy Server: lỗi continuation cũ đang được hoãn, note phải phản ánh bộ chạy hiện tại.
 - **Explicit result progress**: `✅ Hoàn thành` là hoàn thành data và phải giữ nguyên kể cả action lỗi. Kết quả explicit Facebook vẫn cần log lỗi độc lập với việc policy dừng hoặc suppress detail; dùng thông báo đã render/cached và receipt để không lặp khi relay/finalization. Email/Zalo giữ helper log khi detail.log trống; thiếu cả message/errorCode thì kết quả failure vẫn dùng câu dự phòng hiện có cho tiến trình, không viết vào detail hoặc thêm log Thành công/Bỏ qua. Không dùng cờ newsfeed thành công legacy để ghi đè explicit failure. Xem [bản sửa và smoke](docs/ACTION_RESULT_PROGRESS_LOGS_20261010.md).

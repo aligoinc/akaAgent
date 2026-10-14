@@ -1,0 +1,71 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "start": {
+    "before_sample": {
+      "from": "2026-10-14T02:38:50.626996+00:00",
+      "payload_bytes": 37930484,
+      "rows": 1000,
+      "to": "2026-10-14T02:39:22.824232+00:00"
+    },
+    "boundary_id": 35694,
+    "campaign_inserts_stat": 10875,
+    "campaign_updates_stat": 13917723,
+    "latest_id": 35835,
+    "logs_after_boundary": [
+      {
+        "first_at": "2026-10-14T02:40:02.523355+00:00",
+        "last_at": "2026-10-14T02:46:46.789421+00:00",
+        "operation": "UPDATE",
+        "payload_bytes": 698523,
+        "rows": 95,
+        "table_name": "auto_campaigns"
+      },
+      {
+        "first_at": "2026-10-14T02:42:01.820492+00:00",
+        "last_at": "2026-10-14T02:46:19.941808+00:00",
+        "operation": "INSERT",
+        "payload_bytes": 12652,
+        "rows": 5,
+        "table_name": "auto_campaigns"
+      }
+    ],
+    "measured_at": "2026-10-14 02:47:08.218943+00",
+    "total_bytes": 1499447296
+  },
+  "end": {
+    "boundary_id": 35835,
+    "campaign_inserts_stat": 10875,
+    "campaign_updates_stat": 13920464,
+    "latest_id": 35836,
+    "logs_after_boundary": [
+      {
+        "first_at": "2026-10-14T02:47:25.883418+00:00",
+        "last_at": "2026-10-14T02:47:25.883418+00:00",
+        "operation": "UPDATE",
+        "payload_bytes": 9234,
+        "rows": 1,
+        "table_name": "auto_campaigns"
+      }
+    ],
+    "measured_at": "2026-10-14 02:48:22.168532+00",
+    "total_bytes": 1499471872
+  },
+  "metrics": {
+    "current_window_seconds": 73.949589,
+    "current_source_updates": 2741,
+    "current_logs": 1,
+    "current_log_rows_per_minute": 0.811363535772998,
+    "current_payload_bytes": 9234,
+    "current_payload_bytes_per_minute": 7492.130889327863,
+    "current_allocated_size_growth_bytes": 24576,
+    "before_logs_per_minute": 1863.5139985308058,
+    "before_payload_bytes_per_minute": 70683987.90504876,
+    "since_apply_seconds": 538.636532,
+    "since_apply_logs": 101,
+    "since_apply_logs_per_minute": 11.250629394739978,
+    "since_apply_payload_bytes": 720409,
+    "since_apply_payload_bytes_per_minute": 80248.06605579438,
+    "log_rate_reduction_percent_since_apply_average": 99.39626805038169
+  },
+  "note": "Read-only observations, not a load test. Payload sizes include stored old/new JSON only; relation size growth is separate and excludes WAL."
+}
