@@ -77,17 +77,21 @@ export const getAutomationTriggerScopeLabel = (
   trigger: AutomationTriggerDisplayValue
 ): string => {
   const actionCode = String(trigger.actionCode || '').trim()
-  if (isAutomationTriggerWildcard(trigger)) return 'Tất cả hành động'
+  if (isAutomationTriggerWildcard(trigger)) return 'Bất kỳ hành động nào'
   return String(trigger.actionName || '').trim() || actionCode
 }
 
-export const formatAutomationTriggerLabel = (
+export const formatAutomationTriggerStatusLabel = (
   trigger: AutomationTriggerDisplayValue
 ): string => {
   const statusLabel = String(trigger.statusLabel || trigger.status || '').trim() || 'Không rõ trạng thái'
   const secondary = trigger.subStatusIds?.map((id, index) => trigger.subStatusLabels?.[index] || `#${id}`).join(' / ')
-  return `${statusLabel}${secondary ? ` (${secondary})` : ''} — ${getAutomationTriggerScopeLabel(trigger)}`
+  return `${statusLabel}${secondary ? ` (${secondary})` : ''}`
 }
+
+export const formatAutomationTriggerLabel = (
+  trigger: AutomationTriggerDisplayValue
+): string => `${formatAutomationTriggerStatusLabel(trigger)} — ${getAutomationTriggerScopeLabel(trigger)}`
 
 const formatFixedAt = (value?: string | null): string => {
   if (!value) return '—'

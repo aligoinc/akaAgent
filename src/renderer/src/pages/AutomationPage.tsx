@@ -104,7 +104,7 @@ const getSemanticDataTypeLabel = (value: {
 const ACTION_FALLBACKS: AutomationOptions['actions'] = [
   {
     id: 'campaign_detail_route',
-    name: 'Theo trạng thái chiến dịch',
+    name: 'Theo trạng thái hành động',
     description: 'Chuyển dữ liệu từ chiến dịch nguồn đến chiến dịch đích, Nhóm data, hoặc cả hai.',
     isAvailable: true,
     isActive: true,
@@ -244,6 +244,9 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
   const actionItems = useMemo(
     () => (options.actions.length > 0 ? options.actions : ACTION_FALLBACKS)
       .filter(action => action.isActive)
+      .map(action => action.id === 'campaign_detail_route'
+        ? { ...action, name: 'Theo trạng thái hành động' }
+        : action)
       .sort((left, right) => left.sortOrder - right.sortOrder),
     [options.actions]
   )
@@ -822,7 +825,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
                           <small>{getSemanticDataTypeLabel(automation)}</small>
                         </td>
                         <td>
-                          <span className="automation-action-cell"><ListRestart size={15} /> Theo trạng thái chiến dịch</span>
+                          <span className="automation-action-cell"><ListRestart size={15} /> Theo trạng thái hành động</span>
                         </td>
                         <td>
                           <span className={`automation-status-pill ${automation.isActive ? 'is-active' : 'is-paused'}`}>

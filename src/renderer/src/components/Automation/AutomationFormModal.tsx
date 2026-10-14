@@ -33,7 +33,9 @@ import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
 import {
   formatAutomationScheduleLabel,
   formatAutomationTriggerLabel,
+  formatAutomationTriggerStatusLabel,
   getAutomationTriggerIdentityKey,
+  getAutomationTriggerScopeLabel,
   getAutomationTriggerSemanticKey,
   isAutomationTriggerWildcard
 } from './automationDisplay'
@@ -523,6 +525,20 @@ export default function AutomationFormModal({
     })
     return Array.from(unique.values())
   }, [options.triggerOptions, sourceCampaign])
+
+  const triggerGroups = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; options: AutomationTriggerOption[] }>()
+    triggerOptions.forEach(option => {
+      const key = isAutomationTriggerWildcard(option) ? 'wildcard' : `action:${option.actionCode}`
+      const group = groups.get(key)
+      if (group) {
+        group.options.push(option)
+      } else {
+        groups.set(key, { key, label: getAutomationTriggerScopeLabel(option), options: [option] })
+      }
+    })
+    return Array.from(groups.values())
+  }, [triggerOptions])
 
   const triggerOptionByKey = useMemo(() => new Map(
     triggerOptions.map(item => [triggerKey(item), item])
@@ -1083,7 +1099,7 @@ export default function AutomationFormModal({
       >
         <header className="automation-form-header">
           <div>
-            <span className="automation-form-eyebrow">Theo trạng thái kết quả chiến dịch</span>
+            <span className="automation-form-eyebrow">Theo trạng thái hành động</span>
             <h2 id="automation-form-title">{mode === 'edit' ? 'Chỉnh sửa tự động hóa' : 'Thêm tự động hóa'}</h2>
           </div>
           <button type="button" className="automation-icon-button" onClick={onClose} disabled={saving} aria-label="Đóng">
@@ -1124,7 +1140,7 @@ export default function AutomationFormModal({
                 <div className="automation-section-heading">
                   <span className="automation-section-icon"><GitBranch size={18} /></span>
                   <div>
-                    <h3 id="automation-step-one-title">Khi chiến dịch A có kết quả</h3>
+                    <h3 id="automation-step-one-title">Khi hành động trong chiến dịch A có kết quả</h3>
                     <p>Chọn chiến dịch nguồn và các trạng thái kết quả sẽ kích hoạt tự động hóa.</p>
                   </div>
                 </div>
@@ -1156,22 +1172,29 @@ export default function AutomationFormModal({
                   ) : triggerOptions.length === 0 ? (
                     <div className="automation-inline-empty is-warning">Loại chiến dịch này chưa có trạng thái kết quả khả dụng.</div>
                   ) : (
-                    <div className="automation-status-options">
-                      {triggerOptions.map(item => {
-                        const key = triggerKey(item)
-                        const checked = form.triggerKeys.includes(key)
-                        return (
-                          <label key={key} className={`automation-status-option ${checked ? 'selected' : ''}`}>
-                            <input type="checkbox" checked={checked} onChange={() => toggleTrigger(item)} />
-                            <span className="automation-status-check"><Check size={13} /></span>
-                            <span>
-                              <strong title={formatAutomationTriggerLabel(item)}>
-                                {formatAutomationTriggerLabel(item)}
-                              </strong>
-                            </span>
-                          </label>
-                        )
-                      })}
+                    <div className="automation-status-groups">
+                      {triggerGroups.map(group => (
+                        <fieldset key={group.key} className="automation-status-group">
+                          <legend>{group.label}</legend>
+                          <div className="automation-status-options">
+                            {group.options.map(item => {
+                              const key = triggerKey(item)
+                              const checked = form.triggerKeys.includes(key)
+                              return (
+                                <label key={key} className={`automation-status-option ${checked ? 'selected' : ''}`}>
+                                  <input type="checkbox" aria-label={formatAutomationTriggerLabel(item)} checked={checked} onChange={() => toggleTrigger(item)} />
+                                  <span className="automation-status-check" aria-hidden="true"><Check size={13} /></span>
+                                  <span>
+                                    <strong title={formatAutomationTriggerLabel(item)}>
+                                      {formatAutomationTriggerStatusLabel(item)}
+                                    </strong>
+                                  </span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </fieldset>
+                      ))}
                     </div>
                   )}
                 </div>
