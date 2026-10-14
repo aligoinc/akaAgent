@@ -39,7 +39,7 @@ export function readRandomDay(accountId: number, query: FacebookRandomReadQuery)
   if (!query || !/^\d{4}-\d{2}-\d{2}$/.test(query.date) || !Number.isFinite(Date.parse(query.date))
     || new Date(query.date).toISOString().slice(0, 10) !== query.date
     || (query.campaignId != null && (!Number.isSafeInteger(query.campaignId) || query.campaignId <= 0))
-    || !Number.isSafeInteger(query.page ?? 1) || (query.page ?? 1) < 1) throw new Error('Bộ lọc kế hoạch không hợp lệ.')
+    || !Number.isSafeInteger(query.page ?? 1) || (query.page ?? 1) < 1) throw new Error('Bộ lọc tiến trình không hợp lệ.')
   return randomRunRpc(accountId, 'day', { ...query })
 }
 export function listRandomDates(accountId: number, before?: string): Promise<string[]> {

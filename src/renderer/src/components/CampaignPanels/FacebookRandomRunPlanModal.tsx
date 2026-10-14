@@ -18,7 +18,7 @@ export default function FacebookRandomRunPlanModal({ account, onClose }: {
   return <dialog ref={dialogRef} className="modal random-plan-modal" aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); onClose() }}>
     <header className="modal-header">
-      <h3 id={titleId}>Kế hoạch chạy ngẫu nhiên · {account.name}</h3>
+      <h3 id={titleId}>Tiến trình chạy ngẫu nhiên · {account.name}</h3>
       <button type="button" className="btn-icon" aria-label="Đóng" onClick={onClose}><X size={18}/></button>
     </header>
     <div className="modal-body"><FacebookRandomRunPanel account={account} active/></div>

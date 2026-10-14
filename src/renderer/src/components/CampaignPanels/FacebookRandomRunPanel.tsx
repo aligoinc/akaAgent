@@ -72,7 +72,7 @@ export default function FacebookRandomRunPanel({ account, campaignId, active }: 
       <label className="report-dropdown-field random-filter-scope">
         <span>Phạm vi</span>
         <div className="random-filter-select">
-          <select className="report-filter-button detail-filter-button random-filter-control" aria-label="Phạm vi kế hoạch" value={scope} onChange={e => { setScope(e.target.value as 'account' | 'campaign'); setPage(1); setData(null) }}><option value="account">Toàn bộ tài khoản</option>{campaignId && <option value="campaign">Chiến dịch đang xem</option>}</select>
+          <select className="report-filter-button detail-filter-button random-filter-control" aria-label="Phạm vi tiến trình" value={scope} onChange={e => { setScope(e.target.value as 'account' | 'campaign'); setPage(1); setData(null) }}><option value="account">Toàn bộ tài khoản</option>{campaignId && <option value="campaign">Chiến dịch đang xem</option>}</select>
           <ChevronDown size={14} aria-hidden="true"/>
         </div>
       </label>
@@ -83,7 +83,7 @@ export default function FacebookRandomRunPanel({ account, campaignId, active }: 
       {current?.turns.map(turn => <tr key={turn.id}><td title={`Vòng ${turn.round}, dòng ${turn.ruleIndex + 1}, cấu hình ${turn.revision}`}>{turn.order}</td><td>{turn.campaignName}</td><td>{turn.quantity} {turn.unit === 'minute' ? 'phút' : turn.unit === 'run' ? 'lượt' : 'data'}</td>
         <td>{turn.unit === 'minute' ? `${Math.floor(turn.elapsedSeconds / 60).toString().padStart(2, '0')}:${(turn.elapsedSeconds % 60).toString().padStart(2, '0')}` : `${turn.processed} ${turn.unit === 'run' ? 'lượt' : 'data'}`}</td>
         <td><span className={`random-turn-status random-turn-${turn.status}`}>{RANDOM_TURN_LABELS[turn.status]}</span></td><td>{turn.reason || '—'}</td></tr>)}
-      {!current?.turns.length && <tr><td colSpan={6} className="random-empty">{loading ? 'Đang tải kế hoạch…' : error ? 'Chưa tải được kế hoạch.' : 'Chưa có kế hoạch chạy trong ngày này'}</td></tr>}
+      {!current?.turns.length && <tr><td colSpan={6} className="random-empty">{loading ? 'Đang tải tiến trình…' : error ? 'Chưa tải được tiến trình.' : 'Chưa có đợt chạy ngẫu nhiên trong ngày này'}</td></tr>}
     </tbody></table></div>
     <div className="random-toolbar"><span className="random-muted">“Hoàn tất đợt” chỉ kết thúc chỉ tiêu của đợt này.</span><div className="random-pagination"><button className="btn btn-secondary btn-sm" disabled={page <= 1 || loading} onClick={() => { setData(null); setPage(n => n - 1) }}>Trước</button><span>Trang {page} · {current?.total ?? 0} đợt</span><button className="btn btn-secondary btn-sm" disabled={!current || page * 100 >= current.total || loading} onClick={() => { setData(null); setPage(n => n + 1) }}>Sau</button></div></div>
   </div>

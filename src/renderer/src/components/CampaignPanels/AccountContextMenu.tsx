@@ -283,8 +283,8 @@ export default function AccountContextMenu({
 
       {account.flatformType === 'facebook' && <div className="context-menu-group">
         <button className="context-menu-item" onClick={() => handleAction(() => onRandomToggle(account))}>{account.facebookRandomRunEnabled ? <Pause size={14}/> : <Play size={14}/>}<span>{account.facebookRandomRunEnabled ? 'Dừng chạy ngẫu nhiên' : 'Chạy ngẫu nhiên'}</span></button>
-        <button className="context-menu-item" onClick={() => handleAction(() => onRandomConfig(account))}><FolderCog size={14}/><span>Cài đặt chạy ngẫu nhiên…</span></button>
-        <button className="context-menu-item" onClick={() => handleAction(() => onRandomPlan(account))}><Info size={14}/><span>Xem kế hoạch chạy ngẫu nhiên</span></button>
+        <button className="context-menu-item" onClick={() => handleAction(() => onRandomConfig(account))}><FolderCog size={14}/><span>Cài đặt chạy ngẫu nhiên</span></button>
+        <button className="context-menu-item" onClick={() => handleAction(() => onRandomPlan(account))}><Info size={14}/><span>Xem tiến trình chạy ngẫu nhiên</span></button>
       </div>}
 
       {/* Campaign Group */}
