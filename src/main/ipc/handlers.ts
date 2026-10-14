@@ -30,6 +30,7 @@ import { startAccountPoller, type AccountPollerController } from '../domain/acco
 import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
 import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
+import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
@@ -321,6 +322,7 @@ export function registerIpcHandlers(
       isAccountStartupPending: account => facebookLogin.isStartupPending(account) }
   )
   const campaignDiagnostics = registerCampaignDiagnosticsHandlers(mainWindow, campaignScheduler)
+  const campaignFormAi = registerCampaignFormAiHandlers(mainWindow)
   const automationProcessor = new AutomationProcessor({
     runtimeTarget: 'desktop',
     onUpdated: event => emitAutomationUpdated(mainWindow, event)
@@ -761,6 +763,7 @@ export function registerIpcHandlers(
 
     campaignSupport.stop()
     campaignDiagnostics.stop()
+    campaignFormAi.stop()
     const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     await facebookStopped
@@ -1168,6 +1171,7 @@ export function registerIpcHandlers(
   app.on('before-quit', (event) => {
     campaignSupport.stop()
     campaignDiagnostics.stop()
+    campaignFormAi.stop()
     if (quitCleanupCompleted) return
     if (quitCleanupStarted) {
       event.preventDefault()
@@ -1259,6 +1263,7 @@ export function registerIpcHandlers(
   registerAuthHandlers({
     afterLogin: async ({ username, password }) => {
       campaignDiagnostics.stop()
+      campaignFormAi.stop()
       await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1350,6 +1355,7 @@ export function registerIpcHandlers(
     beforeLogout: async () => {
       campaignSupport.stop()
       campaignDiagnostics.stop()
+      campaignFormAi.stop()
       const facebookStopped = facebookLogin.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)

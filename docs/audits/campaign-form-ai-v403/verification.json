@@ -1,0 +1,30 @@
+{
+  "history": {
+    "at": "2026-10-14T17:33:53.574Z",
+    "project_ref": "cgjbsmqtfhqvttudyjzq",
+    "history_version": "20261014173351",
+    "name": "migration_v403_campaign_form_ai_repeat",
+    "migration_sha256": "10773b15a31bb2687a805313c8a316df3f4a1f64cdd58b4df2f323d76d098fad",
+    "applied": true
+  },
+  "passed": true,
+  "candidate_provider_checks": 11,
+  "applied_provider_checks": 6,
+  "checks": {
+    "shared_json_ipc_smoke": "passed",
+    "real_form_shift_enter_and_enter_both_sections": "passed",
+    "real_form_repeated_request_empty_patch_success_both_sections": "passed",
+    "full_schedule_limits_drafts_timezone_ui_smoke": "passed",
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "sql_rollback_transaction": "passed",
+    "live_history_prompt_metadata_other_config_checksums": "passed",
+    "rollback_rehearsal": "passed"
+  },
+  "schema_changed": false,
+  "connections_added": false,
+  "schema_reloaded": false,
+  "packaged": false,
+  "released": false
+}

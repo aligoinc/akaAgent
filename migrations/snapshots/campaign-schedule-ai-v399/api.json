@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-14T16:01:49.817Z",
+  "passed": true,
+  "status": 200,
+  "rows": [
+    {
+      "id": 47,
+      "code": "app_campaign_schedule",
+      "model_id": 21,
+      "prompt_id": 49,
+      "is_active": true
+    }
+  ]
+}

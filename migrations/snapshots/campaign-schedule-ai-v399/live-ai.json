@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-14T16:01:56.918Z",
+  "model": "gpt-6.1-sol",
+  "passed": true,
+  "results": [
+    {
+      "name": "weekly",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "weekly",
+          "startTime": "08:00",
+          "scheduleWeekDays": "2,4,6"
+        }
+      }
+    },
+    {
+      "name": "business-conflict-filled",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startTime": "20:00",
+          "useDailyStopTime": true,
+          "dailyStopTime": "18:00"
+        }
+      }
+    },
+    {
+      "name": "monthly",
+      "result": {
+        "ok": true,
+        "patch": {
+          "scheduleType": "monthly",
+          "startTime": "09:30",
+          "scheduleDays": "1,15,28"
+        }
+      }
+    },
+    {
+      "name": "unsupported",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Lịch bạn yêu cầu chưa được hỗ trợ cho loại chiến dịch này. Loại chiến dịch này chỉ hỗ trợ lịch hàng ngày, không hỗ trợ chạy riêng thứ 2 và thứ 6 hàng tuần."
+      }
+    },
+    {
+      "name": "unclear",
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Chưa hiểu yêu cầu của bạn. Vui lòng mô tả rõ hơn lịch muốn chạy."
+      }
+    },
+    {
+      "name": "relative-date",
+      "result": {
+        "ok": true,
+        "patch": {
+          "startDate": "2026-10-15",
+          "startTime": "08:00"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+.campaign-schedule-ai-trigger { color: var(--accent-primary, #6366f1); margin-left: 8px; }
+.campaign-schedule-ai-popover {
+  position: fixed; width: min(400px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto;
+  box-sizing: border-box; padding: 16px; border: 1px solid var(--border-default, #e2e8f0); border-radius: 12px;
+  background: var(--bg-primary, #fff); color: var(--text-primary, #1e293b); box-shadow: 0 12px 36px #0002;
+  font-size: 13px;
+}
+.campaign-schedule-ai-heading, .campaign-schedule-ai-heading strong, .campaign-schedule-ai-actions {
+  display: flex; align-items: center; gap: 8px;
+}
+.campaign-schedule-ai-heading { justify-content: space-between; margin-bottom: 12px; }
+.campaign-schedule-ai-popover label { display: block; margin-bottom: 6px; }
+.campaign-schedule-ai-popover textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 80px; }
+.campaign-schedule-ai-hint { margin-top: 6px; color: var(--text-secondary, #64748b); font-size: 12px; line-height: 1.5; }
+.campaign-schedule-ai-actions { justify-content: flex-end; margin-top: 12px; }
+.campaign-schedule-ai-error { color: var(--accent-error, #dc2626); margin-top: 10px; line-height: 1.5; }

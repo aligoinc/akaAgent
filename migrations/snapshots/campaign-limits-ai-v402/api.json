@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-14T17:23:24.081Z",
+  "passed": true,
+  "status": 200,
+  "rows": [
+    {
+      "id": 50,
+      "code": "app_campaign_action_limits",
+      "model_id": 21,
+      "prompt_id": 52,
+      "is_active": true
+    }
+  ]
+}
