@@ -3,6 +3,7 @@ import type {
   ZaloSessionCheckResult
 } from '../../shared/types'
 import type {
+  ZaloPhoneSearchResult,
   ZaloGroupInfoBatch,
   ZaloGroupMembersResult
 } from './zaloRuntimeService'
@@ -14,6 +15,7 @@ import type {
  * scan pacing, progress, cancellation and persistence stay in one place.
  */
 export interface ZaloContactScanSource {
+  findUserByPhone?(accountId: number, phone: string, signal?: AbortSignal): Promise<ZaloPhoneSearchResult>
   checkSession(accountId: number): Promise<ZaloSessionCheckResult>
   getAllFriendsPage(
     accountId: number,

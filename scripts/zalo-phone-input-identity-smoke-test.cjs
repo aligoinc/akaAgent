@@ -75,6 +75,8 @@ function fixture(options = {}) {
   }
   const update = compile(updateFunction.getText(repositorySource).replace(/^export /, ''), {
     normalizeVietnamMobilePhone, getCampaignInputDataRequirement,
+    // These fixtures run outside managed action context.
+    settleManagedActionInput: async () => null,
     client: () => db,
     requireCurrentUser: () => ({ staffId: 20 }),
     getCampaign: async () => campaign,

@@ -1,4 +1,5 @@
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
+import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult } from '../shared/zaloPhoneCheck'
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -72,6 +73,21 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, state: ChatWebState) => callback(state)
     ipcRenderer.on(IPC_EVENTS.CHAT_WEB_STATE, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.CHAT_WEB_STATE, handler)
+  },
+
+  zaloPhoneCheck: {
+    start: (request: ZaloPhoneCheckRequest): Promise<ZaloPhoneCheckResult> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.start, request),
+    cancel: (runId: string): Promise<void> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.cancel, runId),
+    onRow: (callback: (event: ZaloPhoneCheckEvent) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, event: ZaloPhoneCheckEvent) => callback(event)
+      ipcRenderer.on(ZALO_PHONE_CHECK_IPC.row, handler)
+      return () => ipcRenderer.removeListener(ZALO_PHONE_CHECK_IPC.row, handler)
+    },
+    onCompleted: (callback: (result: ZaloPhoneCheckResult) => void): (() => void) => {
+      const handler = (_: Electron.IpcRendererEvent, result: ZaloPhoneCheckResult) => callback(result)
+      ipcRenderer.on(ZALO_PHONE_CHECK_IPC.completed, handler)
+      return () => ipcRenderer.removeListener(ZALO_PHONE_CHECK_IPC.completed, handler)
+    }
   },
 
   // Auth

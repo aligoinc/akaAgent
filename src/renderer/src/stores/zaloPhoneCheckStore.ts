@@ -1,0 +1,68 @@
+import { createStore } from 'zustand/vanilla'
+import { createZaloPhoneCheckRow, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckRow, type ZaloPhoneCheckStatus } from '../../../shared/zaloPhoneCheck'
+
+export type PhoneCheckFilter = 'all' | ZaloPhoneCheckStatus
+interface State {
+  ids: string[]; visibleIds: string[]; rows: Record<string, ZaloPhoneCheckRow>
+  selected: Record<string, boolean>; filter: PhoneCheckFilter
+  runId: string | null; accountId: number | null; sequence: number
+  busy: boolean; stopping: boolean; message: string
+  processed: number; total: number; checkingPhone: string
+}
+const initial = (): State => ({ ids: [], visibleIds: [], rows: {}, selected: {}, filter: 'all', runId: null,
+  accountId: null, sequence: 0, busy: false, stopping: false, message: '', processed: 0, total: 0, checkingPhone: '' })
+function visible(state: State, rows = state.rows) {
+  if (state.filter === 'all') return state.ids
+  const ids = state.ids.filter(id => rows[id].status === state.filter)
+  return ids.length === state.visibleIds.length && ids.every((id, i) => id === state.visibleIds[i]) ? state.visibleIds : ids
+}
+export function createZaloPhoneCheckStore() {
+  const store = createStore<State>(() => initial())
+  return Object.assign(store, {
+    load(phones: string[]) {
+      store.setState({ ...initial(), ids: phones, visibleIds: phones, rows: Object.fromEntries(phones.map(phone => [phone, createZaloPhoneCheckRow(phone)])) }, true)
+    },
+    begin(runId: string, accountId: number, total: number) {
+      store.setState({ runId, accountId, sequence: 0, busy: true, stopping: false, processed: 0, total, checkingPhone: '', message: '' })
+    },
+    row(event: ZaloPhoneCheckEvent) {
+      const state = store.getState()
+      if (!state.busy || event.runId !== state.runId || event.accountId !== state.accountId || event.sequence <= state.sequence || !state.rows[event.row.id]) return
+      const prior = state.rows[event.row.id]
+      const row = { ...event.row }
+      const rows = { ...state.rows, [row.id]: row }
+      const finished = row.status !== 'pending' && row.status !== 'checking'
+      store.setState({ rows, visibleIds: visible(state, rows), sequence: event.sequence,
+        processed: state.processed + (finished && (prior.status === 'pending' || prior.status === 'checking') ? 1 : 0),
+        checkingPhone: row.status === 'checking' ? row.phone : '' })
+    },
+    complete(result: ZaloPhoneCheckResult) {
+      const state = store.getState()
+      if (!state.busy || result.runId !== state.runId || result.accountId !== state.accountId || result.sequence <= state.sequence) return
+      const rows = { ...state.rows }
+      for (const row of result.rows) {
+        const prior = rows[row.id]
+        if (!prior) continue
+        if (prior.status !== row.status || prior.name !== row.name || prior.uid !== row.uid || prior.note !== row.note || prior.accountId !== row.accountId) rows[row.id] = { ...row }
+      }
+      store.setState({ rows, visibleIds: visible(state, rows), sequence: result.sequence, busy: false, stopping: false,
+        checkingPhone: '', processed: result.rows.filter(row => row.status !== 'pending').length,
+        message: result.error || (result.stopped ? 'Đã dừng kiểm tra.' : 'Đã kiểm tra xong.') })
+    },
+    fail(message: string) {
+      const state = store.getState(), rows = { ...state.rows }
+      for (const id of state.ids) if (rows[id].status === 'checking') rows[id] = { ...rows[id], status: 'unknown', note: message }
+      store.setState({ rows, visibleIds: visible(state, rows), busy: false, stopping: false, message, checkingPhone: '' })
+    },
+    filter(filter: PhoneCheckFilter) {
+      const state = { ...store.getState(), filter }
+      store.setState({ filter, visibleIds: visible(state) })
+    },
+    toggle(id: string) { store.setState(state => ({ selected: { ...state.selected, [id]: !state.selected[id] } })) },
+    selectVisible(selected: boolean) {
+      store.setState(state => ({ selected: { ...state.selected, ...Object.fromEntries(state.visibleIds.map(id => [id, selected])) } }))
+    },
+    selectedRows(): ZaloPhoneCheckRow[] { const state = store.getState(); return state.ids.filter(id => state.selected[id]).map(id => state.rows[id]) }
+  })
+}
+export type ZaloPhoneCheckStore = ReturnType<typeof createZaloPhoneCheckStore>

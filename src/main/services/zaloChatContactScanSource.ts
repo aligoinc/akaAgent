@@ -1,3 +1,4 @@
+import { searchZaloPhone, phoneSearchLimitScope } from './zaloPhoneSearch'
 import type {
   ZaloLabelOption,
   ZaloSessionCheckResult
@@ -33,8 +34,16 @@ function normalizeProxyUrl(value: unknown): string | undefined {
 export class ZaloChatContactScanSource implements ZaloContactScanSource {
   public constructor(
     private readonly chatApi: ZaloChatApiClient,
-    private readonly supabase: Pick<SupabaseService, 'getSystemSettingValue'>
+    private readonly supabase: Pick<SupabaseService, 'getSystemSettingValue' | 'getZaloErrorPolicyByCode'>
   ) {}
+
+  public async findUserByPhone(accountId: number, phone: string, signal?: AbortSignal) {
+    return searchZaloPhone(
+      reqSrc => this.chatApi.findUserByPhoneSource(accountId, phone, reqSrc, signal),
+      async code => phoneSearchLimitScope(await this.supabase.getZaloErrorPolicyByCode(code, 'zalo_find_phone_user').catch(() => null)),
+      signal
+    )
+  }
 
   public checkSession(accountId: number): Promise<ZaloSessionCheckResult> {
     return this.chatApi.checkSession(accountId)

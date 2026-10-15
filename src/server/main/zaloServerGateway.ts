@@ -1,3 +1,4 @@
+import { validateZaloPhoneCheckRequest } from '../../shared/zaloPhoneCheck'
 import { randomUUID, type KeyObject } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { isIP } from 'net'
@@ -111,6 +112,7 @@ interface ClientRecord {
   capabilityTimer: ReturnType<typeof setTimeout> | null
   revalidationPromise: Promise<boolean> | null
   messageQueue: Promise<void>
+  phoneChecks: Map<string, number>
 }
 
 export interface ZaloServerGatewayOptions {
@@ -129,6 +131,7 @@ export interface ZaloServerGatewayOptions {
   startControlOperation(staffId: number, command: ZaloServerCommandName, args: unknown[]): ZaloServerOperationSnapshot
   revalidateControlSession(staffId: number, organizationId: number, sessionId: string): Promise<boolean>
   revalidateControlCapability(staffId: number, organizationId: number): Promise<boolean>
+  cancelPhoneCheck?(staffId: number, accountId: number, runId: string): void
   onClientCountChanged?(): void
 }
 
@@ -489,7 +492,8 @@ export class ZaloServerGateway {
       sessionExpiryTimer: null,
       capabilityTimer: null,
       revalidationPromise: null,
-      messageQueue: Promise.resolve()
+      messageQueue: Promise.resolve(),
+      phoneChecks: new Map()
     }
     this.clients.add(client)
     socket.on('message', raw => {
@@ -514,6 +518,8 @@ export class ZaloServerGateway {
         })
     })
     socket.on('close', () => {
+      if (client.auth) for (const [runId, accountId] of client.phoneChecks) this.options.cancelPhoneCheck?.(client.auth.staffId, accountId, runId)
+      client.phoneChecks.clear()
       clearTimeout(client.authTimer)
       if (client.sessionExpiryTimer) clearTimeout(client.sessionExpiryTimer)
       if (client.capabilityTimer) clearTimeout(client.capabilityTimer)
@@ -593,11 +599,18 @@ export class ZaloServerGateway {
     let response: ZaloServerCommandResponse
     try {
       const args = Array.isArray(message.args) ? message.args : []
-      const result = auth.kind === 'control'
+      const phoneRequest = message.command === 'contacts.checkZaloPhones' ? validateZaloPhoneCheckRequest(args[1]) : null
+      if (phoneRequest) {
+        if (auth.kind !== 'desktop' || phoneRequest.accountId !== args[0]) throw new Error('Yêu cầu kiểm tra SĐT không hợp lệ.')
+        client.phoneChecks.set(phoneRequest.runId, phoneRequest.accountId)
+      }
+      let result: unknown
+      try { result = auth.kind === 'control'
         ? await this.startAuthorizedControlOperation(client, message.command, args)
         : DESKTOP_DETACHED_OPERATION_COMMANDS.has(message.command)
           ? this.options.startControlOperation(auth.staffId, message.command, args)
           : await this.options.executeCommand(auth.staffId, message.command, args)
+      } finally { if (phoneRequest) client.phoneChecks.delete(phoneRequest.runId) }
       response = { type: 'command-result', requestId: message.requestId, ok: true, result }
     } catch (error) {
       response = {

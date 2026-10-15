@@ -15,6 +15,9 @@ import type { ZaloGroupContactInput, ZaloGroupMemberContactInput, ZaloUserContac
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import type { ZaloContactScanSource } from './zaloContactScanSource'
 import { getContactDatasetScanTypeCode } from '../../shared/dataGroupSemantics'
+import { ZALO_PHONE_CHECK_IPC, createZaloPhoneCheckRow, validateZaloPhoneCheckRequest, type ZaloPhoneCheckRequest, type ZaloPhoneCheckRow, type ZaloPhoneCheckResult } from '../../shared/zaloPhoneCheck'
+import { phoneSearchErrorCode } from './zaloPhoneSearch'
+import { withRequestDeadline } from './requestDeadline'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -171,6 +174,131 @@ export class ContactLoader {
 
   destroyBackgroundPage(accountId: number): void {
     this.backgroundPages.destroy(accountId)
+  }
+
+  private readonly cancelledPhoneChecks = new Map<string, number>()
+
+  cancelAllZaloPhoneChecks(): void {
+    for (const [accountId, load] of this.activeLoads) {
+      const runId = load.variables.phoneCheckRunId
+      if (typeof runId === 'string') this.cancelZaloPhoneCheck(accountId, runId)
+    }
+  }
+
+  cancelZaloPhoneCheck(accountId: number, runId: string): void {
+    // A cancel may overtake Server claim/preflight. Keep a bounded, short-lived tombstone.
+    for (const [key, expires] of this.cancelledPhoneChecks) if (expires < Date.now()) this.cancelledPhoneChecks.delete(key)
+    if (this.cancelledPhoneChecks.size >= 300) this.cancelledPhoneChecks.delete(this.cancelledPhoneChecks.keys().next().value!)
+    this.cancelledPhoneChecks.set(`${accountId}:${runId}`, Date.now() + 300_000)
+    const active = this.activeLoads.get(accountId)
+    if (active?.variables.phoneCheckRunId !== runId) return
+    this.cancelLoad(accountId)
+    active.controller.abort()
+  }
+
+  async checkZaloPhones(input: ZaloPhoneCheckRequest, parentSignal?: AbortSignal): Promise<ZaloPhoneCheckResult> {
+    const request = validateZaloPhoneCheckRequest(input)
+    const { accountId, runId } = request
+    parentSignal?.throwIfAborted()
+    if ((this.cancelledPhoneChecks.get(`${accountId}:${runId}`) || 0) > Date.now()) throw new Error('Lượt kiểm tra đã bị dừng.')
+    const load = this.startLoad(accountId, 'person', {}, {
+      runtimePlatform: 'zalo', runKeyLabel: 'phone-check', targetUrl: 'zalo://phone-check',
+      variables: { phoneCheckRunId: runId }
+    })
+    const cancel = () => this.cancelZaloPhoneCheck(accountId, runId)
+    parentSignal?.addEventListener('abort', cancel, { once: true })
+    const rows = request.phones.slice(0, request.limit).map(createZaloPhoneCheckRow)
+    let sequence = 0
+    let claim: AccountRuntimeScanClaim | undefined
+    let account: AutoAccount | null = null
+    let errorMessage: string | undefined
+    const signal = load.controller.signal
+    const assertActive = () => {
+      signal.throwIfAborted()
+      parentSignal?.throwIfAborted()
+      if (this.isLoadCancelled(accountId, load.variables)) throw new Error('Đã dừng kiểm tra.')
+    }
+    const emit = (row: ZaloPhoneCheckRow) => {
+      if (parentSignal?.aborted || this.mainWindow.isDestroyed()) return
+      this.mainWindow.webContents.send(ZALO_PHONE_CHECK_IPC.row, { runId, accountId, sequence: ++sequence, row: { ...row } })
+    }
+    try {
+      account = await this.supabase.getAccount(accountId)
+      assertActive()
+      const preflight = this.getZaloPreflightError(account)
+      if (preflight) throw new Error(preflight)
+      if (!this.zaloRuntime?.findUserByPhone) throw new Error('Bộ chạy chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật runtime.')
+      claim = await this.claimAccountForScan(account!)
+      assertActive()
+      const session = await withRequestDeadline(signal, () => this.zaloRuntime!.checkSession(accountId), 30_000)
+      assertActive()
+      if (!session.loggedIn) throw new Error('Tài khoản chưa đăng nhập Zalo. Vui lòng đăng nhập lại.')
+      for (let index = 0; index < rows.length; index++) {
+        if (index > 0) await this.waitForZaloFriendApiDelay(accountId, load, this.getZaloFriendApiDelayMs())
+        assertActive()
+        const row = rows[index]
+        row.status = 'checking'
+        row.accountId = accountId
+        emit(row)
+        try {
+          const result = await withRequestDeadline(signal,
+            requestSignal => this.zaloRuntime!.findUserByPhone!(accountId, row.phone, requestSignal), 30_000)
+          assertActive()
+          if (!result.user || typeof result.user.uid !== 'string' || !/^[1-9]\d{0,63}$/.test(result.user.uid.trim())) throw new Error('Zalo trả về hồ sơ không hợp lệ.')
+          row.status = 'found'
+          row.uid = result.user.uid.trim()
+          const name = result.user.displayName || result.user.originalName
+          row.name = typeof name === 'string' ? name.trim() : ''
+          emit(row)
+        } catch (error) {
+          assertActive()
+          // 216 is an explicit no-user response. Limits/transport failures never prove absence.
+          if (phoneSearchErrorCode(error) === '216') {
+            row.status = 'not_found'
+            emit(row)
+            continue
+          }
+          row.status = 'unknown'
+          const code = phoneSearchErrorCode(error)
+          row.note = ['phone_check_update_required', 'data_scan_not_supported', 'unsupported_query_type'].includes(code)
+            ? 'Zalo Server chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật Chat API và runtime.'
+            : code ? `Chưa xác định được kết quả (mã ${code.slice(0, 80)}). Đã dừng lượt kiểm tra.`
+            : 'Không xác nhận được kết quả do lỗi kết nối, hết thời gian chờ hoặc phiên không sẵn sàng. Đã dừng lượt kiểm tra.'
+          emit(row)
+          errorMessage = row.note
+          break
+        }
+      }
+    } catch (error) {
+      if (!signal.aborted && !parentSignal?.aborted && !this.isLoadCancelled(accountId, load.variables)) {
+        errorMessage = error instanceof Error ? error.message : 'Không thể kiểm tra SĐT.'
+      }
+    } finally {
+      parentSignal?.removeEventListener('abort', cancel)
+      for (const row of rows) {
+        if (row.status === 'checking') {
+          row.status = 'unknown'
+          row.note = 'Đã dừng trước khi xác nhận được kết quả.'
+        }
+      }
+      try {
+        if (claim && account) await this.restoreAccountStatus(account, claim)
+      } catch {
+        errorMessage = 'Chưa xác nhận nhả tài khoản. Vui lòng kiểm tra trạng thái tài khoản trước lượt tiếp theo.'
+      } finally {
+        if (this.activeLoads.get(accountId) === load) {
+          this.activeLoads.delete(accountId)
+          this.cancelledLoads.delete(accountId)
+        }
+      }
+    }
+    const result: ZaloPhoneCheckResult = {
+      runId, accountId, sequence: ++sequence, rows,
+      stopped: signal.aborted || !!parentSignal?.aborted || !!errorMessage,
+      error: errorMessage
+    }
+    if (!parentSignal?.aborted && !this.mainWindow.isDestroyed()) this.mainWindow.webContents.send(ZALO_PHONE_CHECK_IPC.completed, result)
+    return result
   }
 
   async loadFriends(accountId: number): Promise<ContactLoadResult> {
@@ -712,7 +840,7 @@ export class ContactLoader {
     const active = this.activeLoads.get(accountId)
     if (active) {
       active.variables.contactScanCancelled = true
-      if (active.contactType === PAGE_INBOX_CONTACT_TYPE) active.controller.abort()
+      if (active.contactType === PAGE_INBOX_CONTACT_TYPE || active.variables.phoneCheckRunId) active.controller.abort()
       if (active.runtimePlatform === 'zalo') {
         void Promise.resolve(this.zaloRuntime?.cancelActiveQuery?.(accountId)).catch(error => {
           console.warn('[ContactLoader] Failed to cancel active Zalo scan query:', {

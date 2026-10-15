@@ -8,6 +8,7 @@ import { getContactTypeForDataTypeCode, getDataScanActionTypeCode, getDataTypeDi
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useUiStore } from '../../stores/uiStore'
 import DataGroupManagerModal from './DataGroupManagerModal'
+import ZaloPhoneCheckModal from './ZaloPhoneCheckModal'
 import DataScanGroupSelectionModal from './DataScanGroupSelectionModal'
 import { useAuthStore } from '../../stores/authStore'
 import { normalizeEntitlements } from '../../utils/entitlements'
@@ -1031,6 +1032,7 @@ export default function DataScanModal({
   const [contacts, setContacts] = useState<AutoAccountContact[]>([])
   const [loading, setLoading] = useState(false)
   const [scanLoading, setScanLoading] = useState(false)
+  const [showPhoneCheck, setShowPhoneCheck] = useState(false)
   const [selectingOutput, setSelectingOutput] = useState(false)
   const [scanStopping, setScanStopping] = useState(false)
   const [search, setSearch] = useState('')
@@ -3886,6 +3888,7 @@ export default function DataScanModal({
             </div>
           </div>
           <div className="data-scan-header-actions">
+            {entitlements?.zalo && <button className="btn btn-secondary btn-sm" disabled={scanLoading || selectingOutput} onClick={() => setShowPhoneCheck(true)}>Kiểm tra SĐT có Zalo</button>}
             {scanLoading && (
               <button
                 className="btn-icon"
@@ -5269,6 +5272,7 @@ export default function DataScanModal({
         </>
         )}
       </div>
+      {showPhoneCheck && <ZaloPhoneCheckModal initialAccountId={typeof accountId === 'number' ? accountId : undefined} onClose={() => setShowPhoneCheck(false)} />}
     </div>
   )
 }

@@ -1,0 +1,30 @@
+.modal-overlay.phone-check-overlay { z-index: 3700; }
+.phone-check-modal { position: relative; display: flex; flex-direction: column; width: min(1200px, 96vw); height: min(820px, 92vh); border: 1px solid var(--border-default); border-radius: 12px; background: var(--bg-primary); color: var(--text-primary); overflow: hidden; }
+.phone-check-modal h2 { margin: 0; font-size: 18px; }
+.phone-check-config { display: flex; align-items: end; gap: 12px; padding: 20px 20px 8px; flex-wrap: wrap; }
+.phone-check-config label, .phone-check-summary label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.phone-check-config label:first-child { flex: 1; min-width: 240px; }
+.phone-check-config input { width: 150px; }
+.phone-check-hint { margin: 4px 20px 12px; color: var(--text-secondary); font-size: 12px; }
+.phone-check-summary { padding: 10px 20px 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.phone-check-summary > div { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; }
+.phone-check-summary > p { flex-basis: 100%; margin: 0; font-size: 13px; }
+.phone-check-summary label { flex-direction: row; align-items: center; }
+.phone-check-summary select { width: auto; }
+.phone-check-table-scroll { flex: 1; min-height: 0; overflow: auto; border-block: 1px solid var(--border-default); }
+.phone-check-table-scroll table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.phone-check-table-scroll th { position: sticky; top: 0; z-index: 1; background: var(--bg-secondary); text-align: left; white-space: nowrap; }
+.phone-check-table-scroll th, .phone-check-table-scroll td { padding: 12px; border-bottom: 1px solid var(--border-default); }
+.phone-check-table-scroll td:nth-child(3), .phone-check-table-scroll td:nth-child(5) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phone-check-table-scroll td:last-child { min-width: 180px; max-width: 330px; overflow-wrap: anywhere; }
+.phone-check-status { white-space: nowrap; color: var(--text-secondary); }
+.phone-check-status.is-found { color: var(--accent-success, #15803d); }
+.phone-check-status.is-checking { color: var(--accent-primary, #2563eb); }
+.phone-check-status.is-unknown { color: var(--accent-warning, #b45309); }
+.phone-check-empty { text-align: center; height: 160px; color: var(--text-secondary); }
+.phone-check-subdialog { position: absolute; inset: 0; z-index: 3; background: #0005; display: grid; place-items: center; }
+.phone-check-subdialog > div { padding: 24px; border-radius: 10px; background: var(--bg-primary); max-width: 480px; }
+.phone-check-subdialog button { margin: 8px 8px 0 0; }
+
+.phone-check-overlay ~ .data-group-manager-backdrop { z-index: 3800; }
+.phone-check-overlay ~ .data-group-form-backdrop { z-index: 3900; }

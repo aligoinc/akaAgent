@@ -1,3 +1,4 @@
+import { ZALO_PHONE_CHECK_IPC, validateZaloPhoneCheckRequest } from '../../shared/zaloPhoneCheck'
 import { attachServerCampaignEngagementOwner } from '../../main/services/zaloCampaignEngagement'
 import { accountOperationRegistry } from '../../main/services/accountOperationRegistry'
 import { randomUUID } from 'crypto'
@@ -131,7 +132,7 @@ function isUserFacingActivityChannel(channel: string): boolean {
 }
 
 function isLiveUiStateChannel(channel: string): boolean {
-  return channel === IPC_EVENTS.CAMPAIGN_STATUS_UPDATED ||
+  return channel === ZALO_PHONE_CHECK_IPC.row || channel === ZALO_PHONE_CHECK_IPC.completed || channel === IPC_EVENTS.CAMPAIGN_STATUS_UPDATED ||
     channel === IPC_EVENTS.ACCOUNT_STATUS_UPDATED
 }
 
@@ -520,6 +521,10 @@ export class ZaloServerRuntimeManager {
       .map(operation => ({ ...operation }))
   }
 
+  cancelPhoneCheck(staffId: number, accountId: number, runId: string): void {
+    this.runtimes.get(staffId)?.contactLoader?.cancelZaloPhoneCheck(accountId, runId)
+  }
+
   async executeCommand(
     staffId: number,
     command: ZaloServerCommandName,
@@ -532,8 +537,8 @@ export class ZaloServerRuntimeManager {
     }
     if (this.isStoppingOrStopped()) throw new Error('akaAgent Zalo Server đang dừng')
 
-    const cleanupCommand = command === 'contacts.cancel' || command === 'zalo.loginQr.cancel'
-    const cleanupGuard = cleanupCommand ? this.parseCleanupRuntimeGuard(args[1]) : null
+    const cleanupCommand = command === 'contacts.cancel' || command === 'contacts.cancelPhoneCheck' || command === 'zalo.loginQr.cancel'
+    const cleanupGuard = cleanupCommand ? this.parseCleanupRuntimeGuard(args[command === 'contacts.cancelPhoneCheck' ? 2 : 1]) : null
     const ownedCleanup = cleanupCommand && this.cleanupGuardMatchesRuntime(runtime, cleanupGuard)
     if (cleanupGuard && !ownedCleanup) {
       throw new Error('Runtime Zalo đã thay đổi; không thể gửi lệnh dọn dẹp vào runtime mới')
@@ -582,7 +587,7 @@ export class ZaloServerRuntimeManager {
         command === 'zalo.loginQr.start' ||
         command === 'contacts.loadFriends' ||
         command === 'contacts.loadGroups' ||
-        command === 'contacts.loadZaloGroupMembers'
+        command === 'contacts.loadZaloGroupMembers' || command === 'contacts.checkZaloPhones'
       )
       if (!bypassAccountValidation) {
         const account = await runWithCurrentUser(runtime.user, () => cleanupCommand
@@ -677,6 +682,14 @@ export class ZaloServerRuntimeManager {
             return await runtime.contactLoader!.loadGroups(accountId)
           case 'contacts.loadZaloGroupMembers':
             return await runtime.contactLoader!.loadZaloGroupMembers(accountId, (args[1] || {}) as never)
+          case 'contacts.checkZaloPhones': {
+            const request = validateZaloPhoneCheckRequest(args[1])
+            if (request.accountId !== accountId) throw new Error('Tài khoản kiểm tra không khớp.')
+            return await runtime.contactLoader!.checkZaloPhones(request)
+          }
+          case 'contacts.cancelPhoneCheck':
+            runtime.contactLoader!.cancelZaloPhoneCheck(accountId, String(args[1] || ''))
+            return { success: true, accountId }
           case 'contacts.cancel':
             runtime.contactLoader!.cancelLoad(accountId)
             return { success: true, accountId }
@@ -1077,6 +1090,8 @@ export class ZaloServerRuntimeManager {
     await runWithCurrentUser(runtime.user, async () => {
       try {
         if (wasWaitingForDesktop) return
+        // Interactive phone checks end with their runtime, including graceful campaign drains.
+        runtime.contactLoader?.cancelAllZaloPhoneChecks()
         if (runtime.gracefulCapabilityLoss) {
           runtime.scheduler?.stopAcceptingNewZaloWork()
         } else {
@@ -1306,11 +1321,11 @@ export class ZaloServerRuntimeManager {
       return { ...value, operationId: operation.operationId }
     }
 
-    if (channel === IPC_EVENTS.CONTACTS_PROGRESS || channel === IPC_EVENTS.CONTACTS_COMPLETED) {
+    if (channel === IPC_EVENTS.CONTACTS_PROGRESS || channel === IPC_EVENTS.CONTACTS_COMPLETED || channel === ZALO_PHONE_CHECK_IPC.row || channel === ZALO_PHONE_CHECK_IPC.completed) {
       const operation = this.getBoundRunningOperation(runtime, accountId, command => (
         command === 'contacts.loadFriends' ||
         command === 'contacts.loadGroups' ||
-        command === 'contacts.loadZaloGroupMembers'
+        command === 'contacts.loadZaloGroupMembers' || command === 'contacts.checkZaloPhones'
       ))
       if (operation) {
         if (channel === IPC_EVENTS.CONTACTS_PROGRESS) {

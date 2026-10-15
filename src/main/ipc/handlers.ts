@@ -1,3 +1,4 @@
+import { registerZaloPhoneCheckHandlers } from './handlers/zaloPhoneCheckHandlers'
 import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
 import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
 import { registerSendExclusionHandlers } from './handlers/campaignSendExclusionHandlers'
@@ -231,7 +232,10 @@ export function registerIpcHandlers(
   )
   let chatContactLoader: ContactLoader | null = null
   let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
+  let phoneCheckChatMode: boolean | undefined
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
+    if (phoneCheckChatMode !== undefined && phoneCheckChatMode !== (user.isChatSync === true)) stopPhoneChecks()
+    phoneCheckChatMode = user.isChatSync === true
     if (user.isChatSync === true) {
       zaloServerClient.stop()
       zaloChatApiClient.start(user, username, password)
@@ -243,7 +247,9 @@ export function registerIpcHandlers(
     zaloChatApiClient.stop()
     zaloServerClient.start(user, username, password)
   }
+  let stopPhoneChecks = (): void => {}
   const stopZaloRemoteClients = (): void => {
+    stopPhoneChecks()
     chatContactLoader?.stopAll()
     zaloServerClient.stop()
     zaloLocalChatSync?.stop()
@@ -1473,6 +1479,7 @@ export function registerIpcHandlers(
     chatContactLoader,
     isChatSync: () => getCurrentUser()?.isChatSync === true
   })
+  stopPhoneChecks = registerZaloPhoneCheckHandlers(mainWindow, supabase, contactLoader, chatContactLoader, zaloServerClient, () => getCurrentUser()?.isChatSync === true)
   registerV2Handlers(mainWindow, pageRegistry)
 
   // Start account login poller
