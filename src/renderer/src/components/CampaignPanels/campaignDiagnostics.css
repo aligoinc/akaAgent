@@ -1,4 +1,12 @@
-/* Mirrors akaBizWebClient's diagnostics cards within the desktop detail dock. */
+/* Diagnostics share the right panel with campaign progress and assistants. */
+.campaign-diagnostics-panel {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  container-type: inline-size;
+}
+.campaign-diagnostics-panel[hidden] { display: none; }
 .campaign-diagnostics {
   --diagnostic-card: var(--bg-secondary);
   --diagnostic-success: var(--accent-success);
@@ -158,16 +166,21 @@ body.theme-light .campaign-diagnostics {
 @keyframes diagnostic-spin { to { transform: rotate(360deg); } }
 @keyframes diagnostic-pulse { 50% { opacity: 0.45; } }
 
-@media (max-width: 900px) {
+@container (max-width: 900px) {
   .campaign-diagnostics { padding: 12px 12px 32px; }
 }
-@media (max-width: 580px) {
+@container (max-width: 580px) {
   .campaign-diagnostics { padding: 10px 10px 32px; }
   .diagnostic-banner, .diagnostic-ai { padding: 12px; }
   .diagnostic-banner-message { flex-basis: 100%; }
   .diagnostic-check-toggle { padding: 12px; gap: 8px; }
   .diagnostic-explanation { padding: 12px; }
   .diagnostic-limit-grid { grid-template-columns: 1fr; }
+  .diagnostic-limit-label { flex-wrap: wrap; gap: 2px 8px; }
+  .diagnostic-limit-label strong { min-width: 0; overflow-wrap: anywhere; }
+  .diagnostic-source-counts > div:first-child { align-items: flex-start; }
+  .diagnostic-source-counts > div:first-child svg { flex-shrink: 0; margin-top: 3px; }
+  .diagnostic-source-pills > span { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   .campaign-diagnostics *, .campaign-diagnostics *::before, .campaign-diagnostics *::after { animation: none !important; transition: none !important; }

@@ -1,4 +1,4 @@
-export type CampaignAssistantMode = 'ask' | 'campaign_support' | 'campaign_support_dsh'
+export type CampaignAssistantMode = 'diagnostics' | 'ask' | 'campaign_support' | 'campaign_support_dsh'
 export type CampaignSupportVariant = 'standard' | 'dsh'
 export interface CampaignAssistantOpenRequest {
   campaignId: number
