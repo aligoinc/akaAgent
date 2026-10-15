@@ -11,6 +11,7 @@ Tab thứ ba trong chi tiết chiến dịch Facebook/Zalo/Email: **Thông tin �
 - Form cũ tiếp tục kiểm tra quyền và trạng thái cho phép lưu. Đóng form được mở từ chẩn đoán thì cập nhật snapshot và đánh dấu AI cũ; đăng nhập Zalo thành công cũng làm mới. Chuyển sang tab data rồi quay lại lấy snapshot mới, giữ kết quả AI cũ để đối chiếu.
 - Không tự xác minh phiên, khôi phục runtime, điều chỉnh quota, claim hoặc thay đổi trạng thái. Đăng nhập chỉ được khởi động khi người dùng bấm nút tương ứng.
 - Lỗi tải một nhóm trả **Chưa xác minh**, không biến thành dữ liệu rỗng hoặc bình thường. Lỗi AI giữ kết quả kiểm tra bằng quy tắc.
+- Đếm lỗi gần đây theo `report_group` đã lưu; chỉ dùng trạng thái `lỗi`/`thất bại` cho dòng cũ có `report_group=NULL` hoặc thiếu trường này. Không phân loại lại kết quả `success`/`skipped`/`pending` theo text cũ; giữ nguyên evidence đưa cho AI. Smoke kiểm tra trên cả ba kênh.
 - Kết quả AI chỉ nêu vấn đề cần xử lý, điều kiện đang chờ/chặn hoặc thiếu bằng chứng có liên quan. Không dựng box từ điều kiện bình thường hay nguyên nhân đã loại trừ; gộp tình trạng và phần chưa rõ nguyên nhân vào một mục. Giữ `info` cho trạng thái tạm dừng/chờ lịch, không lọc bỏ toàn bộ `info` trong UI. Không có bất thường hoặc điều kiện chờ cần giải thích thì `issues=[]`.
 
 ## Giao diện Desktop

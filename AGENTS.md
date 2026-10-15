@@ -88,6 +88,8 @@ V369, V370 và V372–V375 đã apply trên akachat ngày 10/10/2026; không app
 
 Catalog policy kết quả dùng cache RAM chung 60 giây mỗi process; Chat chia sẻ theo Kysely client. Vẫn lấy snapshot/preflight tại đầu lượt, không cập nhật policy giữa lượt. Refresh lỗi giữ catalog hoàn chỉnh cũ, chờ 60 giây trước lần cần tải tiếp theo; cold failure giữ đường lỗi hiện có. Không polling, pool hoặc connection mới. Cache và mapping Đã duyệt bài chưa được đóng gói/deploy trong đợt này; xem [cache và kiểm chứng](docs/ACTION_STATUS_CATALOG_CACHE_20261010.md).
 
+Chẩn đoán đếm lỗi gần đây theo `report_group` đã lưu; chỉ fallback text `lỗi`/`thất bại` khi NULL hoặc thiếu, giữ nguyên evidence cho AI. Smoke bao phủ cả ba kênh; không đổi DB/quota/prompt.
+
 ## Supabase/Postgres: phải thảo luận trước khi tăng connection
 
 Connection là tài nguyên có giới hạn, dùng chung giữa các service và toàn bộ client của hệ thống. **Không tự ý thêm nguồn connection hoặc tăng ngân sách connection. Phải trình bày đề xuất và chờ người dùng đồng ý trước khi triển khai thay đổi đó.** Yêu cầu làm một tính năng không mặc nhiên cho phép tăng connection.

@@ -196,6 +196,8 @@ async function rules() {
   const webRun = {accountId:2,runId:'rules-web-run'}
   let webChangeDuringRead = false
   let platform='facebook', quotaFail=false, logsFail=false, configChange=null, historyLog=historyLogs[0], dbNow='2026-10-14T03:00:00Z'
+  const defaultResults = [{status:'lỗi',log:authorizationText}]
+  let evidenceResults = defaultResults
   const campaign = { id:1,accountId:2,actionId:'facebook_message_uid',status:'chờ xử lý',extraSettings:{headers:{Authorization:authorizationValues[0]}},schedule:'2026-10-14T02:00:00Z',scheduleType:'weekly',scheduleWeekDays:'4,5',dataTargetSourceMode:'direct',refreshData:true,content:credentialText+'\n'+authorizationText }
   let campaignReads=0, aiCalls=0
   let randomRun = { enabled: false, config: null }, accountReads = 0, randomChange = null
@@ -227,7 +229,7 @@ async function rules() {
     '../data/repositories/campaignPendingChatLimitRepository':{readChatPendingLimitReason:async()=>null},
     '../data/repositories/campaignDiagnosticsRepository':{
       readDiagnosticsCampaign:async()=>{campaignReads++;return {...campaign,note:configChange==='note'&&campaignReads%2===0?'changed':null,refreshData:!(configChange==='refreshData'&&campaignReads%2===0)}},
-      readDiagnosticsEvidence:async()=>{if(logsFail)throw Error('private');return {accountHistory:[{password:'never',details:{cookie:'never'},message:credentialText+'\n'+authorizationText}],campaignHistory:rpcHistory(historyLog),results:[{status:'lỗi',log:authorizationText}],inputSummary:{},inputs:[{content:authorizationText,headers:{Authorization:authorizationValues[0]}}]}},
+      readDiagnosticsEvidence:async()=>{if(logsFail)throw Error('private');return {accountHistory:[{password:'never',details:{cookie:'never'},message:credentialText+'\n'+authorizationText}],campaignHistory:rpcHistory(historyLog),results:evidenceResults,inputSummary:{},inputs:[{content:authorizationText,headers:{Authorization:authorizationValues[0]}}]}},
       readDiagnosticsQuotas:async()=>{if(quotaFail)throw Error('private');if(webChangeDuringRead){webControl.setWebEnrichmentState(webRun,true);webControl.setWebEnrichmentState(webRun,false)}return[{code:'fixture',name:'fixture',checked:true,dayUsed:1,dayLimit:30,windowUsed:1,windowLimit:9,windowMinutes:65}]}
     },
     './campaignDiagnosticsSchedule':scheduleRules,
@@ -299,6 +301,24 @@ async function rules() {
     assert.equal(snapshot.facts.schedule.endDateState,'not_set')
     if(platform==='zalo')assert.equal(snapshot.checks.find(x=>x.id==='runtime').severity,'unknown')
   }
+  for (platform of ['facebook','zalo','email']) {
+    for (const [reportGroup, status, errorCount] of [
+      ...['success','skipped','pending'].flatMap(group => ['lỗi','thất bại'].map(status => [group,status,0])),
+      ['failure','thành công',1], ['failure','',1],
+      [null,'lỗi',1], [null,'thất bại',1], [undefined,'thất bại',1],
+      [null,'thành công',0], ['unknown','thất bại',0]
+    ]) {
+      evidenceResults = [{report_group:reportGroup,status,log:'Stored outcome'}]
+      const result = await service.collectCampaignDiagnostics(1,runtime,new AbortController().signal)
+      const history = result.checks.find(check => check.id === 'history')
+      assert.equal(history.problem,`${errorCount} kết quả lỗi/thất bại trong 1 kết quả gần nhất.`,`${platform}/${reportGroup}/${status}`)
+      assert.equal(history.severity,errorCount ? 'warning' : 'info')
+      assert.deepEqual(history.evidence,errorCount ? ['Stored outcome'] : [])
+      assert.deepEqual(result.facts.results,evidenceResults,'Preserve stored evidence for AI')
+    }
+  }
+  evidenceResults = defaultResults
+  console.log('PASS stored report groups override legacy status, NULL fallback and unchanged AI evidence on three channels')
   // Reported case: weekly direct data, an older end date, two pending inputs and a paused campaign.
   const originalCampaign={...campaign}
   Object.assign(campaign,{schedule:'2026-10-14T10:37:00Z',originalSchedule:'2026-10-14T10:37:00Z',scheduleEndDate:'2026-10-12T16:59:59Z',status:'tạm dừng'})
