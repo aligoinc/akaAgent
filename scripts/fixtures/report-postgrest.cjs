@@ -15,7 +15,12 @@ function split(source) {
   result.push(source.slice(start)); return result
 }
 function value(row, path) { return path.split('.').reduce((v,k) => v?.[k], row) }
-function scalar(raw) { return raw.startsWith('"') ? JSON.parse(raw) : raw }
+function scalar(raw) {
+  // PostgREST pQuotedValue retains the character after a backslash; it is not JSON.
+  if (!raw.startsWith('"')) return raw
+  if (!raw.endsWith('"')) throw new Error('Unterminated PostgREST fixture literal')
+  return raw.slice(1, -1).replace(/\\([\s\S])/g, '$1')
+}
 function compare(a, b) {
   const stamp = v => typeof v === 'string' && /^\d{4}-\d\d-\d\d[T ]/.test(v)
   if (stamp(a) && stamp(b)) {
@@ -29,7 +34,7 @@ function match(row, expression) {
   for (const op of ['or','and']) if (expression.startsWith(op+'(') && expression.endsWith(')')) {
     const conditions = split(expression.slice(op.length + 1,-1)); return op==='or' ? conditions.some(x=>match(row,x)) : conditions.every(x=>match(row,x))
   }
-  const m = /^(.*?)\.(eq|neq|in|is|gt|gte|lt|lte)\.(.*)$/.exec(expression)
+  const m = /^(.*?)\.(eq|neq|in|is|gt|gte|lt|lte)\.(.*)$/s.exec(expression)
   if (!m) throw new Error('Unsupported report predicate '+expression)
   const [,key,op,raw]=m,v=value(row,key),expected=scalar(raw)
   if (op==='eq') return String(v)===String(expected)

@@ -1,3 +1,4 @@
+import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
@@ -535,6 +536,11 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.APP_NOTIFICATION_GET_ACTIVE),
 
   // Reports
+  getAccountActionStatusReport: (query: AccountActionReportQuery): Promise<AccountActionStatusReportResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_SUMMARY, query),
+  getAccountActionStatusReportDetails: (query: AccountActionStatusReportDetailQuery): Promise<AccountActionStatusReportDetailResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_DETAILS, query),
+
   getAccountActionReport: (query: AccountActionReportQuery): Promise<AccountActionReportResult> =>
     ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_SUMMARY, query),
 

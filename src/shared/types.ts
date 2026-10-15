@@ -3226,6 +3226,8 @@ export const IPC_EVENTS = {
   LOGIN_SCREEN_GET_CONTENT: 'login-screen:get-content',
 
   // Reports
+  REPORT_ACCOUNT_ACTION_STATUS_SUMMARY: 'report:account-action-status-summary',
+  REPORT_ACCOUNT_ACTION_STATUS_DETAILS: 'report:account-action-status-details',
   REPORT_ACCOUNT_ACTION_SUMMARY: 'report:account-action-summary',
   REPORT_ACCOUNT_ACTION_DETAILS: 'report:account-action-details',
 

@@ -1,15 +1,15 @@
+import { useAuthStore } from '../stores/authStore'
+import { generalReportView, actionStatusReportView, reportExportMatrix, type ReportView, type ReportViewColumn, type ReportMode } from '../../../shared/reportView'
+import type { AccountActionStatusReportDetailResult } from '../../../shared/actionStatusReport'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Download, ExternalLink, Search, X } from 'lucide-react'
 import { utils, writeFile } from 'xlsx'
 import {
   AccountActionReportAccount,
   AccountActionReportAction,
-  AccountActionReportCell,
   AccountActionReportDetailResult,
   AccountActionReportDetailRow,
   AccountActionReportQuery,
-  AccountActionReportResult,
-  AccountActionReportStatusBucket,
   AutoAccount,
   AutoAccountAction,
   AutoAccountGroup
@@ -21,7 +21,7 @@ type ReportFilterDropdown = 'platform' | 'accounts' | 'range' | 'actions'
 type ReportDetailModalState = {
   account: AccountActionReportAccount
   action: AccountActionReportAction
-  statusBucket: AccountActionReportStatusBucket
+  column: ReportViewColumn
   statusLabel: string
   count: number
 }
@@ -107,32 +107,8 @@ function formatDateTimeLabel(iso?: string): string {
   return new Date(iso).toLocaleString('vi-VN')
 }
 
-function hasAnyCount(report: AccountActionReportResult | null): boolean {
-  if (!report) return false
-  return report.rows.some(row =>
-    report.actions.some(action => {
-      const cell = row.countsByActionCode[action.code]
-      return (cell?.successCount || 0) > 0 || (cell?.skippedCount || 0) > 0 || (cell?.failureCount || 0) > 0 || (cell?.pendingCount || 0) > 0
-    })
-  )
-}
-
-function getStatusBucketLabel(statusBucket: AccountActionReportStatusBucket): string {
-  if (statusBucket === 'pending') return 'Chờ xử lý'
-  if (statusBucket === 'success') return 'Thành công'
-  if (statusBucket === 'skipped') return 'Bỏ qua'
-  return 'Thất bại'
-}
-
-function getDetailCount(
-  cell: AccountActionReportCell | undefined,
-  statusBucket: AccountActionReportStatusBucket
-): number {
-  if (!cell) return 0
-  if (statusBucket === 'pending') return cell.pendingCount || 0
-  if (statusBucket === 'success') return cell.successCount || 0
-  if (statusBucket === 'skipped') return cell.skippedCount || 0
-  return cell.failureCount || 0
+function hasAnyCount(report: ReportView | null): boolean {
+  return !!report?.rows.some(row => report.actions.some(action => action.columns.some(column => (row.countsByActionCode[action.code]?.[column.key] || 0) > 0)))
 }
 
 function formatTarget(row: AccountActionReportDetailRow): string {
@@ -169,6 +145,14 @@ function makeDetailExportRows(rows: AccountActionReportDetailRow[]) {
 
 export default function ReportPage({ isActive }: ReportPageProps) {
   const showAlert = useUiStore(state => state.showAlert)
+  const authScope = useAuthStore(state => state.user ? `${state.user.organizationId}:${state.user.staffId}:${state.user.chatWebSessionId || ''}` : '')
+  const [reportMode, setReportMode] = useState<ReportMode>('general')
+  const modeRef = useRef<ReportMode>('general')
+  const summaryRequest = useRef(0), optionsRequest = useRef(0), detailRequest = useRef(0), exportRequest = useRef(0)
+  const loadedScope = useRef<string | null>(null)
+  const scopeRef = useRef(authScope)
+  scopeRef.current = `${authScope}:${isActive}`
+
   const [platform, setPlatform] = useState(DEFAULT_PLATFORM)
   const [accounts, setAccounts] = useState<AutoAccount[]>([])
   const [groups, setGroups] = useState<AutoAccountGroup[]>([])
@@ -183,15 +167,15 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   const [filtersReady, setFiltersReady] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingReport, setLoadingReport] = useState(false)
-  const [report, setReport] = useState<AccountActionReportResult | null>(null)
+  const [report, setReport] = useState<ReportView | null>(null)
   const [openDropdown, setOpenDropdown] = useState<ReportFilterDropdown | null>(null)
   const [detailModal, setDetailModal] = useState<ReportDetailModalState | null>(null)
-  const [detailResult, setDetailResult] = useState<AccountActionReportDetailResult | null>(null)
+  const [detailResult, setDetailResult] = useState<AccountActionReportDetailResult | AccountActionStatusReportDetailResult | null>(null)
   const [detailPage, setDetailPage] = useState(1)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [exportingDetail, setExportingDetail] = useState(false)
+  const detailExportInFlightRef = useRef(false)
   const filterRef = useRef<HTMLDivElement>(null)
-  const hasInitializedRef = useRef(false)
 
   const platformAccounts = useMemo(
     () => accounts.filter(account => !platform || account.flatformType === platform),
@@ -242,43 +226,63 @@ export default function ReportPage({ isActive }: ReportPageProps) {
     ...buildRange(rangePreset, customStartDate, customEndDate)
   })
 
+  const retireReads = () => {
+    summaryRequest.current++; optionsRequest.current++; detailRequest.current++; exportRequest.current++
+    detailExportInFlightRef.current = false
+  }
+  const invalidateReport = () => {
+    retireReads()
+    setReport(null); setDetailModal(null); setDetailResult(null)
+    setLoadingReport(false); setLoadingOptions(false); setLoadingDetail(false); setExportingDetail(false)
+    setLoadError(null)
+  }
+
   const loadReport = async (
     accountIds = selectedAccountIdList,
     actionCodes = selectedActionCodeList,
-    targetPlatform = platform
+    targetPlatform = platform,
+    actionOptions = actions,
+    mode = modeRef.current
   ) => {
     if (!window.electronAPI) return
-    setLoadError(null)
+    const request = ++summaryRequest.current, scope = scopeRef.current
+    const current = () => summaryRequest.current === request && scopeRef.current === scope
+    detailRequest.current++; exportRequest.current++
+    detailExportInFlightRef.current = false
+    setLoadingDetail(false); setExportingDetail(false)
+    setLoadError(null); setDetailModal(null); setDetailResult(null)
     if (accountIds.length === 0 || actionCodes.length === 0) {
-      setDetailModal(null)
-      setDetailResult(null)
-      setReport({
+      const empty = generalReportView({
         query: buildQuery(accountIds, actionCodes, targetPlatform),
-        actions: actions
-          .filter(action => actionCodes.includes(action.code))
+        actions: actionOptions.filter(action => actionCodes.includes(action.code))
           .map(action => ({ code: action.code, name: action.name, flatformType: action.flatformType })),
-        rows: [],
-        generatedAt: new Date().toISOString()
+        rows: [], generatedAt: new Date().toISOString()
       })
+      setReport({ ...empty, mode })
+      setLoadingReport(false)
       return
     }
-
-    setDetailModal(null)
-    setDetailResult(null)
     setLoadingReport(true)
     try {
-      const result = await window.electronAPI.getAccountActionReport(buildQuery(accountIds, actionCodes, targetPlatform))
-      setReport(result)
-    } catch (err: any) {
-      console.error('Failed to load account action report:', err)
-      setLoadError(err?.message || 'Không thể tải báo cáo.')
+      const query = buildQuery(accountIds, actionCodes, targetPlatform)
+      const result = mode === 'general'
+        ? generalReportView(await window.electronAPI.getAccountActionReport(query))
+        : actionStatusReportView(await window.electronAPI.getAccountActionStatusReport(query))
+      if (current()) setReport(result)
+    } catch (error) {
+      if (!current()) return
+      console.error('Failed to load account action report:', error)
+      setLoadError(error instanceof Error ? error.message : 'Không thể tải báo cáo.')
     } finally {
-      setLoadingReport(false)
+      if (current()) setLoadingReport(false)
     }
   }
 
   const loadOptions = async (nextPlatform = platform) => {
     if (!window.electronAPI) return
+    invalidateReport()
+    const request = ++optionsRequest.current, scope = scopeRef.current
+    const current = () => optionsRequest.current === request && scopeRef.current === scope
     setLoadingOptions(true)
     setFiltersReady(false)
     setLoadError(null)
@@ -288,6 +292,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
         window.electronAPI.listAccountGroups(nextPlatform || undefined),
         window.electronAPI.listAccountActions(nextPlatform || undefined)
       ])
+      if (!current()) return
       const nextPlatformAccounts = nextAccounts.filter(account => !nextPlatform || account.flatformType === nextPlatform)
       const nextAccountIds = nextPlatformAccounts.map(account => account.id)
       const nextActionCodes = nextActions.map(action => action.code)
@@ -298,28 +303,27 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       setSelectedAccountIds(new Set(nextAccountIds))
       setSelectedActionCodes(new Set(nextActionCodes))
       setFiltersReady(true)
-      await loadReport(nextAccountIds, nextActionCodes, nextPlatform)
+      await loadReport(nextAccountIds, nextActionCodes, nextPlatform, nextActions)
     } catch (err: any) {
+      if (!current()) return
       console.error('Failed to load report filters:', err)
       setLoadError(err?.message || 'Không thể tải bộ lọc báo cáo.')
     } finally {
-      setLoadingOptions(false)
+      if (current()) setLoadingOptions(false)
     }
   }
 
   useEffect(() => {
-    if (!isActive) return
-
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true
-      void loadOptions(DEFAULT_PLATFORM)
-      return
+    invalidateReport()
+    if (isActive) {
+      if (loadedScope.current !== authScope || !filtersReady) {
+        loadedScope.current = authScope
+        void loadOptions(platform)
+      } else void loadReport()
     }
-
-    if (!filtersReady) void loadOptions(platform)
-    else void loadReport()
+    return retireReads
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive])
+  }, [isActive, authScope])
 
   useEffect(() => {
     if (!openDropdown) return
@@ -360,6 +364,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   }
 
   const toggleAccount = (accountId: number) => {
+    invalidateReport()
     setSelectedAccountIds(prev => {
       const next = new Set(prev)
       if (next.has(accountId)) next.delete(accountId)
@@ -369,6 +374,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   }
 
   const toggleAccounts = (accountIds: number[]) => {
+    invalidateReport()
     setSelectedAccountIds(prev => {
       const next = new Set(prev)
       const allSelected = accountIds.length > 0 && accountIds.every(id => next.has(id))
@@ -381,6 +387,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   }
 
   const toggleAction = (actionCode: string) => {
+    invalidateReport()
     setSelectedActionCodes(prev => {
       const next = new Set(prev)
       if (next.has(actionCode)) next.delete(actionCode)
@@ -396,38 +403,14 @@ export default function ReportPage({ isActive }: ReportPageProps) {
     }
 
     try {
-      const header1 = ['Danh sách hành động/danh sách tài khoản chọn']
-      const header2 = ['Trạng thái']
-      for (const action of report.actions) {
-        header1.push(action.name, '', '', '')
-        header2.push('Chờ xử lý', 'Thành công', 'Bỏ qua', 'Thất bại')
-      }
-
-      const rows = report.rows.map(row => {
-        const values: Array<string | number> = [row.account.name]
-        for (const action of report.actions) {
-          const cell = row.countsByActionCode[action.code]
-          values.push(cell?.pendingCount || 0, cell?.successCount || 0, cell?.skippedCount || 0, cell?.failureCount || 0)
-        }
-        return values
-      })
-
-      const sheet = utils.aoa_to_sheet([header1, header2, ...rows])
-      sheet['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
-        ...report.actions.map((_, index) => ({
-          s: { r: 0, c: 1 + index * 4 },
-          e: { r: 0, c: 4 + index * 4 }
-        }))
-      ]
-      sheet['!cols'] = [
-        { wch: 34 },
-        ...report.actions.flatMap(() => [{ wch: 13 }, { wch: 13 }, { wch: 13 }, { wch: 13 }])
-      ]
+      const matrix = reportExportMatrix(report)
+      const sheet = utils.aoa_to_sheet(matrix.values)
+      sheet['!merges'] = matrix.merges
+      sheet['!cols'] = matrix.widths
 
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Bao cao')
-      writeFile(workbook, `bao-cao-hanh-dong-${formatExportTimestamp()}.xlsx`)
+      writeFile(workbook, `${report.mode === 'general' ? 'bao-cao-hanh-dong' : 'bao-cao-trang-thai-hanh-dong'}-${formatExportTimestamp()}.xlsx`)
       showAlert('Đã xuất báo cáo ra Excel.', 'success')
     } catch (err) {
       console.error('Failed to export report:', err)
@@ -435,43 +418,45 @@ export default function ReportPage({ isActive }: ReportPageProps) {
     }
   }
 
-  const fetchDetailRows = async (modal: ReportDetailModalState, page = 1) => {
-    if (!window.electronAPI || !report) return
+  const readDetails = async (modal: ReportDetailModalState, page = 1, exportAll = false) => {
+    if (!report || !window.electronAPI) throw new Error('Chưa có báo cáo để xem chi tiết.')
+    const query = { flatformType: report.query.flatformType, accountId: modal.account.id, actionCode: modal.action.code,
+      startIso: report.query.startIso, endIso: report.query.endIso, page, pageSize: 100, exportAll }
+    if (modal.column.selector) return window.electronAPI.getAccountActionStatusReportDetails({ ...query, selector: modal.column.selector })
+    return window.electronAPI.getAccountActionReportDetails({ ...query, statusBucket: modal.column.bucket! })
+  }
 
+  const fetchDetailRows = async (modal: ReportDetailModalState, page = 1) => {
+    if (!report) return
+    const request = ++detailRequest.current, scope = scopeRef.current
+    const current = () => detailRequest.current === request && scopeRef.current === scope
     setLoadingDetail(true)
     try {
-      const result = await window.electronAPI.getAccountActionReportDetails({
-        flatformType: report.query.flatformType,
-        accountId: modal.account.id,
-        actionCode: modal.action.code,
-        statusBucket: modal.statusBucket,
-        startIso: report.query.startIso,
-        endIso: report.query.endIso,
-        page,
-        pageSize: 100
-      })
-      setDetailResult(result)
-      setDetailPage(result.page)
-    } catch (err: any) {
-      console.error('Failed to load report detail rows:', err)
-      showAlert(err?.message || 'Không thể tải dữ liệu chi tiết.', 'error')
+      const result = await readDetails(modal, page)
+      if (!current()) return
+      setDetailResult(result); setDetailPage(result.page)
+    } catch (error) {
+      if (!current()) return
+      setDetailResult(null)
+      console.error('Failed to load report detail rows:', error)
+      showAlert(error instanceof Error ? error.message : 'Không thể tải dữ liệu chi tiết.', 'error')
     } finally {
-      setLoadingDetail(false)
+      if (current()) setLoadingDetail(false)
     }
   }
 
   const openDetailModal = (
     account: AccountActionReportAccount,
     action: AccountActionReportAction,
-    statusBucket: AccountActionReportStatusBucket,
+    column: ReportViewColumn,
     count: number
   ) => {
     if (count <= 0) return
     const modal = {
       account,
       action,
-      statusBucket,
-      statusLabel: getStatusBucketLabel(statusBucket),
+      column,
+      statusLabel: column.label,
       count
     }
     setDetailModal(modal)
@@ -481,6 +466,9 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   }
 
   const closeDetailModal = () => {
+    detailRequest.current++; exportRequest.current++
+    detailExportInFlightRef.current = false
+    setExportingDetail(false)
     setDetailModal(null)
     setDetailResult(null)
     setLoadingDetail(false)
@@ -492,19 +480,15 @@ export default function ReportPage({ isActive }: ReportPageProps) {
   }
 
   const handleExportDetail = async () => {
-    if (!detailModal || !report || !window.electronAPI) return
+    if (!detailModal || !report || !window.electronAPI || detailExportInFlightRef.current) return
+    detailExportInFlightRef.current = true
 
+    const request = ++exportRequest.current, scope = scopeRef.current
+    const current = () => exportRequest.current === request && scopeRef.current === scope
     setExportingDetail(true)
     try {
-      const result = await window.electronAPI.getAccountActionReportDetails({
-        flatformType: report.query.flatformType,
-        accountId: detailModal.account.id,
-        actionCode: detailModal.action.code,
-        statusBucket: detailModal.statusBucket,
-        startIso: report.query.startIso,
-        endIso: report.query.endIso,
-        exportAll: true
-      })
+      const result = await readDetails(detailModal, 1, true)
+      if (!current()) return
 
       if (result.rows.length === 0) {
         showAlert('Không có dữ liệu chi tiết để xuất.', 'info')
@@ -521,7 +505,8 @@ export default function ReportPage({ isActive }: ReportPageProps) {
         { wch: 36 },
         { wch: 16 },
         { wch: 24 },
-        { wch: 14 },
+        { wch: 18 },
+        { wch: 20 },
         { wch: 54 },
         { wch: 42 }
       ]
@@ -536,10 +521,11 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       writeFile(workbook, `bao-cao-chi-tiet-${fileToken}-${formatExportTimestamp()}.xlsx`)
       showAlert(`Đã xuất ${result.rows.length} dòng chi tiết ra Excel.`, 'success')
     } catch (err: any) {
+      if (!current()) return
       console.error('Failed to export report detail rows:', err)
       showAlert(err?.message || 'Không thể xuất Excel chi tiết.', 'error')
     } finally {
-      setExportingDetail(false)
+      if (current()) { detailExportInFlightRef.current = false; setExportingDetail(false) }
     }
   }
 
@@ -571,28 +557,24 @@ export default function ReportPage({ isActive }: ReportPageProps) {
     setOpenDropdown(current => current === dropdown ? null : dropdown)
   }
 
-  const renderReportCount = (
-    account: AccountActionReportAccount,
-    action: AccountActionReportAction,
-    cell: AccountActionReportCell | undefined,
-    statusBucket: AccountActionReportStatusBucket
-  ) => {
-    const count = getDetailCount(cell, statusBucket)
-    const className = `report-count ${statusBucket}`
-    if (count <= 0) {
-      return <span className={className}>0</span>
-    }
+  const changeReportMode = (mode: ReportMode) => {
+    if (mode === modeRef.current || loadingOptions) return
+    invalidateReport()
+    modeRef.current = mode; setReportMode(mode)
+    if (filtersReady) void loadReport(selectedAccountIdList, selectedActionCodeList, platform, actions, mode)
+    else void loadOptions(platform)
+  }
 
-    return (
-      <button
-        type="button"
-        className={`${className} report-count-button`}
-        title={`Xem chi tiết ${getStatusBucketLabel(statusBucket).toLowerCase()} của ${action.name}`}
-        onClick={() => openDetailModal(account, action, statusBucket, count)}
-      >
-        {count}
-      </button>
-    )
+  const renderReportCount = (
+    account: AccountActionReportAccount, action: AccountActionReportAction,
+    cell: Record<string, number> | undefined, column: ReportViewColumn
+  ) => {
+    const count = cell?.[column.key] || 0
+    const className = `report-count ${column.bucket || (column.selector?.kind === 'pending' ? 'pending' : '')}`
+    if (count <= 0) return <span className={className}>0</span>
+    return <button type="button" className={`${className} report-count-button`}
+      title={`Xem chi tiết ${column.label.toLowerCase()} của ${action.name}`}
+      onClick={() => openDetailModal(account, action, column, count)}>{count}</button>
   }
 
   const detailTotalPages = detailResult
@@ -744,7 +726,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                     <button
                       key={option.value}
                       className={`report-option-button ${rangePreset === option.value ? 'selected' : ''}`}
-                      onClick={() => setRangePreset(option.value)}
+                      onClick={() => { invalidateReport(); setRangePreset(option.value) }}
                     >
                       {option.label}
                     </button>
@@ -754,11 +736,11 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                   <div className="report-date-grid">
                     <label>
                       <span>Từ ngày</span>
-                      <input type="date" value={customStartDate} onChange={event => setCustomStartDate(event.target.value)} />
+                      <input type="date" value={customStartDate} onChange={event => { invalidateReport(); setCustomStartDate(event.target.value) }} />
                     </label>
                     <label>
                       <span>Đến ngày</span>
-                      <input type="date" value={customEndDate} onChange={event => setCustomEndDate(event.target.value)} />
+                      <input type="date" value={customEndDate} onChange={event => { invalidateReport(); setCustomEndDate(event.target.value) }} />
                     </label>
                   </div>
                 )}
@@ -781,7 +763,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                   <span>{selectedActionCodeList.length}/{actions.length} hành động</span>
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => setSelectedActionCodes(selectedAllActions ? new Set() : new Set(actions.map(action => action.code)))}
+                    onClick={() => { invalidateReport(); setSelectedActionCodes(selectedAllActions ? new Set() : new Set(actions.map(action => action.code))) }}
                   >
                     {selectedAllActions ? 'Bỏ chọn' : 'Chọn tất cả'}
                   </button>
@@ -808,6 +790,12 @@ export default function ReportPage({ isActive }: ReportPageProps) {
       </aside>
 
       <main className="report-main-panel">
+        <div className="report-mode-tabs" role="tablist" aria-label="Loại báo cáo">
+          {([['general', 'Trạng thái chung'], ['action-status', 'Trạng thái hành động']] as const).map(([mode, label]) => (
+            <button key={mode} id={`report-tab-${mode}`} type="button" role="tab" aria-selected={reportMode === mode}
+              aria-controls="report-results" disabled={loadingOptions} onClick={() => changeReportMode(mode)}>{label}</button>
+          ))}
+        </div>
         <div className="report-main-header">
           <div>
             <div className="report-main-title">Báo cáo</div>
@@ -825,7 +813,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
           </div>
         </div>
 
-        <div className="report-table-wrap">
+        <div id="report-results" className="report-table-wrap" role="tabpanel" aria-labelledby={`report-tab-${reportMode}`} aria-busy={loadingReport || loadingOptions}>
           {loadingOptions || loadingReport ? (
             <div className="report-empty-state">Đang tải báo cáo...</div>
           ) : loadError ? (
@@ -843,18 +831,15 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                 <tr>
                   <th className="report-account-col" rowSpan={2}>Danh sách hành động/danh sách tài khoản chọn</th>
                   {report.actions.map(action => (
-                    <th className="report-action-col" key={action.code} colSpan={4} title={action.name}>{action.name}</th>
+                    <th className="report-action-col" key={action.code} colSpan={action.columns.length} title={action.name}>{action.name}</th>
                   ))}
                 </tr>
                 <tr>
-                  {report.actions.map(action => (
-                    <Fragment key={`${action.code}-statuses`}>
-                      <th key={`${action.code}-pending`} className="report-status-col pending">Chờ xử lý</th>
-                      <th key={`${action.code}-success`} className="report-status-col success">Thành công</th>
-                      <th key={`${action.code}-skipped`} className="report-status-col skipped">Bỏ qua</th>
-                      <th key={`${action.code}-failure`} className="report-status-col failure">Thất bại</th>
-                    </Fragment>
-                  ))}
+                  {report.actions.flatMap(action => action.columns.map(column => (
+                    <th key={`${action.code}-${column.key}`} className={`report-status-col ${column.bucket || (column.selector?.kind === 'pending' ? 'pending' : '')}`}>
+                      {column.label}
+                    </th>
+                  )))}
                 </tr>
               </thead>
               <tbody>
@@ -868,10 +853,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                       const cell = row.countsByActionCode[action.code]
                       return (
                         <Fragment key={`${row.account.id}-${action.code}`}>
-                          <td key={`${row.account.id}-${action.code}-pending`}>{renderReportCount(row.account, action, cell, 'pending')}</td>
-                          <td key={`${row.account.id}-${action.code}-success`}>{renderReportCount(row.account, action, cell, 'success')}</td>
-                          <td key={`${row.account.id}-${action.code}-skipped`}>{renderReportCount(row.account, action, cell, 'skipped')}</td>
-                          <td key={`${row.account.id}-${action.code}-failure`}>{renderReportCount(row.account, action, cell, 'failure')}</td>
+                          {action.columns.map(column => <td key={column.key}>{renderReportCount(row.account, action, cell, column)}</td>)}
                         </Fragment>
                       )
                     })}
@@ -955,7 +937,7 @@ export default function ReportPage({ isActive }: ReportPageProps) {
                           <td>{row.targetPhone || '-'}</td>
                           <td title={row.targetEmail || ''}>{row.targetEmail || '-'}</td>
                           <td>
-                            <span className={`report-detail-status ${detailModal.statusBucket}`}>
+                            <span className={`report-detail-status ${detailModal.column.bucket || (detailModal.column.selector?.kind === 'pending' ? 'pending' : '')}`}>
                               {row.statusLabel || row.status}{row.subStatusLabel && <small style={{ display: 'block' }}>{row.subStatusLabel}</small>}
                             </span>
                           </td>

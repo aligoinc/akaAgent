@@ -1,3 +1,4 @@
+const statusCatalogTables = require('./fixtures/action-status-report.json')
 const { match: matches, compare, value: fieldValue } = require('./fixtures/report-postgrest.cjs')
 const assert = require('node:assert/strict')
 const { mkdtempSync, rmSync } = require('node:fs')
@@ -36,6 +37,7 @@ async function main() {
     await assert.rejects(flights.run('failed', async () => { throw new Error('Fixture failure') }), /Fixture failure/)
     assert.equal(await flights.run('failed', async () => 2), 2, 'failure releases capacity for explicit retry')
     assert.notEqual(reportFlightKey('summary', [7,9], {}), reportFlightKey('summary', [8,9], {}), 'never share a tenant read')
+    assert.notEqual(reportFlightKey('summary', [7,9], {}), reportFlightKey('status-summary', [7,9], {}), 'report modes have independent flights')
     assert.notEqual(reportFlightKey('summary', [7,9], {}), reportFlightKey('summary', [7,9], { accountIds: [] }), 'empty selection differs from all accounts')
     const query = { startIso: '2026-09-18T17:00:00.000Z', endIso: '2026-09-19T17:00:00.000Z', flatformType: 'zalo' }
     const accounts = [{ id: 11, name: 'Zalo', flatform_type: 'zalo', staff_id: 7, organization_id: 9, is_delete: false }]
@@ -60,7 +62,7 @@ async function main() {
       global: { fetch: async (urlValue, options) => {
         const url = new URL(urlValue), p = url.searchParams, table = url.pathname.split('/').pop()
         assert.equal(url.hostname, 'fixture.invalid'); assert.ok(['GET','HEAD'].includes(options.method))
-        let rows = ({ auto_accounts: accounts, auto_campaigns: campaigns, auto_campaign_input_data: inputs, auto_campaign_details: details })[table]
+        let rows = ({ ...statusCatalogTables, auto_accounts: accounts, auto_campaigns: campaigns, auto_campaign_input_data: inputs, auto_campaign_details: details })[table]
         assert.ok(rows, table)
         rows = rows.map(row => {
           const input = inputs.find(input => input.id === row.input_data_id)
@@ -170,7 +172,119 @@ async function main() {
     assert.equal(historical.total, 3)
     assert.deepEqual(historical.rows.map(r => r.targetName), ['Historical fallback', 'Historical fallback', 'Deleted target'])
     assert.deepEqual(historical.rows.map(r => r.campaignName), [null, 'Campaign 6', 'Campaign 6'])
-    console.log('PASS reports: DB pending paging, >1000 rows, date fallback, tenant/action guards, microsecond export cursors, complete target hydration, in-flight dedupe and retry; no live DB')
+    // New report: real PostgREST builder, shared pending reader, independent status filters.
+    details.length = 0
+    const resultRow = (id, overrides = {}) => ({ id, campaign_id: 1, account_id: 11, action_code: 'zalo_message_stranger', status: 'thành công',
+      status_id: 20, sub_status_id: 34, report_group: 'success', is_delete: false, created_at: '2026-09-19T00:00:00.123456+00:00', ...overrides })
+    details.push(...Array.from({ length: 1005 }, (_, i) => resultRow(i + 1, { status_id: i % 2 ? 20 : null })))
+    const longLegacy = 'Kết quả cũ, \"nguyên văn\" \\ '.repeat(20)
+    details.push(resultRow(1109, { status_id: null, status: longLegacy, report_group: null }))
+    details.push(resultRow(1100, { status_id: 21 }), resultRow(1101, { status_id: null, status: 'Kết quả, "đặc biệt"', report_group: null }),
+      resultRow(1102, { status_id: 55, status: 'Trạng thái cũ' }), resultRow(1103, { report_group: 'pending', input_data_id: 1 }),
+      resultRow(1104, { report_group: 'pending', input_data_id: null }), resultRow(1105, { status_id: null, status: 'trùng', report_group: null }),
+      resultRow(1106, { account_id: 22 }), resultRow(1107, { is_delete: true }), resultRow(1108, { created_at: query.endIso }))
+    calls.length = 0
+    const statuses = await repo.getAccountActionStatusReport(query)
+    const selectedAction = statuses.actions.find(a => a.code === 'zalo_message_stranger')
+    const statusCounts = statuses.rows[0].countsByActionCode.zalo_message_stranger
+    assert.equal(statusCounts.pending, 1207, 'pending result/input counted once, result with no input retained')
+    assert.equal(statusCounts['status:20'], 1005, 'canonical ID and exact legacy value merge; secondary status never adds a count')
+    assert.equal(statusCounts['status:21'], 1, 'stored main ID wins over text')
+    assert.equal(statusCounts['status:22'], 0, 'configured zero columns retained')
+    assert.equal(statusCounts['status:30'], 0)
+    assert.equal(statusCounts['status:55'], 1, 'retired historical status retained')
+    assert.equal(selectedAction.statuses.filter(c => c.key === 'status:20').length, 1)
+    assert.equal(selectedAction.statuses.some(c => c.key === 'status:34'), false, 'unrelated wildcard and secondary tracking are excluded')
+    const exactQuery = { ...query, accountId: 11, actionCode: 'zalo_message_stranger', page: 1, pageSize: 100 }
+    for (const column of selectedAction.statuses) {
+      const exported = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: column.selector, exportAll: true })
+      assert.equal(exported.total, statusCounts[column.key], `export parity: ${column.label}`)
+      assert.equal(new Set(exported.rows.map(r => r.id)).size, exported.total)
+    }
+    const longColumn = selectedAction.statuses.find(column => column.selector.kind === 'legacy' && column.selector.status === longLegacy)
+    assert.ok(longColumn, 'long legacy status is preserved exactly in summary')
+    const longPage = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: longColumn.selector })
+    assert.equal(longPage.total, 1)
+    assert.equal(longPage.rows[0].status, longLegacy, 'long/escaped legacy detail matches summary and export')
+    const pendingPage = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: { kind: 'pending' }, pageSize: 3 })
+    assert.equal(pendingPage.total, 1207)
+    assert.deepEqual(pendingPage.rows.map(r => r.source), ['campaign_detail', 'campaign_detail', 'campaign_input_data'])
+    assert.equal(pendingPage.rows[2].id, 'pending:2:zalo_message_stranger')
+    assert.ok(calls.filter(c => c.table === 'auto_campaign_details' && c.p.get('or')?.includes('status_id')).every(c => !c.p.get('or').includes('sub_status_id')))
+    await assert.rejects(repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: { kind: 'status', statusId: 20, status: 'thành công' } }), /Trạng thái báo cáo/)
+    await assert.rejects(repo.getAccountActionStatusReportDetails({ ...exactQuery, accountId: 22, selector: { kind: 'pending' } }), /Không tìm thấy tài khoản/)
+    const commonAfter = await repo.getAccountActionReport(query)
+    assert.equal(commonAfter.rows[0].countsByActionCode.zalo_message_stranger.successCount, 1007, 'general report keeps stored report_group semantics')
+    // Use the real PostgREST literal grammar, including controls and look-alike text.
+    assert.equal(matches({ status: 'oldnstate' }, 'status.eq."old\\nstate"'), true)
+    assert.equal(matches({ status: 'old\nstate' }, 'status.eq."old\\nstate"'), false)
+    const rawStates = ['old\nstate', 'old\r\nstate', 'old\tstate', 'old\\nstate', 'oldnstate', ' ",or(account_id.eq.22),\\tail ']
+    const canonicalRaw = 'catalog\nstate\r\n\t"quoted"\\tail'
+    statusCatalogTables.auto_status.push({ id: 88, name: 'Catalog fixture', status_value: canonicalRaw,
+      flatform_type: 'zalo', component_type: 'campaign_detail', is_active: true, is_delete: false })
+    details.length = 0; inputs.length = 0
+    let nextId = 1
+    rawStates.forEach((status, i) => {
+      for (let j = 0; j < (i === 0 ? 1001 : 1); j++) details.push(resultRow(nextId++, { status_id: null, status, report_group: null }))
+    })
+    details.push(resultRow(nextId++, { status_id: null, status: canonicalRaw, report_group: null }),
+      resultRow(nextId++, { status_id: 88, status: 'stored canonical result', report_group: null }))
+    const controlReport = await repo.getAccountActionStatusReport(query)
+    const controlAction = controlReport.actions.find(a => a.code === exactQuery.actionCode)
+    for (const [i, raw] of [...rawStates, canonicalRaw].entries()) {
+      const column = controlAction.statuses.find(c => raw === canonicalRaw
+        ? c.selector.kind === 'status' && c.selector.statusId === 88
+        : c.selector.kind === 'legacy' && c.selector.status === raw)
+      assert.ok(column, 'summary preserves raw status identity')
+      const expected = raw === canonicalRaw ? 2 : i === 0 ? 1001 : 1
+      assert.equal(controlReport.rows[0].countsByActionCode[exactQuery.actionCode][column.key], expected)
+      const page = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: column.selector, pageSize: 2 })
+      assert.equal(page.total, expected, 'control-character detail matches summary')
+      const exported = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: column.selector, exportAll: true })
+      assert.equal(exported.total, expected, 'control-character export matches summary')
+      assert.equal(exported.rows.length, expected)
+      assert.equal(new Set(exported.rows.map(row => row.id)).size, expected)
+      assert.ok(exported.rows.every(row => row.status === raw || (raw === canonicalRaw && row.status === 'stored canonical result')))
+      if (i === 0) {
+        const lastPage = await repo.getAccountActionStatusReportDetails({ ...exactQuery, selector: column.selector, page: 11 })
+        assert.equal(lastPage.rows.length, 1)
+        assert.equal(lastPage.total, 1001)
+      }
+    }
+    // Real catalog loader must recognize types whose quota list is empty or omits likes.
+    accounts[0].flatform_type = 'facebook'
+    campaigns.length = 0; inputs.length = 0; details.length = 0
+    for (const [campaignId, actionCodes, quotaCodes] of [
+      ['facebook_timeline_post', ['fb_post_my_profile', 'fb_comment', 'fb_like_post'], []],
+      ['facebook_group_post', ['fb_post_group', 'fb_comment', 'fb_like_post'], ['fb_post_group']],
+      ['facebook_comment_seeding', ['fb_comment', 'fb_like_post'], ['fb_comment']],
+      ['facebook_comment_seeding_post', ['fb_comment', 'fb_like_post'], ['fb_comment']],
+      ['facebook_newsfeed_interaction', ['fb_comment', 'fb_like_post'], []]
+    ]) {
+      statusCatalogTables.auto_campaign_actions = [
+        { id: campaignId, limit_check_action_codes: quotaCodes, is_active: true, is_delete: false },
+        { id: 'facebook_message_friend', limit_check_action_codes: [], is_active: true, is_delete: false }
+      ]
+      statusCatalogTables.auto_campaign_action_detail_statuses = [20,21,22].map((statusId, i) => ({
+        id: i + 1, campaign_action_id: campaignId, action_code: null, status_id: statusId, sort_order: i,
+        is_active: true, is_delete: false
+      }))
+      statusCatalogTables.auto_campaign_action_detail_statuses.push({ id: 4, campaign_action_id: 'facebook_message_friend',
+        action_code: null, status_id: 34, is_active: true, is_delete: false })
+      globalThis.reportActions = actionCodes.map(code => ({ code, name: code, flatformType: 'facebook' }))
+      const report = await repo.getAccountActionStatusReport({ ...query, flatformType: 'facebook' })
+      assert.equal(report.actions.length, actionCodes.length)
+      for (const action of report.actions) {
+        assert.deepEqual(action.statuses.map(c => c.key), ['pending', 'status:20', 'status:21', 'status:22'], campaignId + ':' + action.code)
+        assert.deepEqual(Object.values(report.rows[0].countsByActionCode[action.code]), [0,0,0,0])
+      }
+    }
+    await build({ entryPoints: [join(root, 'src/main/domain/campaigns/campaignActionDescriptors.ts')], outfile: join(directory, 'actions.cjs'), bundle: true, platform: 'node', format: 'cjs', logLevel: 'warning' })
+    const descriptors = require(join(directory, 'actions.cjs'))
+    assert.deepEqual(descriptors.getCampaignExecutableActionDescriptors({ actionId: 'facebook_newsfeed_interaction' }), [], 'type capabilities must not enable runtime options')
+    assert.deepEqual(descriptors.getCampaignExecutableActionDescriptors({ actionId: 'facebook_timeline_post' }).map(a => a.code), ['fb_post_my_profile'])
+    assert.deepEqual(descriptors.getCampaignActionDescriptors({ actionId: 'facebook_timeline_post' }, { limitCheckActionCodes: [] }), [], 'quota behavior stays unchanged')
+    console.log('PASS reports: DB pending paging, >1000 rows, date fallback, tenant/action guards, microsecond export cursors, complete target hydration, in-flight dedupe and retry; action-status columns, unmetered/optional wildcards, long legacy/history, pending union, main-only counts and detail/export parity; no live DB')
   } finally { rmSync(directory, { recursive: true, force: true }); delete globalThis.reportDb; delete globalThis.reportActions }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

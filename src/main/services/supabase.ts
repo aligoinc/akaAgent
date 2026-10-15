@@ -1,3 +1,4 @@
+import type { AccountActionStatusReportDetailQuery } from '../../shared/actionStatusReport'
 import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignUpdate, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
@@ -492,6 +493,9 @@ export class SupabaseService {
   getLoginScreenContent() { return loginScreenRepo.getLoginScreenContent() }
 
   // =========== REPORTS ===========
+  getAccountActionStatusReport(query: AccountActionReportQuery) { return reportRepo.getAccountActionStatusReport(query) }
+  getAccountActionStatusReportDetails(query: AccountActionStatusReportDetailQuery) { return reportRepo.getAccountActionStatusReportDetails(query) }
+
   getAccountActionReport(query: AccountActionReportQuery) { return reportRepo.getAccountActionReport(query) }
   getAccountActionReportDetails(query: AccountActionReportDetailQuery) { return reportRepo.getAccountActionReportDetails(query) }
 

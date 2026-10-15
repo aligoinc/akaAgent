@@ -1,0 +1,168 @@
+{
+  "auto_status": [
+    {
+      "id": 20,
+      "name": "Thành công",
+      "status_value": "thành công",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 21,
+      "name": "Thất bại",
+      "status_value": "thất bại",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 22,
+      "name": "Lỗi",
+      "status_value": "lỗi",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 30,
+      "name": "Đã là bạn bè",
+      "status_value": "đã là bạn bè",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 34,
+      "name": "Đã xem",
+      "status_value": "đã xem",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 55,
+      "name": "Trạng thái cũ",
+      "status_value": "trạng thái cũ",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": false,
+      "is_delete": false
+    },
+    {
+      "id": 70,
+      "name": "Trùng A",
+      "status_value": "trùng",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 71,
+      "name": "Trùng B",
+      "status_value": "trùng",
+      "component_type": "campaign_detail",
+      "flatform_type": "all",
+      "is_active": true,
+      "is_delete": false
+    }
+  ],
+  "auto_campaign_actions": [
+    {
+      "id": "zalo_message_phone",
+      "limit_check_action_codes": [
+        "zalo_find_phone_user",
+        "zalo_message_stranger",
+        "zalo_add_friend"
+      ],
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": "unrelated",
+      "limit_check_action_codes": [
+        "unrelated"
+      ],
+      "is_active": true,
+      "is_delete": false
+    }
+  ],
+  "auto_campaign_action_detail_statuses": [
+    {
+      "id": 1,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": null,
+      "status_id": 20,
+      "status_value": "thành công",
+      "sort_order": 10,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 2,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": null,
+      "status_id": 21,
+      "status_value": "thất bại",
+      "sort_order": 20,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 3,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": null,
+      "status_id": 22,
+      "status_value": "lỗi",
+      "sort_order": 30,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 4,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": "zalo_message_stranger",
+      "status_id": 30,
+      "status_value": "đã là bạn bè",
+      "sort_order": 40,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 5,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": "zalo_message_stranger",
+      "status_id": 20,
+      "status_value": "thành công",
+      "sort_order": 50,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 6,
+      "campaign_action_id": "unrelated",
+      "action_code": null,
+      "status_id": 34,
+      "status_value": "đã xem",
+      "sort_order": 60,
+      "is_active": true,
+      "is_delete": false
+    },
+    {
+      "id": 7,
+      "campaign_action_id": "zalo_message_phone",
+      "action_code": "zalo_message_stranger",
+      "status_id": 55,
+      "status_value": "trạng thái cũ",
+      "sort_order": 70,
+      "is_active": true,
+      "is_delete": false
+    }
+  ]
+}
