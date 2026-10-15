@@ -560,7 +560,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
   - Zalo IPC (`zalo:login-qr-start`, `zalo:login-qr-cancel`, `zalo:check-session`, `zalo:logout`) lives in `accountHandlers` and talks to `ZaloRuntimeService`; these calls must stay main-process only for raw session access.
 - `aiHandlers` ([handlers/aiHandlers.ts](src/main/ipc/handlers/aiHandlers.ts)) — app-level rewrite/tạo nhiều biến thể nội dung form và campaign assistant gọi centralized AI qua `aiRuntimeService` (`app_ai_rewrite_content`, `app_ai_write_multi_other_content`, `app_campaign_assistant_chat`); payload không truyền `shopId`.
 - `akaBizIntegrationHandlers` ([handlers/akaBizIntegrationHandlers.ts](src/main/ipc/handlers/akaBizIntegrationHandlers.ts)) — Cài đặt chung: lookup/save tích hợp SMS/Zalo Web/Desktop, chọn folder Desktop, list external campaigns và list shop SMS external; API list item phải enrich `status`, Desktop list đọc SQLite local.
-- `reportHandlers` ([handlers/reportHandlers.ts](src/main/ipc/handlers/reportHandlers.ts)) — Báo cáo hành động theo tài khoản: summary matrix + detail modal/export, status `lỗi` gộp vào bucket thất bại.
+- `reportHandlers` ([handlers/reportHandlers.ts](src/main/ipc/handlers/reportHandlers.ts)) — Báo cáo theo tài khoản: summary + detail/export. Tab chung vẫn gộp `lỗi` vào thất bại; tab trạng thái hành động có IPC/contract riêng, đếm từng trạng thái chính và Chờ xử lý.
 - `mediaHandlers` ([handlers/mediaHandlers.ts](src/main/ipc/handlers/mediaHandlers.ts)) — thư viện Media/R2 settings/upload/list/delete. Cấu hình cloud lưu trong `auto_system_settings` với keys `media.storage.*`; chỉ admin thấy/sửa cấu hình. R2 service hardcode `region='auto'`; `key_prefix` rỗng là chủ ý, không tự thêm app folder/prefix.
 - `v2Handlers` ([handlers/v2Handlers.ts](src/main/ipc/handlers/v2Handlers.ts)) — engine v2: BLOCK_LIST/SAVE/DELETE, WORKFLOW_LIST/GET/SAVE/DELETE, ELEMENT_LIST/SAVE/DELETE, WORKFLOW_TEST_RUN, BLOCK_TEST_RUN, RUN_STOP, RUN_PROGRESS broadcast, RUN_LOG broadcast
 
@@ -599,6 +599,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Báo cáo trạng thái hành động**: wildcard theo khả năng thực thi của loại chiến dịch, không chỉ quota; legacy giữ nguyên literal PostgREST và pending không đếm lại vào trạng thái chính. Xem [hợp đồng và hồi quy](docs/ACTION_STATUS_REPORTS.md).
 
 - **Làm giàu Web là tác vụ phụ**: giữ lịch/giữ chỗ/trạng thái trong RAM; lỗi/hủy phải đóng trang và nhả tài khoản, không đi qua claim/error policy của chiến dịch. Chặn callback preview cũ bằng owner/runId và timer đang dùng; workflow cache cần restart app sau cập nhật block DB. Xem [audit](docs/FACEBOOK_WEB_ENRICHMENT_V398.md).
 
@@ -803,3 +805,13 @@ Dual output Zalo giữ cờ dừng/chống chạy lại của helper theo origin
 Adapter helper cũ/explicit dùng chung guard NULL/suppress/requeue/quota và hậu xử lý log/SMS; receipt explicit chỉ hậu xử lý một lần, batch không mượn input người khác. Smoke `action-status-helper-compat-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#legacy-helper-compatibility-and-sms--09102026).
 
 Explicit result có ngưỡng lỗi phải chờ chốt toàn bộ target, giữ receipt policy chống áp lặp và kiểm tra input ownership ngay sau producer cho cả unit 0/1/n input. Smoke: `node scripts/action-status-threshold-input-smoke.cjs`; xem [audit](docs/ACTION_STATUS_READERS_V362.md#error-thresholds-and-input-ownership--09102026).
+
+## Báo cáo theo trạng thái hành động
+
+Báo cáo ngày 16/10/2026: một trang với hai tab **Trạng thái chung** (mặc định, giữ cách tính cũ) và **Trạng thái hành động**. Tab mới đọc catalog cấu hình chính, giữ cột 0/lịch sử và Chờ xử lý hợp kết quả pending + input theo lịch, chống trùng input–hành động; không đếm sub_status_id. Dùng IPC/contract riêng, reader pending/export và Supabase HTTP hiện có, max hai report; vô hiệu hóa phản hồi muộn theo tab/filter/phiên. Web cùng hợp đồng Zalo/SMS, không đổi native mobile. Không migration/RPC/polling/connection mới; chưa deploy/phát hành. Xem [hợp đồng và kiểm chứng](docs/ACTION_STATUS_REPORTS.md).
+
+Review báo cáo 16/10/2026: wildcard phải nhận cả hành động thực thi tùy chọn/không tính hạn mức; không suy phạm vi chỉ từ `limit_check_action_codes`. Catalog dùng chung bộ mô tả thực thi theo loại chiến dịch, giữ phạm vi wildcard và hành vi runtime/quota hiện có. Selector legacy và route Web giữ nguyên chuỗi trạng thái dài hơn 200 ký tự để chi tiết/Excel khớp tổng hợp; không cắt hay sửa lịch sử. Xem [hồi quy](docs/ACTION_STATUS_REPORTS.md#sửa-sau-review--16102026).
+
+Báo cáo legacy 16/10/2026: literal trong `.or()` PostgREST chỉ escape dấu nháy kép và backslash; không dùng JSON.stringify vì LF/CR/tab sẽ đổi giá trị. Giữ JSON.stringify cho khóa cột/cache JSON. Áp dụng cho selector legacy và fallback status_value, đồng bộ Desktop/Web; fixture phải dùng grammar PostgREST, không JSON.parse. Xem [hồi quy ký tự điều khiển](docs/ACTION_STATUS_REPORTS.md#ký-tự-điều-khiển-trong-trạng-thái-legacy--16102026).
+
+PR báo cáo 16/10/2026 giữ query/index hiện có theo quyết định người dùng; hoãn tối ưu phạm vi lớn. Hai lượt tải là giới hạn mỗi process, không phải toàn hệ thống; test chức năng không thay benchmark. Xem [giới hạn hiệu năng](docs/ACTION_STATUS_REPORTS.md#phạm-vi-pr-và-hiệu-năng--16102026).

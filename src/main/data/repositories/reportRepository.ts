@@ -1,3 +1,5 @@
+import { ActionStatusReportBuilder, normalizeActionReportSelector, type ActionReportStatusCatalog, type ActionReportStatusSelector, type AccountActionStatusReportResult, type AccountActionStatusReportDetailQuery, type AccountActionStatusReportDetailResult } from '../../../shared/actionStatusReport'
+import { loadActionReportStatusCatalog } from '../../domain/reports/actionStatusReportCatalog'
 import { resultReportFilter, storedReportGroup } from '../../../shared/resultReport'
 import { ReportReadFlights, reportFlightKey } from '../../domain/reports/reportReadFlights'
 import { completedReportCursor, pendingReportPartitions, pendingReportFilter, readPendingReportPage } from '../../domain/reports/reportPaging'
@@ -48,6 +50,7 @@ interface ReportDetailRow {
   account_id: number | null
   action_code: string | null
   status: CampaignDetailStatus
+  status_id?: number | null
   report_group?: AccountActionReportStatusBucket | null
   input_data_id?: number | null
 }
@@ -464,10 +467,9 @@ export async function getAccountActionReport(input: AccountActionReportQuery): P
     () => runWithCurrentUser(user, () => loadAccountActionReport(query)))
 }
 
-async function loadAccountActionReport(input: AccountActionReportQuery): Promise<AccountActionReportResult> {
+async function loadAccountActionReport(input: AccountActionReportQuery, statusBuilder?: ActionStatusReportBuilder, signal = AbortSignal.timeout(20_000)): Promise<AccountActionReportResult> {
   const u = requireCurrentUser()
   const query = normalizeQuery(input)
-  const signal = AbortSignal.timeout(20_000)
   const explicitAccountFilter = Array.isArray(input.accountIds)
   const explicitActionFilter = Array.isArray(input.actionCodes)
 
@@ -532,26 +534,27 @@ async function loadAccountActionReport(input: AccountActionReportQuery): Promise
   while (true) {
     let detailQuery = client()
       .from('auto_campaign_details')
-      .select('id, input_data_id, account_id, action_code, status, report_group')
+      .select(statusBuilder ? 'id, input_data_id, account_id, action_code, status, status_id, report_group' : 'id, input_data_id, account_id, action_code, status, report_group')
       .eq('is_delete', false)
       .in('account_id', accountIds)
       .in('action_code', actionCodes)
-      .or(resultReportFilter('all', REPORT_COUNT_DETAIL_STATUSES))
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('id', { ascending: true })
       .gt('id', detailAfterId).limit(PAGE_SIZE).abortSignal(signal)
 
+    if (!statusBuilder) detailQuery = detailQuery.or(resultReportFilter('all', REPORT_COUNT_DETAIL_STATUSES))
     const { data, error } = await detailQuery
     if (error) throw new Error(`Failed to list report campaign details: ${error.message}`)
 
-    const page = (data || []) as ReportDetailRow[]
+    const page = (data || []) as unknown as ReportDetailRow[]
     for (const detail of page) {
       const accountId = Number(detail.account_id)
       const actionCode = String(detail.action_code || '')
       const reportRow = rowByAccountId.get(accountId)
       if (!reportRow || !actionCodeSet.has(actionCode)) continue
 
+      statusBuilder?.add(detail, reportRow.account.flatformType)
       const cell = reportRow.countsByActionCode[actionCode] || makeEmptyCell()
       const bucket = storedReportGroup(detail.report_group) || getReportDetailBucket(actionCode, detail.status)
       if (bucket === 'pending') {
@@ -593,7 +596,8 @@ async function getCampaignDetailRows(
   action: AccountActionReportAction,
   staffId: number,
   organizationId: number,
-  signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
+  signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000),
+  statusSelection?: { catalog: ActionReportStatusCatalog; selector: ActionReportStatusSelector }
 ): Promise<AccountActionReportDetailResult> {
   const statuses = query.statusBucket === 'pending' ? [] : getDetailStatuses(query.statusBucket, query.actionCode)
   const offset = ((query.page || 1) - 1) * (query.pageSize || DETAIL_PAGE_SIZE)
@@ -628,7 +632,9 @@ async function getCampaignDetailRows(
       .eq('auto_campaigns.organization_id', organizationId)
       .eq('report_input.auto_campaigns.staff_id', staffId)
       .eq('report_input.auto_campaigns.organization_id', organizationId)
-      .or(resultReportFilter(query.statusBucket, statuses, after ? completedReportCursor(after) : undefined))
+      .or(statusSelection
+        ? statusSelection.catalog.detailFilter(statusSelection.selector, account.flatformType, after ? completedReportCursor(after) : undefined)
+        : resultReportFilter(query.statusBucket, statuses, after ? completedReportCursor(after) : undefined))
       .gte('created_at', query.startIso)
       .lt('created_at', query.endIso)
       .order('created_at', { ascending: false })
@@ -668,7 +674,7 @@ async function getCampaignDetailRows(
     generatedAt: new Date().toISOString(),
     accountName: account.name,
     actionName: action.name,
-    statusLabel: getStatusLabel(query.statusBucket)
+    statusLabel: statusSelection ? statusSelection.catalog.label(statusSelection.selector) : getStatusLabel(query.statusBucket)
   }
 }
 
@@ -751,4 +757,32 @@ async function loadAccountActionReportDetails(
   }
 
   return getCampaignDetailRows(query, account, action, u.staffId, u.organizationId)
+}
+
+
+export async function getAccountActionStatusReport(input: AccountActionReportQuery): Promise<AccountActionStatusReportResult> {
+  const user = requireCurrentUser(), query = normalizeQuery(input)
+  return reportFlights.run(reportFlightKey('status-summary', [user.staffId, user.organizationId, user.entitlements, user.zaloAccountCapabilities], query),
+    () => runWithCurrentUser(user, async () => {
+      const signal = AbortSignal.timeout(20_000)
+      const catalog = await loadActionReportStatusCatalog(client(), signal)
+      const builder = new ActionStatusReportBuilder(catalog)
+      return builder.finish(await loadAccountActionReport(query, builder, signal))
+    }))
+}
+
+export async function getAccountActionStatusReportDetails(input: AccountActionStatusReportDetailQuery): Promise<AccountActionStatusReportDetailResult> {
+  const user = requireCurrentUser(), selector = normalizeActionReportSelector(input.selector)
+  const { statusBucket: _bucket, ...normalized } = normalizeDetailQuery({ ...input, statusBucket: selector.kind === 'pending' ? 'pending' : 'success' })
+  const query: AccountActionStatusReportDetailQuery = { ...normalized, selector }
+  return reportFlights.run(reportFlightKey('status-details', [user.staffId, user.organizationId, user.entitlements, user.zaloAccountCapabilities], query),
+    () => runWithCurrentUser(user, async () => {
+      const legacyQuery: AccountActionReportDetailQuery = { ...normalized, statusBucket: selector.kind === 'pending' ? 'pending' : 'success' }
+      if (selector.kind === 'pending') return { ...await loadAccountActionReportDetails(legacyQuery), query }
+      const signal = AbortSignal.timeout(query.exportAll ? 60_000 : 20_000)
+      const account = await loadReportAccount(legacyQuery, user.staffId)
+      const action = await loadReportAction(account, query.actionCode)
+      const catalog = await loadActionReportStatusCatalog(client(), signal)
+      return { ...await getCampaignDetailRows(legacyQuery, account, action, user.staffId, user.organizationId, signal, { catalog, selector }), query }
+    }))
 }

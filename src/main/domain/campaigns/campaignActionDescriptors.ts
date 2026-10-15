@@ -185,20 +185,20 @@ function filterQuotaActionDescriptors(
   })
 }
 
-function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignActionDescriptor[] {
+function getDefaultCampaignActionDescriptors(campaign: Pick<Campaign, 'actionId' | 'extraSettings'>, includeOptional = false): CampaignActionDescriptor[] {
   const extra = campaign.extraSettings || {}
   const actions: CampaignActionDescriptor[] = []
 
   switch (campaign.actionId) {
     case 'facebook_group_post':
       actions.push({ code: 'fb_post_group', name: 'Đăng bài group' })
-      if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
-      if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+      if (includeOptional || extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
+      if (includeOptional || extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
       break
     case 'facebook_timeline_post':
       actions.push({ code: 'fb_post_my_profile', name: 'Đăng bài trang cá nhân' })
-      if (extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
-      if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+      if (includeOptional || extra.enableComment) actions.push({ code: 'fb_comment', name: 'Comment' })
+      if (includeOptional || extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
       break
     case PAGE_POST_ACTION_ID:
       actions.push({ code: 'fb_post_page', name: 'Đăng bài fanpage' })
@@ -210,19 +210,19 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
       actions.push({ code: 'fb_message_page_inbox_customer', name: 'Nhắn tin khách inbox page' })
       break
     case MESSAGE_UID_ACTION_ID:
-      if (extra.enableMessage !== false) actions.push({ code: 'fb_message_stranger', name: 'Nhắn tin người lạ' })
-      if (extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
+      if (includeOptional || extra.enableMessage !== false) actions.push({ code: 'fb_message_stranger', name: 'Nhắn tin người lạ' })
+      if (includeOptional || extra.enableAddFriend) actions.push({ code: 'fb_add_friend', name: 'Kết bạn' })
       break
     case COMMENT_SEEDING_FEED_ACTION_ID:
     case COMMENT_SEEDING_POST_ACTION_ID:
       actions.push({ code: 'fb_comment', name: 'Comment' })
-      if (extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
+      if (includeOptional || extra.enablePostLike) actions.push({ code: 'fb_like_post', name: 'Like post' })
       break
     case NEWSFEED_INTERACTION_ACTION_ID:
-      if (isNewsfeedCommentConfigured(extra)) {
+      if (includeOptional || isNewsfeedCommentConfigured(extra)) {
         actions.push({ code: 'fb_comment', name: 'Comment' })
       }
-      if (isNewsfeedLikeConfigured(extra)) {
+      if (includeOptional || isNewsfeedLikeConfigured(extra)) {
         actions.push({ code: 'fb_like_post', name: 'Like post' })
       }
       break
@@ -234,29 +234,29 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
       break
     case ZALO_MESSAGE_PHONE_ACTION_ID:
       actions.push({ code: 'zalo_find_phone_user', name: 'Tìm SĐT' })
-      if (extra.enableMessage) {
+      if (includeOptional || extra.enableMessage) {
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
-      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      if (includeOptional || extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
     case ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID:
     case ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID:
-      if (extra.enableMessage) {
+      if (includeOptional || extra.enableMessage) {
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
-      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      if (includeOptional || extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
     case ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID:
-      if (extra.enableMessage) {
+      if (includeOptional || extra.enableMessage) {
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
-      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      if (includeOptional || extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
     case ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID:
-      if (extra.enableMessage) {
+      if (includeOptional || extra.enableMessage) {
         actions.push({ code: 'zalo_message_stranger', name: 'Nhắn tin người lạ' })
       }
-      if (extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
+      if (includeOptional || extra.enableAddFriend) actions.push({ code: 'zalo_add_friend', name: 'Kết bạn' })
       break
     case ZALO_MESSAGE_FRIEND_ACTION_ID:
       actions.push({ code: 'zalo_message_friend', name: 'Nhắn tin bạn bè' })
@@ -288,6 +288,13 @@ function getDefaultCampaignActionDescriptors(campaign: Campaign): CampaignAction
   }
 
   return dedupeActionDescriptors(actions)
+}
+
+/** All actions a campaign type can execute, including optional and unmetered ones.
+ * Presentation metadata only; execution/quota readers still use the saved settings.
+ */
+export function getCampaignSupportedActionDescriptors(actionId: string): CampaignActionDescriptor[] {
+  return getDefaultCampaignActionDescriptors({ actionId }, true)
 }
 
 function getQuotaCandidateActionDescriptors(
