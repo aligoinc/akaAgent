@@ -1,7 +1,7 @@
 import CampaignSendExclusions from './CampaignSendExclusions'
 import CampaignScheduleAi from './CampaignScheduleAi'
 import CampaignLimitsAi from './CampaignLimitsAi'
-import type { LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
+import { limitsAiWindowSnapshot, type LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
 import { getDailyTimeSlotMinutes, parseDailyTimeSlots } from '../../../../shared/campaignTimeSlots'
 import { applyScheduleAiPatch, scheduleAiSnapshot, formatScheduleVietnam, scheduleVietnamToIso } from '../../../../shared/campaignScheduleAi'
 import FacebookRestBrowseSettings from './FacebookRestBrowseSettings'
@@ -17073,7 +17073,9 @@ export default function CampaignFormModal({
                         accountGroupOverrides: selectedAccountGroupNames.length > 0 }}
                       limits={{ sleepBetweenActions: formData.sleepBetweenActions, continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
                         postsPerTarget: formData.postsPerTarget, actions: generalLimitActionCodes.map(actionCode => ({ actionCode,
-                          label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode) })) }}
+                          label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode),
+                          ...limitsAiWindowSnapshot(getDisplayedActionLimit(actionCode).rateLimitMinutes, selectedRateLimitMinuteValues,
+                            Boolean(campaign?.id || cloneFromId || editedRateLimitMinuteActions[actionCode])) })) }}
                       disabled={saveBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}

@@ -10,6 +10,21 @@ const compile = file => {
 }
 async function main() {
   const s = compile('src/shared/campaignScheduleAi.ts')
+  const mixed = compile('src/shared/campaignLimitsAi.ts')
+  assert.deepEqual(mixed.limitsAiWindowSnapshot(65, [60, 30, 60], false), { rateLimitMinutes: null, rateLimitMinuteValues: [30, 60] })
+  assert.deepEqual(mixed.limitsAiWindowSnapshot(45, [30, 60], true), { rateLimitMinutes: 45 })
+  assert.deepEqual(mixed.limitsAiWindowSnapshot(65, [30, 30], false), { rateLimitMinutes: 30 })
+  const mixedRequest = { requestId: '13ee6afe-448b-40fc-83b4-17ef14bc4648', description: 'giữ nguyên khung',
+    context: { actionId: 'zalo_message_friend', dataTargetSourceMode: 'direct', accountGroupOverrides: false },
+    limits: { sleepBetweenActions: 30, continueWhenActionLimitReached: false, postsPerTarget: 1,
+      actions: [{ actionCode: 'zalo_message_friend', label: 'Nhắn tin', unit: 'tin', dailyLimit: 100, rateLimitCount: 15,
+        ...mixed.limitsAiWindowSnapshot(65, [30, 60], false) }] } }
+  assert.deepEqual(mixed.validateLimitsAiRequest(mixedRequest), mixedRequest)
+  for (const invalidWindow of [{ rateLimitMinutes: null }, { rateLimitMinutes: null, rateLimitMinuteValues: [30, 30] },
+    { rateLimitMinutes: null, rateLimitMinuteValues: [30, '60'] }, { rateLimitMinutes: 65, rateLimitMinuteValues: [30, 60] }]) {
+    assert.throws(() => mixed.validateLimitsAiRequest({ ...mixedRequest, limits: { ...mixedRequest.limits,
+      actions: [{ ...mixedRequest.limits.actions[0], rateLimitMinuteValues: undefined, ...invalidWindow }] } }))
+  }
   const schedule = { scheduleType: 'daily', startDate: '2026-10-14', startTime: '09:00', scheduleEndDate: '2026-10-21',
     scheduleDays: '', scheduleWeekDays: '', useDailyStopTime: false, dailyStopTime: '18:00', continueNextDay: true,
     refreshData: true, findDataRerunEnabled: false, findDataRerunAfterHours: 1, multiDailyTimeSlotsEnabled: false, multiDailyTimeSlots: '' }

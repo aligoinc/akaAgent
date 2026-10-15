@@ -9,7 +9,20 @@ export const LIMITS_AI_MESSAGES = {
   unavailable: 'AI tạm thời chưa phản hồi. Vui lòng thử lại sau.'
 } as const
 export interface ActionLimitAiValues { dailyLimit: number; rateLimitCount: number; rateLimitMinutes: number }
-export interface LimitsAiAction extends ActionLimitAiValues { actionCode: string; label: string; unit: string }
+export interface LimitsAiAction extends Omit<ActionLimitAiValues, 'rateLimitMinutes'> {
+  actionCode: string; label: string; unit: string
+  // No common value when an unedited form inherits different account windows.
+  rateLimitMinutes: number | null
+  rateLimitMinuteValues?: number[]
+}
+
+export function limitsAiWindowSnapshot(currentMinutes: number, inheritedMinutes: readonly number[], useFormMinutes: boolean):
+  Pick<LimitsAiAction, 'rateLimitMinutes' | 'rateLimitMinuteValues'> {
+  if (useFormMinutes) return { rateLimitMinutes: currentMinutes }
+  const values = Array.from(new Set(inheritedMinutes)).sort((a, b) => a - b)
+  return values.length > 1 ? { rateLimitMinutes: null, rateLimitMinuteValues: values }
+    : { rateLimitMinutes: values[0] ?? currentMinutes }
+}
 export interface LimitsAiFields {
   sleepBetweenActions: number
   continueWhenActionLimitReached: boolean
@@ -71,10 +84,21 @@ export function validateLimitsAiRequest(input: unknown): LimitsAiRequest {
   const seen = new Set<string>()
   const actions = input.limits.actions.map(item => {
     if (!record(item) || !code(item.actionCode) || seen.has(item.actionCode) || !text(item.label) || !text(item.unit)
-      || numberFields.some(key => !integer(item[key]))) throw new Error(LIMITS_AI_MESSAGES.invalid)
+      || !integer(item.dailyLimit) || !integer(item.rateLimitCount)) throw new Error(LIMITS_AI_MESSAGES.invalid)
+    let window: Pick<LimitsAiAction, 'rateLimitMinutes' | 'rateLimitMinuteValues'>
+    if (item.rateLimitMinutes === null) {
+      if (!Array.isArray(item.rateLimitMinuteValues) || item.rateLimitMinuteValues.length > 1000
+        || !item.rateLimitMinuteValues.every(integer)) throw new Error(LIMITS_AI_MESSAGES.invalid)
+      const values = Array.from(new Set(item.rateLimitMinuteValues as number[])).sort((a, b) => a - b)
+      if (values.length < 2) throw new Error(LIMITS_AI_MESSAGES.invalid)
+      window = { rateLimitMinutes: null, rateLimitMinuteValues: values }
+    } else {
+      if (!integer(item.rateLimitMinutes) || item.rateLimitMinuteValues !== undefined) throw new Error(LIMITS_AI_MESSAGES.invalid)
+      window = { rateLimitMinutes: item.rateLimitMinutes }
+    }
     seen.add(item.actionCode)
     return { actionCode: item.actionCode, label: item.label, unit: item.unit,
-      dailyLimit: item.dailyLimit as number, rateLimitCount: item.rateLimitCount as number, rateLimitMinutes: item.rateLimitMinutes as number }
+      dailyLimit: item.dailyLimit as number, rateLimitCount: item.rateLimitCount as number, ...window }
   })
   return { requestId: input.requestId, description: input.description.trim(), context: {
     actionId: input.context.actionId, dataTargetSourceMode: input.context.dataTargetSourceMode as LimitsAiContext['dataTargetSourceMode'],

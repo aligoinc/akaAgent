@@ -55,7 +55,14 @@ function App() {
   const [generation, setGeneration] = useState(0), [closed, setClosed] = useState(false)
   const [draft, setDraft] = useState<any>(), [newForm, setNewForm] = useState(false)
   const [providedCampaign, setProvidedCampaign] = useState<any>()
+  const [initialAccounts, setInitialAccounts] = useState([11])
   ;(window as any).scheduleSmoke = { state,
+    openMixedWindows: () => {
+      useCampaignStore.setState({ accounts: [{ ...account, rateLimitMinutes: 30 },
+        { ...account, id: 12, name: 'Tài khoản thứ hai', rateLimitMinutes: 60 }], campaignActions: actions as any })
+      setInitialAccounts([11, 12]); setProvidedCampaign(undefined); setDraft(undefined); setNewForm(true)
+      setClosed(false); setGeneration(value => value + 1)
+    },
     open: () => { setProvidedCampaign(undefined); setDraft(undefined); setNewForm(false); setClosed(false); setGeneration(value => value + 1) },
     // The auth-change smoke clears the real store; simulate its next catalog load before opening another form.
     openDraft: (draft: any) => { useCampaignStore.setState({ accounts: [account], campaignActions: actions as any }); setDraft(draft); setNewForm(false); setClosed(false); setGeneration(value => value + 1) },
@@ -68,7 +75,7 @@ function App() {
     content: 'Nội dung kiểm thử', status: 'tạm dừng', refreshData: true, continueNextDay: true, extraSettings: {} }
   return closed ? <div>Đã đóng</div> : <CampaignFormModal key={generation} savedDraft={draft}
     campaign={draft ? undefined : newForm ? { ...campaign, id: undefined } : providedCampaign || campaign}
-    initialSection="schedule" lockedActionId={providedCampaign?.actionId || "facebook_timeline_post"} initialAccountIds={[11]} initialDetails={[detail]}
+    initialSection="schedule" lockedActionId={providedCampaign?.actionId || "facebook_timeline_post"} initialAccountIds={initialAccounts} initialDetails={[detail]}
     onClose={() => setClosed(true)} />
 }
 createRoot(document.getElementById('root')!).render(<App />)

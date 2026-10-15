@@ -1,0 +1,41 @@
+{
+  "at": "2026-10-14T19:33:01.432Z",
+  "passed": true,
+  "migration_sha256": "5c9da174866e6371039638394b6614a8a376a16d92b55bae4d77651ff975620c",
+  "results": [
+    {
+      "name": "mixed-common",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "rateLimitMinutes": 45
+            }
+          ]
+        }
+      },
+      "logId": 643499,
+      "passed": true
+    },
+    {
+      "name": "legacy-repeat",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 100,
+              "rateLimitCount": 15,
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "logId": 643503,
+      "passed": true
+    }
+  ]
+}

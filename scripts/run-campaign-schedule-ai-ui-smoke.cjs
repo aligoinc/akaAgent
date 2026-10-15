@@ -34,6 +34,12 @@ async function main() {
     const env = { ...process.env, TZ: 'America/Los_Angeles' }; delete env.ELECTRON_RUN_AS_NODE
     app = await _electron.launch({ executablePath: require('electron'), args: [join(dir, 'main.cjs')], cwd: resolve(__dirname, '..'), env })
     const page = await app.firstWindow(); page.setDefaultTimeout(12000)
+    if (process.argv.includes('--mixed-only')) {
+      await page.getByRole('button', { name: 'Điền giới hạn bằng AI', exact: true }).waitFor()
+      await require('./campaign-limits-ai-mixed-ui-checks.cjs')(page)
+      assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])
+      return
+    }
     if (process.argv.includes('--limits-only')) {
       await page.getByRole('button', { name: 'Điền giới hạn bằng AI', exact: true }).waitFor()
       await require('./campaign-limits-ai-ui-checks.cjs')(page)
