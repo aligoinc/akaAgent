@@ -2,6 +2,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import CampaignPanel from '../src/renderer/src/components/CampaignPanels/CampaignPanel'
+import AppNotificationBar from '../src/renderer/src/components/AppNotificationBar/AppNotificationBar'
 import { useCampaignStore } from '../src/renderer/src/stores/campaignStore'
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useUiStore } from '../src/renderer/src/stores/uiStore'
@@ -88,6 +89,9 @@ useUiStore.setState({ showAlert: (message, type) => { if (type === 'error') stat
 function App() {
   const user = useAuthStore(state => state.user)
   useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, true, true)
-  return <div style={{ height: '100vh' }}><CampaignPanel isActive /></div>
+  return <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <AppNotificationBar />
+    <div style={{ flex: 1, minHeight: 0 }}><CampaignPanel isActive /></div>
+  </div>
 }
 createRoot(document.getElementById('root')!).render(<App />)
