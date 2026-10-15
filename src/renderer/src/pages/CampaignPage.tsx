@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import AccountPanel from '../components/CampaignPanels/AccountPanel'
-import CampaignPanel from '../components/CampaignPanels/CampaignPanel'
+import CampaignPanel, { type CampaignDiagnosticActionRequest } from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { OpenGeneralSettings } from '../components/Settings/GeneralSettingsModal'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../../shared/types'
@@ -20,6 +20,7 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [editAccountRequest, setEditAccountRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [diagnosticsRevision, setDiagnosticsRevision] = useState(0)
+  const [diagnosticActionRequest, setDiagnosticActionRequest] = useState<CampaignDiagnosticActionRequest | null>(null)
   const [randomPlanRequest, setRandomPlanRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [accountInfoOpenRequest, setAccountInfoOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const [assistantOpenRequest, setAssistantOpenRequest] = useState<CampaignAssistantOpenRequest | null>(null)
@@ -76,13 +77,15 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
     setAssistantOpenRequest({ campaignId, mode, requestId: crypto.randomUUID() })
   }, [])
 
+  const handleDiagnosticsChanged = useCallback(() => setDiagnosticsRevision(value => value + 1), [])
+
   return (
     <div className="campaign-page" ref={containerRef}>
       {/* Account Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[0], minWidth: 180 }}>
         <AccountPanel
           editAccountRequest={editAccountRequest}
-          onAccountFormClosed={() => setDiagnosticsRevision(value => value + 1)}
+          onAccountFormClosed={handleDiagnosticsChanged}
           onNavigateToBrowser={onNavigateToBrowser}
           onFilterCampaigns={handleFilterCampaigns}
           onOpenAccountInfo={handleOpenAccountInfo}
@@ -99,7 +102,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
       {/* Campaign Panel (takes remaining space) */}
       <div className="campaign-page-panel" style={{ flex: 1, minWidth: 300 }}>
         <CampaignPanel
-          diagnosticsRevision={diagnosticsRevision}
+          diagnosticActionRequest={diagnosticActionRequest}
+          onDiagnosticsChanged={handleDiagnosticsChanged}
           onOpenAccountSettings={accountId => setEditAccountRequest(previous => ({ accountId, requestId: (previous?.requestId ?? 0) + 1 }))}
           isActive={isActive}
           filterAccountId={filterAccountId}
@@ -123,7 +127,8 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
 
       {/* Log Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[2], minWidth: 200 }}>
-        <LogPanel assistantOpenRequest={assistantOpenRequest} />
+        <LogPanel assistantOpenRequest={assistantOpenRequest} isActive={isActive} diagnosticsRevision={diagnosticsRevision}
+          onDiagnosticAction={(campaign, action) => setDiagnosticActionRequest({ campaign, action, requestId: crypto.randomUUID() })} />
       </div>
     </div>
   )

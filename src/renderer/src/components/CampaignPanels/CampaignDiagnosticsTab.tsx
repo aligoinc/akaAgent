@@ -75,8 +75,8 @@ function Restrictions({ quotas }: { quotas: DiagnosticQuota[] }) {
     <tbody>{restricted.map(quota => <tr key={quota.code}><td>{quota.name}</td><td><span className="diagnostic-reopen"><CalendarClock size={13} aria-hidden="true" />{formatDiagnosticTime(quota.enableAt)}</span></td><td>{quota.reason || 'Chưa có thông báo nguyên nhân.'}</td></tr>)}</tbody>
   </table></div>
 }
-export default function CampaignDiagnosticsTab({ campaignId, accountId, active = true, revision = 0, accountConfigVersion = '', canResume, onResume, onAction }: {
-  campaignId: number; accountId: number; active?: boolean; revision?: number; accountConfigVersion?: string; canResume: boolean
+export default function CampaignDiagnosticsTab({ campaignId, accountId, active = true, revision = 0, openRequestId, accountConfigVersion = '', campaignStatus, onResume, onAction }: {
+  campaignId: number; accountId: number; active?: boolean; revision?: number; openRequestId?: string; accountConfigVersion?: string; campaignStatus?: string
   onResume: () => Promise<boolean>; onAction: (action: DiagnosticAction) => void
 }) {
   const staffId = useAuthStore(state => state.user?.staffId), organizationId = useAuthStore(state => state.user?.organizationId)
@@ -86,16 +86,20 @@ export default function CampaignDiagnosticsTab({ campaignId, accountId, active =
   const [busy, setBusy] = useState<'read' | 'ai' | 'resume' | null>(null), [error, setError] = useState('')
   const [stale, setStale] = useState(false)
   const [runtimeStale, setRuntimeStale] = useState(false)
+  // The paged campaign list may no longer contain the campaign open in this panel.
+  const canResume = (campaignStatus ?? snapshot?.campaignStatus) === 'tạm dừng'
   const root = useRef<HTMLElement>(null)
   const activeRequest = useRef<string | null>(null), generation = useRef(0)
-  const resuming = useRef(false)
+  const panelActive = useRef(active)
+  // A tab switch cancels reads, but a resume belongs to the campaign/auth scope.
+  const resuming = useRef<symbol | null>(null)
   const cancel = () => {
     generation.current++
     if (activeRequest.current) void window.electronAPI.cancelCampaignDiagnostics(activeRequest.current).catch(() => {})
     activeRequest.current = null
   }
   const run = async (analyze: boolean) => {
-    if (activeRequest.current) return
+    if (activeRequest.current || resuming.current) return
     cancel()
     const owner = generation.current, requestId = crypto.randomUUID()
     activeRequest.current = requestId
@@ -117,29 +121,37 @@ export default function CampaignDiagnosticsTab({ campaignId, accountId, active =
   }
   const resume = async () => {
     if (!canResume || resuming.current || activeRequest.current) return
-    resuming.current = true
-    const owner = generation.current
+    const owner = Symbol('resume')
+    resuming.current = owner
     setBusy('resume'); setError('')
     try {
       const success = await onResume()
-      if (generation.current !== owner) return
-      if (success) await run(false)
+      if (resuming.current !== owner) return
+      resuming.current = null
+      setBusy(null)
+      if (success) {
+        cancel()
+        // Keep the confirmed state even if the subsequent diagnostic read fails.
+        setSnapshot(current => current ? { ...current, campaignStatus: 'chờ xử lý' } : current)
+        setStale(true)
+        if (panelActive.current) void run(false)
+      }
     } catch {
-      if (generation.current === owner) setError('Chưa thể tiếp tục chiến dịch. Kiểm tra trạng thái rồi thử lại.')
+      if (resuming.current === owner) setError('Chưa thể tiếp tục chiến dịch. Kiểm tra trạng thái rồi thử lại.')
     } finally {
-      resuming.current = false
-      if (generation.current === owner) setBusy(null)
+      if (resuming.current === owner) { resuming.current = null; setBusy(null) }
     }
   }
   useEffect(() => useAuthStore.subscribe((next, previous) => {
     if ((!next.user || !previous.user) && next.user !== previous.user
       || next.user?.staffId !== previous.user?.staffId || next.user?.organizationId !== previous.user?.organizationId) {
+      resuming.current = null
       cancel(); setSnapshot(null); setAi(null); setBusy(null); setAuthRevision(value => value + 1)
     }
   }), [])
   useEffect(() => {
-    setSnapshot(null); setAi(null); setRuntimeStale(false)
-    return () => cancel()
+    setSnapshot(null); setAi(null); setRuntimeStale(false); setBusy(null)
+    return () => { resuming.current = null; cancel() }
   }, [campaignId, staffId, organizationId, authRevision])
   useEffect(() => observeWebEnrichmentChanges(changed => {
     if (changed && !changed.has(accountId)) return
@@ -147,10 +159,11 @@ export default function CampaignDiagnosticsTab({ campaignId, accountId, active =
     setStale(true); setRuntimeStale(true)
   }), [accountId, staffId, organizationId, authRevision])
   useEffect(() => {
-    if (active) root.current?.closest('.detail-dock-tab-content')?.scrollTo({ top: 0 })
+    panelActive.current = active
+    if (active) root.current?.closest('.campaign-diagnostics-panel')?.scrollTo({ top: 0 })
     if (staffId && active) void run(false)
-    return () => cancel()
-  }, [campaignId, staffId, organizationId, revision, accountConfigVersion, authRevision, active])
+    return () => { panelActive.current = false; cancel() }
+  }, [campaignId, staffId, organizationId, revision, openRequestId, accountConfigVersion, authRevision, active])
   const severity: DiagnosticSeverity = !snapshot ? 'unknown' : snapshot.checks.some(check => check.severity === 'blocking') ? 'blocking'
     : snapshot.checks.some(check => check.severity === 'warning') ? 'warning' : !snapshot.complete ? 'unknown'
       : snapshot.checks.some(check => check.severity === 'info') || !snapshot.checks.length ? 'info' : 'ok'

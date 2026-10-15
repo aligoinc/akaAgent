@@ -9673,14 +9673,30 @@ button.btn-icon.campaign-control-button.assistant {
   gap: 10px;
 }
 
+.log-panel-header-assistant {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
 .log-panel-header-context {
   min-width: 0;
-  max-width: 68%;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 4px;
+  background: var(--bg-accent-subtle);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.log-panel-campaign-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-tertiary);
-  font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .log-panel-tabs {

@@ -3,19 +3,26 @@ import { Activity, ListFilter, Sparkles, Trash2, X } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import CampaignAssistantTab from './CampaignAssistantTab'
 import CampaignSupportTab from './CampaignSupportTab'
+import CampaignDiagnosticsTab from './CampaignDiagnosticsTab'
 import type { CampaignAssistantOpenRequest } from '../../../../shared/campaignSupport'
+import type { CampaignListItem } from '../../../../shared/types'
+import type { DiagnosticAction } from '../../../../shared/campaignDiagnostics'
+import { useUiStore } from '../../stores/uiStore'
 
 interface LogPanelProps {
   assistantOpenRequest?: CampaignAssistantOpenRequest | null
+  isActive?: boolean
+  diagnosticsRevision?: number
+  onDiagnosticAction?: (campaign: CampaignListItem, action: DiagnosticAction) => void
 }
 
 type LogPanelTab = 'progress' | 'assistant'
 
-export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
+export default function LogPanel({ assistantOpenRequest, isActive = true, diagnosticsRevision = 0, onDiagnosticAction }: LogPanelProps) {
   const { logs, addLog, clearLogs, campaigns, accounts } = useCampaignStore()
   const [activeTab, setActiveTab] = useState<LogPanelTab>('progress')
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
-  const [assistantCampaignSnapshot, setAssistantCampaignSnapshot] = useState<{ id: number; name: string } | null>(null)
+  const [assistantCampaignSnapshot, setAssistantCampaignSnapshot] = useState<CampaignListItem | null>(null)
   const [assistantSelection, setAssistantSelection] = useState<CampaignAssistantOpenRequest | null>(null)
   const assistantCampaignId = assistantSelection?.campaignId ?? null
   const assistantMode = assistantSelection?.mode ?? 'ask'
@@ -38,7 +45,7 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
 
   useEffect(() => {
     const current = campaigns.find(row => row.id === assistantCampaignId)
-    if (current) setAssistantCampaignSnapshot({ id: current.id, name: current.name })
+    if (current) setAssistantCampaignSnapshot(current)
   }, [assistantCampaignId, campaigns])
 
   const assistantCampaign = useMemo(
@@ -47,6 +54,20 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
       : null,
     [assistantCampaignId, campaigns, assistantCampaignSnapshot]
   )
+  const diagnosticAccount = accounts.find(account => account.id === assistantCampaign?.accountId)
+  const diagnosticCampaignStatus = campaigns.find(campaign => campaign.id === assistantCampaignId)?.status
+  const handleDiagnosticResume = async () => {
+    if (!assistantCampaign) return false
+    const currentCampaign = useCampaignStore.getState().campaigns.find(campaign => campaign.id === assistantCampaign.id)
+    if (currentCampaign && currentCampaign.status !== 'tạm dừng') return false
+    try {
+      await useCampaignStore.getState().updateCampaign(assistantCampaign.id, { status: 'chờ xử lý' })
+      return true
+    } catch {
+      useUiStore.getState().showAlert('Không thể tiếp tục chiến dịch. Vui lòng thử lại.', 'error')
+      return false
+    }
+  }
 
   const accountOptions = useMemo(() => {
     const namesById = new Map<number, string>()
@@ -157,15 +178,15 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
           </div>
         </div>
       )}
-      <div className="campaign-panel-header log-panel-header">
-        <span className="campaign-panel-title">{activeTab === 'assistant' ? (assistantMode === 'ask' ? 'Hỏi AI' : 'Trợ lý AI') : 'Tiến trình'}</span>
+      <div className={`campaign-panel-header log-panel-header${activeTab === 'assistant' ? ' log-panel-header-assistant' : ''}`}>
+        <span className="campaign-panel-title">{activeTab === 'assistant' ? (assistantMode === 'diagnostics' ? 'Chẩn đoán' : assistantMode === 'ask' ? 'Hỏi AI' : 'Trợ lý AI') : 'Tiến trình'}</span>
         {activeTab === 'progress' ? (
           <button className="btn btn-ghost btn-icon" onClick={clearLogs} title="Xoá log">
             <Trash2 size={14} />
           </button>
         ) : (
           <span className="log-panel-header-context" title={assistantCampaign?.name || ''}>
-            {assistantCampaign?.name || 'Chưa chọn chiến dịch'}
+            <span className="log-panel-campaign-name">{assistantCampaign?.name || 'Chưa chọn chiến dịch'}</span>
           </span>
         )}
       </div>
@@ -246,12 +267,22 @@ export default function LogPanel({ assistantOpenRequest }: LogPanelProps) {
             })
           )}
         </div>
-      ) : (
+      ) : assistantMode === 'diagnostics' ? null : (
         assistantMode === 'campaign_support' || assistantMode === 'campaign_support_dsh'
           ? <CampaignSupportTab key={`${assistantMode}:${assistantCampaignId}`} campaign={assistantCampaign} startRequestId={assistantSelection?.requestId}
               variant={assistantMode === 'campaign_support_dsh' ? 'dsh' : 'standard'} />
           : <CampaignAssistantTab key={assistantCampaignId} campaign={assistantCampaign} />
       )}
+      {assistantMode === 'diagnostics' && <div className="campaign-diagnostics-panel" hidden={activeTab !== 'assistant'}>
+        {assistantCampaign && /^(facebook|zalo|email)_/.test(assistantCampaign.actionId)
+          ? <CampaignDiagnosticsTab key={assistantCampaign.id} campaignId={assistantCampaign.id} accountId={assistantCampaign.accountId}
+              active={isActive && activeTab === 'assistant'} revision={diagnosticsRevision} openRequestId={assistantSelection?.requestId}
+              accountConfigVersion={diagnosticAccount?.flatformType === 'facebook'
+                ? `${diagnosticAccount.id}:${diagnosticAccount.facebookRandomRunEnabled}:${diagnosticAccount.facebookRandomRunRevision}` : ''}
+              campaignStatus={diagnosticCampaignStatus} onResume={handleDiagnosticResume}
+              onAction={action => onDiagnosticAction?.(assistantCampaign, action)} />
+          : <div className="empty-state"><div className="empty-state-text">Chọn Chẩn đoán trong menu Trợ lý của chiến dịch.</div></div>}
+      </div>}
     </div>
   )
 }

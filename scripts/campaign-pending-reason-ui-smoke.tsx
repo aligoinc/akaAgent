@@ -69,4 +69,5 @@ useCampaignStore.setState({ campaigns, campaignConfigs: Object.fromEntries(campa
     useCampaignStore.setState(previous)
   }
 }
-createRoot(document.getElementById('root')!).render(<div style={{ height: '100vh' }}><CampaignPanel isActive /></div>)
+export const root = createRoot(document.getElementById('root')!)
+root.render(<div style={{ height: '100vh' }}><CampaignPanel isActive /></div>)
