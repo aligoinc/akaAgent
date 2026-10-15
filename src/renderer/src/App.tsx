@@ -1,3 +1,4 @@
+import CampaignEditDialogs from './components/CampaignPanels/CampaignEditDialogs'
 import { useDesktopUiPolling } from './hooks/useDesktopUiPolling'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import TopBar, { type AppPage } from './components/TopBar/TopBar'
@@ -338,6 +339,7 @@ export default function App() {
         </div>
         <AlertModal />
         <ConfirmModal />
+        <CampaignEditDialogs />
         {runtimeRestartModal}
         {showUpdateModal && availableUpdate && (
           <UpdateModal
@@ -357,6 +359,7 @@ export default function App() {
         <LoginPage />
         <AlertModal />
         <ConfirmModal />
+        <CampaignEditDialogs />
         {runtimeRestartModal}
         {showUpdateModal && availableUpdate && (
           <UpdateModal
@@ -472,6 +475,7 @@ export default function App() {
 
       <AlertModal />
       <ConfirmModal />
+      <CampaignEditDialogs />
       {runtimeRestartModal}
       {showDataScan && (
         <DataScanModal onClose={() => setShowDataScan(false)} />

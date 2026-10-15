@@ -1,3 +1,4 @@
+import { campaignEdit, useCampaignEditSession } from './campaignEdit'
 import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
 import FacebookCredentialsModal from './FacebookCredentialsModal'
 import type { DiagnosticAction } from '../../../../shared/campaignDiagnostics'
@@ -705,7 +706,7 @@ const DETAIL_DOCK_LIST_MIN_HEIGHT = 220
 const DETAIL_DOCK_MAX_HEIGHT_RESERVE = 16
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
-const canEditCampaign = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
+const canEditCampaign = (status: string) => ['chờ xử lý', 'đang chạy', 'tạm dừng'].includes(status)
 const canPauseCampaign = (status: string) => status === 'chờ xử lý' || status === 'đang chạy'
 const canResumeCampaign = (status: string) => status === 'tạm dừng'
 const canDeleteCampaign = (status: string) => status !== 'đang chạy'
@@ -2560,6 +2561,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [limitUpdateCampaign, setLimitUpdateCampaign] = useState<CampaignConfig | null>(null)
   const [contentMediaUpdateCampaign, setContentMediaUpdateCampaign] = useState<CampaignConfig | null>(null)
   const campaignDrafts = useCampaignDrafts(isActive)
+  const editSession = useCampaignEditSession(isActive)
   const [editingCampaign, setEditingCampaign] = useState<CampaignConfig | null>(null)
   const [cloneFromId, setCloneFromId] = useState<number | undefined>(undefined)
   const [campaignFormInitialActionId, setCampaignFormInitialActionId] = useState<string | undefined>(undefined)
@@ -2759,13 +2761,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           onDataGroupCampaignRequestHandled?.(request.requestId)
           return
         }
-        void loadCampaignConfig(campaign.id, { force: true })
+        void campaignEdit.prepare(campaign.id, editSession.current.signal)
           .then(config => {
             if (handledNavigationRequestRef.current !== request.requestId) return
-            if (!config) {
-              showAlert('Không thể tải cấu hình chiến dịch.', 'error')
-              return
-            }
+            if (!config || editSession.current.signal.aborted) return
             if (!canEditCampaign(config.status)) {
               showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể mở form khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
               void loadCampaigns({ silent: true })
@@ -3387,17 +3386,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   }
 
   const handleEdit = async (campaign: CampaignListItem, section?: 'schedule') => {
-    if (!canEditCampaign(campaign.status)) {
-      showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      return
-    }
-    const config = await requireCampaignConfig(campaign)
-    if (!config) return
-    if (!canEditCampaign(config.status)) {
-      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể sửa khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      void loadCampaigns({ silent: true })
-      return
-    }
+    const config = await campaignEdit.prepare(campaign.id, editSession.current.signal)
+    if (!config || editSession.current.signal.aborted) return
     setCampaignFormInitialActionId(undefined)
     setCampaignFormInitialDetails(undefined)
     setEditingCampaign(config)
@@ -3449,8 +3439,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   }
 
   const handleClone = async (campaign: CampaignListItem) => {
+    const signal = editSession.current.signal
     const config = await requireCampaignConfig(campaign)
-    if (!config) return
+    if (!config || signal.aborted) return
     const cloneData: CampaignConfig = {
       ...config,
       id: 0,
@@ -3475,32 +3466,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   }
 
   const handleOpenLimitUpdate = async (campaign: CampaignListItem) => {
-    if (!canEditCampaign(campaign.status)) {
-      showAlert('Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      return
-    }
-    const config = await requireCampaignConfig(campaign)
-    if (!config) return
-    if (!canEditCampaign(config.status)) {
-      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể cập nhật giới hạn gửi khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      void loadCampaigns({ silent: true })
-      return
-    }
+    const config = await campaignEdit.prepare(campaign.id, editSession.current.signal)
+    if (!config || editSession.current.signal.aborted) return
     setLimitUpdateCampaign(config)
   }
 
   const handleOpenContentMediaUpdate = async (campaign: CampaignListItem) => {
-    if (!canEditCampaign(campaign.status)) {
-      showAlert('Chỉ có thể cập nhật nội dung + media khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      return
-    }
-    const config = await requireCampaignConfig(campaign)
-    if (!config) return
-    if (!canEditCampaign(config.status)) {
-      showAlert('Trạng thái chiến dịch đã thay đổi. Chỉ có thể cập nhật nội dung + media khi chiến dịch là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      void loadCampaigns({ silent: true })
-      return
-    }
+    const config = await campaignEdit.prepare(campaign.id, editSession.current.signal)
+    if (!config || editSession.current.signal.aborted) return
     setContentMediaUpdateCampaign(config)
   }
 
@@ -6463,7 +6436,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                                 handleEdit(campaign)
                               }}
                               disabled={!canEditCampaign(campaign.status)}
-                              title={canEditCampaign(campaign.status) ? 'Sửa chiến dịch' : 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              title={canEditCampaign(campaign.status) ? 'Sửa chiến dịch' : 'Chiến dịch đã hoàn thành không thể sửa'}
                               role="menuitem"
                             >
                               <Edit3 size={14} />
@@ -6498,7 +6471,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                                 handleOpenLimitUpdate(campaign)
                               }}
                               disabled={!canEditCampaign(campaign.status)}
-                              title={canEditCampaign(campaign.status) ? 'Cập nhật giới hạn gửi' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              title={canEditCampaign(campaign.status) ? 'Cập nhật giới hạn gửi' : 'Chiến dịch đã hoàn thành không thể cập nhật'}
                               role="menuitem"
                             >
                               <SlidersHorizontal size={14} />
@@ -6512,7 +6485,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                                 handleOpenContentMediaUpdate(campaign)
                               }}
                               disabled={!canEditCampaign(campaign.status)}
-                              title={canEditCampaign(campaign.status) ? 'Cập nhật nội dung + media' : 'Chỉ cập nhật được chiến dịch chờ xử lý hoặc tạm dừng'}
+                              title={canEditCampaign(campaign.status) ? 'Cập nhật nội dung + media' : 'Chiến dịch đã hoàn thành không thể cập nhật'}
                               role="menuitem"
                             >
                               <FileText size={14} />

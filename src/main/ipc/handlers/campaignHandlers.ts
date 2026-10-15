@@ -1,4 +1,5 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaignDraftRequest } from '../../../shared/campaignDrafts'
 import * as campaignDraftRepo from '../../data/repositories/campaignDraftRepository'
 import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
@@ -135,7 +136,7 @@ export function registerCampaignHandlers(
     return campaign
   })
 
-  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: CampaignUpdate | null | undefined) => {
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: CampaignUpdate | null | undefined, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean) => {
     const payload = updates || {}
     if (
       isStatusOnlyCampaignUpdate(payload)
@@ -149,9 +150,18 @@ export function registerCampaignHandlers(
       return campaign
     }
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
-    const campaign = await supabase.updateCampaign(id, payload)
-    realtimeRefreshController?.refreshSoon('campaign-updated')
-    return campaign
+    if (requireEditReady === true && !(await supabase.getCampaignConfig(id))?.editReady) {
+      throw new Error('Chiến dịch chưa tạm dừng hoàn tất hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
+    }
+    try {
+      const campaign = await supabase.updateCampaign(id, payload, requireEditReady === true, expectedUpdatedAt, retrySmsInputSchedule)
+      realtimeRefreshController?.refreshSoon('campaign-updated')
+      return campaign
+    } catch (error) {
+      if (!(error instanceof CampaignConfigSaveError)) throw error
+      realtimeRefreshController?.refreshSoon('campaign-updated')
+      return error.result
+    }
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_CAMPAIGN, async (_, id: number) => {

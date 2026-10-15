@@ -1,4 +1,5 @@
 import { randomRunRpc } from './facebookRandomRunRepository'
+import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { writeManagedActionResult, settleManagedActionInput, settleManagedBadTarget, defersManagedBadTargetReset } from '../../services/actionResultRuntime'
 import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
 import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
@@ -116,6 +117,8 @@ const CAMPAIGN_LOG_APPEND_RESULT_SELECT = [
   CAMPAIGN_PRIMARY_ACCOUNT_RELATION
 ].join(', ')
 const CAMPAIGN_CONFIG_SELECT = [
+  'runtime_claim_token',
+  'runtime_unit_token',
   'id',
   'name',
   'action_id',
@@ -2324,7 +2327,7 @@ function getMobileContentUpdateFailureMessage(actionId: string, paused: boolean)
     'Hãy mở Sửa chiến dịch, bấm Lưu lại, rồi tiếp tục chiến dịch.'
 }
 
-export async function updateCampaign(id: number, updates: CampaignUpdate): Promise<Campaign> {
+export async function updateCampaign(id: number, updates: CampaignUpdate, requireEditReady = false, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean): Promise<Campaign> {
   const u = requireCurrentUser()
   if ((updates as Record<string, unknown>).log !== undefined) {
     throw new Error('Campaign log must be written through the bounded atomic append operation.')
@@ -2393,7 +2396,7 @@ export async function updateCampaign(id: number, updates: CampaignUpdate): Promi
     const currentActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
     targetActionId = currentActionId
     await ensureCurrentUserCanUseCampaignAction(currentActionId)
-  } else if (smsMaterializationUpdateRequested(updates)) {
+  } else if (smsMaterializationUpdateRequested(updates) || (requireEditReady && retrySmsInputSchedule !== undefined)) {
     targetActionId = await getCampaignActionIdForCurrentUser(id, u.staffId)
   }
   const previousSmsExtraSettings = updates.extraSettings !== undefined && targetActionId === SMS_SEND_ACTION_ID
@@ -2436,27 +2439,40 @@ export async function updateCampaign(id: number, updates: CampaignUpdate): Promi
     payload.refresh_data = true
   }
 
-  const { data, error } = await client()
+  let write = client()
     .from('auto_campaigns')
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .select(CAMPAIGN_SELECT)
-    .single()
+  if (requireEditReady) write = write.eq('is_delete', false).eq('status', 'tạm dừng')
+    .is('runtime_claim_token', null).is('runtime_unit_token', null)
+  if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
+  const { data, error } = await write.select(CAMPAIGN_SELECT).single()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
   const updatedCampaign = mapCampaignFromDB(data)
   if (
     isMobileManagedSmsCampaignAction(updatedCampaign.actionId) &&
-    smsMaterializationTouched(updates, updatedCampaign.actionId, previousSmsExtraSettings)
+    (smsMaterializationTouched(updates, updatedCampaign.actionId, previousSmsExtraSettings) ||
+      (requireEditReady && retrySmsInputSchedule !== undefined))
   ) {
+    const updateSmsSchedule = updates.actionId !== undefined || updates.schedule !== undefined ||
+      updates.originalSchedule !== undefined || (requireEditReady && retrySmsInputSchedule === true)
     try {
-      await rematerializeSmsInputData(
-        updatedCampaign,
-        updates.actionId !== undefined || updates.schedule !== undefined || updates.originalSchedule !== undefined
-      )
+      await rematerializeSmsInputData(updatedCampaign, updateSmsSchedule)
     } catch (materializationError) {
       console.error('Failed to update mobile-managed campaign input content:', materializationError)
+      if (requireEditReady && updatedCampaign.updatedAt) {
+        // This write already required paused/unowned. Keep its exact version;
+        // a later edit/resume must still conflict when this editor retries.
+        throw new CampaignConfigSaveError({
+          code: 'campaign_input_materialization_failed',
+          campaignId: id,
+          updatedAt: updatedCampaign.updatedAt,
+          updateSmsSchedule,
+          message: 'Cấu hình chiến dịch đã lưu, nhưng cập nhật data chưa hoàn tất. Bấm Lưu để thử lại trước khi tiếp tục chiến dịch.'
+        })
+      }
       const paused = await pauseCampaignAfterMobileContentUpdateFailure(id, u.staffId)
       throw new Error(getMobileContentUpdateFailureMessage(updatedCampaign.actionId, paused))
     }

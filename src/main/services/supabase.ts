@@ -183,7 +183,7 @@ export class SupabaseService {
   listCampaignSummaries() { return campaignRepo.listCampaignSummaries() }
   listCampaigns() { return campaignRepo.listCampaigns() }
   createCampaign(campaign: Partial<Campaign>) { return campaignRepo.createCampaign(campaign) }
-  updateCampaign(id: number, updates: CampaignUpdate) { return campaignRepo.updateCampaign(id, updates) }
+  updateCampaign(id: number, updates: CampaignUpdate, requireEditReady = false, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean) { return campaignRepo.updateCampaign(id, updates, requireEditReady, expectedUpdatedAt, retrySmsInputSchedule) }
   updateClaimedZaloServerCampaign(id: number, updates: CampaignUpdate) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
   }

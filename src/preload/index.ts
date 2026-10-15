@@ -1,3 +1,4 @@
+import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -304,8 +305,8 @@ const electronAPI = {
   createCampaign: (data: Partial<Campaign>): Promise<Campaign> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CAMPAIGN, data),
 
-  updateCampaign: (id: number, updates: CampaignUpdate): Promise<Campaign> =>
-    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN, id, updates),
+  updateCampaign: (id: number, updates: CampaignUpdate, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean): Promise<Campaign | CampaignConfigSaveFailure> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN, id, updates, requireEditReady, expectedUpdatedAt, retrySmsInputSchedule),
 
   deleteCampaign: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN, id),

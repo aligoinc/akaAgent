@@ -228,7 +228,7 @@ const getCampaignProgress = (campaign: DataGroupPanelCampaign) => {
   return Math.min(100, Math.round(((campaign.inputCompleted + campaign.inputFailed) / campaign.inputTotal) * 100))
 }
 
-const canOpenCampaignForm = (status: string) => status === 'chờ xử lý' || status === 'tạm dừng'
+const canOpenCampaignForm = (status: string) => ['chờ xử lý', 'đang chạy', 'tạm dừng'].includes(status)
 
 const formatCampaignStatus = (status: string) => {
   const normalized = status.trim()

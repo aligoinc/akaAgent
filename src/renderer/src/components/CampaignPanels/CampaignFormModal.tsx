@@ -1,3 +1,4 @@
+import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignSendExclusions'
 import CampaignScheduleAi from './CampaignScheduleAi'
 import CampaignLimitsAi from './CampaignLimitsAi'
@@ -1692,6 +1693,8 @@ export default function CampaignFormModal({
   const draftValuesRef = useRef<Record<string, unknown>>({})
   const draftIdRef = useRef(savedDraft?.id || crypto.randomUUID())
   const campaign = providedCampaign ?? (draftPayload?.baseCampaign as CampaignConfig | undefined)
+  const editSession = useCampaignEditSession(campaign?.id)
+  const saveCompletion = useCampaignSaveCompletion(campaign?.id)
   const restoredDraftAction = (draftPayload?.values.formData as { actionId?: string } | undefined)?.actionId
 
   const {
@@ -6667,6 +6670,14 @@ export default function CampaignFormModal({
   }
 
   const handleSave = async () => {
+    const saveSignal = saveCompletion.session.current.signal
+    if (saveCompletion.hasPending()) {
+      setSavingCampaign(true)
+      try { await saveCompletion.retry() }
+      catch (error) { if (!saveSignal.aborted) showAlert(savedCampaignCompletionError + formatIpcErrorMessage(error, 'Không thể hoàn tất.'), 'error') }
+      finally { if (!saveSignal.aborted) setSavingCampaign(false) }
+      return
+    }
     if (formAiBusy || generalSettingsOpen || exclusionEditing) return
     if (savingCampaign) return
     if (canUseSendExclusions) {
@@ -7385,6 +7396,15 @@ export default function CampaignFormModal({
       return
     }
 
+    const selectedSaveStatus = (isEditingSavedCampaign || cloneFromId)
+      ? await campaignEdit.chooseSaveStatus(saveSignal) : null
+    if (((isEditingSavedCampaign || cloneFromId) && !selectedSaveStatus) || saveSignal.aborted) {
+      setSavingCampaign(false)
+      setSaveProgress(null)
+      return
+    }
+    if (cloneFromId && selectedSaveStatus) saveBundleItems = saveBundleItems.map(item => ({ ...item, campaignPayload: { ...item.campaignPayload, status: selectedSaveStatus } }))
+
     try {
       updateSaveProgress(3, 'Đang kiểm tra và chuẩn hóa dữ liệu...')
       const {
@@ -7610,7 +7630,7 @@ export default function CampaignFormModal({
           ? `${progressRange.itemIndex + 1}/${progressRange.itemCount}`
           : ''
 
-        const finalStatus = campaignPayload.status ?? 'chờ xử lý'
+        const finalStatus = selectedSaveStatus ?? campaignPayload.status ?? 'chờ xử lý'
         const usesAtomicProvisioningBarrier = campaignPayload.dataTargetSourceMode === 'data_group' && !!creationBundle
         setItemProgress(
           0.02,
@@ -7620,7 +7640,7 @@ export default function CampaignFormModal({
         )
         const savedCampaign = await createCampaign({
           ...campaignPayload,
-          status: usesAtomicProvisioningBarrier ? finalStatus : 'tạm dừng'
+          status: usesAtomicProvisioningBarrier && !selectedSaveStatus ? finalStatus : 'tạm dừng'
         }, { refresh: false })
         setItemProgress(
           0.12,
@@ -7751,7 +7771,7 @@ export default function CampaignFormModal({
             setItemProgress(0.9, 'Đã liên kết chiến dịch với Nhóm data.')
           }
 
-          if (!usesAtomicProvisioningBarrier) {
+          if (!usesAtomicProvisioningBarrier || selectedSaveStatus) {
             stagedCampaignFinalStatusById.set(savedCampaign.id, finalStatus)
           }
           setItemProgress(
@@ -7787,12 +7807,14 @@ export default function CampaignFormModal({
             `Đang kích hoạt chiến dịch ${index + 1}/${stagedCampaigns.length}...`
           )
           if (stagedCampaign.finalStatus !== 'tạm dừng') {
-            await updateCampaign(stagedCampaign.campaignId, { status: stagedCampaign.finalStatus }, { refresh: false })
+            if (selectedSaveStatus) await resumeAfterCampaignSave([stagedCampaign.campaignId], saveSignal)
+            else await updateCampaign(stagedCampaign.campaignId, { status: stagedCampaign.finalStatus }, { refresh: false })
           }
         }
         updateSaveProgress(99, 'Đã kích hoạt các chiến dịch.')
       }
 
+      const savedLinkedDraftItems = new Map<string, number>()
       const persistDraftCampaign = async (
         draft: InternalCampaignDraft,
         linkTargetIds: number[] = [],
@@ -7802,6 +7824,9 @@ export default function CampaignFormModal({
         const progressStartIndex = linkedDraftProgressStartIndexByTempId.get(draft.tempId)
 
         for (let draftItemIndex = 0; draftItemIndex < draft.items.length; draftItemIndex += 1) {
+          const itemKey = `${draft.tempId}:${draftItemIndex}`
+          const existingId = savedLinkedDraftItems.get(itemKey)
+          if (existingId !== undefined) { createdIds.push(existingId); continue }
           const draftItem = draft.items[draftItemIndex]
           const payloadExtraSettings = {
             ...(draftItem.campaignPayload.extraSettings || {})
@@ -7822,6 +7847,7 @@ export default function CampaignFormModal({
                 itemIndex: progressStartIndex + draftItemIndex,
                 itemCount: Math.max(1, campaignWorkItemCount)
               })
+          savedLinkedDraftItems.set(itemKey, savedDraftCampaign.id)
           createdIds.push(savedDraftCampaign.id)
         }
 
@@ -7874,215 +7900,243 @@ export default function CampaignFormModal({
         }
       }
 
-      const mainCampaignCount = Math.max(1, saveBundleItems.length)
-      for (let i = 0; i < saveBundleItems.length; i++) {
-        const { campaignPayload, details: currentDetails, dataGroupSnapshots: currentDataGroupSnapshots } = saveBundleItems[i]
-        const progressRange: CampaignSaveProgressRange = {
-          itemIndex: i,
-          itemCount: Math.max(1, campaignWorkItemCount)
-        }
-        const setMainItemProgress = (
-          ratio: number,
-          label: string,
-          processedRows?: number,
-          totalRows?: number
-        ): void => {
-          updateCampaignWorkProgress(
-            progressRange.itemIndex,
-            ratio,
-            label,
-            processedRows,
-            totalRows
-          )
-        }
-        const effectiveCampaignPayload: Partial<Campaign> = creationBundle
-          ? {
-              ...campaignPayload,
-              creationBundleId: creationBundle.id,
-              creationBundleChildIndex: i
-            }
-          : campaignPayload
-        const isFirst = (i === 0)
-
-        let savedCampaign: Pick<Campaign, 'id'>
-
-        if (campaign && campaign.id && isFirst) {
-          setMainItemProgress(0.04, `Đang cập nhật chiến dịch ${i + 1}/${mainCampaignCount}...`)
-          const changesDataGroup = effectiveCampaignPayload.dataTargetSourceMode === 'data_group' &&
-            Number(effectiveCampaignPayload.dataGroupId || 0) > 0 &&
-            effectiveCampaignPayload.dataGroupId !== campaign.dataGroupId
-          if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
-            const preflight = await window.electronAPI.preflightCampaignDataGroupChange(
-              campaign.id,
-              effectiveCampaignPayload.dataGroupId
+      let nextMainItemIndex = 0
+      let existingConfigSaved = false
+      const linkedTargetFieldsSaved = new Set<FindDataTargetCampaignField>()
+      const persistCampaigns = async (): Promise<void> => {
+        if (saveSignal.aborted) return
+        const mainCampaignCount = Math.max(1, saveBundleItems.length)
+        for (let i = nextMainItemIndex; i < saveBundleItems.length; i++) {
+          const { campaignPayload, details: currentDetails, dataGroupSnapshots: currentDataGroupSnapshots } = saveBundleItems[i]
+          const progressRange: CampaignSaveProgressRange = {
+            itemIndex: i,
+            itemCount: Math.max(1, campaignWorkItemCount)
+          }
+          const setMainItemProgress = (
+            ratio: number,
+            label: string,
+            processedRows?: number,
+            totalRows?: number
+          ): void => {
+            updateCampaignWorkProgress(
+              progressRange.itemIndex,
+              ratio,
+              label,
+              processedRows,
+              totalRows
             )
-            if (!preflight.allowed) {
-              const reason = preflight.reason === 'canonical_inputs_exist'
-                ? `Chiến dịch đã có ${preflight.canonicalCount} canonical input nên không thể đổi Nhóm data.`
-                : preflight.reason === 'campaign_creation_bundle_immutable'
-                  ? 'Chiến dịch thuộc bundle đã tạo nên không thể đổi Nhóm data.'
-                  : preflight.reason === 'campaign_action_incompatible'
-                    ? 'Loại chiến dịch này không tương thích với Nhóm data.'
-                    : preflight.reason === 'campaign_not_bindable'
-                      ? 'Chỉ có thể đổi Nhóm data khi chiến dịch chưa chạy và chưa hết hạn.'
-                      : 'Không thể đổi sang Nhóm data đã chọn.'
-              throw new Error(reason)
-            }
           }
-          const updatePayload = changesDataGroup
+          const effectiveCampaignPayload: Partial<Campaign> = creationBundle
             ? {
-                ...effectiveCampaignPayload,
-                dataTargetSourceMode: undefined,
-                dataGroupId: undefined
+                ...campaignPayload,
+                creationBundleId: creationBundle.id,
+                creationBundleChildIndex: i
               }
-            : effectiveCampaignPayload
-          await updateCampaign(campaign.id, updatePayload, { refresh: false })
-          setMainItemProgress(0.35, `Đã cập nhật chiến dịch ${i + 1}/${mainCampaignCount}.`)
-          if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
-            setMainItemProgress(0.45, 'Đang liên kết chiến dịch với Nhóm data...')
-            await window.electronAPI.bindCampaignDataGroupSource({
-              requestId: `${saveRequestId}:${campaign.id}`,
-              campaignId: campaign.id,
-              groupId: effectiveCampaignPayload.dataGroupId,
-              bundleId: null
-            })
-            setMainItemProgress(0.8, 'Đã liên kết chiến dịch với Nhóm data.')
-          }
-          savedCampaign = campaign
+            : campaignPayload
+          const isFirst = (i === 0)
 
-          if (!isEditingSavedCampaign) {
-            const newDetails: Partial<CampaignInputData>[] = []
-            for (let detailIndex = 0; detailIndex < currentDetails.length; detailIndex += 1) {
-              const d = currentDetails[detailIndex]
-              if (d.id) {
-	                await updateCampaignInputData(d.id, {
-	                  name: d.name,
-	                  phone: d.phone,
-	                  phoneCarrier: inferInputDataPhoneCarrier(d.phone, d.phoneCarrier),
-	                  uid: d.uid,
-	                  email: d.email,
-	                  note: d.note,
-                })
-              } else {
-                newDetails.push({
-                  ...d,
-                  campaignId: savedCampaign.id
-                })
+          let savedCampaign: Pick<Campaign, 'id'>
+
+          if (campaign && campaign.id && isFirst) {
+            setMainItemProgress(0.04, `Đang cập nhật chiến dịch ${i + 1}/${mainCampaignCount}...`)
+            const changesDataGroup = effectiveCampaignPayload.dataTargetSourceMode === 'data_group' &&
+              Number(effectiveCampaignPayload.dataGroupId || 0) > 0 &&
+              effectiveCampaignPayload.dataGroupId !== campaign.dataGroupId
+            if (!existingConfigSaved && changesDataGroup && effectiveCampaignPayload.dataGroupId) {
+              const preflight = await window.electronAPI.preflightCampaignDataGroupChange(
+                campaign.id,
+                effectiveCampaignPayload.dataGroupId
+              )
+              if (!preflight.allowed) {
+                const reason = preflight.reason === 'canonical_inputs_exist'
+                  ? `Chiến dịch đã có ${preflight.canonicalCount} canonical input nên không thể đổi Nhóm data.`
+                  : preflight.reason === 'campaign_creation_bundle_immutable'
+                    ? 'Chiến dịch thuộc bundle đã tạo nên không thể đổi Nhóm data.'
+                    : preflight.reason === 'campaign_action_incompatible'
+                      ? 'Loại chiến dịch này không tương thích với Nhóm data.'
+                      : preflight.reason === 'campaign_not_bindable'
+                        ? 'Chỉ có thể đổi Nhóm data khi chiến dịch chưa chạy và chưa hết hạn.'
+                        : 'Không thể đổi sang Nhóm data đã chọn.'
+                throw new Error(reason)
               }
-              if ((detailIndex + 1) % 100 === 0 || detailIndex === currentDetails.length - 1) {
-                setMainItemProgress(
-                  0.4 + (0.25 * ((detailIndex + 1) / Math.max(1, currentDetails.length))),
-                  'Đang cập nhật data chiến dịch...',
-                  detailIndex + 1,
-                  currentDetails.length
+            }
+            const updatePayload = changesDataGroup
+              ? {
+                  ...effectiveCampaignPayload,
+                  dataTargetSourceMode: undefined,
+                  dataGroupId: undefined
+                }
+              : effectiveCampaignPayload
+            if (!existingConfigSaved) {
+              await saveCampaignConfig(campaign.id, updatePayload, campaign.updatedAt, saveSignal)
+              if (saveSignal.aborted) return
+              existingConfigSaved = true
+              // Keep the exact remaining work once the config write has committed.
+              // Retrying must not write again with the form's original CAS version.
+              saveCompletion.checkpoint(persistCampaigns)
+            }
+            if (saveSignal.aborted) return
+            setMainItemProgress(0.35, `Đã cập nhật chiến dịch ${i + 1}/${mainCampaignCount}.`)
+            if (changesDataGroup && effectiveCampaignPayload.dataGroupId) {
+              setMainItemProgress(0.45, 'Đang liên kết chiến dịch với Nhóm data...')
+              await window.electronAPI.bindCampaignDataGroupSource({
+                requestId: `${saveRequestId}:${campaign.id}`,
+                campaignId: campaign.id,
+                groupId: effectiveCampaignPayload.dataGroupId,
+                bundleId: null
+              })
+              setMainItemProgress(0.8, 'Đã liên kết chiến dịch với Nhóm data.')
+            }
+            savedCampaign = campaign
+
+            if (!isEditingSavedCampaign) {
+              const newDetails: Partial<CampaignInputData>[] = []
+              for (let detailIndex = 0; detailIndex < currentDetails.length; detailIndex += 1) {
+                const d = currentDetails[detailIndex]
+                if (d.id) {
+                  await updateCampaignInputData(d.id, {
+                    name: d.name,
+                    phone: d.phone,
+                    phoneCarrier: inferInputDataPhoneCarrier(d.phone, d.phoneCarrier),
+                    uid: d.uid,
+                    email: d.email,
+                    note: d.note,
+                  })
+                } else {
+                  newDetails.push({
+                    ...d,
+                    campaignId: savedCampaign.id
+                  })
+                }
+                if ((detailIndex + 1) % 100 === 0 || detailIndex === currentDetails.length - 1) {
+                  setMainItemProgress(
+                    0.4 + (0.25 * ((detailIndex + 1) / Math.max(1, currentDetails.length))),
+                    'Đang cập nhật data chiến dịch...',
+                    detailIndex + 1,
+                    currentDetails.length
+                  )
+                }
+              }
+              if (newDetails.length > 0) {
+                await runCampaignInputDataWriteWithProgress(
+                  progressRequestId => createCampaignInputDataBatch(newDetails, progressRequestId),
+                  progress => {
+                    const ratio = progress.totalCount > 0
+                      ? progress.processedCount / progress.totalCount
+                      : 1
+                    setMainItemProgress(
+                      0.65 + (0.25 * ratio),
+                      'Đang lưu data mới...',
+                      progress.processedCount,
+                      progress.totalCount
+                    )
+                  }
                 )
               }
             }
-            if (newDetails.length > 0) {
-              await runCampaignInputDataWriteWithProgress(
-                progressRequestId => createCampaignInputDataBatch(newDetails, progressRequestId),
-                progress => {
-                  const ratio = progress.totalCount > 0
-                    ? progress.processedCount / progress.totalCount
-                    : 1
-                  setMainItemProgress(
-                    0.65 + (0.25 * ratio),
-                    'Đang lưu data mới...',
-                    progress.processedCount,
-                    progress.totalCount
-                  )
-                }
-              )
+            setMainItemProgress(1, `Đã lưu chiến dịch ${i + 1}/${mainCampaignCount}.`)
+          } else {
+            savedCampaign = await createCampaignWithInputDataSafely(
+              effectiveCampaignPayload,
+              currentDetails,
+              currentDataGroupSnapshots,
+              progressRange
+            )
+          }
+
+          savedCampaignIds.push(savedCampaign.id)
+          savedCampaignPayloadById.set(savedCampaign.id, effectiveCampaignPayload)
+          nextMainItemIndex = i + 1
+        }
+
+        updateCampaignWorkPhase('Đang lưu các chiến dịch liên kết...')
+        const persistAndPatchFindDataTargetDrafts = async (
+          field: FindDataTargetCampaignField,
+          rawIds: number[],
+          enabled: boolean
+        ) => {
+          if (!isFindDataCampaign || !enabled || linkedTargetFieldsSaved.has(field)) return
+          const tempIds = Array.from(new Set(rawIds.filter(id => id < 0)))
+          // Do not leave a sibling creation running after an error enables retry.
+          const createdIds: number[] = []
+          for (const tempId of tempIds) createdIds.push(...await persistDraftByTempId(tempId))
+          await patchSavedSourceCampaignTargets(field, createdIds)
+          linkedTargetFieldsSaved.add(field)
+        }
+
+        if (isFindDataCampaign) {
+          await persistAndPatchFindDataTargetDrafts('findUidTargetCampaignIds', formData.findUidTargetCampaignIds, formData.isFindUid && handleFoundUidData)
+          await persistAndPatchFindDataTargetDrafts('findPostLinkTargetCampaignIds', formData.findPostLinkTargetCampaignIds, formData.isFindPostLink && handleFoundPostLinkData)
+          await persistAndPatchFindDataTargetDrafts('findPhoneZaloMessagePhoneTargetCampaignIds', formData.findPhoneZaloMessagePhoneTargetCampaignIds, formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData)
+          await persistAndPatchFindDataTargetDrafts('findZaloGroupLinkJoinTargetCampaignIds', formData.findZaloGroupLinkJoinTargetCampaignIds, formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData)
+          await persistAndPatchFindDataTargetDrafts('findFacebookGroupPostTargetCampaignIds', formData.findFacebookGroupPostTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData)
+          await persistAndPatchFindDataTargetDrafts('findFacebookGroupCommentTargetCampaignIds', formData.findFacebookGroupCommentTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData)
+          await persistAndPatchFindDataTargetDrafts('findFacebookGroupJoinTargetCampaignIds', formData.findFacebookGroupJoinTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData)
+        }
+
+        updateCampaignWorkPhase('Đang đồng bộ liên kết chiến dịch...')
+        await syncFindDataSourceCampaignLinks(savedCampaignIds)
+        completeCampaignLinkSyncProgress('Đã đồng bộ liên kết chiến dịch.')
+
+        if (targetFindDataField) {
+          updateCampaignWorkPhase('Đang tạo chiến dịch nguồn liên kết...')
+          const tempSourceDraftIds = selectedFindDataSourceCampaignIds.filter(id => id < 0)
+          for (const tempId of tempSourceDraftIds) {
+            await persistDraftByTempId(tempId, savedCampaignIds, targetFindDataField)
+          }
+        }
+
+        if (saveSignal.aborted) return
+        await saveCompletion.finish(async () => {
+          if (saveSignal.aborted) return
+          if (isEditingSavedCampaign && selectedSaveStatus === 'chờ xử lý' && campaign?.id) {
+            await resumeAfterCampaignSave([campaign.id], saveSignal)
+          }
+          await resumeStagedCampaigns()
+          await loadCampaigns({ silent: true })
+          if (saveSignal.aborted) return
+          dataGroupBundleRequestIdRef.current = null
+          dataGroupBundleFingerprintRef.current = null
+          clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
+          updateSaveProgress(100, 'Lưu chiến dịch hoàn tất.')
+
+          if (savedDraftForCreation) {
+            try {
+              await window.electronAPI.completeCampaignDraft({
+                id: savedDraftForCreation.id,
+                revision: savedDraftForCreation.revision,
+                campaignIds: [...savedCampaignIds, ...Array.from(createdDraftIdsByTempId.values()).flat()]
+              })
+            } catch (error) {
+              console.error('Failed to mark campaign draft converted:', error)
+              showAlert('Chiến dịch đã tạo thành công, nhưng chưa cập nhật được bản nháp. Bạn có thể xóa nháp còn lại trong danh sách.', 'info')
+              onClose()
+              return
             }
           }
-          setMainItemProgress(1, `Đã lưu chiến dịch ${i + 1}/${mainCampaignCount}.`)
-        } else {
-          savedCampaign = await createCampaignWithInputDataSafely(
-            effectiveCampaignPayload,
-            currentDetails,
-            currentDataGroupSnapshots,
-            progressRange
+
+          const emptySnapshotCampaignNames = emptySnapshotCampaigns
+            .slice(0, 3)
+            .map(item => item.campaignName)
+            .join(', ')
+          const additionalEmptySnapshotCount = Math.max(0, emptySnapshotCampaigns.length - 3)
+          showAlert(
+            emptySnapshotCampaigns.length > 0
+              ? `Lưu chiến dịch thành công. Giữ tạm dừng ${emptySnapshotCampaigns.length} campaign con chưa có data phù hợp: ${emptySnapshotCampaignNames}${additionalEmptySnapshotCount > 0 ? ` và ${additionalEmptySnapshotCount} campaign khác` : ''}. Các campaign con còn lại vẫn được kích hoạt.`
+              : 'Lưu chiến dịch thành công!',
+            'success'
           )
-        }
-
-        savedCampaignIds.push(savedCampaign.id)
-        savedCampaignPayloadById.set(savedCampaign.id, effectiveCampaignPayload)
+          // Delay closing to let user see the toast
+          setTimeout(() => { if (!saveSignal.aborted) onClose() }, 1200)
+        })
       }
-
-      updateCampaignWorkPhase('Đang lưu các chiến dịch liên kết...')
-      const persistAndPatchFindDataTargetDrafts = async (
-        field: FindDataTargetCampaignField,
-        rawIds: number[],
-        enabled: boolean
-      ) => {
-        if (!isFindDataCampaign || !enabled) return
-        const tempIds = Array.from(new Set(rawIds.filter(id => id < 0)))
-        const createdIds = (await Promise.all(tempIds.map(tempId => persistDraftByTempId(tempId)))).flat()
-        await patchSavedSourceCampaignTargets(field, createdIds)
-      }
-
-      if (isFindDataCampaign) {
-        await persistAndPatchFindDataTargetDrafts('findUidTargetCampaignIds', formData.findUidTargetCampaignIds, formData.isFindUid && handleFoundUidData)
-        await persistAndPatchFindDataTargetDrafts('findPostLinkTargetCampaignIds', formData.findPostLinkTargetCampaignIds, formData.isFindPostLink && handleFoundPostLinkData)
-        await persistAndPatchFindDataTargetDrafts('findPhoneZaloMessagePhoneTargetCampaignIds', formData.findPhoneZaloMessagePhoneTargetCampaignIds, formData.isFindPhone && canUseZaloFeature && handleFoundPhoneZaloMessagePhoneData)
-        await persistAndPatchFindDataTargetDrafts('findZaloGroupLinkJoinTargetCampaignIds', formData.findZaloGroupLinkJoinTargetCampaignIds, formData.isFindLinkGroupZalo && canUseZaloFeature && handleFoundZaloGroupLinkJoinData)
-        await persistAndPatchFindDataTargetDrafts('findFacebookGroupPostTargetCampaignIds', formData.findFacebookGroupPostTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupPostData)
-        await persistAndPatchFindDataTargetDrafts('findFacebookGroupCommentTargetCampaignIds', formData.findFacebookGroupCommentTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupCommentData)
-        await persistAndPatchFindDataTargetDrafts('findFacebookGroupJoinTargetCampaignIds', formData.findFacebookGroupJoinTargetCampaignIds, isFindDataSearchCampaign && formData.isFindFacebookGroup && handleFoundFacebookGroupJoinData)
-      }
-
-      updateCampaignWorkPhase('Đang đồng bộ liên kết chiến dịch...')
-      await syncFindDataSourceCampaignLinks(savedCampaignIds)
-      completeCampaignLinkSyncProgress('Đã đồng bộ liên kết chiến dịch.')
-
-      if (targetFindDataField) {
-        updateCampaignWorkPhase('Đang tạo chiến dịch nguồn liên kết...')
-        const tempSourceDraftIds = selectedFindDataSourceCampaignIds.filter(id => id < 0)
-        for (const tempId of tempSourceDraftIds) {
-          await persistDraftByTempId(tempId, savedCampaignIds, targetFindDataField)
-        }
-      }
-
-      await resumeStagedCampaigns()
-      await loadCampaigns({ silent: true })
-      dataGroupBundleRequestIdRef.current = null
-      dataGroupBundleFingerprintRef.current = null
-      clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
-      updateSaveProgress(100, 'Lưu chiến dịch hoàn tất.')
-
-      if (savedDraftForCreation) {
-        try {
-          await window.electronAPI.completeCampaignDraft({
-            id: savedDraftForCreation.id,
-            revision: savedDraftForCreation.revision,
-            campaignIds: [...savedCampaignIds, ...Array.from(createdDraftIdsByTempId.values()).flat()]
-          })
-        } catch (error) {
-          console.error('Failed to mark campaign draft converted:', error)
-          showAlert('Chiến dịch đã tạo thành công, nhưng chưa cập nhật được bản nháp. Bạn có thể xóa nháp còn lại trong danh sách.', 'info')
-          onClose()
-          return
-        }
-      }
-
-      const emptySnapshotCampaignNames = emptySnapshotCampaigns
-        .slice(0, 3)
-        .map(item => item.campaignName)
-        .join(', ')
-      const additionalEmptySnapshotCount = Math.max(0, emptySnapshotCampaigns.length - 3)
-      showAlert(
-        emptySnapshotCampaigns.length > 0
-          ? `Lưu chiến dịch thành công. Giữ tạm dừng ${emptySnapshotCampaigns.length} campaign con chưa có data phù hợp: ${emptySnapshotCampaignNames}${additionalEmptySnapshotCount > 0 ? ` và ${additionalEmptySnapshotCount} campaign khác` : ''}. Các campaign con còn lại vẫn được kích hoạt.`
-          : 'Lưu chiến dịch thành công!',
-        'success'
-      )
-      // Delay closing to let user see the toast
-      setTimeout(() => onClose(), 1200)
+      await persistCampaigns()
     } catch (err) {
+      if (saveSignal.aborted) return
       console.error('Failed to save campaign:', err)
       setSavingCampaign(false)
       setSaveProgress(null)
-      showAlert(formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
+      showAlert((saveCompletion.hasPending() ? savedCampaignCompletionError : '') + formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
     }
   }
 
@@ -11422,13 +11476,10 @@ export default function CampaignFormModal({
         return
       }
       if (!item.campaign) return
-      if (!isEditableFindDataSourceCampaign(item.campaign)) {
-        showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
-        return
-      }
+
       try {
-        const fullCampaign = await useCampaignStore.getState().loadCampaignConfig(item.campaign.id, { force: true })
-        if (!fullCampaign) throw new Error('Không tìm thấy cấu hình chiến dịch.')
+        const fullCampaign = await campaignEdit.prepare(item.campaign.id, editSession.current.signal)
+        if (!fullCampaign || editSession.current.signal.aborted) return
         if (!isEditableFindDataSourceCampaign(fullCampaign)) {
           showAlert('Chỉ có thể sửa chiến dịch khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
           return
@@ -11463,7 +11514,7 @@ export default function CampaignFormModal({
           </thead>
           <tbody>
             {selectedItems.map(item => {
-              const editDisabled = item.campaign ? !isEditableFindDataSourceCampaign(item.campaign) : !item.draft
+              const editDisabled = item.campaign ? item.campaign.status === 'hoàn thành' : !item.draft
               return (
                 <tr key={item.id} title={getCampaignPickerRowLabel(item.row)}>
                   {showTargetActions && (
@@ -11477,7 +11528,7 @@ export default function CampaignFormModal({
                           className="btn-icon"
                           onClick={() => { void editTargetCampaign(item) }}
                           disabled={editDisabled}
-                          title={editDisabled ? 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng' : 'Sửa'}
+                          title={editDisabled ? 'Chiến dịch đã hoàn thành không thể sửa' : 'Sửa'}
                         >
                           <Edit3 size={13} />
                         </button>
@@ -11575,13 +11626,10 @@ export default function CampaignFormModal({
 
     const sourceCampaign = campaigns.find(item => item.id === sourceId)
     if (!sourceCampaign) return
-    if (!isEditableFindDataSourceCampaign(sourceCampaign)) {
-      showAlert('Chỉ có thể sửa chiến dịch nguồn khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
-      return
-    }
+
     try {
-      const fullCampaign = await useCampaignStore.getState().loadCampaignConfig(sourceCampaign.id, { force: true })
-      if (!fullCampaign) throw new Error('Không tìm thấy cấu hình chiến dịch nguồn.')
+      const fullCampaign = await campaignEdit.prepare(sourceCampaign.id, editSession.current.signal)
+      if (!fullCampaign || editSession.current.signal.aborted) return
       if (!isEditableFindDataSourceCampaign(fullCampaign)) {
         showAlert('Chỉ có thể sửa chiến dịch nguồn khi trạng thái là "chờ xử lý" hoặc "tạm dừng".', 'info')
         return
@@ -11671,7 +11719,7 @@ export default function CampaignFormModal({
             {items.map(item => {
               const { row, campaign: sourceCampaign } = item
               const detachBlockReason = sourceCampaign ? getFindDataSourceDetachBlockReason(sourceCampaign) : ''
-              const editDisabled = sourceCampaign ? !isEditableFindDataSourceCampaign(sourceCampaign) : !item.draft
+              const editDisabled = sourceCampaign ? sourceCampaign.status === 'hoàn thành' : !item.draft
               const detachDisabled = !!detachBlockReason
               return (
                 <tr key={item.id} title={getCampaignPickerRowLabel(row)}>
@@ -11685,7 +11733,7 @@ export default function CampaignFormModal({
                         className="btn-icon"
                         onClick={() => { void editFindDataSourceCampaign(item.id) }}
                         disabled={editDisabled}
-                        title={editDisabled ? 'Chỉ sửa được chiến dịch chờ xử lý hoặc tạm dừng' : 'Sửa'}
+                        title={editDisabled ? 'Chiến dịch đã hoàn thành không thể sửa' : 'Sửa'}
                       >
                         <Edit3 size={13} />
                       </button>
@@ -15471,7 +15519,7 @@ export default function CampaignFormModal({
         </div>
 
         {/* Keep editors mounted while saving so validation alerts preserve their UI state. */}
-          <div className="stepper-layout" inert={saveBusy || formAiBusy || undefined} aria-busy={saveBusy || formAiBusy}>
+          <div className="stepper-layout" inert={saveBusy || formAiBusy || saveCompletion.pending || undefined} aria-busy={saveBusy || formAiBusy}>
           {/* Left Sidebar - Stepper Navigation */}
           <div className="stepper-sidebar">
             {STEPS.map((step, stepIndex) => {
@@ -17347,7 +17395,7 @@ export default function CampaignFormModal({
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">
           {!draftMode && !isEditingSavedCampaign && <button type="button" className="btn btn-secondary"
-            disabled={formAiBusy || saveBusy || loadingDetails} onClick={() => { void handleSavePersistentDraft() }}>
+            disabled={formAiBusy || saveBusy || saveCompletion.pending || loadingDetails} onClick={() => { void handleSavePersistentDraft() }}>
             Lưu nháp
           </button>}
           <CampaignSaveControls
@@ -17355,7 +17403,7 @@ export default function CampaignFormModal({
             starting={saveStarting}
             saving={savingCampaign}
             ref={saveControlsRef}
-            idleLabel={persistentDraft ? 'Tạo chiến dịch' : submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
+            idleLabel={saveCompletion.pending ? 'Thử lại hoàn tất' : persistentDraft ? 'Tạo chiến dịch' : submitLabel || (draftMode ? 'Chọn chiến dịch tạm' : 'Lưu chiến dịch')}
             onSave={handleSave}
             onCancel={onClose}
             onStartingChange={setSaveStarting}
