@@ -73,3 +73,7 @@ Kiểm tra read-only bằng EXPLAIN/EXPLAIN ANALYZE trên akachat: các truy v�
 ## Kiểm chứng nhánh PR — 16/10/2026
 
 Nhánh PR được tách từ origin/dev_3, chỉ chứa 18 file báo cáo và tài liệu; giữ nguyên các thay đổi đang làm song song ở checkout gốc. Hai typecheck tsconfig.node.json/tsconfig.web.json, production build, smoke repository và Electron UI đều đạt trên chính nhánh này. UI kiểm tra 1440/850 px, hai tab, cột 0, pending drilldown, Excel tổng hợp/chi tiết tải thật và phản hồi muộn. Chưa phát hành Desktop.
+
+## Sửa timeout DB — 16/10/2026
+
+Reader kết quả/data chờ đã chuyển sang RPC có statement_timeout riêng 60 giây; hạn toàn lượt tải ứng dụng 65 giây. Thay thế các mô tả reader trực tiếp/20 giây ở trên. Giữ cách tính, UI tự tải, cache/concurrency và role timeout chung; không thêm pool/index. DB đã apply `20261015230729 / report_read_timeout`, app cần nạp main/API mới. Xem [audit, kiểm chứng HTTP >3 giây và rollback](REPORT_READ_TIMEOUT_20261016.md).

@@ -99,6 +99,16 @@ export class ActionReportStatusCatalog {
     return [PENDING_ACTION_REPORT_COLUMN, ...Array.from(columns.values())]
   }
 
+  /** Typed values for the bounded SQL reader; preserve the same legacy matching rule. */
+  detailSelection(selector: ActionReportStatusSelector, platform: string): Record<string, unknown> {
+    if (selector.kind !== 'status') return selector.kind === 'pending'
+      ? { kind: 'group', group: 'pending', legacyStatuses: [] } : selector
+    const row = this.byId.get(selector.statusId)
+    return { ...selector, ...(typeof row?.status_value === 'string'
+      && Number(this.legacyStatus(row.status_value, platform)?.id) === selector.statusId
+      ? { legacyStatus: row.status_value } : {}) }
+  }
+
   detailFilter(selector: ActionReportStatusSelector, platform: string, cursor?: string): string {
     let selected: string
     if (selector.kind === 'pending') selected = 'report_group.eq.pending'
