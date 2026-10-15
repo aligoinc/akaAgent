@@ -1,0 +1,28 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history": {
+    "version": "20261014193235",
+    "name": "migration_v405_campaign_limits_mixed_windows",
+    "statement_md5": "3605ff43c8d472fa5d846b94df72c45d"
+  },
+  "verified_checksums": {
+    "models_md5": "e867cf45f105479a4c89d8704a8e5089",
+    "prompt_md5": "920d73f8af472921dfc1ff5ec6a2ffe8",
+    "usings_md5": "8b37048572e3a753754f19b42280b1ec",
+    "other_prompts_md5": "285a64d9770c0fec6d0597f11e7c8610"
+  },
+  "rollback_rehearsal": {
+    "rolled_back": true,
+    "checksums": {
+      "models_md5": "e867cf45f105479a4c89d8704a8e5089",
+      "prompt_md5": "851310707eef1f972089e634ee859024",
+      "usings_md5": "8b37048572e3a753754f19b42280b1ec",
+      "other_prompts_md5": "285a64d9770c0fec6d0597f11e7c8610"
+    }
+  },
+  "applied_prompt_remains_live": true,
+  "model_id": 21,
+  "model_name": "gpt-6.1-sol",
+  "schema_reload": false,
+  "note": "Rollback rehearsed within a transaction ending with ROLLBACK. Final read confirms the V405 prompt remains live. No API schema or connection changes."
+}

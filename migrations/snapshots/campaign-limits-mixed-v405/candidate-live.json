@@ -1,0 +1,99 @@
+{
+  "at": "2026-10-14T19:31:34.704Z",
+  "passed": true,
+  "migration_sha256": "5c9da174866e6371039638394b6614a8a376a16d92b55bae4d77651ff975620c",
+  "results": [
+    {
+      "name": "mixed-keep",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 80
+            }
+          ]
+        }
+      },
+      "logId": 643465,
+      "passed": true
+    },
+    {
+      "name": "mixed-count-only",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "rateLimitCount": 12
+            }
+          ]
+        }
+      },
+      "logId": 643468,
+      "passed": true
+    },
+    {
+      "name": "mixed-common",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "rateLimitMinutes": 45
+            }
+          ]
+        }
+      },
+      "logId": 643469,
+      "passed": true
+    },
+    {
+      "name": "mixed-relative-distinct",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Giới hạn bạn yêu cầu chưa được hỗ trợ trong phần này. Gấp đôi khung hiện tại sẽ tạo các khung 60 và 120 phút khác nhau theo từng tài khoản, form không thể điền cùng lúc. Bạn có thể đặt một khung chung hoặc chỉnh riêng từng tài khoản."
+      },
+      "logId": 643471,
+      "passed": true
+    },
+    {
+      "name": "mixed-relative-common",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "logId": 643474,
+      "passed": true
+    },
+    {
+      "name": "legacy-repeat",
+      "result": {
+        "ok": true,
+        "patch": {
+          "actions": [
+            {
+              "actionCode": "zalo_message_friend",
+              "dailyLimit": 100,
+              "rateLimitCount": 15,
+              "rateLimitMinutes": 60
+            }
+          ]
+        }
+      },
+      "logId": 643477,
+      "passed": true
+    }
+  ]
+}

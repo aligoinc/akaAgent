@@ -1,0 +1,13 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history_version": "20261014193235",
+  "name": "migration_v405_campaign_limits_mixed_windows",
+  "migration_sha256": "5c9da174866e6371039638394b6614a8a376a16d92b55bae4d77651ff975620c",
+  "applied": true,
+  "checksums": {
+    "models_md5": "e867cf45f105479a4c89d8704a8e5089",
+    "prompt_md5": "920d73f8af472921dfc1ff5ec6a2ffe8",
+    "usings_md5": "8b37048572e3a753754f19b42280b1ec",
+    "other_prompts_md5": "285a64d9770c0fec6d0597f11e7c8610"
+  }
+}
