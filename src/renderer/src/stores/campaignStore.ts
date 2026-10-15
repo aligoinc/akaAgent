@@ -1,4 +1,5 @@
 import type { DesktopCampaignPage, DesktopCampaignPageQuery } from '../../../shared/desktopUiReads'
+import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { create } from 'zustand'
 import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignLogSnapshot, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 import { useAuthStore } from './authStore'
@@ -59,7 +60,7 @@ interface CampaignStore {
   loadCampaignConfig: (id: number, options?: { force?: boolean }) => Promise<CampaignConfig | null>
   loadCampaignLog: (id: number, options?: { force?: boolean }) => Promise<CampaignLogSnapshot | null>
   createCampaign: (data: Partial<Campaign>, options?: { refresh?: boolean }) => Promise<Campaign>
-  updateCampaign: (id: number, updates: CampaignUpdate, options?: { refresh?: boolean }) => Promise<void>
+  updateCampaign: (id: number, updates: CampaignUpdate, options?: { refresh?: boolean; requireEditReady?: boolean; expectedUpdatedAt?: string; retrySmsInputSchedule?: boolean }) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
   cloneCampaign: (id: number) => Promise<Campaign>
   bulkUpdateCampaignStatus: (ids: number[], status: string) => Promise<void>
@@ -711,7 +712,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
   updateCampaign: async (id, updates, options) => {
     if (!window.electronAPI) return
-    await window.electronAPI.updateCampaign(id, updates)
+    const result = await window.electronAPI.updateCampaign(id, updates, options?.requireEditReady, options?.expectedUpdatedAt, options?.retrySmsInputSchedule)
     if ('extraSettings' in updates || 'actionId' in updates) campaignSourcesInvalidationVersion++
     set(state => {
       const campaignConfigs = { ...state.campaignConfigs }
@@ -720,6 +721,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       delete campaignLogs[id]
       return { campaignConfigs, campaignLogs }
     })
+    if (result && 'code' in result && result.code === 'campaign_input_materialization_failed') {
+      throw new CampaignConfigSaveError(result)
+    }
     if (options?.refresh !== false) await get().loadCampaigns({ silent: true })
   },
 
@@ -748,7 +752,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   bulkUpdateCampaignStatus: async (ids, status) => {
     if (!window.electronAPI || ids.length === 0) return
     const api = window.electronAPI
-    const results: PromiseSettledResult<Campaign>[] = []
+    const results: PromiseSettledResult<unknown>[] = []
     for (let offset = 0; offset < ids.length; offset += BULK_CAMPAIGN_STATUS_CONCURRENCY) {
       const batch = ids.slice(offset, offset + BULK_CAMPAIGN_STATUS_CONCURRENCY)
       results.push(...await Promise.allSettled(

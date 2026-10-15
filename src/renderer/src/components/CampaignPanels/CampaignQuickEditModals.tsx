@@ -1,3 +1,4 @@
+import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import { supportsStopMessagesLink, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -502,6 +503,7 @@ function QuickEditShell({
   icon,
   saving,
   saveDisabled = false,
+  completionPending = false,
   onClose,
   onSave,
   children
@@ -510,6 +512,7 @@ function QuickEditShell({
   icon: ReactNode
   saving: boolean
   saveDisabled?: boolean
+  completionPending?: boolean
   onClose: () => void
   onSave: () => void
   children: ReactNode
@@ -530,14 +533,14 @@ function QuickEditShell({
             <X size={18} />
           </button>
         </div>
-        <div className="stepper-content campaign-quick-edit-content">
+        <div className="stepper-content campaign-quick-edit-content" inert={saving || completionPending || undefined}>
           {children}
         </div>
         <div className="modal-footer">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Huỷ</button>
           <button type="button" className="btn btn-primary" onClick={onSave} disabled={saving || saveDisabled}>
             <Save size={14} />
-            <span>{saving ? 'Đang lưu...' : 'Lưu'}</span>
+            <span>{saving ? 'Đang lưu...' : completionPending ? 'Thử lại hoàn tất' : 'Lưu'}</span>
           </button>
         </div>
       </div>
@@ -546,10 +549,11 @@ function QuickEditShell({
 }
 
 export function CampaignLimitUpdateModal({ campaign, action, onClose }: CampaignQuickEditModalProps) {
-  const updateCampaign = useCampaignStore(state => state.updateCampaign)
   const entitlements = useAuthStore(state => state.user?.entitlements)
   const showAlert = useUiStore(state => state.showAlert)
   const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const saveCompletion = useCampaignSaveCompletion(campaign.id)
   const [formData, setFormData] = useState<CampaignLimitFormState>(() => getInitialLimitFormState(campaign))
   const actionPlatform = getCampaignPlatform(campaign, action)
   const limitActionCodes = useMemo(() => getLimitActionCodes(campaign, action), [campaign, action])
@@ -592,6 +596,17 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
   }
 
   const handleSave = async () => {
+    const saveSignal = saveCompletion.session.current.signal
+    if (saveInFlight.current) return
+    if (saveCompletion.hasPending()) {
+      saveInFlight.current = true
+      setSaving(true)
+      try { await saveCompletion.retry() }
+      catch (error) { if (!saveSignal.aborted) showAlert(savedCampaignCompletionError + formatIpcErrorMessage(error, 'Không thể hoàn tất.'), 'error') }
+      finally { saveInFlight.current = false; if (!saveSignal.aborted) setSaving(false) }
+      return
+    }
+    saveInFlight.current = true
     setSaving(true)
     let shouldClose = false
     try {
@@ -631,14 +646,25 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
           byActionCode
         }
       }
-      await updateCampaign(campaign.id, { extraSettings: nextExtraSettings })
-      showAlert('Đã cập nhật giới hạn gửi.', 'success')
-      shouldClose = true
-      onClose()
+      const status = await campaignEdit.chooseSaveStatus(saveSignal)
+      if (!status || saveSignal.aborted) return
+      await saveCampaignConfig(campaign.id, { extraSettings: nextExtraSettings }, campaign.updatedAt, saveSignal)
+      await saveCompletion.finish(async () => {
+        if (saveSignal.aborted) return
+        if (status === 'chờ xử lý') await resumeAfterCampaignSave([campaign.id], saveSignal)
+        if (saveSignal.aborted) return
+        await useCampaignStore.getState().loadCampaigns({ silent: true })
+        if (saveSignal.aborted) return
+        showAlert('Đã cập nhật giới hạn gửi.', 'success')
+        shouldClose = true
+        onClose()
+      })
     } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể cập nhật giới hạn gửi.'), 'error')
+      if (saveSignal.aborted) return
+      showAlert((saveCompletion.hasPending() ? savedCampaignCompletionError : '') + formatIpcErrorMessage(err, 'Không thể cập nhật giới hạn gửi.'), 'error')
     } finally {
-      if (!shouldClose) setSaving(false)
+      saveInFlight.current = false
+      if (!shouldClose && !saveSignal.aborted) setSaving(false)
     }
   }
 
@@ -647,6 +673,7 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
       title="Cập nhật giới hạn gửi"
       icon={<SlidersHorizontal size={18} />}
       saving={saving}
+      completionPending={saveCompletion.pending}
       onClose={onClose}
       onSave={handleSave}
     >
@@ -774,11 +801,12 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
 }
 
 export function CampaignContentMediaUpdateModal({ campaign, action, onOpenContentTemplates, onClose }: CampaignQuickEditModalProps) {
-  const updateCampaign = useCampaignStore(state => state.updateCampaign)
   const accounts = useCampaignStore(state => state.accounts)
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
   const [saving, setSaving] = useState(false)
+  const saveInFlight = useRef(false)
+  const saveCompletion = useCampaignSaveCompletion(campaign.id)
   const [mediaPickerTarget, setMediaPickerTarget] = useState<QuickMediaPickerTarget | null>(null)
   const localMediaPickerTargetRef = useRef<QuickMediaPickerTarget | null>(null)
   const localImageInputRef = useRef<HTMLInputElement>(null)
@@ -1813,6 +1841,16 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   )
 
   const handleSave = async () => {
+    const saveSignal = saveCompletion.session.current.signal
+    if (saveInFlight.current) return
+    if (saveCompletion.hasPending()) {
+      saveInFlight.current = true
+      setSaving(true)
+      try { await saveCompletion.retry() }
+      catch (error) { if (!saveSignal.aborted) showAlert(savedCampaignCompletionError + formatIpcErrorMessage(error, 'Không thể hoàn tất.'), 'error') }
+      finally { saveInFlight.current = false; if (!saveSignal.aborted) setSaving(false) }
+      return
+    }
     if (!hasAnyEditableField) {
       showAlert('Loại chiến dịch này không có nội dung hoặc media để cập nhật.', 'info')
       return
@@ -1895,6 +1933,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     if (isCommentSeedingCampaign && !isAdvancedContentMode && !validateSelectedMedia('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
     if (showCommentContent && !validateSelectedMedia('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
 
+    saveInFlight.current = true
     setSaving(true)
     let shouldClose = false
     try {
@@ -2019,18 +2058,29 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         : campaign.content || ''
       const optOutError = validateStopMessagesSettings(finalContent, nextExtraSettings, campaign.actionId, formattedContentToPlainText)
       if (optOutError) throw new Error(optOutError)
-      await updateCampaign(campaign.id, {
+      const status = await campaignEdit.chooseSaveStatus(saveSignal)
+      if (!status || saveSignal.aborted) return
+      await saveCampaignConfig(campaign.id, {
         ...(showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
         ...(showMainMedia && !isLegacyManualAdvancedSource ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
+      }, campaign.updatedAt, saveSignal)
+      await saveCompletion.finish(async () => {
+        if (saveSignal.aborted) return
+        if (status === 'chờ xử lý') await resumeAfterCampaignSave([campaign.id], saveSignal)
+        if (saveSignal.aborted) return
+        await useCampaignStore.getState().loadCampaigns({ silent: true })
+        if (saveSignal.aborted) return
+        showAlert('Đã cập nhật nội dung và media.', 'success')
+        shouldClose = true
+        onClose()
       })
-      showAlert('Đã cập nhật nội dung và media.', 'success')
-      shouldClose = true
-      onClose()
     } catch (err) {
-      showAlert(formatIpcErrorMessage(err, 'Không thể cập nhật nội dung và media.'), 'error')
+      if (saveSignal.aborted) return
+      showAlert((saveCompletion.hasPending() ? savedCampaignCompletionError : '') + formatIpcErrorMessage(err, 'Không thể cập nhật nội dung và media.'), 'error')
     } finally {
-      if (!shouldClose) setSaving(false)
+      saveInFlight.current = false
+      if (!shouldClose && !saveSignal.aborted) setSaving(false)
     }
   }
 
@@ -2040,6 +2090,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         title="Cập nhật nội dung + media"
         icon={<FileText size={18} />}
         saving={saving}
+      completionPending={saveCompletion.pending}
         saveDisabled={!hasAnyEditableField}
         onClose={onClose}
         onSave={handleSave}

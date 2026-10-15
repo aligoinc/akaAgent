@@ -819,7 +819,7 @@ export interface Campaign {
  * The potentially large append-only log is deliberately loaded through
  * `getCampaignLog` instead of travelling with the configuration payload.
  */
-export type CampaignConfig = Omit<Campaign, 'log'> & { /** UI read version, independent of runtime/log updatedAt. */ readVersion?: string }
+export type CampaignConfig = Omit<Campaign, 'log'> & { /** Server-confirmed pause with no campaign runtime ownership. */ editReady?: boolean; /** UI read version, independent of runtime/log updatedAt. */ readVersion?: string }
 
 /** Mutable campaign fields exposed to runtime/UI callers; logs append atomically. */
 export type CampaignUpdate = Omit<Partial<Campaign>, 'log'>
