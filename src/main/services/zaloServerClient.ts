@@ -40,7 +40,8 @@ const RUNTIME_HANDOFF_TIMEOUT_MS = 45_000
 const DESKTOP_HANDOFF_READY_TIMEOUT_MS = 10_000
 const CLEANUP_COMMANDS = new Set<ZaloServerCommandName>([
   'zalo.loginQr.cancel',
-  'contacts.cancel'
+  'contacts.cancel',
+  'contacts.cancelPhoneCheck'
 ])
 
 interface CleanupRuntimeGuard {
@@ -850,7 +851,7 @@ export class ZaloServerClient {
     if (
       command === 'contacts.loadFriends' ||
       command === 'contacts.loadGroups' ||
-      command === 'contacts.loadZaloGroupMembers'
+      command === 'contacts.loadZaloGroupMembers' || command === 'contacts.checkZaloPhones'
     ) {
       return null
     }

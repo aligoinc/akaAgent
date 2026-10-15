@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Kiểm tra SĐT có Zalo ngày 16/10/2026: modal riêng trong Quét data, tối đa 300 số, nhập chỉ SĐT, live từng hàng và ba nút xuất/lưu nhóm. Dùng chung profile/get 32→40 với chiến dịch, claim/release Quét data; QR/Web/Server cũ/Chat Data Scan, hủy theo runId/phiên và không detail/quota/lịch sử tự lưu. Không migration/RPC/connection/polling mới; chưa deploy/đóng gói/phát hành. Cập nhật Chat API/protocol rồi runtime (capability `data_scan_phone_lookup`), Server cũ trước Desktop. Xem [hợp đồng, kiểm chứng và rollout](docs/ZALO_PHONE_CHECK.md).
+
 Ngày 16/10/2026: Desktop/Web sửa chiến dịch qua xác nhận pause và `editReady` từ runtime của chính chiến dịch; Lưu sửa/nhân bản chọn Tạm dừng/Chờ xử lý, chỉ resume sau khi lưu đủ, lỗi activation retry không tạo lại. Native giữ hợp đồng cũ. Không migration/RPC/connection/deploy; xem [hợp đồng và kiểm chứng](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md).
 Review luồng sửa: checkpoint Desktop bắt đầu ngay sau khi ghi cấu hình, retry tiếp liên kết không ghi lại bằng CAS cũ; Web thay listener theo mỗi phiên và hủy busy/timer khi đổi phiên. Hồi quy trong [audit](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md#sửa-hai-finding-review--16102026).
 Review tiếp theo chỉ sửa finding 2 SMS/voice: lỗi materialize sau commit trả object IPC với đúng phiên bản đã ghi; form giữ phiên bản theo phiên sửa để lưu lại, vẫn CAS/runtime và không resume khi data lỗi. Giữ ý định cập nhật lịch và materialize lại cả khi settings đã giống nhau. Hai finding cũ về liên kết/tạo campaign liên quan giữ nguyên theo yêu cầu; [audit và smoke](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md#sửa-finding-2-smsvoice--16102026).
@@ -603,6 +605,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Phone check cancellation (accepted risk)**: Chat start can reach runtime after an early cancel returns 404; one read may outlive the released scan claim. Late UI results are fenced. This limited race is accepted; see [review decision](docs/ZALO_PHONE_CHECK.md#rủi-ro-đã-chấp-nhận-sau-review--16102026).
 
 - **Timeout báo cáo**: reader kết quả/pending dùng RPC `aka_agent_read_report_page` với timeout DB riêng 60 giây và deadline toàn lượt 65 giây; tăng AbortSignal không thay timeout role PostgreSQL. Không apply lại migration đã live hoặc tăng pool để chữa timeout. Xem [audit](docs/REPORT_READ_TIMEOUT_20261016.md).
 

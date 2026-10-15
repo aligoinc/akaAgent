@@ -126,6 +126,8 @@ export type ZaloServerCommandName =
   | 'contacts.loadFriends'
   | 'contacts.loadGroups'
   | 'contacts.loadZaloGroupMembers'
+  | 'contacts.checkZaloPhones'
+  | 'contacts.cancelPhoneCheck'
   | 'contacts.cancel'
   | 'campaign.pause'
 

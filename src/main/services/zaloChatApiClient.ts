@@ -95,6 +95,7 @@ interface ActiveQrOperation {
 }
 
 type DataScanQueryType =
+  | 'find_user_by_phone'
   | 'get_all_friends_page'
   | 'list_labels'
   | 'get_all_groups'
@@ -620,6 +621,24 @@ export class ZaloChatApiClient {
     }
   }
 
+  public async findUserByPhoneSource(accountId: number, phoneNumber: string, reqSrc: 32 | 40, signal?: AbortSignal) {
+    signal?.throwIfAborted()
+    const cancel = () => { void this.cancelActiveQuery(accountId).catch(() => undefined) }
+    signal?.addEventListener('abort', cancel, { once: true })
+    try {
+      const raw = await this.executeDataScanQuery<Record<string, unknown>>(accountId, 'find_user_by_phone', { phoneNumber, reqSrc }, undefined, signal)
+      signal?.throwIfAborted()
+      const rawUid = raw?.uid || raw?.userId
+      const uid = typeof rawUid === 'string' ? rawUid.trim() : ''
+      return uid ? { uid, displayName: String(raw.display_name || raw.displayName || raw.zalo_name || raw.zaloName || ''), raw } : null
+    } catch (error) {
+      if (error instanceof ZaloChatApiRequestError && (error.statusCode === 400 || error.code === 'phone_check_update_required')) {
+        throw Object.assign(new Error('Zalo Server chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật Chat API và runtime.'), { code: 'phone_check_update_required' })
+      }
+      throw error
+    } finally { signal?.removeEventListener('abort', cancel) }
+  }
+
   private requireEnabled(): void {
     if (!this.isEnabled() || !this.user || !this.credentials) {
       throw new Error('Tổ chức chưa được cấp quyền Đồng bộ Chat cho sản phẩm đang sử dụng.')
@@ -636,7 +655,8 @@ export class ZaloChatApiClient {
     accountId: number,
     queryType: DataScanQueryType,
     payload: unknown,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string) => void,
+    signal?: AbortSignal
   ): Promise<T> {
     this.requireEnabled()
     if (this.activeDataScanByAccount.has(accountId)) {
@@ -661,16 +681,19 @@ export class ZaloChatApiClient {
     try {
       let snapshot: DataScanOperationSnapshot | null = null
       while (!snapshot && consecutiveFailures < DATA_SCAN_MAX_REQUEST_FAILURES) {
+        signal?.throwIfAborted()
         try {
           snapshot = await this.dataScanRequest<DataScanOperationSnapshot>(
             `/api/chat/zalo/accounts/${accountId}/data-scan-queries`,
             {
               method: 'POST',
-              body: { requestId: active.requestId, queryType, payload }
+              body: { requestId: active.requestId, queryType, payload }, signal
             }
           )
           consecutiveFailures = 0
         } catch (error) {
+          signal?.throwIfAborted()
+          if (queryType === 'find_user_by_phone') throw error
           consecutiveFailures += 1
           if (
             error instanceof ZaloChatApiRequestError &&
@@ -682,6 +705,7 @@ export class ZaloChatApiClient {
       }
 
       while (Date.now() < deadline) {
+        signal?.throwIfAborted()
         if (
           active.generation !== this.generation ||
           this.activeDataScanByAccount.get(accountId) !== active
@@ -691,12 +715,15 @@ export class ZaloChatApiClient {
 
         if (!snapshot || !isDataScanTerminal(snapshot.status)) {
           await wait(DATA_SCAN_POLL_INTERVAL_MS)
+          signal?.throwIfAborted()
           try {
             snapshot = await this.dataScanRequest<DataScanOperationSnapshot>(
-              `/api/chat/zalo/data-scan-queries/${active.requestId}`
+              `/api/chat/zalo/data-scan-queries/${active.requestId}`, { signal }
             )
             consecutiveFailures = 0
           } catch (error) {
+            signal?.throwIfAborted()
+            if (queryType === 'find_user_by_phone') throw error
             consecutiveFailures += 1
             if (
               error instanceof ZaloChatApiRequestError &&
@@ -1048,13 +1075,16 @@ export class ZaloChatApiClient {
 
   private async dataScanRequest<T>(
     path: string,
-    options: { method?: 'GET' | 'POST'; body?: unknown } = {},
+    options: { method?: 'GET' | 'POST'; body?: unknown; signal?: AbortSignal } = {},
     allowTokenRefresh = true
   ): Promise<T> {
+    options.signal?.throwIfAborted()
     const token = await this.ensureDataScanToken()
+    options.signal?.throwIfAborted()
     const hasBody = options.body !== undefined
     const response = await this.fetchWithTimeout(path, {
       method: options.method ?? 'GET',
+      signal: options.signal,
       headers: {
         authorization: `Bearer ${token}`,
         ...(hasBody ? { 'content-type': 'application/json' } : {})
@@ -1098,7 +1128,7 @@ export class ZaloChatApiClient {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
-      return await fetch(new URL(path, this.origin), { ...init, signal: controller.signal })
+      return await fetch(new URL(path, this.origin), { ...init, signal: init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal })
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('Chat API phản hồi quá chậm. Vui lòng thử lại.')

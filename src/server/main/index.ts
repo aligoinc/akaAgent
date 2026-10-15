@@ -150,6 +150,7 @@ async function startServer(): Promise<void> {
     getSnapshot: staffId => runtimeManager!.getSnapshot(staffId),
     getOperations: staffId => runtimeManager!.getOperations(staffId),
     executeCommand: (staffId, command, args) => runtimeManager!.executeCommand(staffId, command, args),
+    cancelPhoneCheck: (staffId, accountId, runId) => runtimeManager!.cancelPhoneCheck(staffId, accountId, runId),
     startControlOperation: (staffId, command, args) => runtimeManager!.startControlOperation(staffId, command, args),
     revalidateControlSession: (staffId, organizationId, sessionId) =>
       hasLiveControlRealtimeSession(staffId, organizationId, sessionId),
