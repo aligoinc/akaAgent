@@ -11,7 +11,7 @@ import { canCheckCampaignPendingReason } from '../../../../shared/campaignPendin
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Tags, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Hash, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
 import { loadSelectedCampaignInputData } from '../../../../shared/campaignInputDataSelection'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -1282,11 +1282,11 @@ const getMultiSelectLabel = (options: CampaignFilterOption[], values: string[]) 
 }
 
 const renderCampaignFilterIcon = (key: CampaignFilterDropdown) => {
-  if (key === 'time') return <CalendarDays size={17} />
-  if (key === 'account') return <AtSign size={17} />
-  if (key === 'status') return <CircleDot size={17} />
-  if (key === 'platform') return <Monitor size={17} />
-  return <Tags size={17} />
+  if (key === 'time') return <CalendarDays size={12} />
+  if (key === 'account') return <AtSign size={12} />
+  if (key === 'status') return <CircleDot size={12} />
+  if (key === 'platform') return <Monitor size={12} />
+  return <Hash size={12} />
 }
 
 const formatDetailRangeDate = (value: string) => {
@@ -2654,6 +2654,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
+  const [filterPopoverPosition, setFilterPopoverPosition] = useState<DetailPopoverPosition | null>(null)
   const [openDetailDropdown, setOpenDetailDropdown] = useState<DetailFilterDropdown | null>(null)
   const [detailPopoverPosition, setDetailPopoverPosition] = useState<DetailPopoverPosition | null>(null)
   const [showInitialCampaignLoading, setShowInitialCampaignLoading] = useState(true)
@@ -3176,10 +3177,53 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
         setOpenFilterDropdown(null)
       }
     }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenFilterDropdown(null)
+    }
 
     document.addEventListener('mousedown', handleDocumentMouseDown)
-    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [openFilterDropdown])
+
+  useLayoutEffect(() => {
+    const panel = filterPanelRef.current
+    const anchor = panel?.querySelector<HTMLButtonElement>(`[data-campaign-filter="${openFilterDropdown}"]`)
+    if (!panel || !anchor || !openFilterDropdown) {
+      setFilterPopoverPosition(null)
+      return
+    }
+    const minWidth = openFilterDropdown === 'action' ? 420 : openFilterDropdown === 'time' ? 300 : 240
+    const updatePosition = () => {
+      const next = getDetailPopoverPosition(
+        anchor, minWidth, openFilterDropdown === 'time' ? 440 : 280
+      )
+      setFilterPopoverPosition(previous => previous
+        && previous.top === next.top && previous.bottom === next.bottom
+        && previous.left === next.left && previous.width === next.width ? previous : next)
+    }
+    updatePosition()
+    const observer = new ResizeObserver(updatePosition)
+    observer.observe(anchor)
+    // A banner can move the filter without resizing it; the surrounding flex layout resizes instead.
+    for (let ancestor: HTMLElement | null = panel; ancestor; ancestor = ancestor.parentElement) {
+      observer.observe(ancestor)
+    }
+    const handleScroll = (event: Event) => {
+      const target = event.target
+      if (target instanceof Element && target.contains(anchor) || target === document) updatePosition()
+    }
+    document.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [openFilterDropdown, statusFilters, accountFilters, platformFilters, actionFilters, timePreset, dateFrom, dateTo])
 
   useEffect(() => {
     if (!openDetailDropdown) return
@@ -5428,6 +5472,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
     })
   }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading, campaignPage, campaignPageError])
   const campaignRangeLabel = getCampaignRangeLabel(timePreset, dateFrom, dateTo)
+  const campaignFilterPopoverStyle = filterPopoverPosition ? {
+    ...filterPopoverPosition,
+    top: filterPopoverPosition.top ?? 'auto',
+    bottom: filterPopoverPosition.bottom ?? 'auto',
+    maxHeight: `min(440px, calc(100vh - ${(filterPopoverPosition.top ?? filterPopoverPosition.bottom ?? 0) + 12}px))`
+  } : undefined
 
   const handleReloadCampaigns = () => {
     campaignDrafts.refresh()
@@ -5657,21 +5707,22 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
         <div className="campaign-multi-select">
           <button
             type="button"
-            className={`campaign-multi-select-trigger ${isOpen ? 'is-open' : ''}`}
+            className={`campaign-multi-select-trigger ${isOpen ? 'is-open' : ''} ${values.length > 0 ? 'has-value' : ''}`}
+            data-campaign-filter={key}
             onClick={() => setOpenFilterDropdown(prev => prev === key ? null : key)}
             aria-expanded={isOpen}
             title={`${label}: ${triggerLabel}`}
           >
-            {renderCampaignFilterIcon(key)}
+            <span className="campaign-filter-icon" aria-hidden="true">{renderCampaignFilterIcon(key)}</span>
             <span className="campaign-filter-trigger-copy">
-              <span className="campaign-filter-trigger-label">{label}:</span>
-              <strong>{triggerLabel}</strong>
+              <span className="campaign-filter-trigger-label">{label}</span>
+              {values.length > 0 && <strong>{triggerLabel}</strong>}
             </span>
-            <ChevronDown size={14} />
+            <ChevronDown size={12} />
           </button>
 
-          {isOpen && (
-            <div className="campaign-filter-menu">
+          {isOpen && filterPopoverPosition && (
+            <div className="campaign-filter-menu" style={campaignFilterPopoverStyle}>
               <button
                 type="button"
                 className={`campaign-filter-option ${values.length === 0 ? 'selected' : ''}`}
@@ -5886,8 +5937,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
         </div>
       )}
       <div className="campaign-panel-top">
-        <div className="campaign-panel-header">
-          <span className="campaign-panel-title">Chiến dịch</span>
+        <div className="campaign-panel-header campaign-list-header">
+          <span className="campaign-panel-title">Chiến dịch <span className="campaign-list-count">{campaignPage?.total ?? 0}</span></span>
           <div style={{ display: 'flex', gap: 4 }}>
             {canManageCampaignActions && (
               <button className="btn btn-ghost btn-icon" onClick={() => setShowActionManager(true)} title="Quản lý Hành động">
@@ -5921,13 +5972,25 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
 
         <div className="campaign-list-filter-panel" ref={filterPanelRef}>
           <div className="campaign-filter-row campaign-filter-compact-row">
+            <div className="campaign-filter-selection">
+              <input
+                className="campaign-list-select-checkbox"
+                aria-label="Chọn tất cả chiến dịch"
+                type="checkbox"
+                checked={!showCampaignTableLoading && allFilteredSelected}
+                disabled={campaignSelectionBlocked || selectionLoading || bulkActionLoading || filteredCampaigns.length === 0}
+                ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedIds.size > 0 && !allFilteredSelected }}
+                onChange={toggleSelectAll}
+              />
+            </div>
             <div className="campaign-filter-field campaign-filter-search-field">
               <div className="campaign-filter-search-box">
-                <Search size={17} />
+                <Search size={13} />
                 <input
                   value={campaignNameSearch}
                   onChange={event => setCampaignNameSearch(event.target.value)}
-                  placeholder="Tìm tên chiến dịch..."
+                  placeholder="Tìm chiến dịch"
+                  aria-label="Tìm chiến dịch"
                 />
               </div>
             </div>
@@ -5935,19 +5998,21 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
             <div className="report-dropdown-field campaign-filter-time-preset">
               <button
                 type="button"
-                className={`report-filter-button campaign-filter-inline-button ${openFilterDropdown === 'time' ? 'active' : ''}`}
+                data-campaign-filter="time"
+                className={`report-filter-button campaign-filter-inline-button ${openFilterDropdown === 'time' ? 'active' : ''} ${timePreset !== 'all' ? 'has-value' : ''}`}
                 onClick={() => setOpenFilterDropdown(prev => prev === 'time' ? null : 'time')}
+                aria-expanded={openFilterDropdown === 'time'}
                 title={`Thời gian: ${campaignRangeLabel}`}
               >
-                {renderCampaignFilterIcon('time')}
+                <span className="campaign-filter-icon" aria-hidden="true">{renderCampaignFilterIcon('time')}</span>
                 <span className="campaign-filter-trigger-copy">
-                  <span className="campaign-filter-trigger-label">Thời gian:</span>
-                  <strong>{campaignRangeLabel}</strong>
+                  <span className="campaign-filter-trigger-label">Thời gian</span>
+                  {timePreset !== 'all' && <strong>{campaignRangeLabel}</strong>}
                 </span>
-                <ChevronDown size={14} />
+                <ChevronDown size={12} />
               </button>
-              {openFilterDropdown === 'time' && (
-                <div className="report-filter-popover campaign-time-filter-popover">
+              {openFilterDropdown === 'time' && filterPopoverPosition && (
+                <div className="report-filter-popover campaign-time-filter-popover" style={campaignFilterPopoverStyle}>
                   <div className="report-option-list">
                     {CAMPAIGN_TIME_PRESETS.map(option => (
                       <button
@@ -6010,13 +6075,21 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
             )}
             {renderMultiSelectFilter(
               'action',
-              'Loại chiến dịch',
+              'Loại',
               actionFilterOptions,
               actionFilters,
               value => setActionFilters(prev => toggleStringValue(prev, value)),
               () => setActionFilters([]),
               true
             )}
+            <div className="campaign-filter-pager" aria-label="Phân trang chiến dịch">
+              <span aria-live="polite">
+                {campaignPage?.total ?? 0} chiến dịch{(campaignPage?.total ?? 0) > (campaignPage?.campaignTotal ?? 0) ? ' / bản nháp' : ''} · {campaignPageNumber}/{Math.max(1, Math.ceil((campaignPage?.total || 0) / 100))}
+                {selectionLoading ? ' · Đang đọc lựa chọn...' : ''}
+              </span>
+              <button type="button" className="btn btn-ghost btn-icon" aria-label="Trang chiến dịch trước" disabled={showCampaignTableLoading || campaignPageNumber <= 1 || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page - 1)}><ChevronLeft size={14} /></button>
+              <button type="button" className="btn btn-ghost btn-icon" aria-label="Trang chiến dịch sau" disabled={showCampaignTableLoading || !!campaignPageError || campaignPageNumber >= Math.ceil((campaignPage?.total || 0) / 100) || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page + 1)}><ChevronRight size={14} /></button>
+            </div>
           </div>
         </div>
 
@@ -6175,15 +6248,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
             <div className="campaign-table">
               <div className="campaign-table-header">
                 <div className="campaign-col col-campaign">
-                  <input
-                    className="campaign-list-select-checkbox"
-                    aria-label="Chọn tất cả chiến dịch"
-                    type="checkbox"
-                    checked={!showCampaignTableLoading && allFilteredSelected}
-                    disabled={campaignSelectionBlocked || selectionLoading || bulkActionLoading || filteredCampaigns.length === 0}
-                    ref={el => { if (el) el.indeterminate = !showCampaignTableLoading && selectedIds.size > 0 && !allFilteredSelected }}
-                    onChange={toggleSelectAll}
-                  />
                   <span>Chiến dịch</span>
                 </div>
                 <div className="campaign-col col-toggle">Dừng/Chạy</div>
@@ -6641,15 +6705,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticsRevisi
               </div>}
             </div>
           )}
-        </div>
-
-        <div className="campaign-list-pager" aria-label="Phân trang chiến dịch">
-          <span>{campaignPage?.total ?? 0} chiến dịch / bản nháp{selectedIds.size > 0 ? ` · Đã chọn ${selectedIds.size}` : ''}{selectionLoading ? ' · Đang đọc lựa chọn...' : ''}</span>
-          <div>
-            <button className="btn btn-secondary btn-sm" aria-label="Trang chiến dịch trước" disabled={showCampaignTableLoading || campaignPageNumber <= 1 || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page - 1)}>Trước</button>
-            <span> {campaignPageNumber}/{Math.max(1, Math.ceil((campaignPage?.total || 0) / 100))} </span>
-            <button className="btn btn-secondary btn-sm" aria-label="Trang chiến dịch sau" disabled={showCampaignTableLoading || !!campaignPageError || campaignPageNumber >= Math.ceil((campaignPage?.total || 0) / 100) || bulkActionLoading} onClick={() => setCampaignPageNumber(page => page + 1)}>Sau</button>
-          </div>
         </div>
 
         {/* Bottom Detail Dock */}

@@ -28,11 +28,48 @@ async function main() {
     await page.waitForFunction(() => window.desktopSmoke?.store.getState().campaignPage?.total === 1205)
     const store = expression => page.evaluate(expression)
     const count = method => page.evaluate(method => window.desktopSmoke.state.calls.filter(call => call.method === method).length, method)
+    const selectedCount = () => page.evaluate(() => Number(document.querySelector('.campaign-bulk-action-bar > span strong')?.textContent || 0))
+    const waitForSelectedCount = expected => page.waitForFunction(expected => {
+      const bar = document.querySelector('.campaign-bulk-action-bar')
+      return expected === 0 ? !bar : Number(bar?.querySelector('strong')?.textContent) === expected
+    }, expected)
+    const pager = page.getByLabel('Phân trang chiến dịch', { exact: true })
     const settled = () => page.waitForFunction(() => {
       const s = window.desktopSmoke.store.getState()
       return !s.campaignPageDirty && s.campaignPageResultKey === JSON.stringify(s.campaignPageQuery)
     })
     await settled()
+    assert.equal(await pager.count(), 1)
+    assert.ok((await pager.innerText()).includes('1/13'))
+    // Real notification banner appears/disappears without a viewport resize.
+    for (const key of ['status', 'time']) {
+      const trigger = page.locator(`[data-campaign-filter="${key}"]`)
+      const menu = page.locator(key === 'time' ? '.campaign-time-filter-popover' : '.campaign-filter-menu')
+      await trigger.click()
+      await menu.waitFor()
+      // Measure the baseline only after the opening transform has finished.
+      await menu.evaluate(async element => {
+        await Promise.all(element.getAnimations().map(animation => animation.finished))
+      })
+      const initialAnchor = await trigger.boundingBox()
+      const initialMenu = await menu.boundingBox()
+      for (const offline of [true, false]) {
+        await page.evaluate(offline => window.dispatchEvent(new Event(offline ? 'offline' : 'online')), offline)
+        await page.getByText('Mất kết nối mạng', { exact: true }).waitFor({ state: offline ? 'visible' : 'hidden' })
+        await page.waitForFunction(({ key, gap }) => {
+          const anchor = document.querySelector(`[data-campaign-filter="${key}"]`).getBoundingClientRect()
+          const menu = document.querySelector(key === 'time' ? '.campaign-time-filter-popover' : '.campaign-filter-menu').getBoundingClientRect()
+          return Math.abs(menu.top - anchor.bottom - gap) < 1
+        }, { key, gap: initialMenu.y - initialAnchor.y - initialAnchor.height })
+        const anchor = await trigger.boundingBox()
+        const popup = await menu.boundingBox()
+        assert.ok(offline ? anchor.y > initialAnchor.y : Math.abs(anchor.y - initialAnchor.y) < 1)
+        assert.ok(Math.abs((popup.y - initialMenu.y) - (anchor.y - initialAnchor.y)) < 1)
+      }
+      await page.keyboard.press('Escape')
+      await menu.waitFor({ state: 'hidden' })
+    }
+    console.log('PASS time/status dropdowns follow real offline banner insertion/removal without a window resize')
     assert.equal(await page.locator('.campaign-table-row').count(), 100)
     const beforeOpen = await count('getDesktopCampaignPage')
     await page.getByText('Campaign 1', { exact: true }).first().click()
@@ -44,9 +81,10 @@ async function main() {
     await page.waitForFunction(() => window.desktopSmoke.store.getState().campaignPage.page === 2)
     assert.equal(await store(() => window.desktopSmoke.store.getState().campaignPageQuery.selectedId), 1)
     assert.equal(await store(() => window.desktopSmoke.store.getState().campaigns.length), 101)
-    assert.ok((await page.locator('.campaign-list-pager').innerText()).includes('Đã chọn 1'))
+    assert.ok((await pager.innerText()).includes('2/13'))
+    assert.equal(await selectedCount(), 1)
     await page.getByRole('checkbox', { name: 'Chọn tất cả chiến dịch', exact: true }).check()
-    await page.waitForFunction(() => document.querySelector('.campaign-list-pager').textContent.includes('Đã chọn 1205'))
+    await waitForSelectedCount(1205)
     assert.equal(await count('getDesktopCampaignSelection'), 3)
     assert.equal(await count('listDesktopCampaignCatalog'), 0)
     console.log('PASS 100-row pages, pinned detail, cross-page selection of 1205, no catalog during list reads')
@@ -54,7 +92,7 @@ async function main() {
     await page.getByTitle('Tiếp tục các chiến dịch đang tạm dừng').click()
     await page.waitForFunction(() => window.desktopSmoke.state.calls.filter(call => call.method === 'updateCampaign').length === 1205)
     await settled()
-    await page.waitForFunction(() => !document.querySelector('.campaign-list-pager').textContent.includes('Đã chọn'))
+    await waitForSelectedCount(0)
     assert.equal(await page.getByRole('checkbox', { name: 'Chọn tất cả chiến dịch', exact: true }).isChecked(), false)
     console.log('PASS bulk resume includes selected campaigns across all 13 pages and clears selection')
 
@@ -98,7 +136,7 @@ async function main() {
     assert.equal(await count('getDesktopCampaignSources'), initialSources + 5)
     console.log('PASS sources refresh on manual reload/config changes, event bursts coalesce and pending reads serialize')
 
-    const search = page.getByPlaceholder('Tìm tên chiến dịch...')
+    const search = page.getByRole('textbox', { name: 'Tìm chiến dịch', exact: true })
     const selectAll = page.getByRole('checkbox', { name: 'Chọn tất cả chiến dịch', exact: true })
     const selectionsBeforeSearch = await count('getDesktopCampaignSelection')
     await search.fill('Campaign 1205')
@@ -109,8 +147,8 @@ async function main() {
     await page.clock.runFor(301)
     await settled()
     await selectAll.check()
-    await page.waitForFunction(() => document.querySelector('.campaign-list-pager').textContent.includes('Đã chọn 1'))
-    assert.ok(!(await page.locator('.campaign-list-pager').innerText()).includes('Đã chọn 1205'))
+    await waitForSelectedCount(1)
+    assert.equal(await selectedCount(), 1)
     await store(() => window.desktopSmoke.ui.setState({ showConfirm: message => { window.desktopSmoke.state.confirmation = message } }))
     await page.getByTitle('Xoá các chiến dịch đã chọn').click()
     await page.waitForFunction(() => !!window.desktopSmoke.state.confirmation)
@@ -118,7 +156,7 @@ async function main() {
     await search.fill('')
     await page.clock.runFor(301)
     await settled()
-    assert.ok(!(await page.locator('.campaign-list-pager').innerText()).includes('Đã chọn'))
+    assert.equal(await selectedCount(), 0)
     await store(() => { window.desktopSmoke.state.hold = 'selection' })
     await selectAll.click()
     await page.waitForFunction(() => !!window.desktopSmoke.state.release)
@@ -127,7 +165,7 @@ async function main() {
     await settled()
     await store(() => { window.desktopSmoke.state.hold = null; window.desktopSmoke.state.release(); window.desktopSmoke.state.release = null })
     await page.clock.runFor(1)
-    assert.ok(!(await page.locator('.campaign-list-pager').innerText()).includes('Đã chọn'), 'stale selection response discarded')
+    assert.equal(await selectedCount(), 0, 'stale selection response discarded')
     await search.fill('')
     await page.clock.runFor(301)
     await settled()
