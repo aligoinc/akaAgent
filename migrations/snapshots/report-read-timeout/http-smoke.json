@@ -1,0 +1,39 @@
+{
+  "at": "2026-10-15T23:08:17.120Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "readOnly": true,
+  "evidence": [
+    {
+      "probe": "anon_results_30_days",
+      "httpStatus": 200,
+      "ms": 640,
+      "rows": 1000
+    },
+    {
+      "probe": "anon_second_page",
+      "httpStatus": 200,
+      "rows": 1000,
+      "noDuplicates": true
+    },
+    {
+      "probe": "invalid_credentials",
+      "httpStatus": 400
+    },
+    {
+      "probe": "anon_results_30_days",
+      "httpStatus": 200,
+      "ms": 13622,
+      "rows": 1000
+    },
+    {
+      "probe": "anon_second_page",
+      "httpStatus": 200,
+      "rows": 1000,
+      "noDuplicates": true
+    },
+    {
+      "probe": "invalid_credentials",
+      "httpStatus": 400
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+const { reportRpcRequest } = require('./fixtures/report-rpc.cjs')
 const statusCatalogTables = require('./fixtures/action-status-report.json')
 const { match: matches, compare, value: fieldValue } = require('./fixtures/report-postgrest.cjs')
 const assert = require('node:assert/strict')
@@ -17,7 +18,7 @@ async function main() {
         builder.onResolve({ filter: /\/(supabaseClient|currentUser|accountActionRepository|entitlementRepository)$/ }, args => ({ path: args.path.split('/').pop(), namespace: 'fixture' }))
         builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents: {
           supabaseClient: 'export const getSupabaseClient = () => globalThis.reportDb',
-          currentUser: 'export const requireCurrentUser = () => ({staffId:7,organizationId:9}); export const runWithCurrentUser = (_user, run) => run()',
+          currentUser: 'export const requireCurrentUser = () => ({staffId:7,organizationId:9}); export const runWithCurrentUser = (_user, run) => run(); export const requireCurrentUserCredentials = () => ({ username: "fixture", password: "fixture" })',
           accountActionRepository: 'export const listAccountActions = async () => globalThis.reportActions',
           entitlementRepository: 'export const loadCurrentUserEffectiveEntitlements = async () => ({}); export const canUseAccountPlatformWithEntitlements = () => true'
         }[args.path] }))
@@ -107,6 +108,7 @@ async function main() {
         return new Response(options.method === 'HEAD' ? null : JSON.stringify(single ? rows[0] : rows), { headers: { 'content-type': 'application/json', 'content-range': `0-${rows.length - 1}/${total}` } })
       } }
     })
+    globalThis.reportDb.rpc = (name, args) => reportRpcRequest(globalThis.reportDb, name, args)
     const repo = require(join(directory, 'repository.cjs'))
     const report = await repo.getAccountActionReport(query)
     assert.equal(report.rows[0].countsByActionCode.zalo_message_stranger.pendingCount, 1206)

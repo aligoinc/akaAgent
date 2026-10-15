@@ -600,6 +600,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Timeout báo cáo**: reader kết quả/pending dùng RPC `aka_agent_read_report_page` với timeout DB riêng 60 giây và deadline toàn lượt 65 giây; tăng AbortSignal không thay timeout role PostgreSQL. Không apply lại migration đã live hoặc tăng pool để chữa timeout. Xem [audit](docs/REPORT_READ_TIMEOUT_20261016.md).
+
 - **Báo cáo trạng thái hành động**: wildcard theo khả năng thực thi của loại chiến dịch, không chỉ quota; legacy giữ nguyên literal PostgREST và pending không đếm lại vào trạng thái chính. Xem [hợp đồng và hồi quy](docs/ACTION_STATUS_REPORTS.md).
 
 - **Làm giàu Web là tác vụ phụ**: giữ lịch/giữ chỗ/trạng thái trong RAM; lỗi/hủy phải đóng trang và nhả tài khoản, không đi qua claim/error policy của chiến dịch. Chặn callback preview cũ bằng owner/runId và timer đang dùng; workflow cache cần restart app sau cập nhật block DB. Xem [audit](docs/FACEBOOK_WEB_ENRICHMENT_V398.md).
@@ -815,3 +817,5 @@ Review báo cáo 16/10/2026: wildcard phải nhận cả hành động thực th
 Báo cáo legacy 16/10/2026: literal trong `.or()` PostgREST chỉ escape dấu nháy kép và backslash; không dùng JSON.stringify vì LF/CR/tab sẽ đổi giá trị. Giữ JSON.stringify cho khóa cột/cache JSON. Áp dụng cho selector legacy và fallback status_value, đồng bộ Desktop/Web; fixture phải dùng grammar PostgREST, không JSON.parse. Xem [hồi quy ký tự điều khiển](docs/ACTION_STATUS_REPORTS.md#ký-tự-điều-khiển-trong-trạng-thái-legacy--16102026).
 
 PR báo cáo 16/10/2026 giữ query/index hiện có theo quyết định người dùng; hoãn tối ưu phạm vi lớn. Hai lượt tải là giới hạn mỗi process, không phải toàn hệ thống; test chức năng không thay benchmark. Xem [giới hạn hiệu năng](docs/ACTION_STATUS_REPORTS.md#phạm-vi-pr-và-hiệu-năng--16102026).
+
+Sửa timeout báo cáo 16/10/2026 đã apply trên akachat (`20261015230729 / report_read_timeout`): `aka_agent_read_report_page(bigint,bigint,text,text,jsonb)` đọc kết quả/pending bằng RPC riêng 60s; app có hạn toàn lượt 65s. Giữ credential/tenant/account guards, tối đa 1.000 dòng/trang, hai report/process, cache và cách tính; cursor kết quả `(created_at,id)`, pending `(campaign_id,id)`. Không tăng role timeout/pool/connection/index/polling. HTTP anon >13 giây đã thành công. Không apply lại; Desktop cần restart main, chưa phát hành/deploy Web. [Audit và rollback](docs/REPORT_READ_TIMEOUT_20261016.md).

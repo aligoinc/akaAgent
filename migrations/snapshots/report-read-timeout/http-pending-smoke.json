@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-15T23:08:54.987Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "readOnly": true,
+  "evidence": [
+    {
+      "probe": "anon_pending_fallback",
+      "httpStatus": 200,
+      "ms": 329,
+      "rows": 0
+    },
+    {
+      "probe": "invalid_credentials",
+      "httpStatus": 400
+    },
+    {
+      "probe": "anon_pending_fallback",
+      "httpStatus": 200,
+      "ms": 160,
+      "rows": 1000
+    },
+    {
+      "probe": "anon_second_page",
+      "httpStatus": 200,
+      "rows": 1000,
+      "noDuplicates": true
+    },
+    {
+      "probe": "invalid_credentials",
+      "httpStatus": 400
+    }
+  ]
+}
