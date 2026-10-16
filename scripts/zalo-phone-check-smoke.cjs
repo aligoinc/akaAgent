@@ -14,6 +14,8 @@ function load(file) {
   const code = ts.transpileModule(readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
   const req = id => {
     if (id === 'electron') return { ipcMain: { handle: (name, fn) => handlers.set(name, fn) } }
+    // The Web abort check exercises session.fetch directly, without creating an SDK API.
+    if (id === 'zca-js') return { API: class {} }
     if (id.endsWith('/currentUser')) return { requireCurrentUser: () => user, requireCurrentUserCredentials: () => credentials, getCurrentUserCredentials: () => credentials, runWithCurrentUser: (_, fn) => fn() }
     if (id.endsWith('/entitlementRepository')) return { ensureCurrentUserFeatureActive: async () => {} }
     if (id.endsWith('/backgroundPageManager')) return { BackgroundPageManager: class { destroy() {} destroyAll() {} } }
@@ -31,6 +33,7 @@ const h = load('src/shared/zaloPhoneCheck.ts')
 const { searchZaloPhone } = load('src/main/services/zaloPhoneSearch.ts')
 const { ContactLoader } = load('src/main/services/contactLoader.ts')
 const { ZaloChatApiClient } = load('src/main/services/zaloChatApiClient.ts')
+const { ZaloChatContactScanSource } = load('src/main/services/zaloChatContactScanSource.ts')
 const { createZaloPhoneCheckStore } = load('src/renderer/src/stores/zaloPhoneCheckStore.ts')
 const { registerZaloPhoneCheckHandlers } = load('src/main/ipc/handlers/zaloPhoneCheckHandlers.ts')
 const phones = Array.from({ length: 301 }, (_, i) => `090${String(i).padStart(7, '0')}`)
@@ -61,6 +64,38 @@ function fixture(options = {}) {
   const loader = new ContactLoader(db, {}, win, undefined, runtime, { zaloRuntimeTarget: options.server ? 'server' : 'desktop', ...(options.legacy ? { contactDatasetAuth: 'server_claim' } : {}) })
   loader.getZaloFriendApiDelayMs = () => 0
   return { loader, db, win, events, calls, runtime, held: () => held }
+}
+async function checkNativeWebAbort() {
+  const { app, session } = require('electron')
+  await app.whenReady()
+  const { ZaloWebRuntimeService } = load('src/main/services/zaloWebRuntimeService.ts')
+  const web = new ZaloWebRuntimeService()
+  const entry = { accountId: 71, captureVersion: 0, bootstrap: {}, generationAbortController: new AbortController(),
+    wc: { isDestroyed: () => false, session: session.fromPartition('phone-check-abort-fixture') } }
+  web.entries.set(71, entry)
+  const webFetch = web.createSessionFetch(entry, 0, entry.bootstrap, entry.generationAbortController.signal, {})
+  let requestCount = 0, transportError
+  const server = require('node:http').createServer(() => { requestCount++; web.advanceCaptureGeneration(entry) })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const f = fixture({ web: true, lookup: ({ signal }) => searchZaloPhone(async () => {
+      try { await webFetch(`http://127.0.0.1:${server.address().port}/`, { signal }) }
+      catch (error) { transportError = error; throw error }
+      throw new Error('Fixture must abort before receiving a profile')
+    }, async () => null, signal) })
+    const result = await f.loader.checkZaloPhones(req(phones.slice(0, 2)))
+    assert.equal(transportError.name, 'AbortError'); assert.equal(transportError.code, 20)
+    assert.deepEqual(result.rows.map(row => row.status), ['unknown', 'pending'])
+    assert.equal(result.stopped, true); assert.equal(requestCount, 1)
+    assert.equal(f.calls.filter(c => /^090/.test(c)).length, 1)
+    assert.equal(f.calls.filter(c => c === 'release').length, 1)
+    assert.equal(f.held(), false)
+    assert.doesNotMatch(result.rows[0].note, /mã 20/)
+    console.log('PASS native Electron Web generation abort: AbortError(20) => unknown, stop, next phone pending, release once')
+  } finally {
+    server.closeAllConnections()
+    await new Promise(resolve => server.close(resolve))
+  }
 }
 async function main() {
   assert.deepEqual(h.normalizeZaloCheckPhones(['+84 901 234 567', '0901234567', 901234567, 'bad', '', '01621234567']), ['0901234567', '0321234567'])
@@ -96,12 +131,55 @@ async function main() {
     assert.equal(result.rows.length, 2); assert.ok(result.rows.every(r => r.status === 'found'))
     assert.equal(initial.events.filter(e => e.channel === h.ZALO_PHONE_CHECK_IPC.row).length, 4)
     assert.equal(initial.calls.at(-1), 'release'); assert.equal(initial.held(), false)
-    for (const code of ['216', '429', '401', undefined]) {
+    // akaBizAuto CheckPhoneExist_ByApi: 0 or SearchPhone.LIMITS => true; other API codes => false.
+    // These are Zalo response codes, not HTTP status codes.
+    for (const [code, status] of [
+      [0, 'found'], [312, 'found'], [313, 'found'], [304, 'found'], [221, 'found'],
+      [212, 'not_found'], [214, 'not_found'], [216, 'not_found'], [401, 'not_found'],
+      [429, 'not_found'], [-1, 'not_found'], [999, 'not_found'], [20, 'not_found'], [23, 'not_found']
+    ]) {
       const f = fixture({ ...kind, errorAt: 1, code })
       const r = await f.loader.checkZaloPhones(req())
-      assert.equal(r.rows[0].status, code === '216' ? 'not_found' : 'unknown')
-      assert.equal(r.rows[1].status, code === '216' ? 'found' : 'pending')
+      assert.equal(r.rows[0].status, status, `akaBizAuto parity for ${code}`)
+      assert.equal(r.rows[0].uid, ''); assert.equal(r.rows[0].name, '')
+      assert.ok(r.rows.slice(1).every(row => row.status === 'found'))
+      assert.equal(r.stopped, false); assert.equal(r.error, undefined)
+      assert.equal(f.events.filter(e => e.channel === h.ZALO_PHONE_CHECK_IPC.row).length, 6)
+      assert.equal(f.calls.filter(c => c === 'release').length, 1)
       assert.equal(f.held(), false)
+      if (status === 'found') {
+        assert.throws(() => h.zaloPhoneCheckGroupRows([r.rows[0]], 'zalo_person'), /Zalo ID/)
+        assert.equal(h.zaloPhoneCheckGroupRows([r.rows[0]], 'phone')[0].phone, phones[0])
+        assert.deepEqual(h.zaloPhoneCheckExport([r.rows[0]], true)[1], ['', '', phones[0], '', '', '', '', '', ''])
+      }
+    }
+    for (const code of [undefined, 'ECONNRESET', 'data_scan_runtime_binding_changed', 'phone_check_update_required']) {
+      const f = fixture({ ...kind, errorAt: 1, code })
+      const r = await f.loader.checkZaloPhones(req())
+      assert.equal(r.rows[0].status, 'unknown'); assert.equal(r.rows[1].status, 'pending')
+      assert.equal(r.stopped, true); assert.equal(f.held(), false)
+    }
+    // Runtime-owned aborts do not necessarily abort the scan controller.
+    // DOMException.code is not a Zalo response code, even after a limit fallback.
+    for (const name of ['AbortError', 'TimeoutError']) {
+      for (const firstLimit of [false, true]) {
+        const attempts = []
+        const transportError = new DOMException('Fixture request interrupted', name)
+        const f = fixture({ ...kind, lookup: ({ signal }) => searchZaloPhone(async src => {
+          attempts.push(src)
+          if (firstLimit && src === 32) throw error('312')
+          throw transportError
+        }, async code => code === '312' ? 'hour' : null, signal) })
+        const r = await f.loader.checkZaloPhones(req())
+        assert.equal(r.rows[0].status, 'unknown')
+        assert.ok(r.rows.slice(1).every(row => row.status === 'pending'))
+        assert.equal(r.stopped, true); assert.equal(f.held(), false)
+        assert.doesNotMatch(r.rows[0].note, /mã (20|23)/)
+        assert.deepEqual(attempts, firstLimit ? [32, 40] : [32])
+        assert.equal(f.calls.filter(c => /^090/.test(c)).length, 1)
+        assert.equal(f.calls.filter(c => c === 'release').length, 1)
+        assert.deepEqual(f.events.filter(e => e.channel === h.ZALO_PHONE_CHECK_IPC.row).map(e => e.payload.row.status), ['checking', 'unknown'])
+      }
     }
     for (const opts of [{ busy: true }, { noSession: true }]) {
       const f = fixture({ ...kind, ...opts }), r = await f.loader.checkZaloPhones(req())
@@ -144,18 +222,54 @@ async function main() {
   chat.credentials = { username: 'fixture', password: 'fixture' }
   chat.dataScanToken = 'fixture-token'; chat.dataScanTokenExpiresAt = Date.now() + 3600000
   const payloads = []
-  let legacy = false
+  let legacy = false, responseCode = 'H', httpStatus = 0
   globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith('/data-scan-session')) return new Response(JSON.stringify({
+      token: 'fixture-token', staffId: 7, organizationId: 9, expiresAt: new Date(Date.now() + 3600000).toISOString()
+    }))
     assert.match(String(url), /data-scan-queries/)
+    if (String(url).endsWith('/cancel')) return new Response(JSON.stringify({ status: 'cancelled' }))
     const body = JSON.parse(init.body); payloads.push(body)
     assert.equal(body.queryType, 'find_user_by_phone')
+    if (httpStatus) return new Response(JSON.stringify({ error: 'http_error' }), { status: httpStatus })
     if (legacy) return new Response(JSON.stringify({ error: 'phone_check_update_required', message: 'upgrade' }), { status: 503 })
+    if (responseCode === '0') return new Response(JSON.stringify({ status: 'succeeded', result: {} }), { status: 202 })
+    if (responseCode !== 'H') return new Response(JSON.stringify({ status: 'failed', errorCode: responseCode }), { status: 202 })
     return new Response(JSON.stringify({ status: body.payload.reqSrc === 32 ? 'failed' : 'succeeded',
       errorCode: 'H', result: { uid: '1234', display_name: 'API' } }), { status: 202 })
   }
   try {
     const result = await searchZaloPhone(src => chat.findUserByPhoneSource(71, phones[0], src), policy)
     assert.equal(result.user.uid, '1234'); assert.deepEqual(payloads.map(p => p.payload.reqSrc), [32, 40])
+    const source = new ZaloChatContactScanSource(chat, { getZaloErrorPolicyByCode: async code => ({
+      disableActionCodes: ['312', '313', '304', '221'].includes(code) ? ['zalo_find_phone_user'] : [],
+      disableActionMode: ['313', '304'].includes(code) ? 'end_of_day' : 'fixed_minutes', timeDisableActions: 60
+    }) })
+    for (const [code, status, sources] of [
+      ['0', 'found', [32]],
+      ['212', 'not_found', [32]], ['214', 'not_found', [32]], ['216', 'not_found', [32]],
+      ['312', 'found', [32, 40]], ['313', 'found', [32, 40]],
+      ['304', 'found', [32, 40]], ['221', 'found', [32, 40]], ['999', 'not_found', [32]]
+    ]) {
+      responseCode = code; payloads.length = 0
+      const f = fixture({ server: true })
+      f.runtime.findUserByPhone = source.findUserByPhone.bind(source)
+      const r = await f.loader.checkZaloPhones(req(phones.slice(0, 2)))
+      assert.deepEqual(r.rows.map(row => row.status), [status, status])
+      assert.deepEqual(payloads.map(p => p.payload.reqSrc), [...sources, ...sources])
+      assert.equal(r.stopped, false); assert.equal(f.held(), false)
+    }
+    // An HTTP failure is not a Zalo error_code and must still stop the scan.
+    for (const status of [401, 429, 503]) {
+      httpStatus = status
+      const f = fixture({ server: true })
+      f.runtime.findUserByPhone = source.findUserByPhone.bind(source)
+      const r = await f.loader.checkZaloPhones(req())
+      assert.equal(r.rows[0].status, 'unknown'); assert.equal(r.rows[1].status, 'pending')
+      assert.match(r.error, /http_error/)
+      assert.equal(r.stopped, true); assert.equal(f.held(), false)
+    }
+    httpStatus = 0
     legacy = true
     await assert.rejects(chat.findUserByPhoneSource(71, phones[0], 32), /cập nhật Chat API/)
     const stopped = new AbortController(); stopped.abort(); const before = payloads.length
@@ -219,9 +333,19 @@ async function main() {
   await runtimeReady; changing.loader.cancelAllZaloPhoneChecks()
   const changed = await changingRun
   assert.equal(changed.rows[0].status, 'unknown'); assert.equal(changed.rows[1].status, 'pending'); assert.equal(changing.held(), false)
-  const invalidProfile = fixture({ lookup: async () => ({ user: { uid: '[object Object]' } }) })
-  const invalidResult = await invalidProfile.loader.checkZaloPhones(req())
-  assert.equal(invalidResult.rows[0].status, 'unknown'); assert.equal(invalidResult.rows[1].status, 'pending')
-  console.log('PASS normalization, 300/301, Excel text/template, groups, fallback, QR/Web/legacy/Chat orchestration, busy/auth, timeout/cancel/late results, store and IPC')
+  for (const user of [null, { uid: '[object Object]', displayName: 'Tên API' }]) {
+    const f = fixture({ lookup: async () => ({ user }) })
+    const r = await f.loader.checkZaloPhones(req())
+    assert.ok(r.rows.every(row => row.status === 'found' && row.uid === ''))
+    assert.equal(r.rows[0].name, user?.displayName || '')
+    assert.equal(r.stopped, false)
+    assert.throws(() => h.zaloPhoneCheckGroupRows(r.rows, 'zalo_person'), /Zalo ID/)
+  }
+  if (process.versions.electron) await checkNativeWebAbort()
+  console.log('PASS akaBizAuto code parity (0/limits/other), DOM abort/timeout vs API codes, continuation and empty UID, real Chat transport/fallback vs HTTP errors, normalization, 300/301, Excel/groups, QR/Web/legacy/Chat, busy/auth, timeout/cancel/late results, store and IPC')
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+main().then(() => { if (process.versions.electron) require('electron').app.quit() }).catch(error => {
+  console.error(error)
+  if (process.versions.electron) require('electron').app.exit(1)
+  else process.exitCode = 1
+})

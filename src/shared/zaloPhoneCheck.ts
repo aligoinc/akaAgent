@@ -11,6 +11,12 @@ export const ZALO_PHONE_CHECK_LABELS: Record<ZaloPhoneCheckStatus, string> = {
   pending: 'Chưa kiểm tra', checking: 'Đang kiểm tra', found: 'Có Zalo',
   not_found: 'Không tìm thấy Zalo', unknown: 'Chưa xác định'
 }
+/** Matches akaBizAuto CheckPhoneExist_ByApi / SearchPhone.LIMITS, after 32→40 selection. */
+export function classifyZaloPhoneCheckApiCode(code: string): 'found' | 'not_found' | null {
+  // Transport/runtime errors have no Zalo error_code and cannot classify a phone.
+  if (!/^-?\d+$/.test(code)) return null
+  return [0, 312, 313, 304, 221].includes(Number(code)) ? 'found' : 'not_found'
+}
 export interface ZaloPhoneCheckRow {
   id: string
   phone: string

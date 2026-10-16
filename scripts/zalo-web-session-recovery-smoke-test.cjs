@@ -444,6 +444,7 @@ async function runSchedulerChecks() {
       getPendingCampaigns: async id => [{ id, accountId: id }]
     },
     shouldProcessAccountForRuntime: () => true, isSmsAccount: () => false,
+    isWithinCampaignDispatchSchedule: () => true, // All fixture campaigns are due; this tests the Web-session gate.
     finalizeDataGroupCampaignAtHardEnd: async () => false, isRealtimeCampaignDisabledForRuntime: () => false,
     zaloRuntime: { hasVerifiedWebSession: () => ready }, isBrowserlessCampaign: () => true,
     webviewRegistry: { isRegistered: () => true },
