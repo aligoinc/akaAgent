@@ -2,6 +2,20 @@ import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import type { ZaloPhoneCheckUsage } from '../../../shared/zaloPhoneCheck'
 
+/** Read the public upload limit without an account, claim or usage reservation. */
+export async function getZaloPhoneCheckDailyLimit(signal: AbortSignal): Promise<number> {
+  signal.throwIfAborted()
+  requireCurrentUser()
+  const { data, error } = await getSupabaseClient().from('auto_system_settings')
+    .select('value').eq('key', 'zalo.phone_check.daily_limit').eq('is_active', true).eq('is_secret', false)
+    .abortSignal(signal).maybeSingle()
+  signal.throwIfAborted()
+  if (error) throw new Error('Không tải được giới hạn kiểm tra SĐT. Vui lòng thử lại.')
+  // Match the existing daily-usage RPC's default and integer range.
+  const value = String(data?.value ?? '')
+  return /^[1-9][0-9]{0,9}$/.test(value) && Number(value) <= 2147483647 ? Number(value) : 600
+}
+
 /** One request, never retried: a lost response may already have consumed a slot. */
 export async function getZaloPhoneCheckUsage(accountId: number, runtimeTarget: 'desktop' | 'server',
   claimToken: string | null, consume: boolean, serverClaim: boolean, signal: AbortSignal): Promise<ZaloPhoneCheckUsage> {

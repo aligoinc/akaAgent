@@ -12,6 +12,7 @@ export function zaloPhoneCheckDailyLimitMessage(usage: ZaloPhoneCheckUsage): str
 export const ZALO_PHONE_CHECK_IPC = {
   start: 'contacts:zalo-phone-check:start', cancel: 'contacts:zalo-phone-check:cancel',
   usage: 'contacts:zalo-phone-check:usage',
+  limit: 'contacts:zalo-phone-check:limit',
   row: 'contacts:zalo-phone-check:row', completed: 'contacts:zalo-phone-check:completed'
 } as const
 export type ZaloPhoneCheckStatus = 'pending' | 'checking' | 'found' | 'not_found' | 'unknown'

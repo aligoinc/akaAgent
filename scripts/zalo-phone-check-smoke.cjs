@@ -25,7 +25,7 @@ function load(file) {
     if (id.endsWith('/accountLogService')) return { recordAccountLog() { throw new Error('No scan history allowed') } }
     if (!id.startsWith('.')) return require(id)
     const path = resolve(dirname(filename), `${id}.ts`)
-    if (path.includes('/shared/') || /\/(zaloPhoneSearch|requestDeadline|zaloPhoneCheckStore|originPolicy|realtimeTicketVerifier)\.ts$/.test(path)) return load(path)
+    if (path.includes('/shared/') || /\/(zaloPhoneSearch|zaloPhoneCheckRepository|requestDeadline|zaloPhoneCheckStore|originPolicy|realtimeTicketVerifier)\.ts$/.test(path)) return load(path)
     return {}
   }
   new Function('require', 'module', 'exports', code)(req, module, module.exports)
@@ -42,6 +42,23 @@ const phones = Array.from({ length: 601 }, (_, i) => `090${String(i).padStart(7,
 const error = code => Object.assign(new Error('Fixture error'), { code })
 const req = (values = phones.slice(0, 3), limit = 300) => ({ accountId: 71, runId: randomUUID(), limit, phones: values })
 const tick = () => new Promise(resolve => setImmediate(resolve))
+function mockDailyLimit(value = '600', error = null, read) {
+  const filters = [], calls = []
+  phoneDbClient = { from: table => {
+    calls.push(table); assert.equal(table, 'auto_system_settings')
+    const query = {
+      select: fields => { assert.equal(fields, 'value'); return query },
+      eq: (key, val) => { filters.push([key, val]); return query },
+      abortSignal: signal => { query.signal = signal; return query },
+      maybeSingle: () => {
+        assert.deepEqual(filters.slice(-3), [['key', 'zalo.phone_check.daily_limit'], ['is_active', true], ['is_secret', false]])
+        return read ? read(query.signal) : Promise.resolve({ data: value === null ? null : { value }, error })
+      }
+    }
+    return query
+  } }
+  return calls
+}
 function fixture(options = {}) {
   const events = [], calls = []
   let count = 0, held = false
@@ -116,6 +133,24 @@ async function checkNativeWebAbort() {
   }
 }
 async function main() {
+  {
+    const { getZaloPhoneCheckDailyLimit } = load('src/main/data/repositories/zaloPhoneCheckRepository.ts')
+    for (const value of ['125', '600', '1000', '2147483647']) {
+      const calls = mockDailyLimit(value)
+      assert.equal(await getZaloPhoneCheckDailyLimit(new AbortController().signal), Number(value))
+      assert.equal(calls.length, 1)
+    }
+    for (const value of [null, '', '0', '-1', '1.5', ' 600', '2147483648', 'bad']) {
+      mockDailyLimit(value)
+      assert.equal(await getZaloPhoneCheckDailyLimit(new AbortController().signal), 600)
+    }
+    const calls = mockDailyLimit('600', { message: 'secret DB detail' })
+    await assert.rejects(getZaloPhoneCheckDailyLimit(new AbortController().signal), err => /Không tải được/.test(err.message) && !err.message.includes('secret'))
+    assert.equal(calls.length, 1)
+    const controller = new AbortController(); controller.abort()
+    await assert.rejects(getZaloPhoneCheckDailyLimit(controller.signal), { name: 'AbortError' })
+    assert.equal(calls.length, 1, 'cancelled config read must not dispatch')
+  }
   // Real repository: one HTTP/RPC attempt, strict response, credential vs Server claim.
   {
     const { getZaloPhoneCheckUsage }=load('src/main/data/repositories/zaloPhoneCheckRepository.ts')
@@ -743,6 +778,28 @@ async function main() {
   registerZaloPhoneCheckHandlers(f.win, f.db, f.loader, f.loader, { executeCommand: async (...args) => { serverCalls.push(args); throw new Error('Lệnh server không được hỗ trợ') } }, () => false)
   const ev = { sender: f.win.webContents, senderFrame: f.win.webContents.mainFrame }
   const start = handlers.get(h.ZALO_PHONE_CHECK_IPC.start), cancel = handlers.get(h.ZALO_PHONE_CHECK_IPC.cancel)
+  const readLimit = handlers.get(h.ZALO_PHONE_CHECK_IPC.limit)
+  {
+    const queries = mockDailyLimit('1000')
+    await assert.rejects(readLimit({ ...ev, senderFrame: {} }), /quyền/)
+    assert.equal(queries.length, 0)
+    assert.equal(await readLimit(ev), 1000)
+    assert.deepEqual(f.calls, [], 'config read does not claim an account or run lookups')
+    assert.equal(f.reservations.length, 0)
+    let finish, entered
+    const ready = new Promise(resolve => { entered = resolve })
+    mockDailyLimit('600', null, () => { entered(); return new Promise(resolve => { finish = resolve }) })
+    const pending = readLimit(ev); await ready
+    credentials = { ...credentials }
+    finish({ data: { value: '600' }, error: null })
+    await assert.rejects(pending, /Phiên đăng nhập/)
+    let signal
+    mockDailyLimit('600', null, value => { signal = value; return new Promise(() => {}) })
+    const originalTimeout = global.setTimeout
+    global.setTimeout = (fn, ms, ...args) => originalTimeout(fn, Math.min(ms, 10), ...args)
+    try { await assert.rejects(readLimit(ev), /quá thời gian/); assert.equal(signal.aborted, true) }
+    finally { global.setTimeout = originalTimeout }
+  }
   const readUsage=handlers.get(h.ZALO_PHONE_CHECK_IPC.usage)
   await assert.rejects(readUsage({...ev,senderFrame:{}},71),/quyền/)
   await assert.rejects(readUsage(ev,-1),/không hợp lệ/)

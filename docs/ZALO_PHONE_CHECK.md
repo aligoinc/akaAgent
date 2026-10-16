@@ -80,7 +80,7 @@ Server cũ quảng bá capability qua hello WebSocket hiện có: V407 ban đầ
 
 ### Upload theo hạn mức ngày — 16/10/2026
 
-Thay giới hạn cố định 300 bằng `usage.limit` từ setting ngày V407 hiện có, cho cả số SĐT upload và số lượng mỗi lượt. Ví dụ đã dùng 125/600 vẫn nhận 600 SĐT; bộ đếm ngày chỉ cho chạy các lượt còn lại. UI chờ snapshot đúng tài khoản trước khi mở tải data/chạy; lỗi đọc giữ khóa và báo trên form. Mặc định số lượng theo hạn mức, số người dùng đã nhập giữ nguyên nếu còn hợp lệ và hạ về max khi hạn mức giảm. Data đang có không bị tự cắt khi đổi tài khoản/hạn mức.
+Thay giới hạn cố định 300 bằng `usage.limit` từ setting ngày V407 hiện có, cho cả số SĐT upload và số lượng mỗi lượt. Ví dụ đã dùng 125/600 vẫn nhận 600 SĐT; bộ đếm ngày chỉ cho chạy các lượt còn lại. Tải data đọc cấu hình hạn mức chung độc lập với tài khoản (điều chỉnh ngày 17/10/2026 bên dưới); chỉ Bắt đầu chờ snapshot usage đúng tài khoản. Lỗi usage không khóa tải data. Mặc định số lượng theo hạn mức, số người dùng đã nhập giữ nguyên nếu còn hợp lệ và hạ về max khi hạn mức giảm. Data đang có không bị tự cắt khi đổi tài khoản/hạn mức.
 
 Shared validator ở IPC/gateway chỉ kiểm tra cấu trúc. ContactLoader trên QR/Web/Chat/Server đọc RPC usage với `consume=false` một lần sau claim, kiểm tra số lượng/danh sách trước tạo hàng kết quả, check session và cấp lượt; payload vượt mức không tiêu lượt. Read có deadline 6 giây và hủy theo run/phiên; lỗi/hủy luôn nhả claim, bỏ kết quả muộn. Vẫn cấp lượt atomic trước mỗi tra cứu. Không thêm RPC/migration/polling/connection, không đổi quota/policy chiến dịch hoặc form upload chung.
 
@@ -90,11 +90,15 @@ Review ngày 16/10/2026: form upload dùng chung vẫn giữ trần 10.000 dòng
 
 ### Tài khoản ban đầu của modal — 17/10/2026
 
-Quét data có thể truyền ID Facebook hoặc ID không còn trong danh sách. Modal chỉ dùng ID thuộc danh sách tài khoản Zalo hiện tại cho dropdown, đọc hạn mức và bắt đầu; nếu không hợp lệ thì hiện **Chọn tài khoản**, chưa gửi request usage. Khi danh sách mất tài khoản đang chọn, xóa snapshot hạn mức và bỏ kết quả/lỗi đọc đến muộn bằng guard hiện có. Refresh metadata của cùng tài khoản không phát sinh lần đọc mới.
+Quét data có thể truyền ID Facebook hoặc ID không còn trong danh sách. Modal chỉ kế thừa ID thuộc danh sách Zalo hiện tại; nếu không hợp lệ thì hiện **Chọn tài khoản**, không gửi request usage cho ID đó. Khi danh sách mất tài khoản đang chọn, xóa snapshot usage và bỏ kết quả/lỗi đến muộn. Refresh metadata cùng tài khoản không phát sinh lần đọc mới.
 
-Hồi quy Electron trong `scripts/run-zalo-phone-check-ui-smoke.cjs` bao phủ ID rỗng/Facebook/không tồn tại, chọn lại Zalo, kế thừa QR/Web/Server, refresh danh sách và tài khoản bị gỡ khi đang chờ usage. Hai typecheck và smoke UI 600 dòng đạt. Chỉ sửa renderer; không đổi quota/policy chiến dịch, DB, Chat API hoặc Server. Bộ cài 8.6.0 đã đóng gói trước đó chưa chứa bản sửa này.
+**Tải data không cần chọn tài khoản.** Khi mở form, IPC riêng `contacts:zalo-phone-check:limit` đọc đúng một setting public `zalo.phone_check.daily_limit` qua Supabase HTTP hiện có, không đọc account/claim/consume hoặc quota chiến dịch. Kiểm tra main-frame, đăng nhập/quyền Zalo, phiên sau await và deadline 6 giây; chỉ trả một số, không trả cấu hình khác. Giữ quy tắc default/range của RPC V407 (thiếu/sai setting dùng 600). Chờ cùng request nếu bấm tải trong lúc đọc; lỗi được thử lại khi người dùng bấm tải. Đóng/đổi phiên bỏ phản hồi cũ, không tự mở lại importer. Không thêm polling/connection hoặc migration.
 
-Thanh tổng kết giữ số lượng/tiến độ, hạn mức ngày và bộ lọc trên cùng hàng khi đủ chỗ; chỉ thông báo lỗi/trạng thái cần chiếm trọn hàng. Kiểm tra giao diện Electron 600 dòng ở 1440/1024 px nằm ngang, 800 px tự xuống hàng không tràn. Cleanup khi modal còn rảnh không ghi “Đã đóng phiên kiểm tra”, tránh thông báo sai khi React StrictMode chạy lại effect ở dev; lượt đang chạy vẫn hủy/cleanup như cũ. Smoke StrictMode và hồi quy dừng/đóng đạt.
+Số lượng mặc định/max và upload lấy hạn mức chung; chọn tài khoản sau vẫn giữ data. Usage tài khoản mới hơn được ưu tiên, kết quả đọc cấu hình cũ không ghi đè. 600/601 kiểm tra sau chuẩn hóa/loại trùng, không dùng remaining và không tự cắt. Chỉ Bắt đầu cần tài khoản và snapshot usage hợp lệ; main/loader vẫn xác nhận giới hạn trước cấp lượt như cũ. Lỗi hoặc đang chờ usage không khóa tải data.
+
+Khôi phục bố cục trước phần hạn mức: cụm số lượng/tiến độ bên trái, bộ lọc bên phải. Chỉ thêm **Hôm nay: N/600 lượt** trong cụm số liệu, số còn lại/ngày Việt Nam nằm trong tooltip; bỏ khối hạn mức và dòng ngày/giờ riêng, không có note dưới tài khoản. Cleanup khi form còn rảnh không ghi “Đã đóng phiên kiểm tra”, tránh thông báo sai trong StrictMode; lượt đang chạy vẫn hủy/cleanup như cũ.
+
+Hồi quy Node/Electron bao phủ read-only setting, default/range/error/abort/deadline, main-frame và đổi phiên; upload trước chọn tài khoản, 600/601 và 125, pending/error usage độc lập, retry cấu hình lỗi, cấu hình muộn sau usage hoặc đóng, kế thừa QR/Web/Server và gỡ tài khoản. UI 600 hàng vẫn chỉ render một hàng khi cập nhật kết quả, cập nhật usage không render hàng nào. Hai typecheck và smoke đạt. Bản sửa cần cập nhật Desktop; không đổi/deploy Server hoặc Chat API, không đổi quota/policy chiến dịch và không apply migration. Bộ cài 8.6.0 trước đó chưa chứa bản sửa.
 
 ### Apply và hiệu năng
 

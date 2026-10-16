@@ -39,6 +39,12 @@ win.electronAPI = {
   ingestDataGroup: async (payload: any) => { win.phoneSmoke.ingested = payload; return { insertedMembershipCount: payload.rows.length, reactivatedMembershipCount: 0, alreadyMemberCount: 0, invalidCount: 0, incompatibleCount: 0, conflictCount: 0, conflicts: [] } },
 
   zaloPhoneCheck: {
+    getLimit: async () => {
+      win.phoneSmoke.limitRequests = (win.phoneSmoke.limitRequests || 0) + 1
+      return win.phoneSmoke.deferLimit
+        ? new Promise((resolve, reject) => { (win.phoneSmoke.limitReads ||= []).push({ resolve, reject }) })
+        : win.phoneSmoke.dailyLimit || 600
+    },
     usage: async (accountId: number) => {
       win.phoneSmoke.usageRequests.push(accountId)
       if (!useCampaignStore.getState().accounts.some(account => account.id === accountId && account.flatformType === 'zalo')) {

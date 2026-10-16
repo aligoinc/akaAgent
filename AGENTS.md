@@ -629,6 +629,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Phone check upload**: tải data không cần chọn tài khoản; IPC `contacts:zalo-phone-check:limit` chỉ đọc setting ngày public qua HTTP hiện có, không claim/consume. Giữ bố cục cũ, chỉ thêm bộ đếm ngày ngắn trong cụm số liệu; [hợp đồng](docs/ZALO_PHONE_CHECK.md#tài-khoản-ban-đầu-của-modal--17102026).
+
 - **Phone check usage snapshots**: tải data reset `runId`, nên request đọc hạn mức phải có generation riêng và bị vô hiệu hóa khi Start; bỏ cả success/error cũ sau tải lại. Không dùng bộ đếm chiến dịch. Hồi quy: `node scripts/run-zalo-phone-check-ui-smoke.cjs`; [hợp đồng](docs/ZALO_PHONE_CHECK.md).
 
 - **Lịch sử chiến dịch V408**: mỗi append ghi một mục vào `auto_campaign_logs`, không ghi `auto_campaigns.log`/`updated_at`. Giữ ID/cursor dạng chuỗi và chỉ tiến cursor sau khi đọc hết các trang mới trong cùng `throughId`; dùng tín hiệu log và nhịp refresh hiện có, không suy log mới từ timestamp campaign. RPC đọc tương thích vẫn cho Desktop cũ xem log mới; cập nhật Desktop để có phân trang. Không apply lại V408 hoặc backfill log cũ; xem [hợp đồng](docs/CAMPAIGN_LOGS_V408.md).

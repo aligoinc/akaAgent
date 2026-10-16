@@ -28,7 +28,9 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const zaloAccounts = accounts.filter(account => account.flatformType === 'zalo')
   // Inherited IDs and refreshed account lists must use the same options as the select.
   const accountId = zaloAccounts.some(account => account.id === selectedAccountId) ? selectedAccountId : 0
-  const dailyLimit = useStore(store, state => state.usageAccountId === accountId ? state.usage?.limit ?? null : null)
+  const accountDailyLimit = useStore(store, state => state.usageAccountId === accountId ? state.usage?.limit ?? null : null)
+  const [configuredLimit, setConfiguredLimit] = useState<number | null>(null)
+  const dailyLimit = accountDailyLimit ?? configuredLimit
   const [limit, setLimit] = useState<string | null>(null)
   const limitValue = limit ?? (dailyLimit === null ? '' : String(dailyLimit))
   const [upload, setUpload] = useState(false)
@@ -39,9 +41,31 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const mounted = useRef(true)
   const pending = useRef<Promise<unknown> | null>(null)
   const usageReadGeneration = useRef(0)
+  const limitRequest = useRef<Promise<number> | null>(null)
+  const limitReadGeneration = useRef(0)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
   const showError = (error: unknown) => useUiStore.getState().showAlert(messageOf(error), 'error')
+
+  useEffect(() => {
+    let active = true
+    limitReadGeneration.current++
+    setConfiguredLimit(null)
+    if (!staffId) return
+    const request = window.electronAPI.zaloPhoneCheck.getLimit()
+    limitRequest.current = request
+    void request.then(value => {
+      if (active) setConfiguredLimit(current => current ?? value)
+    }).catch(() => {
+      // Clicking Upload retries a failed read; selecting an account is never required.
+      if (limitRequest.current === request) limitRequest.current = null
+    })
+    return () => { active = false; limitReadGeneration.current++; if (limitRequest.current === request) limitRequest.current = null }
+  }, [staffId])
+
+  useEffect(() => {
+    if (accountDailyLimit !== null) setConfiguredLimit(accountDailyLimit)
+  }, [accountDailyLimit])
 
   useEffect(() => {
     if (dailyLimit !== null) setLimit(value => value !== null && Number(value) > dailyLimit ? String(dailyLimit) : value)
@@ -84,6 +108,23 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
     if (!staffId) closeRef.current()
   }, [staffId])
 
+  const openUpload = async () => {
+    if (store.getState().busy || saving) return
+    if (dailyLimit !== null) { setUpload(true); return }
+    const generation = limitReadGeneration.current
+    const request = limitRequest.current ?? window.electronAPI.zaloPhoneCheck.getLimit()
+    limitRequest.current = request
+    try {
+      const value = await request
+      if (!mounted.current || limitRequest.current !== request || store.getState().busy) return
+      setConfiguredLimit(current => current ?? value)
+      setUpload(true)
+    } catch (error) {
+      if (mounted.current && limitReadGeneration.current === generation) showError(error)
+      if (limitRequest.current === request) limitRequest.current = null
+    }
+  }
+
   const stop = async () => {
     const state = store.getState()
     if (!state.busy || !state.runId) return
@@ -106,7 +147,8 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
     if (store.getState().busy || saving) return
     try {
       if (!zaloAccounts.some(account => account.id === accountId)) throw new Error('Vui lòng chọn tài khoản Zalo.')
-      if (dailyLimit === null) throw new Error('Vui lòng chờ xác nhận hạn mức ngày của tài khoản.')
+      if (accountDailyLimit === null) throw new Error('Vui lòng chờ xác nhận hạn mức ngày của tài khoản.')
+      const dailyLimit = accountDailyLimit
       const count = Number(limitValue)
       if (!Number.isInteger(count) || count < 1 || count > dailyLimit) throw new Error(`Số lượng kiểm tra phải từ 1 đến ${dailyLimit}.`)
       const state = store.getState()
@@ -185,9 +227,9 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
           <option value={0}>Chọn tài khoản</option>{zaloAccounts.map(account => <option key={account.id} value={account.id}>{account.name} · {account.isZaloServer ? 'Zalo Server' : account.isZaloShowWeb ? 'Web' : 'QR'}</option>)}
         </select></label>
         <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={dailyLimit ?? undefined} value={limitValue} onChange={event => setLimit(event.target.value)} disabled={busy || saving || dailyLimit === null} /></label>
-        <button className="btn btn-secondary" disabled={busy || saving || dailyLimit === null} onClick={() => setUpload(true)}>Tải data</button>
+        <button className="btn btn-secondary" disabled={busy || saving} onClick={() => void openUpload()}>Tải data</button>
         {busy ? <button className="btn btn-danger" disabled={stopping} onClick={() => void stop()}>{stopping ? 'Đang dừng…' : 'Dừng'}</button>
-          : <button className="btn btn-primary" disabled={saving || allChecked || dailyLimit === null} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
+          : <button className="btn btn-primary" disabled={saving || allChecked || accountDailyLimit === null} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
       </div>
       <ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} />
       <footer className="modal-footer">

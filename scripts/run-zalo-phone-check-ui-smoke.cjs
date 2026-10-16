@@ -184,7 +184,7 @@ async function main() {
     await dialog.locator('[data-phone-daily-usage]').filter({hasText:'150/600'}).waitFor()
     await page.evaluate(() => { const s=window.phoneSmoke;s.usageReads[0].resolve({allowed:true,date:'2026-10-16',count:599,limit:600,remaining:1,resetAt:'2026-10-16T17:00:00Z'}) })
     assert.match(await dialog.locator('[data-phone-daily-usage]').innerText(),/150\/600/)
-    // Upload/start need the configured limit. Remaining slots do not restrict upload size.
+    // Upload uses the configured limit independently of account usage. Remaining slots do not restrict upload size.
     const uploadPhone = async phone => {
       await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
       await page.getByRole('textbox').first().fill(phone)
@@ -198,7 +198,7 @@ async function main() {
       await page.evaluate(() => { window.phoneSmoke.usageReads=[]; window.phoneSmoke.show() })
       await dialog.waitFor()
       await page.waitForFunction(() => window.phoneSmoke.usageReads.length === 1)
-      assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(),true)
+      assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(),false)
       assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(),true)
       if (outcome === 'resolve') {
         await page.evaluate(() => window.phoneSmoke.usageReads[0].resolve({allowed:true,date:'2026-10-16',count:599,limit:600,remaining:1,resetAt:'2026-10-16T17:00:00Z'}))
@@ -223,7 +223,8 @@ async function main() {
         })
         await dialog.locator('[data-phone-daily-usage]').filter({hasText:'600/600'}).waitFor()
         await uploadPhone('0912345678')
-        assert.match(await dialog.locator('[data-phone-daily-usage]').innerText(),/600\/600.*Còn 0 lượt/)
+        assert.match(await dialog.locator('[data-phone-daily-usage]').innerText(),/600\/600/)
+        assert.match(await dialog.locator('[data-phone-daily-usage]').getAttribute('title'),/Còn 0 lượt/)
         assert.equal(await page.evaluate(() => window.phoneSmoke.usageReads.length),1,'no extra usage request after upload/run')
         await page.evaluate(()=>{window.phoneSmoke.deferUsage=false;window.phoneSmoke.dailyLimit=1000})
         await dialog.getByLabel('Tài khoản Zalo').selectOption('72')
@@ -245,7 +246,7 @@ async function main() {
       } else {
         await page.evaluate(()=>window.phoneSmoke.usageReads[0].reject(new Error('Không đọc được hạn mức')))
         await dialog.getByText('Không đọc được hạn mức',{exact:true}).waitFor()
-        assert.equal(await dialog.getByRole('button',{name:'Tải data',exact:true}).isDisabled(),true)
+        assert.equal(await dialog.getByRole('button',{name:'Tải data',exact:true}).isDisabled(),false)
         assert.equal(await dialog.getByRole('button',{name:'Bắt đầu kiểm tra',exact:true}).isDisabled(),true)
       }
     }
@@ -273,8 +274,17 @@ async function main() {
       assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), valid ? [initialAccountId] : [])
       assert.equal(await dialog.getByText('Phiên hoặc tài khoản không hợp lệ.', { exact: true }).count(), 0)
       if (!valid) {
-        assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), true)
+        assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), false)
         assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
+        if (initialAccountId === 0) {
+          await uploadPhone(await page.evaluate(() => [...window.phoneSmoke.phones, '0912345678'].join('\n')))
+          await page.getByText('Chỉ nhận tối đa 600 SĐT hợp lệ, không trùng theo hạn mức ngày. Vui lòng chia nhỏ file.', { exact: true }).waitFor()
+          await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+          await page.locator('.campaign-import-modal button[title="Đóng"]').click()
+          await uploadPhone(await page.evaluate(() => window.phoneSmoke.phones.join('\n')))
+          await dialog.getByText('600 SĐT', { exact: true }).waitFor()
+          assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [])
+        }
         await dialog.getByLabel('Tài khoản Zalo').selectOption('71')
       }
       await dialog.locator('[data-phone-daily-usage]').filter({ hasText: '125/600' }).waitFor()
@@ -301,12 +311,60 @@ async function main() {
       await settle()
       assert.equal(await dialog.locator('[data-phone-daily-usage]').count(), 0)
       assert.equal(await dialog.getByText('Phiên hoặc tài khoản không hợp lệ.', { exact: true }).count(), 0)
-      assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), true)
+      assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), false)
       assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
       assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [71])
       await closeDialog()
       await page.evaluate(value => window.phoneSmoke.setAccounts(value), accounts)
     }
+    // A slow or failed shared-setting read never requires selecting an account.
+    for (const outcome of ['resolve', 'reject']) {
+      await page.evaluate(() => {
+        const s = window.phoneSmoke
+        s.deferUsage = false; s.deferLimit = true; s.limitReads = []; s.limitRequests = 0; s.usageRequests = []; s.show(0)
+      })
+      await page.waitForFunction(() => window.phoneSmoke.limitReads.length === 1)
+      await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
+      assert.equal(await page.locator('.campaign-import-modal').count(), 0)
+      assert.equal(await page.evaluate(() => window.phoneSmoke.limitRequests), 1, 'reuse pending setting read')
+      if (outcome === 'resolve') {
+        await page.evaluate(() => window.phoneSmoke.limitReads[0].resolve(125))
+        await page.locator('.campaign-import-modal').waitFor()
+        await page.getByRole('textbox').first().fill(await page.evaluate(() => window.phoneSmoke.phones.slice(0,125).join('\n')))
+        await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+        await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+        await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
+        await dialog.getByText('125 SĐT', { exact: true }).waitFor()
+        assert.equal(await dialog.getByLabel('Số lượng kiểm tra').inputValue(), '125')
+      } else {
+        await page.evaluate(() => window.phoneSmoke.limitReads[0].reject(new Error('Không tải được giới hạn kiểm tra SĐT. Vui lòng thử lại.')))
+        await page.getByText('Không tải được giới hạn kiểm tra SĐT. Vui lòng thử lại.', { exact: true }).waitFor()
+        await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+        await page.evaluate(() => { window.phoneSmoke.deferLimit = false })
+        await uploadPhone('0901234567')
+        await dialog.getByText('1 SĐT', { exact: true }).waitFor()
+        assert.equal(await page.evaluate(() => window.phoneSmoke.limitRequests), 2)
+      }
+      assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [])
+      assert.equal(await dialog.getByLabel('Tài khoản Zalo').inputValue(), '0')
+      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
+      await closeDialog()
+    }
+    // Late config cannot replace a newer account limit; closing cannot reopen the importer.
+    await page.evaluate(() => { const s=window.phoneSmoke;s.deferLimit=true;s.limitReads=[];s.dailyLimit=1000;s.show() })
+    await dialog.locator('[data-phone-daily-usage]').filter({ hasText: '125/1000' }).waitFor()
+    await page.evaluate(() => window.phoneSmoke.limitReads[0].resolve(600))
+    await settle()
+    assert.equal(await dialog.getByLabel('Số lượng kiểm tra').inputValue(), '1000')
+    await closeDialog()
+    await page.evaluate(() => { const s=window.phoneSmoke;s.limitReads=[];s.dailyLimit=600;s.show(0) })
+    await page.waitForFunction(() => window.phoneSmoke.limitReads.length === 1)
+    await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
+    await closeDialog()
+    await page.evaluate(() => window.phoneSmoke.limitReads[0].resolve(600))
+    await settle()
+    assert.equal(await page.locator('.campaign-import-modal').count(), 0)
+    await page.evaluate(() => { window.phoneSmoke.deferLimit=false })
     // Development StrictMode replays idle cleanup when opening the modal.
     await page.evaluate(() => { window.phoneSmoke.deferUsage = false; window.phoneSmoke.show(71, true) })
     await dialog.locator('[data-phone-daily-usage]').waitFor()
