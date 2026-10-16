@@ -1,4 +1,4 @@
-import { validateZaloPhoneCheckRequest } from '../../shared/zaloPhoneCheck'
+import { validateZaloPhoneCheckRequest, ZALO_PHONE_CHECK_DAILY_CAPABILITY } from '../../shared/zaloPhoneCheck'
 import { randomUUID, type KeyObject } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { isIP } from 'net'
@@ -561,6 +561,7 @@ export class ZaloServerGateway {
         this.scheduleClientSessionExpiry(client, message.token, session.expiresAt)
         client.socket.send(JSON.stringify({
           type: 'hello',
+          phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY],
           snapshot: this.options.getSnapshot(session.staffId),
           events: this.getBufferedEvents(session.staffId),
           operations: this.options.getOperations(session.staffId)
@@ -584,6 +585,7 @@ export class ZaloServerGateway {
       this.scheduleControlRevalidation(client)
       client.socket.send(JSON.stringify({
         type: 'hello',
+        phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY],
         snapshot: this.getClientSnapshot(client.auth),
         events: [],
         operations: this.options.getOperations(ticket.staffId),

@@ -1,0 +1,68 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "cron": {
+    "active": true,
+    "command": "\nUPDATE public.auto_accounts\nSET zalo_phone_check_usage=jsonb_build_object('date',timezone('Asia/Ho_Chi_Minh',statement_timestamp())::date,'count',0)\nWHERE zalo_phone_check_usage->>'date' < timezone('Asia/Ho_Chi_Minh',statement_timestamp())::date::text\n  AND (zalo_phone_check_usage->>'count')::integer > 0;\n",
+    "jobname": "zalo_phone_check_usage_reset_daily",
+    "schedule": "0 17 * * *"
+  },
+  "setting": {
+    "id": 70,
+    "key": "zalo.phone_check.daily_limit",
+    "value": "600",
+    "active": true,
+    "secret": false
+  },
+  "function": {
+    "acl": "{postgres=X/postgres,service_role=X/postgres,anon=X/postgres,authenticated=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=5s"
+    ],
+    "checksum": "91fb0001b629cb058a41454068b439d2",
+    "signature": "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)",
+    "volatility": "v",
+    "security_definer": true
+  },
+  "migration": {
+    "name": "migration_v407_zalo_phone_check_daily_limit",
+    "version": "20261016090818"
+  },
+  "non_null_usage": 0,
+  "unchanged": {
+    "cron": "e1d29786a3e8f7af4945579bf20c7d2e",
+    "policy": "de5ce939e25e69700b637963e54c4502",
+    "settings": "ea82696496e648e0eace87b56edcc356",
+    "quota_functions": [
+      {
+        "checksum": "288c1dffb3764a9f8b4bd9626bf8dc61",
+        "signature": "aka_agent_get_account_action_status_today(bigint,text)"
+      },
+      {
+        "checksum": "a73e7ec7edc66cf6389b4233ffbcc3de",
+        "signature": "increment_auto_account_action_count(bigint,text,integer)"
+      },
+      {
+        "checksum": "14ea7ed9cdee3aa6e743c45f9282a195",
+        "signature": "reset_auto_account_action_status_daily()"
+      }
+    ]
+  },
+  "sqlSmoke": "pre-apply and post-apply rollback passed",
+  "performance": {
+    "productionReset": {
+      "accounts": 7155,
+      "eligibleRows": 0,
+      "executionMs": 3.482,
+      "scope": "EXPLAIN ANALYZE in rollback, all usage NULL"
+    },
+    "local": {
+      "accounts": 7143,
+      "eligibleRows": 500,
+      "resetExecutionMs": 4.653,
+      "pointReadExecutionMs": 0.073
+    }
+  },
+  "limitations": "No real Zalo requests, installers, release or Chat deployment."
+}

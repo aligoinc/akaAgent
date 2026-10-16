@@ -7,6 +7,7 @@ const ts = require('typescript')
 const root = resolve(__dirname, '..'), modules = new Map(), handlers = new Map()
 const user = { staffId: 7, organizationId: 9 }
 let credentials = { username: 'fixture', password: 'fixture' }
+let phoneDbClient
 function load(file) {
   const filename = resolve(root, file)
   if (modules.has(filename)) return modules.get(filename)
@@ -16,6 +17,7 @@ function load(file) {
     if (id === 'electron') return { ipcMain: { handle: (name, fn) => handlers.set(name, fn) } }
     // The Web abort check exercises session.fetch directly, without creating an SDK API.
     if (id === 'zca-js') return { API: class {} }
+    if (id.endsWith('/supabaseClient')) return { getSupabaseClient: () => phoneDbClient }
     if (id.endsWith('/currentUser')) return { requireCurrentUser: () => user, requireCurrentUserCredentials: () => credentials, getCurrentUserCredentials: () => credentials, runWithCurrentUser: (_, fn) => fn() }
     if (id.endsWith('/entitlementRepository')) return { ensureCurrentUserFeatureActive: async () => {} }
     if (id.endsWith('/backgroundPageManager')) return { BackgroundPageManager: class { destroy() {} destroyAll() {} } }
@@ -43,9 +45,19 @@ const tick = () => new Promise(resolve => setImmediate(resolve))
 function fixture(options = {}) {
   const events = [], calls = []
   let count = 0, held = false
+  let used = options.used || 0
+  const reservations = []
   const account = { id: 71, flatformType: 'zalo', isActive: true, isZaloServer: !!options.server, isZaloShowWeb: !!options.web, loginStatus: 'đã đăng nhập', status: 'tạm dừng', ...options.account }
   const claim = async () => { calls.push('claim'); if (options.busy) return { claimed: false }; held = true; return { claimed: true, previousStatus: 'tạm dừng', claimToken: 'claim-token', staffId: 7 } }
   const db = {
+    getZaloPhoneCheckUsage: async (...args) => {
+      reservations.push(args)
+      assert.ok(held); assert.equal(args[3], true); assert.equal(args[4], !!options.legacy)
+      if (options.reserve) return options.reserve(args)
+      const limit = options.dailyLimit || 600, allowed = used < limit
+      if (allowed) used++
+      return { allowed, date: '2026-10-16', count: used, limit, remaining: Math.max(0, limit-used), resetAt: '2026-10-16T17:00:00Z' }
+    },
     getAccount: async () => account,
     getSystemSettingValue: async key => { calls.push('setting'); assert.equal(key, 'zalo.phone_check.hour_limit_wait_minutes'); return options.setting ? options.setting() : '60' },
     claimZaloAccountRuntimeOperation: claim, claimZaloServerContactScan: claim,
@@ -64,7 +76,7 @@ function fixture(options = {}) {
   }
   const loader = new ContactLoader(db, {}, win, undefined, runtime, { zaloRuntimeTarget: options.server ? 'server' : 'desktop', ...(options.legacy ? { contactDatasetAuth: 'server_claim' } : {}) })
   loader.getZaloFriendApiDelayMs = () => 0
-  return { loader, db, win, events, calls, runtime, held: () => held }
+  return { loader, db, win, events, calls, runtime, reservations, held: () => held }
 }
 async function checkNativeWebAbort() {
   const { app, session } = require('electron')
@@ -99,6 +111,81 @@ async function checkNativeWebAbort() {
   }
 }
 async function main() {
+  // Real repository: one HTTP/RPC attempt, strict response, credential vs Server claim.
+  {
+    const { getZaloPhoneCheckUsage }=load('src/main/data/repositories/zaloPhoneCheckRepository.ts')
+    const response={allowed:true,date:'2026-10-16',count:1,limit:600,remaining:599,resetAt:'2026-10-16T17:00:00Z'}
+    let calls=0, params, failure=null, value=response
+    phoneDbClient={rpc:(name,input)=>{calls++;assert.equal(name,'aka_agent_zalo_phone_check_usage');params=input;return {abortSignal:async()=>({data:value,error:failure})}}}
+    const signal=new AbortController().signal
+    assert.equal((await getZaloPhoneCheckUsage(71,'desktop','token',true,false,signal)).count,1)
+    assert.equal(params.p_auth_username,'fixture');assert.equal(params.p_consume,true)
+    await getZaloPhoneCheckUsage(71,'server','token',true,true,signal)
+    assert.equal(params.p_auth_username,null);assert.equal(params.p_auth_password,null)
+    failure={code:'PGRST202'};await assert.rejects(getZaloPhoneCheckUsage(71,'desktop','token',true,false,signal),/cập nhật backend/)
+    failure={code:'OTHER',message:'password=secret'};const before=calls
+    await assert.rejects(getZaloPhoneCheckUsage(71,'desktop','token',true,false,signal),err=>/chưa gửi tra cứu/.test(err.message)&&!err.message.includes('secret'))
+    assert.equal(calls,before+1)
+    failure=null;value={...response,count:601,remaining:0}
+    await assert.rejects(getZaloPhoneCheckUsage(71,'desktop','token',true,false,signal),/không hợp lệ/)
+  }
+  // New Desktop refuses a legacy Server without the daily-limit capability.
+  {
+    const { ZaloServerClient }=load('src/main/services/zaloServerClient.ts')
+    const server=new ZaloServerClient({})
+    server.user={staffId:7,organizationId:9,entitlements:{zalo:true},isZaloServer:true}
+    server.stopped=false;server.authenticated=true
+    let sent=0
+    server.socket={readyState:1,send:(raw,cb)=>{sent++;cb();const request=JSON.parse(raw);server.resolveCommand({type:'command-result',requestId:request.requestId,ok:true,result:{ok:true}})}}
+    await assert.rejects(server.executeCommand('contacts.checkZaloPhones',71,req()),/cập nhật akaAgent Zalo Server/)
+    assert.equal(sent,0)
+    server.phoneCheckDailyLimitSupported=true
+    assert.deepEqual(await server.executeCommand('contacts.checkZaloPhones',71,req()),{ok:true})
+    assert.equal(sent,1)
+  }
+  // Independent daily cap: QR/Web/legacy/Chat all reserve before lookup.
+  for (const mode of [{}, { web: true }, { server: true, legacy: true }, { server: true }]) {
+    for (const used of [599, 600]) {
+      const f = fixture({ ...mode, used }), r = await f.loader.checkZaloPhones(req())
+      assert.equal(f.calls.filter(c => /^090/.test(c)).length, used === 599 ? 1 : 0)
+      assert.equal(r.usage.count,600); assert.equal(r.usage.remaining,0)
+      assert.equal(r.stopped,true); assert.match(r.error,/600\/600.*giờ Việt Nam/)
+      assert.deepEqual(r.rows.map(row=>row.status),used===599?['found','pending','pending']:['pending','pending','pending'])
+      assert.equal(f.calls.filter(c=>c==='release').length,1)
+    }
+    for (const lastError of [error(312),error(221),new TypeError('fetch failed')]) {
+      const f=fixture({ ...mode, used:599, lookup:async()=>{throw lastError} })
+      f.loader.sleep=async()=>{throw new Error('Must not sleep at the daily cap')}
+      const r=await f.loader.checkZaloPhones(req())
+      assert.equal(f.reservations.length,1); assert.match(r.error,/600\/600/)
+      assert.deepEqual(r.rows.map(row=>row.status),['unknown','pending','pending'])
+    }
+    const f=fixture({ ...mode, used:598, lookup:async({count})=>{if(count===1)throw new TypeError('fetch failed');return {user:{uid:'1234'}}} })
+    const r=await f.loader.checkZaloPhones(req())
+    assert.deepEqual(f.calls.filter(c=>/^090/.test(c)),[phones[0],phones[0]])
+    assert.equal(r.usage.count,600); assert.equal(r.rows[0].status,'found')
+  }
+  {
+    const f=fixture({ reserve:async()=>{throw new Error('DB confirmation lost')} })
+    const r=await f.loader.checkZaloPhones(req())
+    assert.equal(f.reservations.length,1); assert.equal(f.calls.filter(c=>/^090/.test(c)).length,0)
+    assert.ok(r.rows.every(row=>row.status==='pending')); assert.equal(f.held(),false)
+  }
+  {
+    let finish, entered
+    const ready=new Promise(resolve=>{entered=resolve})
+    const f=fixture({ reserve:()=>{entered();return new Promise(resolve=>{finish=resolve})} }), request=req()
+    const pending=f.loader.checkZaloPhones(request); await ready
+    f.loader.cancelZaloPhoneCheck(71,request.runId)
+    const r=await pending
+    finish({allowed:true,date:'2026-10-16',count:1,limit:600,remaining:599,resetAt:'2026-10-16T17:00:00Z'}); await tick()
+    assert.equal(f.calls.filter(c=>/^090/.test(c)).length,0); assert.equal(r.stopped,true)
+    assert.equal(f.calls.filter(c=>c==='release').length,1)
+  }
+  {
+    const f=fixture({lookup:({signal})=>searchZaloPhone(async src=>{if(src===32)throw error(312);return {uid:'1234'}},async()=> 'hour',signal)})
+    await f.loader.checkZaloPhones(req([phones[0]])); assert.equal(f.reservations.length,1,'32→40 is one reservation')
+  }
   assert.deepEqual(h.normalizeZaloCheckPhones(['+84 901 234 567', '0901234567', 901234567, 'bad', '', '01621234567']), ['0901234567', '0321234567'])
   assert.equal(h.normalizeZaloCheckPhones(phones.slice(0, 300)).length, 300)
   assert.throws(() => h.normalizeZaloCheckPhones(phones), /chia nhỏ/)
@@ -595,12 +682,13 @@ async function main() {
     startControlOperation: () => { throw new Error('Phone scan must not outlive its socket') },
     cancelPhoneCheck: (...args) => cancellations.push(args)
   })
-  class Socket extends EventEmitter { readyState = 1; send() {} close() { this.readyState = 3; this.emit('close') } }
+  class Socket extends EventEmitter { readyState = 1; sent=[]; send(value) { this.sent.push(JSON.parse(value)) } close() { this.readyState = 3; this.emit('close') } }
   const socket = new Socket()
   gateway.sessions.set('session', { staffId: 7, organizationId: 9, expiresAt: Date.now() + 60000 })
   gateway.acceptSocket(socket, { headers: {} })
   const client = [...gateway.clients][0]
   await gateway.handleSocketMessage(client, JSON.stringify({ type: 'authenticate', token: 'session' }))
+  assert.ok(socket.sent[0].phoneCheckCapabilities.includes(h.ZALO_PHONE_CHECK_DAILY_CAPABILITY))
   const remoteRequest = req()
   const running = gateway.handleSocketMessage(client, JSON.stringify({ type: 'command', requestId: 'transport-request', command: 'contacts.checkZaloPhones', args: [71, remoteRequest] }))
   await remoteStarted; socket.close()
@@ -611,6 +699,20 @@ async function main() {
   registerZaloPhoneCheckHandlers(f.win, f.db, f.loader, f.loader, { executeCommand: async (...args) => { serverCalls.push(args); throw new Error('Lệnh server không được hỗ trợ') } }, () => false)
   const ev = { sender: f.win.webContents, senderFrame: f.win.webContents.mainFrame }
   const start = handlers.get(h.ZALO_PHONE_CHECK_IPC.start), cancel = handlers.get(h.ZALO_PHONE_CHECK_IPC.cancel)
+  const readUsage=handlers.get(h.ZALO_PHONE_CHECK_IPC.usage)
+  await assert.rejects(readUsage({...ev,senderFrame:{}},71),/quyền/)
+  await assert.rejects(readUsage(ev,-1),/không hợp lệ/)
+  {
+    const original=f.db.getZaloPhoneCheckUsage
+    let finish, entered
+    const ready=new Promise(resolve=>{entered=resolve})
+    f.db.getZaloPhoneCheckUsage=async (...args)=>{assert.equal(args[3],false);assert.equal(args[2],null);entered();return new Promise(resolve=>{finish=resolve})}
+    const pending=readUsage(ev,71);await ready
+    credentials={username:'changed',password:'changed'}
+    finish({allowed:true,date:'2026-10-16',count:0,limit:600,remaining:600,resetAt:'2026-10-16T17:00:00Z'})
+    await assert.rejects(pending,/Phiên đăng nhập/)
+    credentials={username:'fixture',password:'fixture'};f.db.getZaloPhoneCheckUsage=original
+  }
   await assert.rejects(start({ ...ev, senderFrame: {} }, req()), /quyền/)
   await assert.rejects(start(ev, req(phones)), /300/)
   assert.equal((await start(ev, req([phones[0]]))).rows[0].status, 'found')

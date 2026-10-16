@@ -16,6 +16,9 @@ async function main() {
     const errors = []; page.on('pageerror', error => errors.push(error.message))
     await page.locator('[data-phone-row]').last().waitFor()
     assert.equal(await page.locator('[data-phone-row]').count(), 300)
+    await page.evaluate(() => { const s=window.phoneSmoke; s.renders={}; s.store.setState({ usage: { allowed:true,date:'2026-10-16',count:125,limit:600,remaining:475,resetAt:'2026-10-16T17:00:00Z' } }) })
+    await page.locator('[data-phone-daily-usage]').filter({hasText:'125/600'}).waitFor()
+    assert.deepEqual(await page.evaluate(() => window.phoneSmoke.renders), {}, 'usage-only update must not render any phone row')
     await page.evaluate(() => { const s = window.phoneSmoke; s.renders = {}; s.store.begin('run-perf', 71); s.store.row({ runId: 'run-perf', accountId: 71, sequence: 1, row: { ...s.store.getState().rows[s.phones[0]], status: 'checking' } }) })
     await page.locator('.phone-check-status.is-checking').waitFor()
     assert.deepEqual(await page.evaluate(() => window.phoneSmoke.renders), { '0900000000': 1 })
@@ -171,8 +174,58 @@ async function main() {
     await page.waitForFunction(() => window.phoneSmoke.startCount === 6)
     assert.equal(await page.evaluate(() => window.phoneSmoke.request.phones[0]), '0900000050')
     await dialog.getByRole('button', { name: 'Dừng', exact: true }).click()
+    // Account changes discard late usage snapshots, independently of row data.
+    await page.evaluate(() => { window.phoneSmoke.deferUsage=true;window.phoneSmoke.usageReads=[] })
+    await dialog.getByLabel('Tài khoản Zalo').selectOption('72')
+    await page.waitForFunction(() => window.phoneSmoke.usageReads.length===1)
+    await dialog.getByLabel('Tài khoản Zalo').selectOption('71')
+    await page.waitForFunction(() => window.phoneSmoke.usageReads.length===2)
+    await page.evaluate(() => { const s=window.phoneSmoke;s.usageReads[1].resolve({allowed:true,date:'2026-10-16',count:150,limit:600,remaining:450,resetAt:'2026-10-16T17:00:00Z'}) })
+    await dialog.locator('[data-phone-daily-usage]').filter({hasText:'150/600'}).waitFor()
+    await page.evaluate(() => { const s=window.phoneSmoke;s.usageReads[0].resolve({allowed:true,date:'2026-10-16',count:599,limit:600,remaining:1,resetAt:'2026-10-16T17:00:00Z'}) })
+    assert.match(await dialog.locator('[data-phone-daily-usage]').innerText(),/150\/600/)
+    // Re-upload resets runId to null. Neither a result nor an error from the
+    // initial usage read may become current again after a completed/cancelled run.
+    const uploadPhone = async phone => {
+      await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
+      await page.getByRole('textbox').first().fill(phone)
+      await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+      await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+      await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
+    }
+    for (const outcome of ['resolve', 'reject']) {
+      await dialog.getByRole('button', { name: 'Đóng kiểm tra SĐT', exact: true }).click()
+      await page.getByText('Đã đóng', { exact: true }).waitFor()
+      await page.evaluate(() => { window.phoneSmoke.usageReads=[]; window.phoneSmoke.show() })
+      await dialog.waitFor()
+      await page.waitForFunction(() => window.phoneSmoke.usageReads.length === 1)
+      await uploadPhone('0901234567')
+      await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).click()
+      if (outcome === 'resolve') {
+        await page.evaluate(() => {
+          const s=window.phoneSmoke, phone=s.request.phones[0]
+          const row={id:phone,phone,name:'',uid:'',status:'found',note:'',accountId:71}
+          s.row({runId:s.request.runId,accountId:71,sequence:1,row,
+            usage:{allowed:true,date:'2026-10-16',count:600,limit:600,remaining:0,resetAt:'2026-10-16T17:00:00Z'}})
+          s.complete([row],false)
+        })
+        await dialog.locator('[data-phone-daily-usage]').filter({hasText:'600/600'}).waitFor()
+      } else {
+        await dialog.getByRole('button', { name: 'Dừng', exact: true }).click()
+      }
+      await uploadPhone('0912345678')
+      await page.evaluate(async outcome => {
+        const read=window.phoneSmoke.usageReads[0]
+        if (outcome === 'resolve') read.resolve({allowed:true,date:'2026-10-16',count:599,limit:600,remaining:1,resetAt:'2026-10-16T17:00:00Z'})
+        else read.reject(new Error('Lỗi đọc hạn mức cũ'))
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      }, outcome)
+      if (outcome === 'resolve') assert.match(await dialog.locator('[data-phone-daily-usage]').innerText(),/600\/600.*Còn 0 lượt/)
+      assert.equal(await dialog.getByText('Lỗi đọc hạn mức cũ', { exact: true }).count(),0)
+      assert.equal(await page.evaluate(() => window.phoneSmoke.usageReads.length),1,'no extra usage request after upload/run')
+    }
     assert.deepEqual(errors, [])
-    console.log('PASS Electron: 300 rows, exactly 1 row renders per update, real text/Excel import strips metadata, template round-trip, both group types, live result, locked form and stop/close confirmation')
+    console.log('PASS Electron: 300 rows, exactly 1 row renders per update, real text/Excel import strips metadata, template round-trip, both group types, live result, locked form, stop/close confirmation, stale usage success/error ignored after run and re-upload')
   } catch (error) { if (page) console.error((await page.locator('body').innerText()).slice(-2500)); throw error }
   finally { if (app) await app.close(); rmSync(dir, { recursive: true, force: true }) }
 }

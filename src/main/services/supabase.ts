@@ -18,6 +18,7 @@ import * as loginScreenRepo from '../data/repositories/loginScreenRepository'
 import * as reportRepo from '../data/repositories/reportRepository'
 import * as zaloApiErrorLogRepo from '../data/repositories/zaloApiErrorLogRepository'
 import * as systemSettingsRepo from '../data/repositories/systemSettingsRepository'
+import * as zaloPhoneCheckRepo from '../data/repositories/zaloPhoneCheckRepository'
 import * as emailTrackingRepo from '../data/repositories/emailTrackingRepository'
 import * as dataGroupRepo from '../data/repositories/dataGroupRepository'
 import * as runtimeClockRepo from '../data/repositories/runtimeClockRepository'
@@ -27,6 +28,9 @@ import * as runtimeClockRepo from '../data/repositories/runtimeClockRepository'
  * Keeps a thin service API so callers do not know repository boundaries.
  */
 export class SupabaseService {
+  getZaloPhoneCheckUsage(...args: Parameters<typeof zaloPhoneCheckRepo.getZaloPhoneCheckUsage>) {
+    return zaloPhoneCheckRepo.getZaloPhoneCheckUsage(...args)
+  }
   getRuntimeClock() { return runtimeClockRepo.getDatabaseRuntimeClock() }
   invalidateRuntimeClock() { runtimeClockRepo.invalidateDatabaseRuntimeClock() }
 

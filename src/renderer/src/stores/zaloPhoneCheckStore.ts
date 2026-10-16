@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import { createZaloPhoneCheckRow, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckRow, type ZaloPhoneCheckStatus } from '../../../shared/zaloPhoneCheck'
+import { createZaloPhoneCheckRow, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckRow, type ZaloPhoneCheckStatus, type ZaloPhoneCheckUsage } from '../../../shared/zaloPhoneCheck'
 
 export type PhoneCheckFilter = 'all' | ZaloPhoneCheckStatus
 interface State {
@@ -8,9 +8,11 @@ interface State {
   runId: string | null; accountId: number | null; sequence: number
   busy: boolean; stopping: boolean; message: string
   processed: number; checkingPhone: string
+  usageAccountId: number | null; usage: ZaloPhoneCheckUsage | null; usageError: string
 }
 const initial = (): State => ({ ids: [], visibleIds: [], rows: {}, selected: {}, filter: 'all', runId: null,
-  accountId: null, sequence: 0, busy: false, stopping: false, message: '', processed: 0, checkingPhone: '' })
+  accountId: null, sequence: 0, busy: false, stopping: false, message: '', processed: 0, checkingPhone: '',
+  usageAccountId: null, usage: null, usageError: '' })
 const hasResult = (status: ZaloPhoneCheckStatus) => status === 'found' || status === 'not_found'
 function visible(state: State, rows = state.rows) {
   if (state.filter === 'all') return state.ids
@@ -21,10 +23,12 @@ export function createZaloPhoneCheckStore() {
   const store = createStore<State>(() => initial())
   return Object.assign(store, {
     load(phones: string[]) {
-      store.setState({ ...initial(), ids: phones, visibleIds: phones, rows: Object.fromEntries(phones.map(phone => [phone, createZaloPhoneCheckRow(phone)])) }, true)
+      const { usage, usageAccountId, usageError } = store.getState()
+      store.setState({ ...initial(), usage, usageAccountId, usageError, ids: phones, visibleIds: phones, rows: Object.fromEntries(phones.map(phone => [phone, createZaloPhoneCheckRow(phone)])) }, true)
     },
     begin(runId: string, accountId: number) {
-      store.setState({ runId, accountId, sequence: 0, busy: true, stopping: false, checkingPhone: '', message: '' })
+      store.setState(state => ({ runId, accountId, sequence: 0, busy: true, stopping: false, checkingPhone: '', message: '',
+        usageAccountId: accountId, usage: state.usageAccountId === accountId ? state.usage : null, usageError: '' }))
     },
     row(event: ZaloPhoneCheckEvent) {
       const state = store.getState()
@@ -35,7 +39,7 @@ export function createZaloPhoneCheckStore() {
       store.setState({ rows, visibleIds: visible(state, rows), sequence: event.sequence,
         processed: state.processed + Number(hasResult(row.status)) - Number(hasResult(prior.status)),
         checkingPhone: row.status === 'checking' ? row.phone : '',
-        message: row.note })
+        message: row.note, ...(event.usage ? { usage: event.usage, usageAccountId: event.accountId, usageError: '' } : {}) })
     },
     complete(result: ZaloPhoneCheckResult) {
       const state = store.getState()
@@ -49,7 +53,7 @@ export function createZaloPhoneCheckStore() {
       const processed = state.ids.filter(id => hasResult(rows[id].status)).length
       const remaining = state.ids.length - processed
       store.setState({ rows, visibleIds: visible(state, rows), sequence: result.sequence, busy: false, stopping: false,
-        checkingPhone: '', processed,
+        checkingPhone: '', processed, ...(result.usage ? { usage: result.usage, usageAccountId: result.accountId, usageError: '' } : {}),
         message: result.error || (result.stopped ? 'Đã dừng kiểm tra.' : remaining
           ? `Đã hoàn tất lượt này. Còn ${remaining} SĐT chưa có kết quả. Bấm Tiếp tục kiểm tra để chạy tiếp.`
           : 'Đã kiểm tra xong.') })

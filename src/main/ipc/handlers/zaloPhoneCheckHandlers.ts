@@ -5,6 +5,7 @@ import { ensureCurrentUserFeatureActive } from '../../data/repositories/entitlem
 import type { SupabaseService } from '../../services/supabase'
 import type { ContactLoader } from '../../services/contactLoader'
 import type { ZaloServerClient } from '../../services/zaloServerClient'
+import { withRequestDeadline } from '../../services/requestDeadline'
 
 export function registerZaloPhoneCheckHandlers(window: BrowserWindow, supabase: SupabaseService,
   local: ContactLoader, chat: ContactLoader, server: ZaloServerClient, isChatSync: () => boolean): () => void {
@@ -19,6 +20,21 @@ export function registerZaloPhoneCheckHandlers(window: BrowserWindow, supabase: 
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Không có quyền thực hiện thao tác này.')
   }
   window.webContents.once('destroyed', stop)
+  ipcMain.handle(ZALO_PHONE_CHECK_IPC.usage, async (event, accountId: unknown) => {
+    assertFrame(event)
+    if (typeof accountId !== 'number' || !Number.isSafeInteger(accountId) || accountId <= 0) throw new Error('Tài khoản không hợp lệ.')
+    const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
+    return runWithCurrentUser(user, async () => {
+      await ensureCurrentUserFeatureActive('zalo')
+      const account = await supabase.getAccount(accountId)
+      if (!account || account.flatformType !== 'zalo' || getCurrentUserCredentials() !== credentials) throw new Error('Phiên hoặc tài khoản không hợp lệ.')
+      const usage = await withRequestDeadline(new AbortController().signal, signal => supabase.getZaloPhoneCheckUsage(
+        accountId, account.isZaloServer ? 'server' : 'desktop', null, false, false, signal
+      ), 6_000)
+      if (getCurrentUserCredentials() !== credentials || window.isDestroyed()) throw new Error('Phiên đăng nhập đã thay đổi.')
+      return usage
+    })
+  })
   ipcMain.handle(ZALO_PHONE_CHECK_IPC.start, async (event, input: unknown): Promise<ZaloPhoneCheckResult> => {
     assertFrame(event)
     const request = validateZaloPhoneCheckRequest(input)

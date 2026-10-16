@@ -1,3 +1,4 @@
+import { ZALO_PHONE_CHECK_DAILY_CAPABILITY } from '../../shared/zaloPhoneCheck'
 import { zaloServerUiSnapshotKey } from '../../shared/zaloServerUiSnapshot'
 import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
@@ -70,6 +71,7 @@ interface PendingOperation {
 }
 
 export class ZaloServerClient {
+  private phoneCheckDailyLimitSupported = false
   private readonly origin: string
   private credentials: LoginCredentials | null = null
   private user: AuthUser | null = null
@@ -232,6 +234,9 @@ export class ZaloServerClient {
     }
     if (!this.isCurrentSocket(socket, generation)) {
       throw new Error('Kết nối akaAgent Zalo Server đã thay đổi. Vui lòng thử lại.')
+    }
+    if (command === 'contacts.checkZaloPhones' && !this.phoneCheckDailyLimitSupported) {
+      throw new Error('Zalo Server chưa hỗ trợ giới hạn kiểm tra SĐT theo ngày. Vui lòng cập nhật akaAgent Zalo Server.')
     }
     const expectedRuntimeStartedAt = this.cleanupOnly
       ? this.cleanupRuntimeStartedAt
@@ -449,6 +454,7 @@ export class ZaloServerClient {
     await new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(url.toString())
       this.socket = socket
+      this.phoneCheckDailyLimitSupported = false
       this.authenticated = false
       let opened = false
       let settled = false
@@ -544,6 +550,7 @@ export class ZaloServerClient {
       return
     }
     if (message.type === 'hello') {
+      this.phoneCheckDailyLimitSupported = message.phoneCheckCapabilities?.includes(ZALO_PHONE_CHECK_DAILY_CAPABILITY) === true
       this.uiSnapshotKey = zaloServerUiSnapshotKey(message.snapshot, this.user?.staffId, this.user?.organizationId)
       this.updateRuntimeStartedAt(message.snapshot)
       const serverRestarted = !!this.serverStartedAt && this.serverStartedAt !== message.snapshot.startedAt
