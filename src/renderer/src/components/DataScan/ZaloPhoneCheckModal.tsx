@@ -25,7 +25,9 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const hasRun = useStore(store, state => state.runId !== null)
   const allChecked = useStore(store, state => state.ids.length > 0 && state.processed === state.ids.length)
   const [accountId, setAccountId] = useState(initialAccountId || 0)
-  const [limit, setLimit] = useState('300')
+  const dailyLimit = useStore(store, state => state.usageAccountId === accountId ? state.usage?.limit ?? null : null)
+  const [limit, setLimit] = useState<string | null>(null)
+  const limitValue = limit ?? (dailyLimit === null ? '' : String(dailyLimit))
   const [upload, setUpload] = useState(false)
   const [chooseType, setChooseType] = useState(false)
   const [groupType, setGroupType] = useState<DataTypeCategoryItem | null>(null)
@@ -38,6 +40,10 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   closeRef.current = onClose
   const zaloAccounts = accounts.filter(account => account.flatformType === 'zalo')
   const showError = (error: unknown) => useUiStore.getState().showAlert(messageOf(error), 'error')
+
+  useEffect(() => {
+    if (dailyLimit !== null) setLimit(value => value !== null && Number(value) > dailyLimit ? String(dailyLimit) : value)
+  }, [dailyLimit])
 
   useEffect(() => {
     let active = true
@@ -96,10 +102,11 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
     if (store.getState().busy || saving) return
     try {
       if (!zaloAccounts.some(account => account.id === accountId)) throw new Error('Vui lòng chọn tài khoản Zalo.')
-      const count = Number(limit)
-      if (!Number.isInteger(count) || count < 1 || count > 300) throw new Error('Số lượng kiểm tra phải từ 1 đến 300.')
+      if (dailyLimit === null) throw new Error('Vui lòng chờ xác nhận hạn mức ngày của tài khoản.')
+      const count = Number(limitValue)
+      if (!Number.isInteger(count) || count < 1 || count > dailyLimit) throw new Error(`Số lượng kiểm tra phải từ 1 đến ${dailyLimit}.`)
       const state = store.getState()
-      const phones = normalizeZaloCheckPhones(state.ids.filter(id => state.rows[id].status === 'pending' || state.rows[id].status === 'unknown'))
+      const phones = normalizeZaloCheckPhones(state.ids.filter(id => state.rows[id].status === 'pending' || state.rows[id].status === 'unknown'), dailyLimit)
       const runId = crypto.randomUUID()
       // Upload resets runId; it must never make a pre-run usage read current again.
       usageReadGeneration.current++
@@ -173,12 +180,12 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
         <label>Tài khoản Zalo<select className="stepper-input" value={accountId} onChange={event => setAccountId(Number(event.target.value))} disabled={busy || saving}>
           <option value={0}>Chọn tài khoản</option>{zaloAccounts.map(account => <option key={account.id} value={account.id}>{account.name} · {account.isZaloServer ? 'Zalo Server' : account.isZaloShowWeb ? 'Web' : 'QR'}</option>)}
         </select></label>
-        <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={300} value={limit} onChange={event => setLimit(event.target.value)} disabled={busy || saving} /></label>
-        <button className="btn btn-secondary" disabled={busy || saving} onClick={() => setUpload(true)}>Tải data</button>
+        <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={dailyLimit ?? undefined} value={limitValue} onChange={event => setLimit(event.target.value)} disabled={busy || saving || dailyLimit === null} /></label>
+        <button className="btn btn-secondary" disabled={busy || saving || dailyLimit === null} onClick={() => setUpload(true)}>Tải data</button>
         {busy ? <button className="btn btn-danger" disabled={stopping} onClick={() => void stop()}>{stopping ? 'Đang dừng…' : 'Dừng'}</button>
-          : <button className="btn btn-primary" disabled={saving || allChecked} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
+          : <button className="btn btn-primary" disabled={saving || allChecked || dailyLimit === null} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
       </div>
-      <p className="phone-check-hint">Tối đa 300 SĐT hợp lệ, không trùng. Mỗi lượt kiểm tra các số Chưa kiểm tra hoặc Chưa xác định theo thứ tự danh sách và số lượng đã đặt.</p>
+      <p className="phone-check-hint">{dailyLimit === null ? 'Chọn tài khoản và chờ xác nhận hạn mức ngày để tải data.' : `Tối đa ${dailyLimit} SĐT hợp lệ, không trùng theo hạn mức ngày.`} Mỗi lượt kiểm tra các số Chưa kiểm tra hoặc Chưa xác định theo thứ tự danh sách và số lượng đã đặt.</p>
       <ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} />
       <footer className="modal-footer">
         <button className="btn btn-secondary" disabled={busy || saving} onClick={() => { try { selectedRows(); setChooseType(true) } catch (error) { showError(error) } }}>Lưu vào nhóm data</button>
@@ -196,7 +203,8 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
       title="Tải danh sách SĐT kiểm tra Zalo" submitLabel="Thêm SĐT" contextSlot={<p>Chỉ lấy số điện thoại. Tên, UID, Email và Info từ nguồn nhập sẽ được bỏ.</p>}
       onInsert={() => undefined} onClose={() => setUpload(false)} onSubmitRows={({ rows }) => {
         // Copy only phones across the importer boundary; never retain imported identities or metadata.
-        const phones = normalizeZaloCheckPhones(rows.map(row => row.phone))
+        if (dailyLimit === null) throw new Error('Chưa xác nhận được hạn mức kiểm tra SĐT.')
+        const phones = normalizeZaloCheckPhones(rows.map(row => row.phone), dailyLimit)
         store.load(phones)
       }} />}
     {groupType && <DataGroupPickerModal compatibleDataTypeCategoryItemId={groupType.id} onSelect={group => void saveGroup(group)} onClose={() => { if (!saving) setGroupType(null) }} />}

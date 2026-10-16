@@ -561,7 +561,7 @@ export class ZaloServerGateway {
         this.scheduleClientSessionExpiry(client, message.token, session.expiresAt)
         client.socket.send(JSON.stringify({
           type: 'hello',
-          phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY],
+          phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1'],
           snapshot: this.options.getSnapshot(session.staffId),
           events: this.getBufferedEvents(session.staffId),
           operations: this.options.getOperations(session.staffId)
@@ -585,7 +585,7 @@ export class ZaloServerGateway {
       this.scheduleControlRevalidation(client)
       client.socket.send(JSON.stringify({
         type: 'hello',
-        phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY],
+        phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1'],
         snapshot: this.getClientSnapshot(client.auth),
         events: [],
         operations: this.options.getOperations(ticket.staffId),
