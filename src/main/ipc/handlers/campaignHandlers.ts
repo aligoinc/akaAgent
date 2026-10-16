@@ -136,7 +136,7 @@ export function registerCampaignHandlers(
     return campaign
   })
 
-  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: CampaignUpdate | null | undefined, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean) => {
+  ipcMain.handle(IPC_EVENTS.DB_UPDATE_CAMPAIGN, async (_, id: number, updates: CampaignUpdate | null | undefined, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean, expectedEditVersion?: string) => {
     const payload = updates || {}
     if (
       isStatusOnlyCampaignUpdate(payload)
@@ -150,8 +150,19 @@ export function registerCampaignHandlers(
       return campaign
     }
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
-    if (requireEditReady === true && !(await supabase.getCampaignConfig(id))?.editReady) {
-      throw new Error('Chiến dịch chưa tạm dừng hoàn tất hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
+    if (requireEditReady === true) {
+      const ready = await supabase.getCampaignConfig(id)
+      if (!ready?.editReady) {
+        throw new Error('Chiến dịch chưa tạm dừng hoàn tất hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
+      }
+      if (expectedEditVersion) {
+        if (ready.editVersion !== expectedEditVersion) {
+          throw new Error('Cấu hình chiến dịch đã thay đổi ở phiên khác. Vui lòng mở lại form sửa để tải cấu hình mới nhất.')
+        }
+        // Log-only changes while the form is open are safe. The final UPDATE
+        // still compares this exact timestamp and paused/unowned predicates.
+        expectedUpdatedAt = ready.updatedAt
+      }
     }
     try {
       const campaign = await supabase.updateCampaign(id, payload, requireEditReady === true, expectedUpdatedAt, retrySmsInputSchedule)

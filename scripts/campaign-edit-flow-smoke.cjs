@@ -61,14 +61,14 @@ async function main() {
     isMobileManagedSmsCampaignAction:()=>false, SMS_SEND_ACTION_ID:'sms_send',
     client:()=>({from:()=>{
       const filters={};let patch;const q={update:v=>(patch=v,q),eq:(k,v)=>(filters[k]=v,q),is:(k,v)=>(filters[k]=v,q),select:()=>q,
-        single:async()=>{beforeWrite?.();if(!Object.entries(filters).every(([k,v])=>stored[k]===v))return {data:null,error:{message:'conflict'}};Object.assign(stored,patch);return {data:stored,error:null}}};return q
+        maybeSingle:async()=>{beforeWrite?.();if(!Object.entries(filters).every(([k,v])=>stored[k]===v))return {data:null,error:null};Object.assign(stored,patch);return {data:stored,error:null}}};return q
     }})
   })
   for (const change of [{}, {status:'chờ xử lý'}, {status:'đang chạy'}, {runtime_claim_token:'another-owner'}, {runtime_unit_token:'unit'}, {updated_at:'newer-version'}, {staff_id:8}]) {
     stored={id:1,staff_id:7,status:'tạm dừng',runtime_claim_token:null,runtime_unit_token:null,is_delete:false,updated_at:'read-version',name:'old'}
     beforeWrite=()=>Object.assign(stored,change)
     const write=exports.updateCampaign(1,{name:'new'},true,'read-version')
-    if(Object.keys(change).length) { await assert.rejects(write,/conflict/);assert.equal(stored.name,'old') }
+    if(Object.keys(change).length) { await assert.rejects(write,/đã thay đổi/);assert.equal(stored.name,'old') }
     else { await write;assert.equal(stored.name,'new') }
   }
   console.log('PASS: edit confirmation, single-flight, actual release, cancellation/auth/late reads, save choices, resume-only retry, 16 readiness/redaction cases')

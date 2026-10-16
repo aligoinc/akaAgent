@@ -4,6 +4,9 @@ Kiểm tra SĐT có Zalo ngày 16/10/2026: modal riêng trong Quét data, tối 
 
 Ngày 16/10/2026: Desktop/Web sửa chiến dịch qua xác nhận pause và `editReady` từ runtime của chính chiến dịch; Lưu sửa/nhân bản chọn Tạm dừng/Chờ xử lý, chỉ resume sau khi lưu đủ, lỗi activation retry không tạo lại. Native giữ hợp đồng cũ. Không migration/RPC/connection/deploy; xem [hợp đồng và kiểm chứng](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md).
 Review luồng sửa: checkpoint Desktop bắt đầu ngay sau khi ghi cấu hình, retry tiếp liên kết không ghi lại bằng CAS cũ; Web thay listener theo mỗi phiên và hủy busy/timer khi đổi phiên. Hồi quy trong [audit](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md#sửa-hai-finding-review--16102026).
+
+Sửa lỗi lưu 16/10/2026: Desktop dùng `editVersion` tính từ cấu hình để log đổi `updated_at` không làm mất khả năng Lưu. Main tái sử dụng lần đọc readiness, so cấu hình rồi giữ timestamp chính xác cùng guard paused/unowned tại UPDATE. SMS/voice retry giữ phiên bản của lần commit thuộc form đó. Web đã có `configVersion`, chỉ bổ sung hồi quy. Không thêm query/polling/connection/RPC; xem [nguyên nhân và kiểm chứng](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md#sửa-lỗi-lưu-sau-khi-log-thay-đổi--16102026).
+
 Review tiếp theo chỉ sửa finding 2 SMS/voice: lỗi materialize sau commit trả object IPC với đúng phiên bản đã ghi; form giữ phiên bản theo phiên sửa để lưu lại, vẫn CAS/runtime và không resume khi data lỗi. Giữ ý định cập nhật lịch và materialize lại cả khi settings đã giống nhau. Hai finding cũ về liên kết/tạo campaign liên quan giữ nguyên theo yêu cầu; [audit và smoke](docs/CAMPAIGN_EDIT_PAUSE_CONFIRMATION.md#sửa-finding-2-smsvoice--16102026).
 
 V405 đã apply trên akachat ngày 15/10/2026 (`20261014193235 / migration_v405_campaign_limits_mixed_windows`): chỉ cập nhật prompt `app_campaign_action_limits` ID 52 để hiểu khung phút khác nhau giữa các tài khoản; giữ model/binding/schema, không reload hay thêm connection/polling. Desktop/Web snapshot gửi `rateLimitMinutes=null` + `rateLimitMinuteValues` khi chưa chỉnh khung chung, giữ kế thừa qua Lưu; Web dùng public session ID hiện có để hủy kết quả AI từ phiên cũ cùng user. Hai repo typecheck/build, hồi quy/UI và model thật đạt; bản sửa ứng dụng chưa phát hành/deploy. Không apply lại; [audit và rollback](docs/CAMPAIGN_LIMITS_MIXED_WINDOWS_V405.md).
@@ -605,6 +608,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- `auto_campaigns.updated_at` đổi cả khi append log. Không dùng timestamp lúc mở form làm phiên bản cấu hình dài hạn; so `editVersion` trước, rồi dùng timestamp nguyên vẹn của lần kiểm tra readiness cho CAS cuối. Không bỏ guard trạng thái/runtime hoặc lấy phiên bản mới để ghi đè cấu hình từ phiên khác. Hồi quy: `node scripts/campaign-edit-version-smoke.cjs`.
 
 - **Phone check cancellation (accepted risk)**: Chat start can reach runtime after an early cancel returns 404; one read may outlive the released scan claim. Late UI results are fenced. This limited race is accepted; see [review decision](docs/ZALO_PHONE_CHECK.md#rủi-ro-đã-chấp-nhận-sau-review--16102026).
 

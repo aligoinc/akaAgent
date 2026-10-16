@@ -7968,7 +7968,7 @@ export default function CampaignFormModal({
                 }
               : effectiveCampaignPayload
             if (!existingConfigSaved) {
-              await saveCampaignConfig(campaign.id, updatePayload, campaign.updatedAt, saveSignal)
+              await saveCampaignConfig(campaign.id, updatePayload, campaign.updatedAt, saveSignal, campaign.editVersion)
               if (saveSignal.aborted) return
               existingConfigSaved = true
               // Keep the exact remaining work once the config write has committed.

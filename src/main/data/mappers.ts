@@ -1,5 +1,6 @@
 import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignConfig, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, CampaignListItem, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 import { getCurrentUser } from './currentUser'
+import { getCampaignEditVersion } from './campaignEditVersion'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
@@ -242,7 +243,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
 
 export function mapCampaignConfigFromDB(row: Record<string, unknown>): CampaignConfig {
   const { log: _omittedLog, ...config } = mapCampaignFromDB(row)
-  return { ...config, editReady: row.status === 'tạm dừng' && row.runtime_claim_token === null && row.runtime_unit_token === null }
+  return { ...config, editVersion: getCampaignEditVersion(row), editReady: row.status === 'tạm dừng' && row.runtime_claim_token === null && row.runtime_unit_token === null }
 }
 
 export function mapCampaignListItemFromDB(row: Record<string, unknown>): CampaignListItem {

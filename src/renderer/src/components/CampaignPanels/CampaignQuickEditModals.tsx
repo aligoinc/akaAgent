@@ -648,7 +648,7 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
       }
       const status = await campaignEdit.chooseSaveStatus(saveSignal)
       if (!status || saveSignal.aborted) return
-      await saveCampaignConfig(campaign.id, { extraSettings: nextExtraSettings }, campaign.updatedAt, saveSignal)
+      await saveCampaignConfig(campaign.id, { extraSettings: nextExtraSettings }, campaign.updatedAt, saveSignal, campaign.editVersion)
       await saveCompletion.finish(async () => {
         if (saveSignal.aborted) return
         if (status === 'chờ xử lý') await resumeAfterCampaignSave([campaign.id], saveSignal)
@@ -2064,7 +2064,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         ...(showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource ? { content: isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content } : {}),
         extraSettings: nextExtraSettings,
         ...(showMainMedia && !isLegacyManualAdvancedSource ? { images: isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images } : {})
-      }, campaign.updatedAt, saveSignal)
+      }, campaign.updatedAt, saveSignal, campaign.editVersion)
       await saveCompletion.finish(async () => {
         if (saveSignal.aborted) return
         if (status === 'chờ xử lý') await resumeAfterCampaignSave([campaign.id], saveSignal)

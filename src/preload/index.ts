@@ -321,8 +321,8 @@ const electronAPI = {
   createCampaign: (data: Partial<Campaign>): Promise<Campaign> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CAMPAIGN, data),
 
-  updateCampaign: (id: number, updates: CampaignUpdate, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean): Promise<Campaign | CampaignConfigSaveFailure> =>
-    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN, id, updates, requireEditReady, expectedUpdatedAt, retrySmsInputSchedule),
+  updateCampaign: (id: number, updates: CampaignUpdate, requireEditReady?: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean, expectedEditVersion?: string): Promise<Campaign | CampaignConfigSaveFailure> =>
+    ipcRenderer.invoke(IPC_EVENTS.DB_UPDATE_CAMPAIGN, id, updates, requireEditReady, expectedUpdatedAt, retrySmsInputSchedule, expectedEditVersion),
 
   deleteCampaign: (id: number): Promise<void> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_DELETE_CAMPAIGN, id),
