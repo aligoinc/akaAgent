@@ -46,14 +46,15 @@ export function ZaloPhoneCheckSummary({ store }: { store: ZaloPhoneCheckStore })
         <ZaloPhoneCheckDailyUsage store={store} />
       </div>
       <div className="phone-check-stats-row">
-        {checking && <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>}
+        {checking ? <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>
+          : message && <span role="status">{message}</span>}
       </div>
     </div>
     <label>Lọc trạng thái <select className="stepper-input" value={filter} onChange={event => store.filter(event.target.value as PhoneCheckFilter)}>
       <option value="all">Tất cả</option>{Object.entries(ZALO_PHONE_CHECK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select></label>
     <ZaloPhoneCheckUsageError store={store} />
-    {message && <p role="status">{message}</p>}
+    {checking && message && <p role="status">{message}</p>}
   </div>
 }
 

@@ -6,7 +6,7 @@
 .phone-check-config label:first-child { flex: 1; min-width: 240px; }
 .phone-check-config input { width: 150px; }
 .phone-check-summary { padding: 10px 20px 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-.phone-check-stats { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.phone-check-stats { display: flex; flex: 1; min-width: 240px; flex-direction: column; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
 .phone-check-stats-row { display: flex; flex-wrap: wrap; gap: 16px; min-height: 20px; align-items: center; }
 .phone-check-summary > p { flex-basis: 100%; margin: 0; font-size: 13px; }
 .phone-check-summary label { flex-direction: row; align-items: center; }
