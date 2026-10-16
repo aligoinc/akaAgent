@@ -14,8 +14,13 @@ const phones = Array.from({ length: 300 }, (_, i) => `090${String(i).padStart(7,
 store.load(phones)
 const root = createRoot(document.getElementById('root')!)
 let rowHandler: Function, completed: Function, resolve: Function, request: any
-win.phoneSmoke = { store, phones, row: (row: any) => rowHandler(row), complete: (rows?: any[]) => {
-  const result = { runId: request.runId, accountId: request.accountId, sequence: 10, stopped: true, rows: rows || request.phones.slice(0, request.limit).map((phone: string) => ({ id: phone, phone, name: '', uid: '', status: 'pending', note: '' })) }
+let sequence = 0
+let currentRows = new Map<string, any>()
+win.phoneSmoke = { store, phones, row: (event: any) => {
+  if (event.runId === request?.runId) { sequence = Math.max(sequence, event.sequence); currentRows.set(event.row.id, event.row) }
+  rowHandler(event)
+}, complete: (rows?: any[], stopped = true) => {
+  const result = { runId: request.runId, accountId: request.accountId, sequence: ++sequence, stopped, rows: rows || [...currentRows.values()].map(row => row.status === 'checking' ? { ...row, status: 'unknown', note: 'Đã dừng trước khi xác nhận được kết quả.' } : row) }
   completed(result); resolve(result)
 }, captureExport: (book: any) => { win.phoneSmoke.exported = book }, startCount: 0, cancels: [], closed: false, renders: {}, show: () => {
   root.render(<><ZaloPhoneCheckModal initialAccountId={71} onClose={() => { win.phoneSmoke.closed = true; root.render(<div>Đã đóng</div>) }} /><ConfirmModal /><AlertModal /></>)
@@ -32,7 +37,7 @@ win.electronAPI = {
   zaloPhoneCheck: {
     onRow: (handler: Function) => { rowHandler = handler; return () => {} },
     onCompleted: (handler: Function) => { completed = handler; return () => {} },
-    start: (value: any) => { request = value; win.phoneSmoke.request = value; win.phoneSmoke.startCount++; return new Promise(r => { resolve = r }) },
+    start: (value: any) => { request = value; sequence = 0; currentRows = new Map(value.phones.slice(0, value.limit).map((phone: string) => [phone, { id: phone, phone, name: '', uid: '', status: 'pending', note: '' }])); win.phoneSmoke.request = value; win.phoneSmoke.startCount++; return new Promise(r => { resolve = r }) },
     cancel: async (id: string) => { win.phoneSmoke.cancels.push(id); win.phoneSmoke.complete() }
   }
 }

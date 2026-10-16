@@ -18,6 +18,7 @@ import { getContactDatasetScanTypeCode } from '../../shared/dataGroupSemantics'
 import { ZALO_PHONE_CHECK_IPC, classifyZaloPhoneCheckApiCode, createZaloPhoneCheckRow, validateZaloPhoneCheckRequest, type ZaloPhoneCheckRequest, type ZaloPhoneCheckRow, type ZaloPhoneCheckResult } from '../../shared/zaloPhoneCheck'
 import { phoneSearchErrorCode } from './zaloPhoneSearch'
 import { withRequestDeadline } from './requestDeadline'
+import { sanitizeDiagnosticText } from '../../shared/campaignDiagnostics'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -81,6 +82,7 @@ const PAGE_INBOX_MAX_FETCH_FAILURES = 3
 const ZALO_FRIEND_PAGE_SIZE = 500
 const ZALO_FRIEND_API_MIN_DELAY_MS = 2000
 const ZALO_FRIEND_API_MAX_DELAY_MS = 5000
+const ZALO_PHONE_CHECK_MAX_ATTEMPTS = 3
 const ZALO_FRIEND_API_429_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const
 const ZALO_GROUP_INFO_BATCH_SIZE = 50
 const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
@@ -237,41 +239,72 @@ export class ContactLoader {
         if (index > 0) await this.waitForZaloFriendApiDelay(accountId, load, this.getZaloFriendApiDelayMs())
         assertActive()
         const row = rows[index]
-        row.status = 'checking'
         row.accountId = accountId
-        emit(row)
-        try {
-          const result = await withRequestDeadline(signal,
-            requestSignal => this.zaloRuntime!.findUserByPhone!(accountId, row.phone, requestSignal), 30_000)
-          assertActive()
-          // A successful API response is error_code=0, as in akaBizAuto.
-          // Missing profile fields must not change the existence classification.
-          row.status = 'found'
-          const uid = result.user?.uid
-          row.uid = typeof uid === 'string' && /^[1-9]\d{0,63}$/.test(uid.trim()) ? uid.trim() : ''
-          const name = result.user?.displayName || result.user?.originalName
-          row.name = typeof name === 'string' ? name.trim() : ''
+        for (let attempt = 1; attempt <= ZALO_PHONE_CHECK_MAX_ATTEMPTS; attempt++) {
+          row.status = 'checking'
+          row.note = attempt > 1 ? `Đang thử lại SĐT này (lần ${attempt}/${ZALO_PHONE_CHECK_MAX_ATTEMPTS}).` : ''
           emit(row)
-        } catch (error) {
-          assertActive()
-          // DOMException.code (20/23) identifies an abort/timeout, not a Zalo response.
-          const errorName = (error as { name?: unknown } | null)?.name
-          const code = errorName === 'AbortError' || errorName === 'TimeoutError' ? '' : phoneSearchErrorCode(error)
-          const status = classifyZaloPhoneCheckApiCode(code)
-          if (status) {
-            row.status = status
+          try {
+            const result = await withRequestDeadline(signal,
+              requestSignal => this.zaloRuntime!.findUserByPhone!(accountId, row.phone, requestSignal), 30_000)
+            assertActive()
+            // A successful API response is error_code=0, as in akaBizAuto.
+            // Missing profile fields must not change the existence classification.
+            row.status = 'found'
+            const uid = result.user?.uid
+            row.uid = typeof uid === 'string' && /^[1-9]\d{0,63}$/.test(uid.trim()) ? uid.trim() : ''
+            const name = result.user?.displayName || result.user?.originalName
+            row.name = typeof name === 'string' ? name.trim() : ''
+            row.note = ''
             emit(row)
-            continue
+            break
+          } catch (error) {
+            assertActive()
+            // DOMException.code (20/23) identifies an abort/timeout, not a Zalo response.
+            const errorName = (error as { name?: unknown } | null)?.name
+            const code = errorName === 'AbortError' || errorName === 'TimeoutError' ? '' : phoneSearchErrorCode(error)
+            const status = classifyZaloPhoneCheckApiCode(code)
+            if (status) {
+              row.status = status
+              row.note = ''
+              emit(row)
+              break
+            }
+            const message = typeof error === 'string' ? error : (error as { message?: unknown } | null)?.message
+            // Retry only the transient fetch failure reported by the local/Chat transport.
+            // Abort, timeout, session/capability errors and Zalo response codes keep their policy.
+            const fetchFailed = errorName !== 'AbortError' && errorName !== 'TimeoutError'
+              && (!code || code === 'data_scan_failed')
+              && typeof message === 'string' && message.trim().toLowerCase() === 'fetch failed'
+            if (fetchFailed && attempt < ZALO_PHONE_CHECK_MAX_ATTEMPTS) {
+              const delayMs = this.getZaloFriendApiDelayMs()
+              row.note = `Lỗi kết nối (fetch failed) ở lần ${attempt}/${ZALO_PHONE_CHECK_MAX_ATTEMPTS}. Đợi ${Math.ceil(delayMs / 1000)} giây rồi thử lại SĐT này.`
+              emit(row)
+              await this.waitForZaloFriendApiDelay(accountId, load, delayMs)
+              assertActive()
+              continue
+            }
+            row.status = 'unknown'
+            const requiresUpdate = ['phone_check_update_required', 'data_scan_not_supported', 'unsupported_query_type'].includes(code)
+            row.note = requiresUpdate
+              ? 'Zalo Server chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật Chat API và runtime.'
+              : code ? `Chưa xác định được kết quả (mã ${code.slice(0, 80)}). Đã dừng lượt kiểm tra.`
+              : 'Không xác nhận được kết quả do lỗi kết nối, hết thời gian chờ hoặc phiên không sẵn sàng. Đã dừng lượt kiểm tra.'
+            if (fetchFailed) row.note += ` Đã thử ${ZALO_PHONE_CHECK_MAX_ATTEMPTS} lần.`
+            if (!requiresUpdate) {
+              // Chat preserves the runtime error in message; keep it in both the row and run summary.
+              // Local/legacy errors may contain a proxy URL or session details, so mask before IPC/export.
+              const detail = typeof message === 'string' ? sanitizeDiagnosticText(message.slice(0, 8000)
+                .replace(/\b(?:https?|socks[45]?):\/\/[^\s"'<>]+/gi, '[ẩn URL]'))
+                .replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500) : ''
+              if (detail) row.note += ` Chi tiết: ${detail}`
+            }
+            emit(row)
+            errorMessage = row.note
+            break
           }
-          row.status = 'unknown'
-          row.note = ['phone_check_update_required', 'data_scan_not_supported', 'unsupported_query_type'].includes(code)
-            ? 'Zalo Server chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật Chat API và runtime.'
-            : code ? `Chưa xác định được kết quả (mã ${code.slice(0, 80)}). Đã dừng lượt kiểm tra.`
-            : 'Không xác nhận được kết quả do lỗi kết nối, hết thời gian chờ hoặc phiên không sẵn sàng. Đã dừng lượt kiểm tra.'
-          emit(row)
-          errorMessage = row.note
-          break
         }
+        if (errorMessage) break
       }
     } catch (error) {
       if (!signal.aborted && !parentSignal?.aborted && !this.isLoadCancelled(accountId, load.variables)) {

@@ -22,6 +22,8 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const staffId = useAuthStore(state => state.user?.staffId)
   const busy = useStore(store, state => state.busy)
   const stopping = useStore(store, state => state.stopping)
+  const hasRun = useStore(store, state => state.runId !== null)
+  const allChecked = useStore(store, state => state.ids.length > 0 && state.processed === state.ids.length)
   const [accountId, setAccountId] = useState(initialAccountId || 0)
   const [limit, setLimit] = useState('300')
   const [upload, setUpload] = useState(false)
@@ -81,9 +83,9 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
       const count = Number(limit)
       if (!Number.isInteger(count) || count < 1 || count > 300) throw new Error('Số lượng kiểm tra phải từ 1 đến 300.')
       const state = store.getState()
-      const phones = normalizeZaloCheckPhones(state.ids.filter(id => state.rows[id].status === 'pending'))
+      const phones = normalizeZaloCheckPhones(state.ids.filter(id => state.rows[id].status === 'pending' || state.rows[id].status === 'unknown'))
       const runId = crypto.randomUUID()
-      store.begin(runId, accountId, Math.min(count, phones.length))
+      store.begin(runId, accountId)
       const request = window.electronAPI.zaloPhoneCheck.start({ runId, accountId, limit: count, phones })
       pending.current = request
       try { const result = await request; if (mounted.current) store.complete(result) }
@@ -156,9 +158,9 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
         <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={300} value={limit} onChange={event => setLimit(event.target.value)} disabled={busy || saving} /></label>
         <button className="btn btn-secondary" disabled={busy || saving} onClick={() => setUpload(true)}>Tải data</button>
         {busy ? <button className="btn btn-danger" disabled={stopping} onClick={() => void stop()}>{stopping ? 'Đang dừng…' : 'Dừng'}</button>
-          : <button className="btn btn-primary" disabled={saving} onClick={() => void start()}>Bắt đầu kiểm tra</button>}
+          : <button className="btn btn-primary" disabled={saving || allChecked} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
       </div>
-      <p className="phone-check-hint">Tối đa 300 SĐT hợp lệ, không trùng. Mỗi lượt chỉ kiểm tra các số chưa kiểm tra theo số lượng đã đặt.</p>
+      <p className="phone-check-hint">Tối đa 300 SĐT hợp lệ, không trùng. Mỗi lượt kiểm tra các số Chưa kiểm tra hoặc Chưa xác định theo thứ tự danh sách và số lượng đã đặt.</p>
       <ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} />
       <footer className="modal-footer">
         <button className="btn btn-secondary" disabled={busy || saving} onClick={() => { try { selectedRows(); setChooseType(true) } catch (error) { showError(error) } }}>Lưu vào nhóm data</button>

@@ -1,5 +1,9 @@
 # AGENTS.md
 
+Kiểm tra SĐT ngày 16/10/2026: riêng `fetch failed` (mã rỗng/`data_scan_failed`) nghỉ theo nhịp quét 2–5 giây rồi thử lại cùng số, tối đa 3 lần tính cả lần đầu; giữ checking/tiến độ/claim, hủy lúc nghỉ chặn lần tiếp. Không đổi mã akaBizAuto hay retry lỗi khác; cập nhật Desktop/Server cũ, không cần deploy Chat API. [Hợp đồng và hồi quy](docs/ZALO_PHONE_CHECK.md#api-và-runtime).
+
+Kiểm tra SĐT chạy tiếp ngày 16/10/2026: renderer lấy các dòng Chưa kiểm tra **hoặc Chưa xác định** theo thứ tự gốc; dừng ở số 50 thì chạy lại số 50. Tiến độ đếm Có Zalo/Không tìm thấy trên toàn danh sách qua nhiều lượt, không reset/cộng trùng; hiện STT gốc khi đang chạy. Giữ row subscription/memo, runId/sequence, checkbox/kết quả cũ và giới hạn từng lượt. Chỉ cần cập nhật Desktop cho hành vi này, không đổi API/runtime/DB; xem [hợp đồng và hồi quy](docs/ZALO_PHONE_CHECK.md).
+
 Kiểm tra SĐT có Zalo ngày 16/10/2026: modal riêng trong Quét data, tối đa 300 số, nhập chỉ SĐT, live từng hàng và ba nút xuất/lưu nhóm. Dùng chung profile/get 32→40 với chiến dịch, claim/release Quét data; QR/Web/Server cũ/Chat Data Scan, hủy theo runId/phiên và không detail/quota/lịch sử tự lưu. Không migration/RPC/connection/polling mới; Chat API/runtime đã deploy, Desktop/Server cũ chưa đóng gói/phát hành. Cập nhật Chat API/protocol rồi runtime (capability `data_scan_phone_lookup`), Server cũ trước Desktop. Xem [hợp đồng, kiểm chứng và rollout](docs/ZALO_PHONE_CHECK.md).
 
 Sửa phân loại kiểm tra SĐT theo yêu cầu 16/10/2026: giữ đúng akaBizAuto — 0/312/313/304/221 là Có Zalo, mã Zalo khác là Không tìm thấy, đều tiếp tục; transport/timeout không có kết quả vẫn dừng. Không tự điền UID/tên khi API không trả hồ sơ; Chat backend đã deploy chuyển nguyên mã nên sửa này chỉ cần cập nhật Desktop/Server cũ. Xem [quy tắc thay thế và hồi quy](docs/ZALO_PHONE_CHECK.md#api-và-runtime).
