@@ -229,7 +229,7 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
         <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={dailyLimit ?? undefined} value={limitValue} onChange={event => setLimit(event.target.value)} disabled={busy || saving || dailyLimit === null} /></label>
         <button className="btn btn-secondary" disabled={busy || saving} onClick={() => void openUpload()}>Tải data</button>
         {busy ? <button className="btn btn-danger" disabled={stopping} onClick={() => void stop()}>{stopping ? 'Đang dừng…' : 'Dừng'}</button>
-          : <button className="btn btn-primary" disabled={saving || allChecked || accountDailyLimit === null} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
+          : <button className="btn btn-primary" disabled={saving || allChecked} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
       </div>
       <ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} />
       <footer className="modal-footer">

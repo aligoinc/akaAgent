@@ -38,7 +38,8 @@ export function createZaloPhoneCheckStore() {
       const rows = { ...state.rows, [row.id]: row }
       store.setState({ rows, visibleIds: visible(state, rows), sequence: event.sequence,
         processed: state.processed + Number(hasResult(row.status)) - Number(hasResult(prior.status)),
-        checkingPhone: row.status === 'checking' ? row.phone : '',
+        // Keep the current phone visible during the pause before the next lookup.
+        checkingPhone: row.status === 'checking' ? row.phone : state.checkingPhone,
         message: row.note, ...(event.usage ? { usage: event.usage, usageAccountId: event.accountId, usageError: '' } : {}) })
     },
     complete(result: ZaloPhoneCheckResult) {

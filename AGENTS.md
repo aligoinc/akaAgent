@@ -629,7 +629,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
-- **Phone check upload**: tải data không cần chọn tài khoản; IPC `contacts:zalo-phone-check:limit` chỉ đọc setting ngày public qua HTTP hiện có, không claim/consume. Giữ bố cục cũ, chỉ thêm bộ đếm ngày ngắn trong cụm số liệu; [hợp đồng](docs/ZALO_PHONE_CHECK.md#tài-khoản-ban-đầu-của-modal--17102026).
+- **Phone check upload**: tải data không cần chọn tài khoản; IPC `contacts:zalo-phone-check:limit` chỉ đọc setting ngày public qua HTTP hiện có, không claim/consume. Thống kê ba hàng, giữ số đang kiểm tra qua khoảng nghỉ; Bắt đầu báo thiếu tài khoản khi bấm; [hợp đồng](docs/ZALO_PHONE_CHECK.md#tài-khoản-ban-đầu-của-modal--17102026).
 
 - **Phone check usage snapshots**: tải data reset `runId`, nên request đọc hạn mức phải có generation riêng và bị vô hiệu hóa khi Start; bỏ cả success/error cũ sau tải lại. Không dùng bộ đếm chiến dịch. Hồi quy: `node scripts/run-zalo-phone-check-ui-smoke.cjs`; [hợp đồng](docs/ZALO_PHONE_CHECK.md).
 

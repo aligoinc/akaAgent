@@ -39,9 +39,16 @@ export function ZaloPhoneCheckSummary({ store }: { store: ZaloPhoneCheckStore })
   const message = useStore(store, state => state.message)
   const filter = useStore(store, state => state.filter)
   return <div className="phone-check-summary">
-    <div><strong>{total} SĐT</strong><span>Đã chọn {selected}</span>{total > 0 && <span>Đã có kết quả: {processed}/{total}</span>}
-      <ZaloPhoneCheckDailyUsage store={store} />
-      {checking && <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>}</div>
+    <div className="phone-check-stats">
+      <div className="phone-check-stats-row"><strong>{total} SĐT</strong><span>Đã chọn {selected}</span></div>
+      <div className="phone-check-stats-row">
+        {total > 0 && <span>Đã có kết quả: {processed}/{total}</span>}
+        <ZaloPhoneCheckDailyUsage store={store} />
+      </div>
+      <div className="phone-check-stats-row">
+        {checking && <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>}
+      </div>
+    </div>
     <label>Lọc trạng thái <select className="stepper-input" value={filter} onChange={event => store.filter(event.target.value as PhoneCheckFilter)}>
       <option value="all">Tất cả</option>{Object.entries(ZALO_PHONE_CHECK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select></label>

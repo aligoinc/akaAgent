@@ -41,6 +41,30 @@ async function main() {
     await page.evaluate(note => { const s = window.phoneSmoke; s.renders = {}; s.store.row({ runId: 'run-perf', accountId: 71, sequence: 4, row: { ...s.store.getState().rows[s.phones[0]], status: 'unknown', note } }) }, failureNote)
     await page.getByRole('status').filter({ hasText: failureNote }).waitFor()
     assert.deepEqual(await page.evaluate(() => window.phoneSmoke.renders), { '0900000000': 1 })
+    // Keep the current phone and table position stable between results and the next lookup.
+    await page.evaluate(() => { const s = window.phoneSmoke; s.store.load(s.phones); s.store.begin('run-steady', 71); s.store.row({ runId: 'run-steady', accountId: 71, sequence: 1, row: { ...s.store.getState().rows[s.phones[0]], status: 'checking' } }) })
+    const currentPhone = page.getByRole('status').filter({ hasText: 'Đang kiểm tra số' })
+    await currentPhone.filter({ hasText: '1/600: 0900000000' }).waitFor()
+    const tableTop = (await page.locator('.phone-check-table-scroll').boundingBox()).y
+    const statsHeight = (await page.locator('.phone-check-stats').boundingBox()).height
+    await page.evaluate(() => { const s = window.phoneSmoke; s.renders = {}; s.store.row({ runId: 'run-steady', accountId: 71, sequence: 2, row: { ...s.store.getState().rows[s.phones[0]], status: 'found' } }) })
+    await page.getByText('Đã có kết quả: 1/600', { exact: true }).waitFor()
+    assert.match(await currentPhone.innerText(), /1\/600: 0900000000/)
+    assert.equal((await page.locator('.phone-check-table-scroll').boundingBox()).y, tableTop)
+    assert.deepEqual(await page.evaluate(() => window.phoneSmoke.renders), { '0900000000': 1 })
+    await page.evaluate(() => { const s = window.phoneSmoke; s.renders = {}; s.store.row({ runId: 'run-steady', accountId: 71, sequence: 3, row: { ...s.store.getState().rows[s.phones[1]], status: 'checking' } }) })
+    await currentPhone.filter({ hasText: '2/600: 0900000001' }).waitFor()
+    assert.deepEqual(await page.evaluate(() => window.phoneSmoke.renders), { '0900000001': 1 })
+    await page.evaluate(() => { const s = window.phoneSmoke; s.store.row({ runId: 'run-steady', accountId: 71, sequence: 4, row: { ...s.store.getState().rows[s.phones[1]], status: 'not_found' } }) })
+    await page.getByText('Đã có kết quả: 2/600', { exact: true }).waitFor()
+    assert.match(await currentPhone.innerText(), /2\/600: 0900000001/)
+    await page.evaluate(() => { const s = window.phoneSmoke; s.store.complete({ runId: 'run-steady', accountId: 71, sequence: 5, rows: [], stopped: false }); s.store.row({ runId: 'run-steady', accountId: 71, sequence: 6, row: { ...s.store.getState().rows[s.phones[2]], status: 'checking' } }) })
+    await currentPhone.waitFor({ state: 'detached' })
+    assert.equal((await page.locator('.phone-check-stats').boundingBox()).height, statsHeight, 'clearing current phone must not collapse the third row')
+    await page.evaluate(() => { const s = window.phoneSmoke; s.store.begin('run-fail', 71); s.store.row({ runId: 'run-fail', accountId: 71, sequence: 1, row: { ...s.store.getState().rows[s.phones[2]], status: 'checking' } }) })
+    await currentPhone.filter({ hasText: '3/600: 0900000002' }).waitFor()
+    await page.evaluate(() => window.phoneSmoke.store.fail('Đã dừng kiểm tra.'))
+    await currentPhone.waitFor({ state: 'detached' })
     await page.evaluate(() => { const previous = document.createElement('div'); previous.className = 'data-group-manager-backdrop'; previous.id = 'original-group-picker'; document.body.append(previous); window.phoneSmoke.show() })
     const dialog = page.getByRole('dialog', { name: 'Kiểm tra SĐT có Zalo', exact: true })
     await dialog.waitFor()
@@ -199,7 +223,12 @@ async function main() {
       await dialog.waitFor()
       await page.waitForFunction(() => window.phoneSmoke.usageReads.length === 1)
       assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(),false)
-      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(),true)
+      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(),false)
+      const startsBeforeUsage = await page.evaluate(() => window.phoneSmoke.startCount)
+      await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).click()
+      await page.getByText('Vui lòng chờ xác nhận hạn mức ngày của tài khoản.', { exact: true }).waitFor()
+      await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+      assert.equal(await page.evaluate(() => window.phoneSmoke.startCount), startsBeforeUsage, 'pending usage must not dispatch a run')
       if (outcome === 'resolve') {
         await page.evaluate(() => window.phoneSmoke.usageReads[0].resolve({allowed:true,date:'2026-10-16',count:599,limit:600,remaining:1,resetAt:'2026-10-16T17:00:00Z'}))
         await dialog.locator('[data-phone-daily-usage]').filter({hasText:'599/600'}).waitFor()
@@ -247,7 +276,7 @@ async function main() {
         await page.evaluate(()=>window.phoneSmoke.usageReads[0].reject(new Error('Không đọc được hạn mức')))
         await dialog.getByText('Không đọc được hạn mức',{exact:true}).waitFor()
         assert.equal(await dialog.getByRole('button',{name:'Tải data',exact:true}).isDisabled(),false)
-        assert.equal(await dialog.getByRole('button',{name:'Bắt đầu kiểm tra',exact:true}).isDisabled(),true)
+        assert.equal(await dialog.getByRole('button',{name:'Bắt đầu kiểm tra',exact:true}).isDisabled(),false)
       }
     }
     // A parent Data Scan selection may be Facebook, stale or empty. Never read its usage.
@@ -275,7 +304,7 @@ async function main() {
       assert.equal(await dialog.getByText('Phiên hoặc tài khoản không hợp lệ.', { exact: true }).count(), 0)
       if (!valid) {
         assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), false)
-        assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
+        assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), false)
         if (initialAccountId === 0) {
           await uploadPhone(await page.evaluate(() => [...window.phoneSmoke.phones, '0912345678'].join('\n')))
           await page.getByText('Chỉ nhận tối đa 600 SĐT hợp lệ, không trùng theo hạn mức ngày. Vui lòng chia nhỏ file.', { exact: true }).waitFor()
@@ -285,6 +314,11 @@ async function main() {
           await dialog.getByText('600 SĐT', { exact: true }).waitFor()
           assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [])
         }
+        const startsBeforeSelection = await page.evaluate(() => window.phoneSmoke.startCount)
+        await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).click()
+        await page.getByText('Vui lòng chọn tài khoản Zalo.', { exact: true }).waitFor()
+        await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
+        assert.equal(await page.evaluate(() => window.phoneSmoke.startCount), startsBeforeSelection, 'missing account must not dispatch a run')
         await dialog.getByLabel('Tài khoản Zalo').selectOption('71')
       }
       await dialog.locator('[data-phone-daily-usage]').filter({ hasText: '125/600' }).waitFor()
@@ -312,7 +346,7 @@ async function main() {
       assert.equal(await dialog.locator('[data-phone-daily-usage]').count(), 0)
       assert.equal(await dialog.getByText('Phiên hoặc tài khoản không hợp lệ.', { exact: true }).count(), 0)
       assert.equal(await dialog.getByRole('button', { name: 'Tải data', exact: true }).isDisabled(), false)
-      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
+      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), false)
       assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [71])
       await closeDialog()
       await page.evaluate(value => window.phoneSmoke.setAccounts(value), accounts)
@@ -347,7 +381,7 @@ async function main() {
       }
       assert.deepEqual(await page.evaluate(() => window.phoneSmoke.usageRequests), [])
       assert.equal(await dialog.getByLabel('Tài khoản Zalo').inputValue(), '0')
-      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), true)
+      assert.equal(await dialog.getByRole('button', { name: 'Bắt đầu kiểm tra', exact: true }).isDisabled(), false)
       await closeDialog()
     }
     // Late config cannot replace a newer account limit; closing cannot reopen the importer.
