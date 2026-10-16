@@ -15,7 +15,7 @@ import type { ZaloGroupContactInput, ZaloGroupMemberContactInput, ZaloUserContac
 import { ProxyRuntimeService } from './proxyRuntimeService'
 import type { ZaloContactScanSource } from './zaloContactScanSource'
 import { getContactDatasetScanTypeCode } from '../../shared/dataGroupSemantics'
-import { ZALO_PHONE_CHECK_IPC, createZaloPhoneCheckRow, validateZaloPhoneCheckRequest, type ZaloPhoneCheckRequest, type ZaloPhoneCheckRow, type ZaloPhoneCheckResult } from '../../shared/zaloPhoneCheck'
+import { ZALO_PHONE_CHECK_IPC, classifyZaloPhoneCheckApiCode, createZaloPhoneCheckRow, validateZaloPhoneCheckRequest, type ZaloPhoneCheckRequest, type ZaloPhoneCheckRow, type ZaloPhoneCheckResult } from '../../shared/zaloPhoneCheck'
 import { phoneSearchErrorCode } from './zaloPhoneSearch'
 import { withRequestDeadline } from './requestDeadline'
 
@@ -244,22 +244,26 @@ export class ContactLoader {
           const result = await withRequestDeadline(signal,
             requestSignal => this.zaloRuntime!.findUserByPhone!(accountId, row.phone, requestSignal), 30_000)
           assertActive()
-          if (!result.user || typeof result.user.uid !== 'string' || !/^[1-9]\d{0,63}$/.test(result.user.uid.trim())) throw new Error('Zalo trả về hồ sơ không hợp lệ.')
+          // A successful API response is error_code=0, as in akaBizAuto.
+          // Missing profile fields must not change the existence classification.
           row.status = 'found'
-          row.uid = result.user.uid.trim()
-          const name = result.user.displayName || result.user.originalName
+          const uid = result.user?.uid
+          row.uid = typeof uid === 'string' && /^[1-9]\d{0,63}$/.test(uid.trim()) ? uid.trim() : ''
+          const name = result.user?.displayName || result.user?.originalName
           row.name = typeof name === 'string' ? name.trim() : ''
           emit(row)
         } catch (error) {
           assertActive()
-          // 216 is an explicit no-user response. Limits/transport failures never prove absence.
-          if (phoneSearchErrorCode(error) === '216') {
-            row.status = 'not_found'
+          // DOMException.code (20/23) identifies an abort/timeout, not a Zalo response.
+          const errorName = (error as { name?: unknown } | null)?.name
+          const code = errorName === 'AbortError' || errorName === 'TimeoutError' ? '' : phoneSearchErrorCode(error)
+          const status = classifyZaloPhoneCheckApiCode(code)
+          if (status) {
+            row.status = status
             emit(row)
             continue
           }
           row.status = 'unknown'
-          const code = phoneSearchErrorCode(error)
           row.note = ['phone_check_update_required', 'data_scan_not_supported', 'unsupported_query_type'].includes(code)
             ? 'Zalo Server chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật Chat API và runtime.'
             : code ? `Chưa xác định được kết quả (mã ${code.slice(0, 80)}). Đã dừng lượt kiểm tra.`
