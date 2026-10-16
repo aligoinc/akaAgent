@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useCampaignStore } from '../stores/campaignStore'
 
-/** Only the visible log tab reads stored history. The main cache/RPC transfer deltas. */
-export function useCampaignRunLog(id: number | null, active: boolean): void {
+/** Only the visible history tab reads immutable entries through ID cursors. */
+export function useCampaignRunLog(id: number | null, active: boolean): () => Promise<void> {
+  const olderRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
     if (!active || !id) return
     let disposed = false
@@ -10,6 +11,11 @@ export function useCampaignRunLog(id: number | null, active: boolean): void {
     let due = 0
     let timer: ReturnType<typeof setTimeout> | undefined
     const visible = () => document.visibilityState === 'visible'
+    const loadOlder = async () => {
+      if (disposed || !visible()) return
+      await useCampaignStore.getState().loadCampaignLog(id, { older: true, current: () => !disposed && visible() })
+    }
+    olderRef.current = loadOlder
     const arm = () => {
       clearTimeout(timer)
       if (!disposed && visible() && !running && due) timer = setTimeout(run, Math.max(0, due - Date.now()))
@@ -21,7 +27,7 @@ export function useCampaignRunLog(id: number | null, active: boolean): void {
         // Reopening while an older read settles must still get a fresh snapshot.
         if (useCampaignStore.getState().loadingCampaignLogIds[id]) await useCampaignStore.getState().loadCampaignLog(id).catch(() => null)
         if (disposed || !visible()) return
-        return useCampaignStore.getState().loadCampaignLog(id, { force: true })
+        return useCampaignStore.getState().loadCampaignLog(id, { force: true, current: () => !disposed && visible() })
       })()
         .catch(error => console.error('Failed to refresh campaign log:', error))
         .finally(() => { running = false; arm() })
@@ -48,9 +54,11 @@ export function useCampaignRunLog(id: number | null, active: boolean): void {
     request(0)
     return () => {
       disposed = true; clearTimeout(timer)
+      if (olderRef.current === loadOlder) olderRef.current = async () => {}
       unsubscribeLog(); unsubscribeUpdate(); unsubscribeState(); unsubscribeStore()
       document.removeEventListener('visibilitychange', refreshVisible)
       window.removeEventListener('focus', refreshVisible)
     }
   }, [id, active])
+  return useCallback(() => olderRef.current(), [])
 }

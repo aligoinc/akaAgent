@@ -1,7 +1,8 @@
+import { readCampaignHistory, type CampaignHistorySnapshot } from '../../../shared/campaignHistory'
 import type { DesktopCampaignPage, DesktopCampaignPageQuery } from '../../../shared/desktopUiReads'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { create } from 'zustand'
-import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignLogSnapshot, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
+import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 import { useAuthStore } from './authStore'
 
 interface CampaignStore {
@@ -54,11 +55,11 @@ interface CampaignStore {
   loadingCampaigns: boolean
   loadCampaigns: (options?: { silent?: boolean; passive?: boolean; refreshSources?: boolean }) => Promise<void>
   campaignConfigs: Record<number, CampaignConfig>
-  campaignLogs: Record<number, CampaignLogSnapshot>
+  campaignLogs: Record<number, CampaignHistorySnapshot>
   loadingCampaignConfigIds: Record<number, true>
   loadingCampaignLogIds: Record<number, true>
   loadCampaignConfig: (id: number, options?: { force?: boolean }) => Promise<CampaignConfig | null>
-  loadCampaignLog: (id: number, options?: { force?: boolean }) => Promise<CampaignLogSnapshot | null>
+  loadCampaignLog: (id: number, options?: { force?: boolean; older?: boolean; current?: () => boolean }) => Promise<CampaignHistorySnapshot | null>
   createCampaign: (data: Partial<Campaign>, options?: { refresh?: boolean }) => Promise<Campaign>
   updateCampaign: (id: number, updates: CampaignUpdate, options?: { refresh?: boolean; requireEditReady?: boolean; expectedUpdatedAt?: string; retrySmsInputSchedule?: boolean; expectedEditVersion?: string }) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
@@ -196,7 +197,7 @@ let accountMutationRevision = 0
 const accountListLoads = new Map<string, SessionListLoadState>()
 const campaignListLoads = new Map<string, SessionListLoadState>()
 const campaignConfigLoadsInFlight = new Map<number, Promise<CampaignConfig | null>>()
-const campaignLogLoadsInFlight = new Map<number, Promise<CampaignLogSnapshot | null>>()
+const campaignLogLoadsInFlight = new Map<number, Promise<CampaignHistorySnapshot | null>>()
 const campaignConfigInvalidationVersions = new Map<number, number>()
 const campaignConfigReadVersions = new Map<number, string>()
 const offPageCampaignSignals = new Map<number, string>()
@@ -678,9 +679,11 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const pending = campaignLogLoadsInFlight.get(id)
     if (pending) return pending
     const cached = get().campaignLogs[id]
-    if (cached && options?.force !== true) return Promise.resolve(cached)
+    if (cached && options?.force !== true && !options?.older) return Promise.resolve(cached)
     set(state => ({ loadingCampaignLogIds: { ...state.loadingCampaignLogIds, [id]: true } }))
-    const operation = window.electronAPI.getDesktopCampaignLog(id).then(log => {
+    const current = () => storeSessionEpoch === requestEpoch && getStoreAuthScopeKey() === authScope && (options?.current?.() ?? true)
+    const operation = readCampaignHistory(id, cached, query => window.electronAPI.getDesktopCampaignLogs(id, query), options?.older, current).then(log => {
+      if (!current()) return null
       if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) return null
       set(state => {
         const campaignLogs = { ...state.campaignLogs }

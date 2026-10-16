@@ -1,3 +1,4 @@
+import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campaignHistory'
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
 import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckUsage } from '../shared/zaloPhoneCheck'
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
@@ -516,6 +517,7 @@ const electronAPI = {
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
 
   getDesktopCampaignConfig: (id: number): Promise<CampaignConfig | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignConfig, id),
+  getDesktopCampaignLogs: (id: number, query?: CampaignHistoryQuery): Promise<CampaignHistoryPage | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignLogs, id, query),
   getDesktopCampaignLog: (id: number): Promise<CampaignLogSnapshot | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignLog, id),
   onCampaignLogUpdated: (callback: (payload: { id: number }) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: { id: number }) => callback(payload)
