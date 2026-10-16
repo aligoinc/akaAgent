@@ -34,7 +34,8 @@ export function createZaloPhoneCheckStore() {
       const rows = { ...state.rows, [row.id]: row }
       store.setState({ rows, visibleIds: visible(state, rows), sequence: event.sequence,
         processed: state.processed + Number(hasResult(row.status)) - Number(hasResult(prior.status)),
-        checkingPhone: row.status === 'checking' ? row.phone : '' })
+        checkingPhone: row.status === 'checking' ? row.phone : '',
+        message: row.note })
     },
     complete(result: ZaloPhoneCheckResult) {
       const state = store.getState()

@@ -83,6 +83,8 @@ const ZALO_FRIEND_PAGE_SIZE = 500
 const ZALO_FRIEND_API_MIN_DELAY_MS = 2000
 const ZALO_FRIEND_API_MAX_DELAY_MS = 5000
 const ZALO_PHONE_CHECK_MAX_ATTEMPTS = 3
+const ZALO_PHONE_CHECK_HOUR_WAIT_SETTING = 'zalo.phone_check.hour_limit_wait_minutes'
+const ZALO_PHONE_CHECK_DEFAULT_HOUR_WAIT_MINUTES = 60
 const ZALO_FRIEND_API_429_RETRY_DELAYS_MS = [15_000, 30_000, 60_000] as const
 const ZALO_GROUP_INFO_BATCH_SIZE = 50
 const PHONE_RE = /((\+?84|0)[\s.-]?)?(3[2-9]|5[689]|7[06-9]|8[1-689]|9[0-46-9])[0-9\s.-]{7,}/g
@@ -214,6 +216,7 @@ export class ContactLoader {
     let claim: AccountRuntimeScanClaim | undefined
     let account: AutoAccount | null = null
     let errorMessage: string | undefined
+    let hourWaitMinutes: number | undefined
     const signal = load.controller.signal
     const assertActive = () => {
       signal.throwIfAborted()
@@ -240,7 +243,9 @@ export class ContactLoader {
         assertActive()
         const row = rows[index]
         row.accountId = accountId
-        for (let attempt = 1; attempt <= ZALO_PHONE_CHECK_MAX_ATTEMPTS; attempt++) {
+        let attempt = 1
+        while (true) {
+          assertActive()
           row.status = 'checking'
           row.note = attempt > 1 ? `Đang thử lại SĐT này (lần ${attempt}/${ZALO_PHONE_CHECK_MAX_ATTEMPTS}).` : ''
           emit(row)
@@ -264,6 +269,36 @@ export class ContactLoader {
             const errorName = (error as { name?: unknown } | null)?.name
             const code = errorName === 'AbortError' || errorName === 'TimeoutError' ? '' : phoneSearchErrorCode(error)
             const status = classifyZaloPhoneCheckApiCode(code)
+            if (status === 'hour_limit') {
+              row.note = `Đã đạt giới hạn tìm SĐT theo giờ (mã ${code}). Đang chuẩn bị thời gian chờ.`
+              emit(row)
+              if (hourWaitMinutes === undefined) {
+                hourWaitMinutes = ZALO_PHONE_CHECK_DEFAULT_HOUR_WAIT_MINUTES
+                try {
+                  const value = Number(await withRequestDeadline(signal,
+                    () => this.supabase.getSystemSettingValue(ZALO_PHONE_CHECK_HOUR_WAIT_SETTING), 5_000))
+                  // Positive whole minutes within the maximum delay supported by setTimeout.
+                  if (Number.isInteger(value) && value > 0 && value * 60_000 <= 2_147_483_647) hourWaitMinutes = value
+                } catch { /* Missing/unavailable settings use the default for this run. */ }
+                assertActive()
+              }
+              const delayMs = hourWaitMinutes * 60_000
+              const resumeAt = new Date(Date.now() + delayMs).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+              row.note = `Đã đạt giới hạn tìm SĐT theo giờ (mã ${code}). Chờ ${hourWaitMinutes} phút; tự kiểm tra lại SĐT này lúc ${resumeAt} (giờ Việt Nam). Có thể bấm Dừng.`
+              emit(row)
+              await this.sleep(delayMs, signal)
+              assertActive()
+              // An hourly limit is independent of the consecutive transport-failure budget.
+              attempt = 1
+              continue
+            }
+            if (status === 'day_limit') {
+              row.status = 'unknown'
+              row.note = `Đã đạt giới hạn tìm SĐT theo ngày (mã ${code}). Đã dừng lượt kiểm tra; SĐT này chưa có kết quả.`
+              emit(row)
+              errorMessage = row.note
+              break
+            }
             if (status) {
               row.status = status
               row.note = ''
@@ -282,6 +317,7 @@ export class ContactLoader {
               emit(row)
               await this.waitForZaloFriendApiDelay(accountId, load, delayMs)
               assertActive()
+              attempt++
               continue
             }
             row.status = 'unknown'
