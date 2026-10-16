@@ -24,7 +24,10 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const stopping = useStore(store, state => state.stopping)
   const hasRun = useStore(store, state => state.runId !== null)
   const allChecked = useStore(store, state => state.ids.length > 0 && state.processed === state.ids.length)
-  const [accountId, setAccountId] = useState(initialAccountId || 0)
+  const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || 0)
+  const zaloAccounts = accounts.filter(account => account.flatformType === 'zalo')
+  // Inherited IDs and refreshed account lists must use the same options as the select.
+  const accountId = zaloAccounts.some(account => account.id === selectedAccountId) ? selectedAccountId : 0
   const dailyLimit = useStore(store, state => state.usageAccountId === accountId ? state.usage?.limit ?? null : null)
   const [limit, setLimit] = useState<string | null>(null)
   const limitValue = limit ?? (dailyLimit === null ? '' : String(dailyLimit))
@@ -38,7 +41,6 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const usageReadGeneration = useRef(0)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
-  const zaloAccounts = accounts.filter(account => account.flatformType === 'zalo')
   const showError = (error: unknown) => useUiStore.getState().showAlert(messageOf(error), 'error')
 
   useEffect(() => {
@@ -70,8 +72,10 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
       mounted.current = false
       offRow(); offComplete()
       const state = store.getState()
-      if (state.busy && state.runId) void window.electronAPI.zaloPhoneCheck.cancel(state.runId).catch(() => undefined)
-      store.fail('Đã đóng phiên kiểm tra.')
+      if (state.busy) {
+        if (state.runId) void window.electronAPI.zaloPhoneCheck.cancel(state.runId).catch(() => undefined)
+        store.fail('Đã đóng phiên kiểm tra.')
+      }
       if (previousFocus?.isConnected) previousFocus.focus()
     }
   }, [store])
@@ -177,7 +181,7 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
     }} role="dialog" aria-modal="true" aria-labelledby="phone-check-title">
       <header className="modal-header"><h2 id="phone-check-title">Kiểm tra SĐT có Zalo</h2><button className="btn-icon" aria-label="Đóng kiểm tra SĐT" onClick={close} disabled={stopping || saving}><X size={18} /></button></header>
       <div className="phone-check-config">
-        <label>Tài khoản Zalo<select className="stepper-input" value={accountId} onChange={event => setAccountId(Number(event.target.value))} disabled={busy || saving}>
+        <label>Tài khoản Zalo<select className="stepper-input" value={accountId} onChange={event => setSelectedAccountId(Number(event.target.value))} disabled={busy || saving}>
           <option value={0}>Chọn tài khoản</option>{zaloAccounts.map(account => <option key={account.id} value={account.id}>{account.name} · {account.isZaloServer ? 'Zalo Server' : account.isZaloShowWeb ? 'Web' : 'QR'}</option>)}
         </select></label>
         <label>Số lượng kiểm tra<input className="stepper-input" type="number" min={1} max={dailyLimit ?? undefined} value={limitValue} onChange={event => setLimit(event.target.value)} disabled={busy || saving || dailyLimit === null} /></label>

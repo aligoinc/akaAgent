@@ -22,8 +22,12 @@ win.phoneSmoke = { store, phones, row: (event: any) => {
 }, complete: (rows?: any[], stopped = true) => {
   const result = { runId: request.runId, accountId: request.accountId, sequence: ++sequence, stopped, rows: rows || [...currentRows.values()].map(row => row.status === 'checking' ? { ...row, status: 'unknown', note: 'Đã dừng trước khi xác nhận được kết quả.' } : row) }
   completed(result); resolve(result)
-}, captureExport: (book: any) => { win.phoneSmoke.exported = book }, startCount: 0, cancels: [], closed: false, renders: {}, show: () => {
-  root.render(<><ZaloPhoneCheckModal initialAccountId={71} onClose={() => { win.phoneSmoke.closed = true; root.render(<div>Đã đóng</div>) }} /><ConfirmModal /><AlertModal /></>)
+}, captureExport: (book: any) => { win.phoneSmoke.exported = book }, startCount: 0, cancels: [], closed: false, renders: {}, usageRequests: [],
+setAccounts: (accounts: any[]) => useCampaignStore.setState({ accounts }),
+getAccounts: () => useCampaignStore.getState().accounts,
+show: (initialAccountId = 71, strict = false) => {
+  const content = <><ZaloPhoneCheckModal initialAccountId={initialAccountId} onClose={() => { win.phoneSmoke.closed = true; root.render(<div>Đã đóng</div>) }} /><ConfirmModal /><AlertModal /></>
+  root.render(strict ? <React.StrictMode>{content}</React.StrictMode> : content)
 } }
 win.electronAPI = {
   listDataTypeCategoryItems: async () => [{ id: 1, code: 'phone', name: 'SĐT', sortOrder: 1, isActive: true }, { id: 2, code: 'zalo_person', name: 'Zalo UID', sortOrder: 2, isActive: true }],
@@ -35,9 +39,15 @@ win.electronAPI = {
   ingestDataGroup: async (payload: any) => { win.phoneSmoke.ingested = payload; return { insertedMembershipCount: payload.rows.length, reactivatedMembershipCount: 0, alreadyMemberCount: 0, invalidCount: 0, incompatibleCount: 0, conflictCount: 0, conflicts: [] } },
 
   zaloPhoneCheck: {
-    usage: async (accountId: number) => win.phoneSmoke.deferUsage
-      ? new Promise((resolve, reject) => { (win.phoneSmoke.usageReads ||= []).push({accountId,resolve,reject}) })
-      : ({ allowed: (win.phoneSmoke.dailyLimit || 600) > 125, date: '2026-10-16', count: 125, limit: win.phoneSmoke.dailyLimit || 600, remaining: Math.max(0,(win.phoneSmoke.dailyLimit || 600)-125), resetAt: '2026-10-16T17:00:00Z' }),
+    usage: async (accountId: number) => {
+      win.phoneSmoke.usageRequests.push(accountId)
+      if (!useCampaignStore.getState().accounts.some(account => account.id === accountId && account.flatformType === 'zalo')) {
+        throw new Error('Phiên hoặc tài khoản không hợp lệ.')
+      }
+      return win.phoneSmoke.deferUsage
+        ? new Promise((resolve, reject) => { (win.phoneSmoke.usageReads ||= []).push({accountId,resolve,reject}) })
+        : ({ allowed: (win.phoneSmoke.dailyLimit || 600) > 125, date: '2026-10-16', count: 125, limit: win.phoneSmoke.dailyLimit || 600, remaining: Math.max(0,(win.phoneSmoke.dailyLimit || 600)-125), resetAt: '2026-10-16T17:00:00Z' })
+    },
     onRow: (handler: Function) => { rowHandler = handler; return () => {} },
     onCompleted: (handler: Function) => { completed = handler; return () => {} },
     start: (value: any) => { request = value; sequence = 0; currentRows = new Map(value.phones.slice(0, value.limit).map((phone: string) => [phone, { id: phone, phone, name: '', uid: '', status: 'pending', note: '' }])); win.phoneSmoke.request = value; win.phoneSmoke.startCount++; return new Promise(r => { resolve = r }) },

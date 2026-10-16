@@ -88,6 +88,14 @@ Cập nhật Server cũ trước Desktop để hỗ trợ payload trên 300; kh�
 
 Review ngày 16/10/2026: form upload dùng chung vẫn giữ trần 10.000 dòng. Đã tái hiện hạn mức cấu hình 10.001 nhưng file 10.001 SĐT bị importer từ chối trước bước kiểm tra riêng. Người dùng xác nhận không cấu hình tới mức này và yêu cầu giữ nguyên; không chặn PR vì finding này. Hạn mức hiện tại 600 không bị ảnh hưởng, không sửa form upload hoặc giới hạn chiến dịch.
 
+### Tài khoản ban đầu của modal — 17/10/2026
+
+Quét data có thể truyền ID Facebook hoặc ID không còn trong danh sách. Modal chỉ dùng ID thuộc danh sách tài khoản Zalo hiện tại cho dropdown, đọc hạn mức và bắt đầu; nếu không hợp lệ thì hiện **Chọn tài khoản**, chưa gửi request usage. Khi danh sách mất tài khoản đang chọn, xóa snapshot hạn mức và bỏ kết quả/lỗi đọc đến muộn bằng guard hiện có. Refresh metadata của cùng tài khoản không phát sinh lần đọc mới.
+
+Hồi quy Electron trong `scripts/run-zalo-phone-check-ui-smoke.cjs` bao phủ ID rỗng/Facebook/không tồn tại, chọn lại Zalo, kế thừa QR/Web/Server, refresh danh sách và tài khoản bị gỡ khi đang chờ usage. Hai typecheck và smoke UI 600 dòng đạt. Chỉ sửa renderer; không đổi quota/policy chiến dịch, DB, Chat API hoặc Server. Bộ cài 8.6.0 đã đóng gói trước đó chưa chứa bản sửa này.
+
+Thanh tổng kết giữ số lượng/tiến độ, hạn mức ngày và bộ lọc trên cùng hàng khi đủ chỗ; chỉ thông báo lỗi/trạng thái cần chiếm trọn hàng. Kiểm tra giao diện Electron 600 dòng ở 1440/1024 px nằm ngang, 800 px tự xuống hàng không tràn. Cleanup khi modal còn rảnh không ghi “Đã đóng phiên kiểm tra”, tránh thông báo sai khi React StrictMode chạy lại effect ở dev; lượt đang chạy vẫn hủy/cleanup như cũ. Smoke StrictMode và hồi quy dừng/đóng đạt.
+
 ### Apply và hiệu năng
 
 V407 đã apply trên **akachat** (`cgjbsmqtfhqvttudyjzq`), history **20261016090818 / migration_v407_zalo_phone_check_daily_limit**. Setting ID 70, value `600`, active/non-secret. Không apply lại khi merge hoặc phát hành.
