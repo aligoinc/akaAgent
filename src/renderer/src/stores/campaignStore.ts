@@ -60,7 +60,7 @@ interface CampaignStore {
   loadCampaignConfig: (id: number, options?: { force?: boolean }) => Promise<CampaignConfig | null>
   loadCampaignLog: (id: number, options?: { force?: boolean }) => Promise<CampaignLogSnapshot | null>
   createCampaign: (data: Partial<Campaign>, options?: { refresh?: boolean }) => Promise<Campaign>
-  updateCampaign: (id: number, updates: CampaignUpdate, options?: { refresh?: boolean; requireEditReady?: boolean; expectedUpdatedAt?: string; retrySmsInputSchedule?: boolean }) => Promise<void>
+  updateCampaign: (id: number, updates: CampaignUpdate, options?: { refresh?: boolean; requireEditReady?: boolean; expectedUpdatedAt?: string; retrySmsInputSchedule?: boolean; expectedEditVersion?: string }) => Promise<void>
   deleteCampaign: (id: number) => Promise<void>
   cloneCampaign: (id: number) => Promise<Campaign>
   bulkUpdateCampaignStatus: (ids: number[], status: string) => Promise<void>
@@ -712,7 +712,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
 
   updateCampaign: async (id, updates, options) => {
     if (!window.electronAPI) return
-    const result = await window.electronAPI.updateCampaign(id, updates, options?.requireEditReady, options?.expectedUpdatedAt, options?.retrySmsInputSchedule)
+    const result = await window.electronAPI.updateCampaign(id, updates, options?.requireEditReady, options?.expectedUpdatedAt, options?.retrySmsInputSchedule, options?.expectedEditVersion)
     if ('extraSettings' in updates || 'actionId' in updates) campaignSourcesInvalidationVersion++
     set(state => {
       const campaignConfigs = { ...state.campaignConfigs }

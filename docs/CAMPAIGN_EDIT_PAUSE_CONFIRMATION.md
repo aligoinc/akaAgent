@@ -14,7 +14,7 @@ Desktop và Web dùng một cổng mở sửa trong mỗi ứng dụng. Áp dụ
 
 ## Ranh giới ghi
 
-Desktop UI gửi `requireEditReady` và `expectedUpdatedAt` qua IPC hiện có. Main đọc lại readiness; UPDATE cấu hình lọc staff, id, chưa xóa, tạm dừng, hai token NULL và timestamp đã đọc, chống resume/claim/ghi từ phiên khác xen vào. Runtime/internal writers không bật guard dành cho UI.
+Desktop UI gửi `requireEditReady`, `expectedEditVersion` và `expectedUpdatedAt` qua IPC hiện có. Main dùng lần đọc readiness hiện có để so phiên bản cấu hình; chỉ khi cấu hình vẫn khớp mới dùng timestamp chính xác của hàng vừa đọc cho UPDATE. UPDATE lọc staff, id, chưa xóa, tạm dừng, hai token NULL và timestamp, chống resume/claim/ghi từ phiên khác xen vào. Caller chưa có phiên bản cấu hình giữ kiểm tra timestamp cũ. Runtime/internal writers không bật guard dành cho UI.
 
 Web PATCH mới opt-in `requireEditReady`. API kiểm tra tenant/quyền/phiên bản như cũ, đọc lại readiness rồi gọi **RPC atomic hiện có** với timestamp chính xác từ snapshot mới. Với đường sửa này, không dùng wrapper retry timestamp theo runtime vì wrapper đó có thể chấp nhận một lần resume xen giữa. Caller native cũ không opt-in vẫn giữ hợp đồng cũ. Không sửa định nghĩa RPC.
 
@@ -59,3 +59,21 @@ Kiểm chứng bản sửa SMS/voice: hai typecheck `tsconfig.node.json`/`tsconf
 ## Kiểm chứng nhánh PR riêng — 16/10/2026
 
 Tách đúng thay đổi sửa chiến dịch khỏi các thay đổi local khác. Trên checkout riêng: hai typecheck Desktop, production build, state machine/CAS, continuation, SMS/voice retry và giao diện Electron đều đạt. Web/API được kiểm chứng trên nhánh riêng của akaAgentWebApp; hai cấu hình trình duyệt Desktop/Android Chromium đạt với API/WebSocket giả lập. Không chạy chiến dịch thật hoặc phát hành.
+
+## Sửa lỗi lưu sau khi log thay đổi — 16/10/2026
+
+Người dùng báo Desktop: `Failed to update campaign: Cannot coerce the result to a single JSON object`. Đã tái hiện đúng thông báo bằng repository và Supabase HTTP client thật trên dữ liệu giả: mở form khi đã dừng → append log làm đổi `updated_at` → Lưu. Điều kiện timestamp của tính năng mới khớp 0 hàng; `.single()` trả PGRST116. Đây là hồi quy mới. Các ca review trước giữ timestamp cố định hoặc coi mọi thay đổi timestamp là xung đột, nên bỏ sót log phát sinh bình thường trong lúc form đang mở.
+
+- `editVersion` chỉ đọc, tính trong main từ cấu hình đã lưu trên cùng hàng DB; bỏ log, note, trạng thái và tiến độ runtime. Chuẩn hóa thứ tự key JSON, giữ thứ tự mảng; bao gồm lịch hiện tại/gốc, tài khoản, nội dung/media, extra settings, nguồn data và provisioning. Không dùng `readVersion` của cache UI thay cho phiên bản sửa.
+- Main so phiên bản cấu hình trong lần đọc readiness sẵn có. Log thay đổi không chặn nhầm; cấu hình thực sự thay đổi vẫn yêu cầu mở lại form. UPDATE cuối vẫn dùng timestamp nguyên vẹn đến microsecond và các điều kiện paused/unowned. Không đọc thêm, tự retry, thêm polling hay connection.
+- UPDATE khớp 0 hàng có thông báo tiếng Việt; giữ form. SMS/voice lưu dở trả thêm đúng phiên bản cấu hình vừa commit, helper giữ theo phiên form để retry qua log mới mà không nhận cấu hình của người sửa khác.
+- Form đầy đủ/lịch, nội dung/media và giới hạn cùng truyền phiên bản này. Nhân bản và tạo mới giữ nguyên luồng tạo.
+- Web đã so `configVersion` trước khi lấy timestamp mới cho RPC atomic, nên ca log đổi trong lúc mở form đã hoạt động. Chỉ bổ sung kiểm thử API Zalo/SMS và browser gửi đúng phiên bản cho sửa đầy đủ/sửa nhanh; không đổi mã nghiệp vụ Web/native.
+
+Đối chiếu chỉ đọc trên `akachat`: `public.append_auto_campaign_log(bigint,bigint,text)` cập nhật `updated_at` cùng log (checksum định nghĩa `f94520920cec83d91829b7f542435eeb`). `public.aka_agent_campaign_config_version(public.auto_campaigns)` giữ phiên bản khi chỉ đổi log/timestamp và đổi phiên bản khi nội dung đổi, kiểm tra bằng `SELECT` trên hàng tổng hợp, không ghi chiến dịch. Không thay định nghĩa/ACL/RPC; checksum đích không đổi.
+
+Hồi quy mới: `node scripts/campaign-edit-version-smoke.cjs` đi qua reader → IPC → writer → Supabase HTTP giả; kiểm tra log-only, cấu hình thực sự đổi, JSON đổi thứ tự key, timestamp microsecond, quyền/trạng thái/runtime đổi trước ghi và số lần đọc không tăng. Smoke SMS/voice và giao diện Electron bổ sung log xen giữa mở form/lưu dở/thử lại.
+
+Kiểm chứng hoàn tất: hai typecheck Desktop, typecheck monorepo Web/API và production build cả hai repo đạt. Smoke phiên bản mới, edit flow, continuation, SMS/voice, pause note, lịch AI và content preparation đạt; giao diện Electron đạt. Web: 22/22 ca API readiness, 125/125 ca form/quick edit/session và Playwright Desktop/Android Chromium 2/2 đạt. `git diff --check` sạch ở cả hai repo. Bản sửa ứng dụng nằm trong working tree, chưa đóng gói/phát hành/deploy; main/preload đang mở cần nạp lại bản mới.
+
+Kiểm chứng PR sửa lỗi trên checkout riêng từ `origin/dev_3`: hai typecheck, production build, HTTP regression, edit flow, continuation, SMS/voice retry và giao diện Electron đều đạt. Nhánh chỉ chứa bản sửa này; giữ nguyên các thay đổi local khác ở repo chính.

@@ -1,5 +1,6 @@
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
+import { getCampaignEditVersion } from '../campaignEditVersion'
 import { writeManagedActionResult, settleManagedActionInput, settleManagedBadTarget, defersManagedBadTargetReset } from '../../services/actionResultRuntime'
 import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
 import { recordKnownCampaignLog, rememberCampaignLogSnapshot } from '../../services/accountLogService'
@@ -2447,9 +2448,10 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
   if (requireEditReady) write = write.eq('is_delete', false).eq('status', 'tạm dừng')
     .is('runtime_claim_token', null).is('runtime_unit_token', null)
   if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
-  const { data, error } = await write.select(CAMPAIGN_SELECT).single()
+  const { data, error } = await write.select(CAMPAIGN_SELECT).maybeSingle()
 
   if (error) throw new Error(`Failed to update campaign: ${error.message}`)
+  if (!data) throw new Error('Chiến dịch đã thay đổi hoặc không còn sẵn sàng sửa. Vui lòng thử lưu lại; nếu vẫn lỗi, mở lại form sửa để tải cấu hình mới nhất.')
   const updatedCampaign = mapCampaignFromDB(data)
   if (
     isMobileManagedSmsCampaignAction(updatedCampaign.actionId) &&
@@ -2469,6 +2471,7 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
           code: 'campaign_input_materialization_failed',
           campaignId: id,
           updatedAt: updatedCampaign.updatedAt,
+          editVersion: getCampaignEditVersion(data),
           updateSmsSchedule,
           message: 'Cấu hình chiến dịch đã lưu, nhưng cập nhật data chưa hoàn tất. Bấm Lưu để thử lại trước khi tiếp tục chiến dịch.'
         })

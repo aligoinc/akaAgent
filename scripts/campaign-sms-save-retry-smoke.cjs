@@ -57,6 +57,7 @@ function fixture(actionId = 'sms_send') {
     clampCampaignExtraSettingsDailyLimits: value => value,
     assertAdvancedContentPersistenceContract() {}, getAdvancedContentItems: extra => extra?.advancedContentItems || [],
     mapCampaignFromDB: map,
+    getCampaignEditVersion: row => JSON.stringify([row.content, row.schedule, row.original_schedule, row.extra_settings]),
     listCampaignInputData: async () => state.inputs,
     renderMobileManagedInputContent: campaign => `${campaign.content}:${campaign.extraSettings.smsUseUnicode === true}`,
     normalizeCampaignInputPhoneCarrier: () => null,
@@ -81,7 +82,7 @@ function fixture(actionId = 'sms_send') {
         eq: (key, value) => (filters.push(row => row[key] === value), query),
         is: (key, value) => (filters.push(row => row[key] === value), query),
         in: (key, values) => (filters.push(row => values.includes(row[key])), query),
-        select: () => query, single: run, then: (resolve, reject) => run().then(resolve, reject)
+        select: () => query, single: run, maybeSingle: run, then: (resolve, reject) => run().then(resolve, reject)
       }
       return query
     } })
@@ -95,7 +96,7 @@ function fixture(actionId = 'sms_send') {
     realtimeRefreshController: { refreshSoon() { state.refreshes++ } },
     supabase: {
       updateCampaign: repo.updateCampaign,
-      getCampaignConfig: async () => ({ editReady: state.row.status === 'tạm dừng' &&
+      getCampaignConfig: async () => ({ updatedAt: state.row.updated_at, editVersion: scope.getCampaignEditVersion(state.row), editReady: state.row.status === 'tạm dừng' &&
         state.row.runtime_claim_token === null && state.row.runtime_unit_token === null })
     }
   })
@@ -110,7 +111,7 @@ function fixture(actionId = 'sms_send') {
       return structuredClone(await ipc.update(null, ...args))
     } } }
   })
-  return { state, repo, save: createCampaignConfigSaver(store.store.updateCampaign) }
+  return { state, repo, editVersion: () => scope.getCampaignEditVersion(state.row), save: createCampaignConfigSaver(store.store.updateCampaign) }
 }
 
 async function main() {
@@ -146,7 +147,7 @@ async function main() {
     await assert.rejects(save(91, { content: 'new' }, 'v0', session.signal), CampaignConfigSaveError)
     Object.assign(state.row, change)
     const writes = state.inputWrites
-    await assert.rejects(save(91, { content: 'retry' }, 'v0', session.signal), /conflict|tạm dừng/)
+    await assert.rejects(save(91, { content: 'retry' }, 'v0', session.signal), /conflict|tạm dừng|đã thay đổi/)
     assert.equal(state.configWrites, 1)
     assert.equal(state.inputWrites, writes)
   }
@@ -158,6 +159,21 @@ async function main() {
   first.abort()
   await assert.rejects(save(91, { content: 'closed' }, 'v0', first.signal), /đã đóng/)
   assert.equal(state.configWrites, 1)
+
+  // Both the first write and its own partial-save retry tolerate log-only updates.
+  for (const action of ['sms_send', 'voice_call']) {
+    const test = fixture(action), controller = new AbortController()
+    const openedVersion = test.editVersion()
+    test.state.row.updated_at = 'log-after-open'
+    await assert.rejects(test.save(91, { content: 'new' }, 'v0', controller.signal, openedVersion), CampaignConfigSaveError)
+    const committedVersion = test.editVersion()
+    test.state.row.updated_at = 'log-after-partial-save'
+    await test.save(91, { content: 'retry content' }, 'v0', controller.signal, openedVersion)
+    assert.equal(test.state.ipcArgs[0][5], openedVersion)
+    assert.equal(test.state.ipcArgs[1][5], committedVersion)
+    assert(test.state.inputs.every(row => row.content === 'retry content:false'))
+    assert.equal(test.state.configWrites, 2)
+  }
 
   // An ordinary write failure must not advance the form's expected version.
   const conflict = fixture()

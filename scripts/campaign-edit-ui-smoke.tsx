@@ -8,23 +8,24 @@ import { CampaignContentMediaUpdateModal } from '../src/renderer/src/components/
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 const base = (window as any).pendingSmoke
 const api = window.electronAPI
-const state: any = { pauses: 0, writes: 0, resumes: 0, failResume: false, ready: false }
-const config = (id: number) => ({ ...base.store.getState().campaigns.find((c: any) => c.id === id), editReady: state.ready, content: 'Nội dung sau khi dừng', images: [] })
+const state: any = { pauses: 0, writes: 0, resumes: 0, failResume: false, ready: false, editVersion: 'original-config' }
+const config = (id: number) => ({ ...base.store.getState().campaigns.find((c: any) => c.id === id), editReady: state.ready, editVersion: state.editVersion, content: 'Nội dung sau khi dừng', images: [] })
 window.electronAPI = new Proxy(api, { get(target, key) {
   if (key === 'getCampaignConfig' || key === 'getDesktopCampaignConfig') return async (id: number) => config(id)
   if (key === 'listCampaignInputData') return async () => [{ id: 1, uid: '123456', name: 'Khách thử', status: 'chờ xử lý' }]
-  if (key === 'updateCampaign') return async (id: number, patch: any, strict: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean) => {
+  if (key === 'updateCampaign') return async (id: number, patch: any, strict: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean, expectedEditVersion?: string) => {
     if (patch.status === 'tạm dừng') { state.pauses++; base.patch(id, { status: 'tạm dừng' }) }
     else if (patch.status === 'chờ xử lý') { state.resumes++; if (state.failResume) throw Error('Lỗi tiếp tục giả lập'); base.patch(id, patch) }
     else {
       if (!strict || !state.ready) throw Error('Missing readiness guard')
+      if (expectedEditVersion !== state.editVersion) throw Error('Missing or conflicting configuration version')
       if (state.mobileEditor) {
-        if (expectedUpdatedAt !== config(id).updatedAt) throw Error('Version conflict')
-        state.mobileWrites.push({ expectedUpdatedAt, retrySmsInputSchedule })
+        state.mobileWrites.push({ expectedUpdatedAt, retrySmsInputSchedule, expectedEditVersion })
         const updatedAt = `mobile-version-${state.mobileWrites.length}`
+        state.editVersion = `mobile-config-${state.mobileWrites.length}`
         base.patch(id, { ...patch, updatedAt })
         if (state.failInputs) return { code: 'campaign_input_materialization_failed', campaignId: id,
-          updatedAt, updateSmsSchedule: Boolean(patch.schedule || retrySmsInputSchedule),
+          updatedAt, editVersion: state.editVersion, updateSmsSchedule: Boolean(patch.schedule || retrySmsInputSchedule),
           message: 'Cấu hình chiến dịch đã lưu, nhưng cập nhật data chưa hoàn tất. Bấm Lưu để thử lại trước khi tiếp tục chiến dịch.' }
       }
       state.writes++
@@ -37,6 +38,7 @@ window.electronAPI = new Proxy(api, { get(target, key) {
 ;(window as any).editSmoke = { state, ready: () => { state.ready = true; base.store.setState({ campaignsReadAt: Date.now() }) },
   openMobileEditor: (mode: 'full' | 'quick', actionId: 'sms_send' | 'voice_call') => {
     state.mobileEditor = true; state.failInputs = true; state.mobileWrites = []; state.ready = true
+    state.editVersion = 'mobile-config-original'
     const user = useAuthStore.getState().user!
     useAuthStore.setState({ user: { ...user, entitlements: { ...user.entitlements!, sms: true } } })
     const action: any = { id: actionId, name: actionId, flatformType: 'sms', isActive: true, isDelete: false }
