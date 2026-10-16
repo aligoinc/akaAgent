@@ -47,6 +47,7 @@ function fixture(options = {}) {
   const claim = async () => { calls.push('claim'); if (options.busy) return { claimed: false }; held = true; return { claimed: true, previousStatus: 'tạm dừng', claimToken: 'claim-token', staffId: 7 } }
   const db = {
     getAccount: async () => account,
+    getSystemSettingValue: async key => { calls.push('setting'); assert.equal(key, 'zalo.phone_check.hour_limit_wait_minutes'); return options.setting ? options.setting() : '60' },
     claimZaloAccountRuntimeOperation: claim, claimZaloServerContactScan: claim,
     releaseZaloAccountRuntimeOperation: async (...args) => { assert.equal(args[4], 'claim-token'); calls.push('release'); held = false; return true }
   }
@@ -183,7 +184,7 @@ async function main() {
       [{ code: 'data_scan_runtime_binding_changed', message: 'fetch failed' }, 'unknown'],
       [{ code: 'phone_check_update_required', message: 'fetch failed' }, 'unknown'],
       [{ code: '212', message: 'fetch failed' }, 'not_found'],
-      [{ code: '312', message: 'fetch failed' }, 'found']
+      [{ code: '304', message: 'fetch failed' }, 'unknown']
     ]) {
       const f = fixture({ ...kind, lookup: async () => { throw failure } })
       const r = await f.loader.checkZaloPhones(req([phones[0]]))
@@ -216,10 +217,72 @@ async function main() {
       assert.equal(f.calls.filter(c => c === 'release').length, 1)
       assert.doesNotMatch(r.rows[0].note, /Đợi|Đang thử lại/)
     }
-    // akaBizAuto CheckPhoneExist_ByApi: 0 or SearchPhone.LIMITS => true; other API codes => false.
+    // Hour limits wait without counting a result, keep one claim and retry the same phone.
+    for (const code of [312, 221]) {
+      const waits = [], perPhone = new Map()
+      const f = fixture({ ...kind, setting: async () => '7', lookup: async ({ phone }) => {
+        const n = (perPhone.get(phone) || 0) + 1; perPhone.set(phone, n)
+        if (n <= 2) throw error(code)
+        return { user: { uid: '1234', displayName: 'After hourly wait' } }
+      } })
+      f.loader.sleep = async (ms, signal) => {
+        assert.equal(f.held(), true); assert.equal(signal.aborted, false); waits.push(ms)
+        const row = f.events.at(-1).payload.row
+        assert.equal(row.status, 'checking'); assert.equal(row.uid, ''); assert.equal(row.name, '')
+        assert.match(row.note, /giới hạn.*theo giờ.*Chờ 7 phút.*tự kiểm tra lại SĐT này/)
+      }
+      const r = await f.loader.checkZaloPhones(req())
+      assert.deepEqual(waits, Array(6).fill(7 * 60_000))
+      assert.deepEqual(f.calls.filter(c => /^090/.test(c)), phones.slice(0, 3).flatMap(phone => Array(3).fill(phone)))
+      assert.equal(f.calls.filter(c => c === 'setting').length, 1)
+      assert.equal(f.calls.filter(c => c === 'claim').length, 1)
+      assert.equal(f.calls.filter(c => c === 'release').length, 1)
+      assert.ok(r.rows.every(row => row.status === 'found')); assert.equal(r.stopped, false)
+      const live = createZaloPhoneCheckStore(); live.load(req().phones); live.begin(r.runId, 71)
+      live.filter('found')
+      for (const { payload } of f.events.filter(e => e.channel === h.ZALO_PHONE_CHECK_IPC.row)) {
+        const before = live.getState().processed
+        live.row(payload)
+        if (payload.row.status === 'checking') {
+          assert.equal(live.getState().processed, before)
+          assert.equal(live.getState().message, payload.row.note)
+          assert.ok(!live.getState().visibleIds.includes(payload.row.id))
+        }
+      }
+      assert.equal(live.getState().processed, 3); assert.equal(live.getState().message, '')
+    }
+    for (const code of [313, 304]) {
+      const f = fixture({ ...kind, errorAt: 2, code }), r = await f.loader.checkZaloPhones(req())
+      assert.deepEqual(r.rows.map(row => row.status), ['found', 'unknown', 'pending'])
+      assert.match(r.error, /giới hạn.*theo ngày.*Đã dừng/)
+      assert.equal(r.error, r.rows[1].note); assert.equal(r.rows[1].uid, '')
+      assert.equal(r.stopped, true); assert.equal(f.held(), false)
+      assert.equal(f.calls.filter(c => c === 'setting').length, 0)
+      assert.deepEqual(f.calls.filter(c => /^090/.test(c)), phones.slice(0, 2))
+    }
+    // Abort the actual long timer, without waiting for it; no late lookup after cancellation.
+    for (const cancelKind of ['stop', 'parent', 'runtime']) {
+      let entered
+      const sleeping = new Promise(resolve => { entered = resolve })
+      const f = fixture({ ...kind, lookup: async () => { throw error(312) } })
+      const sleep = f.loader.sleep.bind(f.loader)
+      f.loader.sleep = (ms, signal) => { assert.equal(ms, 3_600_000); entered(); return sleep(ms, signal) }
+      const request = req(), parent = new AbortController()
+      const pending = f.loader.checkZaloPhones(request, parent.signal)
+      await sleeping
+      if (cancelKind === 'stop') f.loader.cancelZaloPhoneCheck(71, request.runId)
+      else if (cancelKind === 'parent') parent.abort()
+      else f.loader.cancelAllZaloPhoneChecks()
+      const r = await pending
+      assert.deepEqual(r.rows.map(row => row.status), ['unknown', 'pending', 'pending'])
+      assert.deepEqual(f.calls.filter(c => /^090/.test(c)), [phones[0]])
+      assert.equal(f.calls.filter(c => c === 'release').length, 1)
+      assert.equal(r.stopped, true); assert.equal(f.held(), false)
+    }
+    // Non-limit Zalo response codes keep the existing akaBizAuto classification.
     // These are Zalo response codes, not HTTP status codes.
     for (const [code, status] of [
-      [0, 'found'], [312, 'found'], [313, 'found'], [304, 'found'], [221, 'found'],
+      [0, 'found'],
       [212, 'not_found'], [214, 'not_found'], [216, 'not_found'], [401, 'not_found'],
       [429, 'not_found'], [-1, 'not_found'], [999, 'not_found'], [20, 'not_found'], [23, 'not_found']
     ]) {
@@ -318,6 +381,50 @@ async function main() {
     early.loader.cancelZaloPhoneCheck(71, earlyRequest.runId)
     await assert.rejects(early.loader.checkZaloPhones(earlyRequest), /bị dừng/); assert.deepEqual(early.calls, [])
   }
+  // A setting read is lazy, bounded, once per run; invalid/missing/failed reads fall back to 60.
+  for (const value of ['', '0', '-1', '1.5', 'bad', 'Infinity', '35792', null, 'throw', '1', '35791']) {
+    const f = fixture({ errorAt: 1, code: 221, setting: async () => { if (value === 'throw') throw new Error('offline'); return value } })
+    const waits = []; f.loader.sleep = async ms => { waits.push(ms) }
+    const r = await f.loader.checkZaloPhones(req([phones[0]]))
+    assert.deepEqual(waits, [(value === '1' ? 1 : value === '35791' ? 35791 : 60) * 60_000])
+    assert.equal(r.rows[0].status, 'found'); assert.equal(f.calls.filter(c => c === 'setting').length, 1)
+  }
+  // Cancellation during a slow setting read ignores the eventual value and prevents the wait/retry.
+  {
+    let entered, finish
+    const reading = new Promise(resolve => { entered = resolve })
+    const f = fixture({ errorAt: 1, code: 312, setting: () => { entered(); return new Promise(resolve => { finish = resolve }) } })
+    f.loader.sleep = async () => { throw new Error('Must never sleep after cancel') }
+    const request = req(), pending = f.loader.checkZaloPhones(request)
+    await reading; f.loader.cancelZaloPhoneCheck(71, request.runId)
+    const r = await pending, count = f.events.length
+    finish('5'); await tick()
+    assert.equal(f.events.length, count); assert.equal(r.stopped, true)
+    assert.deepEqual(f.calls.filter(c => /^090/.test(c)), [phones[0]])
+    assert.equal(f.calls.filter(c => c === 'release').length, 1)
+  }
+  // Hourly wait resets transport retries; daily limit after waiting still stops at the same phone.
+  for (const daily of [false, true]) {
+    const sequence = [new TypeError('fetch failed'), error(312), new TypeError('fetch failed'), new TypeError('fetch failed'), ...(daily ? [error(313)] : [])]
+    const f = fixture({ lookup: async () => { if (sequence.length) throw sequence.shift(); return { user: { uid: '1234' } } } })
+    const waits = []; f.loader.sleep = async ms => { waits.push(ms) }
+    const r = await f.loader.checkZaloPhones(req())
+    assert.deepEqual(waits, [3_600_000])
+    assert.deepEqual(r.rows.map(row => row.status), daily ? ['unknown', 'pending', 'pending'] : ['found', 'found', 'found'])
+    assert.equal(r.stopped, daily)
+  }
+  // A hung settings request reaches its own deadline and defaults without hanging the scan.
+  {
+    const original = global.setTimeout
+    global.setTimeout = (fn, ms, ...args) => original(fn, ms === 5000 ? 5 : ms, ...args)
+    try {
+      const f = fixture({ errorAt: 1, code: 312, setting: () => new Promise(() => {}) })
+      const waits = []; f.loader.sleep = async ms => { waits.push(ms) }
+      const r = await f.loader.checkZaloPhones(req([phones[0]]))
+      assert.deepEqual(waits, [3_600_000]); assert.equal(r.stopped, false)
+      assert.equal(f.calls.filter(c => c === 'release').length, 1)
+    } finally { global.setTimeout = original }
+  }
   // A deadline aborts the request, preserves pending rows and releases exactly once.
   const nativeTimeout = global.setTimeout
   global.setTimeout = (fn, ms, ...args) => nativeTimeout(fn, ms === 30000 ? 5 : ms, ...args)
@@ -402,8 +509,7 @@ async function main() {
     for (const [code, status, sources] of [
       ['0', 'found', [32]],
       ['212', 'not_found', [32]], ['214', 'not_found', [32]], ['216', 'not_found', [32]],
-      ['312', 'found', [32, 40]], ['313', 'found', [32, 40]],
-      ['304', 'found', [32, 40]], ['221', 'found', [32, 40]], ['999', 'not_found', [32]]
+      ['999', 'not_found', [32]]
     ]) {
       responseCode = code; payloads.length = 0
       const f = fixture({ server: true })
@@ -412,6 +518,22 @@ async function main() {
       assert.deepEqual(r.rows.map(row => row.status), [status, status])
       assert.deepEqual(payloads.map(p => p.payload.reqSrc), [...sources, ...sources])
       assert.equal(r.stopped, false); assert.equal(f.held(), false)
+    }
+    // Real Chat client/source preserves final limit selection, then retries after hourly wait.
+    for (const code of ['312', '221', '313', '304']) {
+      const hourly = ['312', '221'].includes(code)
+      responseCode = '0'; payloads.length = 0
+      responseSequence.push({ code }, { code })
+      const f = fixture({ server: true }), waits = []
+      f.runtime.findUserByPhone = source.findUserByPhone.bind(source)
+      f.loader.sleep = async ms => { waits.push(ms) }
+      const r = await f.loader.checkZaloPhones(req(phones.slice(0, 2)))
+      assert.deepEqual(r.rows.map(row => row.status), hourly ? ['found', 'found'] : ['unknown', 'pending'])
+      assert.deepEqual(payloads.map(p => p.payload.reqSrc), hourly ? [32, 40, 32, 32] : [32, 40])
+      assert.deepEqual(payloads.map(p => p.payload.phoneNumber), hourly ? [phones[0], phones[0], phones[0], phones[1]] : [phones[0], phones[0]])
+      assert.deepEqual(waits, hourly ? [3_600_000] : [])
+      assert.equal(r.stopped, !hourly); assert.equal(f.held(), false)
+      assert.equal(responseSequence.length, 0)
     }
     responseCode = 'data_scan_failed'
     for (const recovery of [false, true]) {
@@ -528,7 +650,7 @@ async function main() {
     assert.throws(() => h.zaloPhoneCheckGroupRows(r.rows, 'zalo_person'), /Zalo ID/)
   }
   if (process.versions.electron) await checkNativeWebAbort()
-  console.log('PASS fetch failed retries: same phone, scan delay, 3-attempt limit, per-phone budget, progress and cancellation during sleep; akaBizAuto code parity (0/limits/other), DOM abort/timeout vs API codes, safe runtime error detail in row/summary/Excel, continuation and empty UID, real Chat transport/fallback vs HTTP errors, normalization, 300/301, Excel/groups, QR/Web/legacy/Chat, busy/auth, timeout/cancel/late results, store and IPC')
+  console.log('PASS fetch failed retries: same phone, scan delay, 3-attempt limit, per-phone budget, progress and cancellation during sleep; hour limits 312/221 setting/sleep/retry/cancel, day limits 313/304 stop, non-limit akaBizAuto code parity, DOM abort/timeout vs API codes, safe runtime error detail in row/summary/Excel, continuation and empty UID, real Chat transport/fallback vs HTTP errors, normalization, 300/301, Excel/groups, QR/Web/legacy/Chat, busy/auth, timeout/cancel/late results, store and IPC')
 }
 main().then(() => { if (process.versions.electron) require('electron').app.quit() }).catch(error => {
   console.error(error)
