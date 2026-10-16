@@ -153,6 +153,7 @@ export interface ZaloServerCommandResponse {
 
 export interface ZaloServerHelloMessage {
   type: 'hello'
+  phoneCheckCapabilities?: string[]
   snapshot: ZaloServerSnapshot
   events: ZaloServerRuntimeEvent[]
   /** Control-web clients always start at the connection boundary. */

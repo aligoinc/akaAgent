@@ -2,8 +2,17 @@ import { normalizeVietnamMobilePhone } from './phone'
 import type { DataGroupIngestRow } from './types'
 
 export const ZALO_PHONE_CHECK_MAX = 300
+export const ZALO_PHONE_CHECK_DAILY_CAPABILITY = 'phone_check_daily_limit_v1'
+export interface ZaloPhoneCheckUsage {
+  allowed: boolean; date: string; count: number; limit: number; remaining: number; resetAt: string
+}
+export function zaloPhoneCheckDailyLimitMessage(usage: ZaloPhoneCheckUsage): string {
+  const reset = new Date(usage.resetAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })
+  return `Tài khoản đã dùng ${usage.count}/${usage.limit} lượt kiểm tra SĐT hôm nay. Đã dừng lượt kiểm tra. Có thể tiếp tục từ ${reset} (giờ Việt Nam).`
+}
 export const ZALO_PHONE_CHECK_IPC = {
   start: 'contacts:zalo-phone-check:start', cancel: 'contacts:zalo-phone-check:cancel',
+  usage: 'contacts:zalo-phone-check:usage',
   row: 'contacts:zalo-phone-check:row', completed: 'contacts:zalo-phone-check:completed'
 } as const
 export type ZaloPhoneCheckStatus = 'pending' | 'checking' | 'found' | 'not_found' | 'unknown'
@@ -31,9 +40,11 @@ export interface ZaloPhoneCheckRow {
 }
 export interface ZaloPhoneCheckRequest { runId: string; accountId: number; limit: number; phones: string[] }
 export interface ZaloPhoneCheckEvent {
+  usage?: ZaloPhoneCheckUsage
   runId: string; accountId: number; sequence: number; row: ZaloPhoneCheckRow
 }
 export interface ZaloPhoneCheckResult {
+  usage?: ZaloPhoneCheckUsage
   runId: string; accountId: number; sequence: number
   stopped: boolean; error?: string; rows: ZaloPhoneCheckRow[]
 }

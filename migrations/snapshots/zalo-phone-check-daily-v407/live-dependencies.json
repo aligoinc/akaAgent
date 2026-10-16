@@ -1,0 +1,86 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "captured": "2026-10-16",
+  "dependencies": [
+    {
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "5a9a503db72b965eb644739f5f60905d"
+    },
+    {
+      "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+      "definition": "CREATE OR REPLACE FUNCTION public.claim_zalo_account_runtime_operation(p_account_id bigint, p_staff_id bigint, p_runtime_target text, p_previous_status text, p_claim_token uuid, p_requires_login boolean DEFAULT true)\n RETURNS jsonb\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_account public.auto_accounts%ROWTYPE;\n  v_organization_id bigint;\n  v_runtime_target text := lower(btrim(COALESCE(p_runtime_target, '')));\n  v_previous_status text := btrim(COALESCE(p_previous_status, ''));\n  v_capabilities record;\n  v_is_web boolean;\n  v_is_server boolean;\nBEGIN\n  IF p_account_id IS NULL OR p_account_id <= 0\n    OR p_staff_id IS NULL OR p_staff_id <= 0\n  THEN\n    RAISE EXCEPTION 'Account and staff IDs must be positive integers';\n  END IF;\n  IF v_runtime_target NOT IN ('desktop', 'server') THEN\n    RAISE EXCEPTION 'Runtime target must be desktop or server';\n  END IF;\n  IF v_previous_status NOT IN ('chờ xử lý', 'tạm dừng') THEN\n    RAISE EXCEPTION 'Previous account status must be pending or paused';\n  END IF;\n  IF p_claim_token IS NULL THEN\n    RAISE EXCEPTION 'Runtime claim token is required';\n  END IF;\n\n  SELECT staff.organization_id\n  INTO v_organization_id\n  FROM public.org_staff AS staff\n  WHERE staff.id = p_staff_id\n    AND staff.is_active = true AND public.aka_agent_staff_time_allowed(staff.id)\n  FOR SHARE OF staff;\n  IF NOT FOUND OR v_organization_id IS NULL THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'staff_not_active'\n    );\n  END IF;\n\n  PERFORM pg_advisory_xact_lock_shared(\n    hashtextextended('aka-agent-zalo-runtime-entitlement-mutation', 0)\n  );\n  SELECT *\n  INTO v_capabilities\n  FROM public.resolve_organization_zalo_account_capabilities(\n    v_organization_id\n  );\n\n  SELECT account.*\n  INTO v_account\n  FROM public.auto_accounts AS account\n  WHERE account.id = p_account_id\n    AND account.staff_id = p_staff_id\n    AND (\n      account.organization_id IS NULL\n      OR account.organization_id = v_organization_id\n    )\n  FOR UPDATE OF account;\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'account_not_found'\n    );\n  END IF;\n\n  IF COALESCE(v_account.is_delete, false)\n    OR lower(btrim(COALESCE(v_account.flatform_type, ''))) <> 'zalo'\n  THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'account_not_available'\n    );\n  END IF;\n\n  v_is_web := COALESCE(v_account.is_zalo_show_web, false);\n  v_is_server := COALESCE(v_account.is_zalo_server, false);\n  IF (\n    v_runtime_target = 'server'\n    AND (\n      v_is_web\n      OR NOT v_is_server\n      OR NOT COALESCE(v_capabilities.qr_enabled, false)\n      OR NOT COALESCE(v_capabilities.server_enabled, false)\n    )\n  ) OR (\n    v_runtime_target = 'desktop'\n    AND (\n      v_is_server\n      OR (\n        v_is_web\n        AND NOT COALESCE(v_capabilities.web_enabled, false)\n      )\n      OR (\n        NOT v_is_web\n        AND NOT v_is_server\n        AND NOT COALESCE(v_capabilities.qr_enabled, false)\n      )\n    )\n  ) THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'runtime_not_owner'\n    );\n  END IF;\n\n  -- Retry of the same account-operation token remains idempotent after an\n  -- ambiguous response. A campaign cannot form a unit while this account row\n  -- is already owned/running by that token.\n  IF v_account.status = 'đang chạy'\n    AND v_account.runtime_operation_claim_token = p_claim_token\n  THEN\n    RETURN jsonb_build_object(\n      'claimed', true,\n      'account_id', p_account_id,\n      'previous_status', v_previous_status,\n      'claim_token', p_claim_token,\n      'runtime_target', v_runtime_target\n    );\n  END IF;\n\n  IF EXISTS (\n    SELECT 1\n    FROM public.auto_campaigns AS campaign\n    WHERE campaign.account_id = p_account_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign.runtime_unit_token IS NOT NULL\n  ) OR EXISTS (\n    SELECT 1\n    FROM public.auto_campaigns AS campaign\n    WHERE campaign.account_id = p_account_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign.status = 'đang chạy'\n  ) OR EXISTS (\n    SELECT 1\n    FROM public.auto_campaign_inputs AS campaign_input\n    JOIN public.auto_campaigns AS campaign\n      ON campaign.id = campaign_input.campaign_id\n    WHERE campaign.account_id = p_account_id\n      AND campaign.staff_id = p_staff_id\n      AND campaign_input.status = 'đang chạy'\n  ) OR EXISTS (\n    SELECT 1\n    FROM public.auto_campaign_input_data AS input_data\n    JOIN public.auto_campaigns AS campaign\n      ON campaign.id = input_data.campaign_id\n    WHERE campaign.account_id = p_account_id\n      AND campaign.staff_id = p_staff_id\n      AND input_data.status = 'đang chạy'\n  ) THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'work_running'\n    );\n  END IF;\n\n  IF v_account.status IS DISTINCT FROM v_previous_status\n    OR (\n      COALESCE(p_requires_login, true)\n      AND (\n        v_account.is_active IS NOT TRUE\n        OR v_account.login_status IS DISTINCT FROM 'đã đăng nhập'\n      )\n    )\n  THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'account_not_available'\n    );\n  END IF;\n\n  UPDATE public.auto_accounts AS account\n  SET status = 'đang chạy',\n    runtime_operation_claim_token = p_claim_token,\n    updated_at = now()\n  WHERE account.id = p_account_id\n    AND account.status = v_previous_status;\n\n  IF NOT FOUND THEN\n    RETURN jsonb_build_object(\n      'claimed', false,\n      'account_id', p_account_id,\n      'reason', 'account_not_available'\n    );\n  END IF;\n\n  RETURN jsonb_build_object(\n    'claimed', true,\n    'account_id', p_account_id,\n    'previous_status', v_previous_status,\n    'claim_token', p_claim_token,\n    'runtime_target', v_runtime_target\n  );\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "2f925040dd0bdc49725e0cebbf07c407"
+    },
+    {
+      "signature": "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_finalize_zalo_server_contact_dataset(p_staff_id bigint, p_organization_id bigint, p_account_id bigint, p_scan_type text, p_contact_type text, p_source_key text, p_name text, p_link text, p_description text, p_status text, p_contact_uids text[], p_extra_data jsonb, p_data_type_category_item_id bigint, p_claim_token uuid)\n RETURNS SETOF auto_account_contacts_dataset\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE\n  v_account public.auto_accounts%ROWTYPE;\n  v_capabilities record;\n  v_expected_type bigint;\nBEGIN\n  IF p_staff_id IS NULL OR p_staff_id <= 0\n    OR p_organization_id IS NULL OR p_organization_id <= 0\n    OR p_account_id IS NULL OR p_account_id <= 0\n    OR p_claim_token IS NULL\n  THEN\n    RAISE EXCEPTION 'server_contact_dataset_claim_required';\n  END IF;\n  IF p_scan_type IS DISTINCT FROM 'zalo_group_members'\n    OR p_contact_type IS DISTINCT FROM 'person'\n  THEN\n    RAISE EXCEPTION 'server_contact_dataset_scan_not_supported';\n  END IF;\n\n  -- Match claim lock order: staff, entitlement barrier, account.\n  PERFORM 1 FROM public.org_staff AS staff\n  WHERE staff.id = p_staff_id\n    AND staff.organization_id = p_organization_id\n    AND staff.is_active = true\n  FOR SHARE OF staff;\n  IF NOT FOUND THEN\n    RAISE EXCEPTION 'server_contact_dataset_staff_invalid';\n  END IF;\n  PERFORM pg_advisory_xact_lock_shared(\n    hashtextextended('aka-agent-zalo-runtime-entitlement-mutation', 0)\n  );\n  SELECT * INTO v_capabilities\n  FROM public.resolve_organization_zalo_account_capabilities(p_organization_id);\n  IF NOT COALESCE(v_capabilities.qr_enabled, false)\n    OR NOT COALESCE(v_capabilities.server_enabled, false)\n  THEN\n    RAISE EXCEPTION 'server_contact_dataset_runtime_not_owner';\n  END IF;\n\n  SELECT account.* INTO v_account\n  FROM public.auto_accounts AS account\n  WHERE account.id = p_account_id\n    AND account.staff_id = p_staff_id\n    AND account.organization_id = p_organization_id\n    AND COALESCE(account.is_delete, false) = false\n  FOR UPDATE OF account;\n  IF NOT FOUND\n    OR lower(btrim(COALESCE(v_account.flatform_type, ''))) <> 'zalo'\n    OR v_account.is_zalo_server IS NOT TRUE\n    OR v_account.is_zalo_show_web IS TRUE\n    OR v_account.status IS DISTINCT FROM 'đang chạy'\n    OR v_account.runtime_operation_claim_token IS DISTINCT FROM p_claim_token\n  THEN\n    RAISE EXCEPTION 'server_contact_dataset_claim_invalid';\n  END IF;\n\n  v_expected_type := public.aka_agent_data_type_category_item_id('zalo_person', true);\n  IF v_expected_type IS NULL OR (p_data_type_category_item_id IS NOT NULL\n    AND p_data_type_category_item_id <> v_expected_type)\n  THEN\n    RAISE EXCEPTION 'server_contact_dataset_data_type_invalid';\n  END IF;\n\n  -- Reuse the live v244 semantic core and v205 snapshot behavior. In particular,\n  -- partial results merge, completed snapshots replace, and failed scans preserve members.\n  RETURN QUERY SELECT * FROM public.aka_agent_finalize_contact_dataset(\n    p_staff_id, p_organization_id, p_account_id,\n    p_scan_type, p_contact_type, p_source_key, p_name, p_link, p_description,\n    p_status, p_contact_uids, p_extra_data, v_expected_type\n  );\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "c97300fa762faa37e7b931761a9b2abb"
+    }
+  ],
+  "baseline": {
+    "dep": {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres",
+        "aka_agent_chat_api=X/postgres"
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "checksum": "46412e94cf00a788230835f6d56d8d3b",
+      "security": false,
+      "definition": "CREATE OR REPLACE FUNCTION public.resolve_organization_zalo_account_capabilities(p_organization_id bigint)\n RETURNS TABLE(entitlement_id bigint, product_id bigint, product_name text, package_name text, package_type text, expiration_date timestamp with time zone, max_sends_per_day integer, max_accounts integer, created_at timestamp with time zone, qr_enabled boolean, web_enabled boolean, server_enabled boolean, capability_revision text)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public', 'private'\nAS $function$\n  WITH pools AS MATERIALIZED (\n    SELECT *\n    FROM private.resolve_organization_zalo_entitlement_pools(p_organization_id)\n  ),\n  flags AS (\n    SELECT\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'qr'),\n        false\n      ) AS qr_enabled,\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'web'),\n        false\n      ) AS web_enabled,\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'server'),\n        false\n      ) AS server_enabled\n    FROM pools\n  ),\n  primary_pool AS (\n    SELECT *\n    FROM pools\n    WHERE entitlement_id IS NOT NULL\n    ORDER BY CASE account_subtype\n      WHEN 'server' THEN 1\n      WHEN 'web' THEN 2\n      ELSE 3\n    END\n    LIMIT 1\n  )\n  SELECT\n    primary_pool.entitlement_id,\n    primary_pool.product_id,\n    primary_pool.product_name,\n    primary_pool.package_name,\n    primary_pool.package_type,\n    primary_pool.expiration_date,\n    primary_pool.max_sends_per_day,\n    primary_pool.max_accounts,\n    primary_pool.created_at,\n    flags.qr_enabled,\n    flags.web_enabled,\n    flags.server_enabled,\n    COALESCE(\n      primary_pool.pool_revision,\n      'none:' || COALESCE(p_organization_id::text, 'null')\n    ) AS capability_revision\n  FROM flags\n  LEFT JOIN primary_pool ON true;\n$function$\n"
+    },
+    "absent": true,
+    "policy": "de5ce939e25e69700b637963e54c4502",
+    "settings": "ea82696496e648e0eace87b56edcc356",
+    "triggers": [
+      "CREATE TRIGGER trg_auto_accounts_runtime_operation_claim_token BEFORE UPDATE OF status, runtime_operation_claim_token ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION guard_auto_account_runtime_operation_claim_token()",
+      "CREATE TRIGGER trg_facebook_account_cleanup BEFORE UPDATE OF is_delete, flatform_type, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION aka_agent_facebook_account_cleanup()",
+      "CREATE TRIGGER trg_lock_auto_account_control_resources BEFORE INSERT OR UPDATE OF account_group_id, proxy_id, flatform_type, is_zalo_show_web, is_zalo_server, is_delete, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION lock_auto_account_control_resources()",
+      "CREATE TRIGGER trg_normalize_legacy_zalo_account_server_owner BEFORE INSERT ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION normalize_legacy_zalo_account_server_owner()",
+      "CREATE TRIGGER trg_validate_zalo_account_capability_and_quota BEFORE INSERT OR UPDATE OF flatform_type, is_zalo_show_web, is_zalo_server, is_delete, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION enforce_zalo_account_capability_and_quota()",
+      "CREATE TRIGGER trg_zz_facebook_login_claim_generation BEFORE UPDATE OF status, runtime_operation_claim_token ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION guard_facebook_login_claim_generation()"
+    ],
+    "campaign_reset": [
+      {
+        "checksum": "288c1dffb3764a9f8b4bd9626bf8dc61",
+        "signature": "aka_agent_get_account_action_status_today(bigint,text)"
+      },
+      {
+        "checksum": "a73e7ec7edc66cf6389b4233ffbcc3de",
+        "signature": "increment_auto_account_action_count(bigint,text,integer)"
+      },
+      {
+        "checksum": "14ea7ed9cdee3aa6e743c45f9282a195",
+        "signature": "reset_auto_account_action_status_daily()"
+      }
+    ]
+  }
+}

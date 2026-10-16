@@ -19,6 +19,7 @@ import { ZALO_PHONE_CHECK_IPC, classifyZaloPhoneCheckApiCode, createZaloPhoneChe
 import { phoneSearchErrorCode } from './zaloPhoneSearch'
 import { withRequestDeadline } from './requestDeadline'
 import { sanitizeDiagnosticText } from '../../shared/campaignDiagnostics'
+import { zaloPhoneCheckDailyLimitMessage, type ZaloPhoneCheckUsage } from '../../shared/zaloPhoneCheck'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -217,6 +218,7 @@ export class ContactLoader {
     let account: AutoAccount | null = null
     let errorMessage: string | undefined
     let hourWaitMinutes: number | undefined
+    let usage: ZaloPhoneCheckUsage | undefined
     const signal = load.controller.signal
     const assertActive = () => {
       signal.throwIfAborted()
@@ -225,7 +227,7 @@ export class ContactLoader {
     }
     const emit = (row: ZaloPhoneCheckRow) => {
       if (parentSignal?.aborted || this.mainWindow.isDestroyed()) return
-      this.mainWindow.webContents.send(ZALO_PHONE_CHECK_IPC.row, { runId, accountId, sequence: ++sequence, row: { ...row } })
+      this.mainWindow.webContents.send(ZALO_PHONE_CHECK_IPC.row, { runId, accountId, sequence: ++sequence, row: { ...row }, usage })
     }
     try {
       account = await this.supabase.getAccount(accountId)
@@ -246,6 +248,19 @@ export class ContactLoader {
         let attempt = 1
         while (true) {
           assertActive()
+          // Reserve before dispatch, outside the Zalo error classifier/retry loop.
+          // Uncertain database results must never trigger a Zalo request or another reservation.
+          usage = await withRequestDeadline(signal, requestSignal => this.supabase.getZaloPhoneCheckUsage(
+            accountId, this.zaloRuntimeTarget, claim!.claimToken, true, this.contactDatasetAuth === 'server_claim', requestSignal
+          ), 6_000)
+          assertActive()
+          if (!usage.allowed) {
+            errorMessage = zaloPhoneCheckDailyLimitMessage(usage)
+            if (row.status === 'checking') row.status = 'unknown'
+            row.note = errorMessage
+            emit(row)
+            break
+          }
           row.status = 'checking'
           row.note = attempt > 1 ? `Đang thử lại SĐT này (lần ${attempt}/${ZALO_PHONE_CHECK_MAX_ATTEMPTS}).` : ''
           emit(row)
@@ -269,6 +284,17 @@ export class ContactLoader {
             const errorName = (error as { name?: unknown } | null)?.name
             const code = errorName === 'AbortError' || errorName === 'TimeoutError' ? '' : phoneSearchErrorCode(error)
             const status = classifyZaloPhoneCheckApiCode(code)
+            const message = typeof error === 'string' ? error : (error as { message?: unknown } | null)?.message
+            const fetchFailed = errorName !== 'AbortError' && errorName !== 'TimeoutError'
+              && (!code || code === 'data_scan_failed')
+              && typeof message === 'string' && message.trim().toLowerCase() === 'fetch failed'
+            if ((status === 'hour_limit' || fetchFailed) && usage.remaining === 0) {
+              row.status = 'unknown'
+              row.note = zaloPhoneCheckDailyLimitMessage(usage)
+              errorMessage = row.note
+              emit(row)
+              break
+            }
             if (status === 'hour_limit') {
               row.note = `Đã đạt giới hạn tìm SĐT theo giờ (mã ${code}). Đang chuẩn bị thời gian chờ.`
               emit(row)
@@ -305,12 +331,7 @@ export class ContactLoader {
               emit(row)
               break
             }
-            const message = typeof error === 'string' ? error : (error as { message?: unknown } | null)?.message
             // Retry only the transient fetch failure reported by the local/Chat transport.
-            // Abort, timeout, session/capability errors and Zalo response codes keep their policy.
-            const fetchFailed = errorName !== 'AbortError' && errorName !== 'TimeoutError'
-              && (!code || code === 'data_scan_failed')
-              && typeof message === 'string' && message.trim().toLowerCase() === 'fetch failed'
             if (fetchFailed && attempt < ZALO_PHONE_CHECK_MAX_ATTEMPTS) {
               const delayMs = this.getZaloFriendApiDelayMs()
               row.note = `Lỗi kết nối (fetch failed) ở lần ${attempt}/${ZALO_PHONE_CHECK_MAX_ATTEMPTS}. Đợi ${Math.ceil(delayMs / 1000)} giây rồi thử lại SĐT này.`
@@ -367,7 +388,7 @@ export class ContactLoader {
     }
     const result: ZaloPhoneCheckResult = {
       runId, accountId, sequence: ++sequence, rows,
-      stopped: signal.aborted || !!parentSignal?.aborted || !!errorMessage,
+      stopped: signal.aborted || !!parentSignal?.aborted || !!errorMessage, usage,
       error: errorMessage
     }
     if (!parentSignal?.aborted && !this.mainWindow.isDestroyed()) this.mainWindow.webContents.send(ZALO_PHONE_CHECK_IPC.completed, result)

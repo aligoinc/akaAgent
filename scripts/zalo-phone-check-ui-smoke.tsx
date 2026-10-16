@@ -35,6 +35,9 @@ win.electronAPI = {
   ingestDataGroup: async (payload: any) => { win.phoneSmoke.ingested = payload; return { insertedMembershipCount: payload.rows.length, reactivatedMembershipCount: 0, alreadyMemberCount: 0, invalidCount: 0, incompatibleCount: 0, conflictCount: 0, conflicts: [] } },
 
   zaloPhoneCheck: {
+    usage: async (accountId: number) => win.phoneSmoke.deferUsage
+      ? new Promise((resolve, reject) => { (win.phoneSmoke.usageReads ||= []).push({accountId,resolve,reject}) })
+      : ({ allowed: true, date: '2026-10-16', count: 125, limit: 600, remaining: 475, resetAt: '2026-10-16T17:00:00Z' }),
     onRow: (handler: Function) => { rowHandler = handler; return () => {} },
     onCompleted: (handler: Function) => { completed = handler; return () => {} },
     start: (value: any) => { request = value; sequence = 0; currentRows = new Map(value.phones.slice(0, value.limit).map((phone: string) => [phone, { id: phone, phone, name: '', uid: '', status: 'pending', note: '' }])); win.phoneSmoke.request = value; win.phoneSmoke.startCount++; return new Promise(r => { resolve = r }) },
@@ -42,5 +45,5 @@ win.electronAPI = {
   }
 }
 useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: { zalo: true } } as any })
-useCampaignStore.setState({ loadAccounts: async () => {}, accounts: [{ id: 71, name: 'Tài khoản thử', flatformType: 'zalo', isActive: true, isZaloServer: false, isZaloShowWeb: false }] as any })
+useCampaignStore.setState({ loadAccounts: async () => {}, accounts: [{ id: 71, name: 'Tài khoản thử', flatformType: 'zalo', isActive: true, isZaloServer: false, isZaloShowWeb: false }, { id: 72, name: 'Tài khoản thử 2', flatformType: 'zalo', isActive: true, isZaloServer: false, isZaloShowWeb: false }] as any })
 root.render(<div style={{ padding: 20 }}><ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} /></div>)

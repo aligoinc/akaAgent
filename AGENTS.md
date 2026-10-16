@@ -1,5 +1,9 @@
 # AGENTS.md
 
+Review V407 ngày 16/10/2026: modal Kiểm tra SĐT dùng generation riêng cho request đọc hạn mức; Start vô hiệu hóa cả kết quả/lỗi cũ, tải data không làm guard quay lại hợp lệ khi runId reset. Hồi quy Electron giữ 600/600 sau phản hồi cũ 599/600 và bỏ lỗi cũ sau dừng/tải lại; hai typecheck và smoke đạt. Chỉ renderer, không DB/RPC/quota/policy chiến dịch; [audit](docs/ZALO_PHONE_CHECK.md#giới-hạn-lượt-kiểm-tra-mỗi-ngày--v407-16102026).
+
+V407 đã apply trên akachat ngày 16/10/2026 (`20261016090818 / migration_v407_zalo_phone_check_daily_limit`): Kiểm tra SĐT có Zalo giới hạn riêng 600 lượt/tài khoản/ngày, setting `zalo.phone_check.daily_limit`, một cột JSONB `auto_accounts.zalo_phone_check_usage`. RPC riêng kiểm tra quyền/claim rồi tăng atomic; fallback 32→40 một lượt, retry lượt mới, DB không rõ kết quả phải dừng không tự retry. Cron riêng 00:00 Việt Nam chỉ reset nonzero ngày cũ, có lazy rollover. Giữ nguyên quota/policy/RPC/cron chiến dịch; không connection/polling mới. Server cũ quảng bá `phone_check_daily_limit_v1`, cập nhật Server trước Desktop; không cần deploy Chat. Hai typecheck/build Desktop–Server, SQL concurrent/rollback/API và UI 300 hàng đạt; chưa đóng gói/phát hành. Không apply lại; [hợp đồng, checksum và rollback](docs/ZALO_PHONE_CHECK.md#giới-hạn-lượt-kiểm-tra-mỗi-ngày--v407-16102026).
+
 Kiểm tra SĐT cập nhật giới hạn ngày 16/10/2026 (thay thế phân loại bốn mã giới hạn bên dưới): `312/221` báo giới hạn giờ trên form, giữ claim/tiến độ, chờ `auto_system_settings.zalo.phone_check.hour_limit_wait_minutes` (mặc định 60 phút) rồi thử lại đúng số; `313/304` báo giới hạn ngày, số hiện tại Chưa xác định và dừng, số sau pending. Dừng/đóng/logout/đổi runtime hủy timer; không đổi `auto_error`, fallback 32→40, quota/detail hoặc Chat protocol. V406 đã apply trên akachat (`20261016075914 / migration_v406_zalo_phone_check_hour_wait`), setting ID 65 = 60, chỉ dữ liệu; không apply lại. Hai typecheck/build và smoke Node/Electron/UI đạt; Desktop/Server cũ cần cập nhật, chưa đóng gói; xem [hợp đồng và kiểm chứng](docs/ZALO_PHONE_CHECK.md#giới-hạn-giờngày-và-setting-v406--16102026).
 
 Kiểm tra SĐT ngày 16/10/2026: riêng `fetch failed` (mã rỗng/`data_scan_failed`) nghỉ theo nhịp quét 2–5 giây rồi thử lại cùng số, tối đa 3 lần tính cả lần đầu; giữ checking/tiến độ/claim, hủy lúc nghỉ chặn lần tiếp. Không đổi mã akaBizAuto hay retry lỗi khác; cập nhật Desktop/Server cũ, không cần deploy Chat API. [Hợp đồng và hồi quy](docs/ZALO_PHONE_CHECK.md#api-và-runtime).
@@ -620,6 +624,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Phone check usage snapshots**: tải data reset `runId`, nên request đọc hạn mức phải có generation riêng và bị vô hiệu hóa khi Start; bỏ cả success/error cũ sau tải lại. Không dùng bộ đếm chiến dịch. Hồi quy: `node scripts/run-zalo-phone-check-ui-smoke.cjs`; [hợp đồng](docs/ZALO_PHONE_CHECK.md).
 
 - `auto_campaigns.updated_at` đổi cả khi append log. Không dùng timestamp lúc mở form làm phiên bản cấu hình dài hạn; so `editVersion` trước, rồi dùng timestamp nguyên vẹn của lần kiểm tra readiness cho CAS cuối. Không bỏ guard trạng thái/runtime hoặc lấy phiên bản mới để ghi đè cấu hình từ phiên khác. Hồi quy: `node scripts/campaign-edit-version-smoke.cjs`.
 

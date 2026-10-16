@@ -1,5 +1,5 @@
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
-import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult } from '../shared/zaloPhoneCheck'
+import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckUsage } from '../shared/zaloPhoneCheck'
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -76,6 +76,7 @@ const electronAPI = {
   },
 
   zaloPhoneCheck: {
+    usage: (accountId: number): Promise<ZaloPhoneCheckUsage> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.usage, accountId),
     start: (request: ZaloPhoneCheckRequest): Promise<ZaloPhoneCheckResult> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.start, request),
     cancel: (runId: string): Promise<void> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.cancel, runId),
     onRow: (callback: (event: ZaloPhoneCheckEvent) => void): (() => void) => {

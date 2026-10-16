@@ -33,10 +33,26 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
   const modalRef = useRef<HTMLElement>(null)
   const mounted = useRef(true)
   const pending = useRef<Promise<unknown> | null>(null)
+  const usageReadGeneration = useRef(0)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
   const zaloAccounts = accounts.filter(account => account.flatformType === 'zalo')
   const showError = (error: unknown) => useUiStore.getState().showAlert(messageOf(error), 'error')
+
+  useEffect(() => {
+    let active = true
+    const generation = ++usageReadGeneration.current
+    store.setState({ usage: null, usageAccountId: accountId || null, usageError: '' })
+    if (accountId && staffId) {
+      // One read on selection. Run events become authoritative once Start is pressed.
+      void window.electronAPI.zaloPhoneCheck.usage(accountId).then(usage => {
+        if (active && !store.getState().busy && usageReadGeneration.current === generation) store.setState({ usage, usageError: '' })
+      }).catch(error => {
+        if (active && !store.getState().busy && usageReadGeneration.current === generation) store.setState({ usageError: messageOf(error) })
+      })
+    }
+    return () => { active = false }
+  }, [accountId, staffId, store])
 
   useEffect(() => {
     mounted.current = true
@@ -85,6 +101,8 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
       const state = store.getState()
       const phones = normalizeZaloCheckPhones(state.ids.filter(id => state.rows[id].status === 'pending' || state.rows[id].status === 'unknown'))
       const runId = crypto.randomUUID()
+      // Upload resets runId; it must never make a pre-run usage read current again.
+      usageReadGeneration.current++
       store.begin(runId, accountId)
       const request = window.electronAPI.zaloPhoneCheck.start({ runId, accountId, limit: count, phones })
       pending.current = request
