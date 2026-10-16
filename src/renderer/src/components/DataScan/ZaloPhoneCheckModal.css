@@ -5,7 +5,6 @@
 .phone-check-config label, .phone-check-summary label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .phone-check-config label:first-child { flex: 1; min-width: 240px; }
 .phone-check-config input { width: 150px; }
-.phone-check-hint { margin: 4px 20px 12px; color: var(--text-secondary); font-size: 12px; }
 .phone-check-summary { padding: 10px 20px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .phone-check-summary > div { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; }
 .phone-check-summary > p { flex-basis: 100%; margin: 0; font-size: 13px; }

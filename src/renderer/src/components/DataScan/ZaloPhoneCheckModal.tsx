@@ -189,7 +189,6 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
         {busy ? <button className="btn btn-danger" disabled={stopping} onClick={() => void stop()}>{stopping ? 'Đang dừng…' : 'Dừng'}</button>
           : <button className="btn btn-primary" disabled={saving || allChecked || dailyLimit === null} onClick={() => void start()}>{hasRun ? 'Tiếp tục kiểm tra' : 'Bắt đầu kiểm tra'}</button>}
       </div>
-      <p className="phone-check-hint">{dailyLimit === null ? 'Chọn tài khoản và chờ xác nhận hạn mức ngày để tải data.' : `Tối đa ${dailyLimit} SĐT hợp lệ, không trùng theo hạn mức ngày.`} Mỗi lượt kiểm tra các số Chưa kiểm tra hoặc Chưa xác định theo thứ tự danh sách và số lượng đã đặt.</p>
       <ZaloPhoneCheckSummary store={store} /><ZaloPhoneCheckTable store={store} />
       <footer className="modal-footer">
         <button className="btn btn-secondary" disabled={busy || saving} onClick={() => { try { selectedRows(); setChooseType(true) } catch (error) { showError(error) } }}>Lưu vào nhóm data</button>
