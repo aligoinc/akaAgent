@@ -77,6 +77,7 @@ const electronAPI = {
   },
 
   zaloPhoneCheck: {
+    getLimit: (): Promise<number> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.limit),
     usage: (accountId: number): Promise<ZaloPhoneCheckUsage> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.usage, accountId),
     start: (request: ZaloPhoneCheckRequest): Promise<ZaloPhoneCheckResult> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.start, request),
     cancel: (runId: string): Promise<void> => ipcRenderer.invoke(ZALO_PHONE_CHECK_IPC.cancel, runId),

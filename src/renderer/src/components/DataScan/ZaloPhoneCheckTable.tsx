@@ -39,20 +39,33 @@ export function ZaloPhoneCheckSummary({ store }: { store: ZaloPhoneCheckStore })
   const message = useStore(store, state => state.message)
   const filter = useStore(store, state => state.filter)
   return <div className="phone-check-summary">
-    <div><strong>{total} SĐT</strong><span>Đã chọn {selected}</span>{total > 0 && <span>Đã có kết quả: {processed}/{total}</span>}
-      {checking && <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>}</div>
-    <ZaloPhoneCheckDailyUsage store={store} />
+    <div className="phone-check-stats">
+      <div className="phone-check-stats-row"><strong>{total} SĐT</strong><span>Đã chọn {selected}</span></div>
+      <div className="phone-check-stats-row">
+        {total > 0 && <span>Đã có kết quả: {processed}/{total}</span>}
+        <ZaloPhoneCheckDailyUsage store={store} />
+      </div>
+      <div className="phone-check-stats-row">
+        {checking ? <span role="status">Đang kiểm tra số {checkingIndex}/{total}: <strong>{checking}</strong></span>
+          : message && <span role="status">{message}</span>}
+      </div>
+    </div>
     <label>Lọc trạng thái <select className="stepper-input" value={filter} onChange={event => store.filter(event.target.value as PhoneCheckFilter)}>
       <option value="all">Tất cả</option>{Object.entries(ZALO_PHONE_CHECK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
     </select></label>
-    {message && <p role="status">{message}</p>}
+    <ZaloPhoneCheckUsageError store={store} />
+    {checking && message && <p role="status">{message}</p>}
   </div>
 }
 
 function ZaloPhoneCheckDailyUsage({ store }: { store: ZaloPhoneCheckStore }) {
   const usage = useStore(store, state => state.usage)
+  return usage ? <span role="status" data-phone-daily-usage title={`Còn ${usage.remaining} lượt (ngày ${usage.date.split('-').reverse().join('/')}, giờ Việt Nam)`}>
+    Hôm nay: {usage.count}/{usage.limit} lượt
+  </span> : null
+}
+
+function ZaloPhoneCheckUsageError({ store }: { store: ZaloPhoneCheckStore }) {
   const error = useStore(store, state => state.usageError)
-  return usage ? <p role="status" data-phone-daily-usage>Hôm nay: {usage.count}/{usage.limit} lượt · Còn {usage.remaining} lượt
-    <small> (ngày {usage.date.split('-').reverse().join('/')}, giờ Việt Nam)</small></p>
-    : error ? <p role="status">{error}</p> : null
+  return error ? <p role="status">{error}</p> : null
 }

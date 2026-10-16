@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { ZALO_PHONE_CHECK_IPC, validateZaloPhoneCheckRequest, type ZaloPhoneCheckResult } from '../../../shared/zaloPhoneCheck'
 import { getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials, runWithCurrentUser } from '../../data/currentUser'
 import { ensureCurrentUserFeatureActive } from '../../data/repositories/entitlementRepository'
+import { getZaloPhoneCheckDailyLimit } from '../../data/repositories/zaloPhoneCheckRepository'
 import type { SupabaseService } from '../../services/supabase'
 import type { ContactLoader } from '../../services/contactLoader'
 import type { ZaloServerClient } from '../../services/zaloServerClient'
@@ -20,6 +21,16 @@ export function registerZaloPhoneCheckHandlers(window: BrowserWindow, supabase: 
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Không có quyền thực hiện thao tác này.')
   }
   window.webContents.once('destroyed', stop)
+  ipcMain.handle(ZALO_PHONE_CHECK_IPC.limit, async event => {
+    assertFrame(event)
+    const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
+    return runWithCurrentUser(user, async () => {
+      await ensureCurrentUserFeatureActive('zalo')
+      const limit = await withRequestDeadline(new AbortController().signal, getZaloPhoneCheckDailyLimit, 6_000)
+      if (getCurrentUserCredentials() !== credentials || window.isDestroyed()) throw new Error('Phiên đăng nhập đã thay đổi.')
+      return limit
+    })
+  })
   ipcMain.handle(ZALO_PHONE_CHECK_IPC.usage, async (event, accountId: unknown) => {
     assertFrame(event)
     if (typeof accountId !== 'number' || !Number.isSafeInteger(accountId) || accountId <= 0) throw new Error('Tài khoản không hợp lệ.')
