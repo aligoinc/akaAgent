@@ -1,8 +1,7 @@
 import { normalizeVietnamMobilePhone } from './phone'
 import type { DataGroupIngestRow } from './types'
 
-export const ZALO_PHONE_CHECK_MAX = 300
-export const ZALO_PHONE_CHECK_DAILY_CAPABILITY = 'phone_check_daily_limit_v1'
+export const ZALO_PHONE_CHECK_DAILY_CAPABILITY = 'phone_check_daily_limit_v2'
 export interface ZaloPhoneCheckUsage {
   allowed: boolean; date: string; count: number; limit: number; remaining: number; resetAt: string
 }
@@ -48,22 +47,26 @@ export interface ZaloPhoneCheckResult {
   runId: string; accountId: number; sequence: number
   stopped: boolean; error?: string; rows: ZaloPhoneCheckRow[]
 }
-export function normalizeZaloCheckPhones(values: unknown[]): string[] {
+export function normalizeZaloCheckPhones(values: unknown[], dailyLimit?: number): string[] {
+  if (dailyLimit !== undefined && (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1)) throw new Error('Chưa xác nhận được hạn mức kiểm tra SĐT.')
   const phones = Array.from(new Set(values.map(normalizeVietnamMobilePhone).filter(Boolean)))
   if (!phones.length) throw new Error('Không có số điện thoại hợp lệ.')
-  if (phones.length > ZALO_PHONE_CHECK_MAX) throw new Error('Chỉ nhận tối đa 300 SĐT hợp lệ, không trùng. Vui lòng chia nhỏ file.')
+  if (dailyLimit !== undefined && phones.length > dailyLimit) throw new Error(`Chỉ nhận tối đa ${dailyLimit} SĐT hợp lệ, không trùng theo hạn mức ngày. Vui lòng chia nhỏ file.`)
   return phones
 }
-export function validateZaloPhoneCheckRequest(input: unknown): ZaloPhoneCheckRequest {
+/** Transport boundaries validate shape; the loader also supplies the trusted DB limit before dispatch. */
+export function validateZaloPhoneCheckRequest(input: unknown, dailyLimit?: number): ZaloPhoneCheckRequest {
   const value = input as ZaloPhoneCheckRequest | null
   if (!value || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value.runId)
     || !Number.isSafeInteger(value.accountId) || value.accountId <= 0
-    || !Number.isInteger(value.limit) || value.limit < 1 || value.limit > ZALO_PHONE_CHECK_MAX
-    || !Array.isArray(value.phones) || value.phones.length > ZALO_PHONE_CHECK_MAX
+    || !Number.isSafeInteger(value.limit) || value.limit < 1 || value.limit > 2147483647
+    || !Array.isArray(value.phones)
     || value.phones.some(phone => typeof phone !== 'string' || phone.length > 64)) {
-    throw new Error('Yêu cầu kiểm tra SĐT không hợp lệ (tối đa 300 số).')
+    throw new Error('Yêu cầu kiểm tra SĐT không hợp lệ.')
   }
-  return { runId: value.runId, accountId: value.accountId, limit: value.limit, phones: normalizeZaloCheckPhones(value.phones) }
+  const phones = normalizeZaloCheckPhones(value.phones, dailyLimit)
+  if (dailyLimit !== undefined && value.limit > dailyLimit) throw new Error(`Số lượng kiểm tra phải từ 1 đến ${dailyLimit} theo hạn mức ngày.`)
+  return { runId: value.runId, accountId: value.accountId, limit: value.limit, phones }
 }
 export function createZaloPhoneCheckRow(phone: string): ZaloPhoneCheckRow {
   return { id: phone, phone, status: 'pending', name: '', uid: '', note: '' }

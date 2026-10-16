@@ -236,7 +236,7 @@ export class ZaloServerClient {
       throw new Error('Kết nối akaAgent Zalo Server đã thay đổi. Vui lòng thử lại.')
     }
     if (command === 'contacts.checkZaloPhones' && !this.phoneCheckDailyLimitSupported) {
-      throw new Error('Zalo Server chưa hỗ trợ giới hạn kiểm tra SĐT theo ngày. Vui lòng cập nhật akaAgent Zalo Server.')
+      throw new Error('Zalo Server chưa hỗ trợ số lượng kiểm tra SĐT theo hạn mức ngày. Vui lòng cập nhật akaAgent Zalo Server.')
     }
     const expectedRuntimeStartedAt = this.cleanupOnly
       ? this.cleanupRuntimeStartedAt

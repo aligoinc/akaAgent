@@ -212,7 +212,7 @@ export class ContactLoader {
     })
     const cancel = () => this.cancelZaloPhoneCheck(accountId, runId)
     parentSignal?.addEventListener('abort', cancel, { once: true })
-    const rows = request.phones.slice(0, request.limit).map(createZaloPhoneCheckRow)
+    let rows: ZaloPhoneCheckRow[] = []
     let sequence = 0
     let claim: AccountRuntimeScanClaim | undefined
     let account: AutoAccount | null = null
@@ -237,6 +237,13 @@ export class ContactLoader {
       if (!this.zaloRuntime?.findUserByPhone) throw new Error('Bộ chạy chưa hỗ trợ kiểm tra SĐT. Vui lòng cập nhật runtime.')
       claim = await this.claimAccountForScan(account!)
       assertActive()
+      // Read without consuming: an oversized upload must not spend a lookup.
+      usage = await withRequestDeadline(signal, requestSignal => this.supabase.getZaloPhoneCheckUsage(
+        accountId, this.zaloRuntimeTarget, claim!.claimToken, false, this.contactDatasetAuth === 'server_claim', requestSignal
+      ), 6_000)
+      assertActive()
+      validateZaloPhoneCheckRequest(request, usage.limit)
+      rows = request.phones.slice(0, request.limit).map(createZaloPhoneCheckRow)
       const session = await withRequestDeadline(signal, () => this.zaloRuntime!.checkSession(accountId), 30_000)
       assertActive()
       if (!session.loggedIn) throw new Error('Tài khoản chưa đăng nhập Zalo. Vui lòng đăng nhập lại.')
