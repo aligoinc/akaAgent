@@ -1,0 +1,90 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261016094417",
+    "name": "migration_v408_campaign_logs"
+  },
+  "checksums": "all seven live definitions match local tested targets",
+  "rollbackSmoke": "passed before and after apply; no persisted fixture",
+  "rls": true,
+  "directClientPrivileges": false,
+  "firstObservation": {
+    "rows": 187,
+    "campaigns": 70,
+    "first": "2026-10-16T09:44:17.858972+00:00",
+    "last": "2026-10-16T09:44:36.312224+00:00"
+  },
+  "laterObservation": {
+    "rows": 1384,
+    "campaigns": 230,
+    "updates": 0,
+    "deletes": 0,
+    "fixtureRows": 0
+  },
+  "legacyFreeze": [
+    {
+      "campaignId": 8663,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 13587,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 14046,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 14644,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 15210,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 15325,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 15659,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 15778,
+      "legacyUnchanged": true,
+      "newLogs": false,
+      "campaignTimestampUnchanged": true
+    },
+    {
+      "campaignId": 17021,
+      "legacyUnchanged": true,
+      "newLogs": true,
+      "campaignTimestampUnchanged": false
+    },
+    {
+      "campaignId": 17770,
+      "legacyUnchanged": true,
+      "newLogs": false,
+      "campaignTimestampUnchanged": true
+    }
+  ],
+  "notes": [
+    "Real campaign updated_at may still change through business state transitions; isolated append asserts every campaign field unchanged.",
+    "Live traffic confirms append persistence. Real Chat writer plus committed NOTIFY tested against isolated PostgreSQL; production browser tests use mocked API/WS."
+  ]
+}

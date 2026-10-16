@@ -1,3 +1,4 @@
+import { displayHistoryEntry } from '../../../../shared/campaignHistory'
 import { campaignEdit, useCampaignEditSession } from './campaignEdit'
 import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
 import FacebookCredentialsModal from './FacebookCredentialsModal'
@@ -51,7 +52,6 @@ import {
   type SnapshotDataGroupToCampaignResult,
   type ZaloLoginQrEvent
 } from '../../../../shared/types'
-import { parseCampaignLogLine } from '../../../../shared/campaignLogFormat'
 import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
@@ -153,13 +153,6 @@ interface CampaignActionMenuAnchorRect {
   top: number
   right: number
   bottom: number
-}
-
-interface RunLogEntry {
-  key: string
-  timestamp: string | undefined
-  message: string
-  screenshotEventId?: number
 }
 
 interface FoundDataPayload {
@@ -909,19 +902,6 @@ const getScreenshotResultLabel = (event: CampaignRunEvent): string => {
   }
 }
 
-const SCREENSHOT_EVENT_MARKER_RE = /\s*<!--\s*screenshotEventId:(\d+)\s*-->\s*$/i
-
-const stripScreenshotEventMarker = (message: string): { message: string; screenshotEventId?: number } => {
-  const text = String(message || '')
-  const match = text.match(SCREENSHOT_EVENT_MARKER_RE)
-  if (!match) return { message: text }
-  const id = Number(match[1])
-  return {
-    message: text.replace(SCREENSHOT_EVENT_MARKER_RE, '').trimEnd(),
-    screenshotEventId: Number.isFinite(id) && id > 0 ? id : undefined
-  }
-}
-
 const getStringArrayValue = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value
@@ -1550,47 +1530,6 @@ const sanitizeFileSegment = (value: string) => {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60) || 'campaign'
-}
-
-const parseCampaignRunLog = (log: string): RunLogEntry[] => {
-  const entries: RunLogEntry[] = []
-  const lines = (log || '').split('\n')
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]
-    const text = line.trimEnd()
-    if (!text.trim()) {
-      const lastEntry = entries[entries.length - 1]
-      if (lastEntry) lastEntry.message = `${lastEntry.message}\n`
-      continue
-    }
-    const parsedLine = parseCampaignLogLine(text)
-    if (parsedLine?.timestamp || (parsedLine && entries.length === 0)) {
-      const parsedMessage = stripScreenshotEventMarker(parsedLine.message)
-      entries.push({
-        key: `${index}-${text}`,
-        timestamp: parsedLine.timestamp,
-        message: parsedMessage.message,
-        screenshotEventId: parsedMessage.screenshotEventId
-      })
-      continue
-    }
-
-    const lastEntry = entries[entries.length - 1]
-    if (lastEntry?.timestamp) {
-      const parsedMessage = stripScreenshotEventMarker(`${lastEntry.message}\n${text.trimEnd()}`)
-      lastEntry.message = parsedMessage.message
-      if (parsedMessage.screenshotEventId) lastEntry.screenshotEventId = parsedMessage.screenshotEventId
-    } else {
-      const parsedMessage = stripScreenshotEventMarker(text.trim())
-      entries.push({
-        key: `${index}-${text}`,
-        timestamp: undefined,
-        message: parsedMessage.message,
-        screenshotEventId: parsedMessage.screenshotEventId
-      })
-    }
-  }
-  return entries
 }
 
 interface AddInputDataModalSubmit {
@@ -2894,7 +2833,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     if (detailTab === 'contentPreview' && !supportsContentPreview) setDetailTab('info')
   }, [detailTab, supportsContentPreview])
 
-  useCampaignRunLog(selectedCampaignId, isActive && detailDockOpen && detailTab === 'runLog')
+  const loadOlderHistory = useCampaignRunLog(selectedCampaignId, isActive && detailDockOpen && detailTab === 'runLog')
 
   // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
@@ -4223,8 +4162,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     return Array.from(byId.values())
   }, [campaignCatalog, campaigns])
   const runLogEntries = useMemo(
-    () => parseCampaignRunLog(selectedCampaignLog?.log || ''),
-    [selectedCampaignLog?.log]
+    () => (selectedCampaignLog?.items || []).map(displayHistoryEntry),
+    [selectedCampaignLog?.items]
   )
   const runLogScreenshotEvents = useMemo(
     () => detailTab === 'runLog'
@@ -6836,7 +6775,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                   className={`detail-dock-tab ${detailTab === 'runLog' ? 'active' : ''}`}
                   onClick={() => setDetailTab('runLog')}
                 >
-                  Lịch sử gần đây{selectedCampaignLog ? ` (${runLogEntries.length})` : ''}
+                  Lịch sử chạy{selectedCampaignLog ? ` (${runLogEntries.length})` : ''}
                 </button>
                 {isSelectedFindDataCampaign && (
                   <button
@@ -7903,7 +7842,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 renderCampaignRelationSummaries('Chưa có chiến dịch nguồn liên kết.')
               )}
 
-              {/* Tab: Campaign run log from auto_campaigns.log */}
+              {/* Tab: Campaign run history, paged by immutable log ID */}
               {detailTab === 'runLog' && (
                 selectedCampaignId && loadingCampaignLogIds[selectedCampaignId] && !selectedCampaignLog ? (
                   <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Đang tải lịch sử chạy...</div>
@@ -7949,6 +7888,13 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       </table>
                     )}
 
+                    {selectedCampaignLog?.hasOlder && selectedCampaignId && (
+                      <button type="button" className="btn btn-secondary" disabled={!!loadingCampaignLogIds[selectedCampaignId]}
+                        onClick={() => { void loadOlderHistory()
+                          .catch(error => showAlert(error instanceof Error ? error.message : 'Không thể tải lịch sử.', 'error')) }}>
+                        {loadingCampaignLogIds[selectedCampaignId] ? 'Đang tải...' : 'Tải lịch sử cũ hơn'}
+                      </button>
+                    )}
                     {loadingCampaignRunEvents && (
                       <div className="text-center text-secondary" style={{ padding: 12, fontSize: 12 }}>Đang tải screenshot...</div>
                     )}

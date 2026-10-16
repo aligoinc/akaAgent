@@ -5,7 +5,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
-const IPC_EVENTS = { CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated', ACCOUNT_STATUS_UPDATED: 'account:status-updated' }
+const IPC_EVENTS = { CAMPAIGN_STATUS_UPDATED: 'campaign:status-updated', CAMPAIGN_LOG_UPDATED: 'campaign:log-updated', ACCOUNT_STATUS_UPDATED: 'account:status-updated' }
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText
 function methods(file, className, names, globals) {
   const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true)
@@ -43,7 +43,7 @@ function fixture(runtimeTarget = 'server') {
   const mainWindow = { isDestroyed: () => false, webContents: { send: (channel, payload) => events.push({ channel, payload, writes: writes.length }) } }
   const supabase = {
     getCampaign: async () => ({ ...campaign }), getAccount: async () => ({ ...account }),
-    appendCampaignLog: async () => update(campaign, { updatedAt: `log-${writes.length}` }),
+    appendCampaignLog: async () => { writes.push({ log: 'entry' }); return { ...campaign } },
     updateCampaign: async (_id, patch) => update(campaign, patch),
     updateClaimedZaloServerCampaign: async (_id, patch) => update(campaign, patch),
     updateRunningDesktopCampaign: async (_id, patch) => update(campaign, patch),
@@ -162,11 +162,14 @@ async function main() {
     for (let i = 0; i < 30; i++) await f.scheduler.logCampaignProgress(f.campaign, `Progress ${i}`)
     assert.equal(f.writes.length, 30)
     assert.equal(f.events.filter(event => event.channel === 'campaign:log').length, 30)
-    assert.equal(states(f).length, target === 'server' ? 0 : 30)
+    assert.equal(states(f).length, 0)
+    assert.equal(f.events.filter(event => event.channel === IPC_EVENTS.CAMPAIGN_LOG_UPDATED).length, target === 'server' ? 0 : 30)
+    assert.equal(f.campaign.updatedAt, 'initial')
     assert.equal(accountStates(f).length, 0)
     await f.scheduler.logCampaignProgress(f.campaign, 'stored only', { emitRealtime: false })
     assert.equal(f.events.filter(event => event.channel === 'campaign:log').length, 30)
-    assert.equal(states(f).length, target === 'server' ? 0 : 31)
+    assert.equal(states(f).length, 0)
+    assert.equal(f.events.filter(event => event.channel === IPC_EVENTS.CAMPAIGN_LOG_UPDATED).length, target === 'server' ? 0 : 31)
     const group = Object.assign(new GroupManager(), { runtimeTarget: target, supabase: f.supabase, mainWindow: f.mainWindow })
     const before = states(f).length
     for (const inserted of [false, true]) {

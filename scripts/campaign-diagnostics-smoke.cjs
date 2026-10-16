@@ -93,7 +93,7 @@ function sanitizationRegression() {
   console.log('PASS basic fields/headers, retained business text and bounded long-text processing ('+elapsed.toFixed(1)+'ms)')
 }
 async function campaignReadRegression() {
-  const mappers = load('src/main/data/mappers.ts', { './currentUser': auth })
+  const mappers = load('src/main/data/mappers.ts', { './currentUser': auth, './campaignEditVersion': load('src/main/data/campaignEditVersion.ts', { 'node:crypto': crypto }) })
   let selected = []
   const stored = { id: 1, name: 'fixture', account_id: 2, action_id: 'email_send', status: 'chờ xử lý',
     staff_id: 9, organization_id: 1, is_delete: false, schedule_type: 'weekly', refresh_data: true }

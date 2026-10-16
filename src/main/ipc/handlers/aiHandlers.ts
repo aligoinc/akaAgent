@@ -314,7 +314,9 @@ async function buildCampaignAssistantContext(campaignId: number, settings: Assis
   const actionOverview = account
     ? await accountActionRepo.listAccountActionOverview(account.id).catch(() => [])
     : []
-  const progressLogs = parseCampaignProgressLogs(campaign.log, dayRange.key, settings.maxContextRows)
+  const history = await campaignRepo.getCampaignLog(campaign.id)
+  campaign.log = history?.log || ''
+  const progressLogs = parseCampaignProgressLogs(history?.log || '', dayRange.key, settings.maxContextRows)
   const totalInputData = Object.values(inputCounts).reduce((sum, count) => sum + count, 0)
   let campaignErrorDetails = await campaignRepo.listCampaignErrorDetailsByCreatedAtRange(
     campaign.id,

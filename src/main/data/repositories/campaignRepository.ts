@@ -1235,22 +1235,8 @@ export async function getCampaignConfig(id: number): Promise<CampaignConfig | nu
 }
 
 export async function getCampaignLog(id: number): Promise<CampaignLogSnapshot | null> {
-  const u = requireCurrentUser()
-  const { data, error } = await client()
-    .from('auto_campaigns')
-    .select('id, log, updated_at')
-    .eq('id', id)
-    .eq('staff_id', u.staffId)
-    .eq('is_delete', false)
-    .maybeSingle()
-
-  if (error) throw new Error(`Failed to load campaign log: ${error.message}`)
-  if (!data) return null
-  return {
-    id: Number(data.id),
-    log: typeof data.log === 'string' ? data.log : '',
-    updatedAt: typeof data.updated_at === 'string' ? data.updated_at : undefined
-  }
+  const { getDesktopCampaignLog } = await import('./desktopUiRepository')
+  return getDesktopCampaignLog(id)
 }
 
 export async function setZaloServerCampaignStatus(

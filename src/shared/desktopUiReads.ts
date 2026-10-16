@@ -61,5 +61,6 @@ export const DESKTOP_UI_IPC = {
   campaignSources: 'desktop-ui:campaign-sources',
   campaignConfig: 'desktop-ui:campaign-config',
   campaignLog: 'desktop-ui:campaign-log',
+  campaignLogs: 'desktop-ui:campaign-logs',
   accountSnapshot: 'desktop-ui:account-snapshot'
 } as const

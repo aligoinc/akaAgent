@@ -1,0 +1,621 @@
+{
+  "checks": [
+    "anon: RPC append allowed; table denied",
+    "authenticated: RPC append allowed; table denied",
+    "service_role: RPC append allowed; table denied",
+    "aka_agent_chat_api: RPC append allowed; table denied",
+    "append leaves every campaign field and timestamp unchanged; old log not backfilled",
+    "UTF-8 safe 16000 character cap",
+    "writer ownership, deletion and argument guards",
+    "keyset pages, string IDs, tenant/platform/session and role guards",
+    "legacy reads use new history only; invalid cursors rejected",
+    "concurrent commit ordering, cursor visibility and rollback",
+    "concurrent Desktop/Server/Chat roles; unchanged Chat runtime RPC + commit NOTIFY and campaign updatedAt",
+    "100000-row history page uses campaign/id index",
+    "rollback restores exact source RPC checksums and retains every new log"
+  ],
+  "benchmark": [
+    {
+      "label": "legacy-0",
+      "appends": 120,
+      "wallMs": 20.430665999999974,
+      "cpuMs": 20,
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Result",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0,
+            "Total Cost": 0.26,
+            "Plan Rows": 1,
+            "Plan Width": 1,
+            "Actual Startup Time": 0.427,
+            "Actual Total Time": 0.427,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 17,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 12,
+            "WAL FPI": 0,
+            "WAL Bytes": 997
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.017,
+          "Triggers": [],
+          "Execution Time": 0.431
+        }
+      ],
+      "contention": {
+        "writers": 2,
+        "appends": 120,
+        "wallMs": 68.35729199999992,
+        "p95Ms": 1.4807090000000471,
+        "samples": 32,
+        "lockWaitSamples": 29,
+        "sampleIntervalMs": 2
+      }
+    },
+    {
+      "label": "legacy-2000",
+      "appends": 120,
+      "wallMs": 670.2680830000002,
+      "cpuMs": 660,
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Result",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0,
+            "Total Cost": 0.26,
+            "Plan Rows": 1,
+            "Plan Width": 1,
+            "Actual Startup Time": 5.787,
+            "Actual Total Time": 5.787,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 25,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 1,
+            "Shared Written Blocks": 1,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 13,
+            "WAL FPI": 0,
+            "WAL Bytes": 5081
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.016,
+          "Triggers": [],
+          "Execution Time": 5.79
+        }
+      ],
+      "contention": {
+        "writers": 2,
+        "appends": 120,
+        "wallMs": 683.0488330000001,
+        "p95Ms": 11.89670799999999,
+        "samples": 257,
+        "lockWaitSamples": 236,
+        "sampleIntervalMs": 2
+      }
+    },
+    {
+      "label": "new-0",
+      "appends": 120,
+      "wallMs": 3.0745419999998376,
+      "cpuMs": 0,
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Result",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0,
+            "Total Cost": 0.26,
+            "Plan Rows": 1,
+            "Plan Width": 1,
+            "Actual Startup Time": 0.081,
+            "Actual Total Time": 0.081,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 10,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 4,
+            "WAL FPI": 0,
+            "WAL Bytes": 301
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.017,
+          "Triggers": [],
+          "Execution Time": 0.084
+        }
+      ],
+      "contention": {
+        "writers": 2,
+        "appends": 120,
+        "wallMs": 12.445957999999791,
+        "p95Ms": 0.2640830000000278,
+        "samples": 6,
+        "lockWaitSamples": 3,
+        "sampleIntervalMs": 2
+      }
+    },
+    {
+      "label": "new-2000",
+      "appends": 120,
+      "wallMs": 2.876333000000159,
+      "cpuMs": 0,
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Result",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0,
+            "Total Cost": 0.26,
+            "Plan Rows": 1,
+            "Plan Width": 1,
+            "Actual Startup Time": 0.073,
+            "Actual Total Time": 0.073,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 12,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 4,
+            "WAL FPI": 0,
+            "WAL Bytes": 301
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.013,
+          "Triggers": [],
+          "Execution Time": 0.077
+        }
+      ],
+      "contention": {
+        "writers": 2,
+        "appends": 120,
+        "wallMs": 10.462333999999828,
+        "p95Ms": 0.28395899999986796,
+        "samples": 5,
+        "lockWaitSamples": 0,
+        "sampleIntervalMs": 2
+      }
+    },
+    {
+      "label": "new-100000",
+      "appends": 120,
+      "wallMs": 2.8524999999999636,
+      "cpuMs": 0,
+      "explain": [
+        {
+          "Plan": {
+            "Node Type": "Result",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Startup Cost": 0,
+            "Total Cost": 0.26,
+            "Plan Rows": 1,
+            "Plan Width": 1,
+            "Actual Startup Time": 0.068,
+            "Actual Total Time": 0.068,
+            "Actual Rows": 1,
+            "Actual Loops": 1,
+            "Shared Hit Blocks": 13,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 4,
+            "WAL FPI": 0,
+            "WAL Bytes": 301
+          },
+          "Planning": {
+            "Shared Hit Blocks": 0,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          },
+          "Planning Time": 0.012,
+          "Triggers": [],
+          "Execution Time": 0.071
+        }
+      ],
+      "contention": {
+        "writers": 2,
+        "appends": 120,
+        "wallMs": 10.420708000000104,
+        "p95Ms": 0.24141699999972843,
+        "samples": 5,
+        "lockWaitSamples": 2,
+        "sampleIntervalMs": 2
+      }
+    }
+  ],
+  "readPlan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 0.42,
+        "Total Cost": 13.37,
+        "Plan Rows": 101,
+        "Plan Width": 60,
+        "Actual Startup Time": 0.016,
+        "Actual Total Time": 0.038,
+        "Actual Rows": 101,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 2,
+        "Shared Read Blocks": 6,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Backward",
+            "Index Name": "auto_campaign_logs_pkey",
+            "Relation Name": "auto_campaign_logs",
+            "Alias": "auto_campaign_logs",
+            "Startup Cost": 0.42,
+            "Total Cost": 3790.04,
+            "Plan Rows": 29561,
+            "Plan Width": 60,
+            "Actual Startup Time": 0.015,
+            "Actual Total Time": 0.033,
+            "Actual Rows": 101,
+            "Actual Loops": 1,
+            "Index Cond": "(id < 90000)",
+            "Rows Removed by Index Recheck": 0,
+            "Filter": "(campaign_id = 1)",
+            "Rows Removed by Filter": 0,
+            "Shared Hit Blocks": 2,
+            "Shared Read Blocks": 6,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          }
+        ]
+      },
+      "Planning": {
+        "Shared Hit Blocks": 26,
+        "Shared Read Blocks": 7,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning Time": 0.239,
+      "Triggers": [],
+      "Execution Time": 0.046
+    }
+  ],
+  "sparseReadPlan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 0.42,
+        "Total Cost": 161.18,
+        "Plan Rows": 101,
+        "Plan Width": 60,
+        "Actual Startup Time": 0.01,
+        "Actual Total Time": 0.021,
+        "Actual Rows": 101,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 4,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "idx_auto_campaign_logs_campaign_id_id",
+            "Relation Name": "auto_campaign_logs",
+            "Alias": "auto_campaign_logs",
+            "Startup Cost": 0.42,
+            "Total Cost": 1598.49,
+            "Plan Rows": 1004,
+            "Plan Width": 60,
+            "Actual Startup Time": 0.01,
+            "Actual Total Time": 0.016,
+            "Actual Rows": 101,
+            "Actual Loops": 1,
+            "Index Cond": "(campaign_id = 3)",
+            "Rows Removed by Index Recheck": 0,
+            "Shared Hit Blocks": 4,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          }
+        ]
+      },
+      "Planning": {
+        "Shared Hit Blocks": 30,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning Time": 0.21,
+      "Triggers": [],
+      "Execution Time": 0.029
+    }
+  ],
+  "preparedReadPlan": [
+    {
+      "Plan": {
+        "Node Type": "Limit",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 0.42,
+        "Total Cost": 176.64,
+        "Plan Rows": 101,
+        "Plan Width": 60,
+        "Actual Startup Time": 0.003,
+        "Actual Total Time": 0.003,
+        "Actual Rows": 0,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 3,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "idx_auto_campaign_logs_campaign_id_id",
+            "Relation Name": "auto_campaign_logs",
+            "Alias": "auto_campaign_logs",
+            "Startup Cost": 0.42,
+            "Total Cost": 504.64,
+            "Plan Rows": 289,
+            "Plan Width": 60,
+            "Actual Startup Time": 0.003,
+            "Actual Total Time": 0.003,
+            "Actual Rows": 0,
+            "Actual Loops": 1,
+            "Index Cond": "((campaign_id = '3'::bigint) AND (id <= '89999'::bigint))",
+            "Rows Removed by Index Recheck": 0,
+            "Shared Hit Blocks": 3,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0
+          }
+        ]
+      },
+      "Planning": {
+        "Shared Hit Blocks": 0,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning Time": 0.032,
+      "Triggers": [],
+      "Execution Time": 0.006
+    }
+  ],
+  "functions": [
+    {
+      "signature": "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+      "md5": "9391f47e1be976e0d7e595325d3c2f31",
+      "owner": "postgres",
+      "security": true,
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "acl": null
+    },
+    {
+      "signature": "aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)",
+      "md5": "3bafa54ccba53cb9788a32ab754ab7da",
+      "owner": "postgres",
+      "security": true,
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_desktop_campaign_detail(bigint,bigint,text,text,jsonb,bigint,text,jsonb)",
+      "md5": "8cd5def0920f178d5efed9fb73ddefab",
+      "owner": "postgres",
+      "security": true,
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": null
+    },
+    {
+      "signature": "aka_agent_desktop_campaign_logs(bigint,bigint,text,text,jsonb,bigint,jsonb)",
+      "md5": "61f1ce6860cfc474d998cc70005717a1",
+      "owner": "postgres",
+      "security": true,
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "append_auto_campaign_log(bigint,bigint,text)",
+      "md5": "230e219f5b854a2d2154ee0dc6c867a2",
+      "owner": "postgres",
+      "security": true,
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}"
+    },
+    {
+      "signature": "private.campaign_log_legacy(bigint)",
+      "md5": "453c9f8a1e3d233764e9284e17c36be7",
+      "owner": "postgres",
+      "security": false,
+      "config": [
+        "search_path=pg_catalog, public",
+        "plan_cache_mode=force_custom_plan"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.campaign_log_page(bigint,jsonb)",
+      "md5": "9df075f367231f8ad06970bfb6a62a5a",
+      "owner": "postgres",
+      "security": false,
+      "config": [
+        "search_path=pg_catalog, public",
+        "plan_cache_mode=force_custom_plan"
+      ],
+      "acl": "{postgres=X/postgres}"
+    }
+  ]
+}
