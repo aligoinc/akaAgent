@@ -44,7 +44,9 @@ export class CampaignEditFlow<T extends EditableCampaign> {
       const campaign = await this.read(operation.id, operation.controller.signal)
       if (this.operation !== operation) return
       if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
-      if (campaign.status === 'tạm dừng' && campaign.editReady === true) {
+      // `read` must return a fresh API/IPC snapshot, never optimistic UI state.
+      // Follow the existing pause status contract; runtime claims are not an edit lock.
+      if (campaign.status === 'tạm dừng') {
         this.operation = undefined
         operation.dispose()
         this.publish({ kind: 'closed' })
@@ -113,7 +115,6 @@ export async function resumeSavedCampaigns<T extends EditableCampaign>(
     if (signal.aborted) throw new Error('Phiên sửa chiến dịch đã đóng.')
     if (!current) throw new Error('Không tìm thấy chiến dịch đã lưu.')
     if (current.status === 'tạm dừng') {
-      if (current.editReady !== true) throw new Error('Đang chờ chiến dịch tạm dừng hoàn tất. Hãy thử chuyển trạng thái lại sau.')
       await resume(id)
     } else if (!['chờ xử lý', 'đang chạy', 'hoàn thành'].includes(current.status)) {
       throw new Error('Trạng thái chiến dịch đã thay đổi. Vui lòng kiểm tra lại.')

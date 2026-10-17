@@ -152,15 +152,15 @@ export function registerCampaignHandlers(
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
     if (requireEditReady === true) {
       const ready = await supabase.getCampaignConfig(id)
-      if (!ready?.editReady) {
-        throw new Error('Chiến dịch chưa tạm dừng hoàn tất hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
+      if (ready?.status !== 'tạm dừng') {
+        throw new Error('Chiến dịch chưa tạm dừng hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
       }
       if (expectedEditVersion) {
         if (ready.editVersion !== expectedEditVersion) {
           throw new Error('Cấu hình chiến dịch đã thay đổi ở phiên khác. Vui lòng mở lại form sửa để tải cấu hình mới nhất.')
         }
         // Log-only changes while the form is open are safe. The final UPDATE
-        // still compares this exact timestamp and paused/unowned predicates.
+        // still compares this exact timestamp and paused status.
         expectedUpdatedAt = ready.updatedAt
       }
     }

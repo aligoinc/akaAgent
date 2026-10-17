@@ -2,10 +2,10 @@
 
 Desktop và Web dùng một cổng mở sửa trong mỗi ứng dụng. Áp dụng sửa đầy đủ/lịch, nội dung/media, giới hạn, Nhóm data, Chẩn đoán và chiến dịch liên quan; URL `/campaigns/:id/edit` trên Web cũng đi qua cổng này. Nhân bản chỉ đọc nguồn, không yêu cầu dừng nguồn. Không đổi native mobile.
 
-## Hợp đồng
+## Hợp đồng — cập nhật 17/10/2026
 
 - Đọc cấu hình mới; Chờ xử lý/Đang chạy yêu cầu Có/Không. Có dùng lệnh pause hiện có, chờ xác nhận backend rồi mới giao snapshot mới cho form. Không/đóng không gửi pause; hủy chờ không undo pause.
-- `editReady` chỉ đúng khi **chính chiến dịch** tạm dừng và cả `runtime_claim_token`, `runtime_unit_token` đều NULL. Không dùng trạng thái optimistic, trạng thái tài khoản hay token của chiến dịch khác. Mapper không trả hai token ra IPC/API. Thiếu trường ownership không được coi là ready.
+- Chỉ mở sau khi cấu hình đọc mới từ API/IPC có `status='tạm dừng'`; `editReady` giữ tương thích nhưng nay phản ánh đúng điều kiện trạng thái này. Không dùng trạng thái optimistic hoặc chỉ dựa vào việc lệnh pause trả về thành công. Claim/unit không còn là điều kiện mở/lưu sửa; không đọc hay trả token trong cấu hình.
 - Theo dõi bằng sự kiện/refresh hiện có. Cổng không có timer. Web URL độc lập dùng hàng đợi `usePolledResource` ở chế độ event-only (`pollIntervalMs=null`), nhận status/reconnect; có nút Kiểm tra lại. Khi danh sách đang mount, dùng lần đọc danh sách hiện có. Không thêm vòng polling định kỳ.
 - Một lần mở sửa đang chờ; hủy/đóng/đổi scope đăng nhập làm kết quả cũ vô hiệu. Promise pause đã gửi vẫn được giữ.
 - Lưu sửa/nhân bản: validate rồi hỏi Tạm dừng/Chờ xử lý, focus Tạm dừng. Đóng hộp hỏi chưa ghi cấu hình. Tạo thường/lưu nháp không hỏi.
@@ -14,11 +14,19 @@ Desktop và Web dùng một cổng mở sửa trong mỗi ứng dụng. Áp dụ
 
 ## Ranh giới ghi
 
-Desktop UI gửi `requireEditReady`, `expectedEditVersion` và `expectedUpdatedAt` qua IPC hiện có. Main dùng lần đọc readiness hiện có để so phiên bản cấu hình; chỉ khi cấu hình vẫn khớp mới dùng timestamp chính xác của hàng vừa đọc cho UPDATE. UPDATE lọc staff, id, chưa xóa, tạm dừng, hai token NULL và timestamp, chống resume/claim/ghi từ phiên khác xen vào. Caller chưa có phiên bản cấu hình giữ kiểm tra timestamp cũ. Runtime/internal writers không bật guard dành cho UI.
+Desktop UI gửi `requireEditReady`, `expectedEditVersion` và `expectedUpdatedAt` qua IPC hiện có. Main dùng lần đọc trạng thái hiện có để so phiên bản cấu hình; chỉ khi cấu hình vẫn khớp mới dùng timestamp chính xác của hàng vừa đọc cho UPDATE. UPDATE lọc staff, id, chưa xóa, tạm dừng và timestamp, chống resume/ghi từ phiên khác xen vào. Không lọc claim/unit và không xóa chúng. Caller chưa có phiên bản cấu hình giữ kiểm tra timestamp cũ. Runtime/internal writers không bật guard dành cho UI.
 
 Web PATCH mới opt-in `requireEditReady`. API kiểm tra tenant/quyền/phiên bản như cũ, đọc lại readiness rồi gọi **RPC atomic hiện có** với timestamp chính xác từ snapshot mới. Với đường sửa này, không dùng wrapper retry timestamp theo runtime vì wrapper đó có thể chấp nhận một lần resume xen giữa. Caller native cũ không opt-in vẫn giữ hợp đồng cũ. Không sửa định nghĩa RPC.
 
-## Kiểm chứng local
+## Gỡ phụ thuộc claim khi sửa — 17/10/2026
+
+Tính năng tự động thực hiện thao tác Tạm dừng → chờ trạng thái → Sửa. Chờ xử lý cũng phải gửi pause và chờ, kể cả khi scheduler vừa nhận chạy trong lúc gửi lệnh. Chiến dịch đã tạm dừng mở ngay bằng snapshot mới; claim còn sót không làm chờ vô hạn. Giữ xác nhận Có/Không, Kiểm tra lại/Hủy chờ, lựa chọn trạng thái sau lưu, checkpoint và retry chỉ bước hoàn tất.
+
+Giữ nguyên hợp đồng trạng thái của luồng pause cũ: với Server, trạng thái DB có thể đã là Tạm dừng trước khi thao tác đang thực hiện kết thúc. Bản sửa này không tạo thêm bảo đảm runtime đã rảnh; việc sửa cleanup/claim là công việc riêng. Không sửa scheduler, Chat API, RPC hay dữ liệu production; không thêm polling/connection/pool. Sự kiện/refresh hiện có vẫn kích hoạt đọc cấu hình trong lúc chờ, có single-flight và một lượt đọc tiếp; không coi những lần đọc HTTP này là miễn phí tài nguyên DB.
+
+Kiểm chứng bản 17/10: smoke `campaign-edit-flow`, `campaign-edit-version`, `campaign-edit-save-retry`, `campaign-sms-save-retry` đạt; menu/form Electron với IPC giả đạt, gồm mở khi cờ readiness cũ false, sửa đầy đủ/sửa nhanh và lưu dở SMS/voice. Web/API: 25 ca readiness + 227 service/routes đạt; sáu suite Web có 206 ca, lượt đầu 205/206 do ca đếm render tiến độ lệch 4 lượt, chạy lại riêng toàn bộ bộ form đạt 105/105 mà không sửa test hay logic tiến độ. Playwright 6/6 trên Desktop Chromium, Android Chromium và iPhone WebKit dùng API/WebSocket giả. Hai typecheck Desktop, bảy workspace Web, build Desktop/Web/API và `git diff --check` đạt. Bản sửa Desktop chưa đóng gói/phát hành. Web/API đã deploy image `campaign-edit-status-20261017` lúc 22:48 ngày 17/10/2026 (giờ Việt Nam), health 1/1 và 6/6 ca browser trên bundle production với API/WebSocket giả lập đạt; không deploy Chat API hoặc sửa DB.
+
+## Kiểm chứng local bản 16/10/2026
 
 - `node scripts/campaign-edit-flow-smoke.cjs`: dùng chung state machine Desktop/Web, pending/running/paused/completed, Có/Không, single-flight, pause lỗi, hủy/auth/late response, hai lựa chọn lưu, retry sau phản hồi resume mất; 16 tổ hợp readiness/redaction và production repository CAS đối với claim/unit/status/version/staff xen vào.
 - `node scripts/run-campaign-edit-ui-smoke.cjs`: menu/form thật Electron với IPC giả; chờ runtime nhả, focus, đóng hộp lưu, sửa nhanh và đầy đủ, chỉ retry chuyển trạng thái. Chặn HTTP bên ngoài.

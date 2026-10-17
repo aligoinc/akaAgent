@@ -820,7 +820,7 @@ export interface Campaign {
  * `getCampaignLog` instead of travelling with the configuration payload.
  */
 export type CampaignConfig = Omit<Campaign, 'log'> & {
-  /** Server-confirmed pause with no campaign runtime ownership. */
+  /** Backend-confirmed paused status. Runtime claims do not gate editing. */
   editReady?: boolean
   /** Main-process configuration fingerprint for saving; ignores log/runtime timestamps. */
   editVersion?: string

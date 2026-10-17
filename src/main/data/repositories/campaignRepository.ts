@@ -118,8 +118,6 @@ const CAMPAIGN_LOG_APPEND_RESULT_SELECT = [
   CAMPAIGN_PRIMARY_ACCOUNT_RELATION
 ].join(', ')
 const CAMPAIGN_CONFIG_SELECT = [
-  'runtime_claim_token',
-  'runtime_unit_token',
   'id',
   'name',
   'action_id',
@@ -2432,7 +2430,6 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
     .eq('id', id)
     .eq('staff_id', u.staffId)
   if (requireEditReady) write = write.eq('is_delete', false).eq('status', 'tạm dừng')
-    .is('runtime_claim_token', null).is('runtime_unit_token', null)
   if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
   const { data, error } = await write.select(CAMPAIGN_SELECT).maybeSingle()
 
@@ -2451,7 +2448,7 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
     } catch (materializationError) {
       console.error('Failed to update mobile-managed campaign input content:', materializationError)
       if (requireEditReady && updatedCampaign.updatedAt) {
-        // This write already required paused/unowned. Keep its exact version;
+        // This write already required paused status. Keep its exact version;
         // a later edit/resume must still conflict when this editor retries.
         throw new CampaignConfigSaveError({
           code: 'campaign_input_materialization_failed',

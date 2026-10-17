@@ -75,7 +75,7 @@ async function main(){
     await page.locator('.campaign-feedback-modal').getByRole('button',{name:'Đóng',exact:true}).click()
   }
   assert.deepEqual(await page.evaluate(()=>window.pendingSmoke.state.errors),[])
-  console.log('PASS Desktop real menu, confirmation, actual release, focus, cancel save, retry-only activation and SMS/voice partial-save retry in quick/full forms')
+  console.log('PASS Desktop real menu, confirmation, fresh paused status despite old readiness=false, focus, cancel save, retry-only activation and SMS/voice partial-save retry in quick/full forms')
  }catch(e){if(page)console.error((await page.locator('body').innerText()).slice(-10000));throw e}
  finally{if(app)await app.close();rmSync(dir,{recursive:true,force:true})}
 }
