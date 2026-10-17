@@ -80,14 +80,26 @@ async function main() {
   reordered.state.row.extra_settings = { b: { d: 3, c: 2 }, a: 1 }
   reordered.state.row.updated_at = '2026-10-16T02:00:00.111111+00:00'
   await reordered.save(original)
-  for (const change of [{ status: 'chờ xử lý' }, { runtime_claim_token: 'new-owner' }, { runtime_unit_token: 'new-unit' }]) {
+  for (const change of [{ runtime_claim_token: 'leftover-owner' }, { runtime_unit_token: 'leftover-unit' }]) {
+    const test = fixture()
+    Object.assign(test.state.row, change)
+    const original = await test.repo.getCampaignConfig(91)
+    assert.equal(original.editReady, true)
+    await test.save(original)
+    assert.equal(test.state.writes, 1, 'runtime metadata is not an edit lock')
+    const params = test.state.requests.find(r => r.method === 'PATCH').params
+    assert.equal(params.has('runtime_claim_token'), false)
+    assert.equal(params.has('runtime_unit_token'), false)
+  }
+  for (const change of [{ status: 'chờ xử lý' }, { status: 'đang chạy' }, { status: 'hoàn thành' }]) {
     const test = fixture(), original = await test.repo.getCampaignConfig(91)
     Object.assign(test.state.row, change)
     await assert.rejects(test.save(original), /chưa tạm dừng/)
     assert.equal(test.state.writes, 0)
   }
-  // The configuration check does not replace the final atomic ownership/CAS guard.
-  for (const change of [{ status: 'chờ xử lý' }, { runtime_claim_token: 'new-owner' }, { runtime_unit_token: 'new-unit' },
+  // The configuration check does not replace the final atomic status/CAS guard.
+  for (const change of [{ status: 'chờ xử lý' }, { status: 'đang chạy' }, { status: 'hoàn thành' },
+    { runtime_claim_token: 'new-owner', updated_at: '2026-10-16T02:00:00.111111+00:00' },
     { updated_at: '2026-10-16T02:00:00.111111+00:00', content: 'concurrent' }, { staff_id: 8 }, { is_delete: true }]) {
     const test = fixture(), original = await test.repo.getCampaignConfig(91)
     test.state.beforeWrite = () => Object.assign(test.state.row, change)

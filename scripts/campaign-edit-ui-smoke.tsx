@@ -14,10 +14,10 @@ window.electronAPI = new Proxy(api, { get(target, key) {
   if (key === 'getCampaignConfig' || key === 'getDesktopCampaignConfig') return async (id: number) => config(id)
   if (key === 'listCampaignInputData') return async () => [{ id: 1, uid: '123456', name: 'Khách thử', status: 'chờ xử lý' }]
   if (key === 'updateCampaign') return async (id: number, patch: any, strict: boolean, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean, expectedEditVersion?: string) => {
-    if (patch.status === 'tạm dừng') { state.pauses++; base.patch(id, { status: 'tạm dừng' }) }
+    if (patch.status === 'tạm dừng') { state.pauses++ }
     else if (patch.status === 'chờ xử lý') { state.resumes++; if (state.failResume) throw Error('Lỗi tiếp tục giả lập'); base.patch(id, patch) }
     else {
-      if (!strict || !state.ready) throw Error('Missing readiness guard')
+      if (!strict || config(id).status !== 'tạm dừng') throw Error('Missing paused status guard')
       if (expectedEditVersion !== state.editVersion) throw Error('Missing or conflicting configuration version')
       if (state.mobileEditor) {
         state.mobileWrites.push({ expectedUpdatedAt, retrySmsInputSchedule, expectedEditVersion })
@@ -35,7 +35,7 @@ window.electronAPI = new Proxy(api, { get(target, key) {
   }
   return Reflect.get(target, key)
 } })
-;(window as any).editSmoke = { state, ready: () => { state.ready = true; base.store.setState({ campaignsReadAt: Date.now() }) },
+;(window as any).editSmoke = { state, ready: () => { base.patch(91, { status: 'tạm dừng' }); base.store.setState({ campaignsReadAt: Date.now() }) },
   openMobileEditor: (mode: 'full' | 'quick', actionId: 'sms_send' | 'voice_call') => {
     state.mobileEditor = true; state.failInputs = true; state.mobileWrites = []; state.ready = true
     state.editVersion = 'mobile-config-original'

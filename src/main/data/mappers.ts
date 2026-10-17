@@ -243,7 +243,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
 
 export function mapCampaignConfigFromDB(row: Record<string, unknown>): CampaignConfig {
   const { log: _omittedLog, ...config } = mapCampaignFromDB(row)
-  return { ...config, editVersion: getCampaignEditVersion(row), editReady: row.status === 'tạm dừng' && row.runtime_claim_token === null && row.runtime_unit_token === null }
+  return { ...config, editVersion: getCampaignEditVersion(row), editReady: row.status === 'tạm dừng' }
 }
 
 export function mapCampaignListItemFromDB(row: Record<string, unknown>): CampaignListItem {

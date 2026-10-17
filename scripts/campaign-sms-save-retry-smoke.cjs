@@ -96,8 +96,8 @@ function fixture(actionId = 'sms_send') {
     realtimeRefreshController: { refreshSoon() { state.refreshes++ } },
     supabase: {
       updateCampaign: repo.updateCampaign,
-      getCampaignConfig: async () => ({ updatedAt: state.row.updated_at, editVersion: scope.getCampaignEditVersion(state.row), editReady: state.row.status === 'tạm dừng' &&
-        state.row.runtime_claim_token === null && state.row.runtime_unit_token === null })
+      getCampaignConfig: async () => ({ status: state.row.status, updatedAt: state.row.updated_at,
+        editVersion: scope.getCampaignEditVersion(state.row), editReady: state.row.status === 'tạm dừng' })
     }
   })
   const store = {}
@@ -117,6 +117,7 @@ function fixture(actionId = 'sms_send') {
 async function main() {
   for (const action of ['sms_send', 'voice_call']) {
     const { state, save } = fixture(action)
+    state.row.runtime_claim_token = 'leftover-claim'
     const session = new AbortController()
     await assert.rejects(save(91, { content: 'new' }, 'v0', session.signal), CampaignConfigSaveError)
     assert.equal(state.row.content, 'new')
@@ -126,6 +127,7 @@ async function main() {
     assert.equal(state.ipcArgs[1][3], committed, 'retry uses only its own committed version')
     assert.equal(state.inputs.every(row => row.content === 'new:false'), true)
     assert.equal(state.row.status, 'tạm dừng', 'config retry never resumes')
+    assert.equal(state.row.runtime_claim_token, 'leftover-claim', 'editing does not clean up runtime metadata')
   }
 
   // Identical extraSettings would normally skip SMS materialization on retry.
@@ -141,7 +143,8 @@ async function main() {
   }
 
   for (const change of [{ updated_at: 'other-editor', content: 'other-editor' }, { status: 'chờ xử lý' },
-    { runtime_claim_token: 'other-owner' }, { runtime_unit_token: 'other-unit' }, { staff_id: 2 }, { is_delete: true }]) {
+    { status: 'đang chạy' }, { status: 'hoàn thành' },
+    { staff_id: 2 }, { is_delete: true }]) {
     const { state, save } = fixture()
     const session = new AbortController()
     await assert.rejects(save(91, { content: 'new' }, 'v0', session.signal), CampaignConfigSaveError)
