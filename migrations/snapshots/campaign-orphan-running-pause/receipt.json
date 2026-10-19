@@ -1,0 +1,21 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "applied": true,
+  "migration": [
+    {
+      "name": "campaign_orphan_running_pause",
+      "version": "20261019133105"
+    }
+  ],
+  "fixture_staff": 0,
+  "fixture_account": 0,
+  "fixture_campaign": 0,
+  "server_checksum": "8811f009a969f2ce8dda19df95a8c614",
+  "preAndPostApplyRollbackSmokeChecks": 26,
+  "sourceChecksum": "ba5a4107bf5adcbe13dee5834c644171",
+  "targetChecksum": "f8b736faac1c365999f6741054f08680",
+  "attributesPreserved": true,
+  "rollbackRehearsalPassed": true,
+  "securityAdvisorsBeforeApply": 9,
+  "securityAdvisorsForChangedFunction": 0
+}

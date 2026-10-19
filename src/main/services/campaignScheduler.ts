@@ -1343,12 +1343,20 @@ export class CampaignScheduler {
       campaign = paused
     }
 
-    if (campaign.status === 'chờ xử lý') {
+    // No local run can consume the latch after an orphaned campaign loses its
+    // owner. Let the existing atomic RPC verify account deletion and absence
+    // of both DB leases; never infer remote ownership from this process's RAM.
+    const needsUnownedPause = campaign.status === 'đang chạy' && !failed &&
+      !pauseRuntimeClaimToken && !this.campaignRunBoundaries.has(campaignId)
+    if (campaign.status === 'chờ xử lý' || needsUnownedPause) {
       const transition = await this.supabase.setDesktopCampaignStatusV2(
         campaign.id,
         campaign.accountId,
         'tạm dừng'
-      )
+      ).catch(error => {
+        if (needsUnownedPause) this.pauseRequests.delete(campaignId)
+        throw error
+      })
       if (transition.ok || transition.reason === 'already_target') {
         this.pauseRequests.delete(campaignId)
         const updated = await this.supabase.getCampaign(campaignId)

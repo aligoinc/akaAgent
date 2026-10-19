@@ -1433,8 +1433,10 @@ export function registerIpcHandlers(
       const campaign = await supabase.getCampaign(campaignId)
       if (!campaign) throw new Error('Không tìm thấy chiến dịch.')
 
-      const account = await supabase.getAccount(campaign.accountId)
-      if (!account && String(campaign.actionId || '').startsWith('zalo_')) {
+      const account = status === 'tạm dừng'
+        ? await supabase.getAccountForCampaignPause(campaign.accountId)
+        : await supabase.getAccount(campaign.accountId)
+      if (status !== 'tạm dừng' && !account && String(campaign.actionId || '').startsWith('zalo_')) {
         throw new Error('Tài khoản Zalo của chiến dịch không còn phù hợp với gói hiện tại.')
       }
       if (account?.flatformType === 'zalo') {

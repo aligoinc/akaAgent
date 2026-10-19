@@ -1698,7 +1698,7 @@ export default function CampaignFormModal({
   const restoredDraftAction = (draftPayload?.values.formData as { actionId?: string } | undefined)?.actionId
 
   const {
-    accounts, accountGroups, campaignActions, campaignCatalog: campaigns, loadAccountGroups, loadCampaigns, loadCampaignCatalog,
+    accounts, accountCatalogVersion, loadingAccounts, accountGroups, campaignActions, campaignCatalog: campaigns, loadAccountGroups, loadCampaigns, loadCampaignCatalog,
     createCampaign, updateCampaign,
     createCampaignInputData
   } = useCampaignStore()
@@ -2835,6 +2835,11 @@ export default function CampaignFormModal({
       : accounts,
     [accounts, actionPlatformForAccountSelection, formData.actionId]
   )
+  // Only a successful catalog snapshot can prove an inherited account is gone.
+  // accountsReadAt also advances on failure, so it must not be used here.
+  const cloneAccountCatalogReady = Boolean(accountCatalogVersion) && !loadingAccounts
+  const cloneSourceAccountUnavailable = Boolean(cloneFromId && cloneAccountCatalogReady && campaign &&
+    !accounts.some(account => account.id === campaign.accountId))
   const selectedPrimaryAccount = useMemo(() => {
     if (formData.accountIds.length !== 1) return null
     return accounts.find(account => account.id === formData.accountIds[0]) || null
@@ -4209,15 +4214,21 @@ export default function CampaignFormModal({
     setFormData(prev => {
       const nextAccountIds = prev.accountIds.filter(id => {
         const account = accounts.find(item => item.id === id)
-        // Do not drop a hydrated id just because the account catalog is still incomplete.
-        return !account || allowedIds.has(id)
+        // Preserve hydrated ids until loading succeeds. A clone must not keep
+        // an invisible deleted account when the user selects its replacement.
+        return (!account && !(cloneFromId && cloneAccountCatalogReady)) || allowedIds.has(id)
       })
-      if (nextAccountIds.length === prev.accountIds.length) return prev
+      const secondaryAccountId = cloneFromId && cloneAccountCatalogReady && prev.secondaryAccountId !== null &&
+        !accounts.some(account => account.id === prev.secondaryAccountId)
+        ? null : prev.secondaryAccountId
+      if (nextAccountIds.length === prev.accountIds.length && secondaryAccountId === prev.secondaryAccountId) return prev
       invalidateCampaignNameAiRequest()
-      return { ...prev, accountIds: nextAccountIds }
+      return { ...prev, accountIds: nextAccountIds, secondaryAccountId }
     })
   }, [
     accounts,
+    cloneFromId,
+    cloneAccountCatalogReady,
     actionPlatformForAccountSelection,
     selectableAccounts
   ])
@@ -6715,6 +6726,14 @@ export default function CampaignFormModal({
     }
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
+      return
+    }
+    if (cloneFromId && !cloneAccountCatalogReady) {
+      showAlert('Chưa tải xong danh sách tài khoản. Vui lòng tải lại danh sách trước khi lưu chiến dịch.', 'error')
+      return
+    }
+    if (formData.accountIds.some(id => !accounts.some(account => account.id === id))) {
+      showAlert('Tài khoản đã chọn không còn khả dụng. Vui lòng chọn lại tài khoản.', 'error')
       return
     }
     if (
@@ -15591,6 +15610,9 @@ export default function CampaignFormModal({
                   </div>
 
                   <div className="stepper-form-group" ref={accountDropdownRef}>
+                    {cloneSourceAccountUnavailable && formData.accountIds.length === 0 && (
+                      <div className="field-error" role="alert">Tài khoản của chiến dịch gốc không còn khả dụng. Vui lòng chọn tài khoản khác.</div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                       <label style={{ margin: 0 }}>
                         {allowsSecondaryAccount || runsAsPage ? 'Tài khoản chính' : 'Tài khoản'} <span className="required">*</span>

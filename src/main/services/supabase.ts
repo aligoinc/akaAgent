@@ -58,6 +58,7 @@ export class SupabaseService {
 
   // =========== ACCOUNTS ===========
   getAccount(id: number, signal?: AbortSignal) { return accountRepo.getAccount(id, signal) }
+  getAccountForCampaignPause(id: number) { return accountRepo.getAccountForCampaignPause(id) }
   getAccountIgnoringCapability(id: number) { return accountRepo.getAccountIgnoringCapability(id) }
   listAccounts() { return accountRepo.listAccounts() }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }

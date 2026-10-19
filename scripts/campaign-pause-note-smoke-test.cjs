@@ -150,7 +150,13 @@ async function main() {
 
   // Missing local ownership must not fall back to a tokenless UPDATE.
   f = fixture(); f.scheduler.campaignRunBoundaries.clear()
+  let guardedPauses = 0
+  f.supabase.setDesktopCampaignStatusV2 = async () => {
+    guardedPauses++
+    return { ok: false, reason: 'runtime_busy' }
+  }
   assert.equal((await f.pause()).note, null); assert.equal(f.queries, 0)
+  assert.equal(guardedPauses, 1, 'missing local owner still checks DB ownership atomically')
   assert.equal(f.scheduler.pauseRequests.has(1), true, 'normal pause boundary remains latched')
 
   // A settled run can still hold its claim while status is pending.
