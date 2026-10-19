@@ -164,6 +164,24 @@ export async function getAccountIgnoringCapability(id: number, signal?: AbortSig
   return data ? rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data))) : null
 }
 
+// Pausing needs the original runtime route even after deletion or loss of a
+// package capability. This read cannot authorize starting or resuming a run.
+export async function getAccountForCampaignPause(id: number): Promise<Pick<AutoAccount, 'id' | 'flatformType' | 'isZaloServer'> | null> {
+  const u = requireCurrentUser()
+  const { data, error } = await client()
+    .from('auto_accounts')
+    .select('id,flatform_type,is_zalo_server')
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+    .maybeSingle()
+  if (error) throw new Error(`Failed to get campaign pause account: ${error.message}`)
+  return data ? {
+    id: Number(data.id),
+    flatformType: data.flatform_type,
+    isZaloServer: data.is_zalo_server === true
+  } : null
+}
+
 export async function getAccount(id: number, signal?: AbortSignal): Promise<AutoAccount | null> {
   const account = await getAccountIgnoringCapability(id, signal)
   signal?.throwIfAborted()

@@ -1,0 +1,23 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migrationVersion": "20261019130317",
+  "migrationName": "campaign_orphan_pause",
+  "applied": true,
+  "preAndPostApplyRollbackSmokeChecks": 21,
+  "fixtureRowsAfterRollback": {
+    "staff": 0,
+    "account": 0,
+    "campaign": 0
+  },
+  "attributesPreserved": true,
+  "rollbackRehearsal": [
+    {
+      "signature": "aka_agent_set_zalo_server_campaign_status(bigint,bigint,text)",
+      "checksum": "d13304a4900035696adc468abf3629ed"
+    },
+    {
+      "signature": "aka_agent_set_desktop_campaign_status_v2(bigint,bigint,bigint,text)",
+      "checksum": "861b73d8875f871139cf31ac165cf959"
+    }
+  ]
+}

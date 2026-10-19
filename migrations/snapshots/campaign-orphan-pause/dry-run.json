@@ -1,0 +1,24 @@
+[
+  {
+    "signature": "aka_agent_set_zalo_server_campaign_status(bigint,bigint,text)",
+    "checksum": "8811f009a969f2ce8dda19df95a8c614",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=public"
+    ],
+    "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "aka_agent_set_desktop_campaign_status_v2(bigint,bigint,bigint,text)",
+    "checksum": "ba5a4107bf5adcbe13dee5834c644171",
+    "owner": "postgres",
+    "prosecdef": false,
+    "provolatile": "v",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  }
+]
