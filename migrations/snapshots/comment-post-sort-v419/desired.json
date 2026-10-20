@@ -1,0 +1,1280 @@
+{
+  "block": {
+    "category": "facebook",
+    "code": "// Opt-in for comment feeds; the existing find-data branch below stays unchanged.\nif (input.commentFeedSort === true) {\n  const sortType = ['most_relevant', 'new_posts'].includes(vars.commentPostSort)\n    ? vars.commentPostSort : 'recent_activity';\n  const labels = {\n    most_relevant: 'Phù hợp nhất',\n    recent_activity: 'Hoạt động mới đây',\n    new_posts: 'Bài viết mới'\n  };\n  const optionNames = {\n    most_relevant: 'fb_feed_most_relevant_post_option',\n    recent_activity: 'fb_recent_activity_post_btn',\n    new_posts: 'fb_new_post_btn'\n  };\n  const checkAbort = () => {\n    if (signal && signal.aborted) throw new Error('Đã hủy sắp xếp bài viết');\n  };\n  const recordSort = async (status, reason, message, xpath) => {\n    helpers.log(message);\n    await helpers.logRunEvent({\n      eventType: 'sort_posts',\n      eventName: 'Sắp xếp bài viết',\n      targetType: 'feed',\n      status,\n      isUserVisible: false,\n      message,\n      ...(xpath ? { xpath } : {}),\n      debugData: { sortType, reason }\n    });\n    return { postSort: sortType, postSortApplied: status === 'success', postSortReason: reason };\n  };\n  checkAbort();\n  let menuOpened = false;\n  try {\n    const sortButton = await helpers.element('fb_feed_post_sort_button');\n    checkAbort();\n    const button = await page.$(sortButton);\n    checkAbort();\n    if (!button) {\n      return await recordSort('skipped', 'sort_unavailable',\n        'ℹ️ Trang này không có tùy chọn sắp xếp bài viết; giữ thứ tự đang hiển thị.');\n    }\n    await page.click(sortButton);\n    menuOpened = true;\n    await helpers.sleep(1000, signal);\n    checkAbort();\n    const option = await helpers.element(optionNames[sortType]);\n    checkAbort();\n    const available = await page.$(option);\n    checkAbort();\n    if (!available) {\n      await page.press('Escape');\n      menuOpened = false;\n      checkAbort();\n      return await recordSort('skipped', 'option_unavailable',\n        'ℹ️ Trang này không có lựa chọn “' + labels[sortType] + '”; giữ thứ tự đang hiển thị.');\n    }\n    await page.click(option);\n    menuOpened = false;\n    await helpers.sleep(2500, signal);\n    checkAbort();\n    return await recordSort('success', 'selected',\n      'Đã sắp xếp bài viết: ' + labels[sortType] + '.', option);\n  } catch (err) {\n    checkAbort();\n    if (menuOpened) {\n      try { await page.press('Escape'); } catch (_) {}\n      checkAbort();\n    }\n    return await recordSort('failed', 'sort_failed',\n      'Không đổi được sắp xếp bài viết; tiếp tục theo thứ tự đang hiển thị.');\n  }\n}\n\n\nconst needsFeed = vars.isFindInPost === true || vars.isFindInComment === true || vars.isFindPostLink === true || vars.isFindNewInteractors === true;\nif (!needsFeed) {\n  const skippedSort = String(vars.sortTypePost || input.sortTypePost || 'most_relevant');\n  return { postSort: skippedSort, skippedFeed: true };\n}\n\nconst sortType = String(vars.sortTypePost || input.sortTypePost || 'most_relevant');\nif (sortType === 'most_relevant') {\n  await helpers.logRunEvent({\n    eventType: 'sort_posts',\n    eventName: 'Sắp xếp bài viết',\n    targetType: 'feed',\n    status: 'success',\n    isUserVisible: false,\n    message: 'Giữ sắp xếp phù hợp nhất',\n    debugData: { sortType }\n  });\n  return { postSort: sortType };\n}\n\ntry {\n  const sortButton = await helpers.element('fb_most_relevant_btn');\n  if (await page.$(sortButton)) {\n    await page.click(sortButton);\n    await helpers.sleep(1000, signal);\n    const optionName = sortType === 'new_posts' ? 'fb_new_post_btn' : 'fb_recent_activity_post_btn';\n    const option = await helpers.element(optionName);\n    if (await page.$(option)) {\n      await page.click(option);\n      await helpers.sleep(2500, signal);\n      await helpers.logRunEvent({\n        eventType: 'sort_posts',\n        eventName: 'Sắp xếp bài viết',\n        targetType: 'feed',\n        status: 'success',\n        isUserVisible: false,\n        xpath: option,\n        message: 'Đã đổi sắp xếp bài viết',\n        debugData: { sortType, optionName }\n      });\n    }\n  }\n} catch (err) {\n  const message = err && err.message ? err.message : String(err);\n  helpers.log('Không đổi được sắp xếp bài viết: ' + message);\n  await helpers.logRunEvent({\n    eventType: 'sort_posts',\n    eventName: 'Sắp xếp bài viết',\n    targetType: 'feed',\n    status: 'failed',\n    isUserVisible: false,\n    message,\n    debugData: { sortType }\n  });\n}\n\nreturn { postSort: sortType };\n",
+    "config_schema": [],
+    "created_at": "2026-05-06T10:38:16.694229+00:00",
+    "default_config": {},
+    "description": "Chọn cách sắp xếp bài viết trong group.",
+    "icon": "ArrowUpDown",
+    "id": 2600,
+    "is_builtin": true,
+    "kind": "js",
+    "name": "fb_sort_group_posts",
+    "organization_id": null,
+    "output_schema": [
+      {
+        "label": "Post sort",
+        "name": "postSort",
+        "type": "string"
+      }
+    ],
+    "staff_id": null,
+    "system_type": null,
+    "updated_at": "2026-06-05T19:38:44.394+00:00"
+  },
+  "workflows": [
+    {
+      "created_at": "2026-04-29T08:29:33.872102+00:00",
+      "default_variables": {
+        "campaignContentPreparationVersion": 1,
+        "commentVariants": [],
+        "enablePostLike": false,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "originalIdentityName": "",
+        "pageIdentityReady": false,
+        "pageIdentityRestoreAfterTarget": true,
+        "pageIdentityRestoreOnly": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "postsPerTarget": 3,
+        "runAsPage": false,
+        "runAsPageName": "",
+        "runAsPageUid": "",
+        "targetUrl": "",
+        "commentPostSort": "recent_activity"
+      },
+      "description": "Workflow gieo mầm comment: duyệt feed group/profile/page, lọc keyword, optional like, comment vào N bài",
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-sort_posts",
+          "source": "sleep_after_nav",
+          "target": "sort_posts"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_at_pos-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_at_pos-merge_like",
+          "source": "like_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+          "source": "page_identity_restore_only",
+          "sourceHandle": "true",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+          "source": "page_identity_restore_only",
+          "sourceHandle": "false",
+          "target": "page_identity_needs_switch"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_original-true",
+          "source": "page_identity_needs_switch",
+          "sourceHandle": "true",
+          "target": "page_identity_original"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_enter-false",
+          "source": "page_identity_needs_switch",
+          "sourceHandle": "false",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_switch",
+          "source": "page_identity_original",
+          "target": "page_identity_switch"
+        },
+        {
+          "id": "e-page_identity_switch-page_identity_ready",
+          "source": "page_identity_switch",
+          "target": "page_identity_ready"
+        },
+        {
+          "id": "e-page_identity_ready-page_identity_enter",
+          "source": "page_identity_ready",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_restore_join",
+          "source": "page_identity_original",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_enter-resolve_url",
+          "source": "page_identity_enter",
+          "target": "resolve_url"
+        },
+        {
+          "id": "e-merge_end-page_identity_capture_result",
+          "source": "merge_end",
+          "target": "page_identity_capture_result"
+        },
+        {
+          "id": "e-page_identity_capture_result-page_identity_restore_join",
+          "source": "page_identity_capture_result",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_join-page_identity_needs_restore",
+          "source": "page_identity_restore_join",
+          "target": "page_identity_needs_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_restore-true",
+          "source": "page_identity_needs_restore",
+          "sourceHandle": "true",
+          "target": "page_identity_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+          "source": "page_identity_needs_restore",
+          "sourceHandle": "false",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_restore-page_identity_restored",
+          "source": "page_identity_restore",
+          "target": "page_identity_restored"
+        },
+        {
+          "id": "e-page_identity_restored-page_identity_result_join",
+          "source": "page_identity_restored",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_result_join-page_identity_result",
+          "source": "page_identity_result_join",
+          "target": "page_identity_result"
+        },
+        {
+          "id": "e-loop_comment-comment_at_pos-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "comment_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-if_like",
+          "source": "comment_at_pos",
+          "target": "if_like"
+        },
+        {
+          "id": "e-comment_at_pos-like_at_pos-result",
+          "source": "comment_at_pos",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-merge_like-result",
+          "source": "comment_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-sort_posts-prepare_iters",
+          "source": "sort_posts",
+          "target": "prepare_iters"
+        }
+      ],
+      "id": 157,
+      "is_builtin": true,
+      "name": "facebook_comment_seeding",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "label": "Resolve UID/link → URL group",
+          "position": {
+            "x": 100,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "label": "Mở target",
+          "position": {
+            "x": 100,
+            "y": 100
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "label": "Chờ feed load",
+          "position": {
+            "x": 100,
+            "y": 200
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 100,
+            "y": 300
+          }
+        },
+        {
+          "id": "sort_posts",
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "label": "Sắp xếp bài viết",
+          "position": {
+            "x": 400,
+            "y": 350
+          },
+          "config": {
+            "commentFeedSort": true
+          }
+        },
+        {
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "id": "prepare_iters",
+          "label": "Scroll + chuẩn bị danh sách",
+          "position": {
+            "x": 100,
+            "y": 400
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "systemType": "loop"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true && input.commented === true && input.commentFailed !== true"
+          },
+          "id": "if_like",
+          "position": {
+            "x": 0,
+            "y": 600
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2074,
+          "blockName": "fb_click_like",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_at_pos",
+          "label": "Thích bài tại vị trí",
+          "position": {
+            "x": -100,
+            "y": 700
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "position": {
+            "x": 0,
+            "y": 800
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment_at_pos",
+          "label": "Comment vào bài tại vị trí",
+          "position": {
+            "x": 0,
+            "y": 900
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "position": {
+            "x": 100,
+            "y": 1000
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+          },
+          "id": "page_identity_restore_only",
+          "label": "Chỉ chuyển về danh tính ban đầu?",
+          "position": {
+            "x": 100,
+            "y": -920
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+          },
+          "id": "page_identity_needs_switch",
+          "label": "Cần chuyển sang Page?",
+          "position": {
+            "x": 100,
+            "y": -790
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2670,
+          "blockName": "fb_get_current_identity_name",
+          "config": {},
+          "id": "page_identity_original",
+          "label": "Nhớ danh tính ban đầu",
+          "position": {
+            "x": -120,
+            "y": -660
+          }
+        },
+        {
+          "blockId": 2671,
+          "blockName": "fb_switch_identity_by_name",
+          "config": {
+            "identityNameFromVars": "runAsPageName"
+          },
+          "id": "page_identity_switch",
+          "label": "Chuyển sang Page đã chọn",
+          "position": {
+            "x": -120,
+            "y": -530
+          }
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "ready"
+          },
+          "id": "page_identity_ready",
+          "label": "Kiểm tra đã chuyển Page",
+          "position": {
+            "x": -120,
+            "y": -400
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_enter",
+          "label": "Chạy hành động chiến dịch",
+          "position": {
+            "x": 100,
+            "y": -240
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "capture_result"
+          },
+          "id": "page_identity_capture_result",
+          "label": "Giữ kết quả hành động",
+          "position": {
+            "x": 100,
+            "y": 1260
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_restore_join",
+          "label": "Kết thúc phần hành động",
+          "position": {
+            "x": 500,
+            "y": 1390
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+          },
+          "id": "page_identity_needs_restore",
+          "label": "Cần chuyển về danh tính ban đầu?",
+          "position": {
+            "x": 500,
+            "y": 1520
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2671,
+          "blockName": "fb_switch_identity_by_name",
+          "config": {
+            "useOriginalIdentity": true
+          },
+          "id": "page_identity_restore",
+          "label": "Chuyển về danh tính ban đầu",
+          "position": {
+            "x": 280,
+            "y": 1650
+          }
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "restored"
+          },
+          "id": "page_identity_restored",
+          "label": "Kiểm tra đã chuyển về",
+          "position": {
+            "x": 280,
+            "y": 1780
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_result_join",
+          "label": "Kết thúc phiên Page",
+          "position": {
+            "x": 500,
+            "y": 1910
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "result"
+          },
+          "id": "page_identity_result",
+          "label": "Trả kết quả hành động",
+          "position": {
+            "x": 500,
+            "y": 2040
+          }
+        }
+      ],
+      "organization_id": 1,
+      "staff_id": 1,
+      "updated_at": "2026-10-20T08:48:20.207047+00:00",
+      "variables_schema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        },
+        {
+          "name": "commentPostSort",
+          "type": "string",
+          "label": "Sắp xếp bài viết",
+          "default": "recent_activity"
+        }
+      ]
+    },
+    {
+      "created_at": "2026-06-03T10:01:07.982314+00:00",
+      "default_variables": {
+        "campaignContentPreparationVersion": 1,
+        "commentVariants": [],
+        "enablePostLike": false,
+        "isFindPostByContentAI": false,
+        "isFindPostByKeywords": false,
+        "originalIdentityName": "",
+        "pageIdentityReady": false,
+        "pageIdentityRestoreAfterTarget": true,
+        "pageIdentityRestoreOnly": false,
+        "postContentAI": "",
+        "postKeywords": "",
+        "postsPerTarget": 3,
+        "runAsPage": false,
+        "runAsPageName": "",
+        "runAsPageUid": "",
+        "targetUrl": "",
+        "commentPostSort": "recent_activity"
+      },
+      "description": "Workflow gieo mầm comment: duyệt feed group/profile/page, lọc keyword, optional like, comment vào N bài",
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-nav-wait_main",
+          "source": "nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-sort_posts",
+          "source": "sleep_after_nav",
+          "target": "sort_posts"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "sourceHandle": "done",
+          "target": "merge_end"
+        },
+        {
+          "id": "e-if_like-like_at_pos-true",
+          "source": "if_like",
+          "sourceHandle": "true",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-if_like-merge_like-false",
+          "source": "if_like",
+          "sourceHandle": "false",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-like_at_pos-merge_like",
+          "source": "like_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+          "source": "page_identity_restore_only",
+          "sourceHandle": "true",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+          "source": "page_identity_restore_only",
+          "sourceHandle": "false",
+          "target": "page_identity_needs_switch"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_original-true",
+          "source": "page_identity_needs_switch",
+          "sourceHandle": "true",
+          "target": "page_identity_original"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_enter-false",
+          "source": "page_identity_needs_switch",
+          "sourceHandle": "false",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_switch",
+          "source": "page_identity_original",
+          "target": "page_identity_switch"
+        },
+        {
+          "id": "e-page_identity_switch-page_identity_ready",
+          "source": "page_identity_switch",
+          "target": "page_identity_ready"
+        },
+        {
+          "id": "e-page_identity_ready-page_identity_enter",
+          "source": "page_identity_ready",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_restore_join",
+          "source": "page_identity_original",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_enter-resolve_url",
+          "source": "page_identity_enter",
+          "target": "resolve_url"
+        },
+        {
+          "id": "e-merge_end-page_identity_capture_result",
+          "source": "merge_end",
+          "target": "page_identity_capture_result"
+        },
+        {
+          "id": "e-page_identity_capture_result-page_identity_restore_join",
+          "source": "page_identity_capture_result",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_join-page_identity_needs_restore",
+          "source": "page_identity_restore_join",
+          "target": "page_identity_needs_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_restore-true",
+          "source": "page_identity_needs_restore",
+          "sourceHandle": "true",
+          "target": "page_identity_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+          "source": "page_identity_needs_restore",
+          "sourceHandle": "false",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_restore-page_identity_restored",
+          "source": "page_identity_restore",
+          "target": "page_identity_restored"
+        },
+        {
+          "id": "e-page_identity_restored-page_identity_result_join",
+          "source": "page_identity_restored",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_result_join-page_identity_result",
+          "source": "page_identity_result_join",
+          "target": "page_identity_result"
+        },
+        {
+          "id": "e-loop_comment-comment_at_pos-body",
+          "source": "loop_comment",
+          "sourceHandle": "body",
+          "target": "comment_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-if_like",
+          "source": "comment_at_pos",
+          "target": "if_like"
+        },
+        {
+          "id": "e-comment_at_pos-like_at_pos-result",
+          "source": "comment_at_pos",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-merge_like-result",
+          "source": "comment_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-sort_posts-prepare_iters",
+          "source": "sort_posts",
+          "target": "prepare_iters"
+        }
+      ],
+      "id": 245,
+      "is_builtin": false,
+      "name": "facebook_comment_seeding__test__facebook_comment_seeding",
+      "nodes": [
+        {
+          "blockId": 612,
+          "blockName": "fb_resolve_url",
+          "config": {
+            "urlType": "group"
+          },
+          "id": "resolve_url",
+          "label": "Resolve UID/link → URL group",
+          "position": {
+            "x": 100,
+            "y": 0
+          }
+        },
+        {
+          "blockId": 5,
+          "blockName": "nav_to_url",
+          "config": {},
+          "id": "nav",
+          "label": "Mở target",
+          "position": {
+            "x": 100,
+            "y": 100
+          }
+        },
+        {
+          "blockId": 21,
+          "blockName": "wait_for_selector",
+          "config": {
+            "selector": "//*[@role='main']",
+            "timeout": 10000
+          },
+          "id": "wait_main",
+          "label": "Chờ feed load",
+          "position": {
+            "x": 100,
+            "y": 200
+          }
+        },
+        {
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "id": "sleep_after_nav",
+          "position": {
+            "x": 100,
+            "y": 300
+          }
+        },
+        {
+          "id": "sort_posts",
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "label": "Sắp xếp bài viết",
+          "position": {
+            "x": 400,
+            "y": 350
+          },
+          "config": {
+            "commentFeedSort": true
+          }
+        },
+        {
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "id": "prepare_iters",
+          "label": "Scroll + chuẩn bị danh sách",
+          "position": {
+            "x": 100,
+            "y": 400
+          }
+        },
+        {
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []",
+            "loopType": "forEach"
+          },
+          "id": "loop_comment",
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "systemType": "loop"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enablePostLike === true && input.commented === true && input.commentFailed !== true"
+          },
+          "id": "if_like",
+          "position": {
+            "x": 0,
+            "y": 600
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2074,
+          "blockName": "fb_click_like",
+          "config": {
+            "enabled": true
+          },
+          "id": "like_at_pos",
+          "label": "Thích bài tại vị trí",
+          "position": {
+            "x": -100,
+            "y": 700
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_like",
+          "position": {
+            "x": 0,
+            "y": 800
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "id": "comment_at_pos",
+          "label": "Comment vào bài tại vị trí",
+          "position": {
+            "x": 0,
+            "y": 900
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "merge_end",
+          "position": {
+            "x": 100,
+            "y": 1000
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+          },
+          "id": "page_identity_restore_only",
+          "label": "Chỉ chuyển về danh tính ban đầu?",
+          "position": {
+            "x": 100,
+            "y": -920
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+          },
+          "id": "page_identity_needs_switch",
+          "label": "Cần chuyển sang Page?",
+          "position": {
+            "x": 100,
+            "y": -790
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2670,
+          "blockName": "fb_get_current_identity_name",
+          "config": {},
+          "id": "page_identity_original",
+          "label": "Nhớ danh tính ban đầu",
+          "position": {
+            "x": -120,
+            "y": -660
+          }
+        },
+        {
+          "blockId": 2671,
+          "blockName": "fb_switch_identity_by_name",
+          "config": {
+            "identityNameFromVars": "runAsPageName"
+          },
+          "id": "page_identity_switch",
+          "label": "Chuyển sang Page đã chọn",
+          "position": {
+            "x": -120,
+            "y": -530
+          }
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "ready"
+          },
+          "id": "page_identity_ready",
+          "label": "Kiểm tra đã chuyển Page",
+          "position": {
+            "x": -120,
+            "y": -400
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_enter",
+          "label": "Chạy hành động chiến dịch",
+          "position": {
+            "x": 100,
+            "y": -240
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "capture_result"
+          },
+          "id": "page_identity_capture_result",
+          "label": "Giữ kết quả hành động",
+          "position": {
+            "x": 100,
+            "y": 1260
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_restore_join",
+          "label": "Kết thúc phần hành động",
+          "position": {
+            "x": 500,
+            "y": 1390
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+          },
+          "id": "page_identity_needs_restore",
+          "label": "Cần chuyển về danh tính ban đầu?",
+          "position": {
+            "x": 500,
+            "y": 1520
+          },
+          "systemType": "ifElse"
+        },
+        {
+          "blockId": 2671,
+          "blockName": "fb_switch_identity_by_name",
+          "config": {
+            "useOriginalIdentity": true
+          },
+          "id": "page_identity_restore",
+          "label": "Chuyển về danh tính ban đầu",
+          "position": {
+            "x": 280,
+            "y": 1650
+          }
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "restored"
+          },
+          "id": "page_identity_restored",
+          "label": "Kiểm tra đã chuyển về",
+          "position": {
+            "x": 280,
+            "y": 1780
+          }
+        },
+        {
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "id": "page_identity_result_join",
+          "label": "Kết thúc phiên Page",
+          "position": {
+            "x": 500,
+            "y": 1910
+          },
+          "systemType": "merge"
+        },
+        {
+          "blockId": 2829,
+          "blockName": "fb_campaign_page_identity_state",
+          "config": {
+            "pageIdentityStateOperation": "result"
+          },
+          "id": "page_identity_result",
+          "label": "Trả kết quả hành động",
+          "position": {
+            "x": 500,
+            "y": 2040
+          }
+        }
+      ],
+      "organization_id": 1,
+      "staff_id": 1,
+      "updated_at": "2026-10-20T08:48:20.207837+00:00",
+      "variables_schema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        },
+        {
+          "name": "commentPostSort",
+          "type": "string",
+          "label": "Sắp xếp bài viết",
+          "default": "recent_activity"
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "name": "fb_feed_post_sort_button",
+      "xpath": "//*[@role='main']//*[@role='button' and not(ancestor::*[@role='article' or @role='dialog']) and (normalize-space(.)='Phù hợp nhất' or normalize-space(.)='Most relevant' or normalize-space(.)='Hoạt động mới đây' or normalize-space(.)='Recent activity' or normalize-space(.)='Bài viết mới' or normalize-space(.)='New posts')]",
+      "description": "Nút sắp xếp feed trước khi tìm bài để comment; nhận cả ba trạng thái hiện tại, ngoài bài viết/dialog.",
+      "category": "facebook",
+      "is_builtin": true,
+      "staff_id": null,
+      "organization_id": null
+    },
+    {
+      "name": "fb_feed_most_relevant_post_option",
+      "xpath": "//*[@role='menuitemradio' and (contains(.,'Phù hợp nhất') or contains(.,'Most relevant'))]",
+      "description": "Lựa chọn Phù hợp nhất trong menu sắp xếp bài viết của feed.",
+      "category": "facebook",
+      "is_builtin": true,
+      "staff_id": null,
+      "organization_id": null
+    }
+  ]
+}

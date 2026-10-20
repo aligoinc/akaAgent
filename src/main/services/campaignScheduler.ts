@@ -10295,6 +10295,9 @@ export class CampaignScheduler {
       commentImageOption: enableCommentIterations ? commentImageOption : 'none',
       enablePostLike,
       postsPerTarget: extra.postsPerTarget ?? commentCount,
+      commentPostSort: canUseCommentSeedingPostContentConditions
+        ? (extra.commentPostSort ?? 'recent_activity')
+        : undefined,
       isFindPostByKeywords: canUsePostContentConditions ? (extra.isFindPostByKeywords ?? false) : false,
       postKeywords: canUsePostContentConditions ? (extra.postKeywords ?? '') : '',
       isFindPostByContentAI: canUsePostContentConditions ? (extra.isFindPostByContentAI ?? false) : false,

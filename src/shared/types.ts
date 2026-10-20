@@ -588,6 +588,9 @@ export interface CampaignExtraSettings {
   commentImages?: CampaignMediaInput[]        // kho ảnh/video; runtime luôn chọn tối đa 1 media cho mỗi comment
   enablePostLike?: boolean
   postsPerTarget?: number
+  // Comment danh sách profile/group/page.
+  commentPostSort?: 'recent_activity' | 'most_relevant' | 'new_posts' | null // null/thiếu: Hoạt động mới đây (recent_activity).
+  commentOnlyLatestPost?: boolean // Chỉ lưu cấu hình UI, chưa áp dụng chống comment trùng ở runtime.
   // Lướt newsfeed và tương tác
   newsfeedTimeMinutes?: number
   newsfeedLikeKind?: string

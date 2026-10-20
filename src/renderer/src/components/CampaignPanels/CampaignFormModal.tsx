@@ -1030,6 +1030,12 @@ const POST_SORT_OPTIONS = [
   { value: 'new_posts', label: 'Bài viết mới' }
 ] as const
 
+const COMMENT_POST_SORT_OPTIONS = [
+  { value: 'recent_activity', label: 'Hoạt động mới đây' },
+  { value: 'most_relevant', label: 'Phù hợp nhất' },
+  { value: 'new_posts', label: 'Bài viết mới' }
+] as const
+
 const COMMENT_SORT_OPTIONS = [
   { value: 'most_relevant', label: 'Phù hợp nhất' },
   { value: 'all_comments', label: 'Tất cả bình luận' },
@@ -1925,6 +1931,8 @@ export default function CampaignFormModal({
     rewriteCommentContentEachRun: campaign?.extraSettings?.rewriteCommentContentEachRun ?? false,
     enablePostLike: campaign?.extraSettings?.enablePostLike ?? false,
     postsPerTarget: campaign?.extraSettings?.postsPerTarget ?? campaign?.extraSettings?.commentCount ?? 3,
+    commentPostSort: campaign?.extraSettings?.commentPostSort ?? 'recent_activity',
+    commentOnlyLatestPost: campaign?.extraSettings?.commentOnlyLatestPost ?? false,
     newsfeedTimeMinutes: campaign?.extraSettings?.newsfeedTimeMinutes ?? 20,
     facebookRestBrowse: facebookRestBrowseSettings(campaign?.extraSettings?.facebookRestBrowse),
     newsfeedLikeKind: campaign?.extraSettings?.newsfeedLikeKind || '',
@@ -6406,6 +6414,8 @@ export default function CampaignFormModal({
             rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
             enablePostLike: formData.enablePostLike,
             postsPerTarget: effectivePostsPerTarget,
+            commentPostSort: isCommentSeedingFeedCampaign ? formData.commentPostSort : undefined,
+            commentOnlyLatestPost: isCommentSeedingFeedCampaign ? formData.commentOnlyLatestPost : undefined,
             newsfeedTimeMinutes: isNewsfeedInteractionCampaign ? Math.max(1, Number(formData.newsfeedTimeMinutes) || 20) : undefined,
             newsfeedLikeKind: isNewsfeedInteractionCampaign ? formData.newsfeedLikeKind.trim() : '',
             newsfeedLikeLimit: isNewsfeedInteractionCampaign ? Math.max(0, Number(formData.newsfeedLikeLimit) || 0) : 0,
@@ -16731,6 +16741,36 @@ export default function CampaignFormModal({
 
                 {!collapsedSections['commentPostSearch'] && (
                   <div className="stepper-section-body">
+                    <div className="stepper-form-group">
+                      <label htmlFor="comment-post-sort">Tùy chọn sắp xếp bài post</label>
+                      <select
+                        id="comment-post-sort"
+                        className="stepper-input"
+                        value={formData.commentPostSort}
+                        onChange={e => setFormData(p => ({
+                          ...p,
+                          commentPostSort: e.target.value as NonNullable<CampaignExtraSettings['commentPostSort']>
+                        }))}
+                      >
+                        {COMMENT_POST_SORT_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.commentOnlyLatestPost}
+                          onChange={e => setFormData(p => ({ ...p, commentOnlyLatestPost: e.target.checked }))}
+                          aria-describedby="comment-only-latest-post-note"
+                        />
+                        <span>Chỉ comment vào bài mới nhất (Không comment trùng lặp, tương ứng với đặt lịch dài hạn)</span>
+                      </label>
+                      <div id="comment-only-latest-post-note" className="schedule-hint">
+                        Phù hợp với lịch hẹn dài hạn, hệ thống sẽ vào và comment theo điều kiện và không comment trùng lặp lại bài post đã comment trước đó.
+                      </div>
+                    </div>
                     {renderFindDataPostContentConditions()}
                   </div>
                 )}
