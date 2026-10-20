@@ -403,6 +403,8 @@ V360 đã apply `20261009025028 / migration_v360_facebook_friend_cancel_commit`:
 
 ### Campaign system
 
+V418 đã apply akachat `20261020114812`: đổi tên `zalo_message_group_member` thành thành viên group/người lạ; Desktop thêm nhập UID qua luồng SĐT, giữ nguồn group và workflow. Prompt ảnh 12 nhận UID chuỗi theo action; không apply lại, không RPC/polling mới; [hợp đồng/kiểm chứng/rollback](docs/ZALO_GROUP_MEMBER_UID_V418.md).
+
 **Giới hạn tài khoản chạy v340** đã apply `20261002103201 / migration_v340_browser_run_limits`; không apply lại khi phát hành Desktop. Cài đặt chung lưu hai giới hạn nullable theo staff cho Facebook/Zalo trình duyệt; legacy/v2 claim dùng chung admission transaction, giữ chỗ khi nghỉ/lướt hoặc còn unit, hết chỗ chờ tick 30s và ghi note CAS, không thêm pool/timer. Xem [audit và smoke](docs/BROWSER_RUN_LIMITS.md).
 
 Facebook nghỉ/lướt phụ chỉ cho đăng group, comment group/page/profile và nhắn tin/kết bạn UID: giữ cùng runtime claim theo luồng `đang chạy → giới hạn giờ → lướt/nghỉ → chờ xử lý`, không chạy preclaim/giới hạn ngày/partial còn chạy được. V337 đã apply `20261002075841 / migration_v337_facebook_rest_browse`, không apply lại; lỗi phụ không vào policy/quota, timeout hủy trang tạm, exit CAS giữ pause/token; xem [hướng dẫn và kiểm thử](docs/FACEBOOK_REST_BROWSE.md).

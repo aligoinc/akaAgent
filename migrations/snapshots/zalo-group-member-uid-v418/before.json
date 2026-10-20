@@ -1,0 +1,162 @@
+{
+  "action": {
+    "allow_multiple_accounts": false,
+    "allow_secondary_account": false,
+    "created_at": "2026-06-22T15:23:29.915707+00:00",
+    "flatform_type": "zalo",
+    "id": "zalo_message_group_member",
+    "is_active": true,
+    "is_delete": false,
+    "limit_check_action_codes": [
+      "zalo_message_stranger",
+      "zalo_add_friend"
+    ],
+    "name": "Zalo - Nhắn tin, kết bạn đến thành viên group",
+    "test_workflow_id": 273,
+    "workflow_id": 272
+  },
+  "action_md5": "3efc6d1a599bb6e96cfae379a0f04bbe",
+  "prompt": {
+    "code": "campaign_import_image_to_data",
+    "created_at": "2026-06-24T03:06:09.205202+00:00",
+    "id": 12,
+    "is_active": true,
+    "is_reasoning": false,
+    "is_system": true,
+    "name": "Campaign import image to data",
+    "organization_id": null,
+    "prompt_system": "Bạn là bộ trích xuất dữ liệu từ ảnh cho akaAgent. Chỉ trả về JSON hợp lệ, không markdown, không giải thích.",
+    "prompt_user": "Trích xuất danh sách dữ liệu từ ảnh.\n\nNền tảng: [platform]\nAction ID: [actionId]\n\nQuy tắc output:\n- Nếu platform = \"zalo\" hoặc \"sms\": trả về JSON array, mỗi item có thể có \"name\", \"phone\", \"info1\", \"info2\", \"info3\", \"info4\", \"info5\". Field bắt buộc là \"phone\".\n- Nếu platform = \"facebook\": trả về JSON array, mỗi item có thể có \"name\", \"uid\". Field bắt buộc là \"uid\".\n- Nếu platform = \"email\": trả về JSON array, mỗi item có thể có \"name\", \"email\". Field bắt buộc là \"email\".\n- Không tự bịa dữ liệu không thấy rõ trong ảnh.\n- Chuẩn JSON array duy nhất, ví dụ: [{\"name\":\"Nguyễn Văn A\",\"phone\":\"0912345678\",\"info1\":\"\"}].",
+    "updated_at": "2026-07-02T11:48:38.259256+00:00"
+  },
+  "prompt_md5": "24031cb581b97050e86e5aa945a98fc2",
+  "workflow": {
+    "created_at": "2026-06-22T15:23:29.915707+00:00",
+    "default_variables": {
+      "campaignContentPreparationVersion": 1
+    },
+    "description": "Workflow browserless cho chiến dịch Zalo - Nhắn tin, kết bạn đến thành viên group.",
+    "edges": [
+      {
+        "id": "e_resolve_message",
+        "source": "resolve_member",
+        "target": "send_message"
+      },
+      {
+        "id": "e_message_friend",
+        "source": "send_message",
+        "target": "send_friend_request"
+      },
+      {
+        "id": "e_friend_tag",
+        "source": "send_friend_request",
+        "target": "apply_tag"
+      },
+      {
+        "id": "e_tag_alias",
+        "source": "apply_tag",
+        "target": "change_alias"
+      }
+    ],
+    "id": 272,
+    "is_builtin": true,
+    "name": "zalo_message_group_member",
+    "nodes": [
+      {
+        "blockId": 2782,
+        "blockName": "zalo_resolve_group_member_target",
+        "config": {},
+        "id": "resolve_member",
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2783,
+        "blockName": "zalo_send_group_member_message",
+        "config": {},
+        "id": "send_message",
+        "position": {
+          "x": 260,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2784,
+        "blockName": "zalo_send_group_member_friend_request",
+        "config": {},
+        "id": "send_friend_request",
+        "position": {
+          "x": 520,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2772,
+        "blockName": "zalo_apply_contact_tag",
+        "config": {},
+        "id": "apply_tag",
+        "position": {
+          "x": 780,
+          "y": 0
+        }
+      },
+      {
+        "blockId": 2773,
+        "blockName": "zalo_change_contact_alias",
+        "config": {},
+        "id": "change_alias",
+        "position": {
+          "x": 1040,
+          "y": 0
+        }
+      }
+    ],
+    "organization_id": null,
+    "staff_id": null,
+    "updated_at": "2026-10-06T10:14:35.142327+00:00",
+    "variables_schema": [
+      {
+        "label": "Target UID",
+        "name": "targetUid",
+        "type": "string"
+      },
+      {
+        "label": "Target name",
+        "name": "targetName",
+        "type": "string"
+      },
+      {
+        "label": "Message content",
+        "name": "campaignContent",
+        "type": "string"
+      },
+      {
+        "label": "Friend request message",
+        "name": "friendRequestMessage",
+        "type": "string"
+      },
+      {
+        "label": "Enable message",
+        "name": "enableMessage",
+        "type": "boolean"
+      },
+      {
+        "label": "Enable add friend",
+        "name": "enableAddFriend",
+        "type": "boolean"
+      },
+      {
+        "label": "Enable tag",
+        "name": "enableZaloTag",
+        "type": "boolean"
+      },
+      {
+        "label": "Enable alias",
+        "name": "enableZaloAlias",
+        "type": "boolean"
+      }
+    ]
+  }
+}

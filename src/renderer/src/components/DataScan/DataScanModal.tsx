@@ -73,7 +73,7 @@ const listAllDataGroupsForScan = async (): Promise<DataGroup[]> => {
 const ZALO_REMARKETING_ACTION_FILTER_OPTIONS = [
   { value: 'zalo_message_phone', label: 'Zalo - Gửi tin nhắn đến SĐT (Kiêm kết bạn)' },
   { value: 'zalo_message_friend', label: 'Zalo - Gửi tin nhắn đến bạn bè' },
-  { value: 'zalo_message_group_member', label: 'Zalo - Nhắn tin, kết bạn đến thành viên group' }
+  { value: 'zalo_message_group_member', label: 'Zalo - Nhắn tin, kết bạn đến thành viên group/người lạ' }
 ]
 const DEFAULT_ZALO_REMARKETING_ACTION_IDS = ZALO_REMARKETING_ACTION_FILTER_OPTIONS.map(option => option.value)
 

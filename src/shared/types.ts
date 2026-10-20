@@ -1099,7 +1099,7 @@ const CAMPAIGN_INPUT_DATA_REQUIREMENTS: Record<string, CampaignInputDataRequirem
   facebook_comment_seeding_post: { field: 'uid', label: 'link bài post' },
   zalo_message_phone: { field: 'phone', label: 'SĐT Zalo' },
   zalo_message_friend: { field: 'uid', label: 'UID bạn bè Zalo' },
-  zalo_message_group_member: { field: 'uid', label: 'UID thành viên group Zalo' },
+  zalo_message_group_member: { field: 'uid', label: 'UID Zalo' },
   zalo_message_group_realtime: { field: 'uid', label: 'UID thành viên group Zalo theo thời gian thực' },
   zalo_message_remarketing_customer: { field: 'uid', label: 'UID khách hàng Zalo đã từng gửi tin' },
   zalo_message_group: { field: 'uid', label: 'ID group Zalo' },

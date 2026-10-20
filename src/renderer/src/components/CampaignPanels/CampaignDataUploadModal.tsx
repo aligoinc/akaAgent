@@ -12,6 +12,7 @@ import {
   isValidEmailInputDataValue
 } from '../../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from '../../../../shared/phone'
+import { isZaloUidImportAction, normalizeZaloImportUid } from '../../../../shared/zaloUidImport'
 import { useUiStore } from '../../stores/uiStore'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
 
@@ -114,6 +115,9 @@ const getCellText = (value: unknown): string => {
   }
   return text
 }
+
+const getImportCellText = (value: unknown, actionId: string): string =>
+  isZaloUidImportAction(actionId) ? String(value ?? '').trim() : getCellText(value)
 
 const countNonEmptyImportRows = (rows: unknown[][]): number => rows.reduce(
   (count, row) => count + (row.some(cell => getCellText(cell)) ? 1 : 0),
@@ -361,6 +365,13 @@ const normalizeRows = (rows: CampaignImportDataRow[], platform: CampaignImportPl
   const output: CampaignImportDataRow[] = []
 
   for (const row of rows) {
+    if (isZaloUidImportAction(actionId)) {
+      const uid = normalizeZaloImportUid(row.uid)
+      if (!uid || seen.has(uid)) continue
+      seen.add(uid)
+      output.push({ ...row, uid, phone: '', email: '' })
+      continue
+    }
     if (isDataGroupZaloPersonUidAction(actionId)) {
       const uid = normalizeZaloUserUid(firstText(row.uid, row.name))
       if (!uid || seen.has(uid)) continue
@@ -503,7 +514,8 @@ const buildAkabizTemplateRows = (
   rows: unknown[][],
   platform: CampaignImportPlatform,
   actionId: string,
-  schema: AkabizTemplateSchema
+  schema: AkabizTemplateSchema,
+  rawRows?: unknown[][]
 ): CampaignImportDataRow[] => {
   const seen = new Set<string>()
   const output: CampaignImportDataRow[] = []
@@ -515,29 +527,38 @@ const buildAkabizTemplateRows = (
     output.push(row)
   }
 
-  const valueAt = (row: unknown[], field: keyof AkabizTemplateSchema['columns']): string => {
+  const valueAt = (rowIndex: number, field: keyof AkabizTemplateSchema['columns']): string => {
     const index = schema.columns[field]
-    return index >= 0 ? getCellText(row[index]) : ''
+    if (field === 'uid' && isZaloUidImportAction(actionId)) {
+      return normalizeZaloImportUid(rawRows?.[rowIndex]?.[index])
+    }
+    return index >= 0 ? getImportCellText(rows[rowIndex]?.[index], actionId) : ''
   }
 
-  for (const sourceRow of rows.slice(schema.headerIndex + 1)) {
+  for (let rowIndex = schema.headerIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+    const sourceRow = rows[rowIndex]
     if (!Array.isArray(sourceRow)) continue
     if (sourceRow.every(cell => !getCellText(cell))) continue
 
-    const rawName = valueAt(sourceRow, 'name')
-    const rawUid = valueAt(sourceRow, 'uid')
-    const rawPhone = valueAt(sourceRow, 'phone')
-    const rawEmail = valueAt(sourceRow, 'email')
+    const rawName = valueAt(rowIndex, 'name')
+    const rawUid = valueAt(rowIndex, 'uid')
+    const rawPhone = valueAt(rowIndex, 'phone')
+    const rawEmail = valueAt(rowIndex, 'email')
     const baseRow: CampaignImportDataRow = {
       name: rawName,
       uid: normalizeUid(rawUid),
       phone: rawPhone,
       email: rawEmail,
-      info1: valueAt(sourceRow, 'info1'),
-      info2: valueAt(sourceRow, 'info2'),
-      info3: valueAt(sourceRow, 'info3'),
-      info4: valueAt(sourceRow, 'info4'),
-      info5: valueAt(sourceRow, 'info5')
+      info1: valueAt(rowIndex, 'info1'),
+      info2: valueAt(rowIndex, 'info2'),
+      info3: valueAt(rowIndex, 'info3'),
+      info4: valueAt(rowIndex, 'info4'),
+      info5: valueAt(rowIndex, 'info5')
+    }
+
+    if (isZaloUidImportAction(actionId)) {
+      if (rawUid) pushUnique({ ...baseRow, uid: rawUid, phone: '', email: '' }, rawUid)
+      continue
     }
 
     if (isZaloJoinGroupLinkAction(actionId)) {
@@ -818,6 +839,7 @@ export default function CampaignDataUploadModal({
   const [excelFile, setExcelFile] = useState<File | null>(null)
   const [excelFileName, setExcelFileName] = useState('')
   const [excelRows, setExcelRows] = useState<unknown[][]>([])
+  const [excelRawRows, setExcelRawRows] = useState<unknown[][]>([])
   const [columnMap, setColumnMap] = useState<ColumnMap>(() => createEmptyColumnMap())
   const [skipExcelHeader, setSkipExcelHeader] = useState(true)
   const [previewRows, setPreviewRows] = useState<CampaignImportDataRow[]>([])
@@ -848,6 +870,7 @@ export default function CampaignDataUploadModal({
     setExcelFile(null)
     setExcelFileName('')
     setExcelRows([])
+    setExcelRawRows([])
     setColumnMap(createEmptyColumnMap())
     setSkipExcelHeader(true)
     setPreviewRows([])
@@ -992,12 +1015,17 @@ export default function CampaignDataUploadModal({
         setExcelFile(null)
         setExcelFileName('')
         setExcelRows([])
+        setExcelRawRows([])
         setColumnMap(createEmptyColumnMap())
         showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
         return
       }
       invalidateFormattedPreview()
       setExcelRows(rows)
+      // Preserve display formatting for every column; raw values are only for UID validation.
+      setExcelRawRows(isZaloUidImportAction(actionId)
+        ? utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+        : [])
       setColumnMap(detectRequiredColumnMap(rows, platform, actionId))
     } catch (err) {
       if (sourceRevisionRef.current === sourceRevision && asyncOperationRef.current === operation) {
@@ -1059,7 +1087,10 @@ export default function CampaignDataUploadModal({
         failRead(IMPORT_ROW_LIMIT_MESSAGE)
         return
       }
-      const normalized = buildAkabizTemplateRows(rows, platform, actionId, schema)
+      const rawRows = isZaloUidImportAction(actionId)
+        ? utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: true })
+        : undefined
+      const normalized = buildAkabizTemplateRows(rows, platform, actionId, schema, rawRows)
       if (sourceRevisionRef.current !== sourceRevision || asyncOperationRef.current !== operation) return
       if (normalized.length === 0) {
         const targetField = getImportTargetField(platform, actionId)
@@ -1116,10 +1147,14 @@ export default function CampaignDataUploadModal({
   const buildRowsFromExcel = (): CampaignImportDataRow[] => {
     const rows = skipExcelHeader ? excelRows.slice(1) : excelRows
     return rows
-      .map(row => {
+      .map((row, index) => {
+        const rawRow = excelRawRows[index + (skipExcelHeader ? 1 : 0)] || []
         const item: CampaignImportDataRow = {}
         for (const field of fields) {
-          item[field.key] = getCellText(rowValueByColumn(row, columnMap[field.key]))
+          const value = rowValueByColumn(row, columnMap[field.key])
+          item[field.key] = field.key === 'uid' && isZaloUidImportAction(actionId)
+            ? normalizeZaloImportUid(rowValueByColumn(rawRow, columnMap[field.key]))
+            : getImportCellText(value, actionId)
         }
         return item
       })
@@ -1660,7 +1695,7 @@ export default function CampaignDataUploadModal({
                         {excelRows.slice(0, 5).map((row, rowIndex) => (
                           <tr key={rowIndex}>
                             {excelHeaders.map((_, colIndex) => (
-                              <td key={colIndex} title={getCellText(row[colIndex])}>{getCellText(row[colIndex])}</td>
+                              <td key={colIndex} title={getImportCellText(row[colIndex], actionId)}>{getImportCellText(row[colIndex], actionId)}</td>
                             ))}
                           </tr>
                         ))}
@@ -1705,7 +1740,7 @@ export default function CampaignDataUploadModal({
                     return (
                       <tr key={`${absoluteIndex}-${row.phone || row.uid || row.email || row.name || 'row'}`}>
                         <td className="text-center">{absoluteIndex + 1}</td>
-                        {fields.map(field => <td key={field.key}>{getCellText(row[field.key])}</td>)}
+                        {fields.map(field => <td key={field.key}>{getImportCellText(row[field.key], actionId)}</td>)}
                       </tr>
                     )
                   })

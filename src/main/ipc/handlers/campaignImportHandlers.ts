@@ -9,6 +9,7 @@ import {
   isValidEmailInputDataValue
 } from '../../../shared/types'
 import { normalizeVietnamMobilePhone } from '../../../shared/phone'
+import { isZaloUidImportAction, normalizeZaloImportUid } from '../../../shared/zaloUidImport'
 import { requireCurrentUser } from '../../data/currentUser'
 import { callAiUsing } from '../../services/aiRuntimeService'
 
@@ -185,7 +186,7 @@ function looksLikeHtml(buffer: Buffer, contentType: string): boolean {
   return head.startsWith('<!doctype html') || head.startsWith('<html') || head.includes('<html')
 }
 
-async function fetchSheetWorkbookRows(linkSheet: unknown): Promise<unknown[][]> {
+async function fetchSheetWorkbookRows(linkSheet: unknown, actionId?: string | null): Promise<unknown[][]> {
   const url = resolveSheetDownloadUrl(linkSheet)
   const response = await fetch(url, {
     redirect: 'follow',
@@ -200,19 +201,19 @@ async function fetchSheetWorkbookRows(linkSheet: unknown): Promise<unknown[][]> 
     throw new Error('Không thể đọc link sheet. Vui lòng bật chia sẻ "Anyone with link" hoặc dùng link CSV/XLS/XLSX export hợp lệ.')
   }
 
-  const workbook = read(buffer, { type: 'buffer' })
+  const workbook = read(buffer, { type: 'buffer', ...(isZaloUidImportAction(actionId) ? { raw: true, codepage: 65001 } : {}) })
   const sheetName = workbook.SheetNames[0]
   if (!sheetName) return []
   const sheet = workbook.Sheets[sheetName]
   return utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
 }
 
-function mapSheetRows(rows: unknown[][]): CampaignImportDataRow[] {
+function mapSheetRows(rows: unknown[][], actionId?: string | null): CampaignImportDataRow[] {
   return rows
     .map(row => {
       return {
         name: toText(row[0]),
-        uid: toText(row[1]),
+        uid: isZaloUidImportAction(actionId) ? normalizeZaloImportUid(row[1]) : toText(row[1]),
         phone: toText(row[2]),
         email: toText(row[3]),
         info1: toText(row[4]),
@@ -269,7 +270,12 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
     }
 
     let key = ''
-    if (isZaloJoinGroupLinkAction(actionId)) {
+    if (isZaloUidImportAction(actionId)) {
+      item.uid = normalizeZaloImportUid(record.uid ?? record.userId ?? record.user_id ?? record.value)
+      item.phone = ''
+      item.email = ''
+      key = item.uid
+    } else if (isZaloJoinGroupLinkAction(actionId)) {
       item.uid = normalizeZaloGroupInviteLink(firstText(
         record.uid,
         record.url,
@@ -342,8 +348,8 @@ export function registerCampaignImportHandlers(): void {
   ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, async (_, request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[]> => {
     requireCurrentUser()
     const platform = normalizePlatform(request?.platform)
-    const rows = await fetchSheetWorkbookRows(request?.linkSheet)
-    return normalizeImportedRows(mapSheetRows(rows), platform, request?.actionId || '')
+    const rows = await fetchSheetWorkbookRows(request?.linkSheet, request?.actionId)
+    return normalizeImportedRows(mapSheetRows(rows, request?.actionId), platform, request?.actionId || '')
   })
 
   ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, async (_, request: CampaignImportImageRequest): Promise<CampaignImportDataRow[]> => {
