@@ -2549,7 +2549,7 @@ export default function CampaignFormModal({
   const canPickUidData = isMessageUidCampaign && !isSuggestedFriendsUidCampaign
   const canPickPageInboxCustomers = isPageInboxMessageCampaign
   const canUseOtherDataSources = isZaloMessagePhoneCampaign && !isEditingSavedCampaign
-  const canUploadData = !isMessageFriendCampaign && !isFacebookGroupInviteCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupMemberCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
+  const canUploadData = !isMessageFriendCampaign && !isFacebookGroupInviteCampaign && !isSuggestedFriendsUidCampaign && !isPagePostCampaign && !isPageInboxMessageCampaign && !isZaloMessageFriendCampaign && !isZaloMessageBirthdayCampaign && !isZaloMessageGroupRealtimeCampaign && !isZaloMessageRemarketingCustomerCampaign && !isZaloMessageFriendRecommendationCampaign && !isZaloMessageGroupCampaign && !isZaloCancelSentFriendRequestCampaign
   const showActionOptionsSection = isMessageUidCampaign || isFacebookGroupInviteCampaign || isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign || isZaloMessageGroupCampaign || isZaloAddGroupMemberCampaign || isZaloCancelSentFriendRequestCampaign
   const supportsZaloAuxiliaryActions = isZaloMessagePhoneCampaign ||
     (isZaloMessageFriendCampaign && !isZaloShareMessageMode) || isZaloMessageGroupMemberCampaign ||
@@ -3651,7 +3651,7 @@ export default function CampaignFormModal({
               title: isZaloMessageFriendCampaign
                 ? 'Danh sách bạn bè Zalo'
                 : isZaloMessageGroupMemberCampaign
-                  ? 'Danh sách thành viên group Zalo'
+                  ? 'Danh sách thành viên group/người lạ Zalo'
                 : isZaloMessageRemarketingCustomerCampaign
                   ? 'Danh sách khách hàng cũ Zalo'
                 : isZaloMessageGroupCampaign
@@ -3672,7 +3672,7 @@ export default function CampaignFormModal({
                 label: isZaloMessageFriendCampaign
                   ? 'Bạn bè Zalo'
                   : isZaloMessageGroupMemberCampaign
-                    ? 'Thành viên group Zalo'
+                    ? 'Thành viên group/người lạ Zalo'
                   : isZaloMessageRemarketingCustomerCampaign
                     ? 'Khách hàng cũ Zalo'
                   : isZaloMessageGroupCampaign
@@ -7303,7 +7303,7 @@ export default function CampaignFormModal({
           : isZaloMessageFriendCampaign
             ? 'Vui lòng chọn ít nhất một bạn bè Zalo.'
           : isZaloMessageGroupMemberCampaign
-            ? 'Vui lòng chọn ít nhất một thành viên group Zalo.'
+            ? 'Vui lòng thêm ít nhất một UID Zalo hoặc chọn thành viên group.'
           : isZaloMessageRemarketingCustomerCampaign
             ? 'Vui lòng chọn ít nhất một khách hàng cũ Zalo.'
           : isZaloMessageGroupCampaign
@@ -16140,7 +16140,7 @@ export default function CampaignFormModal({
                                 : isZaloMessageFriendCampaign
                                   ? 'Danh sách bạn bè Zalo'
                                   : isZaloMessageGroupMemberCampaign
-                                    ? 'Danh sách thành viên group Zalo'
+                                    ? 'Danh sách thành viên group/người lạ Zalo'
                                     : isZaloMessageRemarketingCustomerCampaign
                                       ? 'Danh sách khách hàng cũ Zalo'
                                       : isZaloMessageGroupCampaign

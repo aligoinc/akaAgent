@@ -1,0 +1,20 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "history": {
+    "name": "migration_v418_zalo_group_member_uid_import",
+    "version": "20261020114812"
+  },
+  "migration_sha256": "91f1f7252ba1a8031c6939155ad937e48633549ec370c2e5b763eda930b37599",
+  "checks": {
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "production_build": "passed",
+    "electron_ipc_uid_smoke": "passed",
+    "pre_apply_transaction_rollback": "passed",
+    "post_apply_transaction_rollback": "passed",
+    "http_action_catalog": "passed"
+  },
+  "desktop_packaged": false,
+  "zalo_send_tested": false,
+  "live_ai_image_tested": false
+}

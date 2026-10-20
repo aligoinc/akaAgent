@@ -1852,11 +1852,10 @@ const canImportDataForCampaign = (campaign: CampaignConfig, action?: CampaignAct
   if ([
     FACEBOOK_GROUP_INVITE_ACTION_ID,
     ZALO_MESSAGE_FRIEND_ACTION_ID,
-    ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID,
     ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID,
     ZALO_MESSAGE_GROUP_ACTION_ID
   ].includes(campaign.actionId)) return false
-  if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID || campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID) return true
+  if (campaign.actionId === ZALO_JOIN_GROUP_LINK_ACTION_ID || campaign.actionId === ZALO_ADD_GROUP_MEMBER_ACTION_ID || campaign.actionId === ZALO_MESSAGE_GROUP_MEMBER_ACTION_ID) return true
   return action?.flatformType !== 'zalo' || campaign.actionId === ZALO_MESSAGE_PHONE_ACTION_ID
 }
 
