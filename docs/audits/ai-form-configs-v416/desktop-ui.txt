@@ -1,0 +1,6 @@
+PASS natural schedule patches: monthly noon, partial hour preserves cycle/end, dated schedule changes to daily, hidden end retained, clarification visible without changes or autosave
+PASS real campaign form: Enter submit/no newline/IME/repeat guards, success closes only the popover without preview/autosave, hover, full-form lock, Save-only validation, cancel/error/timeout/close/auth, Vietnam time, dark/light
+PASS real draft form: legacy restore/save/reopen/create in UTC, Vietnam and Los Angeles, same instant, date rollover, new draft marker, no AI call
+PASS multi-slot and weekly/monthly cutoffs: 15 timezone cases, direct creation, explicit edits/clear, obsolete override removal, campaign reopen, AI preservation
+PASS advanced runtime slots: preserve originalSchedule and next daily/weekly/monthly run, replace anchor after explicit edits, preserve it after unrelated AI fill
+PASS limits real form: exclusive popover, Enter/IME/hover, full lock/unlock, scoped fields, cancel/error/timeout/close/auth, no autosave, draft→actual Save preserves minute override, group-post exclusions, comment posts-per-target

@@ -1,0 +1,70 @@
+{
+  "date": "2026-10-20",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261020103243",
+    "name": "migration_v416_ai_form_configs"
+  },
+  "schemaSha256": "163bfbd56bc2d03cecf02625932e245b25d9f7aa5c362a0979bb69f0eeaf09b4",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json && npx tsc --noEmit -p tsconfig.web.json",
+      "result": "PASS"
+    },
+    {
+      "command": "npm run build (Desktop)",
+      "result": "PASS"
+    },
+    {
+      "command": "npm run typecheck && npm run build (Web/API)",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/ai-form-configs-smoke.cjs",
+      "result": "PASS exact both-section legacy/new request payload parity, model ID switching, scope, schema, logging, abort"
+    },
+    {
+      "command": "node scripts/campaign-schedule-ai-smoke.cjs",
+      "result": "PASS parser and IPC regression"
+    },
+    {
+      "suite": "API formAi.routes + formAiConfig + formAi + diagnostics",
+      "passed": 52
+    },
+    {
+      "suite": "Web CampaignFormPage + CampaignFormAiPopover + useFormAiAvailability",
+      "passed": 111
+    },
+    {
+      "suite": "Playwright campaign-form-ai.spec.ts",
+      "passed": 3,
+      "projects": [
+        "Desktop Chromium",
+        "Android Chromium",
+        "iPhone WebKit"
+      ]
+    },
+    {
+      "command": "node scripts/run-campaign-schedule-ai-ui-smoke.cjs --limits-only",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/run-campaign-schedule-ai-ui-smoke.cjs --config-only",
+      "result": "PASS"
+    },
+    {
+      "suite": "Live SQL rollback preflight/source drift/constraints/roles/log insert/model switch",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/ai-form-configs-http-smoke.cjs",
+      "result": "PASS"
+    },
+    {
+      "command": "node scripts/run-campaign-schedule-ai-ui-smoke.cjs",
+      "result": "PASS full Electron schedule, draft, timezone and limits suite; exit 0"
+    }
+  ],
+  "providerEvaluation": "Provider responses are mocked for deterministic request parity; no production inference performed.",
+  "release": "DB applied; Web/API not deployed; Desktop not packaged/released"
+}

@@ -9,6 +9,8 @@ import { withRequestDeadline } from '../../services/requestDeadline'
 import { CAMPAIGN_LIMITS_AI_IPC, LIMITS_AI_MESSAGES, validateLimitsAiRequest } from '../../../shared/campaignLimitsAi'
 import { generateCampaignLimits } from '../../services/campaignLimitsAiService'
 import { CAMPAIGN_FORM_AI_TIMEOUT, type CampaignFormAiResult } from '../../../shared/campaignFormAi'
+import { FORM_AI_AVAILABILITY_IPC } from '../../../shared/campaignFormAiConfig'
+import { listFormAiAvailability } from '../../data/repositories/aiRepository'
 
 export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: () => void } {
   let flight: { id: string; channel: string; credentials: object; controller: AbortController } | undefined
@@ -17,6 +19,13 @@ export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: (
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error(SCHEDULE_AI_MESSAGES.unavailable)
   }
   window.webContents.once('destroyed', stop)
+  ipcMain.handle(FORM_AI_AVAILABILITY_IPC, async event => {
+    assertFrame(event)
+    const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
+    const result = await runWithCurrentUser(user, () => listFormAiAvailability(AbortSignal.timeout(10_000)))
+    if (getCurrentUserCredentials() !== credentials || window.isDestroyed()) return []
+    return result
+  })
   function register<Request extends { requestId: string }, Patch>(
     channels: { generate: string; cancel: string }, validate: (input: unknown) => Request,
     generate: (request: Request, signal: AbortSignal) => Promise<CampaignFormAiResult<Patch>>,

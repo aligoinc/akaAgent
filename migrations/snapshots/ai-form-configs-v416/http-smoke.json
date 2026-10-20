@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-10-20T10:40:08.252Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "status": "PASS",
+  "rows": [
+    {
+      "id": 1,
+      "code": "app_campaign_action_limits",
+      "modelId": 21
+    },
+    {
+      "id": 2,
+      "code": "app_campaign_schedule",
+      "modelId": 21
+    }
+  ],
+  "checks": [
+    "prompt byte equality",
+    "schema deep equality",
+    "active seeds and all scope",
+    "model FK schema cache",
+    "log contents stay private; ID-only read allowed"
+  ]
+}

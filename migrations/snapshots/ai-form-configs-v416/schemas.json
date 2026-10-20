@@ -1,0 +1,227 @@
+{
+  "app_campaign_schedule": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "status",
+      "reason",
+      "changes"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "unclear",
+          "unsupported"
+        ]
+      },
+      "reason": {
+        "type": "string",
+        "maxLength": 300
+      },
+      "changes": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scheduleType",
+          "startDate",
+          "startTime",
+          "scheduleEndDate",
+          "scheduleDays",
+          "scheduleWeekDays",
+          "useDailyStopTime",
+          "dailyStopTime",
+          "continueNextDay",
+          "refreshData",
+          "findDataRerunEnabled",
+          "findDataRerunAfterHours",
+          "multiDailyTimeSlotsEnabled",
+          "multiDailyTimeSlots"
+        ],
+        "properties": {
+          "scheduleType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "daily",
+              "weekly",
+              "monthly",
+              null
+            ]
+          },
+          "startDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "startTime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scheduleEndDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scheduleDays": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scheduleWeekDays": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "useDailyStopTime": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "dailyStopTime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "continueNextDay": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "refreshData": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "findDataRerunEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "findDataRerunAfterHours": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "multiDailyTimeSlotsEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "multiDailyTimeSlots": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "app_campaign_action_limits": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "status",
+      "reason",
+      "changes"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "unclear",
+          "unsupported"
+        ]
+      },
+      "reason": {
+        "type": "string",
+        "maxLength": 300
+      },
+      "changes": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sleepBetweenActions",
+          "continueWhenActionLimitReached",
+          "postsPerTarget",
+          "actions"
+        ],
+        "properties": {
+          "sleepBetweenActions": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "continueWhenActionLimitReached": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "postsPerTarget": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "actions": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "actionCode",
+                "dailyLimit",
+                "rateLimitCount",
+                "rateLimitMinutes"
+              ],
+              "properties": {
+                "actionCode": {
+                  "type": "string"
+                },
+                "dailyLimit": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "rateLimitCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "rateLimitMinutes": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -78,16 +78,18 @@ async function main() {
   const output = path.join(directory, 'handler.cjs')
   await build({ entryPoints: [path.join(root, 'src/main/ipc/handlers/campaignFormAiHandlers.ts')], outfile: output,
     bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'fixtures', setup(build) {
-      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits)AiService$|\/currentUser$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits)AiService$|\/currentUser$|\/aiRepository$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents: args.path === 'electron'
         ? `export const ipcMain={handle:(k,v)=>global.__scheduleAiMock.handlers[k]=v}`
+        : args.path.endsWith('aiRepository')
+          ? `export const listFormAiAvailability=async()=>[];`
         : args.path.endsWith('currentUser')
           ? `const m=global.__scheduleAiMock; export const requireCurrentUser=()=>m.user; export const requireCurrentUserCredentials=()=>m.credentials; export const getCurrentUserCredentials=()=>m.credentials; export const runWithCurrentUser=(_,fn)=>fn();`
           : `export const generateCampaignSchedule=(request,signal)=>new Promise((resolve,reject)=>global.__scheduleAiMock.pending.push({request,signal,resolve,reject})); export const generateCampaignLimits=generateCampaignSchedule;` }))
       build.onLoad({ filter: /campaignFormAiHandlers\.ts$/ }, args => ({ loader: 'ts', contents: fs.readFileSync(args.path, 'utf8').replace('signal => generate(request, signal), CAMPAIGN_FORM_AI_TIMEOUT)', 'signal => generate(request, signal), 40)') }))
     } }] })
   const wc = { mainFrame: {}, once: () => {} }, event = { sender: wc, senderFrame: wc.mainFrame }
-  const registration = require(output).registerCampaignFormAiHandlers({ webContents: wc })
+  const registration = require(output).registerCampaignFormAiHandlers({ webContents: wc, isDestroyed: () => false })
   const generate = input => mock.handlers[s.CAMPAIGN_SCHEDULE_AI_IPC.generate](event, input)
   const cancel = id => mock.handlers[s.CAMPAIGN_SCHEDULE_AI_IPC.cancel](event, id)
   const flush = () => new Promise(resolve => setImmediate(resolve))

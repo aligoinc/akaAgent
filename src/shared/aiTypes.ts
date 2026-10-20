@@ -49,6 +49,8 @@ export interface AiUsingConfig {
   using: AiUsing
   model: AiModel
   prompt: AiPrompt
+  formConfigId?: number
+  outputSchema?: Record<string, unknown>
 }
 
 export interface AiCallMetadata {
@@ -84,6 +86,7 @@ export interface AiCallResult {
 }
 
 export interface AiLogInput extends AiCallMetadata {
+  formConfigId?: number | null
   usingId?: number | null
   modelId?: number | null
   promptId?: number | null
