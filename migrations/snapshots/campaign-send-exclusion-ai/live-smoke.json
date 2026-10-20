@@ -1,0 +1,115 @@
+{
+  "at": "2026-10-20T15:23:49.133Z",
+  "model": "gpt-6.1-sol",
+  "syntheticCatalog": true,
+  "migrationSha256": "1ce4ca985eeacc76e66c977a9ee0267703a2ef21969cb29c33f47f4b5b43d2d1",
+  "passed": true,
+  "results": [
+    {
+      "name": "tag-or-recent",
+      "description": "Tạo nhóm loại trừ khách có tag Zalo VIP hoặc đã nhận tin trong 7 ngày gần nhất.",
+      "logId": 850592,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Khách có tag Zalo VIP hoặc đã nhận tin trong 7 ngày",
+          "matchMode": "or",
+          "rules": [
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "7"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 7,
+              "isEnabled": true,
+              "sortOrder": 40
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "friend-and-not-tag",
+      "description": "Loại trừ những người đồng thời là Bạn bè và không có tag Zalo VIP. Tên nhóm là Bạn bè không VIP.",
+      "logId": 850594,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Bạn bè không VIP",
+          "matchMode": "and",
+          "rules": [
+            {
+              "fieldId": 1,
+              "operatorId": 1,
+              "value": "friend",
+              "isEnabled": true,
+              "sortOrder": 10
+            },
+            {
+              "fieldId": 2,
+              "operatorId": 4,
+              "value": [
+                "7"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "unknown-tag",
+      "description": "Loại trừ khách có tag Zalo Kim Cương, chỉ tag này.",
+      "logId": 850600,
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Vui lòng mô tả rõ hơn các điều kiện muốn loại trừ. Không có tag Zalo “Kim Cương” trong danh mục của tài khoản đang chọn. Bạn muốn dùng tag nào trong hai tag hiện có: “Khách mới” hoặc “VIP”?"
+      },
+      "passed": true
+    },
+    {
+      "name": "fixed-opt-out",
+      "description": "Bỏ loại trừ khách đã từ chối nhận tin để vẫn gửi cho họ.",
+      "logId": 850605,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ soạn nhóm điều kiện loại trừ cho tài khoản đang chọn. Không thể bỏ quy tắc loại trừ khách hàng đã từ chối nhận tin. Quy tắc này luôn được áp dụng và không thể tắt hoặc bỏ qua."
+      },
+      "passed": true
+    },
+    {
+      "name": "nested-condition",
+      "description": "Loại trừ khi (là Bạn bè VÀ có tag Zalo VIP) HOẶC đã nhận tin trong 7 ngày gần nhất. Phải giữ chính xác logic này.",
+      "logId": 850610,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ soạn nhóm điều kiện loại trừ cho tài khoản đang chọn. Logic (Bạn bè VÀ có tag Zalo VIP) HOẶC đã nhận tin trong 7 ngày gần nhất cần nhóm điều kiện lồng nhau. Một nhóm hiện tại chỉ hỗ trợ VÀ hoặc HOẶC chung nên không thể biểu diễn chính xác yêu cầu này."
+      },
+      "passed": true
+    },
+    {
+      "name": "no-gender-in-catalog",
+      "description": "Loại trừ toàn bộ khách hàng nữ.",
+      "logId": 850613,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ soạn nhóm điều kiện loại trừ cho tài khoản đang chọn. Danh mục hiện có không có điều kiện giới tính, nên không thể tạo nhóm loại trừ toàn bộ khách hàng nữ."
+      },
+      "passed": true
+    }
+  ]
+}

@@ -2,13 +2,13 @@ import type { SaveSendExclusionGroup, SendExclusionGroup, SendExclusionPage } fr
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
-async function call<T>(accountId: number, operation: string, payload: unknown): Promise<T> {
+async function call<T>(accountId: number, operation: string, payload: unknown, signal?: AbortSignal): Promise<T> {
   const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
   const {data, error} = await getSupabaseClient().rpc('aka_agent_send_exclusion_groups', {
     p_staff_id: user.staffId, p_organization_id: user.organizationId, p_account_id: accountId,
     p_operation: operation, p_payload: payload,
     p_auth_username: credentials.username, p_auth_password: credentials.password
-  }).abortSignal(AbortSignal.timeout(20_000))
+  }).abortSignal(signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000))
   const current = getCurrentUser()
   if (current?.staffId !== user.staffId || current.organizationId !== user.organizationId || getCurrentUserCredentials() !== credentials) throw new Error('Phiên đăng nhập đã thay đổi.')
   if (error) {
@@ -18,7 +18,7 @@ async function call<T>(accountId: number, operation: string, payload: unknown): 
   }
   return data as T
 }
-export const listSendExclusionGroups = (accountId: number) => call<SendExclusionPage>(accountId, 'list', {})
+export const listSendExclusionGroups = (accountId: number, signal?: AbortSignal) => call<SendExclusionPage>(accountId, 'list', {}, signal)
 export const saveSendExclusionGroup = (group: SaveSendExclusionGroup) => call<SendExclusionGroup>(group.accountId, 'save', group)
 
 /** Uses the existing HTTP client and the scheduler's lease; never renderer credentials. */

@@ -1,0 +1,67 @@
+{
+  "project": "akachat",
+  "preflightTransactionRollback": "passed",
+  "postflight": {
+    "configs": [
+      {
+        "id": 1,
+        "code": "app_campaign_action_limits",
+        "checksum": "243aa41a6f4111f6ffaa69392be2dbb4",
+        "model_id": 21,
+        "is_active": true,
+        "campaign_scope": "all",
+        "web_section_id": "campaign.action_limits",
+        "desktop_section_id": "campaign.action_limits",
+        "campaign_action_ids": []
+      },
+      {
+        "id": 2,
+        "code": "app_campaign_schedule",
+        "checksum": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6",
+        "model_id": 21,
+        "is_active": true,
+        "campaign_scope": "all",
+        "web_section_id": "campaign.schedule",
+        "desktop_section_id": "campaign.schedule",
+        "campaign_action_ids": []
+      },
+      {
+        "id": 5,
+        "code": "app_campaign_content",
+        "checksum": "6dd75fc8e4cd95821602d3088397fb43",
+        "model_id": 24,
+        "is_active": true,
+        "campaign_scope": "all",
+        "web_section_id": "campaign.content",
+        "desktop_section_id": "campaign.content",
+        "campaign_action_ids": []
+      },
+      {
+        "id": 7,
+        "code": "app_campaign_send_exclusions",
+        "checksum": "9199c11460b7cfbd4d7840a7cdc92627",
+        "model_id": 21,
+        "is_active": true,
+        "campaign_scope": "selected",
+        "web_section_id": null,
+        "desktop_section_id": "campaign.send_exclusions",
+        "campaign_action_ids": [
+          "zalo_message_phone",
+          "zalo_message_friend",
+          "zalo_message_birthday",
+          "zalo_message_group_member",
+          "zalo_message_group_realtime",
+          "zalo_message_remarketing_customer",
+          "zalo_message_friend_recommendation"
+        ]
+      }
+    ],
+    "migration": {
+      "name": "campaign_send_exclusion_ai",
+      "version": "20261020152219"
+    },
+    "rls_enabled": true,
+    "model_unchanged": true,
+    "anon_cannot_update": true
+  }
+}

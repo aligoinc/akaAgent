@@ -1737,7 +1737,8 @@ export default function CampaignFormModal({
   const [scheduleAiBusy, setScheduleAiBusy] = useState(false)
   const [limitsAiBusy, setLimitsAiBusy] = useState(false)
   const [contentAiBusy, setContentAiBusy] = useState(false)
-  const formAiBusy = scheduleAiBusy || limitsAiBusy || contentAiBusy
+  const [exclusionAiBusy, setExclusionAiBusy] = useState(false)
+  const formAiBusy = scheduleAiBusy || limitsAiBusy || contentAiBusy || exclusionAiBusy
   const saveControlsRef = useRef<CampaignSaveControlsHandle>(null)
   const setSaveProgress: CampaignSaveControlsHandle['setProgress'] = progress => {
     saveControlsRef.current?.setProgress(progress)
@@ -16764,6 +16765,13 @@ export default function CampaignFormModal({
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
               value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId}
               onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
+              ai={{
+                available: formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.exclusions, formData.actionId),
+                actionId: formData.actionId, enableMessage: formData.enableMessage === true,
+                authScope: `${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`,
+                disabled: saveBusy || scheduleAiBusy || limitsAiBusy || contentAiBusy || loadingDetails || generalSettingsOpen,
+                zIndex: Math.max(3100, (modalZIndex || 3000) + 100), onBusyChange: setExclusionAiBusy
+              }}
               onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
             />}
             {/* Nội dung */}
@@ -16786,7 +16794,7 @@ export default function CampaignFormModal({
                     items={isAdvancedContentMode
                       ? (normalizedAdvancedContentItems.length ? normalizedAdvancedContentItems : [{ content: '', emailSubject: undefined }]).map(item => ({ content: item.content, emailSubject: isEmailCampaign ? resolveLegacyManualEmailSubject(item) : null }))
                       : basicContentAiItems(isCommentSeedingCampaign ? formData.commentContent : formData.content, isRichContentEditorEnabled, isEmailCampaign ? formData.emailSubject : null)}
-                    disabled={saveBusy || scheduleAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    disabled={saveBusy || exclusionAiBusy || scheduleAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)} onBusyChange={setContentAiBusy}
                     onApply={patch => {
@@ -16959,7 +16967,7 @@ export default function CampaignFormModal({
                   {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.schedule, formData.actionId) && <CampaignScheduleAi
                     context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
                     schedule={scheduleAiSnapshot(formData)}
-                    disabled={saveBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    disabled={saveBusy || exclusionAiBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                     onBusyChange={setScheduleAiBusy}
@@ -17179,7 +17187,7 @@ export default function CampaignFormModal({
                           label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode),
                           ...limitsAiWindowSnapshot(getDisplayedActionLimit(actionCode).rateLimitMinutes, selectedRateLimitMinuteValues,
                             Boolean(campaign?.id || cloneFromId || editedRateLimitMinuteActions[actionCode])) })) }}
-                      disabled={saveBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
+                      disabled={saveBusy || exclusionAiBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                       onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}

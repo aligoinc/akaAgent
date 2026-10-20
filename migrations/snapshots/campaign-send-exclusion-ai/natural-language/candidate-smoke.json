@@ -1,0 +1,211 @@
+{
+  "at": "2026-10-20T15:40:48.409Z",
+  "model": "gpt-6.1-sol",
+  "syntheticCatalog": true,
+  "candidatePrompt": true,
+  "candidatePromptMd5": "8864fd5e394f3801c46c39627f4b20aa",
+  "migrationSha256": "fb40b11a6a299e104d81f0ea4971d30478dc64d4fc50a3f04a065ec2039c102f",
+  "passed": true,
+  "results": [
+    {
+      "name": "original-natural-request",
+      "description": "loại trừ bạn bè đã gửi tin trước đó 3 ngày và có tag dong nghiẹp",
+      "logId": 851137,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Bạn bè đã gửi tin trong 3 ngày có tag Đồng nghiệp",
+          "matchMode": "and",
+          "rules": [
+            {
+              "fieldId": 1,
+              "operatorId": 1,
+              "value": "friend",
+              "isEnabled": true,
+              "sortOrder": 10
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 3,
+              "isEnabled": true,
+              "sortOrder": 40
+            },
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "6"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "original-natural-repeat",
+      "description": "loại trừ bạn bè đã gửi tin trước đó 3 ngày và có tag dong nghiẹp",
+      "logId": 851138,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Bạn bè đã gửi tin trong 3 ngày có tag Đồng nghiệp",
+          "matchMode": "and",
+          "rules": [
+            {
+              "fieldId": 1,
+              "operatorId": 1,
+              "value": "friend",
+              "isEnabled": true,
+              "sortOrder": 10
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 3,
+              "isEnabled": true,
+              "sortOrder": 40
+            },
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "6"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "natural-lookback-five-days",
+      "description": "Bạn nào là bạn bè có nhãn dong nghiep mà đã nhắn mấy hôm trước trong vòng 5 ngày thì bỏ qua nhé.",
+      "logId": 851142,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Bạn bè Đồng nghiệp đã gửi tin trong 5 ngày",
+          "matchMode": "and",
+          "rules": [
+            {
+              "fieldId": 1,
+              "operatorId": 1,
+              "value": "friend",
+              "isEnabled": true,
+              "sortOrder": 10
+            },
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "6"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 5,
+              "isEnabled": true,
+              "sortOrder": 40
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "natural-or",
+      "description": "Bỏ qua khách có nhãn đồng nghiệp hoặc đã nhắn trước đó 3 ngày.",
+      "logId": 851144,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Đồng nghiệp hoặc đã gửi tin trong 3 ngày gần nhất",
+          "matchMode": "or",
+          "rules": [
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "6"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 3,
+              "isEnabled": true,
+              "sortOrder": 40
+            }
+          ]
+        }
+      },
+      "passed": true
+    },
+    {
+      "name": "explicit-exact-day",
+      "description": "Chỉ loại trừ khách được gửi tin đúng 3 ngày trước, không phải trong 3 ngày gần nhất.",
+      "logId": 851146,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ soạn nhóm điều kiện loại trừ cho tài khoản đang chọn. Điều kiện hiện có chỉ hỗ trợ số ngày gần nhất, không thể biểu diễn việc đã gửi tin đúng 3 ngày trước."
+      },
+      "passed": true
+    },
+    {
+      "name": "missing-day-value",
+      "description": "Loại trừ khách đã gửi tin trong mấy ngày gần nhất; tôi chưa quyết định số ngày.",
+      "logId": 851151,
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Vui lòng mô tả rõ hơn các điều kiện muốn loại trừ. Bạn muốn loại trừ khách đã được gửi tin trong bao nhiêu ngày gần nhất (từ 1 đến 3650 ngày)?"
+      },
+      "passed": true
+    },
+    {
+      "name": "unknown-tag",
+      "description": "Bỏ qua khách có tag Zalo Kim Cương.",
+      "logId": 851156,
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Vui lòng mô tả rõ hơn các điều kiện muốn loại trừ. Không tìm thấy tag Zalo “Kim Cương” trong danh mục của tài khoản đang chọn. Bạn muốn dùng tag nào trong các tag: Khách mới, VIP, Đồng nghiệp?"
+      },
+      "passed": true
+    },
+    {
+      "name": "ambiguous-tag-source",
+      "description": "Bỏ qua khách có tag Đồng nghiệp.",
+      "logId": 851157,
+      "result": {
+        "ok": false,
+        "code": "unclear",
+        "message": "Vui lòng mô tả rõ hơn các điều kiện muốn loại trừ. Tag “Đồng nghiệp” có ở cả Tag Zalo và Tag akaBiz. Bạn muốn loại trừ theo tag nào?"
+      },
+      "passed": true
+    },
+    {
+      "name": "nested-condition",
+      "description": "Loại trừ khi (là Bạn bè VÀ có tag Zalo Đồng nghiệp) HOẶC đã nhận tin trong 3 ngày gần nhất. Phải giữ chính xác logic này.",
+      "logId": 851158,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ soạn nhóm điều kiện loại trừ cho tài khoản đang chọn. Logic (Bạn bè VÀ tag Zalo Đồng nghiệp) HOẶC đã nhận tin trong 3 ngày gần nhất cần nhóm điều kiện lồng nhau. Form chỉ hỗ trợ một cách kết hợp VÀ hoặc HOẶC chung nên không thể biểu diễn chính xác."
+      },
+      "passed": true
+    }
+  ]
+}
