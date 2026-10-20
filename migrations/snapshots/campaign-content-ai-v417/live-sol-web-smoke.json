@@ -1,0 +1,42 @@
+{
+  "testedAt": "2026-10-20T11:47:13.234Z",
+  "modelId": 21,
+  "model": "gpt-6.1-sol",
+  "syntheticInputs": true,
+  "authentication": "synthetic test context; production form service, config repository and provider runtime",
+  "results": [
+    {
+      "name": "web-variants",
+      "durationMs": 4622,
+      "result": {
+        "ok": true,
+        "patch": {
+          "edits": [],
+          "additions": [
+            {
+              "sourceIndex": 0,
+              "content": "Chào #{name}, cửa hàng mẫu ABC mời bạn xem qua các mẫu sổ tay giấy.",
+              "emailSubject": null
+            },
+            {
+              "sourceIndex": 0,
+              "content": "Xin chào #{name}, bạn tham khảo sổ tay giấy tại cửa hàng mẫu ABC nhé.",
+              "emailSubject": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "web-no-op",
+      "durationMs": 2567,
+      "result": {
+        "ok": true,
+        "patch": {
+          "edits": [],
+          "additions": []
+        }
+      }
+    }
+  ]
+}

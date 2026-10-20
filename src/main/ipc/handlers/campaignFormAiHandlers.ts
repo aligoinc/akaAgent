@@ -1,3 +1,5 @@
+import { CAMPAIGN_CONTENT_AI_IPC, CONTENT_AI_MESSAGES, validateContentAiRequest } from '../../../shared/campaignContentAi'
+import { generateCampaignContent } from '../../services/campaignContentAiService'
 import { ipcMain, type BrowserWindow } from 'electron'
 import {
   CAMPAIGN_SCHEDULE_AI_IPC, SCHEDULE_AI_MESSAGES,
@@ -61,5 +63,6 @@ export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: (
   }
   register(CAMPAIGN_SCHEDULE_AI_IPC, validateScheduleAiRequest, generateCampaignSchedule, SCHEDULE_AI_MESSAGES)
   register(CAMPAIGN_LIMITS_AI_IPC, validateLimitsAiRequest, generateCampaignLimits, LIMITS_AI_MESSAGES)
+  register(CAMPAIGN_CONTENT_AI_IPC, validateContentAiRequest, generateCampaignContent, CONTENT_AI_MESSAGES)
   return { stop }
 }

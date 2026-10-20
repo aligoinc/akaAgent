@@ -1,0 +1,79 @@
+{
+  "testedAt": "2026-10-20T11:46:20.093Z",
+  "syntheticInputs": true,
+  "modelId": 21,
+  "model": "gpt-6.1-sol",
+  "results": [
+    {
+      "name": "write-and-two-variants",
+      "durationMs": 8160,
+      "result": {
+        "ok": true,
+        "patch": {
+          "edits": [
+            {
+              "index": 0,
+              "content": "Chào bạn! Cửa hàng mẫu ABC xin giới thiệu mặt hàng sổ tay giấy. Mời bạn ghé xem nhé!",
+              "emailSubject": null
+            }
+          ],
+          "additions": [
+            {
+              "sourceIndex": 0,
+              "content": "Xin chào bạn! Bạn đang tìm sổ tay giấy? Mời bạn tham khảo tại cửa hàng mẫu ABC nhé!",
+              "emailSubject": null
+            },
+            {
+              "sourceIndex": 0,
+              "content": "ABC chào bạn! Cửa hàng mẫu ABC có sổ tay giấy để bạn tham khảo. Rất vui được đón bạn!",
+              "emailSubject": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "edit-second-only",
+      "durationMs": 4765,
+      "result": {
+        "ok": true,
+        "patch": {
+          "edits": [
+            {
+              "index": 1,
+              "content": "Chào #{name}, bạn có muốn tham khảo sổ tay mẫu với giá 129.000đ không ạ?",
+              "emailSubject": null
+            }
+          ],
+          "additions": []
+        }
+      }
+    },
+    {
+      "name": "out-of-scope",
+      "durationMs": 4164,
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "AI trong phần này chỉ viết/sửa chữ và thêm biến thể. Yêu cầu đổi chế độ chọn media và lịch chạy nằm ngoài phạm vi hỗ trợ chỉnh sửa nội dung chiến dịch."
+      }
+    },
+    {
+      "name": "email-html-subject",
+      "durationMs": 6522,
+      "result": {
+        "ok": true,
+        "patch": {
+          "edits": [
+            {
+              "index": 0,
+              "content": "<p>Kính chào #{name},</p><p>ABC trân trọng mời bạn tham khảo sổ tay mẫu của chúng tôi.</p><p>Trân trọng,<br>ABC</p>",
+              "emailSubject": "Lời chào từ ABC"
+            }
+          ],
+          "additions": []
+        }
+      }
+    }
+  ]
+}

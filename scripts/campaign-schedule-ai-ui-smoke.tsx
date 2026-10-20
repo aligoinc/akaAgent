@@ -11,7 +11,7 @@ import '../src/renderer/src/styles/global.css'
 const state: any = { calls: [], requests: [], pending: [], cancels: [], alerts: [], errors: [], deadlines: [] }
 // This fixture exercises AI/drafts. The status-choice dialog has its own edit-flow suite.
 campaignEdit.chooseSaveStatus = async () => 'tạm dừng'
-state.formAiRows = ['campaign.schedule', 'campaign.action_limits'].map(sectionId => ({ sectionId, campaignScope: 'all', campaignActionIds: [] }))
+state.formAiRows = ['campaign.schedule', 'campaign.action_limits', 'campaign.content'].map(sectionId => ({ sectionId, campaignScope: 'all', campaignActionIds: [] }))
 state.metadataPending = []
 const originalTimeout = window.setTimeout.bind(window)
 window.setTimeout = ((callback: any, ms?: number, ...args: any[]) => {
@@ -19,8 +19,8 @@ window.setTimeout = ((callback: any, ms?: number, ...args: any[]) => {
   if (ms === 120000) state.deadlines.push(() => { clearTimeout(id); callback() })
   return id
 }) as typeof window.setTimeout
-const actions = ['facebook_timeline_post', 'facebook_group_post', 'zalo_message_group_realtime', 'facebook_comment_seeding', 'zalo_message_friend'].map(id => ({
-  id, name: id, limitCheckActionCodes: id === 'facebook_timeline_post' ? ['fb_post_my_profile'] : id === 'facebook_group_post' ? ['fb_post_group', 'fb_comment'] : id === 'facebook_comment_seeding' ? ['fb_comment', 'fb_like_post'] : id === 'zalo_message_friend' ? ['zalo_message_friend'] : ['zalo_message_stranger', 'zalo_add_friend'], flatformType: id.startsWith('facebook') ? 'facebook' : 'zalo', isActive: true, isDelete: false
+const actions = ['facebook_timeline_post', 'facebook_group_post', 'zalo_message_group_realtime', 'facebook_comment_seeding', 'zalo_message_friend', 'email_send'].map(id => ({
+  id, name: id, limitCheckActionCodes: id === 'facebook_timeline_post' ? ['fb_post_my_profile'] : id === 'facebook_group_post' ? ['fb_post_group', 'fb_comment'] : id === 'facebook_comment_seeding' ? ['fb_comment', 'fb_like_post'] : id === 'zalo_message_friend' ? ['zalo_message_friend'] : id === 'email_send' ? ['email_send'] : ['zalo_message_stranger', 'zalo_add_friend'], flatformType: id.startsWith('facebook') ? 'facebook' : id === 'email_send' ? 'email' : 'zalo', isActive: true, isDelete: false
 }))
 const account: any = { id: 11, name: 'Tài khoản kiểm thử', flatformType: 'facebook', isActive: true, isDelete: false,
   status: 'chờ xử lý', loginStatus: 'đã đăng nhập', staffId: 7, organizationId: 9 }
@@ -43,6 +43,8 @@ const handlers: Record<string, any> = {
   generateCampaignScheduleAi: (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) },
   cancelCampaignScheduleAi: (id: string) => { state.cancels.push(id) },
   generateCampaignLimitsAi: (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) },
+  generateCampaignContentAi: (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) },
+  cancelCampaignContentAi: (id: string) => { state.cancels.push(id) },
   cancelCampaignLimitsAi: (id: string) => { state.cancels.push(id) }
 }
 window.electronAPI = new Proxy(handlers, { get(target, key: string) {
@@ -53,7 +55,7 @@ window.electronAPI = new Proxy(handlers, { get(target, key: string) {
 } }) as any
 window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
-useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: normalizeEntitlements({ facebookCore: true, zalo: true }) } as any })
+useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: normalizeEntitlements({ facebookCore: true, zalo: true, email: true }) } as any })
 useCampaignStore.setState({ accounts: [account], campaignActions: actions as any, campaigns: [],
   loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { state.alerts.push({ message, type }) }, showConfirm: (_message, confirm) => { void confirm() } })
