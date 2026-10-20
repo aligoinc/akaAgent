@@ -1,3 +1,6 @@
+import CampaignContentAi from './CampaignContentAi'
+import { applyContentAiItems } from '../../../../shared/campaignContentAi'
+import { basicContentAiItems, applyBasicContentAiPatch } from '../../../../shared/campaignContentAiForm'
 import { useFormAiAvailability } from './useFormAiAvailability'
 import { formAiAvailable, FORM_AI_SECTIONS } from '../../../../shared/campaignFormAiConfig'
 import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
@@ -1733,7 +1736,8 @@ export default function CampaignFormModal({
   const saveBusy = saveStarting || savingCampaign
   const [scheduleAiBusy, setScheduleAiBusy] = useState(false)
   const [limitsAiBusy, setLimitsAiBusy] = useState(false)
-  const formAiBusy = scheduleAiBusy || limitsAiBusy
+  const [contentAiBusy, setContentAiBusy] = useState(false)
+  const formAiBusy = scheduleAiBusy || limitsAiBusy || contentAiBusy
   const saveControlsRef = useRef<CampaignSaveControlsHandle>(null)
   const setSaveProgress: CampaignSaveControlsHandle['setProgress'] = progress => {
     saveControlsRef.current?.setProgress(progress)
@@ -2639,7 +2643,7 @@ export default function CampaignFormModal({
     (!isZaloMessageRemarketingCustomerCampaign || formData.enableMessage) &&
     (!isZaloMessageFriendRecommendationCampaign || formData.enableMessage)
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
-  const resolveLegacyManualEmailSubject = (item: CampaignAdvancedContentItem): string => (
+  const resolveLegacyManualEmailSubject = (item: Pick<CampaignAdvancedContentItem, 'emailSubject'>): string => (
     String(item.emailSubject === undefined || item.emailSubject === null
       ? formData.emailSubject
       : item.emailSubject)
@@ -16776,6 +16780,31 @@ export default function CampaignFormModal({
                   <span className="stepper-section-title">
                     {isEmailCampaign ? 'Nội dung email' : isMessageCampaign ? 'Nội dung tin nhắn' : 'Nội dung'}
                   </span>
+                  {!isSourceContentMode && !isAdvancedGroupSource && !isZaloShareMessageMode
+                    && formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.content, formData.actionId) && <CampaignContentAi
+                    context={{ actionId: formData.actionId, mode: isAdvancedContentMode ? 'advanced' : 'basic', format: isRichContentEditorEnabled ? 'html' : 'plain' }}
+                    items={isAdvancedContentMode
+                      ? (normalizedAdvancedContentItems.length ? normalizedAdvancedContentItems : [{ content: '', emailSubject: undefined }]).map(item => ({ content: item.content, emailSubject: isEmailCampaign ? resolveLegacyManualEmailSubject(item) : null }))
+                      : basicContentAiItems(isCommentSeedingCampaign ? formData.commentContent : formData.content, isRichContentEditorEnabled, isEmailCampaign ? formData.emailSubject : null)}
+                    disabled={saveBusy || scheduleAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
+                    zIndex={Math.max(3100, (modalZIndex || 3000) + 100)} onBusyChange={setContentAiBusy}
+                    onApply={patch => {
+                      if (!patch.edits.length && !patch.additions.length) return
+                      setFormData(current => {
+                        if (isAdvancedContentMode) {
+                          const items = current.advancedContentItems.length ? current.advancedContentItems : [createAdvancedContentItem()]
+                          return { ...current, advancedContentItems: applyContentAiItems(items, patch, source => createAdvancedContentItem({
+                            content: source.content, mediaOption: source.mediaOption, mediaItems: source.mediaItems,
+                            randomMediaCount: source.randomMediaCount, emailSubject: source.emailSubject
+                          }), isRichContentEditorEnabled ? sanitizeFormattedContent : undefined) }
+                        }
+                        const key = isCommentSeedingCampaign ? 'commentContent' : 'content'
+                        const next = applyBasicContentAiPatch(current[key], isRichContentEditorEnabled, isEmailCampaign ? current.emailSubject : null, patch)
+                        return { ...current, [key]: next.content, ...(next.emailSubject === null ? {} : { emailSubject: next.emailSubject }) }
+                      })
+                    }} />}
+
                 </div>
                 {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
@@ -16930,7 +16959,7 @@ export default function CampaignFormModal({
                   {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.schedule, formData.actionId) && <CampaignScheduleAi
                     context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
                     schedule={scheduleAiSnapshot(formData)}
-                    disabled={saveBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    disabled={saveBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                     onBusyChange={setScheduleAiBusy}
@@ -17150,7 +17179,7 @@ export default function CampaignFormModal({
                           label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode),
                           ...limitsAiWindowSnapshot(getDisplayedActionLimit(actionCode).rateLimitMinutes, selectedRateLimitMinuteValues,
                             Boolean(campaign?.id || cloneFromId || editedRateLimitMinuteActions[actionCode])) })) }}
-                      disabled={saveBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
+                      disabled={saveBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                       onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}

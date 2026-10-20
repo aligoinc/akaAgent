@@ -1,5 +1,10 @@
 # AGENTS.md
 
+Review V417 ngày 20/10/2026: snapshot AI email nâng cao dùng tiêu đề kế thừa như editor, giữ override rỗng; native Claude Desktop/Web giữ `output_config.effort` từ defaults/request options khi gắn schema runtime. Hồi quy Electron/service, 32 test API, typecheck/build hai repo đạt. Không đổi DB/prompt/schema/model, chưa deploy/phát hành; xem [kiểm chứng](docs/CAMPAIGN_CONTENT_AI_V417.md#sửa-hai-finding-review--20102026).
+
+V417 đã apply akachat ngày 20/10/2026 (`20261020113352 / migration_v417_campaign_content_ai`): AI Nội dung Desktop/Web chỉ viết/sửa chữ và thêm biến thể; giữ media/tùy chọn, không tự lưu/chạy. Config 5 `campaign.content`, model 24 Haiku 5.5 global dùng key sao chép từ model 7 theo yêu cầu; giữ nguyên model 7, hai config V416 và prompt/binding cũ. Native Claude Structured Outputs, parser/index/allowlist, cancel/timeout/phiên và log form_config_id. SQL rollback/audit, fixtures/UI/typecheck/build đạt; live Messages HTTP 400 do tài khoản Anthropic không đủ credit (log 841321), chưa xác nhận tạo nội dung thật bằng Haiku. Theo yêu cầu tiếp theo, đã tạm dùng Sol model 21 và đạt 6/6 ca provider thật qua Desktop/Web service, rồi khôi phục model 24; prompt/schema/scope/options và hai config cũ không đổi. Chưa deploy/phát hành; không apply lại. Xem [hợp đồng, kiểm chứng và rollback](docs/CAMPAIGN_CONTENT_AI_V417.md).
+
+
 V416 đã apply akachat ngày 20/10/2026 (`20261020103243 / migration_v416_ai_form_configs`): AI điền Lịch chạy/Giới hạn trên Desktop/Web đọc `ai_form_configs`, metadata khi mở form, scope kiểm tra lại ở backend, model FK thay khóa tên riêng hai section. Prompt nguyên văn/schema nguyên cấu trúc/model 21/options giữ nguyên; parser/Save/cancel/log guard cũ, thêm `ai_log.form_config_id`. Giữ prompt/binding cũ, không polling/pool mới. SQL rollback/HTTP/parity/UI/typecheck/build đạt; chưa deploy Web/API hoặc phát hành Desktop. Không apply lại; [audit/checksum/rollout/rollback](docs/AI_FORM_CONFIGS_V416.md).
 
 V415 đã apply akachat ngày 20/10/2026 (`20261020095536 / migration_v415_web_orphan_campaign_visibility`): Web giữ danh sách và lịch sử chiến dịch khi account soft-delete, chỉ bỏ điều kiện account `is_delete=false` ở hai RPC đọc. Giữ tenant/capability/Zalo Server/ACL, tiến độ, helper log có custom plan và quyền thao tác; không tự chuyển chiến dịch sang account thêm lại. SQL live/rollback trước–sau, API/browser/typecheck/build đạt; chỉ đổi DB nên Web/API không cần deploy lại. Không apply lại; xem [audit/checksum/rollback](docs/WEB_ORPHAN_CAMPAIGN_VISIBILITY_V415.md).
@@ -647,6 +652,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **AI Nội dung V417**: snapshot email nâng cao phải dùng tiêu đề kế thừa như editor, giữ override rỗng. Với native Claude, hợp nhất `output_config` theo defaults → request options → runtime; chỉ thay `format` bằng schema đã kiểm tra, giữ `effort`. V417 đã apply; không chạy lại migration.
 - **AI điền form V416**: scope/model/schema phải kiểm tra lại ở Main/API; metadata chỉ điều khiển nút. Schema DB không tạo field UI hoặc bỏ parser/allowlist. Giữ prompt/binding cũ cho rollback, không dual-write; xem [hợp đồng](docs/AI_FORM_CONFIGS_V416.md).
 - **Quyền nhóm chia sẻ V409**: admin nhận chia sẻ vẫn không được sửa nguồn; API/IPC/RPC phải lấy danh tính từ phiên và kiểm tra lại quyền. Copy tạo contact/template thuộc người nhận, không mang sharing/sync/binding hay bằng chứng Zalo. Lỗi tải không chứng minh thu hồi; giữ snapshot/input đã lấy. V409 đã apply, không chạy lại `verify.cjs`; kiểm chứng bản live bằng `verify-applied.cjs`, rollback luôn trong transaction. ACL legacy giữ nguyên theo quyết định tương thích; xem [hợp đồng](docs/GROUP_SHARING_V409.md).
 

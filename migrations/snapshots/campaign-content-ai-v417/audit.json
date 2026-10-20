@@ -1,0 +1,68 @@
+{
+  "appliedAt": "2026-10-20T11:33:52.324344Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261020113352",
+    "name": "migration_v417_campaign_content_ai",
+    "sha256": "92d7a415144a4d5efb3a68217d24cad4de936a09752859a3ddeccd7bbea7d595"
+  },
+  "rollbackSmokePassed": true,
+  "rls_enabled": true,
+  "form_configs": [
+    {
+      "id": 1,
+      "code": "app_campaign_action_limits",
+      "checksum": "243aa41a6f4111f6ffaa69392be2dbb4",
+      "model_id": 21,
+      "prompt_md5": "1630c388c4e1e00f0aedc17577e672f6",
+      "user_prompt_md5": "4a74d0a05bb23c699701d34a7e3b626c"
+    },
+    {
+      "id": 2,
+      "code": "app_campaign_schedule",
+      "checksum": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6",
+      "model_id": 21,
+      "prompt_md5": "12165bf38ec3d7d4bf7532f13ebbfa3d",
+      "user_prompt_md5": "dd3972bb667d3063b88a43b0ef8307df"
+    },
+    {
+      "id": 5,
+      "code": "app_campaign_content",
+      "checksum": "ee00d65acf67cb2b7bafaefafcc91edc",
+      "model_id": 24,
+      "prompt_md5": "c36434266b7c7a633fd00483e8ded3d1",
+      "user_prompt_md5": "02f73c8f8da1a38945fb399e7e862235"
+    }
+  ],
+  "legacy_prompts": [
+    {
+      "id": 49,
+      "checksum": "f9f9f06dd018e6cad280a2a8727d7f69"
+    },
+    {
+      "id": 52,
+      "checksum": "920d73f8af472921dfc1ff5ec6a2ffe8"
+    }
+  ],
+  "legacy_bindings": [
+    {
+      "id": 50,
+      "checksum": "4fe325577ea8bbc97ccc15dd09911c02"
+    },
+    {
+      "id": 47,
+      "checksum": "2d0dc8f6601970cbd4127c792e85172b"
+    }
+  ],
+  "source_key_equal": true,
+  "client_update_allowed": false,
+  "source_model_unchanged": true,
+  "liveTest": {
+    "modelDiscoveryHttpStatus": 200,
+    "model": "claude-haiku-5-5",
+    "generationHttpStatus": 400,
+    "aiLogId": 841321,
+    "result": "blocked_insufficient_anthropic_credits",
+    "syntheticInputsOnly": true
+  }
+}

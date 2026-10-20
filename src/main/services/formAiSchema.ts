@@ -1,3 +1,5 @@
+import { CONTENT_AI_SCHEMA } from '../../shared/campaignContentAi'
+import { isFormAiClaude } from '../../shared/formAiClaude'
 import { Ajv } from 'ajv'
 import { FORM_AI_SECTIONS, type FormAiSection } from '../../shared/campaignFormAiConfig'
 import { SCHEDULE_AI_SCHEMA } from '../../shared/campaignScheduleAi'
@@ -23,7 +25,7 @@ function compatible(schema: Schema, contract: Schema): boolean {
 }
 
 export function compileFormAiSchema(schema: unknown, section: FormAiSection): (content: string) => boolean {
-  const contract = section === FORM_AI_SECTIONS.schedule ? SCHEDULE_AI_SCHEMA : LIMITS_AI_SCHEMA
+  const contract = section === FORM_AI_SECTIONS.content ? CONTENT_AI_SCHEMA : section === FORM_AI_SECTIONS.schedule ? SCHEDULE_AI_SCHEMA : LIMITS_AI_SCHEMA
   if (!record(schema) || JSON.stringify(schema).length > 64_000 || !compatible(schema, contract)) {
     throw new Error('JSON Schema không tương thích với section.')
   }
@@ -31,18 +33,21 @@ export function compileFormAiSchema(schema: unknown, section: FormAiSection): (c
   const ajv = new Ajv({ strict: true, allowUnionTypes: true, allErrors: false, addUsedSchema: false })
   const validate = ajv.compile(schema)
   return content => {
-    if (content.length > 16_000) return false
+    if (content.length > (section === FORM_AI_SECTIONS.content ? 100_000 : 16_000)) return false
     try { return validate(JSON.parse(content)) === true } catch { return false }
   }
 }
 
 export function formAiStructuredOptions(provider: string, endpoint: string, schema: unknown, section: FormAiSection): Schema {
   const url = new URL(endpoint)
+  if (isFormAiClaude(provider) && url.protocol === 'https:' && /\/v1\/messages\/?$/.test(url.pathname)) {
+    return { output_config: { format: { type: 'json_schema', schema } } }
+  }
   if (provider !== 'openai' || url.protocol !== 'https:'
     || !/\/(responses|chat\/completions)\/?$/.test(url.pathname)) {
     throw new Error('Model AI không tương thích Structured Outputs.')
   }
-  const name = section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
+  const name = section === FORM_AI_SECTIONS.content ? 'campaign_content' : section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
   return {
     store: false,
     ...(/\/responses\/?$/.test(url.pathname)

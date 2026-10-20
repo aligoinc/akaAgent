@@ -1,3 +1,4 @@
+import { isFormAiClaude, formAiClaudeBody, formAiClaudeText, mergeFormAiClaudeOptions } from '../../shared/formAiClaude'
 import { AiCallMetadata, AiCallResult, AiUsingConfig } from '../../shared/aiTypes'
 import * as aiRepo from '../data/repositories/aiRepository'
 
@@ -262,7 +263,10 @@ function buildRequest(config: AiUsingConfig, payload: Record<string, unknown>): 
   }
 
   const temporaryPrepared = { ...preparedBase, body: {} }
-  const body = provider === 'openai' && endpoint.includes('/responses')
+  const body = config.formConfigId && isFormAiClaude(provider)
+    ? formAiClaudeBody(config.model.model, prompts.systemPrompt, prompts.userPrompt, config.model.defaultBody,
+      mergeFormAiClaudeOptions(config.using.requestOptions, toRecord(payload.bodyOverrides)))
+    : provider === 'openai' && endpoint.includes('/responses')
     ? buildOpenAiResponsesBody(config, temporaryPrepared, payload)
     : buildChatCompletionsBody(config, temporaryPrepared, payload)
 
@@ -385,7 +389,9 @@ export async function callAiUsing(
       headers: {
         'content-type': 'application/json',
         accept: 'application/json',
-        authorization: `Bearer ${config.model.apiKey}`
+        ...(config.formConfigId && isFormAiClaude(config.model.provider)
+          ? { 'x-api-key': config.model.apiKey, 'anthropic-version': '2023-06-01' }
+          : { authorization: `Bearer ${config.model.apiKey}` })
       },
       body: JSON.stringify(request.body),
       signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
@@ -447,7 +453,8 @@ export async function callAiUsing(
       }
     }
 
-    const content = extractResponseText(rawResponse, config.using.responsePath)
+    const content = config.formConfigId && isFormAiClaude(config.model.provider)
+      ? formAiClaudeText(rawResponse) : extractResponseText(rawResponse, config.using.responsePath)
     if (!content) {
       throw new Error('AI không trả về nội dung.')
     }

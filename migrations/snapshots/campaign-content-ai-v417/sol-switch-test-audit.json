@@ -1,0 +1,145 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "request": "Temporarily use Sol 6.1 to test Content AI, then restore Haiku 5.5.",
+  "before": {
+    "models": [
+      {
+        "id": 24,
+        "code": "app_campaign_content_haiku_5_5",
+        "model": "claude-haiku-5-5",
+        "has_key": true,
+        "endpoint": "https://api.anthropic.com/v1/messages",
+        "provider": "claude",
+        "is_active": true,
+        "default_body": {
+          "max_tokens": 16384
+        },
+        "organization_id": null
+      },
+      {
+        "id": 21,
+        "code": "openai_campaign_diagnostics_sol61",
+        "model": "gpt-6.1-sol",
+        "has_key": true,
+        "endpoint": "https://api.openai.com/v1/responses",
+        "provider": "openai",
+        "is_active": true,
+        "default_body": {
+          "model": "gpt-6.1-sol",
+          "store": false,
+          "reasoning": {
+            "effort": "medium"
+          }
+        },
+        "organization_id": null
+      }
+    ],
+    "content": {
+      "id": 5,
+      "model_id": 24,
+      "updated_at": "2026-10-20T11:33:52.324344+00:00",
+      "config_hash": "bd5fdc1b83f319e40f0e09adceaf43f5"
+    },
+    "other_configs": [
+      {
+        "code": "app_campaign_action_limits",
+        "checksum": "243aa41a6f4111f6ffaa69392be2dbb4"
+      },
+      {
+        "code": "app_campaign_schedule",
+        "checksum": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6"
+      }
+    ]
+  },
+  "switched": {
+    "id": 5,
+    "code": "app_campaign_content",
+    "model_id": 21,
+    "updated_at": "2026-10-20 11:45:35.729552+00",
+    "config_hash": "bd5fdc1b83f319e40f0e09adceaf43f5"
+  },
+  "restored": {
+    "id": 5,
+    "code": "app_campaign_content",
+    "model_id": 24,
+    "updated_at": "2026-10-20 11:47:52.639803+00",
+    "config_hash": "bd5fdc1b83f319e40f0e09adceaf43f5"
+  },
+  "verified": {
+    "logs": [
+      {
+        "id": 841641,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 7519,
+        "http_status": 200,
+        "form_config_id": 5
+      },
+      {
+        "id": 841644,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 4128,
+        "http_status": 200,
+        "form_config_id": 5
+      },
+      {
+        "id": 841651,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 3677,
+        "http_status": 200,
+        "form_config_id": 5
+      },
+      {
+        "id": 841659,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 6009,
+        "http_status": 200,
+        "form_config_id": 5
+      },
+      {
+        "id": 841691,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 3993,
+        "http_status": 200,
+        "form_config_id": 5
+      },
+      {
+        "id": 841692,
+        "model": "gpt-6.1-sol",
+        "status": "success",
+        "model_id": 21,
+        "duration_ms": 2046,
+        "http_status": 200,
+        "form_config_id": 5
+      }
+    ],
+    "content": {
+      "id": 5,
+      "model_id": 24,
+      "config_hash": "bd5fdc1b83f319e40f0e09adceaf43f5"
+    },
+    "other_configs": [
+      {
+        "code": "app_campaign_action_limits",
+        "checksum": "243aa41a6f4111f6ffaa69392be2dbb4"
+      },
+      {
+        "code": "app_campaign_schedule",
+        "checksum": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6"
+      }
+    ]
+  },
+  "sql": {
+    "switch": "UPDATE public.ai_form_configs c SET model_id=21 WHERE id=5 AND code='app_campaign_content' AND model_id=24 AND updated_at='2026-10-20T11:33:52.324344+00:00'::timestamptz AND md5((to_jsonb(c)-'model_id'-'updated_at')::text)='bd5fdc1b83f319e40f0e09adceaf43f5' RETURNING id,code,model_id,updated_at,md5((to_jsonb(c)-'model_id'-'updated_at')::text) AS config_hash;",
+    "restore": "UPDATE public.ai_form_configs c SET model_id=24 WHERE id=5 AND code='app_campaign_content' AND model_id=21 AND updated_at='2026-10-20 11:45:35.729552+00'::timestamptz AND md5((to_jsonb(c)-'model_id'-'updated_at')::text)='bd5fdc1b83f319e40f0e09adceaf43f5' RETURNING id,code,model_id,updated_at,md5((to_jsonb(c)-'model_id'-'updated_at')::text) AS config_hash;"
+  }
+}

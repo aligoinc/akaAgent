@@ -1,3 +1,4 @@
+import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
 import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campaignHistory'
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
 import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckUsage } from '../shared/zaloPhoneCheck'
@@ -317,6 +318,8 @@ const electronAPI = {
   listCampaignFormAi: (): Promise<FormAiAvailability[]> => ipcRenderer.invoke(FORM_AI_AVAILABILITY_IPC),
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
+  generateCampaignContentAi: (request: ContentAiRequest): Promise<ContentAiResult> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.generate, request),
+  cancelCampaignContentAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.cancel, requestId),
   generateCampaignLimitsAi: (request: LimitsAiRequest): Promise<LimitsAiResult> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.generate, request),
   cancelCampaignLimitsAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.cancel, requestId),
   checkCampaignPendingReason: (id: number): Promise<CampaignPendingReasonResult> =>
