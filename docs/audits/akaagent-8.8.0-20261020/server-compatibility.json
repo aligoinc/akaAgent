@@ -1,0 +1,43 @@
+{
+  "server_rebuild_required": false,
+  "baseline_version": "8.6.0",
+  "baseline_commit": "8e54f6056881512af1831a238c9d5817c0f95e63",
+  "current_commit": "1a796638ca5a6c0642d27dd3d169a3af48ce2885",
+  "baseline_installer": "dist-server/akaAgent-Zalo-Server-Setup-8.6.0.exe",
+  "baseline_installer_sha256": "f0d4426263e58daad88731bd469e1926638452de125e358448250020afe2f0d1",
+  "evidence": [
+    {
+      "path": "src/server/main/index.ts",
+      "unchanged_since_server_8_6_0": true
+    },
+    {
+      "path": "src/server/main/zaloServerRuntimeManager.ts",
+      "unchanged_since_server_8_6_0": true
+    },
+    {
+      "path": "src/server/main/zaloServerSessionRestorer.ts",
+      "unchanged_since_server_8_6_0": true
+    },
+    {
+      "path": "src/main/services/contactLoader.ts",
+      "unchanged_since_server_8_6_0": true
+    },
+    {
+      "path": "src/shared/zaloServerProtocol.ts",
+      "unchanged_since_server_8_6_0": true
+    },
+    {
+      "path": "src/shared/campaignSendExclusion.ts",
+      "unchanged_since_server_8_6_0": true
+    }
+  ],
+  "shared_code_review": [
+    "campaignScheduler: orphan pause change is after early server return; new sort variable and Unicode preview are Facebook-only.",
+    "campaignSendExclusionRepository: optional AbortSignal only for form catalog; callSendExclusionRuntime unchanged.",
+    "AI form config/Claude Structured Outputs opt in through formConfigId; legacy campaign AI config/request behavior retained.",
+    "Group sharing changes form catalogs and campaign content selection; running campaigns keep saved content snapshot and existing intake RPCs.",
+    "UID import changes Desktop input; existing Zalo group-member runtime already resolves target UID without group ID.",
+    "Phone-check independent upload-limit IPC affects Desktop picker; Server transport/capability/usage runtime unchanged."
+  ],
+  "live_server_version_checked": false
+}

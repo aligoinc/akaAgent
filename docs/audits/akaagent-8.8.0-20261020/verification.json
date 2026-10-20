@@ -1,0 +1,35 @@
+{
+  "version": "8.8.0",
+  "verified_at": "2026-10-20T16:02:51.116Z",
+  "windows_installer_payload_parity": "passed",
+  "arm64": {
+    "architecture": "passed",
+    "signature": "passed (ad-hoc)",
+    "native_sqlite_load": "passed",
+    "dmg_checksum": "passed",
+    "mounted_payload_parity": "passed"
+  },
+  "x86_64": {
+    "architecture": "passed",
+    "signature": "passed (ad-hoc)",
+    "native_sqlite_load": "passed",
+    "dmg_checksum": "passed",
+    "mounted_payload_parity": "passed"
+  },
+  "node_typecheck": "passed",
+  "renderer_typecheck": "passed",
+  "comment_post_sort_smoke": "passed (89 runtime + 18 Electron DOM cases)",
+  "recent_desktop_features_in_bundle": "passed (post sort, AI form configs/content/exclusions)",
+  "windows_native_and_dependencies": "passed",
+  "packaged_output_parity": "passed",
+  "independent_upload_limit_ipc": "passed (three targets)",
+  "source_hashes_unchanged": "passed",
+  "campaign_edit_status_only_gate": "passed (three targets)",
+  "windows_installer_contract": "passed",
+  "server_rebuild_required": false,
+  "server_baseline": "8.6.0",
+  "source_commit": "1a796638ca5a6c0642d27dd3d169a3af48ce2885",
+  "host_native_restored_exactly": true,
+  "uploaded": false,
+  "published": false
+}
