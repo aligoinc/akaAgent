@@ -3,12 +3,15 @@ import exclusionPage from './fixtures/send-exclusion-ui-page.json'
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CampaignFormModal from '../src/renderer/src/components/CampaignPanels/CampaignFormModal'
+import { campaignEdit } from '../src/renderer/src/components/CampaignPanels/campaignEdit'
 import { useCampaignStore } from '../src/renderer/src/stores/campaignStore'
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useUiStore } from '../src/renderer/src/stores/uiStore'
 import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
 import '../src/renderer/src/styles/global.css'
 
+// This isolated form has no app-level status-choice host; edit-flow tests cover that dialog.
+campaignEdit.chooseSaveStatus = async () => 'tạm dừng'
 const accounts = [13, 12, 11].map(id => ({ id, name: `Zalo ${id}`, flatformType: 'zalo', isActive: true, isDelete: false,
   isZaloServer: false, isZaloShowWeb: false, status: 'chờ xử lý', loginStatus: 'đã đăng nhập', staffId: 7, organizationId: 9 }))
 const state: any = { failZaloLabels: false, calls: [], errors: [], alerts: [], groups: [], tags: [], holdWrite: false, pending: [], failGroups: false, failTags: false, holdLabels: null, pendingLabels: [], emptyLabels: false }
@@ -79,7 +82,7 @@ window.addEventListener('unhandledrejection', event => state.errors.push(String(
 useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: normalizeEntitlements({ zalo: true }),
   zaloAccountCapabilities: { qr: true, web: true, server: true } } as any })
 const actions = ['zalo_message_friend', 'zalo_message_phone', 'zalo_message_group_member', 'zalo_message_group_realtime', 'zalo_message_remarketing_customer', 'zalo_message_friend_recommendation']
-useCampaignStore.setState({ accounts: accounts as any, campaignActions: actions.map(id => ({ id, name: id, flatformType: 'zalo', isActive: true, isDelete: false, allowSecondaryAccount: true })) as any,
+useCampaignStore.setState({ accounts: accounts as any, accountCatalogVersion: 'fixture', loadingAccounts: false, campaignActions: actions.map(id => ({ id, name: id, flatformType: 'zalo', isActive: true, isDelete: false, allowSecondaryAccount: true })) as any,
   campaigns: [], loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { state.alerts.push({ message, type }) }, showConfirm: (_message, confirm) => { void confirm() } })
 

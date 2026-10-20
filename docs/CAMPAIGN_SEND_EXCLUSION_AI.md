@@ -101,3 +101,32 @@ Kiểm chứng:
 Lệnh kiểm chứng: `node scripts/campaign-exclusion-ai-live-smoke.cjs --live --natural-language`. Script giữ receipt cũ; dùng `--receipt=<đường-dẫn-mới>` nếu cần chạy lại. `--candidate=<file-json>` chỉ thay prompt trong lần thử, không ghi cấu hình DB; `--case=<tên-ca>` chạy riêng một ca.
 
 Rollback riêng prompt bằng file `natural-language/rollback.sql` sau khi review; file kiểm tra checksum prompt và các cột còn lại trước khi khôi phục. Không apply lại migration khởi tạo hoặc migration này.
+
+
+## Web — 20/10/2026
+
+Đã triển khai section và AI tương ứng trong akaAgentWebApp. Dùng cùng config 7 / Sol 6.1 model 21, prompt tự nhiên và JSON Schema hiện tại. AI chỉ mở form thêm nhóm; người dùng kiểm tra/bấm Lưu nhóm. API đọc catalog/tag theo account từ RPC hiện có bằng singleton service-role, giữ owner/tenant/Server-account guard và revision. Không thay runtime Desktop/Chat hoặc RPC.
+
+Đã apply binding Web trên akachat: `20261020161100 / campaign_send_exclusions_web`;
+canonical `migrations/20261020160644_campaign_send_exclusions_web.sql`. Chỉ đổi web_section_id từ NULL thành campaign.send_exclusions (updated_at do trigger). Không apply lại.
+
+MD5 hàng trước `a912cd1a0d1be0458ce97d75632255d1`, sau `cf5c07d8f50596be2db9c26b193bec63`.
+MD5 toàn bộ cột ngoài web_section_id/updated_at trước = sau `96bc8baafc7efe203e130105c7208ed7`;
+prompt `8864fd5e394f3801c46c39627f4b20aa`, schema `bfa300625ed72495d9923502c40aab29` giữ nguyên.
+RPC `aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)` giữ checksum `7f163f902b82a72f8f850e432050a7e6`, owner/security/config/ACL; không có target function mới.
+
+Đã kiểm tra migration/rollback, guard drift, SQL service-role read/owner/save/revision trong transaction rollback, API/core/Browser fixtures ba nền tảng. Không giữ nhóm test; không gọi lại provider thật trong lần port Web. Rollback binding có checksum guard tại [web-rollback.sql](../migrations/snapshots/campaign-send-exclusion-ai/web-rollback.sql). Các config lịch/giới hạn/nội dung không đổi; nội dung vẫn Haiku model 24.
+
+Chưa deploy Web/API. Hợp đồng và lệnh kiểm tra chi tiết ở repo Web `docs/CAMPAIGN_SEND_EXCLUSIONS_WEB.md`.
+
+## Sửa nháp cũ chưa chọn danh sách — 20/10/2026
+
+Nháp legacy được lưu với `zaloFriendBlocklistEnabled=true`, `zaloFriendBlocklistId=null` từng bị khôi phục thành map rỗng; vì section mới bỏ kiểm tra checkbox cũ, người dùng có thể tạo chiến dịch không có danh sách loại trừ mà không được nhắc.
+
+Desktop và Web nay giữ riêng `values.zaloPendingBlocklistAccountId` theo tài khoản trong nháp. Section hiện cảnh báo và nút **Bỏ yêu cầu loại trừ danh sách**; chọn một danh sách hoặc bấm nút này mới giải quyết trạng thái chờ. Chọn nhóm điều kiện không tự bỏ yêu cầu về danh sách. Tạo/Lưu chiến dịch bị chặn nếu tài khoản còn trạng thái chờ; Lưu nháp vẫn được phép và mở lại vẫn nhắc. Đổi tài khoản không áp dụng yêu cầu của tài khoản cũ cho tài khoản mới. Map mới đã được chọn/bỏ chọn rõ ràng được ưu tiên hơn checkbox legacy.
+
+Marker không vào `extraSettings` hoặc context AI. Không đổi prompt, JSON Schema AI, model, runtime hoặc DB/RPC; không cần migration.
+
+Kiểm chứng: `node scripts/run-send-exclusion-form-smoke.cjs` chạy form Electron thật với IPC giả lập, giữ ca map danh sách cũ/edit/clone/nháp, thêm chặn tạo trước và sau mở lại nháp, chọn danh sách và chủ động bỏ yêu cầu, xác nhận marker không vào payload chiến dịch. Fixture khai báo catalog tài khoản đã sẵn sàng và chọn Tạm dừng để không phụ thuộc dialog cấp app (luồng dialog có suite riêng). Web có 107 ca form và 7 ca core; chi tiết trong audit Web. Chưa đóng gói/phát hành Desktop hoặc deploy Web/API.
+
+Hai typecheck Desktop, typecheck cả bảy workspace Web và production build của hai repo đều đạt. Toàn bộ core Web đạt 73/73 ca, gồm 7 ca loại trừ; `git diff --check` sạch ở cả hai repo.

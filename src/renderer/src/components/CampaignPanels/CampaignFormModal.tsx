@@ -6,6 +6,7 @@ import { formAiAvailable, FORM_AI_SECTIONS } from '../../../../shared/campaignFo
 import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignSendExclusions'
+import { PENDING_BLOCKLIST_MESSAGE, restorePendingBlocklistAccount } from '../../../../shared/campaignSendExclusionDraft'
 import CampaignScheduleAi from './CampaignScheduleAi'
 import CampaignLimitsAi from './CampaignLimitsAi'
 import { limitsAiWindowSnapshot, type LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
@@ -2370,6 +2371,12 @@ export default function CampaignFormModal({
       return ownerId && source.zaloFriendBlocklistEnabled && source.zaloFriendBlocklistId
         ? {[String(ownerId)]: {groupId: null, blocklistIds: [Number(source.zaloFriendBlocklistId)]}} : {}
     }
+  )
+  const [zaloPendingBlocklistAccountId, setZaloPendingBlocklistAccountId] = useCampaignDraftField<number | null>(
+    draftPayload, draftValuesRef, 'zaloPendingBlocklistAccountId', () => restorePendingBlocklistAccount({
+      ...((draftPayload?.values.formData as Record<string, unknown> | undefined) ?? campaign?.extraSettings ?? {}),
+      ...(draftPayload?.values ?? {})
+    }, campaign?.accountId ?? formData.accountIds[0])
   )
   const [exclusionEditing, setExclusionEditing] = useState(false)
   const canUseSendExclusions = supportsSendExclusion(formData.actionId, formData)
@@ -6711,6 +6718,10 @@ export default function CampaignFormModal({
     if (formAiBusy || generalSettingsOpen || exclusionEditing) return
     if (savingCampaign) return
     if (canUseSendExclusions) {
+      if (zaloPendingBlocklistAccountId !== null && zaloTagAccountIds.includes(zaloPendingBlocklistAccountId)) {
+        showAlert(PENDING_BLOCKLIST_MESSAGE, 'error')
+        return
+      }
       try {
         for (const id of zaloTagAccountIds) {
           const selection = zaloSendExclusionsByAccountId[String(id)]
@@ -16804,6 +16815,7 @@ export default function CampaignFormModal({
             {canUseSendExclusions && <CampaignSendExclusions
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
               value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId}
+              pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
               onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
               ai={{
                 available: formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.exclusions, formData.actionId),

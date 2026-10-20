@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Ban, Check, ChevronDown, Info, LockKeyhole, Plus, RefreshCw, X } from 'lucide-react'
 import CampaignExclusionAi from './CampaignExclusionAi'
+import { PENDING_BLOCKLIST_MESSAGE } from '../../../../shared/campaignSendExclusionDraft'
 import { validateExclusionAiPatch } from '../../../../shared/campaignExclusionAi'
 import {
   ruleDefinition, validateExclusionGroup,
@@ -15,6 +16,8 @@ type Props = {
   value: SendExclusionsByAccount
   onChange: (value: SendExclusionsByAccount) => void
   onEditing: (editing: boolean) => void
+  pendingBlocklistAccountId?: number | null
+  onResolvePendingBlocklist?: () => void
   onManage?: () => void
   refreshKey?: number
   ai?: {
@@ -151,7 +154,7 @@ function ConditionRow({ page, field, rule, index, mode, onPatch, onSync }: {
   </div>
 }
 
-export default function CampaignSendExclusions({ accounts, value, onChange, onEditing, onManage, refreshKey, ai }: Props) {
+export default function CampaignSendExclusions({ accounts, value, onChange, onEditing, onManage, refreshKey, ai, pendingBlocklistAccountId, onResolvePendingBlocklist }: Props) {
   const [chosen, setChosen] = useState(accounts[0]?.id)
   const accountId = accounts.some(a => a.id === chosen) ? chosen : accounts[0]?.id
   const accountName = accounts.find(a => a.id === accountId)?.name ?? ''
@@ -199,7 +202,10 @@ export default function CampaignSendExclusions({ accounts, value, onChange, onEd
     document.addEventListener('keydown', handle, true)
     return () => { document.removeEventListener('keydown', handle, true); previous?.focus() }
   }, [!!draft])
-  const choose = (patch: Partial<typeof selection>) => onChange({ ...value, [String(accountId)]: { ...selection, ...patch } })
+  const choose = (patch: Partial<typeof selection>) => {
+    onChange({ ...value, [String(accountId)]: { ...selection, ...patch } })
+    if (accountId === pendingBlocklistAccountId && patch.blocklistIds?.length) onResolvePendingBlocklist?.()
+  }
   const open = (current?: SendExclusionGroup) => {
     if (!page || !accountId) return
     setSaveError('')
@@ -296,6 +302,9 @@ export default function CampaignSendExclusions({ accounts, value, onChange, onEd
         {groupError && <p role="alert" className="exclusion-error">{groupError}</p>}
       </div>}
       <div className="exclusion-divider" />
+      {accountId === pendingBlocklistAccountId && <div className="exclusion-error" role="alert">
+        {PENDING_BLOCKLIST_MESSAGE} <button type="button" className="exclusion-link" onClick={onResolvePendingBlocklist}>Bỏ yêu cầu loại trừ danh sách</button>
+      </div>}
       <div className="exclusion-control-group">
         <div className="exclusion-label-row"><span>Loại trừ danh sách bạn bè/Zalo ID cụ thể</span><small>{selection.blocklistIds.length
           ? `${selection.blocklistIds.length} danh sách${selectedLists.every(Boolean) ? ` · ${selectedLists.reduce((sum, list) => sum + (list?.count ?? 0), 0).toLocaleString('vi-VN')} bạn bè` : ''}` : 'Không bắt buộc'}</small></div>
