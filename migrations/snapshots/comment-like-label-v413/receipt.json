@@ -1,0 +1,16 @@
+{
+  "version": "20261020084709",
+  "name": "migration_v413_comment_like_label",
+  "applied": true,
+  "verified_at": "2026-10-20 08:48:21.729567+00",
+  "migration_sha256": "213a90dc1df6ec408b1ecc519bbc5058d81f1f3933ef7ab3d3dcd228122de7b0",
+  "after_sha256": "963964ac46e40f67b5450cbf8042bcfe1dcce3eb6afbca47732ae7b8dae3f9f4",
+  "label": "Like bài post khi comment",
+  "workflow_ids": [
+    157,
+    207,
+    244,
+    245
+  ],
+  "blocks_elements_unchanged": true
+}

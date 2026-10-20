@@ -1,0 +1,5 @@
+{
+  "name": "migration_v410_comment_like_after",
+  "migration_sha256": "34ce933f46326eb2491c852b93652b17a894117089e0375e89b8b802871a680a",
+  "rollback_sha256": "4028a15c54c78c3c3cbcb997101a88624fd2e4ecf81f01bbcadd6651f932384d"
+}

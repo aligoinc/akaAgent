@@ -3525,7 +3525,7 @@ export default function CampaignFormModal({
           if (s.id === 'extra') {
             return {
               ...s,
-              fields: [{ key: 'enablePostLike', label: 'Like bài trước khi comment' }]
+              fields: [{ key: 'enablePostLike', label: 'Like bài post khi comment' }]
             }
           }
           if (s.id === 'details') {
@@ -17310,7 +17310,7 @@ export default function CampaignFormModal({
                           checked={formData.enablePostLike}
                           onChange={e => setFormData(p => ({ ...p, enablePostLike: e.target.checked }))}
                         />
-                        <span>Like bài trước khi comment</span>
+                        <span>Like bài post khi comment</span>
                       </label>
                     </div>
                   )}

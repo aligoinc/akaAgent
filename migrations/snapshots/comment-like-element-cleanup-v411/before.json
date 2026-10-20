@@ -1,0 +1,183 @@
+{
+  "blocks": [
+    {
+      "id": 2074,
+      "md5": "50c7e3a57648395147bb9f8c563f82b0",
+      "name": "fb_click_like"
+    },
+    {
+      "id": 2603,
+      "md5": "302bcbb892e113663243331d8c64bfbf",
+      "name": "fb_collect_group_comments"
+    },
+    {
+      "id": 2615,
+      "md5": "5f9a1686aaabfc341955ed54d492c01c",
+      "name": "fb_click_like_current_post"
+    },
+    {
+      "id": 2705,
+      "md5": "a99e35f1fe4fa7ce9fec4baad18174f3",
+      "name": "fb_newsfeed_like_post"
+    },
+    {
+      "id": 2708,
+      "md5": "97387bbdeadd6e0df79cb058ebaf2a84",
+      "name": "fb_newsfeed_comment_focus"
+    },
+    {
+      "id": 2719,
+      "md5": "d3559be4b544825b099e082f6ee39ea6",
+      "name": "fb_collect_search_post_comments"
+    }
+  ],
+  "captured_at": "2026-10-20 07:57:29.179538+00",
+  "elements": [
+    {
+      "md5": "e274d9f4982763b4a54007f19778e2f3",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-04-29T08:29:26.476645+00:00",
+        "description": "Nút Thích bài viết đầu tiên trong page (skip nếu đã Like → query không match)",
+        "id": 1132,
+        "is_builtin": true,
+        "name": "fb_like_button",
+        "organization_id": 1,
+        "staff_id": 1,
+        "updated_at": "2026-04-29T09:27:38.81+00:00",
+        "xpath": "//*[@role='article'][1]//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]"
+      }
+    },
+    {
+      "md5": "3a97187ea0d3f6aadb3e5da97a94a987",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-04-29T09:36:36.285814+00:00",
+        "description": "Nút Thích trong bài viết thứ N của feed (template ${n}=position). Skip nếu đã Like → query không match.",
+        "id": 1456,
+        "is_builtin": true,
+        "name": "fb_like_button_at_n",
+        "organization_id": 1,
+        "staff_id": 1,
+        "updated_at": "2026-04-29T09:36:35.184+00:00",
+        "xpath": "(//*[@role='article'])[${n}]//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]"
+      }
+    },
+    {
+      "md5": "aa376e04f9aa123c5e598f931f3cd470",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-05-06T10:38:16.391659+00:00",
+        "description": "Dialog Facebook",
+        "id": 1492,
+        "is_builtin": true,
+        "name": "fb_dialog",
+        "organization_id": null,
+        "staff_id": null,
+        "updated_at": "2026-05-22T14:53:40.476486+00:00",
+        "xpath": "//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')]"
+      }
+    },
+    {
+      "md5": "3f136fa78a2aa28aef2b5b9f5a27ee40",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-05-28T16:28:42.550407+00:00",
+        "description": "Like button inside a post.",
+        "id": 1691,
+        "is_builtin": true,
+        "name": "fb_newsfeed_like_button",
+        "organization_id": null,
+        "staff_id": null,
+        "updated_at": "2026-05-29T08:38:42.804159+00:00",
+        "xpath": ".//*[@role='button' and .='Thích']"
+      }
+    },
+    {
+      "md5": "d5a66517e4be69e1c19e9bab7e5d1e70",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-05-28T16:28:42.550407+00:00",
+        "description": "Facebook dialog.",
+        "id": 1696,
+        "is_builtin": true,
+        "name": "fb_newsfeed_dialog",
+        "organization_id": null,
+        "staff_id": null,
+        "updated_at": "2026-05-28T16:42:21.018934+00:00",
+        "xpath": "//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')]"
+      }
+    },
+    {
+      "md5": "72ff45af0569c1eec317e7cc5573f079",
+      "row": {
+        "category": "facebook",
+        "created_at": "2026-10-20T07:45:57.026078+00:00",
+        "description": "Nút Thích đầu tiên trong dialog bài vừa comment thành công; không tìm trên feed.",
+        "id": 1787,
+        "is_builtin": true,
+        "name": "fb_comment_post_like_button",
+        "organization_id": null,
+        "staff_id": null,
+        "updated_at": "2026-10-20T07:45:57.026078+00:00",
+        "xpath": "(//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')])[1]//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]"
+      }
+    }
+  ],
+  "incoming_fks": [],
+  "references": [
+    {
+      "blocks": [],
+      "errors": [],
+      "id": 1132,
+      "name": "fb_like_button",
+      "workflows": []
+    },
+    {
+      "blocks": [],
+      "errors": [],
+      "id": 1456,
+      "name": "fb_like_button_at_n",
+      "workflows": []
+    },
+    {
+      "blocks": [
+        2603,
+        2719
+      ],
+      "errors": [],
+      "id": 1492,
+      "name": "fb_dialog",
+      "workflows": []
+    },
+    {
+      "blocks": [
+        2705
+      ],
+      "errors": [],
+      "id": 1691,
+      "name": "fb_newsfeed_like_button",
+      "workflows": []
+    },
+    {
+      "blocks": [
+        2708
+      ],
+      "errors": [],
+      "id": 1696,
+      "name": "fb_newsfeed_dialog",
+      "workflows": []
+    },
+    {
+      "blocks": [
+        2074,
+        2615
+      ],
+      "errors": [],
+      "id": 1787,
+      "name": "fb_comment_post_like_button",
+      "workflows": []
+    }
+  ],
+  "project_ref": "cgjbsmqtfhqvttudyjzq"
+}
