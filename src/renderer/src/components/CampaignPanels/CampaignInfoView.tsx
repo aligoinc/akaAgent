@@ -596,6 +596,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
     { label: 'Số comment / bài tối đa', value: extra.commentCount ?? '-', hidden: !commentSettingsEnabled },
     { label: 'Số bài mỗi mục tiêu', value: extra.postsPerTarget ?? '-', hidden: !commentSettingsEnabled || (actionId !== 'facebook_comment_seeding' && extra.postsPerTarget === undefined) },
     { label: 'Like bài post khi comment', value: onOff(extra.enablePostLike), hidden: !isCommentSeedingAction },
+    { label: 'Sắp xếp bài post', value: POST_SORT_LABELS[extra.commentPostSort ?? 'recent_activity'], hidden: actionId !== 'facebook_comment_seeding' },
+    { label: 'Chỉ comment vào bài mới nhất', value: onOff(extra.commentOnlyLatestPost), hidden: actionId !== 'facebook_comment_seeding' },
     { label: 'Lọc từ khóa bài viết', value: extra.isFindPostByKeywords ? textOrDash(extra.postKeywords) : 'Tắt', fullWidth: true, hidden: actionId !== 'facebook_comment_seeding' || (!extra.isFindPostByKeywords && !extra.postKeywords) },
     { label: 'Lọc AI bài viết', value: extra.isFindPostByContentAI ? textOrDash(extra.postContentAI) : 'Tắt', fullWidth: true, hidden: actionId !== 'facebook_comment_seeding' || (!extra.isFindPostByContentAI && !extra.postContentAI) },
     {
