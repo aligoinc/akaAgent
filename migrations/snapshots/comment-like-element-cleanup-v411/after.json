@@ -1,0 +1,91 @@
+{
+  "blocks": [
+    {
+      "id": 2074,
+      "md5": "50c7e3a57648395147bb9f8c563f82b0",
+      "name": "fb_click_like"
+    },
+    {
+      "id": 2603,
+      "md5": "302bcbb892e113663243331d8c64bfbf",
+      "name": "fb_collect_group_comments"
+    },
+    {
+      "id": 2615,
+      "md5": "5f9a1686aaabfc341955ed54d492c01c",
+      "name": "fb_click_like_current_post"
+    },
+    {
+      "id": 2705,
+      "md5": "a99e35f1fe4fa7ce9fec4baad18174f3",
+      "name": "fb_newsfeed_like_post"
+    },
+    {
+      "id": 2708,
+      "md5": "97387bbdeadd6e0df79cb058ebaf2a84",
+      "name": "fb_newsfeed_comment_focus"
+    },
+    {
+      "id": 2719,
+      "md5": "d3559be4b544825b099e082f6ee39ea6",
+      "name": "fb_collect_search_post_comments"
+    }
+  ],
+  "captured_at": "2026-10-20 07:59:27.754529+00",
+  "elements": [
+    {
+      "category": "facebook",
+      "created_at": "2026-05-06T10:38:16.391659+00:00",
+      "description": "Dialog Facebook",
+      "id": 1492,
+      "is_builtin": true,
+      "name": "fb_dialog",
+      "organization_id": null,
+      "staff_id": null,
+      "updated_at": "2026-05-22T14:53:40.476486+00:00",
+      "xpath": "//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')]"
+    },
+    {
+      "category": "facebook",
+      "created_at": "2026-05-28T16:28:42.550407+00:00",
+      "description": "Like button inside a post.",
+      "id": 1691,
+      "is_builtin": true,
+      "name": "fb_newsfeed_like_button",
+      "organization_id": null,
+      "staff_id": null,
+      "updated_at": "2026-05-29T08:38:42.804159+00:00",
+      "xpath": ".//*[@role='button' and .='Thích']"
+    },
+    {
+      "category": "facebook",
+      "created_at": "2026-05-28T16:28:42.550407+00:00",
+      "description": "Facebook dialog.",
+      "id": 1696,
+      "is_builtin": true,
+      "name": "fb_newsfeed_dialog",
+      "organization_id": null,
+      "staff_id": null,
+      "updated_at": "2026-05-28T16:42:21.018934+00:00",
+      "xpath": "//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')]"
+    },
+    {
+      "category": "facebook",
+      "created_at": "2026-10-20T07:45:57.026078+00:00",
+      "description": "Nút Thích đầu tiên trong dialog bài vừa comment thành công; không tìm trên feed.",
+      "id": 1787,
+      "is_builtin": true,
+      "name": "fb_comment_post_like_button",
+      "organization_id": null,
+      "staff_id": null,
+      "updated_at": "2026-10-20T07:45:57.026078+00:00",
+      "xpath": "(//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')])[1]//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]"
+    }
+  ],
+  "history": [
+    {
+      "name": "migration_v411_comment_like_element_cleanup",
+      "version": "20261020075650"
+    }
+  ]
+}

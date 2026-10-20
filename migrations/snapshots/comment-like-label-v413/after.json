@@ -1,0 +1,379 @@
+{
+  "blocks": [
+    {
+      "id": 34,
+      "md5": "02d02cde892483bd98370584e0d3ca08"
+    },
+    {
+      "id": 2074,
+      "md5": "e877144bbf4deffe613ccd5a1c146921"
+    },
+    {
+      "id": 2615,
+      "md5": "7695b0a805cfc139d49614edb6aab429"
+    },
+    {
+      "id": 2616,
+      "md5": "1e39f54fbfc579a2b346e85fb62a78ec"
+    }
+  ],
+  "captured_at": "2026-10-20 08:48:21.729567+00",
+  "elements": [
+    {
+      "id": 1132,
+      "md5": "abde47e52e8a594f9df5cdb68d98b1f4"
+    },
+    {
+      "id": 1456,
+      "md5": "3a97187ea0d3f6aadb3e5da97a94a987"
+    },
+    {
+      "id": 1492,
+      "md5": "aa376e04f9aa123c5e598f931f3cd470"
+    },
+    {
+      "id": 1691,
+      "md5": "3f136fa78a2aa28aef2b5b9f5a27ee40"
+    },
+    {
+      "id": 1696,
+      "md5": "d5a66517e4be69e1c19e9bab7e5d1e70"
+    }
+  ],
+  "history": [
+    {
+      "name": "migration_v413_comment_like_label",
+      "version": "20261020084709"
+    }
+  ],
+  "workflows": [
+    {
+      "id": 157,
+      "invariant_md5": "cfd6485aaaec7612e584d2a4a391a960",
+      "row_md5": "3d5cf9954834788d3f5ab79b23a578b3",
+      "updated_at": "2026-10-20T08:48:20.207047+00:00",
+      "variables_schema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": 207,
+      "invariant_md5": "bf1f4ee8358b5fd9d25376b62fa4271f",
+      "row_md5": "3e0a1f584f8d7a2b5bd66a6dde6742e8",
+      "updated_at": "2026-10-20T08:48:20.20756+00:00",
+      "variables_schema": [
+        {
+          "label": "URL bài post",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "label": "Ảnh comment theo lượt",
+          "name": "commentImageBatches",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": 244,
+      "invariant_md5": "cc05c0f50010ec62d51ba6ea905cfde1",
+      "row_md5": "6e86cdad24cfd7812ce03da3b82928f3",
+      "updated_at": "2026-10-20T08:48:20.207719+00:00",
+      "variables_schema": [
+        {
+          "label": "URL bài post",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "label": "Ảnh comment theo lượt",
+          "name": "commentImageBatches",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "id": 245,
+      "invariant_md5": "220eb6f36de047569ee015798146b51b",
+      "row_md5": "8ec713646619d8d814159086615da096",
+      "updated_at": "2026-10-20T08:48:20.207837+00:00",
+      "variables_schema": [
+        {
+          "label": "URL target (group/profile/page/post)",
+          "name": "targetUrl",
+          "type": "string"
+        },
+        {
+          "label": "Số bài comment / target",
+          "name": "postsPerTarget",
+          "type": "number"
+        },
+        {
+          "label": "Like bài post khi comment",
+          "name": "enablePostLike",
+          "type": "boolean"
+        },
+        {
+          "label": "Danh sách biến thể nội dung comment",
+          "name": "commentVariants",
+          "type": "array"
+        },
+        {
+          "default": false,
+          "label": "Lọc từ khoá bài viết",
+          "name": "isFindPostByKeywords",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Từ khoá bài viết",
+          "name": "postKeywords",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Lọc ý nghĩa bài viết bằng AI",
+          "name": "isFindPostByContentAI",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Ý nghĩa bài viết",
+          "name": "postContentAI",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chạy bằng Page",
+          "name": "runAsPage",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "ID Page",
+          "name": "runAsPageUid",
+          "type": "string"
+        },
+        {
+          "default": "",
+          "label": "Tên Page",
+          "name": "runAsPageName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Đã chuyển Page trong lượt",
+          "name": "pageIdentityReady",
+          "type": "boolean"
+        },
+        {
+          "default": "",
+          "label": "Danh tính ban đầu",
+          "name": "originalIdentityName",
+          "type": "string"
+        },
+        {
+          "default": false,
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean"
+        },
+        {
+          "default": true,
+          "label": "Chuyển về sau target (chạy thử)",
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean"
+        }
+      ]
+    }
+  ]
+}

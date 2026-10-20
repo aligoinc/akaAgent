@@ -1,0 +1,9 @@
+{
+  "tested_at": "2026-10-20 07:58:57.699834+00",
+  "live_delete_restore_rolled_back": true,
+  "removed_ids": [
+    1132,
+    1456
+  ],
+  "kept_combined_id": 1787
+}

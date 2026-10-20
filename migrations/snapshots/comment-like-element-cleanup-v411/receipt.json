@@ -1,0 +1,17 @@
+{
+  "version": "20261020075650",
+  "name": "migration_v411_comment_like_element_cleanup",
+  "verified_at": "2026-10-20 07:59:27.754529+00",
+  "removed_ids": [
+    1132,
+    1456
+  ],
+  "retained_ids": [
+    1492,
+    1691,
+    1696,
+    1787
+  ],
+  "migration_sha256": "90ab577f94fb067ad1d0841cc84b584fd695727a856f4ce6783dd505a0e8c86c",
+  "rollback_sha256": "d21caca8ebe8cb7fbbd3b5e7a8cf9a2506fc67e1c52d255e58555f20a618d259"
+}
