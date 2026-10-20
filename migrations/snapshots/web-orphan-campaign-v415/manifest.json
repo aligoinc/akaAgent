@@ -1,0 +1,20 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+  "sourceChecksum": "bd7caeef73e9675f36dd9851498c11e6",
+  "targetChecksum": "e081e2adaa53652506e9628e851aa604",
+  "functions": [
+    {
+      "signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+      "sourceChecksum": "bd7caeef73e9675f36dd9851498c11e6",
+      "targetChecksum": "e081e2adaa53652506e9628e851aa604"
+    },
+    {
+      "signature": "public.aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)",
+      "sourceChecksum": "3bafa54ccba53cb9788a32ab754ab7da",
+      "targetChecksum": "1275ad05d4dd184f5f6d9cd937caa21c"
+    }
+  ],
+  "change": "Remove only account is_delete predicates from Web list and history reads",
+  "preservedLogReaderChecksum": "9df075f367231f8ad06970bfb6a62a5a"
+}

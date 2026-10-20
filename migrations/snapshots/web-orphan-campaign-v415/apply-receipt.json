@@ -1,0 +1,7 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "success": true,
+  "name": "migration_v415_web_orphan_campaign_visibility",
+  "version": "20261020095536",
+  "verification": "Both target checksums and all captured RPC attributes match; progress overloads and private log reader unchanged"
+}
