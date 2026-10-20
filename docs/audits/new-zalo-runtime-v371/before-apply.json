@@ -1,0 +1,450 @@
+{
+  "ddl_triggers": [
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.set_graphql_placeholder()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\n    DECLARE\n    graphql_is_dropped bool;\n    BEGIN\n    graphql_is_dropped = (\n        SELECT ev.schema_name = 'graphql_public'\n        FROM pg_event_trigger_dropped_objects() AS ev\n        WHERE ev.schema_name = 'graphql_public'\n    );\n\n    IF graphql_is_dropped\n    THEN\n        create or replace function graphql_public.graphql(\n            \"operationName\" text default null,\n            query text default null,\n            variables jsonb default null,\n            extensions jsonb default null\n        )\n            returns jsonb\n            language plpgsql\n            set search_path to ''\n        as $$\n            DECLARE\n                server_version float;\n            BEGIN\n                server_version = (SELECT (SPLIT_PART((select version()), ' ', 2))::float);\n\n                IF server_version >= 14 THEN\n                    RETURN jsonb_build_object(\n                        'errors', jsonb_build_array(\n                            jsonb_build_object(\n                                'message', 'pg_graphql extension is not enabled.'\n                            )\n                        )\n                    );\n                ELSE\n                    RETURN jsonb_build_object(\n                        'errors', jsonb_build_array(\n                            jsonb_build_object(\n                                'message', 'pg_graphql is only available on projects running Postgres 14 onwards.'\n                            )\n                        )\n                    );\n                END IF;\n            END;\n        $$;\n    END IF;\n\n    END;\n$function$\n",
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "8da9dff6b2ae47498209d341acaeb60b",
+      "name": "issue_graphql_placeholder",
+      "signature": "set_graphql_placeholder()",
+      "tags": [
+        "DROP EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_cron_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT\n    FROM pg_event_trigger_ddl_commands() AS ev\n    JOIN pg_extension AS ext\n    ON ev.objid = ext.oid\n    WHERE ext.extname = 'pg_cron'\n  )\n  THEN\n    grant usage on schema cron to postgres with grant option;\n\n    alter default privileges in schema cron grant all on tables to postgres with grant option;\n    alter default privileges in schema cron grant all on functions to postgres with grant option;\n    alter default privileges in schema cron grant all on sequences to postgres with grant option;\n\n    alter default privileges for user supabase_admin in schema cron grant all\n        on sequences to postgres with grant option;\n    alter default privileges for user supabase_admin in schema cron grant all\n        on tables to postgres with grant option;\n    alter default privileges for user supabase_admin in schema cron grant all\n        on functions to postgres with grant option;\n\n    grant all privileges on all tables in schema cron to postgres with grant option;\n    revoke all on table cron.job from postgres;\n    grant select on table cron.job to postgres with grant option;\n    revoke trigger on cron.job_run_details from postgres;\n  END IF;\nEND;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "53a44336da0ac1dd62d89dbd988e6d1d",
+      "name": "issue_pg_cron_access",
+      "signature": "grant_pg_cron_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_graphql_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n    if not exists (\n        select 1\n        from pg_catalog.pg_event_trigger_ddl_commands() ev\n        join pg_catalog.pg_extension e on ev.objid = e.oid\n        where e.extname = 'pg_graphql'\n    ) then\n        return;\n    end if;\n\n    drop function if exists graphql_public.graphql;\n    create or replace function graphql_public.graphql(\n        \"operationName\" text default null,\n        query text default null,\n        variables jsonb default null,\n        extensions jsonb default null\n    )\n        returns jsonb\n        language sql\n    as $$\n        select graphql.resolve(\n            query := query,\n            variables := coalesce(variables, '{}'),\n            \"operationName\" := \"operationName\",\n            extensions := extensions\n        );\n    $$;\n\n    -- Attach the wrapper to the extension so DROP EXTENSION cascades to it,\n    -- which in turn triggers set_graphql_placeholder to reinstall the \"not enabled\" stub.\n    alter extension pg_graphql add function graphql_public.graphql(text, text, jsonb, jsonb);\n\n    grant usage on schema graphql to postgres, anon, authenticated, service_role;\n    grant execute on function graphql.resolve to postgres, anon, authenticated, service_role;\n    grant usage on schema graphql to postgres with grant option;\n    grant usage on schema graphql_public to postgres with grant option;\nend;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "4e6d7efe4aed1b3b92063b648aa7a0cf",
+      "name": "issue_pg_graphql_access",
+      "signature": "grant_pg_graphql_access()",
+      "tags": [
+        "CREATE FUNCTION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.grant_pg_net_access()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nBEGIN\n  IF EXISTS (\n    SELECT 1\n    FROM pg_event_trigger_ddl_commands() AS ev\n    JOIN pg_extension AS ext\n    ON ev.objid = ext.oid\n    WHERE ext.extname = 'pg_net'\n  )\n  THEN\n    IF NOT EXISTS (\n      SELECT 1\n      FROM pg_roles\n      WHERE rolname = 'supabase_functions_admin'\n    )\n    THEN\n      CREATE USER supabase_functions_admin NOINHERIT CREATEROLE LOGIN NOREPLICATION;\n    END IF;\n\n    GRANT USAGE ON SCHEMA net TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n\n    IF EXISTS (\n      SELECT FROM pg_extension\n      WHERE extname = 'pg_net'\n      -- all versions in use on existing projects as of 2025-02-20\n      -- version 0.12.0 onwards don't need these applied\n      AND extversion IN ('0.2', '0.6', '0.7', '0.7.1', '0.8.0', '0.10.0', '0.11.0')\n    ) THEN\n      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;\n      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SECURITY DEFINER;\n\n      ALTER function net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;\n      ALTER function net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) SET search_path = net;\n\n      REVOKE ALL ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;\n      REVOKE ALL ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) FROM PUBLIC;\n\n      GRANT EXECUTE ON FUNCTION net.http_get(url text, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n      GRANT EXECUTE ON FUNCTION net.http_post(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer) TO supabase_functions_admin, postgres, anon, authenticated, service_role;\n    END IF;\n  END IF;\nEND;\n$function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "1d06ef4fb47bb0ab6e6f8818a62013bb",
+      "name": "issue_pg_net_access",
+      "signature": "grant_pg_net_access()",
+      "tags": [
+        "CREATE EXTENSION"
+      ]
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.pgrst_ddl_watch()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nDECLARE\n  cmd record;\nBEGIN\n  FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()\n  LOOP\n    IF cmd.command_tag IN (\n      'CREATE SCHEMA', 'ALTER SCHEMA'\n    , 'CREATE TABLE', 'CREATE TABLE AS', 'SELECT INTO', 'ALTER TABLE'\n    , 'CREATE FOREIGN TABLE', 'ALTER FOREIGN TABLE'\n    , 'CREATE VIEW', 'ALTER VIEW'\n    , 'CREATE MATERIALIZED VIEW', 'ALTER MATERIALIZED VIEW'\n    , 'CREATE FUNCTION', 'ALTER FUNCTION'\n    , 'CREATE TRIGGER'\n    , 'CREATE TYPE', 'ALTER TYPE'\n    , 'CREATE RULE'\n    , 'COMMENT'\n    )\n    -- don't notify in case of CREATE TEMP table or other objects created on pg_temp\n    AND cmd.schema_name is distinct from 'pg_temp'\n    THEN\n      NOTIFY pgrst, 'reload schema';\n    END IF;\n  END LOOP;\nEND; $function$\n",
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "md5": "afaad7193dcf8f81e728d2bedb85e43e",
+      "name": "pgrst_ddl_watch",
+      "signature": "pgrst_ddl_watch()",
+      "tags": null
+    },
+    {
+      "definition": "CREATE OR REPLACE FUNCTION extensions.pgrst_drop_watch()\n RETURNS event_trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nDECLARE\n  obj record;\nBEGIN\n  FOR obj IN SELECT * FROM pg_event_trigger_dropped_objects()\n  LOOP\n    IF obj.object_type IN (\n      'schema'\n    , 'table'\n    , 'foreign table'\n    , 'view'\n    , 'materialized view'\n    , 'function'\n    , 'trigger'\n    , 'type'\n    , 'rule'\n    )\n    AND obj.is_temporary IS false -- no pg_temp objects\n    THEN\n      NOTIFY pgrst, 'reload schema';\n    END IF;\n  END LOOP;\nEND; $function$\n",
+      "enabled": "O",
+      "event": "sql_drop",
+      "md5": "4357772baf5cfcd5c6d7049585b3a537",
+      "name": "pgrst_drop_watch",
+      "signature": "pgrst_drop_watch()",
+      "tags": null
+    }
+  ],
+  "executing_role": "postgres",
+  "recent_migrations": [
+    {
+      "name": "migration_v370_fb_friend_hidden_button_message",
+      "version": "20261009174750"
+    },
+    {
+      "name": "migration_v369_selective_revert_automation_status_catalog",
+      "version": "20261009173841"
+    },
+    {
+      "name": "migration_v368_email_status_observations",
+      "version": "20261009162432"
+    },
+    {
+      "name": "migration_v367_action_status_compatibility",
+      "version": "20261009155339"
+    },
+    {
+      "name": "migration_v366_action_status_runtime_fixes",
+      "version": "20261009133014"
+    },
+    {
+      "name": "migration_v365_remove_unsupported_post_visible_status",
+      "version": "20261009121850"
+    },
+    {
+      "name": "migration_v364_action_status_catalog_grants",
+      "version": "20261009115214"
+    },
+    {
+      "name": "migration_v363_action_status_writer",
+      "version": "20261009114836"
+    },
+    {
+      "name": "migration_v362_action_status_readers",
+      "version": "20261009114725"
+    },
+    {
+      "name": "migration_v361_action_status_policy_catalog",
+      "version": "20261009102331"
+    }
+  ],
+  "server_version": "17.6",
+  "table_schema": {
+    "acl": [
+      "postgres=arwdDxtm/postgres",
+      "service_role=arwdDxtm/postgres",
+      "aka_agent_chat_api=r/postgres",
+      "anon=r/postgres",
+      "authenticated=r/postgres",
+      "crm_interest_worker=r/postgres"
+    ],
+    "bytes": 344064,
+    "columns": [
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "d",
+        "name": "id",
+        "not_null": true,
+        "position": 1,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "customer_id",
+        "not_null": true,
+        "position": 2,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "name",
+        "not_null": true,
+        "position": 3,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "phone",
+        "not_null": true,
+        "position": 4,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "email",
+        "not_null": false,
+        "position": 5,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "sql_account_id",
+        "not_null": false,
+        "position": 6,
+        "type": "text"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "staff_admin_id",
+        "not_null": false,
+        "position": 7,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": "1",
+        "generated": "",
+        "identity": "",
+        "name": "max_staff",
+        "not_null": true,
+        "position": 8,
+        "type": "integer"
+      },
+      {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "created_at",
+        "not_null": true,
+        "position": 9,
+        "type": "timestamp with time zone"
+      },
+      {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "name": "updated_at",
+        "not_null": true,
+        "position": 10,
+        "type": "timestamp with time zone"
+      },
+      {
+        "acl": null,
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "is_admin_akabiz",
+        "not_null": true,
+        "position": 11,
+        "type": "boolean"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "staff_id_created",
+        "not_null": true,
+        "position": 12,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "staff_id_owner",
+        "not_null": true,
+        "position": 13,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "demo_created_by",
+        "not_null": false,
+        "position": 14,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "first_sale_by",
+        "not_null": false,
+        "position": 15,
+        "type": "bigint"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "demo_created_at",
+        "not_null": false,
+        "position": 16,
+        "type": "timestamp with time zone"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "first_sale_at",
+        "not_null": false,
+        "position": 17,
+        "type": "timestamp with time zone"
+      },
+      {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "name": "staff_duration_days",
+        "not_null": false,
+        "position": 18,
+        "type": "integer"
+      },
+      {
+        "acl": null,
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "name": "use_staff_expiration",
+        "not_null": true,
+        "position": 20,
+        "type": "boolean"
+      }
+    ],
+    "constraints": [
+      {
+        "definition": "FOREIGN KEY (staff_admin_id) REFERENCES org_staff(id)",
+        "name": "fk_organization_staff_admin"
+      },
+      {
+        "definition": "FOREIGN KEY (customer_id) REFERENCES aka_customer(id)",
+        "name": "org_organization_customer_id_fkey"
+      },
+      {
+        "definition": "FOREIGN KEY (demo_created_by) REFERENCES org_staff(id) ON UPDATE RESTRICT ON DELETE RESTRICT",
+        "name": "org_organization_demo_created_by_fkey"
+      },
+      {
+        "definition": "FOREIGN KEY (first_sale_by) REFERENCES org_staff(id) ON UPDATE RESTRICT ON DELETE RESTRICT",
+        "name": "org_organization_first_sale_by_fkey"
+      },
+      {
+        "definition": "PRIMARY KEY (id)",
+        "name": "org_organization_pkey"
+      },
+      {
+        "definition": "FOREIGN KEY (staff_id_created) REFERENCES org_staff(id)",
+        "name": "org_organization_staff_id_created_fkey"
+      },
+      {
+        "definition": "CHECK (staff_duration_days IS NULL OR staff_duration_days > 0)",
+        "name": "org_staff_duration_days_positive"
+      }
+    ],
+    "estimated_rows": 1293,
+    "force_rls": false,
+    "kind": "r",
+    "name": "org_organization",
+    "owner": "postgres",
+    "rls": true
+  },
+  "target_overloads": [],
+  "target_signature": null,
+  "triggers": [
+    {
+      "definition": "CREATE TRIGGER trg_lock_organization_aka_order_sync BEFORE UPDATE ON org_organization FOR EACH ROW EXECUTE FUNCTION private.trg_lock_organization_aka_order_sync()",
+      "enabled": "O",
+      "function": {
+        "acl": [
+          "postgres=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "definition": "CREATE OR REPLACE FUNCTION private.trg_lock_organization_aka_order_sync()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n  perform pg_catalog.pg_advisory_xact_lock(\n    private.aka_order_organization_lock_key(new.id)\n  );\n  return new;\nend;\n$function$\n",
+        "md5": "8d2b28195f1e3156fbdd3be530437576",
+        "owner": "postgres",
+        "security_definer": false,
+        "signature": "private.trg_lock_organization_aka_order_sync()",
+        "volatility": "v"
+      },
+      "name": "trg_lock_organization_aka_order_sync"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_loyalty_from_org_customer_link AFTER UPDATE OF customer_id ON org_organization FOR EACH ROW EXECUTE FUNCTION private.trg_loyalty_from_org_customer_link()",
+      "enabled": "O",
+      "function": {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "definition": "CREATE OR REPLACE FUNCTION private.trg_loyalty_from_org_customer_link()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n  if old.customer_id is not distinct from new.customer_id then\n    return new;\n  end if;\n\n  perform private.reconcile_org_product_loyalty(old.customer_id);\n  perform private.reconcile_org_product_loyalty(new.customer_id);\n  return new;\nend;\n$function$\n",
+        "md5": "b72e973ddf383f4b651a5b0a49aaa0c5",
+        "owner": "postgres",
+        "security_definer": true,
+        "signature": "private.trg_loyalty_from_org_customer_link()",
+        "volatility": "v"
+      },
+      "name": "trg_loyalty_from_org_customer_link"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_protect_org_lifecycle_attribution BEFORE INSERT OR UPDATE ON org_organization FOR EACH ROW EXECUTE FUNCTION private.protect_org_lifecycle_attribution()",
+      "enabled": "O",
+      "function": {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "definition": "CREATE OR REPLACE FUNCTION private.protect_org_lifecycle_attribution()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare\n  v_product_actor bigint;\n  v_product_at timestamptz;\nbegin\n  if tg_op = 'INSERT' then\n    new.demo_created_by := null;\n    new.first_sale_by := null;\n    new.demo_created_at := null;\n    new.first_sale_at := null;\n    return new;\n  end if;\n\n  if old.demo_created_at is not null then\n    new.demo_created_at := old.demo_created_at;\n    new.demo_created_by := old.demo_created_by;\n  elsif new.demo_created_at is not null then\n    select product.demo_created_by, product.demo_created_at\n    into v_product_actor, v_product_at\n    from public.org_organization_product as product\n    where product.organization_id = new.id\n      and product.demo_created_at is not null\n    order by product.demo_created_at, product.id\n    limit 1;\n\n    if not found\n       or new.demo_created_at is distinct from v_product_at\n       or new.demo_created_by is distinct from v_product_actor\n       or (\n         old.demo_created_by is not null\n         and v_product_actor is distinct from old.demo_created_by\n       ) then\n      new.demo_created_at := old.demo_created_at;\n      new.demo_created_by := old.demo_created_by;\n    else\n      new.demo_created_at := v_product_at;\n      new.demo_created_by := v_product_actor;\n    end if;\n  else\n    new.demo_created_at := old.demo_created_at;\n    new.demo_created_by := old.demo_created_by;\n  end if;\n\n  if old.first_sale_at is not null then\n    new.first_sale_at := old.first_sale_at;\n    new.first_sale_by := old.first_sale_by;\n  elsif new.first_sale_at is not null then\n    select product.first_sale_by, product.first_sale_at\n    into v_product_actor, v_product_at\n    from public.org_organization_product as product\n    where product.organization_id = new.id\n      and product.first_sale_at is not null\n    order by product.first_sale_at, product.id\n    limit 1;\n\n    if not found\n       or new.first_sale_at is distinct from v_product_at\n       or new.first_sale_by is distinct from v_product_actor\n       or (\n         old.first_sale_by is not null\n         and v_product_actor is distinct from old.first_sale_by\n       ) then\n      new.first_sale_at := old.first_sale_at;\n      new.first_sale_by := old.first_sale_by;\n    else\n      new.first_sale_at := v_product_at;\n      new.first_sale_by := v_product_actor;\n    end if;\n  else\n    new.first_sale_at := old.first_sale_at;\n    new.first_sale_by := old.first_sale_by;\n  end if;\n\n  return new;\nend\n$function$\n",
+        "md5": "12e71ec921b6bdf9d127bde6cd9b6c97",
+        "owner": "postgres",
+        "security_definer": false,
+        "signature": "private.protect_org_lifecycle_attribution()",
+        "volatility": "v"
+      },
+      "name": "trg_protect_org_lifecycle_attribution"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_reassign_org_customer_lifecycle AFTER UPDATE OF customer_id ON org_organization FOR EACH ROW WHEN (old.customer_id IS DISTINCT FROM new.customer_id) EXECUTE FUNCTION private.trg_reassign_org_customer_lifecycle()",
+      "enabled": "O",
+      "function": {
+        "acl": [
+          "postgres=X/postgres"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "definition": "CREATE OR REPLACE FUNCTION private.trg_reassign_org_customer_lifecycle()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_customer_ids bigint[] := array_remove(\n    array[old.customer_id, new.customer_id]::bigint[],\n    null\n  );\n  v_product public.org_organization_product%rowtype;\n  v_history public.org_organization_product_history%rowtype;\n  v_order public.aka_order%rowtype;\n  v_order_history public.aka_order_history%rowtype;\nbegin\n  if old.customer_id is not distinct from new.customer_id then\n    return new;\n  end if;\n\n  for v_product in\n    select product.*\n    from public.org_organization_product as product\n    where product.organization_id = new.id\n    order by product.id\n  loop\n    v_customer_ids := coalesce(v_customer_ids, '{}'::bigint[])\n      || private.sync_org_product_customer_lifecycle(v_product);\n  end loop;\n\n  for v_history in\n    select history.*\n    from public.org_organization_product_history as history\n    where history.organization_id = new.id\n    order by history.id\n  loop\n    v_customer_ids := coalesce(v_customer_ids, '{}'::bigint[])\n      || private.sync_org_product_history_customer_lifecycle(v_history);\n  end loop;\n\n  -- SQL/manual orders with no direct customer use the organization link as a\n  -- fallback. Recompute both current and append-only order evidence when that\n  -- link moves; org_product mirror orders remain excluded by the sync helper.\n  for v_order in\n    select order_row.*\n    from public.aka_order as order_row\n    where order_row.organization_id = new.id\n      and order_row.customer_id is null\n      and order_row.source_system in ('sql_account', 'legacy_manual')\n    order by order_row.id\n  loop\n    v_customer_ids := coalesce(v_customer_ids, '{}'::bigint[])\n      || private.sync_aka_order_customer_lifecycle(v_order);\n\n    for v_order_history in\n      select history.*\n      from public.aka_order_history as history\n      where history.aka_order_id = v_order.id\n      order by history.id\n    loop\n      v_customer_ids := coalesce(v_customer_ids, '{}'::bigint[])\n        || private.sync_aka_order_history_customer_lifecycle(v_order_history);\n    end loop;\n  end loop;\n\n  perform private.refresh_aka_customer_lifecycle_projections(v_customer_ids);\n  return new;\nend\n$function$\n",
+        "md5": "09c8b2ee42ea260984e04f17e6183dcf",
+        "owner": "postgres",
+        "security_definer": true,
+        "signature": "private.trg_reassign_org_customer_lifecycle()",
+        "volatility": "v"
+      },
+      "name": "trg_reassign_org_customer_lifecycle"
+    },
+    {
+      "definition": "CREATE TRIGGER trg_sync_organization_orders AFTER UPDATE ON org_organization FOR EACH ROW WHEN (old.* IS DISTINCT FROM new.*) EXECUTE FUNCTION private.trg_sync_organization_orders()",
+      "enabled": "O",
+      "function": {
+        "acl": [
+          "postgres=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "definition": "CREATE OR REPLACE FUNCTION private.trg_sync_organization_orders()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare\n  v_product_id bigint;\nbegin\n  for v_product_id in\n    select product.id\n    from public.org_organization_product as product\n    where product.organization_id = new.id\n    order by product.id\n  loop\n    perform private.sync_org_product_to_aka_order(\n      v_product_id,\n      'organization_update'\n    );\n  end loop;\n  return new;\nend;\n$function$\n",
+        "md5": "cd1a4fc34ecbe9d45dcac9b346c056a9",
+        "owner": "postgres",
+        "security_definer": false,
+        "signature": "private.trg_sync_organization_orders()",
+        "volatility": "v"
+      },
+      "name": "trg_sync_organization_orders"
+    }
+  ]
+}

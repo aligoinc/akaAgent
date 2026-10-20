@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-09T18:08:26.077Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "verified": true,
+  "rolled_back": true,
+  "customer_writes": 0,
+  "external_operations": 0,
+  "duration": "00:00:00.063806",
+  "migration_sha256": "35c9c1feb9c481f4486912f14787f42b0862eea6f8687fb9c36e0b61e753d259",
+  "smoke_sha256": "eca77ba7d292846412ed0beaf34ad354272a0ab471f63e815f43d46c9fc373c6",
+  "target": {
+    "acl": [
+      "postgres=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "definition": "CREATE OR REPLACE FUNCTION private.aka_agent_org_default_new_zalo_runtime()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog'\nAS $function$\nBEGIN\n  NEW.use_new_zalo_runtime := true;\n  RETURN NEW;\nEND;\n$function$\n",
+    "md5": "df3a75b16492ded9c413ef4db332dd9b",
+    "owner": "postgres",
+    "security_definer": false,
+    "signature": "private.aka_agent_org_default_new_zalo_runtime()",
+    "volatility": "v"
+  }
+}
