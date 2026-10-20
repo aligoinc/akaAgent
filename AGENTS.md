@@ -635,6 +635,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **Preview log Facebook và emoji**: dùng `getCampaignLogContentPreview` trong [campaignScheduler.ts](src/main/services/campaignScheduler.ts:10441) cho comment/newsfeed; không cắt giữa surrogate pair ở mốc 50 vì PostgREST trả `PGRST102` và ngắt lưu các kết quả sau. Hồi quy scheduler→writer→SQL offline: `node scripts/campaign-log-unicode-smoke.cjs`; giữ nguyên nội dung gửi/link, không tự chạy lại hay backfill.
+
 - **Dừng/nhân bản với account đã xóa**: pause chỉ đọc route theo staff qua `getAccountForCampaignPause`, không dùng kết quả này để resume. Thiếu local owner phải để RPC xác nhận account deleted và claim/unit NULL; không tự thu hồi lease. Clone chỉ bỏ ID thiếu sau catalog thành công, giữ lựa chọn khi tải lỗi. Hai migration orphan pause đã apply, không chạy lại; xem [hợp đồng và kiểm chứng](docs/CAMPAIGN_ORPHAN_PAUSE_CLONE.md).
 
 - **Phone check upload**: tải data không cần chọn tài khoản; IPC `contacts:zalo-phone-check:limit` chỉ đọc setting ngày public qua HTTP hiện có, không claim/consume. Thống kê ba hàng, giữ số đang kiểm tra qua khoảng nghỉ; Bắt đầu báo thiếu tài khoản khi bấm; [hợp đồng](docs/ZALO_PHONE_CHECK.md#tài-khoản-ban-đầu-của-modal--17102026).
