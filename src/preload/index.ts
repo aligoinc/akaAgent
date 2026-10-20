@@ -1,4 +1,5 @@
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
+import { CAMPAIGN_EXCLUSION_AI_IPC, type ExclusionAiRequest, type ExclusionAiResult } from '../shared/campaignExclusionAi'
 import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campaignHistory'
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
 import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckUsage } from '../shared/zaloPhoneCheck'
@@ -316,6 +317,8 @@ const electronAPI = {
   analyzeCampaignDiagnostics: (request: CampaignDiagnosticsAiRequest): Promise<CampaignDiagnosticsAiResult> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.ai, request),
   cancelCampaignDiagnostics: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.cancel, requestId),
   listCampaignFormAi: (): Promise<FormAiAvailability[]> => ipcRenderer.invoke(FORM_AI_AVAILABILITY_IPC),
+  generateCampaignExclusionAi: (request: ExclusionAiRequest): Promise<ExclusionAiResult> => ipcRenderer.invoke(CAMPAIGN_EXCLUSION_AI_IPC.generate, request),
+  cancelCampaignExclusionAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_EXCLUSION_AI_IPC.cancel, requestId),
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
   generateCampaignContentAi: (request: ContentAiRequest): Promise<ContentAiResult> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.generate, request),

@@ -1,4 +1,6 @@
 import { CAMPAIGN_CONTENT_AI_IPC, CONTENT_AI_MESSAGES, validateContentAiRequest } from '../../../shared/campaignContentAi'
+import { CAMPAIGN_EXCLUSION_AI_IPC, EXCLUSION_AI_MESSAGES, validateExclusionAiRequest } from '../../../shared/campaignExclusionAi'
+import { generateCampaignExclusion } from '../../services/campaignExclusionAiService'
 import { generateCampaignContent } from '../../services/campaignContentAiService'
 import { ipcMain, type BrowserWindow } from 'electron'
 import {
@@ -64,5 +66,6 @@ export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: (
   register(CAMPAIGN_SCHEDULE_AI_IPC, validateScheduleAiRequest, generateCampaignSchedule, SCHEDULE_AI_MESSAGES)
   register(CAMPAIGN_LIMITS_AI_IPC, validateLimitsAiRequest, generateCampaignLimits, LIMITS_AI_MESSAGES)
   register(CAMPAIGN_CONTENT_AI_IPC, validateContentAiRequest, generateCampaignContent, CONTENT_AI_MESSAGES)
+  register(CAMPAIGN_EXCLUSION_AI_IPC, validateExclusionAiRequest, generateCampaignExclusion, EXCLUSION_AI_MESSAGES)
   return { stop }
 }

@@ -7,11 +7,12 @@ import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useUiStore } from '../src/renderer/src/stores/uiStore'
 import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
 import '../src/renderer/src/styles/global.css'
+import exclusionPage from './fixtures/send-exclusion-ui-page.json'
 
 const state: any = { calls: [], requests: [], pending: [], cancels: [], alerts: [], errors: [], deadlines: [] }
 // This fixture exercises AI/drafts. The status-choice dialog has its own edit-flow suite.
 campaignEdit.chooseSaveStatus = async () => 'tạm dừng'
-state.formAiRows = ['campaign.schedule', 'campaign.action_limits', 'campaign.content'].map(sectionId => ({ sectionId, campaignScope: 'all', campaignActionIds: [] }))
+state.formAiRows = ['campaign.schedule', 'campaign.action_limits', 'campaign.content', 'campaign.send_exclusions'].map(sectionId => ({ sectionId, campaignScope: 'all', campaignActionIds: [] }))
 state.metadataPending = []
 const originalTimeout = window.setTimeout.bind(window)
 window.setTimeout = ((callback: any, ms?: number, ...args: any[]) => {
@@ -47,6 +48,11 @@ const handlers: Record<string, any> = {
   cancelCampaignContentAi: (id: string) => { state.cancels.push(id) },
   cancelCampaignLimitsAi: (id: string) => { state.cancels.push(id) }
 }
+handlers.generateCampaignExclusionAi = (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) }
+handlers.cancelCampaignExclusionAi = (id: string) => { state.cancels.push(id) }
+handlers.listSendExclusionGroups = (id: number) => ({ ...structuredClone(exclusionPage),
+  groups: exclusionPage.groups.map(group => ({ ...group, accountId: id })) })
+handlers.saveSendExclusionGroup = (group: any) => ({ ...group, id: 50, revision: group.revision + 1 })
 window.electronAPI = new Proxy(handlers, { get(target, key: string) {
   if (key in target && typeof target[key] !== 'function') return target[key]
   if (key.startsWith('on')) return () => () => {}
@@ -65,6 +71,16 @@ function App() {
   const [providedCampaign, setProvidedCampaign] = useState<any>()
   const [initialAccounts, setInitialAccounts] = useState([11])
   ;(window as any).scheduleSmoke = { state,
+    openExclusions: () => {
+      const zalo = { ...account, flatformType: 'zalo', connectionMethod: 'qr' }
+      useCampaignStore.setState({ accounts: [zalo, { ...zalo, id: 12, name: 'Zalo phụ' }], campaignActions: actions as any })
+      setInitialAccounts([11, 12]); setDraft(undefined); setNewForm(false)
+      setProvidedCampaign({ name: 'Loại trừ kiểm thử', actionId: 'zalo_message_friend', accountId: 11,
+        content: 'Giữ nội dung', schedule: '2026-10-20T02:00:00Z', scheduleType: 'daily',
+        status: 'tạm dừng', extraSettings: { enableMessage: true, zaloFriendTargetMode: 'all_friends',
+          zaloSendExclusionsByAccountId: { '11': { groupId: 1, blocklistIds: [4] }, '12': { groupId: null, blocklistIds: [] } } } })
+      setClosed(false); setGeneration(value => value + 1)
+    },
     openMixedWindows: () => {
       useCampaignStore.setState({ accounts: [{ ...account, rateLimitMinutes: 30 },
         { ...account, id: 12, name: 'Tài khoản thứ hai', rateLimitMinutes: 60 }], campaignActions: actions as any })

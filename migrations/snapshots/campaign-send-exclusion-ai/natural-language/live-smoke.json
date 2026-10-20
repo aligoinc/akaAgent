@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-20T15:41:10.252Z",
+  "model": "gpt-6.1-sol",
+  "syntheticCatalog": true,
+  "candidatePrompt": false,
+  "candidatePromptMd5": null,
+  "migrationSha256": "fb40b11a6a299e104d81f0ea4971d30478dc64d4fc50a3f04a065ec2039c102f",
+  "passed": true,
+  "results": [
+    {
+      "name": "original-natural-request",
+      "description": "loại trừ bạn bè đã gửi tin trước đó 3 ngày và có tag dong nghiẹp",
+      "logId": 851166,
+      "result": {
+        "ok": true,
+        "patch": {
+          "name": "Bạn bè đã gửi tin trong 3 ngày có tag Đồng nghiệp",
+          "matchMode": "and",
+          "rules": [
+            {
+              "fieldId": 1,
+              "operatorId": 1,
+              "value": "friend",
+              "isEnabled": true,
+              "sortOrder": 10
+            },
+            {
+              "fieldId": 4,
+              "operatorId": 5,
+              "value": 3,
+              "isEnabled": true,
+              "sortOrder": 40
+            },
+            {
+              "fieldId": 2,
+              "operatorId": 3,
+              "value": [
+                "6"
+              ],
+              "isEnabled": true,
+              "sortOrder": 20
+            }
+          ]
+        }
+      },
+      "passed": true
+    }
+  ]
+}

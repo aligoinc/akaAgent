@@ -16,6 +16,8 @@ In-use field meaning, operator algorithm, pair validation and static option mean
 
 ## Desktop UI
 
+Ngày 20/10/2026 thêm AI tạo nhóm bằng Sol 6.1: tự mở editor và điền điều kiện theo mô tả, chỉ ghi khi bấm Lưu nhóm. Config `ai_form_configs.id=7` đã apply; xem [hợp đồng AI, kiểm chứng và rollback](CAMPAIGN_SEND_EXCLUSION_AI.md).
+
 The exclusion card and its 660px group editor follow `Loại trừ gửi - Chiến dịch.dc.html`: icon tiles, optional/default badges, two-line group picker, individual Khi/VÀ/HOẶC summary rows, and selected blocklist chips inside the picker. The editor uses one bordered condition stack, metadata-driven operator/value chips, a compact days input, and separate header/body/footer. Inactive conditions stay visible and selecting a value enables that condition. Narrow layouts wrap controls and scroll the body while retaining the footer; light and dark themes are supported.
 
 The account and “Từ Zalo nào” values in the editor are read-only because the group belongs to the account being configured. Multiple campaign accounts switch independently on the card. Friendship/operator options still come from the existing catalog; prototype-only choices are not copied into production. Empty/invalid drafts show the validation reason and disable Save. Group picker keyboard navigation and modal focus trapping are covered by the offline UI smoke.

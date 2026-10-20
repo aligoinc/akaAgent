@@ -109,6 +109,8 @@ body.theme-light .exclusion-modal {
   color: var(--ex-danger);
 }
 .exclusion-heading-copy { flex: 1; min-width: 0; }
+.exclusion-title-row { display: flex; align-items: center; gap: 8px; }
+.exclusion-title-row > button { flex-shrink: 0; margin-left: 0; }
 .exclusion-heading-copy strong { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .exclusion-heading-copy p { margin-top: 2px; font-size: 12px; line-height: 1.25; color: var(--ex-muted); }
 .exclusion-badge { border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 600; background: var(--ex-subtle); color: var(--ex-muted); white-space: nowrap; }

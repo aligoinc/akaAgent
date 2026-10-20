@@ -1,0 +1,40 @@
+{
+  "configs": [
+    {
+      "id": 1,
+      "code": "app_campaign_action_limits",
+      "row_md5": "243aa41a6f4111f6ffaa69392be2dbb4",
+      "model_id": 21,
+      "system_md5": "1630c388c4e1e00f0aedc17577e672f6",
+      "unchanged_md5": "14fdaef4b3e72b992e268efa5c685182"
+    },
+    {
+      "id": 2,
+      "code": "app_campaign_schedule",
+      "row_md5": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6",
+      "model_id": 21,
+      "system_md5": "12165bf38ec3d7d4bf7532f13ebbfa3d",
+      "unchanged_md5": "a480ed9fc51c3b90b62af580cac39dc9"
+    },
+    {
+      "id": 5,
+      "code": "app_campaign_content",
+      "row_md5": "6dd75fc8e4cd95821602d3088397fb43",
+      "model_id": 24,
+      "system_md5": "c36434266b7c7a633fd00483e8ded3d1",
+      "unchanged_md5": "339eec5c117040fc4a6a28571e9acebe"
+    },
+    {
+      "id": 7,
+      "code": "app_campaign_send_exclusions",
+      "row_md5": "a912cd1a0d1be0458ce97d75632255d1",
+      "model_id": 21,
+      "system_md5": "8864fd5e394f3801c46c39627f4b20aa",
+      "unchanged_md5": "80613a231077b5ede2e3206c826574ed"
+    }
+  ],
+  "migration": {
+    "name": "campaign_send_exclusion_ai_natural_language",
+    "version": "20261020154058"
+  }
+}

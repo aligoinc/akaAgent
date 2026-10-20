@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Ban, Check, ChevronDown, Info, LockKeyhole, Plus, RefreshCw, X } from 'lucide-react'
+import CampaignExclusionAi from './CampaignExclusionAi'
+import { validateExclusionAiPatch } from '../../../../shared/campaignExclusionAi'
 import {
   ruleDefinition, validateExclusionGroup,
   type FilterField, type ExclusionRule, type SaveSendExclusionGroup,
@@ -15,6 +17,10 @@ type Props = {
   onEditing: (editing: boolean) => void
   onManage?: () => void
   refreshKey?: number
+  ai?: {
+    available: boolean; actionId: string; enableMessage: boolean; authScope: string
+    disabled: boolean; zIndex: number; onBusyChange: (busy: boolean) => void
+  }
 }
 const message = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.'
 const empty = { groupId: null, blocklistIds: [] }
@@ -145,11 +151,12 @@ function ConditionRow({ page, field, rule, index, mode, onPatch, onSync }: {
   </div>
 }
 
-export default function CampaignSendExclusions({ accounts, value, onChange, onEditing, onManage, refreshKey }: Props) {
+export default function CampaignSendExclusions({ accounts, value, onChange, onEditing, onManage, refreshKey, ai }: Props) {
   const [chosen, setChosen] = useState(accounts[0]?.id)
   const accountId = accounts.some(a => a.id === chosen) ? chosen : accounts[0]?.id
   const accountName = accounts.find(a => a.id === accountId)?.name ?? ''
   const [page, setPage] = useState<SendExclusionPage | null>(null)
+  const [loadedAccountId, setLoadedAccountId] = useState<number>()
   const [error, setError] = useState(''), [loading, setLoading] = useState(false), [reload, setReload] = useState(0)
   const [draft, setDraft] = useState<SaveSendExclusionGroup | null>(null)
   const [saving, setSaving] = useState(false), [saveError, setSaveError] = useState('')
@@ -159,11 +166,13 @@ export default function CampaignSendExclusions({ accounts, value, onChange, onEd
   const group = page?.groups.find(g => g.id === selection.groupId)
   useEffect(() => {
     const id = ++request.current
-    setPage(null); setError('')
+    setPage(null); setLoadedAccountId(undefined); setError('')
     if (lists.current) lists.current.open = false
     if (!accountId) return
     setLoading(true)
-    window.electronAPI.listSendExclusionGroups(accountId).then(data => { if (id === request.current) setPage(data) })
+    window.electronAPI.listSendExclusionGroups(accountId).then(data => {
+      if (id === request.current) { setPage(data); setLoadedAccountId(accountId) }
+    })
       .catch(e => { if (id === request.current) setError(message(e)) }).finally(() => { if (id === request.current) setLoading(false) })
     return () => { request.current++ }
   }, [accountId, reload, refreshKey])
@@ -247,7 +256,24 @@ export default function CampaignSendExclusions({ accounts, value, onChange, onEd
   const selectedLists = selection.blocklistIds.map(id => page?.blocklists.find(list => list.id === id))
   return <section className="send-exclusions" aria-label="Loại trừ gửi cho khách hàng">
     <header className="exclusion-header"><span className="exclusion-icon"><Ban size={15} /></span>
-      <div className="exclusion-heading-copy"><strong>Loại trừ gửi cho khách hàng</strong><p>Chọn nhóm điều kiện hoặc danh sách khách hàng không gửi tin.</p></div><span className="exclusion-badge">Tùy chọn</span>
+      <div className="exclusion-heading-copy">
+        <div className="exclusion-title-row">
+          <strong>Loại trừ gửi cho khách hàng</strong>
+          {ai?.available && <CampaignExclusionAi
+            context={{ actionId: ai.actionId, accountId: accountId ?? 0, enableMessage: ai.enableMessage }}
+            authScope={`${ai.authScope}:${refreshKey}:${JSON.stringify([loadedAccountId, page?.catalog, page?.options])}`}
+            disabled={ai.disabled || !!draft || saving || loading || !page || !accountId || loadedAccountId !== accountId}
+            zIndex={ai.zIndex} onBusyChange={ai.onBusyChange}
+            onApply={patch => {
+              if (!page || !accountId || loadedAccountId !== accountId || draft) throw new Error('Tài khoản đã thay đổi.')
+              const checked = validateExclusionAiPatch(patch, page)
+              setSaveError('')
+              setDraft({ ...checked, accountId, requestId: crypto.randomUUID(), revision: 0 })
+            }} />}
+        </div>
+        <p>Chọn nhóm điều kiện hoặc danh sách khách hàng không gửi tin.</p>
+      </div>
+      <span className="exclusion-badge">Tùy chọn</span>
     </header>
     <div className="exclusion-default"><Check size={14} /><span>Khách hàng đã từ chối nhận tin luôn được loại trừ</span><small><LockKeyhole size={11} />Mặc định</small></div>
     {accounts.length > 1 && <label className="exclusion-account-label">Từ Zalo nào<select aria-label="Từ Zalo nào" value={accountId} onChange={e => setChosen(Number(e.target.value))}>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}

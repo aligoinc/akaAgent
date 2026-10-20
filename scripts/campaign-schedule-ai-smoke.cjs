@@ -78,14 +78,14 @@ async function main() {
   const output = path.join(directory, 'handler.cjs')
   await build({ entryPoints: [path.join(root, 'src/main/ipc/handlers/campaignFormAiHandlers.ts')], outfile: output,
     bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'fixtures', setup(build) {
-      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits|Content)AiService$|\/currentUser$|\/aiRepository$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits|Content|Exclusion)AiService$|\/currentUser$|\/aiRepository$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents: args.path === 'electron'
         ? `export const ipcMain={handle:(k,v)=>global.__scheduleAiMock.handlers[k]=v}`
         : args.path.endsWith('aiRepository')
           ? `export const listFormAiAvailability=async()=>[];`
         : args.path.endsWith('currentUser')
           ? `const m=global.__scheduleAiMock; export const requireCurrentUser=()=>m.user; export const requireCurrentUserCredentials=()=>m.credentials; export const getCurrentUserCredentials=()=>m.credentials; export const runWithCurrentUser=(_,fn)=>fn();`
-          : `export const generateCampaignSchedule=(request,signal)=>new Promise((resolve,reject)=>global.__scheduleAiMock.pending.push({request,signal,resolve,reject})); export const generateCampaignLimits=generateCampaignSchedule; export const generateCampaignContent=generateCampaignSchedule;` }))
+          : `export const generateCampaignSchedule=(request,signal)=>new Promise((resolve,reject)=>global.__scheduleAiMock.pending.push({request,signal,resolve,reject})); export const generateCampaignLimits=generateCampaignSchedule; export const generateCampaignContent=generateCampaignSchedule; export const generateCampaignExclusion=generateCampaignSchedule;` }))
       build.onLoad({ filter: /campaignFormAiHandlers\.ts$/ }, args => ({ loader: 'ts', contents: fs.readFileSync(args.path, 'utf8').replace('signal => generate(request, signal), CAMPAIGN_FORM_AI_TIMEOUT)', 'signal => generate(request, signal), 40)') }))
     } }] })
   const wc = { mainFrame: {}, once: () => {} }, event = { sender: wc, senderFrame: wc.mainFrame }
@@ -154,5 +154,21 @@ async function main() {
   task = generateLimits(limitsRequest); await flush(); mock.credentials = {}; mock.pending.shift().resolve(parseLimits({ sleepBetweenActions: 90 }))
   assert.equal((await task).code, 'cancelled')
   console.log('PASS limits JSON/allowlist/preservation/clarification and shared cross-section flight, cancel, deadline, auth guards')
+  const exclusionRequest = { requestId: request.requestId, description: 'Loại trừ tag VIP',
+    context: { actionId: 'zalo_message_friend', accountId: 100, enableMessage: true } }
+  const generateExclusion = input => mock.handlers['campaign-exclusion-ai:generate'](event, input)
+  const cancelExclusion = id => mock.handlers['campaign-exclusion-ai:cancel'](event, id)
+  await assert.rejects(() => mock.handlers['campaign-exclusion-ai:generate']({ ...event, senderFrame: {} }, exclusionRequest))
+  assert.equal((await generateExclusion({ ...exclusionRequest, modelId: 7 })).code, 'invalid')
+  task = generateExclusion(exclusionRequest); await flush()
+  assert.equal((await generate(request)).code, 'unavailable')
+  cancel(request.requestId); assert.equal(mock.pending[0].signal.aborted, false)
+  cancelExclusion(request.requestId); assert.equal((await task).code, 'cancelled')
+  mock.pending.shift().resolve({ ok: true, patch: {} })
+  assert.equal((await generateExclusion(exclusionRequest)).code, 'unavailable')
+  assert.equal(mock.pending.shift().signal.aborted, true)
+  task = generateExclusion(exclusionRequest); await flush(); mock.credentials = {}
+  mock.pending.shift().resolve({ ok: true, patch: {} }); assert.equal((await task).code, 'cancelled')
+  console.log('PASS exclusion main-frame/strict request, shared flight, channel cancellation, deadline and auth')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 }).finally(() => fs.rmSync(directory, { recursive: true, force: true }))
