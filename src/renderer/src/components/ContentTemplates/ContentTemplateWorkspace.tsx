@@ -1,3 +1,5 @@
+import { canManageGroup } from '../../../../shared/groupSharing'
+import { GroupSharingButton, GroupSharingBadge, GroupCopyButton } from '../DataGroups/GroupSharingPanel'
 import { STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN } from '../../../../shared/zaloMessageOptOut'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -429,7 +431,7 @@ function GroupManagerDialog({
         <div className="ctw-group-dialog-body">
           <section className="ctw-group-form-card">
             <div className="ctw-section-heading">
-              <div><strong>{form.id ? 'Sửa nhóm' : 'Thêm nhóm mới'}</strong><span>Nhóm chỉ dùng cho nhân viên hiện tại.</span></div>
+              <div><strong>{form.id ? 'Sửa nhóm' : 'Thêm nhóm mới'}</strong><span>Quản lý các nhóm thuộc kho riêng của bạn.</span></div>
               {form.id && <button type="button" className="btn btn-ghost btn-sm" onClick={reset}>Hủy sửa</button>}
             </div>
             <div className="ctw-form-field"><label>Tên nhóm <span>*</span></label><input className="stepper-input" value={form.name} onChange={event => setForm(previous => ({ ...previous, name: event.target.value }))} disabled={busy} /></div>
@@ -864,7 +866,7 @@ export default function ContentTemplateWorkspace({
   }, [contentTypes])
 
   const activeGroups = useMemo(
-    () => groups.filter(group => group.isActive).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi')),
+    () => groups.filter(group => group.isActive && canManageGroup(group)).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'vi')),
     [groups]
   )
 
@@ -966,6 +968,7 @@ export default function ContentTemplateWorkspace({
   }
 
   const startEdit = (template: ContentTemplate) => {
+    if (!canManageGroup(template)) return
     if (busy) return
     const nextChannel = template.channels[preferredChannel]?.enabled
       ? preferredChannel
@@ -1073,6 +1076,7 @@ export default function ContentTemplateWorkspace({
   }
 
   const deleteTemplate = (template: ContentTemplate) => {
+    if (!canManageGroup(template)) return
     if (busy) return
     showConfirm(
       `Bạn có muốn xoá mẫu nội dung “${template.name}” không?`,
@@ -1110,6 +1114,7 @@ export default function ContentTemplateWorkspace({
     const selectedChannelConfig = managerSelectedTemplate?.channels[managerResolvedPreviewChannel]
     const selectedVariantCount = selectedChannelConfig?.variants.length || 0
     const selectedImageUrls = selectedChannelConfig?.imageUrls || []
+    const managerSelectedGroup = groups.find(group => group.id === Number(effectiveGroupFilter))
     const groupLabel = effectiveGroupFilter === 'all'
       ? 'Tất cả mẫu'
       : effectiveGroupFilter === 'ungrouped'
@@ -1184,7 +1189,7 @@ export default function ContentTemplateWorkspace({
               </button>
               {managerVisibleGroups.map(group => (
                 <button type="button" key={group.id} className={`${effectiveGroupFilter === String(group.id) ? 'active' : ''}${group.isActive ? '' : ' inactive'}`} aria-pressed={effectiveGroupFilter === String(group.id)} onClick={() => setGroupFilter(String(group.id))}>
-                  <FolderCog size={15} /><span><strong>{group.name}</strong><small>{group.isActive ? 'Đang sử dụng' : 'Ngừng hoạt động'}</small></span><em>{group.templateCount !== null ? managerGroupCounts.get(group.id) || 0 : '—'}</em>
+                  <FolderCog size={15} /><span><strong>{group.name}</strong><small>{group.isActive ? 'Đang sử dụng' : 'Ngừng hoạt động'}</small><GroupSharingBadge access={group.access} /></span><em>{group.templateCount !== null ? managerGroupCounts.get(group.id) || 0 : '—'}</em>
                 </button>
               ))}
             </div>
@@ -1200,7 +1205,18 @@ export default function ContentTemplateWorkspace({
               <button type="button" className="btn-icon" title="Tải lại" aria-label="Tải lại mẫu nội dung" onClick={() => void loadData()} disabled={libraryLoading || busy}><RefreshCw size={16} className={refreshing ? 'ctw-spin' : ''} /></button>
             </div>
             <div className="ctw-manager-listbar">
-              <div><strong>{groupLabel}</strong><span>{templatesLoaded ? `${managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại` : 'Chưa tải được mẫu nội dung'}</span></div>
+              <div>
+                <div className="ctw-manager-group-title">
+                  <strong title={groupLabel}>{groupLabel}</strong>
+                  {managerSelectedGroup && <GroupSharingButton api={window.electronAPI.groupSharing} kind="content" groupId={managerSelectedGroup.id} groupName={managerSelectedGroup.name} access={managerSelectedGroup.access} disabled={busy} onChanged={() => loadData(true)} />}
+                </div>
+                <span>{templatesLoaded ? `${managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại` : 'Chưa tải được mẫu nội dung'}</span>
+                {managerSelectedGroup?.description && <p className="ctw-manager-group-description">{managerSelectedGroup.description}</p>}
+                {managerSelectedGroup && <div className="ctw-manager-group-actions">
+                  <GroupSharingBadge access={managerSelectedGroup.access} />
+                  <GroupCopyButton api={window.electronAPI.groupSharing} kind="content" groupId={managerSelectedGroup.id} onCopied={() => loadData(true)} />
+                </div>}
+              </div>
               <select value={managerSort} onChange={event => setManagerSort(event.target.value as ManagerSort)} aria-label="Sắp xếp mẫu nội dung">
                 <option value="newest">Mới cập nhật</option>
                 <option value="oldest">Cũ nhất</option>
@@ -1227,12 +1243,12 @@ export default function ContentTemplateWorkspace({
                       <article key={template.id} className={`ctw-manager-card${selected ? ' is-selected' : ''}`}>
                         <button type="button" className="ctw-manager-card-main" aria-pressed={selected} onClick={() => selectManagerTemplate(template)} onDoubleClick={() => startEdit(template)}>
                           <span className="ctw-manager-card-title"><FileText size={15} /><strong title={template.name}>{template.name}</strong></span>
-                          <span className="ctw-manager-card-group">{template.groupName || 'Chưa phân nhóm'}</span>
+                          <span className="ctw-manager-card-group">{template.groupName || 'Chưa phân nhóm'}</span><GroupSharingBadge access={template.access} />
                           <span className="ctw-channel-badges">{summary.activeChannels.map(channelName => <span className={`ctw-channel-badge ${channelName}`} key={channelName}>{CHANNEL_META[channelName].shortLabel}</span>)}</span>
                           <span className="ctw-manager-excerpt">{summary.preview || 'Chưa có nội dung xem trước.'}</span>
                           <span className="ctw-manager-card-meta"><span><MessageSquareText size={12} /> {summary.variantCount}</span><span><ImageIcon size={12} /> {summary.imageCount}</span></span>
                         </button>
-                        <div className="ctw-manager-card-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={14} /></button></div>
+                        <div className="ctw-manager-card-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy || !canManageGroup(template)}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy || !canManageGroup(template)}><Trash2 size={14} /></button></div>
                       </article>
                     )
                   })}
@@ -1245,9 +1261,9 @@ export default function ContentTemplateWorkspace({
                     const selected = managerSelectedTemplate?.id === template.id
                     return (
                       <div key={template.id} className={selected ? 'is-selected' : ''}>
-                        <button type="button" className="ctw-manager-table-select" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={14} /><strong>{template.name}</strong></button>
+                        <button type="button" className="ctw-manager-table-select" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={14} /><strong>{template.name}<GroupSharingBadge access={template.access} /></strong></button>
                         <span>{template.groupName || 'Chưa phân nhóm'}</span><span>{summary.variantCount}</span><span>{summary.imageCount}</span>
-                        <div className="ctw-manager-row-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy}><Trash2 size={14} /></button></div>
+                        <div className="ctw-manager-row-actions"><button type="button" className="btn-icon" title="Sửa mẫu" onClick={() => startEdit(template)} disabled={busy || !canManageGroup(template)}><Edit3 size={14} /></button><button type="button" className="btn-icon danger" title="Xoá mẫu" onClick={() => deleteTemplate(template)} disabled={busy || !canManageGroup(template)}><Trash2 size={14} /></button></div>
                       </div>
                     )
                   })}
@@ -1259,9 +1275,9 @@ export default function ContentTemplateWorkspace({
                     const selected = managerSelectedTemplate?.id === template.id
                     return (
                       <article key={template.id} className={selected ? 'is-selected' : ''}>
-                        <button type="button" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={15} /><strong>{template.name}</strong><span>{template.groupName || 'Chưa phân nhóm'}</span></button>
+                        <button type="button" aria-pressed={selected} onClick={() => selectManagerTemplate(template)}><FileText size={15} /><strong>{template.name}<GroupSharingBadge access={template.access} /></strong><span>{template.groupName || 'Chưa phân nhóm'}</span></button>
                         <p>{summary.preview || 'Chưa có nội dung xem trước.'}</p>
-                        <div><span>{summary.variantCount} biến thể · {summary.imageCount} media</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(template)} disabled={busy}><Edit3 size={13} /> Sửa mẫu</button></div>
+                        <div><span>{summary.variantCount} biến thể · {summary.imageCount} media</span><button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(template)} disabled={busy || !canManageGroup(template)}><Edit3 size={13} /> Sửa mẫu</button></div>
                       </article>
                     )
                   })}
@@ -1271,7 +1287,9 @@ export default function ContentTemplateWorkspace({
           </main>
 
           <aside className="ctw-manager-preview">
-            <div className="ctw-manager-preview-heading"><div><strong>XEM TRƯỚC</strong><span>{managerSelectedTemplate?.name || 'Chưa chọn mẫu'}</span></div>{managerSelectedTemplate && <button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(managerSelectedTemplate)} disabled={busy}><Edit3 size={13} /> Sửa</button>}</div>
+            {managerSelectedTemplate?.groupId && <GroupCopyButton key={managerSelectedTemplate.id} api={window.electronAPI.groupSharing} kind="content" groupId={managerSelectedTemplate.groupId} templateId={managerSelectedTemplate.id} onCopied={() => loadData(true)} />}
+
+            <div className="ctw-manager-preview-heading"><div><strong>XEM TRƯỚC</strong><span>{managerSelectedTemplate?.name || 'Chưa chọn mẫu'}</span></div>{managerSelectedTemplate && <button type="button" className="btn btn-ghost btn-sm" onClick={() => startEdit(managerSelectedTemplate)} disabled={busy || !canManageGroup(managerSelectedTemplate)}><Edit3 size={13} /> Sửa</button>}</div>
             {managerSelectedTemplate ? (
               <>
                 <div className="ctw-manager-preview-channels" role="tablist" aria-label="Loại nội dung xem trước">
@@ -1378,7 +1396,7 @@ export default function ContentTemplateWorkspace({
   return (
     <div className={`ctw-workspace${modal ? ' modal-mode' : ''}`}>
       {view === 'list' ? renderManagerList() : renderEditor()}
-      {groupDialogOpen && <GroupManagerDialog groups={groups} onClose={() => setGroupDialogOpen(false)} onChanged={async () => { await loadData(true) }} />}
+      {groupDialogOpen && <GroupManagerDialog groups={groups.filter(canManageGroup)} onClose={() => setGroupDialogOpen(false)} onChanged={async () => { await loadData(true) }} />}
     </div>
   )
 }

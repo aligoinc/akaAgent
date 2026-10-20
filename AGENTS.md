@@ -1,5 +1,7 @@
 # AGENTS.md
 
+V409 đã apply akachat ngày 20/10/2026 (`20261020083846 / migration_v409_group_sharing`): chia sẻ nhóm data/nội dung, RPC quyền/CAS/copy; giữ ACL legacy và quy ước thao tác bắt đầu trước thu hồi được hoàn tất. SQL smoke/rollback trước–sau, checksum/ACL/RLS và HTTP đạt; chưa deploy API/Web hoặc phát hành Desktop. Không apply lại; [audit/checksum/rollout/rollback](docs/GROUP_SHARING_V409.md#apply-production--20102026).
+
 Review orphan pause ngày 19/10/2026: Desktop không có local owner nay dùng RPC hiện có để dừng chiến dịch đang chạy **chỉ khi account đã xóa và cả claim/unit đều NULL**; giữ local pause mềm, không thu hồi lease, healthy/inactive running vẫn chặn. Migration `20261019133105 / campaign_orphan_running_pause` đã apply akachat, giữ owner/ACL/lock/resume và patch trước. 26 ca SQL rollback trước/sau, IPC→scheduler→SQL/race, pause-note/random boundaries, typecheck/build đạt. Web sửa riêng clone bỏ ID nguồn thiếu sau catalog thành công, giữ chọn mới/data đến muộn và retry catalog lỗi; 21 browser cases/typecheck/build đạt. Chưa đóng gói/phát hành Desktop hoặc deploy Web; không apply lại. Xem [audit/checksum/rollback](docs/CAMPAIGN_ORPHAN_PAUSE_CLONE.md#sửa-finding-runtime-mất-chủ-và-web-clone--19102026).
 
 Ngày 19/10/2026 sửa Desktop dừng/nhân bản chiến dịch có account đã xóa: pause đọc route theo staff kể cả soft-delete, giữ scheduler/token/CAS và RPC Server; resume vẫn kiểm tra account/gói. Clone chỉ loại ID chính/phụ thiếu sau catalog thành công, chặn lưu khi catalog chưa sẵn sàng hoặc còn ID thiếu. Migration `20261019130317 / campaign_orphan_pause` đã apply akachat: chỉ nới deleted/inactive cho pause Desktop và deleted cho pause Server, giữ owner/ACL/lock/capability/resume. Hai typecheck/build, 8 ca UI, IPC→scheduler→SQL và 21 ca SQL rollback trước/sau đạt; Desktop chưa đóng gói/phát hành. Không apply lại; xem [audit/checksum/rollback](docs/CAMPAIGN_ORPHAN_PAUSE_CLONE.md).
@@ -229,6 +231,8 @@ Danh mục điều kiện/toán tử lấy từ DB; UI và runtime dùng metadat
 V330 đã apply trên akachat với history `20260928172551 / migration_v330_campaign_send_exclusions`; không apply lại khi phát hành. Chat runtime/worker đã deploy; bộ cài Desktop/legacy Zalo Server 7.8.0 đã build local. [Audit DB](docs/CAMPAIGN_SEND_EXCLUSIONS_V330_AUDIT.md) và các smoke `send-exclusion-*` kiểm tra metadata động, tenant/CAS, request tag và vòng đời runtime.
 
 ### Kho mẫu nội dung
+
+Chia sẻ nhóm data/nội dung dùng `groupSharingRepository` và IPC `groupSharing` với `GroupAccess`, `GroupSharing` cùng revision chia sẻ riêng. Reader mới lọc quyền trước phân trang; picker đích chỉ nhóm riêng. Nút **Chia sẻ** cạnh tên nhóm chỉ mở dialog khi chủ nhóm bấm; badge người nhận chỉ tên, một dòng ở cuối thông tin nhóm. Dùng client/cache hiện có, hủy phản hồi cũ theo nhóm/phiên; hợp đồng và rollout DB → API → Desktop/Web tại [GROUP_SHARING_V409.md](docs/GROUP_SHARING_V409.md).
 
 [contentTemplateStore.ts](src/renderer/src/stores/contentTemplateStore.ts) chia sẻ dữ liệu/request đang tải giữa kho mẫu và form; form chỉ tải khi dùng mẫu/nhóm, mutation làm mới một lượt sau khi request cũ kết thúc, logout/đổi staff bỏ dữ liệu và phản hồi cũ. Repository phân trang theo ID đến trang rỗng, không đếm riêng từng nhóm; `templateCount=null` khi chưa có danh sách mẫu đầy đủ, lỗi mạng giữ dữ liệu cũ và cho thử lại; xóa nhóm vẫn kiểm tra tồn tại mẫu qua server (`limit(1)`). Smoke: `node scripts/content-template-loading-smoke-test.cjs` và `node scripts/run-content-template-loading-ui-smoke.cjs`.
 
@@ -634,6 +638,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Quyền nhóm chia sẻ V409**: admin nhận chia sẻ vẫn không được sửa nguồn; API/IPC/RPC phải lấy danh tính từ phiên và kiểm tra lại quyền. Copy tạo contact/template thuộc người nhận, không mang sharing/sync/binding hay bằng chứng Zalo. Lỗi tải không chứng minh thu hồi; giữ snapshot/input đã lấy. V409 đã apply, không chạy lại `verify.cjs`; kiểm chứng bản live bằng `verify-applied.cjs`, rollback luôn trong transaction. ACL legacy giữ nguyên theo quyết định tương thích; xem [hợp đồng](docs/GROUP_SHARING_V409.md).
 
 - **Preview log Facebook và emoji**: dùng `getCampaignLogContentPreview` trong [campaignScheduler.ts](src/main/services/campaignScheduler.ts:10441) cho comment/newsfeed; không cắt giữa surrogate pair ở mốc 50 vì PostgREST trả `PGRST102` và ngắt lưu các kết quả sau. Hồi quy scheduler→writer→SQL offline: `node scripts/campaign-log-unicode-smoke.cjs`; giữ nguyên nội dung gửi/link, không tự chạy lại hay backfill.
 

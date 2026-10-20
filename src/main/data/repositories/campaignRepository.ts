@@ -1,3 +1,4 @@
+import { validateContentGroupSelection } from './groupSharingRepository'
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { getCampaignEditVersion } from '../campaignEditVersion'
@@ -2074,6 +2075,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
   const extraSettings = clampCampaignExtraSettingsDailyLimits(campaign.extraSettings, campaign.actionId, entitlements)
   await validateCampaignPageIdentity({ actionId: String(campaign.actionId || ''), accountId, secondaryAccountId, extraSettings })
   assertAdvancedContentPersistenceContract(campaign.actionId, extraSettings)
+  await validateContentGroupSelection(extraSettings as Record<string, unknown> | undefined)
   const sourceMode = campaign.dataTargetSourceMode || 'direct'
   if (sourceMode === 'data_group') {
     if (!actionSupportsDataGroup(campaign.actionId)) {
@@ -2324,6 +2326,10 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
     }
     if (!currentCampaignForUpdate) throw new Error('Không tìm thấy chiến dịch cần cập nhật.')
     return currentCampaignForUpdate
+  }
+  if (updates.extraSettings?.advancedContentSource === 'group_snapshot') {
+    const current = await loadCurrentCampaignForUpdate()
+    await validateContentGroupSelection(updates.extraSettings as Record<string, unknown>, current.extraSettings as Record<string, unknown> | undefined)
   }
   if (updates.dataTargetSourceMode !== undefined || updates.dataGroupId !== undefined) {
     const currentCampaign = await loadCurrentCampaignForUpdate()

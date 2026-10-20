@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-10-20T09:22:24.259012+00:00",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-pr-node.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "completedAt": "2026-10-20T09:19:13.515956+00:00"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-pr-renderer.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "completedAt": "2026-10-20T09:19:13.513217+00:00"
+    },
+    {
+      "command": "npm run build (Desktop)",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-pr-desktop-build.log",
+      "sha256": "17531568af17e415496ed2b2643c19ff8377db47144d99a9760ca85e59d70747",
+      "completedAt": "2026-10-20T09:21:31.097193+00:00"
+    },
+    {
+      "command": "npm run typecheck (7 Web/API workspaces)",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-pr-web-typecheck.log",
+      "sha256": "5e804c87cf811b505c0596355da5cf9caf95100ad15c3606bf577ccd01365f5b",
+      "completedAt": "2026-10-20T09:19:29.909112+00:00"
+    },
+    {
+      "command": "npm run build (Web/API)",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-pr-web-build.log",
+      "sha256": "b8b45b511d3235ff64334e8899d6f445b33fbc229bf9cdd00e77bf629811ff74",
+      "completedAt": "2026-10-20T09:21:29.224097+00:00"
+    },
+    {
+      "command": "node scripts/group-sharing/ui-smoke.cjs",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-dialog-smoke.log",
+      "sha256": "99577faf4bbc1a184e345495b96b83c84cf4f34d23d237e83ea814dec170e23f",
+      "completedAt": "2026-10-20T09:12:26.612931+00:00"
+    },
+    {
+      "command": "Chromium Web bundle: long badges and data/content sharing dialogs at 1440/850px",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-dialog-browser.log",
+      "sha256": "6267b1c7e14be546663b4a2c3a6a6afe0698b2b177908733967f1f277be92ea7",
+      "completedAt": "2026-10-20T09:13:42.428479+00:00"
+    }
+  ],
+  "notes": [
+    "Source and SQL behavior unchanged after the final UI smoke; only documentation updated for PR preparation.",
+    "Unrelated local documentation, packaging version and V371 work excluded from staged changes.",
+    "Production V409 was not reapplied; API/Web deployment and Desktop release are not part of PR creation."
+  ]
+}

@@ -1,3 +1,4 @@
+import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignSendExclusions'
 import CampaignScheduleAi from './CampaignScheduleAi'
@@ -3153,7 +3154,7 @@ export default function CampaignFormModal({
       let offset = 0
       try {
         while (!disposed && foundById.size < wantedIds.size) {
-          const page = await window.electronAPI.listDataGroups({ offset, limit: pageSize })
+          const page = await window.electronAPI.listDataGroups({ offset, limit: pageSize, ownedOnly: true })
           for (const group of page.groups) {
             if (wantedIds.has(group.id)) foundById.set(group.id, group)
           }
@@ -14549,7 +14550,7 @@ export default function CampaignFormModal({
               return (
                 <section className="campaign-manual-template-card" key={template.id}>
                   <div className="campaign-manual-template-card-head">
-                    <span><strong>{template.name}</strong><small>{template.groupName || 'Chưa phân nhóm'} · {resolved.variants.length} biến thể · {resolved.imageUrls.length} media</small></span>
+                    <span><strong>{template.name}</strong><GroupSharingBadge access={template.access} /><small>{template.groupName || 'Chưa phân nhóm'} · {resolved.variants.length} biến thể · {resolved.imageUrls.length} media</small></span>
                     {pickedCount > 0 && <em>Đã chọn {pickedCount}</em>}
                   </div>
                   <div className="campaign-manual-template-variants">
@@ -15014,7 +15015,7 @@ export default function CampaignFormModal({
             <span className={`content-template-picker-v2-mark${selected ? ' is-selected' : ''}`}>
               {selected && <Check size={11} />}
             </span>
-            <span className="content-template-picker-v2-card-title">{template.name}</span>
+            <span className="content-template-picker-v2-card-title">{template.name}<GroupSharingBadge access={template.access} /></span>
           </div>
           <div className="content-template-picker-item-meta">
             <span className="content-template-picker-group-badge">{template.groupName || 'Chưa phân nhóm'}</span>
@@ -15105,7 +15106,7 @@ export default function CampaignFormModal({
                     onClick={() => selectGroup(group.id)}
                   >
                     <FolderCog size={15} />
-                    <span><strong>{group.name}</strong><small>{group.isActive ? (group.description || 'Nhóm mẫu nội dung') : 'Ngừng hoạt động'}</small></span>
+                    <span><strong>{group.name}</strong><small>{group.isActive ? (group.description || 'Nhóm mẫu nội dung') : 'Ngừng hoạt động'}</small><GroupSharingBadge access={group.access} /></span>
                     <em>{group.templateCount !== null ? groupCompatibleCount(group.id) : '—'}</em>
                   </button>
                 ))}
@@ -15365,7 +15366,7 @@ export default function CampaignFormModal({
                   return (
                     <button type="button" key={item.id} className={`${active ? 'active' : ''}${item.isActive ? '' : ' inactive'}`} aria-pressed={active} onClick={() => selectGroup(item)}>
                       <span className={`campaign-group-picker-v2-radio${active ? ' active' : ''}`}>{active && <Check size={10} />}</span>
-                      <span><strong>{item.name}</strong><small>{item.isActive ? (candidate ? `${candidate.compatibleTemplateCount} mẫu phù hợp` : 'Chưa tải số mẫu') : 'Ngừng hoạt động'}</small></span>
+                      <span><strong>{item.name}</strong><small>{item.isActive ? (candidate ? `${candidate.compatibleTemplateCount} mẫu phù hợp` : 'Chưa tải số mẫu') : 'Ngừng hoạt động'}</small><GroupSharingBadge access={item.access} /></span>
                       <em>{candidate?.compatibleTemplateCount ?? '—'}</em>
                     </button>
                   )
@@ -15380,7 +15381,7 @@ export default function CampaignFormModal({
                 <>
                   <div className="campaign-group-picker-v2-hero">
                     <span className="campaign-group-picker-v2-hero-icon"><FolderOpen size={23} /></span>
-                    <div><strong>{group.name}</strong><span>{group.description || 'Nhóm mẫu nội dung dùng lại cho chiến dịch.'}</span></div>
+                    <div><strong>{group.name}</strong><span>{group.description || 'Nhóm mẫu nội dung dùng lại cho chiến dịch.'}</span><GroupSharingBadge access={group.access} /></div>
                     <span className={`campaign-group-picker-v2-status${group.isActive ? ' active' : ''}`}>{group.isActive ? 'Đang dùng' : 'Đã tắt'}</span>
                   </div>
 
@@ -17512,7 +17513,7 @@ export default function CampaignFormModal({
         />
       )}
       {findDataGroupPickerKind && (
-        <DataGroupPickerModal
+        <DataGroupPickerModal ownedOnly
           selectedGroupId={formData.findDataTargetDataGroups[findDataGroupPickerKind]?.groupId ?? null}
           actionId={FIND_DATA_GROUP_DESTINATION_CONFIG[findDataGroupPickerKind].actionId}
           onSelect={group => {

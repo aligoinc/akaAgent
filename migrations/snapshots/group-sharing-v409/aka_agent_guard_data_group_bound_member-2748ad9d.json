@@ -1,0 +1,13 @@
+{
+  "signature": "aka_agent_guard_data_group_bound_member()",
+  "name": "aka_agent_guard_data_group_bound_member",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_data_group_bound_member()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_group public.auto_account_contact_groups%ROWTYPE; v_contact public.auto_account_contacts%ROWTYPE; v_group_id bigint; v_contact_id bigint;\nBEGIN\n  IF TG_TABLE_NAME='auto_account_contact_group_member_origins' THEN\n    IF NOT NEW.is_current THEN RETURN NEW; END IF;\n    SELECT group_id,contact_id INTO v_group_id,v_contact_id FROM public.auto_account_contact_group_members WHERE id=NEW.membership_id;\n  ELSE\n    IF NEW.is_delete THEN RETURN NEW; END IF;\n    v_group_id:=NEW.group_id; v_contact_id:=NEW.contact_id;\n  END IF;\n  -- A share lock fences concurrent binding changes, including unbound -> bound.\n  SELECT * INTO v_group FROM public.auto_account_contact_groups WHERE id=v_group_id FOR SHARE;\n  IF v_group.bound_zalo_account_id IS NULL THEN RETURN NEW; END IF;\n  IF NOT public.aka_agent_data_group_account_available(v_group.bound_zalo_account_id,v_group.staff_id,v_group.organization_id) THEN\n    RAISE EXCEPTION 'data_group_bound_account_invalid';\n  END IF;\n  SELECT * INTO v_contact FROM public.auto_account_contacts WHERE id=v_contact_id;\n  IF v_contact.account_id IS DISTINCT FROM v_group.bound_zalo_account_id OR v_contact.staff_id IS DISTINCT FROM v_group.staff_id\n    OR v_contact.organization_id IS DISTINCT FROM v_group.organization_id THEN RAISE EXCEPTION 'data_group_bound_source_mismatch'; END IF;\n  IF TG_TABLE_NAME='auto_account_contact_group_member_origins' THEN\n    IF NEW.source_account_id IS DISTINCT FROM v_group.bound_zalo_account_id THEN RAISE EXCEPTION 'data_group_bound_source_mismatch'; END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+  "owner": "postgres",
+  "prosecdef": true,
+  "provolatile": "v",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "proacl": "{postgres=X/postgres}",
+  "checksum": "2748ad9dff6273fd7e4b9d91fee74986"
+}

@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-20T08:40:23.479Z",
+  "project": "akachat",
+  "httpStatus": 400,
+  "code": "P0001",
+  "message": "automation_auth_required",
+  "rpcVisible": true,
+  "unauthenticatedRequestDenied": true
+}

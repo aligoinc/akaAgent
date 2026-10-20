@@ -1,3 +1,5 @@
+import { canManageGroup } from '../../../../shared/groupSharing'
+import { GroupSharingButton, GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import {
   lazy,
   Suspense,
@@ -149,6 +151,7 @@ export interface DataGroupManagerModalProps {
   compatibleActionId?: string | null
   compatibleDataTypeCategoryItemId?: number | null
   unrestrictedOnly?: boolean
+  ownedOnly?: boolean
 }
 
 interface AccountFilterOption {
@@ -201,6 +204,7 @@ type DataGroupCompatibilityQuery = Pick<DataGroupListQuery, 'search'> & {
   compatibleActionId?: string | null
   compatibleDataTypeCategoryItemId?: number | null
   unrestrictedOnly?: boolean
+  ownedOnly?: boolean
   dataTypeCategoryItemIds?: number[]
 }
 
@@ -493,7 +497,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     onCreateCampaignFromGroup,
     compatibleActionId,
     compatibleDataTypeCategoryItemId,
-    unrestrictedOnly = false
+    unrestrictedOnly = false,
+    ownedOnly = false
   } = props
   const [fullscreen, setFullscreen] = useState(false)
   const refreshInFlightRef = useRef({ groups: false, members: false })
@@ -688,6 +693,12 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     [activeGroupId, activeGroupSnapshot, groups]
   )
 
+  const copyRequest = useRef<{ signature: string; id: string } | null>(null)
+  const canEditGroup = canManageGroup(activeGroup)
+  useEffect(() => {
+    if (!canEditGroup) { setInfoPanelTab('info'); setExternalSyncDialogOpen(false); setNoteEditing(false); setAddMenuOpen(false) }
+  }, [activeGroupId, canEditGroup])
+
   useEffect(() => {
     setDynamicFilterRuleCount(0)
   }, [activeGroupId])
@@ -786,6 +797,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         compatibleActionId: compatibleActionId || undefined,
         compatibleDataTypeCategoryItemId: compatibleDataTypeCategoryItemId ?? undefined,
         unrestrictedOnly,
+        ownedOnly,
         dataTypeCategoryItemIds: groupDataTypeFilterId === '' ? undefined : [groupDataTypeFilterId],
         offset: (groupPage - 1) * GROUP_PAGE_SIZE,
         limit: GROUP_PAGE_SIZE
@@ -805,6 +817,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const hasCompatibilityFilter = Boolean(compatibleActionId)
         || compatibleDataTypeCategoryItemId != null
         || unrestrictedOnly
+        || ownedOnly
         || groupDataTypeFilterId !== ''
       const hasActiveSnapshot = (
         !hasCompatibilityFilter
@@ -821,6 +834,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           compatibleActionId: compatibleActionId || undefined,
           compatibleDataTypeCategoryItemId: compatibleDataTypeCategoryItemId ?? undefined,
           unrestrictedOnly,
+          ownedOnly,
           dataTypeCategoryItemIds: groupDataTypeFilterId === '' ? undefined : [groupDataTypeFilterId]
         })
         if (
@@ -869,7 +883,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     groupPage,
     initialGroupId,
     showAlert,
-    unrestrictedOnly
+    unrestrictedOnly,
+    ownedOnly
   ])
 
   useEffect(() => {
@@ -1145,6 +1160,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const startRenameGroup = (group: DataGroup) => {
+    if (!canManageGroup(group)) return
     setEditingGroup(group)
     setEditingGroupColor(group.color || DEFAULT_GROUP_COLOR)
     setEditingGroupName(group.name)
@@ -1214,6 +1230,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const handleChangeGroupColor = async (group: DataGroup, color: string) => {
+    if (!canManageGroup(group)) return
     const api = getDataGroupApi()
     if (!api || color === group.color) return
     const optimistic = { ...group, color }
@@ -1271,6 +1288,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const handleDeleteGroup = (group: DataGroup) => {
+    if (!canManageGroup(group)) return
     setDeleteGroupCandidate(group)
     setDetachAutomationsOnDelete(true)
   }
@@ -1313,18 +1331,23 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
 
   const handleDropGroup = async (targetGroupId: number) => {
     const api = getDataGroupApi()
-    const sourceIndex = groups.findIndex(group => group.id === draggedGroupId)
-    const targetIndex = groups.findIndex(group => group.id === targetGroupId)
+    const ownedGroups = groups.filter(canManageGroup)
+    const sourceIndex = ownedGroups.findIndex(group => group.id === draggedGroupId)
+    const targetIndex = ownedGroups.findIndex(group => group.id === targetGroupId)
     setDraggedGroupId(null)
     if (!api || !canReorderGroups || sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return
 
     const previous = groups
-    const reordered = [...groups]
+    const reordered = [...ownedGroups]
     const [moved] = reordered.splice(sourceIndex, 1)
     reordered.splice(targetIndex, 0, moved)
     const pageOffset = (groupPage - 1) * GROUP_PAGE_SIZE
     const normalized = reordered.map((group, index) => ({ ...group, sortOrder: pageOffset + index }))
-    setGroups(normalized)
+    const mergeOwned = (owned: DataGroup[]) => {
+      const byId = new Map(owned.map(group => [group.id, group]))
+      return groups.map(group => byId.get(group.id) || group).sort((a, b) => a.sortOrder - b.sortOrder)
+    }
+    setGroups(mergeOwned(normalized))
     setBusyAction('reorder')
     try {
       const saved = await Promise.all(normalized.map(group => api.updateDataGroup({
@@ -1332,7 +1355,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         sortOrder: group.sortOrder
       })))
       const savedById = new Map(saved.map(group => [group.id, group]))
-      setGroups(normalized.map(group => savedById.get(group.id) || group))
+      setGroups(mergeOwned(normalized.map(group => savedById.get(group.id) || group)))
       await notifyGroupsChanged()
     } catch (err: any) {
       setGroups(previous)
@@ -1403,6 +1426,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const removeMemberships = (membershipIds: number[], label: string) => {
+    if (!canEditGroup) return
     if (!activeGroupId || membershipIds.length === 0) return
     const api = getDataGroupApi()
     if (!api) return
@@ -1469,7 +1493,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       }
       if (selectedDataTypeIds.size > 1) hasUnknownOrMixedOrigin = true
 
-      const compatibleDataTypeId = !hasUnknownOrMixedOrigin && selectedDataTypeIds.size === 1
+      const compatibleDataTypeId = !canEditGroup ? getGroupDataTypeId(activeGroup) : !hasUnknownOrMixedOrigin && selectedDataTypeIds.size === 1
         ? Array.from(selectedDataTypeIds)[0]
         : null
       const onlyUnrestrictedTargets = compatibleDataTypeId == null
@@ -1478,11 +1502,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       const allGroups = await listAllDataGroups(
         api,
         compatibleDataTypeId == null
-          ? {}
-          : { compatibleDataTypeCategoryItemId: compatibleDataTypeId }
+          ? { ownedOnly: true }
+          : { ownedOnly: true, compatibleDataTypeCategoryItemId: compatibleDataTypeId }
       )
       setMoveTargets(allGroups.filter(group => (
-        group.id !== activeGroupId
+        group.id !== activeGroupId && canManageGroup(group)
         && (group.boundZaloAccountId == null || selectedMembers.every(member => member.sourceAccountId === group.boundZaloAccountId))
         && (
           getGroupDataTypeId(group) == null
@@ -1502,17 +1526,20 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     if (!api || !activeGroupId || !moveTargetId || selectedMembershipIds.size === 0) return
     const membershipIds = Array.from(selectedMembershipIds)
     setBusyAction('move')
+    const signature = JSON.stringify([activeGroupId, moveTargetId, membershipIds])
+    if (copyRequest.current?.signature !== signature) copyRequest.current = { signature, id: createDataGroupRequestId() }
     try {
-      const result = await api.moveDataGroupMembers({
+      const result = !canEditGroup ? await window.electronAPI.groupSharing.copy({ kind: 'data', groupId: activeGroupId, targetGroupId: moveTargetId, membershipIds, requestId: copyRequest.current.id }) : await api.moveDataGroupMembers({
         groupId: activeGroupId,
         targetGroupId: moveTargetId,
         membershipIds,
         requestId: createDataGroupRequestId()
       })
-      adjustActiveGroupCount(-result.count)
+      copyRequest.current = null
+      if (canEditGroup) adjustActiveGroupCount(-result.count)
       setSelectedMembershipIds(new Set())
       setMoveModalOpen(false)
-      showAlert(`Đã chuyển ${formatCount(result.count)} data sang nhóm khác.`, 'success')
+      showAlert(`Đã ${canEditGroup ? 'chuyển' : 'sao chép'} ${formatCount(result.count)} data sang nhóm khác.`, 'success')
       await Promise.all([
         loadMembers({ silent: true }),
         loadGroups({ silent: true }),
@@ -1633,6 +1660,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const handleAdvancedImport = async (submission: CampaignDataUploadSubmission) => {
+    if (!canEditGroup) return
     const target = availableImportTargets.find(item => item.value === importTargetValue)
       || availableImportTargets[0]
     if (!target) throw new Error('Loại nhóm này chưa hỗ trợ thêm data từ file.')
@@ -1751,6 +1779,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const openImportModal = () => {
+    if (!canEditGroup) return
     if (!activeGroupId) return
     if (availableImportTargets.length === 0) {
       showAlert(`Loại “${getGroupDataTypeName(activeGroup)}” chưa hỗ trợ thêm từ file.`, 'error')
@@ -1764,6 +1793,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }
 
   const openScanPicker = () => {
+    if (!canEditGroup) return
     if (!activeGroup) return
     if (availableScanActions.length === 0) {
       showAlert(`Loại “${getGroupDataTypeName(activeGroup)}” chưa hỗ trợ thêm từ dữ liệu quét.`, 'error')
@@ -1791,6 +1821,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   }, [campaignStatusFilter, panelData?.campaigns])
 
   const handleSaveNote = async () => {
+    if (!canEditGroup) return
     if (!activeGroupId) return
     const api = getDataGroupApi()
     if (!api?.updateDataGroupNote) return
@@ -1968,9 +1999,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     key={group.id}
                     className={`data-group-manager-group-row${isActive ? ' is-active' : ''}${draggedGroupId === group.id ? ' is-dragging' : ''}`}
                     onClick={() => selectGroup(group)}
-                    draggable={canReorderGroups && !rowBusy && busyAction !== 'reorder'}
+                    draggable={canManageGroup(group) && canReorderGroups && !rowBusy && busyAction !== 'reorder'}
                     onDragStart={event => {
-                      if (!canReorderGroups) {
+                      if (!canReorderGroups || !canManageGroup(group)) {
                         event.preventDefault()
                         return
                       }
@@ -1980,7 +2011,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     }}
                     onDragEnd={() => setDraggedGroupId(null)}
                     onDragOver={event => {
-                      if (canReorderGroups && draggedGroupId && draggedGroupId !== group.id) {
+                      if (canManageGroup(group) && canReorderGroups && draggedGroupId && draggedGroupId !== group.id) {
                         event.preventDefault()
                         event.dataTransfer.dropEffect = 'move'
                       }
@@ -2002,7 +2033,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         type="color"
                         value={group.color || DEFAULT_GROUP_COLOR}
                         onChange={event => void handleChangeGroupColor(group, event.target.value)}
-                        disabled={rowBusy}
+                        disabled={rowBusy || !canManageGroup(group)}
                       />
                     </label>
                     <div className="data-group-manager-group-main">
@@ -2027,12 +2058,13 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         <span className="data-group-manager-type-badge">{getGroupDataTypeName(group)}</span>
                         {group.boundZaloAccountId && <span title="Tài khoản Zalo đã gắn">{group.boundZaloAccountName || `Tài khoản ${group.boundZaloAccountId}`}</span>}
                       </div>
+                      <GroupSharingBadge access={group.access} />
                     </div>
                     <div className="data-group-manager-group-actions">
                       <button type="button" className="btn-icon" onClick={event => {
                         event.stopPropagation()
                         startRenameGroup(group)
-                      }} disabled={busyAction !== null} title="Sửa nhóm"><Pencil size={13} /></button>
+                      }} disabled={busyAction !== null || !canManageGroup(group)} title="Sửa nhóm"><Pencil size={13} /></button>
                       <button type="button" className="btn-icon" onClick={event => {
                         event.stopPropagation()
                         requestDuplicateGroup(group)
@@ -2040,7 +2072,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       <button type="button" className="btn-icon data-group-manager-delete-action" onClick={event => {
                         event.stopPropagation()
                         handleDeleteGroup(group)
-                      }} disabled={rowBusy} title="Xoá nhóm"><Trash2 size={13} /></button>
+                      }} disabled={rowBusy || !canManageGroup(group)} title="Xoá nhóm"><Trash2 size={13} /></button>
                     </div>
                   </div>
                 )
@@ -2096,7 +2128,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                   </div>
                 </div>
               </div>
-              {!selectionMode && activeGroup && <button type="button" className="btn data-group-sync-narrow-button" onClick={() => setExternalSyncDialogOpen(true)}><RefreshCw size={14} />Đồng bộ ngoài</button>}
+              {!selectionMode && canEditGroup && activeGroup && <button type="button" className="btn data-group-sync-narrow-button" onClick={() => setExternalSyncDialogOpen(true)}><RefreshCw size={14} />Đồng bộ ngoài</button>}
               <div className="data-group-manager-context-filters">
                 <label>
                   <span>Tài khoản</span>
@@ -2179,11 +2211,11 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               {selectedMembershipIds.size > 0 ? (
                 <div className="data-group-manager-selection-actions">
                   <span className="data-group-manager-selection-pill">{formatCount(selectedMembershipIds.size)} data đã chọn</span>
-                  <button type="button" className="btn btn-secondary btn-sm text-error" onClick={() => removeMemberships(Array.from(selectedMembershipIds), `${formatCount(selectedMembershipIds.size)} data đã chọn`)} disabled={busyAction !== null || selectingAllMembers || memberSearchPending || membersLoading}>
+                  <button type="button" className="btn btn-secondary btn-sm text-error" onClick={() => removeMemberships(Array.from(selectedMembershipIds), `${formatCount(selectedMembershipIds.size)} data đã chọn`)} disabled={!canEditGroup || busyAction !== null || selectingAllMembers || memberSearchPending || membersLoading}>
                     <Trash2 size={13} /> Xoá khỏi nhóm
                   </button>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleOpenMoveModal()} disabled={busyAction !== null || selectingAllMembers || memberSearchPending || membersLoading}>
-                    <ArrowRightLeft size={13} /> Chuyển nhóm
+                    <ArrowRightLeft size={13} /> {canEditGroup ? 'Chuyển nhóm' : 'Sao chép vào nhóm riêng'}
                   </button>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleExport()} disabled={busyAction !== null || selectingAllMembers || memberSearchPending || membersLoading}>
                     {busyAction === 'export' ? <LoaderCircle size={13} className="spin" /> : <Download size={13} />}
@@ -2195,7 +2227,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               )}
               <div className="data-group-manager-action-right">
                 <div className="data-group-manager-add-menu-wrap" ref={addMenuRef}>
-                  <button type="button" className="btn btn-primary btn-sm data-group-manager-add-button" onClick={() => setAddMenuOpen(open => !open)} disabled={!activeGroupId}>
+                  <button type="button" className="btn btn-primary btn-sm data-group-manager-add-button" onClick={() => setAddMenuOpen(open => !open)} disabled={!canEditGroup}>
                     <Plus size={14} /> Thêm data vào nhóm <span className="data-group-manager-add-divider" aria-hidden="true" /> <ChevronDown size={14} />
                   </button>
                   {addMenuOpen && (
@@ -2302,7 +2334,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                             </button>
                           )}
                         </td>
-                        <td className="is-action"><button type="button" className="btn-icon data-group-manager-delete-action" onClick={() => removeMemberships([member.id], `“${member.name || member.uid || 'data này'}”`)} title="Xoá khỏi nhóm" disabled={selectingAllMembers || memberSearchPending || membersLoading}><Trash2 size={13} /></button></td>
+                        <td className="is-action"><button type="button" className="btn-icon data-group-manager-delete-action" onClick={() => removeMemberships([member.id], `“${member.name || member.uid || 'data này'}”`)} title="Xoá khỏi nhóm" disabled={!canEditGroup || selectingAllMembers || memberSearchPending || membersLoading}><Trash2 size={13} /></button></td>
                       </tr>
                     )
                   })}
@@ -2328,23 +2360,23 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               <div className="data-group-info-header">
                 <div className="data-group-info-tabs" role="tablist" aria-label="Panel nhóm data">
                   <button type="button" role="tab" aria-selected={infoPanelTab === 'info'} className={infoPanelTab === 'info' ? 'is-active' : ''} onClick={() => setInfoPanelTab('info')}>Thông tin</button>
-                  <button type="button" role="tab" aria-selected={infoPanelTab === 'dynamic-filter'} className={infoPanelTab === 'dynamic-filter' ? 'is-active' : ''} onClick={() => setInfoPanelTab('dynamic-filter')}>Bộ lọc động <span>{dynamicFilterRuleCount}</span></button>
-                  <button type="button" role="tab" aria-selected={infoPanelTab === 'external-sync'} className={infoPanelTab === 'external-sync' ? 'is-active' : ''} onClick={() => setInfoPanelTab('external-sync')}>Đồng bộ ngoài <span>{externalSyncCount}</span></button>
+                  <button type="button" style={{ display: canEditGroup ? undefined : 'none' }} role="tab" aria-selected={infoPanelTab === 'dynamic-filter'} className={infoPanelTab === 'dynamic-filter' ? 'is-active' : ''} onClick={() => setInfoPanelTab('dynamic-filter')}>Bộ lọc động <span>{dynamicFilterRuleCount}</span></button>
+                  <button type="button" style={{ display: canEditGroup ? undefined : 'none' }} role="tab" aria-selected={infoPanelTab === 'external-sync'} className={infoPanelTab === 'external-sync' ? 'is-active' : ''} onClick={() => setInfoPanelTab('external-sync')}>Đồng bộ ngoài <span>{externalSyncCount}</span></button>
                 </div>
                 {infoPanelTab === 'info' && (
                   <div className="data-group-info-header-actions">
                     <button type="button" className="btn-icon" onClick={() => activeGroup && void copyGroupId(activeGroup.id)} disabled={!activeGroup} title="Sao chép ID"><Copy size={14} /></button>
                     <button type="button" className="btn-icon" onClick={() => activeGroup && requestDuplicateGroup(activeGroup)} disabled={!activeGroup || busyAction !== null} title="Nhân bản nhóm"><Copy size={14} /></button>
                     <button type="button" className="btn-icon" onClick={() => void handleExport()} disabled={!activeGroup || busyAction !== null} title="Xuất Excel"><Download size={14} /></button>
-                    <button type="button" className="btn-icon is-primary" onClick={() => setAddMenuOpen(true)} disabled={!activeGroup} title="Thêm data"><Plus size={14} /></button>
+                    <button type="button" className="btn-icon is-primary" onClick={() => setAddMenuOpen(true)} disabled={!canEditGroup} title="Thêm data"><Plus size={14} /></button>
                   </div>
                 )}
               </div>
 
-              {infoPanelTab === 'external-sync' ? (
+              {canEditGroup && infoPanelTab === 'external-sync' ? (
                 activeGroup ? !externalSyncDialogOpen && <DataGroupExternalSyncPanel key={`${activeGroup.id}:${activeGroup.dataTypeCode}:${activeGroup.boundZaloAccountId}`} group={{ ...activeGroup, dataTypeCode: activeGroupDataTypeCode as DataGroup['dataTypeCode'] }} active={externalSyncPanelWide} onCountChange={setExternalSyncCount} onChanged={() => { void loadPanel() }} onSynced={refreshSyncedData} />
                   : <div className="data-group-info-empty">Chọn nhóm để cấu hình đồng bộ.</div>
-              ) : infoPanelTab === 'dynamic-filter' && activeGroup && dataGroupApi ? (
+              ) : canEditGroup && infoPanelTab === 'dynamic-filter' && activeGroup && dataGroupApi ? (
                 <DataGroupDynamicFilterPanel
                   api={dataGroupApi}
                   groupId={activeGroup.id}
@@ -2373,7 +2405,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       <div className="data-group-info-name-row">
                         <span className="data-group-info-color" style={{ background: activeGroup.color }} />
                         <strong title={activeGroup.name}>{activeGroup.name}</strong>
-                        <button type="button" className="btn-icon" disabled={busyAction !== null} onClick={() => startRenameGroup(activeGroup)} title="Sửa nhóm"><Pencil size={13} /></button>
+                        <GroupSharingButton api={window.electronAPI.groupSharing} kind="data" groupId={activeGroup.id} groupName={activeGroup.name} access={activeGroup.access} disabled={busyAction !== null} onChanged={() => loadGroups({ silent: true })} />
+                        <button type="button" className="btn-icon" disabled={busyAction !== null || !canEditGroup} onClick={() => startRenameGroup(activeGroup)} title="Sửa nhóm"><Pencil size={13} /></button>
                       </div>
                       <div className="data-group-info-badges">
                         <button type="button" onClick={() => void copyGroupId(activeGroup.id)}>ID {activeGroup.id}<Copy size={10} /></button>
@@ -2384,6 +2417,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         <div><strong>{formatCount(panelData.summary.activeMembershipCount)}</strong><span>data hiện có</span></div>
                         <div><strong>{formatCount(panelData.summary.runCount)}</strong><span>lần chạy chiến dịch</span></div>
                       </div>
+                      <GroupSharingBadge access={activeGroup.access} />
                     </section>
 
                     <section className="data-group-info-section">
@@ -2439,7 +2473,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                     </section>
 
                     <section className="data-group-info-section">
-                      <div className="data-group-info-section-heading"><h4>Ghi chú</h4>{!noteEditing && <button type="button" onClick={() => setNoteEditing(true)}><Pencil size={11} /> Sửa</button>}</div>
+                      <div className="data-group-info-section-heading"><h4>Ghi chú</h4>{canEditGroup && !noteEditing && <button type="button" onClick={() => setNoteEditing(true)}><Pencil size={11} /> Sửa</button>}</div>
                       {noteEditing ? (
                         <div className="data-group-info-note-editor">
                           <textarea value={noteDraft} maxLength={2000} onChange={event => setNoteDraft(event.target.value)} placeholder="Thêm ghi chú cho nhóm data..." autoFocus />
@@ -2510,7 +2544,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
             <span className="data-group-manager-picker-actions">
               <button type="button" className="btn btn-secondary" onClick={onClose}>Huỷ</button>
               <button type="button" className="btn btn-primary" onClick={() => {
-                if (!activeGroup) return
+                if (!activeGroup || (ownedOnly && !canManageGroup(activeGroup))) return
                 onSelectGroup?.(activeGroup)
                 onClose()
               }} disabled={!activeGroup}>
@@ -2579,8 +2613,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
         <div className="data-group-submodal-backdrop" onMouseDown={event => {
           if (event.target === event.currentTarget && busyAction !== 'move') setMoveModalOpen(false)
         }}>
-          <section className="data-group-move-modal" role="dialog" aria-modal="true" aria-label="Chuyển data sang nhóm khác">
-            <header><div><h3>Chuyển data sang nhóm khác</h3><p>{formatCount(selectedMembershipIds.size)} data đã chọn</p></div><button type="button" className="btn-icon" onClick={() => setMoveModalOpen(false)} disabled={busyAction === 'move'}><X size={17} /></button></header>
+          <section className="data-group-move-modal" role="dialog" aria-modal="true" aria-label={canEditGroup ? 'Chuyển data sang nhóm khác' : 'Sao chép data vào nhóm riêng'}>
+            <header><div><h3>{canEditGroup ? 'Chuyển data sang nhóm khác' : 'Sao chép data vào nhóm riêng'}</h3><p>{formatCount(selectedMembershipIds.size)} data đã chọn</p></div><button type="button" className="btn-icon" onClick={() => setMoveModalOpen(false)} disabled={busyAction === 'move'}><X size={17} /></button></header>
             <div className="data-group-move-list">
               {moveTargetsLoading ? (
                 <div className="data-group-manager-empty"><LoaderCircle size={22} className="spin" /><span>Đang tải nhóm...</span></div>
@@ -2604,7 +2638,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 </button>
               ))}
             </div>
-            <footer><button type="button" className="btn btn-ghost" onClick={() => setMoveModalOpen(false)} disabled={busyAction === 'move'}>Huỷ</button><button type="button" className="btn btn-primary" onClick={() => void handleMoveMemberships()} disabled={!moveTargetId || busyAction === 'move'}>{busyAction === 'move' ? <LoaderCircle size={14} className="spin" /> : <ArrowRightLeft size={14} />} Chuyển nhóm</button></footer>
+            <footer><button type="button" className="btn btn-ghost" onClick={() => setMoveModalOpen(false)} disabled={busyAction === 'move'}>Huỷ</button><button type="button" className="btn btn-primary" onClick={() => void handleMoveMemberships()} disabled={!moveTargetId || busyAction === 'move'}>{busyAction === 'move' ? <LoaderCircle size={14} className="spin" /> : <ArrowRightLeft size={14} />} {canEditGroup ? 'Chuyển nhóm' : 'Sao chép vào nhóm riêng'}</button></footer>
           </section>
         </div>
       )}

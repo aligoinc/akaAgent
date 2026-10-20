@@ -63,7 +63,7 @@ const listAllDataGroupsForScan = async (): Promise<DataGroup[]> => {
   const limit = 200
   let offset = 0
   while (true) {
-    const page = await window.electronAPI.listDataGroups({ offset, limit })
+    const page = await window.electronAPI.listDataGroups({ offset, limit, ownedOnly: true })
     groups.push(...page.groups)
     offset += page.groups.length
     if (page.groups.length === 0 || offset >= page.total) return groups

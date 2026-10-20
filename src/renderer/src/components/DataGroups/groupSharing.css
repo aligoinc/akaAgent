@@ -1,0 +1,28 @@
+.group-sharing-dialog{position:fixed;inset:0;margin:auto;height:fit-content;box-sizing:border-box;width:min(440px,calc(100vw - 32px));max-height:calc(100vh - 48px);padding:0;border:1px solid var(--border-default,var(--border-color,#dbe1ea));border-radius:12px;background:var(--bg-primary,#fff);color:var(--text-primary,#1e293b);box-shadow:0 24px 64px rgba(15,23,42,.22);overflow:hidden}
+.group-sharing-dialog[open]{display:flex;flex-direction:column}
+.group-sharing-dialog::backdrop{background:rgba(15,23,42,.4)}
+.group-sharing-dialog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid var(--border-default,var(--border-color,#dbe1ea));flex:none}
+.group-sharing-dialog-header > div{min-width:0}
+.group-sharing-dialog-header h3{margin:0;font-size:16px;font-weight:600}
+.group-sharing-dialog-header p{margin:5px 0 0;font-size:12px;color:var(--text-secondary,#64748b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-sharing-dialog-header .btn-icon{flex:none}
+.group-sharing-dialog-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--border-default,var(--border-color,#dbe1ea));flex:none}
+.group-sharing-panel{display:flex;flex-direction:column;gap:12px;padding:20px;min-height:0;overflow:auto;font-size:13px}
+.group-sharing-trigger{display:inline-flex;align-items:center;gap:5px;flex:none;white-space:nowrap}
+.group-sharing-panel label{display:flex;align-items:center;gap:8px;cursor:pointer}
+.group-sharing-panel input[type=checkbox],.group-sharing-panel input[type=radio]{width:15px;height:15px;flex:none;accent-color:#6366f1}
+.group-sharing-panel input:not([type=checkbox]):not([type=radio]){min-width:0;width:100%;padding:8px;border:1px solid var(--border-default,var(--border-color,#dbe1ea));border-radius:6px;background:transparent;color:inherit;box-sizing:border-box}
+.group-sharing-panel p{margin:0;line-height:1.5}.group-sharing-panel [role=alert]{color:#b91c1c}
+.group-sharing-panel button{align-self:flex-start}
+.group-sharing-staff{display:flex;flex-direction:column;gap:9px;max-height:220px;overflow:auto}
+.group-sharing-staff small{opacity:.65}
+.group-sharing-badge{display:block!important;box-sizing:border-box;min-width:0;width:fit-content;max-width:100%;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;line-height:1.45;padding:3px 6px;border-radius:5px;background:rgba(99,102,241,.09);color:#6366f1;font-size:11px!important;font-weight:500}
+.group-copy-action{display:flex;flex-direction:column;gap:6px;margin:8px 0}.group-copy-action [role=alert]{color:#b91c1c}
+
+.data-group-info-overview > .group-sharing-badge{margin-top:10px}
+.ctw-manager-group-title{display:flex;align-items:center;gap:8px;min-width:0}
+.ctw-manager-group-title > strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctw-manager-group-description{margin:6px 0;font-size:12px;color:var(--text-secondary,#64748b);white-space:pre-wrap;overflow-wrap:anywhere;max-height:60px;overflow:auto}
+.ctw-manager-group-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;min-width:0}
+.ctw-manager-group-actions > .group-copy-action{margin:0;min-width:0}
+.ctw-manager-preview > .group-copy-action{padding:0 12px}

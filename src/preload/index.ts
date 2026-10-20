@@ -16,6 +16,7 @@ import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type Me
 import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimitsResult } from '../shared/browserRunLimits'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
+import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
@@ -59,6 +60,7 @@ const electronAPI = {
   admin: adminAPI,
   staffManagement: staffManagementAPI,
   dataGroupExternalSync: dataGroupExternalSyncAPI,
+  groupSharing: groupSharingAPI,
   listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),
   getCampaignDraft: (id: string): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.get, id),
   saveCampaignDraft: (request: SaveCampaignDraftRequest): Promise<CampaignDraft> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.save, request),

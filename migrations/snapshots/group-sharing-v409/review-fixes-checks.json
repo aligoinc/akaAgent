@@ -1,0 +1,68 @@
+{
+  "at": "2026-10-20T08:21:45.145019+00:00",
+  "fixedFindings": [
+    2,
+    3
+  ],
+  "withdrawnFinding1": "User accepts completion of requests started before sharing revocation; campaign source permission/lock code unchanged.",
+  "migrationSha256": "08281d80afef48986653f49bd2d19fb14eb0202c95c11180a933c428944fd3b4",
+  "copySourceSha256": "a24e49d7923f3d54d86cfc44da707a2c9910e08b0259efac75d580130bbcb4d6",
+  "migrationApplied": false,
+  "deployed": false,
+  "productionChanged": false,
+  "changedDatabaseFunction": "private.copy_shared_group(bigint,bigint,text,bigint,jsonb) (new function in unapplied V409)",
+  "existingFunctionPatchesUnchanged": true,
+  "livePreflight": "review-live-preflight.json: all 11 definitions/owner/ACL match original baseline",
+  "checks": [
+    {
+      "command": "node scripts/group-sharing/verify.cjs",
+      "result": "passed",
+      "receipt": "verification.json",
+      "log": {
+        "path": "/tmp/group-sharing-review-sql.log",
+        "sha256": "4718d4dcde8dfad6db6594dc498d54404afebb18e6f2d58f130a890c5f44daaf"
+      }
+    },
+    {
+      "command": "node scripts/group-sharing/copy-concurrency-smoke.cjs",
+      "result": "passed",
+      "environment": "isolated local PostgreSQL 16",
+      "log": {
+        "path": "/tmp/group-sharing-review-copy-concurrency.log",
+        "sha256": "eb25ad86fb69ba04bbf991b6f3aa706abf1ff80deb9b40e921a5f9266ca897e7"
+      }
+    },
+    {
+      "workspace": "akaAgentWebApp",
+      "command": "npm run test -w @aka-agent/web -- src/test/DataGroupsPage.test.tsx src/test/TemplatesPage.test.tsx",
+      "result": "passed",
+      "tests": 22
+    },
+    {
+      "workspace": "akaAgentWebApp",
+      "command": "npm run typecheck -w @aka-agent/web",
+      "result": "passed"
+    },
+    {
+      "workspace": "akaAgentWebApp",
+      "command": "npm run build",
+      "result": "passed",
+      "log": {
+        "path": "/tmp/group-sharing-review-web-build.log",
+        "sha256": "15b909359ac87f980bffa6b7f392f1ac2bfe1b69864cd2d60bf3f51b5440140e"
+      }
+    },
+    {
+      "workspace": "akaAgentWebApp",
+      "test": "apps/web/e2e/data-group-info.spec.ts: shared data group rows identify each owner even when group names match",
+      "result": "passed",
+      "tests": 1,
+      "environment": "Chrome; production Web bundle via local preview; mocked authenticated API"
+    },
+    {
+      "workspace": "both repositories",
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ]
+}

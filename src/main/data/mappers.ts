@@ -523,6 +523,7 @@ export function mapContentTemplateFromDB(
 
 export function mapContentTemplateGroupFromDB(row: Record<string, unknown>): ContentTemplateGroup {
   return {
+    access: row.access as ContentTemplateGroup['access'],
     id: Number(row.id),
     name: String(row.name || ''),
     description: (row.description as string | null | undefined) ?? null,
