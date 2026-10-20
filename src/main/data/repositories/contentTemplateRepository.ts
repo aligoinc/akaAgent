@@ -1,3 +1,4 @@
+import { listSharedContentRows } from './groupSharingRepository'
 import {
   ContentTemplate,
   ContentTemplateChannelConfig,
@@ -334,6 +335,7 @@ function mapContentTemplateFromV2DB(
   return {
     id: Number(row.id),
     name: String(row.name || ''),
+    access: row.access as ContentTemplate['access'],
     groupId: normalizeId(row.group_id),
     groupName: joinedContentGroupName(row),
     channels,
@@ -417,11 +419,8 @@ export async function listContentTemplateContentTypes(): Promise<ContentTemplate
 }
 
 export async function listContentTemplates(): Promise<ContentTemplate[]> {
-  const user = requireCurrentUser()
   const [rowsResult, mapsResult] = await Promise.allSettled([
-    listAllStaffRows('auto_content_templates',
-      'id, name, group_id, channels, channel_image_urls, is_delete, staff_id, organization_id, created_at, updated_at, content_group:auto_content_groups(name)',
-      user.staffId, 'Không thể tải mẫu nội dung'),
+    listSharedContentRows('content_templates'),
     loadContentTypeMaps()
   ])
 
@@ -432,30 +431,6 @@ export async function listContentTemplates(): Promise<ContentTemplate[]> {
   return data.map(row => mapContentTemplateFromV2DB(row, maps)).sort((a, b) =>
     (Date.parse(b.createdAt || '') || 0) - (Date.parse(a.createdAt || '') || 0) || b.id - a.id
   )
-}
-
-async function listAllStaffRows(
-  table: 'auto_content_templates' | 'auto_content_groups',
-  columns: string,
-  staffId: number,
-  errorLabel: string
-): Promise<Record<string, unknown>[]> {
-  const rows: Record<string, unknown>[] = []
-  let lastId = 0
-  while (true) {
-    const { data, error } = await client().from(table).select(columns)
-      .eq('staff_id', staffId).eq('is_delete', false)
-      .gt('id', lastId).order('id', { ascending: true }).limit(500)
-    if (error) throw formatContentTemplateError(error, errorLabel)
-    const page = (data || []) as unknown as Record<string, unknown>[]
-    // Do not infer completion from page length: PostgREST may impose a smaller
-    // row cap. Only publish a complete list, never a partially fetched count.
-    if (page.length === 0) return rows
-    const nextId = normalizeId(page[page.length - 1].id)
-    if (!nextId || nextId <= lastId) throw new Error(`${errorLabel}: Phân trang không hợp lệ.`)
-    rows.push(...page)
-    lastId = nextId
-  }
 }
 
 export async function createContentTemplate(template: CreateContentTemplateInput): Promise<ContentTemplate> {
@@ -579,8 +554,7 @@ async function hasActiveTemplatesInGroup(groupId: number, staffId: number): Prom
 }
 
 export async function listContentTemplateGroups(): Promise<ContentTemplateGroup[]> {
-  const user = requireCurrentUser()
-  const data = await listAllStaffRows('auto_content_groups', '*', user.staffId, 'Không thể tải nhóm nội dung')
+  const data = await listSharedContentRows('content_groups')
   return data.map(row => mapContentTemplateGroupFromDB(row)).sort((a, b) =>
     a.order - b.order || a.name.localeCompare(b.name, 'vi') || a.id - b.id
   )

@@ -252,6 +252,6 @@ export default function ZaloPhoneCheckModal({ onClose, initialAccountId }: { onC
         const phones = normalizeZaloCheckPhones(rows.map(row => row.phone), dailyLimit)
         store.load(phones)
       }} />}
-    {groupType && <DataGroupPickerModal compatibleDataTypeCategoryItemId={groupType.id} onSelect={group => void saveGroup(group)} onClose={() => { if (!saving) setGroupType(null) }} />}
+    {groupType && <DataGroupPickerModal ownedOnly compatibleDataTypeCategoryItemId={groupType.id} onSelect={group => void saveGroup(group)} onClose={() => { if (!saving) setGroupType(null) }} />}
   </div>, document.body)
 }

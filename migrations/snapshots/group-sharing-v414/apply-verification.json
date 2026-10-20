@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-20T09:35:38.924Z",
+  "project": "akachat",
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "migration_v414_shared_group_source_account_name",
+    "version": "20261020093520"
+  },
+  "migrationSha256": "15df77f46aebee945a3dd8d1eca68d3387053604d9d5805357e4ebd637b46844",
+  "migrationApplied": true,
+  "applicationDeployed": false,
+  "sourceChecksum": "75e14dbec647c96812bed7d8c165fc18",
+  "targetChecksum": "d6bbdca20f780005a411e8a6be6ae8e5",
+  "liveFunctions": [
+    {
+      "checksum": "d6bbdca20f780005a411e8a6be6ae8e5",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "provolatile": "v",
+      "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)"
+    },
+    {
+      "checksum": "bcae895d24daf017a1e52a83e834f1a9",
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "provolatile": "s",
+      "signature": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)"
+    }
+  ],
+  "tests": [
+    "V414 source names and authorization through real anon/service_role roles",
+    "V409 full regression",
+    "V414 rollback rehearsal"
+  ],
+  "liveUnchangedByTests": true
+}

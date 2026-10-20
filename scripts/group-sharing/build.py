@@ -1,0 +1,129 @@
+"""Build V409 from the live definitions captured for this task, never old migrations."""
+import hashlib
+import json
+from pathlib import Path
+import re
+import subprocess
+
+ROOT = Path(__file__).resolve().parents[2]
+SNAPSHOTS = ROOT / "migrations/snapshots/group-sharing-v409"
+rows = [json.loads(p.read_text()) for p in SNAPSHOTS.glob("*.json") if p.name.startswith("aka_") or p.name.startswith("auto_")]
+by_sig = {r["signature"]: r for r in rows}
+used = {}
+patches = {}
+
+def live(signature):
+    row = by_sig[signature]
+    used[signature] = row
+    return row["definition"].rstrip().rstrip(";") + ";\n"
+
+def replace(source, before, after, count=1):
+    assert source.count(before) == count, (before, source.count(before), count)
+    return source.replace(before, after)
+
+def patch(signature, changes):
+    source = live(signature)
+    for before, after, count in changes:
+        source = replace(source, before, after, count)
+    patches[signature] = source
+
+group_guard = "private.can_read_data_group(contact_group.id,p_staff_id,p_organization_id)"
+for signature in [
+    "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint)",
+    "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+    "aka_agent_snapshot_data_group_to_direct_campaign(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+    "aka_agent_snapshot_data_group_to_direct_campaign_v205_internal(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+    "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint)",
+    "aka_agent_preview_data_group_campaign_targets(bigint,bigint,bigint,text,bigint[])",
+]:
+    changes = [("contact_group.staff_id = p_staff_id", group_guard, 1)]
+    if "v205_internal" in signature:
+        changes.append(("contact.staff_id = p_staff_id", "contact.staff_id = v_group.staff_id", 1))
+    patch(signature, changes)
+
+patch("aka_agent_internal_preview_data_group_target_key(bigint,bigint,bigint,bigint,text,bigint)", [
+    ("contact.staff_id = p_staff_id",
+     "private.shared_data_member_owner(p_group_id,contact.staff_id,p_staff_id,p_organization_id)", 1)
+])
+patch("aka_agent_internal_route_data_group_member_v186_internal(bigint,bigint,bigint,bigint)", [
+    ("contact.staff_id = v_source.staff_id",
+     "private.shared_data_member_owner(v_source.group_id,contact.staff_id,v_source.staff_id,v_source.organization_id)", 1)
+])
+patch("aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)", [
+    ("BEGIN\n", """BEGIN
+  -- V409: serialize against sharing edits before joining the existing campaign barrier.
+  SELECT group_id,staff_id,organization_id INTO v_group_id,v_staff_id,v_organization_id
+    FROM public.auto_campaign_data_group_sources WHERE id=p_source_id;
+  IF v_group_id IS NOT NULL AND NOT private.lock_read_data_group(v_group_id,v_staff_id,v_organization_id) THEN
+    SELECT campaign_id INTO v_campaign_id FROM public.auto_campaign_data_group_sources WHERE id=p_source_id;
+    PERFORM public.aka_agent_lock_campaign_input_serialization(v_campaign_id);
+    UPDATE public.auto_campaign_data_group_sources SET status='stopped',stop_reason='sharing_revoked',stopped_at=now(),updated_at=now()
+      WHERE id=p_source_id AND status IN ('active','baselining');
+    RETURN jsonb_build_object('status','no_intake','reason','sharing_revoked');
+  END IF;
+""", 1)
+])
+
+# Dedicated readers preserve the old list surface and its ownership-only behavior.
+sig = "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)"
+groups = live(sig)
+groups = replace(groups, "public.aka_agent_list_data_groups(", "private.list_shared_data_groups(")
+groups = replace(groups, "p_unrestricted_only boolean DEFAULT false)", "p_unrestricted_only boolean, p_owned_only boolean)")
+groups = replace(groups, "contact_group.staff_id = p_staff_id",
+                 "(NOT p_owned_only OR contact_group.staff_id = p_staff_id)\n      AND " + group_guard)
+groups += "\nREVOKE ALL ON FUNCTION private.list_shared_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean,boolean) FROM PUBLIC,anon,authenticated,service_role;\n"
+
+sig = "aka_agent_list_data_group_members_v2(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)"
+members = live(sig)
+members = replace(members, "public.aka_agent_list_data_group_members_v2(", "private.read_shared_group_members(")
+members = replace(members, ", p_auth_username text, p_auth_password text)", ")")
+members = replace(members, ",p_auth_username,p_auth_password) m", ") m")
+members += "\nREVOKE ALL ON FUNCTION private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer) FROM PUBLIC,anon,authenticated,service_role;\n"
+
+preflight = ["-- Generated by scripts/group-sharing/build.py from the captured live snapshot.\nDO $preflight$\nBEGIN"]
+inventory = []
+for sig, row in sorted(used.items()):
+    preflight.append(f"""  IF to_regprocedure('public.{sig}') IS NULL OR
+    md5(pg_get_functiondef(to_regprocedure('public.{sig}'))) IS DISTINCT FROM '{row["checksum"]}'
+    THEN RAISE EXCEPTION 'V409 live definition changed: {sig}'; END IF;""")
+    acl_literal = "NULL" if row["proacl"] is None else "'" + row["proacl"].replace("'", "''") + "'"
+    preflight.append(f"IF NOT EXISTS(SELECT 1 FROM pg_proc WHERE oid=to_regprocedure('public.{sig}') AND pg_get_userbyid(proowner)='{row['owner']}' AND proacl::text IS NOT DISTINCT FROM {acl_literal}) THEN RAISE EXCEPTION 'V409 function ownership/ACL changed: {sig}'; END IF;")
+    references = subprocess.run(["rg", "-l", row["name"], "migrations", "--glob", "*.sql", "--glob", "!migration_v409*"], cwd=ROOT, capture_output=True, text=True).stdout.splitlines()
+    inventory.append({"signature": sig, "sourceChecksum": row["checksum"], "owner": row["owner"],
+                      "securityDefiner": row["prosecdef"], "config": row["proconfig"], "acl": row["proacl"],
+                      "repositoryReferences": references,
+                      "changed": sig in patches,
+                      "change": "Only group-read/source-contact ownership guards; retain all other live body and attributes." if sig in patches else "New reader derived from this exact live body; original unchanged."})
+preflight.append("END;\n$preflight$;\n")
+parts = ["\n".join(preflight), (Path(__file__).parent / "schema.sql").read_text(), groups, members]
+parts += list(patches.values())
+parts += [(Path(__file__).parent / name).read_text() for name in ["copy.sql", "rpc.sql"]]
+parts.append("NOTIFY pgrst, 'reload schema'; -- New RPC/tables require API metadata refresh.\n")
+(ROOT / "migrations/migration_v409_group_sharing.sql").write_text("\n\n".join(parts))
+(SNAPSHOTS / "inventory.json").write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n")
+(SNAPSHOTS / "restore-functions.sql").write_text("\n\n".join(used[s]["definition"].rstrip().rstrip(";") + ";" for s in patches))
+print(f"V409: {len(patches)} narrowly patched live functions; {len(used)} checksum guards.")
+
+# Rollback retains sharing metadata and copies for recovery; restores only the nine
+# changed entry points, with a checksum fence against patches made after V409.
+expected_path = SNAPSHOTS / "expected-functions.json"
+if expected_path.exists():
+    expected = json.loads(expected_path.read_text())
+    checks = ["-- Run after rolling clients back. Retains copies, snapshots and sharing metadata.\nBEGIN;\nSET LOCAL lock_timeout='5s';\nDO $guard$ BEGIN"]
+    for row in expected:
+        checks.append(f"IF md5(pg_get_functiondef(to_regprocedure('public.{row['signature']}'))) IS DISTINCT FROM '{row['checksum']}' THEN RAISE EXCEPTION 'Rollback blocked: {row['signature']} changed after V409'; END IF;")
+    checks.append("END; $guard$;")
+    checks.append("""DO $stop$ DECLARE g record; s record; BEGIN
+      FOR g IN SELECT DISTINCT cg.id FROM public.auto_account_contact_groups cg JOIN public.auto_campaign_data_group_sources src ON src.group_id=cg.id
+        WHERE src.staff_id<>cg.staff_id AND src.status IN ('active','baselining') ORDER BY cg.id LOOP
+        PERFORM id FROM public.auto_account_contact_groups WHERE id=g.id FOR UPDATE;
+        FOR s IN SELECT src.id,src.campaign_id FROM public.auto_campaign_data_group_sources src JOIN public.auto_account_contact_groups cg ON cg.id=src.group_id
+          WHERE cg.id=g.id AND src.staff_id<>cg.staff_id AND src.status IN ('active','baselining') ORDER BY src.campaign_id,src.id LOOP
+          PERFORM public.aka_agent_lock_campaign_input_serialization(s.campaign_id);
+          UPDATE public.auto_campaign_data_group_sources SET status='stopped',stop_reason='sharing_revoked',stopped_at=now(),updated_at=now() WHERE id=s.id;
+        END LOOP;
+      END LOOP;
+    END; $stop$;""")
+    checks.append((SNAPSHOTS / "restore-functions.sql").read_text())
+    checks.append("REVOKE ALL ON FUNCTION public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb) FROM PUBLIC,anon,authenticated,service_role;\nNOTIFY pgrst, 'reload schema';\nCOMMIT;\n")
+    (ROOT / "migrations/tests/migration_v409_group_sharing_rollback.sql").write_text("\n".join(checks))

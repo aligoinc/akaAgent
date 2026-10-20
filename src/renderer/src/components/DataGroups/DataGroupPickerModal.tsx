@@ -5,6 +5,7 @@ export interface DataGroupPickerModalProps {
   selectedGroupId?: number | null
   actionId?: string | null
   compatibleDataTypeCategoryItemId?: number | null
+  ownedOnly?: boolean
   unrestrictedOnly?: boolean
   onSelect: (group: DataGroup) => void
   onClose: () => void
@@ -22,6 +23,7 @@ export default function DataGroupPickerModal({
   actionId,
   compatibleDataTypeCategoryItemId,
   unrestrictedOnly,
+  ownedOnly,
   onSelect,
   onClose
 }: DataGroupPickerModalProps) {
@@ -31,6 +33,7 @@ export default function DataGroupPickerModal({
       compatibleActionId={actionId}
       compatibleDataTypeCategoryItemId={compatibleDataTypeCategoryItemId}
       unrestrictedOnly={unrestrictedOnly}
+      ownedOnly={ownedOnly}
       selectionMode
       onSelectGroup={onSelect}
       onClose={onClose}

@@ -1650,7 +1650,7 @@ export default function AutomationFormModal({
         </footer>
       </div>
       {dataGroupPickerOpen && (
-        <DataGroupPickerModal
+        <DataGroupPickerModal ownedOnly
           selectedGroupId={form.targetDataGroupId ? Number(form.targetDataGroupId) : null}
           compatibleDataTypeCategoryItemId={selectedDataTypeCategoryItemId}
           unrestrictedOnly={

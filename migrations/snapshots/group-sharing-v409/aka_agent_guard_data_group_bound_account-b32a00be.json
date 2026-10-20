@@ -1,0 +1,13 @@
+{
+  "signature": "aka_agent_guard_data_group_bound_account()",
+  "name": "aka_agent_guard_data_group_bound_account",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_data_group_bound_account()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_reason text;\nBEGIN\n  IF TG_OP='UPDATE' AND NEW.bound_zalo_account_id IS NOT DISTINCT FROM OLD.bound_zalo_account_id\n    AND NEW.data_type_category_item_id IS NOT DISTINCT FROM OLD.data_type_category_item_id\n    AND NEW.staff_id IS NOT DISTINCT FROM OLD.staff_id AND NEW.organization_id IS NOT DISTINCT FROM OLD.organization_id THEN RETURN NEW; END IF;\n  IF NEW.bound_zalo_account_id IS NOT NULL THEN\n    SELECT o.reason INTO v_reason\n    FROM public.aka_agent_data_group_account_options_internal(NEW,ARRAY[NEW.bound_zalo_account_id]) o\n    WHERE o.account_id=NEW.bound_zalo_account_id;\n    IF NOT FOUND THEN RAISE EXCEPTION 'data_group_bound_account_invalid'; END IF;\n    IF v_reason IS NOT NULL THEN RAISE EXCEPTION '%',v_reason; END IF;\n  END IF;\n  IF TG_OP='UPDATE' AND NEW.bound_zalo_account_id IS DISTINCT FROM OLD.bound_zalo_account_id THEN\n    -- Callers take the dynamic worker advisory lock before the group row lock.\n    UPDATE public.auto_account_contact_group_dynamic_filters SET effective_from_at=clock_timestamp(),revision=revision+1,updated_at=clock_timestamp() WHERE group_id=NEW.id;\n    NEW.revision := NEW.revision+1;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+  "owner": "postgres",
+  "prosecdef": true,
+  "provolatile": "v",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "proacl": "{postgres=X/postgres}",
+  "checksum": "b32a00be6ecc6e6c26f6d71b281ffda0"
+}

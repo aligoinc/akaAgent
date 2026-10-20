@@ -1,0 +1,11 @@
+--- live-before
++++ expected-after
+@@ -135,7 +135,7 @@
+           WHERE o.membership_id=m.id AND o.is_current AND c.code IN (SELECT jsonb_array_elements_text(p_data->'sourceCodes')));
+     END IF;
+     RETURN (SELECT COALESCE(jsonb_agg(CASE WHEN v_owner=p_staff_id THEN to_jsonb(m) ELSE to_jsonb(m)||jsonb_build_object(
+-      'source_account_name',NULL,'source_automation_id',NULL,'source_automation_name',NULL,
++      'source_automation_id',NULL,'source_automation_name',NULL,
+       'dataset_ids','[]'::jsonb,'dataset_names','[]'::jsonb,'provenance','[]'::jsonb) END),'[]'::jsonb)
+     FROM private.read_shared_group_members(
+       v_owner,p_organization_id,v_id,p_data->>'search',

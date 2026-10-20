@@ -1,3 +1,5 @@
+import { invokeGroupSharing } from './groupSharingRepository'
+import type { GroupSharing } from '../../../shared/groupSharing'
 import {
   BindCampaignDataGroupSourceRequest,
   CampaignDataGroupChangePreflight,
@@ -86,6 +88,7 @@ function asObjectArray(value: unknown): DbRow[] {
 
 function mapDataGroup(row: DbRow): DataGroup {
   return {
+    access: row.access as DataGroup['access'],
     id: asNumber(row.id),
     name: asString(row.name),
     color: asString(row.color, '#6366f1'),
@@ -299,19 +302,7 @@ function throwRpcError(prefix: string, error: { message?: string } | null): neve
 }
 
 export async function listDataGroups(query: DataGroupListQuery = {}): Promise<DataGroupListResult> {
-  const { data, error } = await client().rpc('aka_agent_list_data_groups_v2', {
-    ...identityParams(),
-    p_search: asNullableString(query.search),
-    p_compatible_action_id: asNullableString(query.compatibleActionId),
-    p_compatible_data_type_category_item_id: asNullableNumber(query.compatibleDataTypeCategoryItemId),
-    p_unrestricted_only: query.unrestrictedOnly === true,
-    p_data_type_category_item_ids: query.dataTypeCategoryItemIds?.length
-      ? query.dataTypeCategoryItemIds
-      : null,
-    p_offset: Math.max(0, Math.trunc(query.offset || 0)),
-    p_limit: Math.min(200, Math.max(1, Math.trunc(query.limit || 50)))
-  })
-  if (error) throwRpcError('Failed to list data groups', error)
+  const data = await invokeGroupSharing('data_groups', query)
   const rows = unwrapRpcRows(data)
   return {
     groups: rows.map(mapDataGroup),
@@ -423,6 +414,13 @@ export async function duplicateDataGroup(
   name: string | null,
   requestId: string
 ): Promise<DataGroup> {
+  const sharing = await invokeGroupSharing<GroupSharing>('get', { kind: 'data', groupId })
+  if (sharing.access.role === 'shared') {
+    const copied = await invokeGroupSharing<{ groupId: number }>('copy', { kind: 'data', groupId, name, requestId })
+    const { data, error } = await client().from('auto_account_contact_groups').select('*').eq('id', copied.groupId).eq('staff_id', requireCurrentUser().staffId).single()
+    if (error) throwRpcError('Không thể đọc nhóm vừa sao chép', error)
+    return mapDataGroup(data)
+  }
   const { data, error } = await client().rpc('aka_agent_duplicate_data_group', {
     ...identityParams(),
     p_group_id: groupId,
@@ -436,26 +434,7 @@ export async function duplicateDataGroup(
 export async function listDataGroupMembers(
   query: DataGroupMemberListQuery
 ): Promise<DataGroupMemberListResult> {
-  const { data, error } = await client().rpc(query.sourceCodes?.length ? 'aka_agent_list_data_group_members_v3' : 'aka_agent_list_data_group_members_v2', {
-    ...(query.sourceCodes?.length ? { p_source_codes: query.sourceCodes } : {}),
-    ...identityParams(),
-    p_group_id: query.groupId,
-    p_search: asNullableString(query.search),
-    p_account_ids: query.accountIds?.length ? query.accountIds : null,
-    p_include_accountless: query.includeAccountless !== false,
-    p_contact_types: query.contactTypes?.length ? query.contactTypes : null,
-    p_flatform_types: query.flatformTypes?.length ? query.flatformTypes : null,
-    p_status: query.status || 'all',
-    p_dataset_ids: query.datasetIds?.length ? query.datasetIds : null,
-    p_data_type_category_item_ids: query.dataTypeCategoryItemIds?.length
-      ? query.dataTypeCategoryItemIds
-      : null,
-    p_ids: query.ids?.length ? query.ids : null,
-    p_exclude_ids: query.excludeIds?.length ? query.excludeIds : null,
-    p_offset: Math.max(0, Math.trunc(query.offset || 0)),
-    p_limit: Math.min(500, Math.max(1, Math.trunc(query.limit || 50)))
-  })
-  if (error) throwRpcError('Failed to list data group members', error)
+  const data = await invokeGroupSharing('data_members', { ...query, kind: 'data' })
   const rows = unwrapRpcRows(data)
   return {
     members: rows.map(mapDataGroupMember),
@@ -487,11 +466,7 @@ export async function listDataGroupMemberIds(
 }
 
 export async function listDataGroupDatasets(groupId: number): Promise<DataGroupDataset[]> {
-  const { data, error } = await client().rpc('aka_agent_list_data_group_datasets', {
-    ...identityParams(),
-    p_group_id: groupId
-  })
-  if (error) throwRpcError('Failed to list data group datasets', error)
+  const data = await invokeGroupSharing('data_datasets', { kind: 'data', groupId })
   return unwrapRpcRows(data).map(mapDataGroupDataset)
 }
 
@@ -816,11 +791,7 @@ function mapDynamicFilterConfig(payloadValue: unknown, groupId: number): DataGro
 }
 
 export async function getDataGroupPanel(groupId: number): Promise<DataGroupPanelData> {
-  const { data, error } = await client().rpc('aka_agent_get_data_group_panel', {
-    ...identityParams(),
-    p_group_id: groupId
-  })
-  if (error) throwRpcError('Failed to get Data Group panel', error)
+  const data = await invokeGroupSharing('data_panel', { kind: 'data', groupId })
 
   const payload = unwrapRpcRow(data)
   const group = asObject(payload.group)

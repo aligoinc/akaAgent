@@ -1,0 +1,24 @@
+{
+  "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+  "sourceChecksum": "75e14dbec647c96812bed7d8c165fc18",
+  "targetChecksum": "d6bbdca20f780005a411e8a6be6ae8e5",
+  "sourceAttributes": {
+    "checksum": "75e14dbec647c96812bed7d8c165fc18",
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=60s"
+    ],
+    "prosecdef": true,
+    "provolatile": "v",
+    "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)"
+  },
+  "repositoryReferences": [
+    "migrations/migration_v409_group_sharing.sql",
+    "migrations/tests/migration_v409_group_sharing_rollback.sql",
+    "migrations/tests/migration_v409_group_sharing_smoke.sql"
+  ],
+  "liveMatchesAppliedV409": true,
+  "changedBehavior": "Keep source_account_name for authorized data_members; leave all other redactions and access guards unchanged."
+}

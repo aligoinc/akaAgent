@@ -42,6 +42,7 @@ import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
 import { registerStaffManagementHandlers } from './handlers/staffManagementHandlers'
 import { readStaffAccess } from '../data/repositories/staffManagementRepository'
+import { registerGroupSharingHandlers } from './handlers/groupSharingHandlers'
 import { registerDataGroupExternalSyncHandlers } from './handlers/dataGroupExternalSyncHandlers'
 import { registerUpdateHandlers } from './handlers/updateHandlers'
 import { registerV2Handlers } from './handlers/v2Handlers'
@@ -166,6 +167,7 @@ export function registerIpcHandlers(
   registerStaffManagementHandlers(mainWindow)
   registerSendExclusionHandlers(mainWindow)
   registerDataGroupExternalSyncHandlers(mainWindow)
+  registerGroupSharingHandlers(mainWindow)
   const campaignSupport = registerCampaignSupportHandlers(mainWindow)
   registerMessageOptOutCustomerHandlers(mainWindow)
   registerBrowserRunLimitsHandlers(mainWindow)

@@ -25,7 +25,7 @@ async function main() {
   await compile('src/main/data/repositories/contentTemplateRepository.ts', 'repository.cjs',
     /\/(supabaseClient|currentUser)$/, path => path.endsWith('/supabaseClient')
       ? 'export const getSupabaseClient = () => globalThis.templateTestDb'
-      : 'export const requireCurrentUser = () => ({ staffId: 7, organizationId: 9 }); export const getCurrentUser = requireCurrentUser')
+      : 'export const requireCurrentUser = () => ({ staffId: 7, organizationId: 9 }); export const getCurrentUser = requireCurrentUser; const credentials={username: "fixture",password: "fixture"}; export const requireCurrentUserCredentials=()=>credentials; export const getCurrentUserCredentials=()=>credentials')
 
   const types = [{ id: 1, type: 'content_type', name: 'sms', description: 'SMS', is_active: true }]
   const makeRow = id => ({ id, name: `Mẫu ${id}`, staff_id: 7, organization_id: 9,
@@ -40,6 +40,13 @@ async function main() {
   const calls = []
   let fail = () => false
   globalThis.templateTestDb = {
+    rpc(name, params) {
+      assert.equal(name, 'aka_agent_group_sharing')
+      assert.equal(params.p_staff_id, 7)
+      assert.equal(params.p_organization_id, 9)
+      const table = params.p_action === 'content_groups' ? 'auto_content_groups' : 'auto_content_templates'
+      return this.from(table).select('*').eq('staff_id', 7).eq('is_delete', false).gt('id', params.p_data.afterId).order('id').limit(500)
+    },
     from(table) {
       const call = { table, filters: [], limit: Infinity, update: null }
       const query = {

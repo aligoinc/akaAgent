@@ -1,0 +1,156 @@
+{
+  "at": "2026-10-20T08:40:53.279Z",
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "beforeCounts": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "count": 187
+    },
+    {
+      "name": "security_definer_view",
+      "count": 8
+    },
+    {
+      "name": "function_search_path_mutable",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "count": 201
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "count": 201
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "count": 1
+    }
+  ],
+  "afterCounts": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "count": 190
+    },
+    {
+      "name": "security_definer_view",
+      "count": 8
+    },
+    {
+      "name": "function_search_path_mutable",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "count": 202
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "count": 202
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "count": 1
+    }
+  ],
+  "delta": [
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "delta": 3,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "findings": [
+        {
+          "detail": "Table \\`private.group_copy_requests\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "group_copy_requests",
+            "type": "table",
+            "schema": "private"
+          },
+          "observed_at": "2026-10-20T08:39:02.447Z"
+        },
+        {
+          "detail": "Table \\`public.auto_content_group_recipients\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "auto_content_group_recipients",
+            "type": "table",
+            "schema": "public"
+          },
+          "observed_at": "2026-10-20T08:39:02.447Z"
+        },
+        {
+          "detail": "Table \\`public.auto_data_group_recipients\\` has RLS enabled, but no policies exist",
+          "metadata": {
+            "name": "auto_data_group_recipients",
+            "type": "table",
+            "schema": "public"
+          },
+          "observed_at": "2026-10-20T08:39:02.447Z"
+        }
+      ]
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "delta": 1,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+      "findings": [
+        {
+          "detail": "Function `public.aka_agent_group_sharing(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_action text, p_data jsonb)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_group_sharing`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+          "metadata": {
+            "name": "aka_agent_group_sharing",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_action text, p_data jsonb",
+            "security_definer": true
+          },
+          "observed_at": "2026-10-20T08:39:02.447Z"
+        }
+      ]
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "delta": 1,
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "findings": [
+        {
+          "detail": "Function `public.aka_agent_group_sharing(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_action text, p_data jsonb)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_group_sharing`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+          "metadata": {
+            "name": "aka_agent_group_sharing",
+            "schema": "public",
+            "language": "plpgsql",
+            "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_action text, p_data jsonb",
+            "security_definer": true
+          },
+          "observed_at": "2026-10-20T08:39:02.447Z"
+        }
+      ]
+    }
+  ],
+  "assessment": "Expected RPC-only design: three new tables enable RLS with no direct client grants/policies; public RPC SECURITY DEFINER is explicitly executable by anon/authenticated, validates identity and staff/organization/ownership. No new mutable-search-path or disabled-RLS findings; legacy ACL remains intentionally unchanged."
+}

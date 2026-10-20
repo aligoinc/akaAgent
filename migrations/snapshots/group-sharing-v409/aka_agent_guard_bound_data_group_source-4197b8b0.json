@@ -1,0 +1,13 @@
+{
+  "signature": "aka_agent_guard_bound_data_group_source()",
+  "name": "aka_agent_guard_bound_data_group_source",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_bound_data_group_source()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_group record; v_source_account_id bigint;\nBEGIN\n  IF TG_TABLE_NAME='auto_account_contacts' THEN\n    IF NEW.account_id IS NOT DISTINCT FROM OLD.account_id AND NEW.staff_id IS NOT DISTINCT FROM OLD.staff_id AND NEW.organization_id IS NOT DISTINCT FROM OLD.organization_id THEN RETURN NEW; END IF;\n    FOR v_group IN SELECT g.* FROM public.auto_account_contact_groups g\n      WHERE g.bound_zalo_account_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_account_contact_group_members m WHERE m.group_id=g.id AND m.contact_id=NEW.id AND NOT m.is_delete)\n      ORDER BY g.id FOR SHARE\n    LOOP\n      IF NEW.account_id IS DISTINCT FROM v_group.bound_zalo_account_id OR NEW.staff_id IS DISTINCT FROM v_group.staff_id OR NEW.organization_id IS DISTINCT FROM v_group.organization_id THEN RAISE EXCEPTION 'data_group_bound_source_mismatch'; END IF;\n    END LOOP;\n  ELSE\n    IF NEW.target_data_group_id IS NULL OR NOT NEW.is_active OR NEW.is_delete THEN RETURN NEW; END IF;\n    SELECT g.* INTO v_group FROM public.auto_account_contact_groups g WHERE g.id=NEW.target_data_group_id FOR SHARE;\n    IF v_group.bound_zalo_account_id IS NULL THEN RETURN NEW; END IF;\n    SELECT account_id INTO v_source_account_id FROM public.auto_campaigns WHERE id=NEW.source_campaign_id AND staff_id=NEW.staff_id AND organization_id=NEW.organization_id;\n    IF v_source_account_id IS DISTINCT FROM v_group.bound_zalo_account_id OR NEW.staff_id IS DISTINCT FROM v_group.staff_id OR NEW.organization_id IS DISTINCT FROM v_group.organization_id THEN RAISE EXCEPTION 'data_group_bound_source_mismatch'; END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n",
+  "owner": "postgres",
+  "prosecdef": true,
+  "provolatile": "v",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "proacl": "{postgres=X/postgres}",
+  "checksum": "4197b8b0c30c934043b491f5da81c51d"
+}

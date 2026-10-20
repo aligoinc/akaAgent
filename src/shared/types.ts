@@ -1,3 +1,4 @@
+import type { GroupAccess } from './groupSharing'
 import type { ZaloEngagement, EngagementFilter } from './zaloCampaignEngagement'
 import type { SendExclusionsByAccount } from './campaignSendExclusion'
 import { normalizeVietnamMobilePhone, type VietnamMobileCarrier } from './phone'
@@ -1806,6 +1807,7 @@ export interface DataGroupAccountOption {
 }
 
 export interface DataGroup {
+  access?: GroupAccess
   id: number
   name: string
   color: string
@@ -2120,6 +2122,7 @@ export interface DataGroupDataset {
 }
 
 export interface DataGroupListQuery {
+  ownedOnly?: boolean
   search?: string
   compatibleActionId?: string | null
   compatibleDataTypeCategoryItemId?: number | null
@@ -2671,6 +2674,7 @@ export interface ContentTemplateChannelConfig {
 export type ContentTemplateChannels = Partial<Record<ContentTemplateChannelName, ContentTemplateChannelConfig>>
 
 export interface ContentTemplate {
+  access?: GroupAccess
   id: number
   name: string
   groupId: number | null
@@ -2692,6 +2696,7 @@ export interface CreateContentTemplateInput {
 export type UpdateContentTemplateInput = Partial<CreateContentTemplateInput>
 
 export interface ContentTemplateGroup {
+  access?: GroupAccess
   id: number
   name: string
   description: string | null

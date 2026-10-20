@@ -1,0 +1,133 @@
+{
+  "at": "2026-10-20T08:01:16.650964+00:00",
+  "migrationSha256": "275a79d33b6b606a89f05b5edfca91bef024082e1d72d6fea574fd7590ea1906",
+  "productionChanged": false,
+  "migrationApplied": false,
+  "deployed": false,
+  "desktopPackaged": false,
+  "checks": [
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "npx tsc --noEmit -p tsconfig.node.json && npx tsc --noEmit -p tsconfig.web.json",
+      "result": "passed"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "npm run build",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-desktop-build-final.log",
+      "sha256": "2731687ec5a45a55c1dbcf84b6694d8f5f097dc369b4c6cfdeaaadaa4c2fd7e9",
+      "completedAt": "2026-10-20T07:58:00.819733+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "command": "npm run typecheck",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-web-typecheck.log",
+      "sha256": "5e804c87cf811b505c0596355da5cf9caf95100ad15c3606bf577ccd01365f5b",
+      "completedAt": "2026-10-20T07:52:12.751535+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "command": "npm test",
+      "result": "passed",
+      "tests": {
+        "control-api": 20,
+        "campaign-core": 66,
+        "control-client": 51,
+        "api": 926,
+        "web": 751,
+        "mobile": 229
+      },
+      "totalTests": 2043,
+      "logFile": "/tmp/group-sharing-web-tests-final.log",
+      "sha256": "9ca46a999a89ebbe4f1e5db40ae8db42d560e83fe34790ea2fb75633fbd0b43f",
+      "completedAt": "2026-10-20T07:54:04.183361+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "command": "npm run build",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-web-build-final.log",
+      "sha256": "2d5c3d90ab12243b1328ee6657ed606767827f1829d1adfb1784d1d1259c94ed",
+      "completedAt": "2026-10-20T07:57:44.405936+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "command": "npm run test -w @aka-agent/web -- src/test/DataGroupsPage.test.tsx src/test/TemplatesPage.test.tsx",
+      "result": "passed",
+      "tests": 22,
+      "logFile": "/tmp/group-sharing-ui-final.log",
+      "sha256": "e69260d599aef2ee4f8643a0f848f70807cfec38e26e16ff7489f9aed5c4bcfb",
+      "completedAt": "2026-10-20T07:57:51.083185+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "node scripts/group-sharing/ui-smoke.cjs",
+      "result": "passed",
+      "coverage": [
+        "Electron actual managers and destination picker",
+        "Chromium actual Web sharing panel",
+        "staff search/selection",
+        "CAS conflict",
+        "recipient guards",
+        "copy",
+        "stale responses"
+      ],
+      "logFile": "/tmp/group-sharing-ui-electron.log",
+      "sha256": "a127eb9fa36737ffba1e714abbe4c58c19a86d15db1777b37d5d2127e895b89a",
+      "completedAt": "2026-10-20T07:57:25.797850+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "node scripts/content-template-loading-smoke-test.cjs",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-library.log",
+      "sha256": "bd6dfa066c3c02c21921b3e70d9c1552c71429792354d3bbaba8012abab3a754",
+      "completedAt": "2026-10-20T07:57:26.319482+00:00"
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "node scripts/group-sharing/ipc-smoke.cjs",
+      "result": "passed",
+      "coverage": [
+        "main-frame/window guard",
+        "action allowlist",
+        "positive integer group IDs",
+        "authenticated actor"
+      ]
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "node scripts/group-sharing/concurrency-smoke.cjs",
+      "result": "passed",
+      "environment": "isolated local PostgreSQL 16",
+      "coverage": [
+        "intake before revoke",
+        "revoke before intake",
+        "concurrent sharing CAS",
+        "staff organization change"
+      ]
+    },
+    {
+      "workspace": "/Users/lequangnhut/Repos/akaAgent",
+      "command": "node scripts/group-sharing/verify.cjs",
+      "result": "passed",
+      "receipt": "verification.json",
+      "environment": "akachat / cgjbsmqtfhqvttudyjzq; BEGIN/ROLLBACK only"
+    },
+    {
+      "workspace": [
+        "/Users/lequangnhut/Repos/akaAgent",
+        "/Users/lequangnhut/Repos/akaAgentWebApp"
+      ],
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "notes": [
+    "Full workspace tests passed; the two changed manager suites were rerun after final UI edits.",
+    "Build and typechecks include existing workspace changes from other tasks; those changes were preserved.",
+    "Temporary log paths are machine-local evidence; SQL checksums, test coverage and outcomes are retained in this receipt and verification.json."
+  ]
+}

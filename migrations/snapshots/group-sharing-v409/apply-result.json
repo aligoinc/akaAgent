@@ -1,0 +1,16 @@
+{
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "name": "migration_v409_group_sharing",
+  "version": "20261020083846",
+  "migrationSha256": "08281d80afef48986653f49bd2d19fb14eb0202c95c11180a933c428944fd3b4",
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"success\":true}"
+      }
+    ],
+    "structuredContent": null,
+    "isError": false
+  }
+}
