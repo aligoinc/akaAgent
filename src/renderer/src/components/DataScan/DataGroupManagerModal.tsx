@@ -2405,7 +2405,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                       <div className="data-group-info-name-row">
                         <span className="data-group-info-color" style={{ background: activeGroup.color }} />
                         <strong title={activeGroup.name}>{activeGroup.name}</strong>
-                        <GroupSharingButton api={window.electronAPI.groupSharing} kind="data" groupId={activeGroup.id} groupName={activeGroup.name} access={activeGroup.access} disabled={busyAction !== null} onChanged={() => loadGroups({ silent: true })} />
+                        <GroupSharingButton api={window.electronAPI.groupSharing} kind="data" groupId={activeGroup.id} groupName={activeGroup.name} access={activeGroup.access} disabled={busyAction !== null} onChanged={() => loadGroups({ silent: true })} onSaved={() => showAlert('Đã lưu chia sẻ nhóm.', 'success')} />
                         <button type="button" className="btn-icon" disabled={busyAction !== null || !canEditGroup} onClick={() => startRenameGroup(activeGroup)} title="Sửa nhóm"><Pencil size={13} /></button>
                       </div>
                       <div className="data-group-info-badges">

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import AlertModal from '../../src/renderer/src/components/CampaignPanels/AlertModal'
 import { createRoot } from 'react-dom/client'
 import { GroupSharingButton, GroupSharingBadge, GroupCopyButton } from '../../src/renderer/src/components/DataGroups/GroupSharingPanel'
 import ContentTemplateWorkspace from '../../src/renderer/src/components/ContentTemplates/ContentTemplateWorkspace'
@@ -30,7 +31,7 @@ const api: any = {
 }
 const groups: any[] = [1, 2].map(id => ({ id, name: id === 1 ? 'Kho riêng' : 'Kho chia sẻ', description: '', color: '#6366f1', order: id, sortOrder: id, isActive: true, isDelete: false, templateCount: 1, activeMembershipCount: 1, dataTypeCode: 'facebook_person', dataTypeCategoryItemId: 1, boundZaloAccountId: null, access: id === 1 ? owner : shared }))
 const templates: any[] = groups.map(group => ({ id: group.id, groupId: group.id, groupName: group.name, name: `Mẫu ${group.id}`, access: group.access, isDelete: false, channels: { zalo_message: { enabled: true, variants: [{ text: 'Xin chào khách hàng' }], imageUrls: [] } } }))
-const member: any = { id: 11, contactId: 11, name: 'Khách hàng', uid: '100001', contactType: 'person', flatformType: 'facebook', datasetIds: [], datasetNames: [], provenance: [], dataTypeCategoryItemId: 1 }
+const member: any = { id: 11, contactId: 11, name: 'Khách hàng', uid: '100001', contactType: 'person', flatformType: 'facebook', sourceAccountId: 21, sourceAccountName: 'Facebook nguồn của chủ nhóm', datasetIds: [], datasetNames: [], provenance: [], dataTypeCategoryItemId: 1 }
 const handlers: any = {
  groupSharing: api,
  listContentTemplates: async () => templates,
@@ -51,7 +52,7 @@ window.electronAPI = new Proxy(handlers, { get(target, key: string) {
 }}) as any
 useAuthStore.setState({ user: { staffId: 7, organizationId: 9 } as any })
 useCampaignStore.setState({ accounts: [], loadAccounts: async () => {} })
-useUiStore.setState({ showAlert: (message, type) => state.calls.push({ method: 'alert', message, type }), showConfirm: (_m, cb) => { void cb() } })
+useUiStore.setState({ showAlert: (message, type = 'info') => { state.calls.push({ method: 'alert', message, type }); useUiStore.setState({ alert: { isOpen: true, message, type } }) }, showConfirm: (_m, cb) => { void cb() } })
 window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
 function App() {
@@ -59,6 +60,6 @@ function App() {
  ;(window as any).sharingUi = { state, show: setMode, select: setId, release: () => { state.hold = false; state.releases.splice(0).forEach((resolve: any) => resolve()) }, store: useContentTemplateStore, changeSession: () => useAuthStore.setState({ user: { staffId: 8, organizationId: 9 } as any }) }
  if (mode === 'content') return <div style={{ height: '100vh' }}><ContentTemplateWorkspace /></div>
  if (mode === 'data' || mode === 'destination') return <DataGroupManagerModal initialGroupId={2} selectionMode={mode === 'destination'} ownedOnly={mode === 'destination'} onClose={() => setMode('panel')} />
- return <main style={{ width: 400, margin: '20px auto' }}><GroupSharingBadge access={id === 2 ? shared : owner} /><GroupSharingButton api={api} kind="data" groupId={id} groupName={id === 2 ? 'Kho chia sẻ' : 'Kho riêng'} access={id === 2 ? shared : owner} onChanged={() => {}} /><GroupCopyButton api={api} kind="data" groupId={id} onCopied={() => {}} /></main>
+ return <main style={{ width: 400, margin: '20px auto' }}><GroupSharingBadge access={id === 2 ? shared : owner} /><GroupSharingButton api={api} kind="data" groupId={id} groupName={id === 2 ? 'Kho chia sẻ' : 'Kho riêng'} access={id === 2 ? shared : owner} onChanged={() => {}} onSaved={() => useUiStore.getState().showAlert('Đã lưu chia sẻ nhóm.', 'success')} /><GroupCopyButton api={api} kind="data" groupId={id} onCopied={() => {}} /></main>
 }
-createRoot(document.getElementById('root')!).render(<App />)
+createRoot(document.getElementById('root')!).render(<><App /><AlertModal /></>)

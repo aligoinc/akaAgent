@@ -1,0 +1,60 @@
+{
+  "checkedAt": "2026-10-20T09:39:10.310732+00:00",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-node.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "completedAt": "2026-10-20T09:27:40.190662+00:00"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-renderer.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "completedAt": "2026-10-20T09:27:40.190645+00:00"
+    },
+    {
+      "command": "npm run build (Desktop)",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-desktop-build.log",
+      "sha256": "969a4a541f4a4fdf15c5c65160023ddb0a741b3823bbdabaae92e56bab89a1c5",
+      "completedAt": "2026-10-20T09:36:53.274829+00:00"
+    },
+    {
+      "command": "npm run build --workspace @aka-agent/web (includes tsc -b)",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-web-build.log",
+      "sha256": "79498d1d5195bc23d5b1797e700fbee48bfd3a11fb2dd83a5d63ab75b7dc4ff1",
+      "completedAt": "2026-10-20T09:28:56.915415+00:00"
+    },
+    {
+      "command": "npm run test -w @aka-agent/web -- src/test/DataGroupsPage.test.tsx src/test/TemplatesPage.test.tsx",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-web-tests.log",
+      "sha256": "43e511031fe09cb3a2e5da0f0157dfae8f5ba6a0bdbf1f6a0b105945acf9493f",
+      "completedAt": "2026-10-20T09:36:51.504825+00:00"
+    },
+    {
+      "command": "node scripts/group-sharing/ui-smoke.cjs",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-smoke.log",
+      "sha256": "0508529c1aa1b028b6f96ace500cd6c268029eac0e84163211932faa7eb12221",
+      "completedAt": "2026-10-20T09:36:32.917383+00:00"
+    },
+    {
+      "command": "Playwright Web production bundle: source account cell and data/content save feedback at 1440/850px",
+      "result": "passed",
+      "logFile": "/tmp/group-sharing-feedback-browser.log",
+      "sha256": "142fd145517375804ebadf719fd9729d3f667188de3bec9433370b60c07e512c",
+      "completedAt": "2026-10-20T09:36:36.074149+00:00"
+    }
+  ],
+  "review": "React changes reuse parent feedback callbacks, guard current generation after await, add no provider/listener/query. Real UI shows existing success modal after closing sharing dialog.",
+  "notes": [
+    "V414 applied and verified separately with real-role SQL fixtures and rollback rehearsal.",
+    "No Web/API deployment or Desktop packaging/release.",
+    "Unrelated local changes excluded."
+  ]
+}

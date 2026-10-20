@@ -14,6 +14,7 @@ export function GroupSharingBadge({ access }: { access?: GroupAccess }) {
 type GroupSharingProps = {
   api: GroupSharingApi; kind: GroupKind; groupId: number; groupName: string; access?: GroupAccess
   onChanged: () => unknown | Promise<unknown>
+  onSaved: () => void
 }
 
 export function GroupSharingButton({ disabled = false, ...props }: GroupSharingProps & { disabled?: boolean }) {
@@ -31,7 +32,7 @@ export function GroupSharingButton({ disabled = false, ...props }: GroupSharingP
   </>
 }
 
-function GroupSharingDialog({ api, kind, groupId, groupName, access, onChanged, onClose }: GroupSharingProps & { onClose: () => void }) {
+function GroupSharingDialog({ api, kind, groupId, groupName, access, onChanged, onSaved, onClose }: GroupSharingProps & { onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const headingId = useId()
   useEffect(() => {
@@ -76,7 +77,7 @@ function GroupSharingDialog({ api, kind, groupId, groupName, access, onChanged, 
       if (current !== generation.current) return
       setSharing(next); setScope(next.scope); setRecipients(next.recipientIds)
       await onChanged()
-      if (current === generation.current) onClose()
+      if (current === generation.current) { onClose(); onSaved() }
     } catch (cause) {
       if (current === generation.current) setError(groupSharingError(cause))
     } finally {

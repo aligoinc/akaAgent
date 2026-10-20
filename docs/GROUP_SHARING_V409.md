@@ -6,6 +6,8 @@ Triển khai tại `akaAgent` (Desktop + migration) và repo `akaAgentWebApp` (W
 Migration **đã apply** trên `akachat` (`cgjbsmqtfhqvttudyjzq`) ngày 20/10/2026,
 lúc 15:38:46 giờ Việt Nam: `20261020083846 / migration_v409_group_sharing`.
 Kiểm thử trước/sau apply và chạy thử rollback đều đạt. Không apply lại V409.
+V414 đã apply tiếp để hiện tên tài khoản nguồn trong các dòng data được chia sẻ;
+xem [audit, checksum và rollback V414](GROUP_SHARING_ACCOUNT_NAMES_V414.md).
 Chưa deploy API/Web hoặc đóng gói/phát hành Desktop.
 
 ## Hợp đồng
@@ -15,7 +17,7 @@ Chưa deploy API/Web hoặc đóng gói/phát hành Desktop.
 - Mặc định riêng tư; toàn tổ chức tính theo thành viên hiện tại, bao gồm thành viên gia nhập sau.
 - Chỉ chủ nhóm lưu chia sẻ bằng CAS; admin nhận chia sẻ vẫn chỉ đọc. Reader nhân viên riêng chỉ trả ID/tên của người đang hoạt động, chưa bị xóa trong cùng tổ chức.
 - Người nhận xem, xuất Excel, dùng làm nguồn chiến dịch, nhân bản nhóm/mẫu và sao chép các data được chọn vào nhóm riêng. Picker đích chỉ trả nhóm riêng. Tên/màu/thứ tự/ghi chú, data/mẫu gốc, đồng bộ/bộ lọc và chia sẻ lại vẫn chỉ chủ nhóm được thao tác.
-- Panel người nhận trả thông tin nhóm và data; không trả lịch sử, chiến dịch, nguồn đồng bộ, tên tài khoản hoặc cấu hình riêng của chủ nhóm. ID tài khoản gốc chỉ phục vụ điều kiện tương thích, không cấp quyền tài khoản.
+- Panel người nhận trả thông tin nhóm và data; không trả lịch sử, chiến dịch, nguồn đồng bộ hoặc cấu hình riêng của chủ nhóm. Từ V414, cột **Tài khoản** của từng dòng được hiện tên tài khoản nguồn theo yêu cầu người dùng; tên/ID không cấp quyền mở chi tiết, điều khiển hay sử dụng tài khoản.
 - Bản sao khác nhân viên có contact/template mới, chủ sở hữu mới, không chia sẻ lại, không đồng bộ, không gắn tài khoản hoặc mang theo bằng chứng bạn bè/tham gia nhóm Zalo. Các trường thông tin bổ sung sao chép chỉ `info1`–`info5`.
 - Thu hồi chia sẻ hoặc nhân viên bị xóa/rời tổ chức/ngừng hoạt động chặn đọc/copy/intake. Nguồn đang hoạt động bị chuyển `stopped/sharing_revoked`; cấp lại quyền không tự bật lại. Input, snapshot nội dung và bản sao đã tạo được giữ nguyên.
 - Quy ước thu hồi đã chốt khi review ngày 20/10/2026: yêu cầu mới sau thu hồi bị chặn; thao tác đã bắt đầu trước thu hồi được phép hoàn tất và nhận thêm data trong khoảng đó. Đây là hành vi được chấp nhận, không phải finding cần sửa; giữ nguyên luồng khóa/quyền hiện có.
@@ -26,10 +28,10 @@ Chưa deploy API/Web hoặc đóng gói/phát hành Desktop.
 
 - Badge chỉ hiện tên người chia sẻ, nằm ở hàng cuối phần thông tin nhóm trong danh sách quản lý và picker nguồn. Giữ một dòng, tên dài có dấu `…`; rê chuột xem tên đầy đủ.
 - Nhóm data có nút **Chia sẻ** cạnh tên nhóm trong tab **Thông tin**. Nhóm nội dung có nút cạnh tiêu đề nhóm đang chọn phía trên danh sách mẫu; không chiếm khu vực xem trước và không hiện ở **Tất cả mẫu / Chưa phân nhóm**.
-- Chỉ chủ nhóm thấy nút. Bấm nút mới mở hộp thoại và đọc cấu hình/danh sách nhân viên; chỉ ghi khi bấm **Lưu chia sẻ**, lưu thành công đóng hộp thoại. Người nhận giữ badge và thao tác sao chép hiện có.
+- Chỉ chủ nhóm thấy nút. Bấm nút mới mở hộp thoại và đọc cấu hình/danh sách nhân viên; chỉ ghi khi bấm **Lưu chia sẻ**, lưu thành công đóng hộp thoại và báo **Đã lưu chia sẻ nhóm.** Người nhận giữ badge và thao tác sao chép hiện có.
 - Hộp thoại dùng native modal dialog, giữ focus bên trong, Escape đóng hộp và trả focus về nút mở. Đổi nhóm/phiên đóng hộp, bỏ phản hồi muộn; lỗi tải có **Tải lại**, xung đột phiên bản giữ hộp để xử lý.
 - Kiểm chứng: hai typecheck Desktop, production build Desktop/Web; 22 test trang quản lý Web; smoke Electron/Chromium với lưu, CAS, Escape/focus, tải lỗi, đổi nhóm/phiên, người nhận và picker đích. Browser trên bundle Web kiểm tra vị trí ở 1440/850px cùng badge tên dài.
-- Chỉ đổi giao diện; không sửa migration/API hoặc triển khai ứng dụng.
+- Điều chỉnh vị trí/badge và thông báo chỉ đổi giao diện. Việc hiện tên tài khoản nguồn được xử lý riêng bằng V414; chưa triển khai ứng dụng.
 
 ## Database, RPC và tương thích
 

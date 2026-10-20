@@ -1208,7 +1208,7 @@ export default function ContentTemplateWorkspace({
               <div>
                 <div className="ctw-manager-group-title">
                   <strong title={groupLabel}>{groupLabel}</strong>
-                  {managerSelectedGroup && <GroupSharingButton api={window.electronAPI.groupSharing} kind="content" groupId={managerSelectedGroup.id} groupName={managerSelectedGroup.name} access={managerSelectedGroup.access} disabled={busy} onChanged={() => loadData(true)} />}
+                  {managerSelectedGroup && <GroupSharingButton api={window.electronAPI.groupSharing} kind="content" groupId={managerSelectedGroup.id} groupName={managerSelectedGroup.name} access={managerSelectedGroup.access} disabled={busy} onChanged={() => loadData(true)} onSaved={() => showAlert('Đã lưu chia sẻ nhóm.', 'success')} />}
                 </div>
                 <span>{templatesLoaded ? `${managerTemplates.length} mẫu nội dung theo bộ lọc hiện tại` : 'Chưa tải được mẫu nội dung'}</span>
                 {managerSelectedGroup?.description && <p className="ctw-manager-group-description">{managerSelectedGroup.description}</p>}
