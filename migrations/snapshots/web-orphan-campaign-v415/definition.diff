@@ -1,0 +1,22 @@
+--- aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[]) before
++++ aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[]) V415
+@@ -26,7 +26,7 @@
+       CASE c.status WHEN 'đang chạy' THEN 0 WHEN 'chờ xử lý' THEN 1 WHEN 'tạm dừng' THEN 2 WHEN 'hoàn thành' THEN 3 ELSE 99 END AS rank
+     FROM public.auto_campaigns c
+     JOIN public.auto_accounts a ON a.id = c.account_id
+-      AND a.staff_id = p_staff_id AND a.organization_id = p_organization_id AND a.is_delete = false
++      AND a.staff_id = p_staff_id AND a.organization_id = p_organization_id
+     WHERE c.staff_id = p_staff_id AND c.organization_id = p_organization_id AND c.is_delete = false
+       AND a.flatform_type = ANY(p_platforms)
+       AND (a.flatform_type = 'sms' OR (a.flatform_type = 'zalo' AND a.is_zalo_show_web = false AND a.is_zalo_server = true))
+--- aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb) before
++++ aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb) V415
+@@ -9,7 +9,7 @@
+  IF NOT EXISTS (
+   SELECT 1 FROM public.auto_campaigns c JOIN public.auto_accounts a ON a.id=c.account_id
+   WHERE c.id=p_campaign_id AND c.staff_id=p_staff_id AND c.organization_id=p_organization_id AND c.is_delete=false
+-   AND a.staff_id=p_staff_id AND a.organization_id=p_organization_id AND a.is_delete=false
++   AND a.staff_id=p_staff_id AND a.organization_id=p_organization_id
+    AND a.flatform_type=ANY(p_platforms)
+    AND (a.flatform_type<>'zalo' OR (a.is_zalo_server IS TRUE AND a.is_zalo_show_web IS FALSE))
+  ) THEN RETURN NULL; END IF;

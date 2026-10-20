@@ -1,5 +1,7 @@
 # AGENTS.md
 
+V415 đã apply akachat ngày 20/10/2026 (`20261020095536 / migration_v415_web_orphan_campaign_visibility`): Web giữ danh sách và lịch sử chiến dịch khi account soft-delete, chỉ bỏ điều kiện account `is_delete=false` ở hai RPC đọc. Giữ tenant/capability/Zalo Server/ACL, tiến độ, helper log có custom plan và quyền thao tác; không tự chuyển chiến dịch sang account thêm lại. SQL live/rollback trước–sau, API/browser/typecheck/build đạt; chỉ đổi DB nên Web/API không cần deploy lại. Không apply lại; xem [audit/checksum/rollback](docs/WEB_ORPHAN_CAMPAIGN_VISIBILITY_V415.md).
+
 V414 đã apply akachat ngày 20/10/2026 (`20261020093520 / migration_v414_shared_group_source_account_name`): người nhận nhóm data thấy tên tài khoản nguồn, không được mở chi tiết/điều khiển hoặc dùng tài khoản đó. Chỉ bỏ redaction tên trong RPC live V409; giữ ACL/guard/copy/Zalo, không query/polling mới. Desktop/Web báo “Đã lưu chia sẻ nhóm.” sau lưu thành công, bỏ phản hồi cũ. SQL role/rollback trước–sau và smoke UI đạt; chưa deploy/phát hành. Không apply lại V409/V414; [audit/checksum/rollback](docs/GROUP_SHARING_ACCOUNT_NAMES_V414.md).
 
 V409 đã apply akachat ngày 20/10/2026 (`20261020083846 / migration_v409_group_sharing`): chia sẻ nhóm data/nội dung, RPC quyền/CAS/copy; giữ ACL legacy và quy ước thao tác bắt đầu trước thu hồi được hoàn tất. SQL smoke/rollback trước–sau, checksum/ACL/RLS và HTTP đạt; chưa deploy API/Web hoặc phát hành Desktop. Không apply lại; [audit/checksum/rollout/rollback](docs/GROUP_SHARING_V409.md#apply-production--20102026).
