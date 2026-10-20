@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-09T18:09:16.148Z",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "name": "migration_v371_org_new_zalo_runtime_flag",
+  "history_version": "20261009180914",
+  "migration_sha256": "35c9c1feb9c481f4486912f14787f42b0862eea6f8687fb9c36e0b61e753d259",
+  "applied": true,
+  "duration": "00:00:00.018962",
+  "legacy_false_count": 1300,
+  "org_count": 1300
+}

@@ -1,0 +1,39 @@
+{
+  "function_default_acls": [
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "role": "postgres",
+      "schema": "public",
+      "type": "f"
+    },
+    {
+      "acl": [
+        "postgres=X/postgres",
+        "anon=X/postgres",
+        "authenticated=X/postgres",
+        "service_role=X/postgres"
+      ],
+      "role": "postgres",
+      "schema": "storage",
+      "type": "f"
+    }
+  ],
+  "overloads": [],
+  "private_schema": {
+    "acl": [
+      "postgres=UC/postgres",
+      "anon=U/postgres",
+      "authenticated=U/postgres",
+      "service_role=U/postgres",
+      "aka_agent_chat_api=U/postgres",
+      "crm_interest_worker=U/postgres"
+    ],
+    "owner": "postgres"
+  },
+  "target_signature": null
+}
