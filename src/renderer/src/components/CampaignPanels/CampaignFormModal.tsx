@@ -1,3 +1,5 @@
+import { useFormAiAvailability } from './useFormAiAvailability'
+import { formAiAvailable, FORM_AI_SECTIONS } from '../../../../shared/campaignFormAiConfig'
 import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignSendExclusions'
@@ -1704,6 +1706,7 @@ export default function CampaignFormModal({
     createCampaignInputData
   } = useCampaignStore()
   const authUser = useAuthStore(state => state.user)
+  const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
   const canUseZaloQrAccount = authUser?.zaloAccountCapabilities?.qr === true
@@ -16924,7 +16927,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('schedule')}</span>
                   <span className="stepper-section-title">Lịch chạy</span>
-                  <CampaignScheduleAi
+                  {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.schedule, formData.actionId) && <CampaignScheduleAi
                     context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
                     schedule={scheduleAiSnapshot(formData)}
                     disabled={saveBusy || limitsAiBusy || loadingDetails || !formData.actionId}
@@ -16932,7 +16935,7 @@ export default function CampaignFormModal({
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                     onBusyChange={setScheduleAiBusy}
                     onApply={patch => setFormData(current => applyScheduleAiPatch(current, patch))}
-                  />
+                  />}
                 </div>
                 {collapsedSections['schedule'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
@@ -17139,7 +17142,7 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('limits')}</span>
                     <span className="stepper-section-title">Giới hạn hành động</span>
-                    <CampaignLimitsAi
+                    {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.limits, formData.actionId) && <CampaignLimitsAi
                       context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
                         accountGroupOverrides: selectedAccountGroupNames.length > 0 }}
                       limits={{ sleepBetweenActions: formData.sleepBetweenActions, continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
@@ -17151,7 +17154,7 @@ export default function CampaignFormModal({
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                       onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}
-                    />
+                    />}
                   </div>
                   {collapsedSections['limits'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>

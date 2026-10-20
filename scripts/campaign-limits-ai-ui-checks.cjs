@@ -105,7 +105,7 @@ module.exports = async function checkLimitsUi(page) {
   await resolveAi({ ok: true, patch: { actions: [], sleepBetweenActions: 5 } })
   assert.equal(await requests(), countBeforeAuth + 1)
   assert.equal(await section.getByText('Thời gian nghỉ giữa 2 lần gửi', { exact: true }).locator('..').locator('input').inputValue(), '90')
-  await panel.getByRole('button', { name: 'Đóng nhập giới hạn AI' }).click()
+  await panel.waitFor({ state: 'detached' }) // The previous auth session no longer owns AI metadata.
 
   await page.evaluate(value => window.scheduleSmoke.openCampaign(value), { ...groupCampaign, actionId: 'facebook_comment_seeding',
     extraSettings: { postsPerTarget: 3, enablePostLike: false, actionLimits: { sleepBetweenActions: 30,
@@ -114,7 +114,7 @@ module.exports = async function checkLimitsUi(page) {
   await resolveAi({ ok: true, patch: { actions: [], postsPerTarget: 5 } }); await panel.waitFor({ state: 'detached' })
   assert.equal(await section.getByText('Số bài cần comment trên mỗi group/page/profile', { exact: true }).locator('..').locator('input').inputValue(), '5')
   await trigger.click(); await input.fill('Mỗi ngày 50 comment, mỗi nửa giờ 5 comment, nghỉ một phút giữa hai lần.')
-  const shots = resolve(__dirname, '../docs/audits/campaign-limits-ai-v402'); mkdirSync(shots, { recursive: true })
+  const shots = resolve(__dirname, '../docs/audits/ai-form-configs-v416/limits'); mkdirSync(shots, { recursive: true })
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => document.body.classList.toggle('theme-light', theme === 'light'), theme)
     await panel.screenshot({ path: resolve(shots, `${theme}.png`) })

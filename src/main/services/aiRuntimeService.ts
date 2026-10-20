@@ -288,6 +288,9 @@ export async function callAiUsing(
   options: {
     signal?: AbortSignal
     expectedModel?: string
+    /** Main-process only: the IPC validators never accept configuration from renderer. */
+    formConfig?: AiUsingConfig
+    validateContent?: (content: string) => boolean
   } = {}
 ): Promise<AiCallResult> {
   const usingCode = String(code || '').trim()
@@ -306,7 +309,7 @@ export async function callAiUsing(
 
   let config: AiUsingConfig | null = null
   try {
-    config = await aiRepo.getAiUsingConfigByCode(usingCode, metadata)
+    config = options.formConfig ?? await aiRepo.getAiUsingConfigByCode(usingCode, metadata)
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     return {
@@ -345,9 +348,10 @@ export async function callAiUsing(
     const durationMs = Date.now() - startedAt
     const logId = await createAiLogSafe({
       ...metadata,
-      usingId: config.using.id,
+      formConfigId: config.formConfigId,
+      usingId: config.formConfigId ? null : config.using.id,
       modelId: config.model.id,
-      promptId: config.prompt.id,
+      promptId: config.formConfigId ? null : config.prompt.id,
       organizationId: metadata.organizationId ?? config.using.organizationId ?? config.model.organizationId ?? null,
       usingCode,
       provider,
@@ -404,9 +408,10 @@ export async function callAiUsing(
       const usage = extractUsage(rawResponse)
       const logId = await createAiLogSafe({
         ...metadata,
-        usingId: config.using.id,
+        formConfigId: config.formConfigId,
+        usingId: config.formConfigId ? null : config.using.id,
         modelId: config.model.id,
-        promptId: config.prompt.id,
+        promptId: config.formConfigId ? null : config.prompt.id,
         organizationId: metadata.organizationId ?? config.using.organizationId ?? config.model.organizationId ?? null,
         usingCode,
         provider,
@@ -446,13 +451,17 @@ export async function callAiUsing(
     if (!content) {
       throw new Error('AI không trả về nội dung.')
     }
+    if (options.validateContent && !options.validateContent(content)) {
+      throw new Error('AI trả về dữ liệu không đúng JSON Schema.')
+    }
 
     const usage = extractUsage(rawResponse)
     const logId = await createAiLogSafe({
       ...metadata,
-      usingId: config.using.id,
+      formConfigId: config.formConfigId,
+      usingId: config.formConfigId ? null : config.using.id,
       modelId: config.model.id,
-      promptId: config.prompt.id,
+      promptId: config.formConfigId ? null : config.prompt.id,
       organizationId: metadata.organizationId ?? config.using.organizationId ?? config.model.organizationId ?? null,
       usingCode,
       provider,
@@ -492,9 +501,10 @@ export async function callAiUsing(
     const error = err instanceof Error ? err.message : String(err)
     const logId = await createAiLogSafe({
       ...metadata,
-      usingId: config.using.id,
+      formConfigId: config.formConfigId,
+      usingId: config.formConfigId ? null : config.using.id,
       modelId: config.model.id,
-      promptId: config.prompt.id,
+      promptId: config.formConfigId ? null : config.prompt.id,
       organizationId: metadata.organizationId ?? config.using.organizationId ?? config.model.organizationId ?? null,
       usingCode,
       provider,

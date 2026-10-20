@@ -1,6 +1,7 @@
 import { AiCallMetadata, AiLogInput, AiModel, AiPrompt, AiUsing, AiUsingConfig } from '../../../shared/aiTypes'
 import { getCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
+import { formAiApplies, formAiAvailability, type FormAiSection, type FormAiAvailability } from '../../../shared/campaignFormAiConfig'
 
 const client = () => getSupabaseClient()
 
@@ -126,8 +127,36 @@ export async function getAiUsingConfigByCode(code: string, metadata?: AiCallMeta
   }
 }
 
+export async function listFormAiAvailability(signal: AbortSignal): Promise<FormAiAvailability[]> {
+  const { data, error } = await client().from('ai_form_configs')
+    .select('desktop_section_id,campaign_scope,campaign_action_ids')
+    .eq('is_active', true).not('desktop_section_id', 'is', null).abortSignal(signal)
+  if (error) throw new Error('Không thể tải cấu hình AI.')
+  return formAiAvailability(data || [], 'desktop')
+}
+
+export async function getFormAiConfig(section: FormAiSection, actionId: string, signal: AbortSignal): Promise<AiUsingConfig> {
+  const { data: row, error } = await client().from('ai_form_configs').select('*')
+    .eq('desktop_section_id', section).eq('is_active', true).abortSignal(signal).maybeSingle()
+  if (error || !row || !formAiApplies({
+    campaignScope: row.campaign_scope, campaignActionIds: row.campaign_action_ids
+  }, actionId)) throw new Error('AI chưa được cấu hình cho loại chiến dịch này.')
+  const { data: model, error: modelError } = await client().from('ai_model').select('*')
+    .eq('id', row.model_id).eq('is_active', true).abortSignal(signal).maybeSingle()
+  if (modelError || !model || model.organization_id != null) throw new Error('Model AI không khả dụng.')
+  return {
+    // IDs are only used for legacy logging; form calls log their own FK instead.
+    using: mapUsing({ ...row, id: 0, prompt_id: 0, organization_id: null, is_system: true }),
+    prompt: mapPrompt({ ...row, id: 0, organization_id: null, is_system: true }),
+    model: mapModel(model),
+    formConfigId: row.id,
+    outputSchema: row.output_schema
+  }
+}
+
 export async function createAiLog(input: AiLogInput): Promise<number | null> {
   const payload = {
+    ...(input.formConfigId == null ? {} : { form_config_id: input.formConfigId }),
     using_id: input.usingId ?? null,
     model_id: input.modelId ?? null,
     prompt_id: input.promptId ?? null,

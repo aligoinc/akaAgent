@@ -5,6 +5,7 @@ import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQu
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
+import { FORM_AI_AVAILABILITY_IPC, type FormAiAvailability } from '../shared/campaignFormAiConfig'
 import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomReadQuery } from '../shared/facebookRandomRun'
 import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, type WebEnrichmentState } from '../shared/facebookWebEnrichment'
 import type { BrowserPreview } from '../shared/browserPreview'
@@ -313,6 +314,7 @@ const electronAPI = {
   getCampaignDiagnostics: (request: CampaignDiagnosticsRequest): Promise<CampaignDiagnosticsSnapshot> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.read, request),
   analyzeCampaignDiagnostics: (request: CampaignDiagnosticsAiRequest): Promise<CampaignDiagnosticsAiResult> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.ai, request),
   cancelCampaignDiagnostics: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_DIAGNOSTICS_IPC.cancel, requestId),
+  listCampaignFormAi: (): Promise<FormAiAvailability[]> => ipcRenderer.invoke(FORM_AI_AVAILABILITY_IPC),
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
   generateCampaignLimitsAi: (request: LimitsAiRequest): Promise<LimitsAiResult> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.generate, request),

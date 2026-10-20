@@ -34,6 +34,38 @@ async function main() {
     const env = { ...process.env, TZ: 'America/Los_Angeles' }; delete env.ELECTRON_RUN_AS_NODE
     app = await _electron.launch({ executablePath: require('electron'), args: [join(dir, 'main.cjs')], cwd: resolve(__dirname, '..'), env })
     const page = await app.firstWindow(); page.setDefaultTimeout(12000)
+    if (process.argv.includes('--config-only')) {
+      const trigger = page.getByRole('button', { name: 'Điền lịch bằng AI', exact: true })
+      await trigger.waitFor()
+      const reads = () => page.evaluate(() => window.scheduleSmoke.state.calls.filter(x => x.method === 'listCampaignFormAi').length)
+      const initialReads = await reads()
+      await page.evaluate(() => {
+        window.scheduleSmoke.state.formAiRows = [{ sectionId: 'campaign.schedule', campaignScope: 'selected', campaignActionIds: ['sms_send'] }]
+        window.scheduleSmoke.open()
+      })
+      await page.waitForFunction(() => window.scheduleSmoke.state.calls.filter(x => x.method === 'listCampaignFormAi').length >= 2)
+      await trigger.waitFor({ state: 'detached' })
+      assert.equal(await reads(), initialReads + 1)
+      await page.evaluate(() => {
+        window.scheduleSmoke.state.formAiRows = [{ sectionId: 'campaign.schedule', campaignScope: 'selected', campaignActionIds: ['facebook_timeline_post'] }]
+        window.scheduleSmoke.open()
+      })
+      await trigger.waitFor()
+      await page.evaluate(() => { window.scheduleSmoke.state.deferMetadata = true; window.scheduleSmoke.open() })
+      await page.waitForFunction(() => window.scheduleSmoke.state.metadataPending.length === 1)
+      await trigger.waitFor({ state: 'detached' })
+      await page.evaluate(() => window.scheduleSmoke.open())
+      await page.waitForFunction(() => window.scheduleSmoke.state.metadataPending.length === 2)
+      await page.evaluate(() => {
+        const [old, current] = window.scheduleSmoke.state.metadataPending
+        current([])
+        old([{ sectionId: 'campaign.schedule', campaignScope: 'all', campaignActionIds: [] }])
+      })
+      await trigger.waitFor({ state: 'detached' })
+      assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])
+      console.log('PASS Electron: selected scopes hide/show AI, one metadata read per form, late response from previous form ignored')
+      return
+    }
     if (process.argv.includes('--mixed-only')) {
       await page.getByRole('button', { name: 'Điền giới hạn bằng AI', exact: true }).waitFor()
       await require('./campaign-limits-ai-mixed-ui-checks.cjs')(page)
@@ -89,7 +121,7 @@ async function main() {
     assert.equal(await panel.getByRole('status').count(), 0, 'reopening never shows a preview')
     await descriptionInput.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', repeat: true })
     assert.equal(await page.evaluate(() => window.scheduleSmoke.state.requests.length), 1, 'held Enter must not send another request')
-    const screenshots = resolve(__dirname, '../docs/audits/campaign-schedule-ai-v399'); mkdirSync(screenshots, { recursive: true })
+    const screenshots = resolve(__dirname, '../docs/audits/ai-form-configs-v416'); mkdirSync(screenshots, { recursive: true })
     for (const theme of ['dark', 'light']) {
       await page.evaluate(theme => document.body.classList.toggle('theme-light', theme === 'light'), theme)
       await panel.screenshot({ path: join(screenshots, `${theme}.png`) })
@@ -135,7 +167,7 @@ async function main() {
     await open()
     await generate('đổi phiên'); await page.evaluate(() => window.scheduleSmoke.switchUser()); await resolveAi({ startTime: '04:00' })
     assert.equal(await startTime.inputValue(), '09:00'); assert(await save.isEnabled())
-    await panel.getByRole('button', { name: 'Đóng nhập lịch AI' }).click()
+    await panel.waitFor({ state: 'detached' }) // Auth changes invalidate metadata and unmount the old AI session.
     const cdp = await page.context().newCDPSession(page)
     const requestsBeforeDraftTests = await page.evaluate(() => window.scheduleSmoke.state.requests.length)
     const saveDraft = form.getByRole('button', { name: 'Lưu nháp', exact: true })

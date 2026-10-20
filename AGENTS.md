@@ -1,5 +1,7 @@
 # AGENTS.md
 
+V416 đã apply akachat ngày 20/10/2026 (`20261020103243 / migration_v416_ai_form_configs`): AI điền Lịch chạy/Giới hạn trên Desktop/Web đọc `ai_form_configs`, metadata khi mở form, scope kiểm tra lại ở backend, model FK thay khóa tên riêng hai section. Prompt nguyên văn/schema nguyên cấu trúc/model 21/options giữ nguyên; parser/Save/cancel/log guard cũ, thêm `ai_log.form_config_id`. Giữ prompt/binding cũ, không polling/pool mới. SQL rollback/HTTP/parity/UI/typecheck/build đạt; chưa deploy Web/API hoặc phát hành Desktop. Không apply lại; [audit/checksum/rollout/rollback](docs/AI_FORM_CONFIGS_V416.md).
+
 V415 đã apply akachat ngày 20/10/2026 (`20261020095536 / migration_v415_web_orphan_campaign_visibility`): Web giữ danh sách và lịch sử chiến dịch khi account soft-delete, chỉ bỏ điều kiện account `is_delete=false` ở hai RPC đọc. Giữ tenant/capability/Zalo Server/ACL, tiến độ, helper log có custom plan và quyền thao tác; không tự chuyển chiến dịch sang account thêm lại. SQL live/rollback trước–sau, API/browser/typecheck/build đạt; chỉ đổi DB nên Web/API không cần deploy lại. Không apply lại; xem [audit/checksum/rollback](docs/WEB_ORPHAN_CAMPAIGN_VISIBILITY_V415.md).
 
 V414 đã apply akachat ngày 20/10/2026 (`20261020093520 / migration_v414_shared_group_source_account_name`): người nhận nhóm data thấy tên tài khoản nguồn, không được mở chi tiết/điều khiển hoặc dùng tài khoản đó. Chỉ bỏ redaction tên trong RPC live V409; giữ ACL/guard/copy/Zalo, không query/polling mới. Desktop/Web báo “Đã lưu chia sẻ nhóm.” sau lưu thành công, bỏ phản hồi cũ. SQL role/rollback trước–sau và smoke UI đạt; chưa deploy/phát hành. Không apply lại V409/V414; [audit/checksum/rollback](docs/GROUP_SHARING_ACCOUNT_NAMES_V414.md).
@@ -645,6 +647,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- **AI điền form V416**: scope/model/schema phải kiểm tra lại ở Main/API; metadata chỉ điều khiển nút. Schema DB không tạo field UI hoặc bỏ parser/allowlist. Giữ prompt/binding cũ cho rollback, không dual-write; xem [hợp đồng](docs/AI_FORM_CONFIGS_V416.md).
 - **Quyền nhóm chia sẻ V409**: admin nhận chia sẻ vẫn không được sửa nguồn; API/IPC/RPC phải lấy danh tính từ phiên và kiểm tra lại quyền. Copy tạo contact/template thuộc người nhận, không mang sharing/sync/binding hay bằng chứng Zalo. Lỗi tải không chứng minh thu hồi; giữ snapshot/input đã lấy. V409 đã apply, không chạy lại `verify.cjs`; kiểm chứng bản live bằng `verify-applied.cjs`, rollback luôn trong transaction. ACL legacy giữ nguyên theo quyết định tương thích; xem [hợp đồng](docs/GROUP_SHARING_V409.md).
 
 - **Preview log Facebook và emoji**: dùng `getCampaignLogContentPreview` trong [campaignScheduler.ts](src/main/services/campaignScheduler.ts:10441) cho comment/newsfeed; không cắt giữa surrogate pair ở mốc 50 vì PostgREST trả `PGRST102` và ngắt lưu các kết quả sau. Hồi quy scheduler→writer→SQL offline: `node scripts/campaign-log-unicode-smoke.cjs`; giữ nguyên nội dung gửi/link, không tự chạy lại hay backfill.

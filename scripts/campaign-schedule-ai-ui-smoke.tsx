@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CampaignFormModal from '../src/renderer/src/components/CampaignPanels/CampaignFormModal'
+import { campaignEdit } from '../src/renderer/src/components/CampaignPanels/campaignEdit'
 import { useCampaignStore } from '../src/renderer/src/stores/campaignStore'
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useUiStore } from '../src/renderer/src/stores/uiStore'
@@ -8,6 +9,10 @@ import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
 import '../src/renderer/src/styles/global.css'
 
 const state: any = { calls: [], requests: [], pending: [], cancels: [], alerts: [], errors: [], deadlines: [] }
+// This fixture exercises AI/drafts. The status-choice dialog has its own edit-flow suite.
+campaignEdit.chooseSaveStatus = async () => 'tạm dừng'
+state.formAiRows = ['campaign.schedule', 'campaign.action_limits'].map(sectionId => ({ sectionId, campaignScope: 'all', campaignActionIds: [] }))
+state.metadataPending = []
 const originalTimeout = window.setTimeout.bind(window)
 window.setTimeout = ((callback: any, ms?: number, ...args: any[]) => {
   const id = originalTimeout(callback, ms, ...args)
@@ -34,6 +39,7 @@ const handlers: Record<string, any> = {
       updatedAt: new Date().toISOString(), isDelete: false, deletionReason: null, campaignIds: [] }
     return state.lastSavedDraft
   },
+  listCampaignFormAi: () => state.deferMetadata ? new Promise(resolve => state.metadataPending.push(resolve)) : state.formAiRows,
   generateCampaignScheduleAi: (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) },
   cancelCampaignScheduleAi: (id: string) => { state.cancels.push(id) },
   generateCampaignLimitsAi: (request: any) => { state.requests.push(request); return new Promise((resolve, reject) => state.pending.push({ resolve, reject })) },
