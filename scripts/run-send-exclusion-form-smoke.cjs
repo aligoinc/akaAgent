@@ -9,7 +9,7 @@ async function main() {
   const root = resolve(__dirname, '..')
   const directory = mkdtempSync(join(tmpdir(), 'akaagent-auxiliary-skip-ui-'))
   const output = mkdtempSync(join(tmpdir(), 'akaagent-exclusions-form-artifacts-'))
-  let app
+  let app, page
   try {
     await build({ entryPoints: [join(__dirname, 'zalo-auxiliary-skip-ui-smoke.tsx')], outdir: directory,
       bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', target: 'chrome120',
@@ -22,7 +22,7 @@ async function main() {
     });`)
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE
     app = await _electron.launch({ executablePath: require('electron'), args: [join(directory, 'main.cjs')], cwd: root, env })
-    const page = await app.firstWindow()
+    page = await app.firstWindow()
     page.setDefaultTimeout(15000)
     await page.waitForFunction(() => !!window.settingsSmoke)
     // Render the four production definitions; the fifth-field extension is covered by the component smoke.
@@ -70,10 +70,50 @@ async function main() {
     await card.getByRole('button',{name:'Sửa nhóm',exact:true}).click()
     await page.screenshot({path:join(output,'form-modal-narrow.png')})
     assert(await page.locator('.exclusion-modal').evaluate(el=>el.scrollWidth<=el.clientWidth))
+    await page.keyboard.press('Escape')
+    // Legacy drafts may be saved before choosing their required blocklist.
+    const legacyDraft = structuredClone(draft)
+    delete legacyDraft.payload.values.zaloSendExclusionsByAccountId
+    delete legacyDraft.payload.values.zaloPendingBlocklistAccountId
+    delete legacyDraft.payload.values.formData.zaloSendExclusionsByAccountId
+    delete legacyDraft.payload.values.formData.zaloPendingBlocklistAccountId
+    legacyDraft.payload.values.formData.zaloFriendBlocklistEnabled = true
+    legacyDraft.payload.values.formData.zaloFriendBlocklistId = null
+    if (legacyDraft.payload.baseCampaign?.extraSettings) delete legacyDraft.payload.baseCampaign.extraSettings.zaloSendExclusionsByAccountId
+    await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1550,1100))
+    for (const resolution of ['choose', 'discard']) {
+      await page.evaluate(savedDraft=>window.settingsSmoke.open('draft','zalo_message_friend',{savedDraft}),legacyDraft)
+      await card.getByRole('button',{name:'Bỏ yêu cầu loại trừ danh sách',exact:true}).waitFor()
+      await form.getByRole('button',{name:'Tạo chiến dịch',exact:true}).click()
+      await page.waitForFunction(()=>window.settingsSmoke.state.alerts.some(a=>a.message.includes('Bạn đã bật loại trừ theo danh sách')))
+      assert.equal(await page.evaluate(()=>window.settingsSmoke.state.calls.filter(c=>['createCampaign','updateCampaign','saveCampaignDraft'].includes(c.method)).length),0)
+      await form.getByRole('button',{name:'Lưu nháp',exact:true}).click()
+      await page.waitForFunction(()=>window.settingsSmoke.state.calls.some(c=>c.method==='saveCampaignDraft'))
+      const pendingDraft=await page.evaluate(()=>window.settingsSmoke.state.calls.find(c=>c.method==='saveCampaignDraft').args[0])
+      assert.equal(pendingDraft.payload.values.zaloPendingBlocklistAccountId,11)
+      await page.evaluate(savedDraft=>window.settingsSmoke.open('draft','zalo_message_friend',{savedDraft}),pendingDraft)
+      await card.getByRole('button',{name:'Bỏ yêu cầu loại trừ danh sách',exact:true}).waitFor()
+      await form.getByRole('button',{name:'Tạo chiến dịch',exact:true}).click()
+      await page.waitForFunction(()=>window.settingsSmoke.state.alerts.some(a=>a.message.includes('Bạn đã bật loại trừ theo danh sách')))
+      assert.equal(await page.evaluate(()=>window.settingsSmoke.state.calls.filter(c=>c.method==='createCampaign').length),0)
+      if(resolution==='choose'){
+        await card.locator('summary').click()
+        await card.getByRole('checkbox',{name:/Không chăm sóc/}).check()
+      }else await card.getByRole('button',{name:'Bỏ yêu cầu loại trừ danh sách',exact:true}).click()
+      assert.equal(await card.getByRole('button',{name:'Bỏ yêu cầu loại trừ danh sách',exact:true}).count(),0)
+      await form.getByRole('button',{name:'Tạo chiến dịch',exact:true}).click()
+      await page.waitForFunction(()=>window.settingsSmoke.state.calls.some(c=>c.method==='createCampaign'))
+      const created=await page.evaluate(()=>window.settingsSmoke.state.calls.find(c=>c.method==='createCampaign').args[0])
+      assert.deepEqual(created.extraSettings.zaloSendExclusionsByAccountId,{'11':{groupId:null,blocklistIds:resolution==='choose'?[31]:[]}})
+      assert.equal(Object.hasOwn(created.extraSettings,'zaloPendingBlocklistAccountId'),false)
+    }
     assert.deepEqual(await page.evaluate(()=>window.settingsSmoke.state.errors),[])
     console.log('Screenshots: '+output)
-    console.log('PASS real campaign form: legacy single blocklist mapped on open, selected group/list saved, edit/clone/draft preserve selection without backfill.')
+    console.log('PASS real campaign form: legacy list preserved; unfinished exclusions block create across draft reopen, require selecting a list or explicit removal, and never enter campaign settings.')
 
+  } catch (error) {
+    if (page) console.error('Fixture diagnostics:', await page.evaluate(()=>({alerts:window.settingsSmoke.state.alerts,errors:window.settingsSmoke.state.errors,methods:window.settingsSmoke.state.calls.map(c=>c.method)})))
+    throw error
   } finally {
     await app?.close()
     rmSync(directory, { recursive: true, force: true })
