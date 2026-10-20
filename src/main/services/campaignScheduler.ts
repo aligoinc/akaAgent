@@ -10438,6 +10438,17 @@ export class CampaignScheduler {
     return !!out && ('actionResult' in out || 'actionResults' in out || ('actionCode' in out && 'statusCode' in out))
   }
 
+  private getCampaignLogContentPreview(content: string): string {
+    if (content.length <= 50) return content
+    let end = 50
+    // Preserve the existing UTF-16 length limit without leaving half an emoji.
+    // PostgREST rejects lone surrogates, even when JSON.stringify escapes them.
+    const last = content.charCodeAt(end - 1)
+    const next = content.charCodeAt(end)
+    if (last >= 0xD800 && last <= 0xDBFF && next >= 0xDC00 && next <= 0xDFFF) end--
+    return content.substring(0, end) + '...'
+  }
+
   private newsfeedMilestonePayload(
     campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2
   ): { action: import('../../shared/types').CreateCampaignDetailInput; progress: string; linkProgress?: string } | null {
@@ -10451,7 +10462,7 @@ export class CampaignScheduler {
     const text = String(out.text || '').trim()
     const commentUrl = isComment ? String(out.commentUrl || '').trim() : ''
     const content = isLike ? postContent : text
-    const preview = content.length > 50 ? content.substring(0, 50) + '...' : content
+    const preview = this.getCampaignLogContentPreview(content)
     return {
       action: {
         inputDataId: detail?.id, campaignId: campaign.id, accountId,
@@ -11864,7 +11875,7 @@ export class CampaignScheduler {
       const imageCount = Number(out.imageCount || 0)
       const commentFailed = out.commentFailed === true
       if (!commentFailed && (out.commented === false || (text.trim().length === 0 && imageCount <= 0))) continue
-      const preview = text.length > 50 ? text.substring(0, 50) + '...' : text
+      const preview = this.getCampaignLogContentPreview(text)
       const commentType = String(campaign.extraSettings?.commentType || '')
       let target: string
       if (this.isCommentSeedingPostCampaign(campaign.actionId)) {
