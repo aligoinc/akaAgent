@@ -76,11 +76,14 @@ const entitlements = load('src/main/data/repositories/entitlementRepository.ts',
 })
 const readers = load('src/main/data/repositories/campaignPendingReasonRepository.ts', {
   '../currentUser': auth, '../supabaseClient': supabase,
-  '../mappers': load('src/main/data/mappers.ts', { './currentUser': auth })
+  '../mappers': load('src/main/data/mappers.ts', {
+    './currentUser': auth,
+    './campaignEditVersion': load('src/main/data/campaignEditVersion.ts', { 'node:crypto': require('node:crypto') })
+  })
 })
 const chatLimits = load('src/main/data/repositories/campaignPendingChatLimitRepository.ts', {
   '../../../shared/accountActionLimits': load('src/shared/accountActionLimits.ts'),
-  '../../domain/campaigns/campaignActionDescriptors': load('src/main/domain/campaigns/campaignActionDescriptors.ts'),
+  '../../domain/campaigns/campaignActionDescriptors': load('src/shared/campaignActionDescriptors.ts'),
   '../supabaseClient': supabase, './entitlementRepository': entitlements
 })
 const service = load('src/main/services/campaignPendingReasonService.ts', {

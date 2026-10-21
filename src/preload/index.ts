@@ -667,8 +667,8 @@ const electronAPI = {
   reloadAccountPage: (accountId: number, flatformType: string): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_RELOAD_PAGE, accountId, flatformType),
 
-  getAccountActionOverview: (accountId: number): Promise<AccountActionOverview[]> =>
-    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId),
+  getAccountActionOverview: (accountId: number, actionCodes?: string[]): Promise<AccountActionOverview[]> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId, actionCodes),
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),

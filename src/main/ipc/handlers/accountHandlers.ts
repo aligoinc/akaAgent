@@ -478,9 +478,9 @@ export function registerAccountHandlers(
     return supabase.listAccountActions(flatformType, includeRestricted)
   })
 
-  ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, async (_, accountId: number) => {
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, async (_, accountId: number, actionCodes?: string[]) => {
     if (!await supabase.getAccount(accountId)) throw new Error('Không tìm thấy tài khoản phù hợp với gói hiện tại')
-    return supabase.listAccountActionOverview(accountId)
+    return supabase.listAccountActionOverview(accountId, actionCodes)
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, async (_, accountId: number, actionCodes: string[]) => {

@@ -64,6 +64,7 @@ import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './Cam
 import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
+import AccountInfoModal from './AccountInfoModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
 import { buildCampaignContentPreview } from './campaignContentPreview'
@@ -2493,6 +2494,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
   const handledDiagnosticAction = useRef<string | null>(null)
   const [diagnosticAccount, setDiagnosticAccount] = useState<AutoAccount | null>(null)
+  const [campaignAccountActions, setCampaignAccountActions] = useState<{ account: AutoAccount; campaign: CampaignListItem } | null>(null)
   const [diagnosticFacebookAccount, setDiagnosticFacebookAccount] = useState<AutoAccount | null>(null)
   const [diagnosticRandomAccount, setDiagnosticRandomAccount] = useState<AutoAccount | null>(null)
   const [campaignFormSection, setCampaignFormSection] = useState<'schedule' | undefined>()
@@ -6062,6 +6064,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
         {diagnosticAccount && <AccountInfoView account={diagnosticAccount} mode="modal" onClose={() => {
           setDiagnosticAccount(null); onDiagnosticsChanged?.()
         }} />}
+        {campaignAccountActions && <AccountInfoModal account={campaignAccountActions.account} campaign={campaignAccountActions.campaign}
+          onClose={() => { setCampaignAccountActions(null); onDiagnosticsChanged?.() }} />}
         {diagnosticFacebookAccount && <FacebookCredentialsModal account={diagnosticFacebookAccount} onClose={() => {
           setDiagnosticFacebookAccount(null); onDiagnosticsChanged?.(); void loadAccounts()
         }} />}
@@ -6504,6 +6508,22 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                             >
                               <Info size={14} />
                               <span>Thông tin tài khoản</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="campaign-action-menu-item"
+                              onClick={() => {
+                                setOpenCampaignActionMenuId(null)
+                                if (!account) {
+                                  showAlert('Chưa tải được tài khoản. Vui lòng kiểm tra lại.', 'info')
+                                  return
+                                }
+                                setCampaignAccountActions({ account, campaign })
+                              }}
+                              role="menuitem"
+                            >
+                              <ListTodo size={14} />
+                              <span>Hành động của tài khoản</span>
                             </button>
                             <button
                               type="button"
