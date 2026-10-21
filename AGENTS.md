@@ -690,6 +690,8 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
+- Import Link sheet Google phải đọc CSV theo dấu phẩy cố định; dấu `;` trong ô là dữ liệu để verify tách SĐT sau mapping. CSV khách hàng vẫn nhận diện dấu phân cột; xem [hồi quy](docs/CAMPAIGN_IMPORT_VERIFICATION.md#sửa-review-link-sheet-google--21102026).
+
 - **Phạm vi hành động tài khoản**: `undefined` là toàn bộ tài khoản, `[]` là không có hành động; không đổi danh sách rỗng thành bộ lọc vắng mặt. Form chiến dịch phải đọc cấu hình thành công và khớp account/phiên trước khi gọi overview. Bộ mô tả hiển thị Gắn tag/Đổi tên tách khỏi bộ lọc runtime/quota.
 - **Upload Desktop**: Sheet/Ảnh `responseMode: 'source'` giữ dữ liệu trước lọc để báo cáo ba nhóm; bỏ tùy chọn giữ IPC legacy. Chuẩn hóa importer, đếm dòng nguồn/mục, trùng trong upload và giới hạn 10.000 độc lập với runtime/đích; xem [hợp đồng và hồi quy](docs/CAMPAIGN_IMPORT_VERIFICATION.md).
   CSV xét header sau dòng mô tả và chặn nguồn mơ hồ; UID khoa học chỉ chuyển đủ chữ số, bỏ 0 của mantissa nhưng giữ 0 của UID text/guard Zalo. Xuất dài dùng sheet phụ có marker/kiểm tra đủ phần; xem [sửa review](docs/CAMPAIGN_IMPORT_VERIFICATION.md#sửa-số-0-của-uid-khoa-học-và-csv-có-dòng-mô-tả--21102026).
