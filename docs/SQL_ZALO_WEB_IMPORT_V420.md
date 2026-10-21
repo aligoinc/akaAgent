@@ -62,3 +62,13 @@ Only the new, unapplied `public.akabiz_import_sql_zalo_web_v1(jsonb)` body chang
 - No real account/campaign data was imported; no messages sent. Existing campaign runtime, business schema and connection budget are unchanged.
 
 Private audit evidence: `/Users/lequangnhut/.codex/deployments/sql-zalo-v420-20261021-japtk2t7`.
+
+## V421 — account identity correction, 21 October 2026
+
+User-approved scope: match only compatible Zalo Server accounts (same staff/organization/UID; exclude QR/Web), and allow missing source UID. Missing-UID accounts use the existing quota/proxy helper, retain no SQL session or fabricated profile, and use the source-ID history mapping for replay. Existing mapped accounts remain unchanged after user login/configuration. Deletion, ownership/mode changes, malformed nonempty UIDs and multiple matching Server accounts still fail. Final campaign completion requires the account mapping even when its UID is NULL. Web service also accepts NULL-to-NULL source identity on first import and retry.
+
+Canonical patch: `migrations/migration_v421_akabiz_sql_zalo_web_account_identity.sql`. Built from the exact live `public.akabiz_import_sql_zalo_web_v1(jsonb)` captured this task; the V420 body matches production, with no DB-only patches. Fail-closed preflight accepts source checksum `300cbfc774051241d5cb289522f26e5c` only; target checksum `650066d9ec7ffddbdf044195ce72d29b`. Original V420 is unchanged and must not be reapplied. No business schema, existing helper/trigger, runtime, connection source or budget change.
+
+Verification: disposable PostgreSQL rollback suite covers independent missing-UID accounts, replay, untouched target session/configuration, owner/deletion/mode/quota conflicts, missing mapping at completion, campaign staging/completion, QR/Web coexistence, single Server reuse and duplicate Server rejection. Existing 1,001-input, 3,000-member and separate-session lease/input-lock tests pass. WebApp passes 1,080 API tests, seven workspace typechecks and build. Live transaction installed the patch temporarily, ran only read-only previews and invalid-target/lease guards as service_role, verified owner/ACL/security/config/target checksum, then rolled back; history remains zero. Apply/deployment receipt follows after execution.
+
+Private evidence: `/Users/lequangnhut/.codex/deployments/sql-zalo-account-fix-20261021`. The initial combined trial lacked the delimiter after `pg_get_functiondef`; PostgreSQL rejected it before execution. The migration now has the delimiter and the corrected rollback trial passed.
