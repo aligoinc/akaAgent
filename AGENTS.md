@@ -1,5 +1,9 @@
 # AGENTS.md
 
+V420 đã apply akachat ngày 21/10/2026 (`20261021063329 / migration_v420_akabiz_sql_zalo_web_import`): chỉ thêm bảng history/ánh xạ và RPC import service-role. Checksum live `300cbfc774051241d5cb289522f26e5c`, ACL/RLS, 8 dependency không đổi và rollback smoke đạt; không apply lại. Web/API đã cập nhật image trên machine hiện có 1 shared CPU/512 MB; không chuyển dữ liệu thật, session, schema nghiệp vụ/runtime hoặc connection. Xem [audit và rollback](docs/SQL_ZALO_WEB_IMPORT_V420.md).
+
+V420 giữ copy theo từng lô, đếm ban đầu/cuối, kiểm tra UID/quyền/nhãn và history/cursor/transaction chống trùng. Không hash/khóa toàn bộ nguồn hoặc quét/hash input đích mỗi lô. Hủy lời mời giữ hành vi lấy lại danh sách khi tất cả input hoàn thành; xem hợp đồng trong audit.
+
 Ngày 21/10/2026 hỗ trợ Web Kiểm tra SĐT: App Server gateway quảng bá `phone_check_web_v1`, cho control client check/cancel qua runtime hiện có. Lượt thuộc socket, cancel đúng run/account/socket, disconnect hủy; không detached operation, không đổi quota/policy chiến dịch hay DB. Hai typecheck/build Server và smoke Web gateway đạt; chưa đóng gói/phát hành. Web/API nằm ở repo akaAgentWebApp, xem [hợp đồng Desktop](docs/ZALO_PHONE_CHECK.md#web-app--21102026).
 
 

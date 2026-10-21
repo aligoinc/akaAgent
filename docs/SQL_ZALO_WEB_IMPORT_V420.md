@@ -1,6 +1,6 @@
 # V420 — SQL Zalo Web import
 
-Prepared 21 October 2026; **not applied or deployed**. Backend implementation and the detailed contract live in akaAgentWebApp, `docs/SQL_ZALO_WEB_IMPORT.md`. Canonical migration: [migration_v420_akabiz_sql_zalo_web_import.sql](../migrations/migration_v420_akabiz_sql_zalo_web_import.sql).
+Applied to **akachat on 21 October 2026**, migration `20261021063329 / migration_v420_akabiz_sql_zalo_web_import`. Web/API deployment is recorded below. Backend implementation and the detailed contract live in akaAgentWebApp, `docs/SQL_ZALO_WEB_IMPORT.md`. Canonical migration: [migration_v420_akabiz_sql_zalo_web_import.sql](../migrations/migration_v420_akabiz_sql_zalo_web_import.sql).
 
 Only two new objects (plus the history table's indexes):
 
@@ -24,7 +24,7 @@ Captured prerequisites (`md5(pg_get_functiondef)`):
 
 The migration checks these exact dependencies without editing them. Their captured definitions and relevant table metadata are in akaAgentWebApp's `apps/api/src/modules/aka-agent-migrations/__fixtures__/zalo-import-live-*.sql`; they contain no production rows or credentials.
 
-New RPC source checksum: **absent**. Local target checksum: **300cbfc774051241d5cb289522f26e5c**. No claim of a live target checksum is made before deployment.
+New RPC source checksum: **absent**. Verified live target checksum after apply: **300cbfc774051241d5cb289522f26e5c**.
 
 Staging inserts campaign paused and `is_delete=true` atomically; readers/claim/realtime queries exclude it. Input and mapping/cursor writes share each transaction, capped at 500 rows/1 MiB. Final completion checks the staging version, unchanged campaign metadata, input count, current account UID/ownership, labels and dependencies. Input content/status fingerprints are no longer rescanned; same-count external input edits are accepted and never overwritten. Replays leave completed campaign configuration and runtime progress untouched. Source detail errors map to completed inputs with original status retained only in import history, never invented action results/logs/counters.
 
@@ -41,7 +41,7 @@ AKA_AGENT_REPO=/path/to/akaAgent sh scripts/test-sql-zalo-import.sh
 AKA_AGENT_CHAT_REPO=/path/to/akaAgentChatApi node --import tsx scripts/test-sql-zalo-import-runtime.mjs
 ```
 
-Deployment requires a separate request: recheck project and dependency checksums; apply only V420, then deploy Web/API. Preserve existing migrations. Rollback the application independently while retaining import history and completed business data; do not drop the new objects or delete imported campaigns automatically.
+The user authorized apply and deployment on 21 October. V420 is now applied; do not reapply it. Preserve existing migrations. Rollback the application independently while retaining import history and completed business data; do not drop the new objects or delete imported campaigns automatically.
 
 Review fixes, 21 October: validate labels from the stored staged configuration (send-source and post-send), rejecting UID drift without remapping. Blocklist history stores expected count, committed offset and last batch fingerprint; member writes/mappings/cursor are atomic, with exact replay and final full-reference validation. First staging after a preflight/transport issue restores the account parent mapping. WebApp also scopes legacy cooldown to supported senders, preserves the birthday daily-limit field and NULL-last detail ordering. Additional rollback regression covers both label modes and 3,000 blocklist members; no new object or runtime change.
 
@@ -50,3 +50,15 @@ Follow-up review: the user approved akaAgent defaults for phone lookup (`PHONE_L
 User-approved simplification, 21 October: remove full-dataset source hashing/read locks and repeated target input hash/row-lock scans. Copy source values as each batch is read. Keep ownership/account UID, source eligibility, label/dependency guards, unique history mappings, run/campaign locks and atomic per-batch cursor/count writes. Source count is captured once; destination active input count is checked once at completion, so missing/extra/deleted rows still block completion. External content/status changes with unchanged count are deliberately not reconciled. Per-input history retains original SQL status and source fingerprint computed from the incoming row, without rereading previous rows; no target input fingerprint is stored.
 
 Only the new, unapplied `public.akabiz_import_sql_zalo_web_v1(jsonb)` body changed. Live signature and history table were confirmed absent again on akachat; prerequisite account/staff/entitlement hashes match the table above. Source checksum: absent; local target: `300cbfc774051241d5cb289522f26e5c`. Existing function definitions/attributes, business schema, scheduler/worker/runtime and connection budget are untouched. Regression ROLLBACK checks accepted input edits, final hard/soft-deletion and extra-row count failures, duplicate mapping rollback, cursor validation, 1,001 inputs and 3,000 blocklist members. Separate sessions verify both import lease exclusion and that a locked previous input does not block the next batch. WebApp: 1,077 API tests, all seven workspace typechecks, build, 14 actual-runtime-with-fakes cases and SQL Server synthetic/projection probes passed. No production DDL or real migration was performed.
+
+## Production apply — 21 October 2026
+
+- Target: `akachat / cgjbsmqtfhqvttudyjzq`; migration version **20261021063329**, at **13:33:29 Asia/Ho_Chi_Minh**. Only the canonical V420 file was applied.
+- Exact new signature: `public.akabiz_import_sql_zalo_web_v1(jsonb)`. Source absent; live target checksum `300cbfc774051241d5cb289522f26e5c` matches the local fixture. Owner `postgres`, SECURITY DEFINER, volatile, fixed search_path, 3s lock timeout and 15s statement timeout are confirmed; only postgres/service_role execute.
+- All eight prerequisite function checksums, owners, security modes, volatility, settings and ACLs match the pre-apply snapshot. No existing function or trigger was replaced.
+- History RLS is enabled; anon/authenticated cannot read it; service_role can SELECT but cannot INSERT/UPDATE/DELETE directly. The advisor's “RLS enabled without policies” notice is intentional for this backend-only table, whose writes go through the restricted RPC.
+- Live ROLLBACK smoke passed: service-role invocation, invalid owner, wrong/expired lease, duplicate open run, and RPC ACL. All synthetic history writes rolled back; history count remained zero. Full 1,001-input/3,000-member, cursor/replay and separate-session tests ran against disposable local PostgreSQL.
+- Web/API image from akaAgentWebApp commit `c3d6eefe8aa224908f3c31f2ee2e5a2088a9fcb1` was updated on the existing machine `48ee749f357398`. Only image changed; one shared CPU/512 MB and all other machine configuration remain unchanged. See WebApp `docs/SQL_ZALO_WEB_IMPORT_DEPLOY_20261021.md` for verification and rollback.
+- No real account/campaign data was imported; no messages sent. Existing campaign runtime, business schema and connection budget are unchanged.
+
+Private audit evidence: `/Users/lequangnhut/.codex/deployments/sql-zalo-v420-20261021-japtk2t7`.
