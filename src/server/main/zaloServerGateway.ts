@@ -561,7 +561,7 @@ export class ZaloServerGateway {
         this.scheduleClientSessionExpiry(client, message.token, session.expiresAt)
         client.socket.send(JSON.stringify({
           type: 'hello',
-          phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1'],
+          phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1', 'phone_check_web_v1'],
           snapshot: this.options.getSnapshot(session.staffId),
           events: this.getBufferedEvents(session.staffId),
           operations: this.options.getOperations(session.staffId)
@@ -585,7 +585,7 @@ export class ZaloServerGateway {
       this.scheduleControlRevalidation(client)
       client.socket.send(JSON.stringify({
         type: 'hello',
-        phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1'],
+        phoneCheckCapabilities: [ZALO_PHONE_CHECK_DAILY_CAPABILITY, 'phone_check_daily_limit_v1', 'phone_check_web_v1'],
         snapshot: this.getClientSnapshot(client.auth),
         events: [],
         operations: this.options.getOperations(ticket.staffId),
@@ -603,11 +603,23 @@ export class ZaloServerGateway {
       const args = Array.isArray(message.args) ? message.args : []
       const phoneRequest = message.command === 'contacts.checkZaloPhones' ? validateZaloPhoneCheckRequest(args[1]) : null
       if (phoneRequest) {
-        if (auth.kind !== 'desktop' || phoneRequest.accountId !== args[0]) throw new Error('Yêu cầu kiểm tra SĐT không hợp lệ.')
+        if (phoneRequest.accountId !== args[0] || client.phoneChecks.has(phoneRequest.runId)) throw new Error('Yêu cầu kiểm tra SĐT không hợp lệ.')
         client.phoneChecks.set(phoneRequest.runId, phoneRequest.accountId)
       }
       let result: unknown
-      try { result = auth.kind === 'control'
+      try {
+        if (auth.kind === 'control' && (phoneRequest || message.command === 'contacts.cancelPhoneCheck')) {
+          // Unlike saved data scans, phone checks belong to this live socket.
+          if (message.command === 'contacts.cancelPhoneCheck') {
+            const runId = String(args[1] || '')
+            if (client.phoneChecks.get(runId) !== args[0]) throw new Error('Lượt kiểm tra không thuộc phiên này.')
+            this.options.cancelPhoneCheck?.(auth.staffId, Number(args[0]), runId)
+            result = { success: true }
+          } else {
+            if (!await this.revalidateControlClient(client) || client.socket.readyState !== WebSocket.OPEN) throw new Error('Phiên kiểm tra không còn hợp lệ.')
+            result = await this.options.executeCommand(auth.staffId, message.command, args)
+          }
+        } else result = auth.kind === 'control'
         ? await this.startAuthorizedControlOperation(client, message.command, args)
         : DESKTOP_DETACHED_OPERATION_COMMANDS.has(message.command)
           ? this.options.startControlOperation(auth.staffId, message.command, args)

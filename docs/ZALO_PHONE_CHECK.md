@@ -174,3 +174,8 @@ Bản sửa tự thử lại `fetch failed` cũng nằm trong `ContactLoader`: c
 2. Nếu dùng Server cũ, cập nhật akaAgent Zalo Server có command/event mới trước Desktop.
 3. Cập nhật Desktop sau khi backend/runtime đã sẵn sàng. QR/Web dùng runtime được build cùng Desktop. V406 chỉ seed setting thời gian chờ giờ, không có schema/RPC mới; không apply lại nếu history đã có.
 4. Rollback Desktop trước để ngừng tạo query mới, dừng các lượt đang chạy; sau đó rollback runtime rồi backend. Kết quả trong modal chỉ ở RAM, dữ liệu đã được người dùng lưu vào nhóm giữ nguyên theo ingest hiện có.
+
+
+## Web App — 21/10/2026
+
+Web/API được port ở repo akaAgentWebApp (`docs/ZALO_PHONE_CHECK_WEB.md`), dùng V407 và Chat Data Scan đã có; không migration hoặc Chat API deploy. Gateway App Server cho control client gọi `contacts.checkZaloPhones`/`contacts.cancelPhoneCheck`, quảng bá `phone_check_web_v1`. Lượt kiểm tra thuộc socket, hủy đúng run/account/socket, tự hủy khi disconnect; không dùng detached operation. Các command khác giữ nguyên. Cần cập nhật App Server trước Web nếu chạy nhánh legacy. Hai typecheck và build:server đạt, smoke thực qua WebSocket/ticket: `node scripts/run-zalo-phone-check-web-gateway-smoke.cjs`. Chưa đóng gói/phát hành.
