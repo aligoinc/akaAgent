@@ -3041,12 +3041,15 @@ export interface CampaignImportImageRequest {
   imageDataUrl: string
   platform: CampaignImportPlatform
   actionId?: string
+  /** Preserve unfiltered source rows for Desktop verification. */
+  responseMode?: 'source'
 }
 
 export interface CampaignImportSheetRequest {
   linkSheet: string
   platform: CampaignImportPlatform
   actionId?: string
+  responseMode?: 'source'
 }
 
 export type AkaBizIntegrationKind = 'sms' | 'zaloWeb' | 'akaBizDesktop'

@@ -76,7 +76,7 @@ async function main() {
     assert.equal(await dialog.getByLabel('Số lượng kiểm tra').inputValue(), '600')
     await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
     await page.getByRole('textbox').first().fill('0901234567\n+84 901 234 567\n0912345678\ninvalid')
-    await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+    await page.getByRole('button', { name: 'Kiểm tra dữ liệu', exact: true }).click()
     await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
     await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
     await dialog.getByText('2 SĐT', { exact: true }).waitFor()
@@ -155,7 +155,7 @@ async function main() {
     // Actual modal resume keeps phone 50 eligible and shows its original index/progress.
     await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
     await page.getByRole('textbox').first().fill(await page.evaluate(() => window.phoneSmoke.phones.join('\n')))
-    await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+    await page.getByRole('button', { name: 'Kiểm tra dữ liệu', exact: true }).click()
     await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
     await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
     await dialog.getByText('Đã có kết quả: 0/600', { exact: true }).waitFor()
@@ -216,7 +216,7 @@ async function main() {
     const uploadPhone = async phone => {
       await dialog.getByRole('button', { name: 'Tải data', exact: true }).click()
       await page.getByRole('textbox').first().fill(phone)
-      await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+      await page.getByRole('button', { name: 'Kiểm tra dữ liệu', exact: true }).click()
       await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
       await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
     }
@@ -369,7 +369,7 @@ async function main() {
         await page.evaluate(() => window.phoneSmoke.limitReads[0].resolve(125))
         await page.locator('.campaign-import-modal').waitFor()
         await page.getByRole('textbox').first().fill(await page.evaluate(() => window.phoneSmoke.phones.slice(0,125).join('\n')))
-        await page.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+        await page.getByRole('button', { name: 'Kiểm tra dữ liệu', exact: true }).click()
         await page.locator('.campaign-feedback-modal').getByRole('button', { name: 'Đóng', exact: true }).click()
         await page.getByRole('button', { name: 'Thêm SĐT', exact: true }).click()
         await dialog.getByText('125 SĐT', { exact: true }).waitFor()
