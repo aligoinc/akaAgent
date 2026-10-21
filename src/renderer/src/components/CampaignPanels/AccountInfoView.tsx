@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, RotateCcw, RefreshCw, X } from 'lucide-react'
-import { AccountActionOverview, AutoAccount } from '../../../../shared/types'
+import type { AccountActionOverview, AutoAccount, CampaignListItem } from '../../../../shared/types'
+import { getCampaignAccountOverviewActionDescriptors } from '../../../../shared/campaignActionDescriptors'
+import { useAuthStore } from '../../stores/authStore'
+import { useCampaignStore } from '../../stores/campaignStore'
 import { getAccountPlatformLabel } from '../../utils/accountLabels'
 
 type AccountInfoViewMode = 'modal' | 'dock'
 
 interface AccountInfoViewProps {
   account: AutoAccount
+  campaign?: Pick<CampaignListItem, 'id' | 'name'>
   mode?: AccountInfoViewMode
   onClose?: () => void
 }
@@ -63,31 +67,51 @@ const getVoiceCallCapability = (account: AutoAccount) => {
   return { label: 'Chưa cài APK phù hợp', detail: capability.blockedReason || 'Thiết bị chưa sẵn sàng.' }
 }
 
-export default function AccountInfoView({ account, mode = 'modal', onClose }: AccountInfoViewProps) {
+export default function AccountInfoView({ account, campaign, mode = 'modal', onClose }: AccountInfoViewProps) {
   const [rows, setRows] = useState<AccountActionOverview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [enablingActionCode, setEnablingActionCode] = useState<string | null>(null)
+  const requestVersion = useRef(0)
+  const enablingAction = useRef(false)
+  const user = useAuthStore(state => state.user)
+  const loadCampaignConfig = useCampaignStore(state => state.loadCampaignConfig)
+  const campaignId = campaign?.id
   const isModal = mode === 'modal'
   const isSmsAccount = account.flatformType === 'sms'
   const voiceCallCapability = getVoiceCallCapability(account)
 
   const loadOverview = useCallback(async () => {
     if (!window.electronAPI?.getAccountActionOverview) return
+    const version = ++requestVersion.current
+    const isCurrent = () => requestVersion.current === version && useAuthStore.getState().user === user
     setLoading(true)
     setError(null)
+    setRows([])
     try {
-      const data = await window.electronAPI.getAccountActionOverview(account.id)
-      setRows(data)
+      let actionCodes: string[] | undefined
+      if (campaignId !== undefined) {
+        const config = await loadCampaignConfig(campaignId, { force: true })
+        if (!isCurrent()) return
+        if (!config) throw new Error('Không thể tải cấu hình chiến dịch. Vui lòng thử lại.')
+        if (config.accountId !== account.id) throw new Error('Tài khoản của chiến dịch đã thay đổi. Vui lòng mở lại form.')
+        actionCodes = Array.from(new Set(getCampaignAccountOverviewActionDescriptors(config).map(action => action.code)))
+        if (actionCodes.length === 0) return
+      }
+      const data = await window.electronAPI.getAccountActionOverview(account.id, actionCodes)
+      if (isCurrent()) setRows(data)
     } catch (err: any) {
-      setError(err?.message || 'Không thể tải thông tin hành động')
+      if (isCurrent()) setError(err?.message || 'Không thể tải thông tin hành động')
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
-  }, [account.id])
+  }, [account.id, campaignId, loadCampaignConfig, user])
 
   useEffect(() => {
-    loadOverview()
+    enablingAction.current = false
+    setEnablingActionCode(null)
+    void loadOverview()
+    return () => { requestVersion.current += 1 }
   }, [loadOverview])
 
   const refreshCurrentView = useCallback(() => {
@@ -95,18 +119,27 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
   }, [loadOverview])
 
   const handleEnableActionNow = useCallback(async (actionCode: string) => {
-    if (!window.electronAPI?.enableAccountActionNow || enablingActionCode) return
+    if (!window.electronAPI?.enableAccountActionNow || enablingAction.current || useAuthStore.getState().user !== user) return
+    const version = requestVersion.current
+    const isCurrent = () => requestVersion.current === version && useAuthStore.getState().user === user
+    enablingAction.current = true
     setEnablingActionCode(actionCode)
     setError(null)
     try {
       await window.electronAPI.enableAccountActionNow(account.id, actionCode)
+      if (!isCurrent()) return
+      enablingAction.current = false
+      setEnablingActionCode(null)
       await loadOverview()
     } catch (err: any) {
-      setError(err?.message || 'Không thể chạy lại hành động ngay')
+      if (isCurrent()) setError(err?.message || 'Không thể chạy lại hành động ngay')
     } finally {
-      setEnablingActionCode(null)
+      if (isCurrent()) {
+        enablingAction.current = false
+        setEnablingActionCode(null)
+      }
     }
-  }, [account.id, enablingActionCode, loadOverview])
+  }, [account.id, loadOverview, user])
 
   const limitedCount = useMemo(() => rows.filter(row => row.status.isDisable).length, [rows])
   const totalToday = useMemo(() => rows.reduce((sum, row) => sum + (row.status.countActionInDay || 0), 0), [rows])
@@ -115,14 +148,14 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
     <>
       <div className={isModal ? 'modal-header' : 'account-info-dock-header'}>
         <div>
-          <div className={isModal ? 'modal-title' : 'account-info-dock-title'}>Thông tin tài khoản</div>
-          <div className="account-info-subtitle">{account.name}</div>
+          <div className={isModal ? 'modal-title' : 'account-info-dock-title'}>{campaign ? 'Hành động của tài khoản' : 'Thông tin tài khoản'}</div>
+          <div className="account-info-subtitle">{account.name}{campaign ? ` · ${campaign.name}` : ''}</div>
         </div>
         <div className="account-info-header-actions">
           <button
             className="btn btn-ghost btn-icon"
             onClick={refreshCurrentView}
-            disabled={loading}
+            disabled={loading || Boolean(enablingActionCode)}
             title="Làm mới"
           >
             <RefreshCw size={15} />
@@ -136,7 +169,7 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
       </div>
 
       <div className={`${isModal ? 'modal-body ' : ''}account-info-body ${isModal ? '' : 'account-info-body-dock'}`}>
-        <div className="account-info-summary">
+        {!campaign && <div className="account-info-summary">
           <div className="account-info-field">
             <span>Nền tảng</span>
             <strong>{getAccountPlatformLabel(account)}</strong>
@@ -203,7 +236,7 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
             <span>Đang bị giới hạn</span>
             <strong>{limitedCount}/{rows.length}</strong>
           </div>
-        </div>
+        </div>}
 
         {error && (
           <div className="account-info-error">
@@ -215,8 +248,8 @@ export default function AccountInfoView({ account, mode = 'modal', onClose }: Ac
         <div className="account-info-actions-title">Hành động</div>
         {loading ? (
           <div className="text-center text-secondary account-info-loading">Đang tải...</div>
-        ) : rows.length === 0 ? (
-          <div className="text-center text-muted account-info-loading">Chưa có hành động nào</div>
+        ) : error && rows.length === 0 ? null : rows.length === 0 ? (
+          <div className="text-center text-muted account-info-loading">{campaign ? 'Chiến dịch này không có hành động áp dụng giới hạn trên tài khoản.' : 'Chưa có hành động nào'}</div>
         ) : (
           <table className="campaign-grid account-info-actions-table">
             <thead>

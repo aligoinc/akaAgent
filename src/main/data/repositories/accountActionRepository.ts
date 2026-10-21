@@ -175,7 +175,12 @@ export async function getAccountActionStatus(accountId: number, actionCode: stri
   return (await getAccountActionStatusSnapshot(accountId, actionCode)).status
 }
 
-export async function listAccountActions(flatformType?: string, includeRestricted = false): Promise<AutoAccountAction[]> {
+export async function listAccountActions(
+  flatformType?: string,
+  includeRestricted = false,
+  actionCodes?: string[]
+): Promise<AutoAccountAction[]> {
+  if (actionCodes?.length === 0) return []
   const entitlements = includeRestricted
     ? {
       facebookCore: true,
@@ -210,6 +215,9 @@ export async function listAccountActions(flatformType?: string, includeRestricte
 
   if (flatformType) {
     query = query.eq('flatform_type', flatformType)
+  }
+  if (actionCodes !== undefined) {
+    query = query.in('code', actionCodes)
   }
 
   const { data, error } = await query
@@ -397,8 +405,20 @@ function getOverviewWindowMinutes(
   )
 }
 
-export async function listAccountActionOverview(accountId: number): Promise<AccountActionOverview[]> {
+/** Omitted codes load the full account; an explicit empty list never falls back to all actions. */
+export async function listAccountActionOverview(
+  accountId: number,
+  requestedActionCodes?: string[]
+): Promise<AccountActionOverview[]> {
   const u = requireCurrentUser()
+  if (!Number.isSafeInteger(accountId) || accountId <= 0 || (requestedActionCodes !== undefined && (
+    !Array.isArray(requestedActionCodes) || requestedActionCodes.length > 32 ||
+    requestedActionCodes.some(code => typeof code !== 'string' || !/^[a-z0-9_]{1,100}$/.test(code))
+  ))) {
+    throw new Error('Tài khoản hoặc mã hành động không hợp lệ')
+  }
+  const requestedCodes = requestedActionCodes === undefined ? undefined : [...new Set(requestedActionCodes)]
+  if (requestedCodes?.length === 0) return []
   const { data: account } = await runOverviewQuery(
     'Failed to get account for action overview',
     () => client()
@@ -413,8 +433,9 @@ export async function listAccountActionOverview(accountId: number): Promise<Acco
 
   await withTransientRetry(() => enableDueAccountActions())
 
-  const actions = await withTransientRetry(() => listAccountActions(account.flatform_type as string))
+  const actions = await withTransientRetry(() => listAccountActions(account.flatform_type as string, false, requestedCodes))
   const actionCodes = actions.map(action => action.code).filter(Boolean)
+  if (actionCodes.length === 0) return []
   const groupSettings = ((account as any).auto_account_groups?.settings as AccountGroupSettings | null) ?? null
   const actionWindowMinutes = new Map(actionCodes.map(actionCode => [
     actionCode,
