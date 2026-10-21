@@ -1,5 +1,13 @@
 # AGENTS.md
 
+V422 đã apply akachat ngày 21/10/2026 (`20261021072601 / migration_v422_akabiz_sql_zalo_web_mapped_reuse`): RPC import ưu tiên ánh xạ ID nguồn→đích dù UID SQL thay đổi; checksum `e7646343b76af8a1d66f1e82ea1a360b`. Giữ owner/mode/deletion, target UID cũ, quota/proxy, ACL và 8 helper/trigger/runtime/connection. Không apply lại V420/V421/V422. Web/API deploy `7160ae4`, health 1/1; dry run nhutlq dự kiến 7 tạo/1 dùng lại, 0 lỗi, history 0, chưa chuyển thật. Xem [audit](docs/SQL_ZALO_WEB_IMPORT_V420.md#v422--reuse-the-saved-source-id-mapping).
+
+V421 đã apply akachat ngày 21/10/2026 (`20261021070657 / migration_v421_akabiz_sql_zalo_web_account_identity`): RPC import chỉ dùng lại Zalo Server cùng UID, thiếu UID tạo session rỗng và chống trùng theo ID nguồn. Checksum `650066d9ec7ffddbdf044195ce72d29b`; giữ quota/proxy, ACL và 8 helper/trigger/runtime, không apply lại. Xem [audit](docs/SQL_ZALO_WEB_IMPORT_V420.md#v421--account-identity-correction-21-october-2026).
+
+V420 đã apply akachat ngày 21/10/2026 (`20261021063329 / migration_v420_akabiz_sql_zalo_web_import`): chỉ thêm bảng history/ánh xạ và RPC import service-role. Checksum live `300cbfc774051241d5cb289522f26e5c`, ACL/RLS, 8 dependency không đổi và rollback smoke đạt; không apply lại. Web/API đã cập nhật image trên machine hiện có 1 shared CPU/512 MB; không chuyển dữ liệu thật, session, schema nghiệp vụ/runtime hoặc connection. Xem [audit và rollback](docs/SQL_ZALO_WEB_IMPORT_V420.md).
+
+V420 giữ copy theo từng lô, đếm ban đầu/cuối, kiểm tra UID/quyền/nhãn và history/cursor/transaction chống trùng. Không hash/khóa toàn bộ nguồn hoặc quét/hash input đích mỗi lô. Hủy lời mời giữ hành vi lấy lại danh sách khi tất cả input hoàn thành; xem hợp đồng trong audit.
+
 Ngày 21/10/2026 hỗ trợ Web Kiểm tra SĐT: App Server gateway quảng bá `phone_check_web_v1`, cho control client check/cancel qua runtime hiện có. Lượt thuộc socket, cancel đúng run/account/socket, disconnect hủy; không detached operation, không đổi quota/policy chiến dịch hay DB. Hai typecheck/build Server và smoke Web gateway đạt; chưa đóng gói/phát hành. Web/API nằm ở repo akaAgentWebApp, xem [hợp đồng Desktop](docs/ZALO_PHONE_CHECK.md#web-app--21102026).
 
 
