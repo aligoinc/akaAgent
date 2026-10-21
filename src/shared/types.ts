@@ -1,3 +1,4 @@
+import type { ColumnFilterRequest, DataTableSource } from './dataColumnFilters'
 import type { GroupAccess } from './groupSharing'
 import type { ZaloEngagement, EngagementFilter } from './zaloCampaignEngagement'
 import type { SendExclusionsByAccount } from './campaignSendExclusion'
@@ -1603,6 +1604,7 @@ export interface PageInboxScanInfo {
 export type PageInboxScanStopReason = 'date_limit' | 'customer_limit' | 'exhausted' | 'cancelled' | 'error'
 
 export interface PageInboxContactListQuery {
+  columnFilters?: ColumnFilterRequest
   pageUid?: string
   search?: string
   phoneFilter?: PageInboxPhoneFilter
@@ -1617,6 +1619,7 @@ export interface PageInboxContactListQuery {
 }
 
 export interface AccountContactListQuery {
+  columnFilters?: ColumnFilterRequest
   contactType?: ContactType
   datasetId?: number
   sortBy?: 'zalo_group_role'
@@ -1673,6 +1676,7 @@ export interface ZaloGroupMemberContactListQuery extends AccountContactListQuery
 }
 
 export interface ZaloRemarketingCustomerListQuery {
+  columnFilters?: ColumnFilterRequest
   campaignActionId?: string
   campaignActionIds?: string[]
   dateFrom?: string
@@ -2153,6 +2157,7 @@ export type DataGroupMemberStatusFilter =
   | 'inactive'
 
 export interface DataGroupMemberListQuery {
+  columnFilters?: ColumnFilterRequest
   sourceCodes?: Array<'upload' | 'scan' | 'automation' | 'dynamic_filter' | 'external_sync'>
   groupId: number
   search?: string
@@ -2167,6 +2172,21 @@ export interface DataGroupMemberListQuery {
   excludeIds?: number[]
   offset?: number
   limit?: number
+}
+
+export interface DataColumnReadRequest {
+  source: DataTableSource
+  accountId?: number
+  formId: string
+  requestId: string
+  query: AccountContactListQuery | PageInboxContactListQuery | ZaloRemarketingCustomerListQuery | DataGroupMemberListQuery
+}
+export interface DataColumnReadResult {
+  available: boolean
+  contacts: AutoAccountContact[]
+  members: DataGroupMember[]
+  ids: number[]
+  total: number
 }
 
 export interface DataGroupMemberListResult {
@@ -3308,6 +3328,9 @@ export const IPC_EVENTS = {
   CONTACTS_GET_PAGE_INBOX_SCAN_INFO: 'contacts:get-page-inbox-scan-info',
   CONTACTS_LOAD_ZALO_GROUP_MEMBERS: 'contacts:load-zalo-group-members',
   CONTACTS_LIST_PAGE_INBOX: 'contacts:list-page-inbox',
+  DATA_COLUMN_FILTER_READ: 'data-column-filter:read',
+  DATA_COLUMN_FILTER_EXPORT: 'data-column-filter:export',
+  DATA_COLUMN_FILTER_CANCEL: 'data-column-filter:cancel',
   CONTACTS_LIST_PAGED: 'contacts:list-paged',
   CONTACTS_LIST_ZALO_GROUP_MEMBERS: 'contacts:list-zalo-group-members',
   CONTACTS_LIST_ZALO_REMARKETING_CUSTOMERS: 'contacts:list-zalo-remarketing-customers',

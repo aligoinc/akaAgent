@@ -1,0 +1,16 @@
+{
+  "checksum": "846ce2b7ba692ae462c87f49ac668ba6",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text DEFAULT NULL::text, p_account_ids bigint[] DEFAULT NULL::bigint[], p_include_accountless boolean DEFAULT true, p_contact_types text[] DEFAULT NULL::text[], p_flatform_types text[] DEFAULT NULL::text[], p_status text DEFAULT 'all'::text, p_dataset_ids bigint[] DEFAULT NULL::bigint[], p_ids bigint[] DEFAULT NULL::bigint[], p_exclude_ids bigint[] DEFAULT NULL::bigint[], p_offset integer DEFAULT 0, p_limit integer DEFAULT 100)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, data_type_category_item_id bigint, data_type_code text, data_type_name text, group_data_type_category_item_id bigint, group_data_type_code text, group_data_type_name text, total_count bigint)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT *\n  FROM public.aka_agent_list_data_group_members(\n    p_staff_id, p_organization_id, p_group_id, p_search, p_account_ids,\n    p_include_accountless, p_contact_types, p_flatform_types, p_status,\n    p_dataset_ids, NULL, p_ids, p_exclude_ids, p_offset, p_limit\n  );\n$function$\n",
+  "identity_args": "p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer",
+  "name": "aka_agent_list_data_group_members",
+  "owner": "postgres",
+  "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "prosecdef": true,
+  "provolatile": "s",
+  "schema": "public",
+  "signature": "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+  "version": "17.6"
+}

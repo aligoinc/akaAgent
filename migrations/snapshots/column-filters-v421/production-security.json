@@ -1,0 +1,60 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "rows": [
+    {
+      "checks": [
+        {
+          "role": "anon",
+          "test": "contacts_missing_auth_rejected"
+        },
+        {
+          "role": "anon",
+          "test": "group_missing_auth_rejected"
+        },
+        {
+          "role": "anon",
+          "test": "remarketing_missing_auth_rejected"
+        },
+        {
+          "role": "anon",
+          "test": "contacts_cross_tenant_rejected"
+        },
+        {
+          "role": "anon",
+          "test": "group_cross_tenant_rejected"
+        },
+        {
+          "role": "anon",
+          "test": "remarketing_cross_tenant_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "contacts_missing_auth_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "group_missing_auth_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "remarketing_missing_auth_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "contacts_cross_tenant_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "group_cross_tenant_rejected"
+        },
+        {
+          "role": "authenticated",
+          "test": "remarketing_cross_tenant_rejected"
+        }
+      ]
+    }
+  ],
+  "businessWrites": 0,
+  "rolledBack": true,
+  "expectedAdvisoriesReviewed": 6
+}

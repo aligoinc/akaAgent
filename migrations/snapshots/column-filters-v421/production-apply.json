@@ -1,0 +1,13 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "projectName": "akachat",
+  "version": "20261021072852",
+  "name": "data_column_filters_v421",
+  "at": "2026-10-21T07:28:53.172Z",
+  "migrationSha256": "26045b91bf6367e09ce3715a120352a1c0bda86b0a9f74054bc8739d0059e6f3",
+  "success": true,
+  "newFunctions": 12,
+  "preservedDependencies": 14,
+  "businessWrites": 0,
+  "appReleased": false
+}

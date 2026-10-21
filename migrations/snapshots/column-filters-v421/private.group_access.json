@@ -1,0 +1,16 @@
+{
+  "checksum": "251162422553d81d432151554b5ea16a",
+  "definition": "CREATE OR REPLACE FUNCTION private.group_access(p_kind text, p_group_id bigint, p_staff_id bigint, p_organization_id bigint)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  WITH resource AS (\n    SELECT id,staff_id,organization_id,sharing_scope,sharing_revision\n    FROM public.auto_account_contact_groups\n    WHERE p_kind='data' AND id=p_group_id AND purpose='data_group' AND NOT is_delete\n    UNION ALL\n    SELECT id,staff_id,organization_id,sharing_scope,sharing_revision\n    FROM public.auto_content_groups\n    WHERE p_kind='content' AND id=p_group_id AND NOT is_delete\n  )\n  SELECT jsonb_build_object(\n    'ownerStaffId',g.staff_id,'ownerName',COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id),\n    'role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END,\n    'canManage',g.staff_id=p_staff_id,'canUse',true,'canCopy',true,\n    'scope',g.sharing_scope,'revision',g.sharing_revision::text)\n  FROM resource g\n  JOIN public.org_staff owner ON owner.id=g.staff_id AND owner.organization_id=g.organization_id\n    AND owner.deleted_at IS NULL AND owner.is_active\n  JOIN public.org_staff viewer ON viewer.id=p_staff_id AND viewer.organization_id=g.organization_id\n    AND viewer.deleted_at IS NULL AND viewer.is_active\n  WHERE g.organization_id=p_organization_id AND (\n    g.staff_id=p_staff_id OR g.sharing_scope='organization' OR\n    (g.sharing_scope='selected' AND (\n      (p_kind='data' AND EXISTS(SELECT 1 FROM public.auto_data_group_recipients r WHERE r.group_id=g.id AND r.staff_id=p_staff_id))\n      OR (p_kind='content' AND EXISTS(SELECT 1 FROM public.auto_content_group_recipients r WHERE r.group_id=g.id AND r.staff_id=p_staff_id))\n    ))\n  );\n$function$\n",
+  "identity_args": "p_kind text, p_group_id bigint, p_staff_id bigint, p_organization_id bigint",
+  "name": "group_access",
+  "owner": "postgres",
+  "proacl": "{postgres=X/postgres}",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "prosecdef": true,
+  "provolatile": "s",
+  "schema": "private",
+  "signature": "private.group_access(text,bigint,bigint,bigint)",
+  "version": "17.6"
+}

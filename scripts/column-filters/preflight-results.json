@@ -1,0 +1,15 @@
+{
+  "checks": 7,
+  "passed": [
+    "all scan sources retain account/capability preflight through IPC",
+    "missing account and missing capability never dispatch filtered RPC",
+    "both preflight HTTP reads close on the overall deadline; no RPC follows",
+    "slots retain the uncertain server budget, then queued reads recover",
+    "form cancellation closes account HTTP and prevents the filtered read",
+    "session changes close old preflight without authorizing a stale read",
+    "real HTTP concurrency never exceeds two account reads"
+  ],
+  "maxActiveAccountReads": 2,
+  "fixture": "localhost HTTP; deadline 450ms / uncertain budget 140ms only in test",
+  "production_changed": false
+}

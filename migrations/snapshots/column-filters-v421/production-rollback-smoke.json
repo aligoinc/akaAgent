@@ -1,0 +1,13 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "mode": "rollback-smoke",
+  "at": "2026-10-21T07:30:46.673Z",
+  "durationMs": 5975,
+  "rolledBack": true,
+  "businessWrites": 0,
+  "rows": [
+    {
+      "all_targets_removed": true
+    }
+  ]
+}

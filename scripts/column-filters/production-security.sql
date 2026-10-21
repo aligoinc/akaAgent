@@ -1,0 +1,44 @@
+BEGIN READ ONLY; SET LOCAL statement_timeout='60s';
+DO $checks$
+DECLARE role_name text; creds record; ok boolean; result jsonb:='[]';
+BEGIN
+ SELECT username,password INTO STRICT creds FROM public.org_staff WHERE id=308 AND organization_id=289 AND is_active AND deleted_at IS NULL;
+ FOREACH role_name IN ARRAY ARRAY['anon','authenticated'] LOOP
+  PERFORM set_config('request.jwt.claim.role',role_name,true);
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('role',role_name)::text,true);
+  EXECUTE format('SET LOCAL ROLE %I',role_name);
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_contacts_v1(0,0,NULL,NULL,'contacts','{"accountId":0,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN OTHERS THEN ok:=SQLERRM='automation_auth_required'; END;
+  IF NOT ok THEN RAISE EXCEPTION 'contacts auth guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','contacts_missing_auth_rejected'));
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_group_v1(0,0,NULL,NULL,'{"groupId":0,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN OTHERS THEN ok:=SQLERRM='automation_auth_required'; END;
+  IF NOT ok THEN RAISE EXCEPTION 'group auth guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','group_missing_auth_rejected'));
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_remarketing_v1(0,0,NULL,NULL,'{"accountId":0,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN OTHERS THEN ok:=SQLERRM='automation_auth_required'; END;
+  IF NOT ok THEN RAISE EXCEPTION 'remarketing auth guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','remarketing_missing_auth_rejected'));
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_contacts_v1(308,289,creds.username,creds.password,'contacts','{"accountId":1568,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN SQLSTATE '42501' THEN ok:=true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'contacts tenant guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','contacts_cross_tenant_rejected'));
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_group_v1(308,289,creds.username,creds.password,'{"groupId":4916,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN SQLSTATE '42501' THEN ok:=true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'group tenant guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','group_cross_tenant_rejected'));
+  ok:=false;
+  BEGIN PERFORM public.aka_agent_read_filtered_remarketing_v1(308,289,creds.username,creds.password,'{"accountId":1568,"columnFilters":{"version":1,"filters":[]}}');
+  EXCEPTION WHEN SQLSTATE '42501' THEN ok:=true; END;
+  IF NOT ok THEN RAISE EXCEPTION 'remarketing tenant guard failed'; END IF;
+  result:=result||jsonb_build_array(jsonb_build_object('role',role_name,'test','remarketing_cross_tenant_rejected'));
+  EXECUTE 'RESET ROLE';
+ END LOOP;
+ PERFORM set_config('column_filters.security_result',result::text,true);
+END $checks$;
+SELECT current_setting('column_filters.security_result')::jsonb checks;ROLLBACK;

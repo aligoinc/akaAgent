@@ -1,0 +1,53 @@
+{
+  "fixture_rows": 100000,
+  "checks": [
+    "full total",
+    "membership identity",
+    "Unicode casefold",
+    "literal wildcard",
+    "leading zero identifier",
+    "trimmed empty",
+    "negative excludes empty",
+    "SQL literal escaping",
+    "primary source",
+    "legacy any-source independent",
+    "primary source plus legacy scope",
+    "boolean status",
+    "ID-only reader uses membership IDs",
+    "empty page preserves total",
+    "shared account name preserved",
+    "shared provenance redacted",
+    "no filtering leak from hidden columns",
+    "owner automation",
+    "cursor no overlap",
+    "cursor matches offset",
+    "cross tenant",
+    "private other owner",
+    "unknown field",
+    "invalid operation",
+    "unknown enum",
+    "oversize page",
+    "helper not executable by anon",
+    "outer statement timeout"
+  ],
+  "performance": {
+    "all": {
+      "max_seconds": 0.232,
+      "two_read_max_seconds": 0.149
+    },
+    "name_contains": {
+      "max_seconds": 0.2578,
+      "two_read_max_seconds": 0.2412
+    },
+    "mixed": {
+      "max_seconds": 0.1412,
+      "two_read_max_seconds": 0.1748
+    },
+    "automation": {
+      "max_seconds": 0.6217,
+      "two_read_max_seconds": 0.4655
+    }
+  },
+  "gate": true,
+  "environment": "PostgreSQL 16.15 local ICU und; metadata schema/indexes captured from PostgreSQL 17.6; no production rows or traffic; durations include psql startup"
+}

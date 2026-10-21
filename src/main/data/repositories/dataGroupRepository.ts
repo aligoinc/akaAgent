@@ -138,7 +138,7 @@ function mapProvenance(row: DbRow): DataProvenance {
   }
 }
 
-function mapDataGroupMember(row: DbRow): DataGroupMember {
+export function mapDataGroupMember(row: DbRow): DataGroupMember {
   const provenanceRows = Array.isArray(row.provenance) ? row.provenance as DbRow[] : []
   const datasetIds = Array.isArray(row.dataset_ids)
     ? row.dataset_ids.map(value => asNumber(value)).filter(value => value > 0)

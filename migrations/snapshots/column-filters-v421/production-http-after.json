@@ -1,0 +1,50 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "at": "2026-10-21T07:29:17.223Z",
+  "mode": "after",
+  "readOnly": true,
+  "checks": [
+    {
+      "case": "legacy_contact_relationship",
+      "status": 200,
+      "rows": 10,
+      "checksum": "27e174485026cbf3f5bfd8f5411fda47be90ab15c007ca9cbd5a8e58d64ec3a5",
+      "durationMs": 560
+    },
+    {
+      "case": "aka_agent_group_sharing",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 93
+    },
+    {
+      "case": "aka_agent_list_data_group_members_v2",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 627
+    },
+    {
+      "case": "aka_agent_read_filtered_contacts_v1",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 101
+    },
+    {
+      "case": "aka_agent_read_filtered_group_v1",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 163
+    },
+    {
+      "case": "aka_agent_read_filtered_remarketing_v1",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 287
+    }
+  ]
+}

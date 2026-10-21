@@ -1,5 +1,16 @@
 # CLAUDE.md
 
+Bộ lọc cột đã apply akachat ngày 21/10/2026: `20261021072852 / data_column_filters_v421`, chỉ 12 hàm mới; 14 dependency/quyền và patch V414 giữ nguyên. SQL/API legacy trước–sau, 25 ca rollback/post-apply, 12 ca auth/tenant và guarded rollback đạt; kiểm tra tương thích ở tầng SQL/API, chưa mở mọi bộ cài cũ. Không apply lại, chưa đóng gói/phát hành app; [audit production và thay đổi độc lập V422](docs/DATA_COLUMN_FILTERS.md#apply-production-và-tương-thích-app-cũ--21102026). Các ghi chú candidate bên dưới là lịch sử trước apply.
+
+Review validate/timeout bộ lọc cột ngày 21/10/2026: điều kiện mới phải hợp lệ trước khi xóa lọc cũ/reset lựa chọn; preflight đọc account nhận AbortSignal/deadline 65 giây qua IPC, abort phải settle rồi giữ ngân sách server 60 giây. 15 UI, 15 contract, 13 service, 7 preflight HTTP local và hai typecheck/build đạt. Không đổi SQL candidate, quyền, query count/connection; chưa apply production/phát hành. Xem [audit validate và timeout](docs/DATA_COLUMN_FILTERS.md#sửa-validate-ui-và-timeout-kiểm-tra-quyền--21102026).
+
+Review tiếp bộ lọc cột ngày 21/10/2026: tìm kiếm chung xét đủ mười trường SĐT trong extra_data/rawPayload trên liên hệ/upload/thành viên nhóm; lọc riêng cột vẫn theo giá trị hiển thị. 154 ca review, 20 ca SQL Quét data và bảy workload local đạt gate 2 giây; chỉ đổi reader contacts trong candidate V421, giữ 14 dependency live và cấu hình timeout. Chưa apply production/phát hành; xem [audit tìm kiếm SĐT](docs/DATA_COLUMN_FILTERS.md#sửa-tìm-kiếm-nhiều-trường-sđt--21102026).
+
+Review bộ lọc cột ngày 21/10/2026: sửa hai finding bằng bind toàn bộ giá trị/cursor/phân trang, ghép cấu trúc SQL một lần và kiểm tra cursor chặt; trạng thái Data khớp hiển thị cho nhóm chưa tham gia và loại không có trạng thái bạn bè. 94 ca hồi quy, timeout HTTP 60s/phục hồi, kiểm chứng tải và audit/rollback local đạt; giữ 14 dependency live, không apply production/phát hành. Xem [audit review](docs/DATA_COLUMN_FILTERS.md#sửa-hai-finding-review--21102026).
+
+Bộ lọc cột Quét data/Data ngày 21/10/2026: đã dựng backend rồi kiểm chứng local trước UI; catalog kiểu/toán tử, menu ở cột + thanh điều kiện, cùng query cho phân trang/chọn/xuất. V421 là **candidate chưa apply production**: ba RPC đọc mới, private allowlist, giữ ACL/V414, HTTP client hiện có, tối đa hai lượt/process, DB 60s/caller 65s theo quy tắc bulk và chặn kết quả phiên cũ; Page Inbox đọc SQLite trong process có thể dừng thật. 100k local đạt; stress 1m lịch sử có timeout được kiểm soát, không phải cam kết production. Hai typecheck/build và hồi quy đạt; chưa đóng gói/phát hành. Xem [hợp đồng, số đo, audit/rollout/rollback](docs/DATA_COLUMN_FILTERS.md).
+
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Commands

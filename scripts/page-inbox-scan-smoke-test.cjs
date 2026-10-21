@@ -38,7 +38,10 @@ function loadSource(relativePath) {
       app: { getPath: () => temporaryDirectory },
       ipcMain: { handle: (event, handler) => ipcHandlers.set(event, handler) }
     }
+    if (id.endsWith('/filters/dataColumnReadService')) return { executeColumnRead: () => { throw new Error('Unexpected column filter invocation in legacy scan smoke') }, cancelColumnRead: () => {} }
     if (id.endsWith('/currentUser')) return { requireCurrentUser: () => user }
+    if (id.endsWith('/accountLogService')) return { recordAccountLog: () => {} }
+    if (id.endsWith('/requestDeadline') || id.endsWith('/zaloPhoneSearch')) return loadSource(resolve(dirname(filename), `${id}.ts`))
     if (id.endsWith('/backgroundPageManager')) return { BackgroundPageManager: class {} }
     if (id.endsWith('/workflowEngine')) return { WorkflowEngineV2: class {} }
     if (id.endsWith('/workflowV2Repository')) return {}
@@ -55,7 +58,7 @@ function loadSource(relativePath) {
     }
     if (!id.startsWith('.')) return require(id)
     const path = resolve(dirname(filename), `${id}.ts`)
-    if (!path.includes('/shared/')) throw new Error(`Unexpected runtime dependency: ${id}`)
+    if (!path.includes('/shared/') && !path.includes('/data/filters/sqlite')) throw new Error(`Unexpected runtime dependency: ${id}`)
     return loadSource(path)
   }
   new Function('require', 'module', 'exports', compiled)(localRequire, module, module.exports)
