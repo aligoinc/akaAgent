@@ -1,5 +1,8 @@
 # AGENTS.md
 
+Ngày 21/10/2026 hỗ trợ Web Kiểm tra SĐT: App Server gateway quảng bá `phone_check_web_v1`, cho control client check/cancel qua runtime hiện có. Lượt thuộc socket, cancel đúng run/account/socket, disconnect hủy; không detached operation, không đổi quota/policy chiến dịch hay DB. Hai typecheck/build Server và smoke Web gateway đạt; chưa đóng gói/phát hành. Web/API nằm ở repo akaAgentWebApp, xem [hợp đồng Desktop](docs/ZALO_PHONE_CHECK.md#web-app--21102026).
+
+
 Review loại trừ ngày 20/10/2026: Desktop/Web giữ ý định của nháp legacy có `zaloFriendBlocklistEnabled=true` nhưng chưa có ID danh sách. Marker `values.zaloPendingBlocklistAccountId` chỉ thuộc nháp, theo account; cảnh báo trong section và chặn Lưu chiến dịch cho đến khi chọn danh sách hoặc chủ động bỏ yêu cầu. Lưu/mở lại nháp giữ marker, cấu hình mới rỗng có chủ ý không bị suy lại từ checkbox cũ. Không đổi prompt/schema AI, DB/RPC/runtime. Hồi quy và phạm vi ở [audit](docs/CAMPAIGN_SEND_EXCLUSION_AI.md#sửa-nháp-cũ-chưa-chọn-danh-sách--20102026).
 
 Web Loại trừ gửi cho khách hàng ngày 20/10/2026: đã port section/AI, giữ config 7 model Sol 6.1 (21), prompt/schema/options. Chỉ gán binding Web qua migration `20261020161100 / campaign_send_exclusions_web` đã apply akachat; canonical `migrations/20261020160644_campaign_send_exclusions_web.sql`, không apply lại. Không sửa RPC/Desktop runtime; chưa deploy Web/API. Xem [audit và rollback](docs/CAMPAIGN_SEND_EXCLUSION_AI.md#web--20102026).
