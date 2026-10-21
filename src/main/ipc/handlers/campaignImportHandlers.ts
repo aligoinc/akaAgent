@@ -12,6 +12,8 @@ import { normalizeVietnamMobilePhone } from '../../../shared/phone'
 import { isZaloUidImportAction, normalizeZaloImportUid } from '../../../shared/zaloUidImport'
 import { requireCurrentUser } from '../../data/currentUser'
 import { callAiUsing } from '../../services/aiRuntimeService'
+import { imageImportRows, type ImportImageSource, type ImportTableSource } from '../../../shared/campaignImportVerification'
+import { importWorkbookTables, readImportWorkbook } from '../../../shared/campaignImportWorkbook'
 
 const IMPORT_IMAGE_AI_CODE = 'app_campaign_import_image_to_data'
 const SHEET_FETCH_TIMEOUT_MS = 30000
@@ -186,7 +188,7 @@ function looksLikeHtml(buffer: Buffer, contentType: string): boolean {
   return head.startsWith('<!doctype html') || head.startsWith('<html') || head.includes('<html')
 }
 
-async function fetchSheetWorkbookRows(linkSheet: unknown, actionId?: string | null): Promise<unknown[][]> {
+async function fetchSheetWorkbook(linkSheet: unknown, actionId?: string | null, sourceMode = false) {
   const url = resolveSheetDownloadUrl(linkSheet)
   const response = await fetch(url, {
     redirect: 'follow',
@@ -201,7 +203,12 @@ async function fetchSheetWorkbookRows(linkSheet: unknown, actionId?: string | nu
     throw new Error('Không thể đọc link sheet. Vui lòng bật chia sẻ "Anyone with link" hoặc dùng link CSV/XLS/XLSX export hợp lệ.')
   }
 
-  const workbook = read(buffer, { type: 'buffer', ...(isZaloUidImportAction(actionId) ? { raw: true, codepage: 65001 } : {}) })
+  return sourceMode ? readImportWorkbook(new Uint8Array(buffer))
+    : read(buffer, { type: 'buffer', ...(isZaloUidImportAction(actionId) ? { raw: true, codepage: 65001 } : {}) })
+}
+
+async function fetchSheetWorkbookRows(linkSheet: unknown, actionId?: string | null): Promise<unknown[][]> {
+  const workbook = await fetchSheetWorkbook(linkSheet, actionId)
   const sheetName = workbook.SheetNames[0]
   if (!sheetName) return []
   const sheet = workbook.Sheets[sheetName]
@@ -345,14 +352,17 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
 }
 
 export function registerCampaignImportHandlers(): void {
-  ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, async (_, request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[]> => {
+  ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, async (_, request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[] | ImportTableSource> => {
     requireCurrentUser()
     const platform = normalizePlatform(request?.platform)
+    if (request?.responseMode === 'source') {
+      return importWorkbookTables(await fetchSheetWorkbook(request.linkSheet, request.actionId, true))
+    }
     const rows = await fetchSheetWorkbookRows(request?.linkSheet, request?.actionId)
     return normalizeImportedRows(mapSheetRows(rows, request?.actionId), platform, request?.actionId || '')
   })
 
-  ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, async (_, request: CampaignImportImageRequest): Promise<CampaignImportDataRow[]> => {
+  ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, async (_, request: CampaignImportImageRequest): Promise<CampaignImportDataRow[] | ImportImageSource> => {
     requireCurrentUser()
     const platform = normalizePlatform(request?.platform)
     const imageDataUrl = toText(request?.imageDataUrl)
@@ -367,6 +377,8 @@ export function registerCampaignImportHandlers(): void {
     })
     if (!result.ok) throw new Error(result.error || 'AI không thể đọc dữ liệu từ ảnh.')
 
-    return normalizeImportedRows(rawRowsFromAiContent(result.content), platform, request?.actionId || '')
+    const source = rawRowsFromAiContent(result.content)
+    if (request?.responseMode === 'source') return { rows: imageImportRows(source, platform, request.actionId || '') }
+    return normalizeImportedRows(source, platform, request?.actionId || '')
   })
 }

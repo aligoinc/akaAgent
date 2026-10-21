@@ -26,7 +26,7 @@ function loadTs(file) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText
   vm.runInNewContext(`(function(require,module,exports){${code}\n})`, {
-    Buffer, URL, AbortSignal,
+    Buffer, URL, AbortSignal, TextDecoder,
     fetch: async () => ({
       ok: true, headers: new Headers({ 'content-type': 'text/csv' }),
       arrayBuffer: async () => sheetBytes
@@ -64,8 +64,15 @@ async function main() {
   aiRows = [{ uid, name: 'An' }, { uid }, { uid: Number(uid) }, { phone: '0912345678' }, { uid: 'invalid' }]
   rows = await extractImage({ platform: 'zalo', actionId, imageDataUrl: 'data:image/png;base64,AA==' })
   assert.deepEqual(plain(rows.map(row => row.uid)), [uid])
+  const sourceImage = await extractImage({ platform: 'zalo', actionId, imageDataUrl: 'data:image/png;base64,AA==', responseMode: 'source' })
+  assert.equal(sourceImage.rows.length, 5, 'source mode preserves invalid and duplicate AI rows')
+  assert.equal(typeof sourceImage.rows[2].data.uid, 'number', 'unsafe numeric UID evidence is preserved')
+  const sourceSheet = await loadSheet({ platform: 'zalo', actionId, linkSheet: 'https://fixture.invalid/data.csv', responseMode: 'source' })
+  assert.equal(sourceSheet.tables[0].rows.length, 5, 'source mode preserves header, invalid and duplicate Sheet rows')
+  assert.equal(sourceSheet.tables[0].rows[1][1].value, uid)
   authenticated = false
   await assert.rejects(loadSheet({ platform: 'zalo', actionId, linkSheet: 'https://fixture.invalid' }), /authenticated/)
+  await assert.rejects(loadSheet({ platform: 'zalo', actionId, linkSheet: 'https://fixture.invalid', responseMode: 'source' }), /authenticated/)
   authenticated = true
   console.log('PASS IPC: exact UID, deduplication, invalid/unsafe numbers, phone regression, auth')
 
@@ -151,7 +158,7 @@ createRoot(document.getElementById('root')).render(<App/>);
     await page.waitForFunction(() => !!window.uidSmoke)
     const open = mode => page.evaluate(m => window.uidSmoke.open(m), mode)
     const upload = page.locator('.campaign-import-modal')
-    const format = () => upload.getByRole('button', { name: 'Format chuẩn dữ liệu', exact: true }).click()
+    const format = () => upload.getByRole('button', { name: 'Kiểm tra dữ liệu', exact: true }).click()
     const insert = async () => {
       await upload.locator('.modal-footer .btn-primary').click()
       await upload.waitFor({ state: 'detached' })
@@ -170,10 +177,12 @@ createRoot(document.getElementById('root')).render(<App/>);
       if (tab.includes('Excel')) {
         const selector = tab.startsWith('Từ template') ? '#campaign-import-akabiz-template-file' : 'input[type=file]'
         await upload.locator(selector).setInputFiles({ name: 'uids.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
-        if (tab.startsWith('Từ template')) await upload.getByRole('status').filter({ hasText: 'Đã đọc 2 data hợp lệ' }).waitFor()
+        if (tab.startsWith('Từ template')) await upload.locator('.campaign-import-results').waitFor()
         else await format()
       } else if (tab === 'Link sheet') {
         await upload.getByPlaceholder('Nhập link sheet').fill('https://fixture.invalid/data.csv')
+        await upload.getByRole('button', { name: 'Đọc dữ liệu', exact: true }).click()
+        await upload.getByLabel('Cột UID Zalo', { exact: true }).waitFor()
         await format()
       } else {
         aiRows = [{ name: 'An', uid }, { name: 'Bình', uid: uid2 }]
@@ -197,7 +206,7 @@ createRoot(document.getElementById('root')).render(<App/>);
       name: 'uids.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       buffer: XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     })
-    await upload.getByRole('status').filter({ hasText: 'Đã đọc 1 data hợp lệ' }).waitFor()
+    await upload.locator('.campaign-import-results').waitFor()
     await insert()
     assert.deepEqual((await snapshot()).rows.map(r => r.uid), [uid2])
     console.log('PASS UI: TXT, CSV, Excel template, sheet, image; no UID rounding')
@@ -227,12 +236,12 @@ createRoot(document.getElementById('root')).render(<App/>);
       const isTemplate = tab.startsWith('Từ template')
       await upload.locator(isTemplate ? '#campaign-import-akabiz-template-file' : 'input[type=file]').setInputFiles(formattedFile)
       if (isTemplate) {
-        await upload.getByRole('status').filter({ hasText: 'Đã đọc 1 data hợp lệ' }).waitFor()
+        await upload.locator('.campaign-import-results').waitFor()
       } else {
-        await upload.locator('.campaign-import-column-field select').first().selectOption('A')
+        await upload.locator('.campaign-import-column-field select').first().selectOption('0')
         for (let index = 0; index < 5; index++) {
           await upload.locator('.campaign-import-column-field select').nth(index + 2)
-            .selectOption(String.fromCharCode(69 + index))
+            .selectOption(String(4 + index))
         }
         await format()
       }

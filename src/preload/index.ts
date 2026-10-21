@@ -1,4 +1,5 @@
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
+import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
 import { CAMPAIGN_EXCLUSION_AI_IPC, type ExclusionAiRequest, type ExclusionAiResult } from '../shared/campaignExclusionAi'
 import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campaignHistory'
@@ -207,10 +208,10 @@ const electronAPI = {
     return () => ipcRenderer.removeListener(CAMPAIGN_SUPPORT_IPC.updated, handler)
   },
 
-  extractCampaignDataFromImage: (request: CampaignImportImageRequest): Promise<CampaignImportDataRow[]> =>
+  extractCampaignDataFromImage: <T extends CampaignImportImageRequest>(request: T): Promise<T extends { responseMode: 'source' } ? ImportImageSource : CampaignImportDataRow[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_IMPORT_EXTRACT_IMAGE, request),
 
-  loadCampaignDataFromSheet: (request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[]> =>
+  loadCampaignDataFromSheet: <T extends CampaignImportSheetRequest>(request: T): Promise<T extends { responseMode: 'source' } ? ImportTableSource : CampaignImportDataRow[]> =>
     ipcRenderer.invoke(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, request),
 
   // akaBiz external integrations
