@@ -203,8 +203,12 @@ async function fetchSheetWorkbook(linkSheet: unknown, actionId?: string | null, 
     throw new Error('Không thể đọc link sheet. Vui lòng bật chia sẻ "Anyone with link" hoặc dùng link CSV/XLS/XLSX export hợp lệ.')
   }
 
-  return sourceMode ? readImportWorkbook(new Uint8Array(buffer))
-    : read(buffer, { type: 'buffer', ...(isZaloUidImportAction(actionId) ? { raw: true, codepage: 65001 } : {}) })
+  if (sourceMode) {
+    const sourceUrl = new URL(url)
+    const csvSeparator = sourceUrl.hostname === 'docs.google.com' && sourceUrl.searchParams.get('format') === 'csv' ? ',' : undefined
+    return readImportWorkbook(new Uint8Array(buffer), '', { csvSeparator })
+  }
+  return read(buffer, { type: 'buffer', ...(isZaloUidImportAction(actionId) ? { raw: true, codepage: 65001 } : {}) })
 }
 
 async function fetchSheetWorkbookRows(linkSheet: unknown, actionId?: string | null): Promise<unknown[][]> {

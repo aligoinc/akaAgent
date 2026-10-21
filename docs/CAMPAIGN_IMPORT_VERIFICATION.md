@@ -296,3 +296,20 @@ Sau sửa, review smoke, smoke Electron, 56 ca verifier, hồi quy UID Zalo,
 Kiểm tra SĐT 600 dòng, Google Sheet sync và định danh SĐT đều **đạt**. Hai
 typecheck sạch; production build Desktop **đạt** (main 4,06 giây, renderer
 26,90 giây), chỉ còn cảnh báo import tĩnh/động hiện có. `git diff --check` sạch.
+
+## Sửa review Link sheet Google — 21/10/2026
+
+Nhánh source của Link sheet nhận diện URL export CSV Google và truyền dấu
+phân cột cố định `,` cho reader. Với nguồn không tiêu đề có một ô
+`0912345678;0987654321`, dấu `;` được giữ trong ô để bộ verify áp dụng đúng
+chính sách nhiều SĐT; không biến thành cột thứ hai rồi mất khỏi báo cáo.
+File CSV tải lên và link export không xác định vẫn nhận diện dấu phân cột
+như trước; XLS/XLSX/XML và nhánh IPC legacy giữ nguyên.
+
+Bổ sung hồi quy IPC Google CSV UTF-8/UTF-16 với ba chính sách, kiểm tra đủ
+hai dòng nguồn/bốn mục sau tách và link CSV khách hàng dùng dấu `;`.
+56 ca verifier và toàn bộ review smoke đạt; hai typecheck Desktop sạch.
+Đối chiếu Web: hai lỗi suy cột UID khi thiếu tiêu đề và bỏ UID hợp lệ khi
+SĐT lỗi được sửa riêng trong repo Web. Desktop giữ quy tắc chỉ nhập SĐT
+của hành động thêm thành viên nhóm; không mở thêm nhánh SĐT hoặc UID.
+Production build Desktop sau sửa đạt; không đóng gói/phát hành trong lượt này.

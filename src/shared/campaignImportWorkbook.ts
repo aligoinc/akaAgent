@@ -79,7 +79,7 @@ function importCsvSeparator(text: string): string {
 }
 
 /** Keep CSV text intact, including long identifiers and scientific notation evidence. */
-export function readImportWorkbook(bytes: Uint8Array, fileName = ''): WorkBook {
+export function readImportWorkbook(bytes: Uint8Array, fileName = '', options: { csvSeparator?: ',' | ';' | '\t' } = {}): WorkBook {
   const binary = (bytes[0] === 0x50 && bytes[1] === 0x4b) || (bytes[0] === 0xd0 && bytes[1] === 0xcf)
     || (bytes[0] === 0x09 && [0x00, 0x02, 0x04, 0x08].includes(bytes[1]))
   if (/\.csv$/i.test(fileName) || (!fileName && !binary)) {
@@ -88,7 +88,9 @@ export function readImportWorkbook(bytes: Uint8Array, fileName = ''): WorkBook {
     const text = new TextDecoder(encoding).decode(bytes)
     // Sheet links may return SpreadsheetML without a filename. Let XLSX read its structure.
     if (!fileName && text.trimStart().startsWith('<')) return read(bytes, { type: 'array' })
-    return read(text, { type: 'string', raw: true, codepage: 65001, FS: importCsvSeparator(text) })
+    // Google exports a known comma-separated structure. Semicolons inside its
+    // cells belong to the data; only local files/unknown exports need guessing.
+    return read(text, { type: 'string', raw: true, codepage: 65001, FS: options.csvSeparator ?? importCsvSeparator(text) })
   }
   return read(bytes, { type: 'array' })
 }

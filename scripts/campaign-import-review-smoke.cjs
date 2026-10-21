@@ -63,6 +63,23 @@ async function main() {
   assert.equal(unknownReport.rejected[0].location.row, 3)
   console.log(`PASS image: ${cases} legacy aliases through IPC, duplicates, invalid and unrecognized records retained`)
 
+  for (const encoding of ['utf8', 'utf16le']) {
+    const csv = '0912345678;0987654321\n0841234567;0901234567'
+    sheetBytes = encoding === 'utf16le' ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(csv, encoding)]) : Buffer.from(csv)
+    const source = await handlers.get(types.IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET)(null, { platform: 'zalo', actionId: options.actionId, linkSheet: 'https://docs.google.com/spreadsheets/d/fixture/edit#gid=123', responseMode: 'source' })
+    const table = source.tables[0]
+    assert.deepEqual(plain(table.rows.map(row => row.map(cell => cell.text))), [['0912345678;0987654321'], ['0841234567;0901234567']])
+    for (const [phonePolicy, expected] of [['first', [2, 2, 0]], ['all', [4, 0, 0]], ['discard', [0, 4, 0]]]) {
+      const report = verify.verifyImportRows(verify.mapImportTable(table, { phone: 0 }, 0, 'Sheet'), { ...options, kind: 'sheet', phonePolicy })
+      assert.deepEqual([report.valid.length, report.rejected.length, report.duplicates.length], expected)
+      assert.equal(report.sourceRowCount, 2); assert.equal(report.itemCount, 4)
+    }
+  }
+  sheetBytes = Buffer.from('Tên;SĐT\nAn;0912345678')
+  const customCsv = await handlers.get(types.IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET)(null, { platform: 'zalo', actionId: options.actionId, linkSheet: 'https://fixture.invalid/data.csv', responseMode: 'source' })
+  assert.deepEqual(plain(customCsv.tables[0].rows[1].map(cell => cell.text)), ['An', '0912345678'])
+  console.log('PASS Google CSV: preserve semicolons in source cells (UTF8/UTF16, all three phone policies); generic CSV still detects separators')
+
   const excelErrors = [[0, '#NULL!'], [7, '#DIV/0!'], [15, '#VALUE!'], [23, '#REF!'], [29, '#NAME?'], [36, '#NUM!'], [42, '#N/A']]
   for (const [platform, actionId, target, valid] of [
     ['zalo', 'zalo_message_phone', 'phone', '0912345678'],
