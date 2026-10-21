@@ -1,0 +1,17 @@
+{
+  "checksum": "a726cda368e948073c609d963912e637",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_contact_dataset_member_ids(p_staff_id bigint, p_organization_id bigint, p_account_id bigint, p_dataset_id bigint, p_contact_type text DEFAULT NULL::text)\n RETURNS TABLE(contact_id bigint, sort_order integer)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\n SET statement_timeout TO '60s'\nAS $function$\n  SELECT member.contact_id, member.sort_order\n  FROM public.auto_account_contacts_dataset AS dataset\n  JOIN public.auto_account_contacts_dataset_members AS member\n    ON member.dataset_id = dataset.id\n  JOIN public.auto_account_contacts AS contact\n    ON contact.id = member.contact_id\n  WHERE dataset.id = p_dataset_id\n    AND dataset.staff_id = p_staff_id\n    AND dataset.organization_id = p_organization_id\n    AND dataset.account_id = p_account_id\n    AND dataset.is_delete = false\n    AND member.is_current = true\n    AND (p_contact_type IS NULL OR dataset.contact_type = p_contact_type)\n    AND contact.staff_id = p_staff_id\n    AND contact.organization_id = p_organization_id\n    AND contact.account_id = p_account_id\n    AND contact.contact_type = dataset.contact_type\n    AND COALESCE(contact.is_delete, false) = false\n  ORDER BY member.sort_order ASC, member.contact_id ASC;\n$function$\n",
+  "identity_args": "p_staff_id bigint, p_organization_id bigint, p_account_id bigint, p_dataset_id bigint, p_contact_type text",
+  "name": "aka_agent_list_contact_dataset_member_ids",
+  "owner": "postgres",
+  "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+  "proconfig": [
+    "search_path=public",
+    "statement_timeout=60s"
+  ],
+  "prosecdef": true,
+  "provolatile": "s",
+  "schema": "public",
+  "signature": "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+  "version": "17.6"
+}

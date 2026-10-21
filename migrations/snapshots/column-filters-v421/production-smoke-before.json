@@ -1,0 +1,38 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "rows": [
+    {
+      "checks": [
+        {
+          "rows": 10,
+          "test": "legacy_contacts",
+          "checksum": "ba3d6d75a6c9d436f4c841c51616d1c1",
+          "sampleId": 1174
+        },
+        {
+          "rows": 10,
+          "test": "legacy_contacts",
+          "checksum": "8b3b7682ba07b8f7eb287ef4d4ca114c",
+          "sampleId": 1568
+        },
+        {
+          "rows": 10,
+          "test": "legacy_owned_group",
+          "total": 832,
+          "checksum": "243cbef7cac5ea6012016255eaf89a6f",
+          "sampleId": 5006
+        },
+        {
+          "rows": 3,
+          "test": "legacy_shared_group",
+          "total": 3,
+          "checksum": "adc991ab27ea70e0023c88612d6d12e6",
+          "sampleId": 4916
+        },
+        {
+          "test": "legacy_missing_auth_rejected"
+        }
+      ]
+    }
+  ]
+}

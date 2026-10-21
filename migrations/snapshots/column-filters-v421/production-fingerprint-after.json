@@ -1,0 +1,27 @@
+[
+  {
+    "category": "functions",
+    "n": 1205,
+    "checksum": "fbb43bf96c2cf83056dc9b27b96ea76a"
+  },
+  {
+    "category": "relations",
+    "n": 2264,
+    "checksum": "bef3fa3aacdda594af5084a52712061d"
+  },
+  {
+    "category": "policies",
+    "n": 33,
+    "checksum": "c92ba6fa52dedbf585878af815f61b5c"
+  },
+  {
+    "category": "columns",
+    "n": 12646,
+    "checksum": "6cead899487a2d05a77d2c69fbdb314d"
+  },
+  {
+    "category": "role_database_settings",
+    "n": 11,
+    "checksum": "6becca24335b5720bec091800710d884"
+  }
+]

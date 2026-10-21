@@ -1,0 +1,61 @@
+{
+  "checks": [
+    "contacts count",
+    "contacts Vietnamese",
+    "contact status",
+    "upload literal and dataset order",
+    "contact cursor order",
+    "members scope/order/identity",
+    "role before count",
+    "tags before count",
+    "gender",
+    "phone matches displayed normalization",
+    "recipient grouping",
+    "latest metadata",
+    "source scope before aggregate",
+    "column filter after aggregate",
+    "empty history dates are optional",
+    "Vietnam history date scope",
+    "latest action is not historical source action",
+    "AND combined recipient filters",
+    "explicit empty action scope",
+    "remarketing cursor"
+  ],
+  "performance": {
+    "contacts": {
+      "max_seconds": 0.0948,
+      "two_read_max_seconds": 0.1054
+    },
+    "upload": {
+      "max_seconds": 0.136,
+      "two_read_max_seconds": 0.1313
+    },
+    "group_members": {
+      "max_seconds": 0.049,
+      "two_read_max_seconds": 0.0512
+    },
+    "remarketing": {
+      "max_seconds": 1.0779,
+      "two_read_max_seconds": 1.0824
+    },
+    "contacts_search": {
+      "max_seconds": 0.2119,
+      "two_read_max_seconds": 0.2488
+    },
+    "upload_search": {
+      "max_seconds": 0.2076,
+      "two_read_max_seconds": 0.2075
+    },
+    "group_members_search": {
+      "max_seconds": 0.0585,
+      "two_read_max_seconds": 0.058
+    }
+  },
+  "gate": true,
+  "fixture": {
+    "contacts": 100000,
+    "group_members": 10000,
+    "history": 100000,
+    "recipients": 10000
+  }
+}

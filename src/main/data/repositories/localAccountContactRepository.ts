@@ -9,7 +9,10 @@ import {
   PageInboxMessageFilterMode,
   PageInboxPhoneFilter
 } from '../../../shared/types'
-import { requireCurrentUser } from '../currentUser'
+import { getCurrentUserCredentials, requireCurrentUser } from '../currentUser'
+import { columnFilterDateBoundary } from '../../../shared/dataColumnFilters'
+import { compilePageInboxColumnFilters } from '../filters/sqliteColumnFilters'
+import { readSqliteFilterPage } from '../filters/sqliteFilterReader'
 
 const LOCAL_DATA_DIR = 'local-data'
 const LOCAL_DB_FILE = 'aka_agent_local.db'
@@ -363,6 +366,28 @@ export function getLatestPageInboxMessageAt(accountId: number, pageUid: string):
   } finally {
     db.close()
   }
+}
+
+/** Candidate filtered reader. Activated only after all backend source gates pass. */
+export async function listFilteredPageInboxContacts(
+  accountId: number, query: PageInboxContactListQuery, signal: AbortSignal
+): Promise<ContactListResult> {
+  const user = requireCurrentUser(), session = getCurrentUserCredentials()
+  const compiled = compilePageInboxColumnFilters(query.columnFilters)
+  // Initialize the existing local schema once; the long read runs off the UI/main thread.
+  const db = openDb(); db.close()
+  const scoped = { ...query, ids: undefined, excludeIds: undefined, dateFrom: undefined, dateTo: undefined }
+  const legacy = buildPageInboxWhere(accountId, user.staffId, scoped)
+  let where = `${legacy.sql.replace(/LOWER\(/g, 'column_filter_fold(')} AND organization_id = ? AND (${compiled.sql})`
+  const params: unknown[] = [...legacy.params, user.organizationId, ...compiled.params]
+  if (query.ids?.length) { where += ' AND id IN (SELECT value FROM json_each(?))'; params.push(JSON.stringify(normalizeIds(query.ids))) }
+  if (query.excludeIds?.length) { where += ' AND id NOT IN (SELECT value FROM json_each(?))'; params.push(JSON.stringify(normalizeIds(query.excludeIds))) }
+  if (query.dateFrom) { where += " AND julianday(json_extract(extra_data,'$.lastMessageAt')) >= julianday(?)"; params.push(columnFilterDateBoundary(query.dateFrom)) }
+  if (query.dateTo) { where += " AND julianday(json_extract(extra_data,'$.lastMessageAt')) < julianday(?)"; params.push(columnFilterDateBoundary(query.dateTo, true)) }
+  const result = await readSqliteFilterPage(getLocalDataDbPath(), where, params, query.limit ?? 100, query.offset ?? 0, signal)
+  const currentUser = requireCurrentUser()
+  if (signal.aborted || getCurrentUserCredentials() !== session || currentUser.staffId !== user.staffId || currentUser.organizationId !== user.organizationId) throw new Error('Lượt lọc hoặc phiên đăng nhập đã thay đổi.')
+  return { contacts: result.rows.map(mapLocalContact), total: result.total }
 }
 
 export function listPageInboxContacts(accountId: number, query: PageInboxContactListQuery = {}): ContactListResult {

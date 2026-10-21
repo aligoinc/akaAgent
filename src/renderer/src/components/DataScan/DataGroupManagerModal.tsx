@@ -1,3 +1,4 @@
+import { ColumnFilterHeader, ColumnFilterBar, useColumnFilters } from '../DataFilters/ColumnFilters'
 import { canManageGroup } from '../../../../shared/groupSharing'
 import { GroupSharingButton, GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import {
@@ -937,10 +938,20 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     void loadDatasets()
   }, [loadDatasets])
 
+  const columnFilters = useColumnFilters('data_group', String(activeGroupId), () => {
+    memberLoadSeqRef.current++; memberSelectionLoadSeqRef.current++
+    setMemberPage(1); setSelectedMembershipIds(new Set()); setMembers([]); setMemberTotal(0); setSelectingAllMembers(false)
+  }, field => {
+    if(field==='account'&&lockedAccountFilterId==='')setAccountFilterId('')
+    if(field==='dataType')setDataTypeFilterId('')
+    if(field==='status')setStatusFilter('all')
+  })
+
   const memberQuery = useMemo<DataGroupMemberListQuery | null>(() => {
     if (!activeGroupId) return null
     return {
       groupId: activeGroupId,
+      columnFilters: columnFilters.filters,
       search: debouncedMemberSearch.trim() || undefined,
       accountIds: accountFilterId === '' ? undefined : [accountFilterId],
       includeAccountless: accountFilterId === '',
@@ -953,6 +964,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       limit: MEMBER_PAGE_SIZE
     } as DataGroupMemberListQuery
   }, [
+    columnFilters.filters,
     accountFilterId,
     activeGroupId,
     contactTypeFilter,
@@ -968,6 +980,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     activeGroupId,
     memberSearch,
     debouncedMemberSearch,
+    columnFilters.filters,
     accountFilterId,
     contactTypeFilter,
     dataTypeFilterId,
@@ -975,6 +988,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     statusFilter,
     datasetFilterId
   ]), [
+    columnFilters.filters,
     accountFilterId,
     activeGroupId,
     contactTypeFilter,
@@ -1001,7 +1015,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const loadSeq = ++memberLoadSeqRef.current
     if (!options.silent) setMembersLoading(true)
     try {
-      const result = await api.listDataGroupMembers(memberQuery)
+      const result = await columnFilters.read(memberQuery, undefined, 'page', () => api.listDataGroupMembers(memberQuery))
       if (loadSeq !== memberLoadSeqRef.current) return
       setMembers(result.members)
       setMemberTotal(result.total)
@@ -1025,12 +1039,12 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     } catch (err: any) {
       console.error('Failed to load data-group members:', err)
       if (loadSeq === memberLoadSeqRef.current && !options.silent) {
-        showAlert(err?.message || 'Không thể tải data trong nhóm.', 'error')
+        if (!String(err?.message).includes('Đã hủy lượt lọc')) showAlert(err?.message || 'Không thể tải data trong nhóm.', 'error')
       }
     } finally {
       if (loadSeq === memberLoadSeqRef.current) setMembersLoading(false)
     }
-  }, [memberPage, memberQuery, showAlert])
+  }, [memberPage, memberQuery, showAlert, columnFilters.read])
 
   useEffect(() => {
     void loadMembers()
@@ -1399,11 +1413,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     const selectionScope = memberSelectionScopeKey
     setSelectingAllMembers(true)
     try {
-      const result = await api.listDataGroupMemberIds({
-        ...memberQuery,
-        offset: undefined,
-        limit: undefined
-      })
+      const selectionQuery = { ...memberQuery, offset: undefined, limit: undefined }
+      const result = await columnFilters.read(selectionQuery, undefined, 'ids', () => api.listDataGroupMemberIds(selectionQuery))
       if (
         loadSeq !== memberSelectionLoadSeqRef.current
         || selectionScope !== memberSelectionScopeRef.current
@@ -1570,7 +1581,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       : { ...memberQuery!, offset: undefined, limit: undefined }
     setBusyAction('export')
     try {
-      const exportedMembers = await api.exportDataGroupMembers(query)
+      const exportedMembers = (await columnFilters.read(query, undefined, 'export', async () => ({members:await api.exportDataGroupMembers(query)}))).members
       if (exportedMembers.length === 0) {
         showAlert('Không có data để xuất.', 'error')
         return
@@ -2133,7 +2144,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <label>
                   <span>Tài khoản</span>
                   <select value={accountFilterId} onChange={event => {
-                    setAccountFilterId(event.target.value ? Number(event.target.value) : '')
+                    columnFilters.remove('account'); setAccountFilterId(event.target.value ? Number(event.target.value) : '')
                     setMemberPage(1)
                   }} disabled={!activeGroupId || lockContext}>
                     <option value="">Tất cả tài khoản</option>
@@ -2145,7 +2156,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                 <label>
                   <span>Loại data</span>
                   <select value={dataTypeFilterId} onChange={event => {
-                    setDataTypeFilterId(event.target.value ? Number(event.target.value) : '')
+                    columnFilters.remove('dataType'); setDataTypeFilterId(event.target.value ? Number(event.target.value) : '')
                     setMemberPage(1)
                   }} disabled={!activeGroupId || lockContext || dataTypesLoading}>
                     <option value="">
@@ -2185,7 +2196,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               <label className="data-group-manager-inline-filter">
                 <span>Hiển thị</span>
                 <select value={statusFilter} onChange={event => {
-                  setStatusFilter(event.target.value as DataGroupMemberStatusFilter)
+                  columnFilters.remove('status'); setStatusFilter(event.target.value as DataGroupMemberStatusFilter)
                   setMemberPage(1)
                 }} disabled={!activeGroupId}>
                   {STATUS_FILTER_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -2256,6 +2267,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               </div>
             </div>
 
+            <ColumnFilterBar controller={columnFilters} options={{accounts:accountOptions.map(a=>({value:String(a.id),label:a.name})),dataTypes:dataTypeItems.map(t=>({value:String(t.id),label:t.name}))}} />
             <div className="data-group-manager-table-wrap">
               <table className="data-group-manager-table">
                 <thead>
@@ -2271,16 +2283,16 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
                         title={selectingAllMembers ? 'Đang chọn toàn bộ data...' : 'Chọn toàn bộ data phù hợp bộ lọc'}
                       />
                     </th>
-                    <th>Tên</th>
-                    <th>Tên hiển thị</th>
-                    <th>UID</th>
-                    <th>Số điện thoại</th>
-                    <th>Link</th>
-                    <th>Tài khoản</th>
-                    <th>Loại data</th>
-                    <th>Trạng thái</th>
-                    <th className="is-source">Nguồn data</th>
-                    <th className="is-automation">Tự động hóa</th>
+                    <ColumnFilterHeader controller={columnFilters} field="name">Tên</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="displayName">Tên hiển thị</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="uid">UID</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="phone">Số điện thoại</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="url">Link</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="account">Tài khoản</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="dataType">Loại data</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="status">Trạng thái</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="source" className="is-source">Nguồn data chính</ColumnFilterHeader>
+                    <ColumnFilterHeader controller={columnFilters} field="automation" className="is-automation">Tự động hóa</ColumnFilterHeader>
                     <th className="is-action"></th>
                   </tr>
                 </thead>

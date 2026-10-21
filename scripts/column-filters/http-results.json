@@ -1,0 +1,8 @@
+{
+  "checks": 6,
+  "postgres": "16.15 local",
+  "postgrest": "16.5 local",
+  "rpcDatabaseTimeoutMs": 60008,
+  "recovery": true,
+  "productionChanged": false
+}

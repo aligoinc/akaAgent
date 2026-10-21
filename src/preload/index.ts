@@ -1,3 +1,4 @@
+import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
 import { CAMPAIGN_EXCLUSION_AI_IPC, type ExclusionAiRequest, type ExclusionAiResult } from '../shared/campaignExclusionAi'
 import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campaignHistory'
@@ -773,6 +774,13 @@ const electronAPI = {
 
   saveUploadDataset: (request: SaveUploadDatasetRequest): Promise<SaveUploadDatasetResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACT_DATASETS_SAVE_UPLOAD, request),
+
+  readDataColumnFilters: (request: DataColumnReadRequest): Promise<DataColumnReadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_COLUMN_FILTER_READ, request),
+  exportDataColumnFilters: (request: DataColumnReadRequest, idsOnly = false): Promise<DataColumnReadResult> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_COLUMN_FILTER_EXPORT, request, idsOnly),
+  cancelDataColumnFilters: (formId: string, requestId?: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_EVENTS.DATA_COLUMN_FILTER_CANCEL, formId, requestId),
 
   listContactsPage: (accountId: number, query?: AccountContactListQuery): Promise<ContactListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.CONTACTS_LIST_PAGED, accountId, query),

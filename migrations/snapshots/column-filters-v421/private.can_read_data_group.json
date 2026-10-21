@@ -1,0 +1,16 @@
+{
+  "checksum": "c47165554f49d3099d1f95e7d136eae5",
+  "definition": "CREATE OR REPLACE FUNCTION private.can_read_data_group(p_group_id bigint, p_staff_id bigint, p_organization_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT private.group_access('data',p_group_id,p_staff_id,p_organization_id) IS NOT NULL;\n$function$\n",
+  "identity_args": "p_group_id bigint, p_staff_id bigint, p_organization_id bigint",
+  "name": "can_read_data_group",
+  "owner": "postgres",
+  "proacl": "{postgres=X/postgres}",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "prosecdef": true,
+  "provolatile": "s",
+  "schema": "private",
+  "signature": "private.can_read_data_group(bigint,bigint,bigint)",
+  "version": "17.6"
+}

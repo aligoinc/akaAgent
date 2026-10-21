@@ -1,0 +1,135 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "mode": "rehearsal",
+  "at": "2026-10-21T07:28:12.552Z",
+  "durationMs": 6854,
+  "rolledBack": true,
+  "businessWrites": 0,
+  "rows": [
+    {
+      "checks": [
+        {
+          "checksum": "ba3d6d75a6c9d436f4c841c51616d1c1",
+          "rows": 10,
+          "sampleId": 1174,
+          "test": "legacy_contacts"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1174,
+          "test": "filtered_contacts_parity"
+        },
+        {
+          "rows": 1,
+          "sampleId": 1174,
+          "test": "filtered_uid"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1174,
+          "test": "upload_ids"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1174,
+          "test": "contacts_cursor_ids"
+        },
+        {
+          "sampleId": 1174,
+          "test": "group_members_empty_scope"
+        },
+        {
+          "sampleId": 1174,
+          "test": "remarketing_empty_window"
+        },
+        {
+          "sampleId": 1174,
+          "test": "filtered_account_denied"
+        },
+        {
+          "checksum": "2fe2010dc62966321c74d880ef6ef266",
+          "rows": 10,
+          "sampleId": 1568,
+          "test": "legacy_contacts"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1568,
+          "test": "filtered_contacts_parity"
+        },
+        {
+          "rows": 1,
+          "sampleId": 1568,
+          "test": "filtered_uid"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1568,
+          "test": "upload_ids"
+        },
+        {
+          "rows": 10,
+          "sampleId": 1568,
+          "test": "contacts_cursor_ids"
+        },
+        {
+          "sampleId": 1568,
+          "test": "group_members_empty_scope"
+        },
+        {
+          "sampleId": 1568,
+          "test": "remarketing_empty_window"
+        },
+        {
+          "sampleId": 1568,
+          "test": "filtered_account_denied"
+        },
+        {
+          "checksum": "243cbef7cac5ea6012016255eaf89a6f",
+          "rows": 10,
+          "sampleId": 5006,
+          "test": "legacy_owned_group",
+          "total": 832
+        },
+        {
+          "rows": 10,
+          "sampleId": 5006,
+          "shared": false,
+          "test": "group_parity",
+          "total": 832
+        },
+        {
+          "sampleId": 5006,
+          "test": "filtered_group_denied"
+        },
+        {
+          "checksum": "adc991ab27ea70e0023c88612d6d12e6",
+          "rows": 3,
+          "sampleId": 4916,
+          "test": "legacy_shared_group",
+          "total": 3
+        },
+        {
+          "rows": 3,
+          "sampleId": 4916,
+          "shared": true,
+          "test": "group_parity",
+          "total": 3
+        },
+        {
+          "sampleId": 4916,
+          "test": "filtered_group_denied"
+        },
+        {
+          "test": "legacy_missing_auth_rejected"
+        },
+        {
+          "test": "filtered_missing_auth_rejected"
+        },
+        {
+          "test": "private_helper_not_executable"
+        }
+      ]
+    }
+  ]
+}

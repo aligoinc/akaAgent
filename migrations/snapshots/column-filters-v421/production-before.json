@@ -1,0 +1,326 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-10-21T07:21:23.626Z",
+  "functions": [
+    {
+      "signature": "public.aka_agent_list_data_group_members_v2(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "resolved": "aka_agent_list_data_group_members_v2(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "checksum": "221ed55d3a0acbfb6a4f1c1491f0915d",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members_v2(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_data_type_category_item_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer, p_auth_username text, p_auth_password text)\n RETURNS SETOF jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nBEGIN\n  RETURN QUERY SELECT to_jsonb(m) || jsonb_build_object('zalo_name',CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.zalo_name,''),NULLIF(z.zalo_name,''),contact.name) END,'display_name',CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.display_name,''),NULLIF(u.zalo_name,''),NULLIF(z.display_name,''),NULLIF(z.zalo_name,''),contact.name) END,'zalo_friend_status',CASE WHEN contact.flatform_type='zalo' AND contact.contact_type='person' THEN\n        CASE WHEN u.id IS NOT NULL THEN CASE WHEN status.code IN ('friend','request_sent','request_received') THEN status.code ELSE 'stranger' END\n          WHEN contact.is_friend IS TRUE THEN 'friend'\n          WHEN COALESCE(contact.extra_data->>'friendRequestReceived',contact.extra_data->>'friend_request_received','false')='true' THEN 'request_received'\n          WHEN COALESCE(contact.extra_data->>'friendRequestSent',contact.extra_data->>'friend_request_sent','false')='true' THEN 'request_sent'\n          ELSE 'stranger' END END)\n  FROM public.aka_agent_list_data_group_members(p_staff_id,p_organization_id,p_group_id,p_search,p_account_ids,p_include_accountless,p_contact_types,p_flatform_types,p_status,p_dataset_ids,p_data_type_category_item_ids,p_ids,p_exclude_ids,p_offset,p_limit,p_auth_username,p_auth_password) m\n  JOIN public.auto_account_contacts contact ON contact.id=m.contact_id\n  LEFT JOIN public.zalo_users z ON z.account_id=contact.account_id AND z.zalo_uid=contact.uid\n      AND z.staff_id=contact.staff_id AND z.organization_id=contact.organization_id AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_organization b ON b.auto_account_id=contact.account_id\n      AND b.organization_id=contact.organization_id AND b.is_active AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_user u ON u.chat_zalo_account_id=b.chat_zalo_account_id\n      AND u.zalo_id=contact.uid AND contact.contact_type='person'\n    LEFT JOIN public.category_item status ON status.id=u.friendship_status_category_item_id\n  ORDER BY m.created_at DESC,m.id DESC;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_data_group_members_v205_internal(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "resolved": "aka_agent_list_data_group_members_v205_internal(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "checksum": "13949f7f28813309f55be5c0f5b51790",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members_v205_internal(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text DEFAULT NULL::text, p_account_ids bigint[] DEFAULT NULL::bigint[], p_include_accountless boolean DEFAULT true, p_contact_types text[] DEFAULT NULL::text[], p_flatform_types text[] DEFAULT NULL::text[], p_status text DEFAULT 'all'::text, p_dataset_ids bigint[] DEFAULT NULL::bigint[], p_ids bigint[] DEFAULT NULL::bigint[], p_exclude_ids bigint[] DEFAULT NULL::bigint[], p_offset integer DEFAULT 0, p_limit integer DEFAULT 100)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, total_count bigint)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  PERFORM public.aka_agent_internal_require_staff_tenant(\n    p_staff_id, p_organization_id\n  );\n  IF COALESCE(p_status, 'all') NOT IN (\n    'all', 'active', 'inactive', 'friend', 'stranger', 'joined', 'not_joined', 'request_sent', 'request_received'\n  )\n    OR COALESCE(p_offset, 0) < 0\n    OR COALESCE(p_limit, 100) NOT BETWEEN 1 AND 1000\n  THEN\n    RAISE EXCEPTION 'invalid_data_group_member_query';\n  END IF;\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.auto_account_contact_groups AS contact_group\n    WHERE contact_group.id = p_group_id\n      AND contact_group.staff_id = p_staff_id\n      AND contact_group.organization_id = p_organization_id\n      AND contact_group.purpose = 'data_group'\n      AND contact_group.is_delete = false\n  ) THEN\n    RAISE EXCEPTION 'data_group_not_found';\n  END IF;\n\n  RETURN QUERY\n  WITH filtered AS (\n    SELECT\n      member.id AS selected_member_id,\n      member.group_id AS selected_group_id,\n      member.contact_id,\n      member.created_at AS member_created_at,\n      member.updated_at AS member_updated_at,\n      member.is_delete AS member_is_delete,\n      member.change_revision,\n      member.primary_origin_id,\n      contact.name,\n      contact.uid,\n      contact.url,\n      contact.phone,\n      contact.email,\n      contact.extra_data,\n      contact.contact_type,\n      contact.flatform_type,\n      contact.account_id,\n      contact.is_friend,\n      contact.is_joined,\n      account.name AS selected_account_name,\n      COALESCE(account.is_delete, false) AS selected_account_deleted\n    FROM public.auto_account_contact_group_members AS member\n    JOIN public.auto_account_contacts AS contact\n      ON contact.id = member.contact_id\n    LEFT JOIN public.auto_accounts AS account\n      ON account.id = contact.account_id\n    LEFT JOIN public.zalo_users z ON z.account_id=contact.account_id AND z.zalo_uid=contact.uid\n      AND z.staff_id=contact.staff_id AND z.organization_id=contact.organization_id AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_organization b ON b.auto_account_id=contact.account_id\n      AND b.organization_id=contact.organization_id AND b.is_active AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_user u ON u.chat_zalo_account_id=b.chat_zalo_account_id\n      AND u.zalo_id=contact.uid AND contact.contact_type='person'\n    LEFT JOIN public.category_item status ON status.id=u.friendship_status_category_item_id\n    WHERE member.group_id = p_group_id\n      AND contact.staff_id = p_staff_id\n      AND contact.organization_id = p_organization_id\n      AND member.is_delete = false\n      AND (\n        COALESCE(p_status, 'all') = 'all'\n        OR (\n          COALESCE(p_status, 'all') = 'active' AND (\n            (contact.contact_type = 'person' AND contact.is_friend = true)\n            OR (contact.contact_type = 'group' AND contact.is_joined = true)\n            OR contact.contact_type NOT IN ('person', 'group')\n          )\n        )\n        OR (\n          COALESCE(p_status, 'all') = 'inactive' AND (\n            (contact.contact_type = 'person' AND contact.is_friend = false)\n            OR (contact.contact_type = 'group' AND contact.is_joined = false)\n          )\n        )\n        OR (\n          COALESCE(p_status, 'all') = 'friend'\n          AND contact.contact_type = 'person'\n          AND CASE WHEN contact.flatform_type='zalo' THEN (CASE WHEN contact.flatform_type='zalo' AND contact.contact_type='person' THEN\n        CASE WHEN u.id IS NOT NULL THEN CASE WHEN status.code IN ('friend','request_sent','request_received') THEN status.code ELSE 'stranger' END\n          WHEN contact.is_friend IS TRUE THEN 'friend'\n          WHEN COALESCE(contact.extra_data->>'friendRequestReceived',contact.extra_data->>'friend_request_received','false')='true' THEN 'request_received'\n          WHEN COALESCE(contact.extra_data->>'friendRequestSent',contact.extra_data->>'friend_request_sent','false')='true' THEN 'request_sent'\n          ELSE 'stranger' END END)='friend' ELSE contact.is_friend=true END\n        )\n        OR (\n          COALESCE(p_status, 'all') = 'stranger'\n          AND contact.contact_type = 'person'\n          AND CASE WHEN contact.flatform_type='zalo' THEN (CASE WHEN contact.flatform_type='zalo' AND contact.contact_type='person' THEN\n        CASE WHEN u.id IS NOT NULL THEN CASE WHEN status.code IN ('friend','request_sent','request_received') THEN status.code ELSE 'stranger' END\n          WHEN contact.is_friend IS TRUE THEN 'friend'\n          WHEN COALESCE(contact.extra_data->>'friendRequestReceived',contact.extra_data->>'friend_request_received','false')='true' THEN 'request_received'\n          WHEN COALESCE(contact.extra_data->>'friendRequestSent',contact.extra_data->>'friend_request_sent','false')='true' THEN 'request_sent'\n          ELSE 'stranger' END END)='stranger' ELSE contact.is_friend=false END\n        )\n        OR (p_status IN ('request_sent','request_received') AND contact.flatform_type='zalo' AND contact.contact_type='person' AND (CASE WHEN contact.flatform_type='zalo' AND contact.contact_type='person' THEN\n        CASE WHEN u.id IS NOT NULL THEN CASE WHEN status.code IN ('friend','request_sent','request_received') THEN status.code ELSE 'stranger' END\n          WHEN contact.is_friend IS TRUE THEN 'friend'\n          WHEN COALESCE(contact.extra_data->>'friendRequestReceived',contact.extra_data->>'friend_request_received','false')='true' THEN 'request_received'\n          WHEN COALESCE(contact.extra_data->>'friendRequestSent',contact.extra_data->>'friend_request_sent','false')='true' THEN 'request_sent'\n          ELSE 'stranger' END END)=p_status)\n        OR (\n          COALESCE(p_status, 'all') = 'joined'\n          AND contact.contact_type = 'group'\n          AND contact.is_joined = true\n        )\n        OR (\n          COALESCE(p_status, 'all') = 'not_joined'\n          AND contact.contact_type = 'group'\n          AND contact.is_joined = false\n        )\n      )\n      AND (\n        NULLIF(btrim(COALESCE(p_search, '')), '') IS NULL\n        OR contact.name ILIKE '%' || btrim(p_search) || '%'\n        OR (CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.zalo_name,''),NULLIF(z.zalo_name,''),contact.name) END) ILIKE '%' || btrim(p_search) || '%'\n        OR (CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.display_name,''),NULLIF(u.zalo_name,''),NULLIF(z.display_name,''),NULLIF(z.zalo_name,''),contact.name) END) ILIKE '%' || btrim(p_search) || '%'\n        OR contact.uid ILIKE '%' || btrim(p_search) || '%'\n        OR contact.phone ILIKE '%' || btrim(p_search) || '%'\n        OR contact.email ILIKE '%' || btrim(p_search) || '%'\n      )\n      AND (\n        p_account_ids IS NULL\n        OR contact.account_id = ANY(p_account_ids)\n        OR (\n          COALESCE(p_include_accountless, true)\n          AND contact.account_id IS NULL\n        )\n      )\n      AND (\n        COALESCE(p_include_accountless, true)\n        OR contact.account_id IS NOT NULL\n      )\n      AND (\n        p_contact_types IS NULL\n        OR contact.contact_type = ANY(p_contact_types)\n      )\n      AND (\n        p_flatform_types IS NULL\n        OR contact.flatform_type = ANY(p_flatform_types)\n      )\n      AND (p_ids IS NULL OR member.id = ANY(p_ids))\n      AND (\n        p_exclude_ids IS NULL\n        OR NOT (member.id = ANY(p_exclude_ids))\n      )\n      AND (\n        p_dataset_ids IS NULL OR EXISTS (\n          SELECT 1\n          FROM public.auto_account_contact_group_member_origins AS dataset_origin\n          WHERE dataset_origin.membership_id = member.id\n            AND dataset_origin.dataset_id = ANY(p_dataset_ids)\n            AND dataset_origin.is_current = true\n        )\n      )\n  ), paged AS MATERIALIZED (\n    SELECT filtered.*,count(*) OVER ()::bigint AS selected_total_count\n    FROM filtered\n    ORDER BY filtered.member_created_at DESC,filtered.selected_member_id DESC\n    OFFSET COALESCE(p_offset,0) LIMIT COALESCE(p_limit,100)\n  )\n  SELECT\n    filtered.selected_member_id,\n    filtered.selected_group_id,\n    filtered.contact_id,\n    filtered.name,\n    filtered.uid,\n    filtered.url,\n    filtered.phone,\n    filtered.email,\n    NULLIF(filtered.extra_data ->> 'info1', ''),\n    NULLIF(filtered.extra_data ->> 'info2', ''),\n    NULLIF(filtered.extra_data ->> 'info3', ''),\n    NULLIF(filtered.extra_data ->> 'info4', ''),\n    NULLIF(filtered.extra_data ->> 'info5', ''),\n    filtered.contact_type,\n    filtered.flatform_type,\n    filtered.account_id::bigint,\n    filtered.selected_account_name,\n    filtered.selected_account_deleted,\n    COALESCE((\n      SELECT array_agg(current_dataset.id ORDER BY current_dataset.id)\n      FROM (\n        SELECT DISTINCT dataset.id, dataset.name\n        FROM public.auto_account_contact_group_member_origins AS origin\n        JOIN public.auto_account_contacts_dataset AS dataset\n          ON dataset.id = origin.dataset_id\n        WHERE origin.membership_id = filtered.selected_member_id\n          AND origin.is_current = true\n          AND dataset.is_delete = false\n      ) AS current_dataset\n    ), '{}'::bigint[]),\n    COALESCE((\n      SELECT array_agg(current_dataset.name ORDER BY current_dataset.id)\n      FROM (\n        SELECT DISTINCT dataset.id, dataset.name\n        FROM public.auto_account_contact_group_member_origins AS origin\n        JOIN public.auto_account_contacts_dataset AS dataset\n          ON dataset.id = origin.dataset_id\n        WHERE origin.membership_id = filtered.selected_member_id\n          AND origin.is_current = true\n          AND dataset.is_delete = false\n      ) AS current_dataset\n    ), '{}'::text[]),\n    filtered.is_friend,\n    filtered.is_joined,\n    filtered.member_is_delete,\n    filtered.change_revision,\n    COALESCE((\n      SELECT jsonb_agg(jsonb_build_object(\n        'id', origin.id,\n        'membership_id', origin.membership_id,\n        'kind', origin.kind,\n        'relationship_kind', origin.relationship_kind,\n        'dataset_id', origin.dataset_id,\n        'batch_id', origin.batch_id,\n        'source_account_id', origin.source_account_id,\n        'source_account_name', source_account.name,\n        'source_account_deleted', COALESCE(source_account.is_delete, false),\n        'automation_detail_id', origin.automation_detail_id,\n        'automation_id', automation_detail.automation_id,\n        'automation_name', automation.name,\n        'automation_detail_status', automation_detail.status,\n        'source_campaign_id', automation_detail.source_campaign_id,\n        'source_campaign_name', source_campaign.name,\n        'target_campaign_id', automation_detail.target_campaign_id,\n        'target_campaign_name', target_campaign.name,\n        'source_name_snapshot', origin.source_name_snapshot,\n        'is_current', origin.is_current,\n        'created_at', origin.created_at,\n        'updated_at', origin.updated_at\n      ) ORDER BY origin.created_at, origin.id)\n      FROM public.auto_account_contact_group_member_origins AS origin\n      LEFT JOIN public.auto_accounts AS source_account\n        ON source_account.id = origin.source_account_id\n      LEFT JOIN public.auto_automation_detail AS automation_detail\n        ON automation_detail.id = origin.automation_detail_id\n      LEFT JOIN public.auto_automation AS automation\n        ON automation.id = automation_detail.automation_id\n      LEFT JOIN public.auto_campaigns AS source_campaign\n        ON source_campaign.id = automation_detail.source_campaign_id\n      LEFT JOIN public.auto_campaigns AS target_campaign\n        ON target_campaign.id = automation_detail.target_campaign_id\n      WHERE origin.membership_id = filtered.selected_member_id\n    ), '[]'::jsonb),\n    filtered.member_created_at,\n    filtered.member_updated_at,\n    primary_source.primary_origin_id,\n    primary_source.source_category_item_id,\n    primary_source.source_code,\n    primary_source.source_name,\n    primary_source.source_automation_id,\n    primary_source.source_automation_name,\n    filtered.selected_total_count\n  FROM paged AS filtered\n  LEFT JOIN LATERAL (\n    SELECT\n      primary_origin.id AS primary_origin_id,\n      category_item.id AS source_category_item_id,\n      category_item.code AS source_code,\n      category_item.name AS source_name,\n      automation.id AS source_automation_id,\n      CASE WHEN category_item.code = 'automation' THEN COALESCE(\n        NULLIF(btrim(automation.name), ''),\n        NULLIF(btrim(primary_origin.source_name_snapshot), '')\n      ) END AS source_automation_name\n    FROM public.auto_account_contact_group_member_origins AS primary_origin\n    JOIN public.category_item AS category_item\n      ON category_item.id = primary_origin.source_category_item_id\n     AND category_item.is_active = true\n     AND category_item.managed_by = 'system'\n     AND category_item.code =\n       public.aka_agent_data_group_source_code(primary_origin.kind)\n    JOIN public.category_type AS category_type\n      ON category_type.id = category_item.category_type_id\n     AND category_type.namespace = 'common'\n     AND category_type.code = 'data_source'\n     AND category_type.managed_by = 'system'\n     AND category_type.is_active = true\n    LEFT JOIN public.auto_automation_detail AS automation_detail\n      ON automation_detail.id = primary_origin.automation_detail_id\n     AND automation_detail.staff_id = p_staff_id\n     AND automation_detail.organization_id = p_organization_id\n    LEFT JOIN public.auto_automation AS automation\n      ON automation.id = automation_detail.automation_id\n     AND automation.staff_id = p_staff_id\n     AND automation.organization_id = p_organization_id\n    WHERE primary_origin.id = filtered.primary_origin_id\n      AND primary_origin.membership_id = filtered.selected_member_id\n      AND primary_origin.is_current = true\n    LIMIT 1\n  ) AS primary_source ON true\n  ORDER BY filtered.member_created_at DESC, filtered.selected_member_id DESC;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "resolved": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "checksum": "d6bbdca20f780005a411e8a6be6ae8e5",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_group_sharing(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_action text, p_data jsonb DEFAULT '{}'::jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nDECLARE\n  v_kind text := p_data->>'kind';\n  v_id bigint := NULLIF(p_data->>'groupId','')::bigint;\n  v_access jsonb;\n  v_scope text;\n  v_revision bigint;\n  v_recipients bigint[];\n  v_owner bigint;\n  v_result jsonb;\n  v_row record;\n  v_ids bigint[];\n  v_template_id bigint;\nBEGIN\n  PERFORM public.auto_assert_automation_identity(p_staff_id,p_organization_id,p_auth_username,p_auth_password);\n  IF NOT EXISTS(SELECT 1 FROM public.org_staff WHERE id=p_staff_id AND organization_id=p_organization_id\n    AND is_active AND deleted_at IS NULL) THEN RAISE EXCEPTION 'group_sharing_access_denied'; END IF;\n\n  IF p_action='staff' THEN\n    RETURN (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',s.id,'name',COALESCE(NULLIF(s.name,''),'Nhân viên #'||s.id)) ORDER BY s.name,s.id),'[]'::jsonb)\n      FROM public.org_staff s WHERE s.organization_id=p_organization_id AND s.deleted_at IS NULL AND s.is_active AND s.id<>p_staff_id);\n  ELSIF p_action='data_groups' THEN\n    SELECT COALESCE(jsonb_agg(to_jsonb(g)||jsonb_build_object(\n      'access',private.group_access('data',g.id,p_staff_id,p_organization_id),\n      'bound_zalo_account_id',cg.bound_zalo_account_id,\n      'bound_zalo_account_name',CASE WHEN cg.staff_id=p_staff_id THEN a.name END)),'[]'::jsonb)\n    INTO v_result FROM private.list_shared_data_groups(\n      p_staff_id,p_organization_id,p_data->>'search',p_data->>'compatibleActionId',\n      (p_data->>'compatibleDataTypeCategoryItemId')::bigint,\n      CASE WHEN jsonb_typeof(p_data->'dataTypeCategoryItemIds')='array' AND jsonb_array_length(p_data->'dataTypeCategoryItemIds')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'dataTypeCategoryItemIds')::bigint) END,\n      COALESCE((p_data->>'offset')::integer,0),LEAST(500,COALESCE((p_data->>'limit')::integer,50)),\n      COALESCE((p_data->>'unrestrictedOnly')::boolean,false),COALESCE((p_data->>'ownedOnly')::boolean,false)\n    ) g JOIN public.auto_account_contact_groups cg ON cg.id=g.id LEFT JOIN public.auto_accounts a ON a.id=cg.bound_zalo_account_id;\n    RETURN v_result;\n  ELSIF p_action='content_groups' THEN\n    RETURN (SELECT COALESCE(jsonb_agg(row_data ORDER BY (row_data->>'id')::bigint),'[]'::jsonb) FROM (\n      SELECT to_jsonb(g)||jsonb_build_object('access',private.group_access('content',g.id,p_staff_id,p_organization_id)) row_data\n      FROM public.auto_content_groups g WHERE g.organization_id=p_organization_id AND NOT g.is_delete\n        AND g.id>COALESCE((p_data->>'afterId')::bigint,0)\n        AND private.group_access('content',g.id,p_staff_id,p_organization_id) IS NOT NULL\n        AND (NOT COALESCE((p_data->>'ownedOnly')::boolean,false) OR g.staff_id=p_staff_id)\n      ORDER BY g.id LIMIT 500\n    ) page);\n  ELSIF p_action='content_templates' THEN\n    RETURN (SELECT COALESCE(jsonb_agg(row_data ORDER BY (row_data->>'id')::bigint),'[]'::jsonb) FROM (\n      SELECT to_jsonb(t)||jsonb_build_object('content_group',jsonb_build_object('name',g.name),\n        'access',CASE WHEN t.staff_id=p_staff_id THEN jsonb_build_object('role','owner','ownerStaffId',p_staff_id,'canManage',true,'canUse',true,'canCopy',true)\n          ELSE private.group_access('content',g.id,p_staff_id,p_organization_id) END) row_data\n      FROM public.auto_content_templates t LEFT JOIN public.auto_content_groups g ON g.id=t.group_id\n      WHERE t.organization_id=p_organization_id AND NOT t.is_delete\n        AND t.id>COALESCE((p_data->>'afterId')::bigint,0)\n        AND (t.staff_id=p_staff_id OR (g.staff_id=t.staff_id AND g.organization_id=t.organization_id\n          AND g.is_active AND private.group_access('content',g.id,p_staff_id,p_organization_id) IS NOT NULL))\n      ORDER BY t.id LIMIT 500\n    ) page);\n  END IF;\n\n  IF v_kind NOT IN ('data','content') OR v_kind IS NULL OR v_id IS NULL THEN\n    RAISE EXCEPTION 'invalid_group_sharing_request';\n  END IF;\n  -- Lock writes/copies with the source group; all affected destinations are locked in ID order by copy RPC.\n  IF p_action='save' THEN\n    IF v_kind='data' THEN PERFORM id FROM public.auto_account_contact_groups WHERE id=v_id FOR UPDATE;\n    ELSE PERFORM id FROM public.auto_content_groups WHERE id=v_id FOR UPDATE; END IF;\n  END IF;\n  v_access:=private.group_access(v_kind,v_id,p_staff_id,p_organization_id);\n  IF v_access IS NULL THEN RAISE EXCEPTION 'group_sharing_access_denied'; END IF;\n  v_owner:=(v_access->>'ownerStaffId')::bigint;\n\n  IF p_action IN ('get','save') THEN\n    IF NOT (v_access->>'canManage')::boolean THEN\n      IF p_action='save' THEN RAISE EXCEPTION 'group_sharing_owner_required'; END IF;\n      RETURN jsonb_build_object('scope',v_access->>'scope','revision',v_access->>'revision','recipientIds','[]'::jsonb,'access',v_access);\n    END IF;\n    IF p_action='save' THEN\n      v_scope:=p_data->>'scope';\n      IF v_scope IS NULL OR v_scope NOT IN ('private','organization','selected') THEN RAISE EXCEPTION 'invalid_group_sharing_scope'; END IF;\n      IF p_data->>'expectedRevision' IS DISTINCT FROM v_access->>'revision' THEN RAISE EXCEPTION 'group_sharing_conflict'; END IF;\n      IF jsonb_typeof(p_data->'recipientIds') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'invalid_group_sharing_recipients'; END IF;\n      SELECT COALESCE(array_agg(DISTINCT x::bigint),'{}'::bigint[]) INTO v_recipients FROM jsonb_array_elements_text(p_data->'recipientIds') x;\n      IF v_scope<>'selected' THEN v_recipients:='{}'::bigint[]; END IF;\n      IF v_scope='selected' AND cardinality(v_recipients)=0 THEN RAISE EXCEPTION 'group_sharing_recipients_required'; END IF;\n      IF EXISTS(SELECT 1 FROM unnest(v_recipients) r(id) LEFT JOIN public.org_staff s\n        ON s.id=r.id AND s.organization_id=p_organization_id AND s.deleted_at IS NULL AND s.is_active\n        WHERE s.id IS NULL OR s.id=p_staff_id) THEN RAISE EXCEPTION 'invalid_group_sharing_recipients'; END IF;\n      IF v_kind='data' THEN\n        DELETE FROM public.auto_data_group_recipients WHERE group_id=v_id;\n        INSERT INTO public.auto_data_group_recipients SELECT v_id,unnest(v_recipients);\n        UPDATE public.auto_account_contact_groups SET sharing_scope=v_scope,sharing_revision=sharing_revision+1 WHERE id=v_id;\n        -- No campaign pause, deletion or input reset. A new grant never reactivates stopped sources.\n        FOR v_row IN SELECT source.id,source.campaign_id FROM public.auto_campaign_data_group_sources source\n          WHERE source.group_id=v_id AND source.staff_id<>p_staff_id AND source.status IN ('active','baselining')\n          AND NOT private.can_read_data_group(v_id,source.staff_id,source.organization_id)\n          ORDER BY source.campaign_id,source.id\n        LOOP\n          PERFORM public.aka_agent_lock_campaign_input_serialization(v_row.campaign_id);\n          UPDATE public.auto_campaign_data_group_sources SET status='stopped',stop_reason='sharing_revoked',stopped_at=now(),updated_at=now()\n            WHERE id=v_row.id AND status IN ('active','baselining');\n        END LOOP;\n      ELSE\n        DELETE FROM public.auto_content_group_recipients WHERE group_id=v_id;\n        INSERT INTO public.auto_content_group_recipients SELECT v_id,unnest(v_recipients);\n        UPDATE public.auto_content_groups SET sharing_scope=v_scope,sharing_revision=sharing_revision+1 WHERE id=v_id;\n      END IF;\n      v_access:=private.group_access(v_kind,v_id,p_staff_id,p_organization_id);\n    END IF;\n    IF v_kind='data' THEN SELECT COALESCE(array_agg(staff_id ORDER BY staff_id),'{}'::bigint[]) INTO v_recipients FROM public.auto_data_group_recipients WHERE group_id=v_id;\n    ELSE SELECT COALESCE(array_agg(staff_id ORDER BY staff_id),'{}'::bigint[]) INTO v_recipients FROM public.auto_content_group_recipients WHERE group_id=v_id; END IF;\n    RETURN jsonb_build_object('scope',v_access->>'scope','revision',v_access->>'revision','recipientIds',to_jsonb(v_recipients),'access',v_access);\n  ELSIF p_action='validate_content_selection' AND v_kind='content' THEN\n    PERFORM id FROM public.auto_content_groups WHERE id=v_id AND is_active FOR SHARE;\n    IF NOT FOUND OR private.group_access('content',v_id,p_staff_id,p_organization_id) IS NULL THEN\n      RAISE EXCEPTION 'group_sharing_access_denied';\n    END IF;\n    RETURN jsonb_build_object('allowed',true);\n  ELSIF p_action='copy' THEN\n    RETURN private.copy_shared_group(p_staff_id,p_organization_id,v_kind,v_id,p_data);\n  ELSIF p_action='data_members' AND v_kind='data' THEN\n    IF jsonb_typeof(p_data->'ids')='array' THEN SELECT array_agg(x::bigint) INTO v_ids FROM jsonb_array_elements_text(p_data->'ids') x; END IF;\n    IF jsonb_typeof(p_data->'sourceCodes')='array' AND jsonb_array_length(p_data->'sourceCodes')>0 THEN\n      IF EXISTS(SELECT 1 FROM jsonb_array_elements_text(p_data->'sourceCodes') code\n        WHERE code NOT IN ('upload','scan','automation','dynamic_filter','external_sync')) THEN\n        RAISE EXCEPTION 'invalid_data_group_source_filter';\n      END IF;\n      SELECT COALESCE(array_agg(m.id),ARRAY[-1]::bigint[]) INTO v_ids\n      FROM public.auto_account_contact_group_members m WHERE m.group_id=v_id AND NOT m.is_delete\n        AND (v_ids IS NULL OR m.id=ANY(v_ids))\n        AND EXISTS(SELECT 1 FROM public.auto_account_contact_group_member_origins o JOIN public.category_item c ON c.id=o.source_category_item_id\n          WHERE o.membership_id=m.id AND o.is_current AND c.code IN (SELECT jsonb_array_elements_text(p_data->'sourceCodes')));\n    END IF;\n    RETURN (SELECT COALESCE(jsonb_agg(CASE WHEN v_owner=p_staff_id THEN to_jsonb(m) ELSE to_jsonb(m)||jsonb_build_object(\n      'source_automation_id',NULL,'source_automation_name',NULL,\n      'dataset_ids','[]'::jsonb,'dataset_names','[]'::jsonb,'provenance','[]'::jsonb) END),'[]'::jsonb)\n    FROM private.read_shared_group_members(\n      v_owner,p_organization_id,v_id,p_data->>'search',\n      CASE WHEN jsonb_typeof(p_data->'accountIds')='array' AND jsonb_array_length(p_data->'accountIds')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'accountIds')::bigint) END,\n      COALESCE((p_data->>'includeAccountless')::boolean,true),\n      CASE WHEN jsonb_typeof(p_data->'contactTypes')='array' AND jsonb_array_length(p_data->'contactTypes')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'contactTypes')) END,\n      CASE WHEN jsonb_typeof(p_data->'flatformTypes')='array' AND jsonb_array_length(p_data->'flatformTypes')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'flatformTypes')) END,\n      COALESCE(p_data->>'status','all'),\n      CASE WHEN jsonb_typeof(p_data->'datasetIds')='array' AND jsonb_array_length(p_data->'datasetIds')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'datasetIds')::bigint) END,\n      CASE WHEN jsonb_typeof(p_data->'dataTypeCategoryItemIds')='array' AND jsonb_array_length(p_data->'dataTypeCategoryItemIds')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'dataTypeCategoryItemIds')::bigint) END,\n      v_ids,CASE WHEN jsonb_typeof(p_data->'excludeIds')='array' AND jsonb_array_length(p_data->'excludeIds')>0 THEN ARRAY(SELECT jsonb_array_elements_text(p_data->'excludeIds')::bigint) END,\n      COALESCE((p_data->>'offset')::integer,0),LEAST(1000,COALESCE((p_data->>'limit')::integer,100))) m);\n  ELSIF p_action='data_datasets' AND v_kind='data' THEN\n    IF v_owner<>p_staff_id THEN RETURN '[]'::jsonb; END IF;\n    RETURN (SELECT COALESCE(jsonb_agg(to_jsonb(d)),'[]'::jsonb) FROM public.aka_agent_list_data_group_datasets(p_staff_id,p_organization_id,v_id) d);\n  ELSIF p_action='data_panel' AND v_kind='data' THEN\n    IF v_owner=p_staff_id THEN RETURN public.aka_agent_get_data_group_panel(p_staff_id,p_organization_id,v_id,p_auth_username,p_auth_password); END IF;\n    RETURN (SELECT jsonb_build_object('group',jsonb_build_object('id',g.id,'name',g.name,'color',g.color,'note',g.note,\n        'created_at',g.created_at,'updated_at',g.updated_at,'data_type_category_item_id',g.data_type_category_item_id,\n        'bound_zalo_account_id',g.bound_zalo_account_id)||public.aka_agent_data_type_json(g.data_type_category_item_id)\n        ||jsonb_build_object('creator_name',v_access->>'ownerName','access',v_access),\n      'summary',jsonb_build_object('active_membership_count',(SELECT count(*) FROM public.auto_account_contact_group_members WHERE group_id=v_id AND NOT is_delete)),\n      'quality','{}'::jsonb,'source_breakdown','[]'::jsonb,'data_type_breakdown','[]'::jsonb,\n      'account_breakdown','[]'::jsonb,'tags','[]'::jsonb,'history','[]'::jsonb,'campaigns','[]'::jsonb)\n      FROM public.auto_account_contact_groups g WHERE g.id=v_id);\n  END IF;\n  RAISE EXCEPTION 'invalid_group_sharing_action';\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "resolved": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "checksum": "bcae895d24daf017a1e52a83e834f1a9",
+      "definition": "CREATE OR REPLACE FUNCTION private.read_shared_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_data_type_category_item_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer)\n RETURNS SETOF jsonb\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\nBEGIN\n  RETURN QUERY SELECT to_jsonb(m) || jsonb_build_object('zalo_name',CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.zalo_name,''),NULLIF(z.zalo_name,''),contact.name) END,'display_name',CASE WHEN contact.flatform_type='zalo' THEN COALESCE(NULLIF(u.display_name,''),NULLIF(u.zalo_name,''),NULLIF(z.display_name,''),NULLIF(z.zalo_name,''),contact.name) END,'zalo_friend_status',CASE WHEN contact.flatform_type='zalo' AND contact.contact_type='person' THEN\n        CASE WHEN u.id IS NOT NULL THEN CASE WHEN status.code IN ('friend','request_sent','request_received') THEN status.code ELSE 'stranger' END\n          WHEN contact.is_friend IS TRUE THEN 'friend'\n          WHEN COALESCE(contact.extra_data->>'friendRequestReceived',contact.extra_data->>'friend_request_received','false')='true' THEN 'request_received'\n          WHEN COALESCE(contact.extra_data->>'friendRequestSent',contact.extra_data->>'friend_request_sent','false')='true' THEN 'request_sent'\n          ELSE 'stranger' END END)\n  FROM public.aka_agent_list_data_group_members(p_staff_id,p_organization_id,p_group_id,p_search,p_account_ids,p_include_accountless,p_contact_types,p_flatform_types,p_status,p_dataset_ids,p_data_type_category_item_ids,p_ids,p_exclude_ids,p_offset,p_limit) m\n  JOIN public.auto_account_contacts contact ON contact.id=m.contact_id\n  LEFT JOIN public.zalo_users z ON z.account_id=contact.account_id AND z.zalo_uid=contact.uid\n      AND z.staff_id=contact.staff_id AND z.organization_id=contact.organization_id AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_organization b ON b.auto_account_id=contact.account_id\n      AND b.organization_id=contact.organization_id AND b.is_active AND contact.flatform_type='zalo'\n    LEFT JOIN public.chat_zalo_account_user u ON u.chat_zalo_account_id=b.chat_zalo_account_id\n      AND u.zalo_id=contact.uid AND contact.contact_type='person'\n    LEFT JOIN public.category_item status ON status.id=u.friendship_status_category_item_id\n  ORDER BY m.created_at DESC,m.id DESC;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "resolved": "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "checksum": "846ce2b7ba692ae462c87f49ac668ba6",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text DEFAULT NULL::text, p_account_ids bigint[] DEFAULT NULL::bigint[], p_include_accountless boolean DEFAULT true, p_contact_types text[] DEFAULT NULL::text[], p_flatform_types text[] DEFAULT NULL::text[], p_status text DEFAULT 'all'::text, p_dataset_ids bigint[] DEFAULT NULL::bigint[], p_ids bigint[] DEFAULT NULL::bigint[], p_exclude_ids bigint[] DEFAULT NULL::bigint[], p_offset integer DEFAULT 0, p_limit integer DEFAULT 100)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, data_type_category_item_id bigint, data_type_code text, data_type_name text, group_data_type_category_item_id bigint, group_data_type_code text, group_data_type_name text, total_count bigint)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT *\n  FROM public.aka_agent_list_data_group_members(\n    p_staff_id, p_organization_id, p_group_id, p_search, p_account_ids,\n    p_include_accountless, p_contact_types, p_flatform_types, p_status,\n    p_dataset_ids, NULL, p_ids, p_exclude_ids, p_offset, p_limit\n  );\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "resolved": "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "checksum": "3261f19ede3835caccc9cc425cbbc414",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_require_staff_tenant(p_staff_id bigint, p_organization_id bigint)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF p_staff_id IS NULL OR p_staff_id <= 0\n    OR p_organization_id IS NULL OR p_organization_id <= 0\n    OR NOT EXISTS (\n      SELECT 1\n      FROM public.org_staff AS staff\n      WHERE staff.id = p_staff_id\n        AND staff.organization_id = p_organization_id\n        AND staff.is_active = true\n    )\n  THEN\n    RAISE EXCEPTION 'data_group_tenant_not_found';\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)",
+      "resolved": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "checksum": "5a9a503db72b965eb644739f5f60905d",
+      "definition": "CREATE OR REPLACE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)\n RETURNS void\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_claim_role text;\n  v_claims jsonb;\nBEGIN\n  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');\n\n  IF v_claim_role IS NULL THEN\n    BEGIN\n      v_claims := NULLIF(\n        current_setting('request.jwt.claims', true),\n        ''\n      )::jsonb;\n      v_claim_role := NULLIF(v_claims ->> 'role', '');\n    EXCEPTION\n      WHEN OTHERS THEN\n        v_claim_role := NULL;\n    END;\n  END IF;\n\n  IF v_claim_role IS NULL THEN\n    v_claim_role := NULLIF(auth.jwt() ->> 'role', '');\n  END IF;\n\n  IF v_claim_role = 'service_role' THEN\n    RETURN;\n  END IF;\n\n  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN\n    RAISE EXCEPTION 'automation_auth_required';\n  END IF;\n\n  IF NOT EXISTS (\n    SELECT 1\n    FROM public.org_staff AS staff\n    WHERE staff.id = p_staff_id\n      AND staff.organization_id = p_organization_id\n      AND staff.is_active = true\n      AND staff.username = p_auth_username\n      AND staff.password = p_auth_password\n  ) THEN\n    RAISE EXCEPTION 'automation_auth_invalid';\n  END IF;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "resolved": "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "checksum": "1f8420ba250757b5c098c4964db81b76",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_data_type_category_item_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, data_type_category_item_id bigint, data_type_code text, data_type_name text, group_data_type_category_item_id bigint, group_data_type_code text, group_data_type_name text, total_count bigint)\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE\n  v_effective_ids bigint[] := p_ids;\nBEGIN\n  IF p_data_type_category_item_ids IS NOT NULL THEN\n    SELECT COALESCE(array_agg(member.id ORDER BY member.id), '{}'::bigint[])\n    INTO v_effective_ids\n    FROM public.auto_account_contact_group_members AS member\n    WHERE member.group_id = p_group_id\n      AND member.is_delete = false\n      AND (\n        p_ids IS NULL\n        OR member.id = ANY(p_ids)\n      )\n      AND EXISTS (\n        SELECT 1\n        FROM public.auto_account_contact_group_member_origins\n          AS primary_origin\n        WHERE primary_origin.id = member.primary_origin_id\n          AND primary_origin.membership_id = member.id\n          AND primary_origin.is_current = true\n          AND primary_origin.data_type_category_item_id =\n            ANY(p_data_type_category_item_ids)\n      );\n  END IF;\n\n  RETURN QUERY\n  SELECT\n    legacy.id,\n    legacy.group_id,\n    legacy.contact_id,\n    legacy.name,\n    legacy.uid,\n    legacy.url,\n    legacy.phone,\n    legacy.email,\n    legacy.info1,\n    legacy.info2,\n    legacy.info3,\n    legacy.info4,\n    legacy.info5,\n    legacy.contact_type,\n    legacy.flatform_type,\n    legacy.source_account_id,\n    legacy.source_account_name,\n    legacy.source_account_deleted,\n    legacy.dataset_ids,\n    legacy.dataset_names,\n    legacy.is_friend,\n    legacy.is_joined,\n    legacy.is_delete,\n    legacy.change_revision,\n    COALESCE(enriched_provenance.items, '[]'::jsonb),\n    legacy.created_at,\n    legacy.updated_at,\n    legacy.primary_origin_id,\n    legacy.source_category_item_id,\n    legacy.source_code,\n    legacy.source_name,\n    legacy.source_automation_id,\n    legacy.source_automation_name,\n    primary_origin.data_type_category_item_id,\n    primary_type.code,\n    primary_type.name,\n    contact_group.data_type_category_item_id,\n    group_type.code,\n    group_type.name,\n    legacy.total_count\n  FROM public.aka_agent_list_data_group_members_v205_internal(\n    p_staff_id,\n    p_organization_id,\n    p_group_id,\n    p_search,\n    p_account_ids,\n    p_include_accountless,\n    p_contact_types,\n    p_flatform_types,\n    p_status,\n    p_dataset_ids,\n    v_effective_ids,\n    p_exclude_ids,\n    p_offset,\n    p_limit\n  ) AS legacy\n  JOIN public.auto_account_contact_groups AS contact_group\n    ON contact_group.id = legacy.group_id\n  LEFT JOIN public.category_item AS group_type\n    ON group_type.id = contact_group.data_type_category_item_id\n  LEFT JOIN public.auto_account_contact_group_member_origins AS primary_origin\n    ON primary_origin.id = legacy.primary_origin_id\n   AND primary_origin.membership_id = legacy.id\n   AND primary_origin.is_current = true\n  LEFT JOIN public.category_item AS primary_type\n    ON primary_type.id = primary_origin.data_type_category_item_id\n  LEFT JOIN LATERAL (\n    SELECT jsonb_agg(\n      provenance_item.value\n      || jsonb_build_object(\n        'data_type_category_item_id',\n          provenance_origin.data_type_category_item_id,\n        'data_type_code', provenance_type.code,\n        'data_type_name', provenance_type.name\n      )\n      ORDER BY provenance_item.ordinality\n    ) AS items\n    FROM jsonb_array_elements(COALESCE(\n      legacy.provenance, '[]'::jsonb\n    )) WITH ORDINALITY AS provenance_item(value, ordinality)\n    LEFT JOIN public.auto_account_contact_group_member_origins\n      AS provenance_origin\n      ON provenance_origin.id = CASE\n        WHEN provenance_item.value ->> 'id' ~ '^[1-9][0-9]*$'\n        THEN (provenance_item.value ->> 'id')::bigint\n        ELSE NULL\n      END\n    LEFT JOIN public.category_item AS provenance_type\n      ON provenance_type.id =\n        provenance_origin.data_type_category_item_id\n  ) AS enriched_provenance ON true;\nEND;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+      "resolved": "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+      "checksum": "a726cda368e948073c609d963912e637",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_contact_dataset_member_ids(p_staff_id bigint, p_organization_id bigint, p_account_id bigint, p_dataset_id bigint, p_contact_type text DEFAULT NULL::text)\n RETURNS TABLE(contact_id bigint, sort_order integer)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\n SET statement_timeout TO '60s'\nAS $function$\n  SELECT member.contact_id, member.sort_order\n  FROM public.auto_account_contacts_dataset AS dataset\n  JOIN public.auto_account_contacts_dataset_members AS member\n    ON member.dataset_id = dataset.id\n  JOIN public.auto_account_contacts AS contact\n    ON contact.id = member.contact_id\n  WHERE dataset.id = p_dataset_id\n    AND dataset.staff_id = p_staff_id\n    AND dataset.organization_id = p_organization_id\n    AND dataset.account_id = p_account_id\n    AND dataset.is_delete = false\n    AND member.is_current = true\n    AND (p_contact_type IS NULL OR dataset.contact_type = p_contact_type)\n    AND contact.staff_id = p_staff_id\n    AND contact.organization_id = p_organization_id\n    AND contact.account_id = p_account_id\n    AND contact.contact_type = dataset.contact_type\n    AND COALESCE(contact.is_delete, false) = false\n  ORDER BY member.sort_order ASC, member.contact_id ASC;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_data_group_source_code(text)",
+      "resolved": "aka_agent_data_group_source_code(text)",
+      "checksum": "490c06769bbf4ac29faacc2eb989119f",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_data_group_source_code(p_origin_kind text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE PARALLEL SAFE\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT CASE lower(btrim(COALESCE(p_origin_kind, '')))\n    WHEN 'manual' THEN 'upload'\n    WHEN 'upload' THEN 'upload'\n    WHEN 'scan' THEN 'scan'\n    WHEN 'automation' THEN 'automation'\n    WHEN 'dynamic_filter' THEN 'dynamic_filter'\n    WHEN 'external_sync' THEN 'external_sync'\n    ELSE NULL\n  END;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "i",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "resolved": "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "checksum": "4564edccd0be59ea0f9563367859f3d3",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_data_type_category_item_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer, p_auth_username text, p_auth_password text)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, data_type_category_item_id bigint, data_type_code text, data_type_name text, group_data_type_category_item_id bigint, group_data_type_code text, group_data_type_name text, total_count bigint)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\n  SELECT public.auto_assert_automation_identity(\n    p_staff_id, p_organization_id, p_auth_username, p_auth_password\n  );\n  SELECT *\n  FROM public.aka_agent_list_data_group_members(\n    p_staff_id, p_organization_id, p_group_id, p_search, p_account_ids,\n    p_include_accountless, p_contact_types, p_flatform_types, p_status,\n    p_dataset_ids, p_data_type_category_item_ids, p_ids, p_exclude_ids,\n    p_offset, p_limit\n  );\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "private.group_access(text,bigint,bigint,bigint)",
+      "resolved": "private.group_access(text,bigint,bigint,bigint)",
+      "checksum": "251162422553d81d432151554b5ea16a",
+      "definition": "CREATE OR REPLACE FUNCTION private.group_access(p_kind text, p_group_id bigint, p_staff_id bigint, p_organization_id bigint)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  WITH resource AS (\n    SELECT id,staff_id,organization_id,sharing_scope,sharing_revision\n    FROM public.auto_account_contact_groups\n    WHERE p_kind='data' AND id=p_group_id AND purpose='data_group' AND NOT is_delete\n    UNION ALL\n    SELECT id,staff_id,organization_id,sharing_scope,sharing_revision\n    FROM public.auto_content_groups\n    WHERE p_kind='content' AND id=p_group_id AND NOT is_delete\n  )\n  SELECT jsonb_build_object(\n    'ownerStaffId',g.staff_id,'ownerName',COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id),\n    'role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END,\n    'canManage',g.staff_id=p_staff_id,'canUse',true,'canCopy',true,\n    'scope',g.sharing_scope,'revision',g.sharing_revision::text)\n  FROM resource g\n  JOIN public.org_staff owner ON owner.id=g.staff_id AND owner.organization_id=g.organization_id\n    AND owner.deleted_at IS NULL AND owner.is_active\n  JOIN public.org_staff viewer ON viewer.id=p_staff_id AND viewer.organization_id=g.organization_id\n    AND viewer.deleted_at IS NULL AND viewer.is_active\n  WHERE g.organization_id=p_organization_id AND (\n    g.staff_id=p_staff_id OR g.sharing_scope='organization' OR\n    (g.sharing_scope='selected' AND (\n      (p_kind='data' AND EXISTS(SELECT 1 FROM public.auto_data_group_recipients r WHERE r.group_id=g.id AND r.staff_id=p_staff_id))\n      OR (p_kind='content' AND EXISTS(SELECT 1 FROM public.auto_content_group_recipients r WHERE r.group_id=g.id AND r.staff_id=p_staff_id))\n    ))\n  );\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.can_read_data_group(bigint,bigint,bigint)",
+      "resolved": "private.can_read_data_group(bigint,bigint,bigint)",
+      "checksum": "c47165554f49d3099d1f95e7d136eae5",
+      "definition": "CREATE OR REPLACE FUNCTION private.can_read_data_group(p_group_id bigint, p_staff_id bigint, p_organization_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT private.group_access('data',p_group_id,p_staff_id,p_organization_id) IS NOT NULL;\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "resolved": "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "checksum": "6c6044a8598df80c417be2aa489ed5e2",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_list_data_group_members(p_staff_id bigint, p_organization_id bigint, p_group_id bigint, p_search text, p_account_ids bigint[], p_include_accountless boolean, p_contact_types text[], p_flatform_types text[], p_status text, p_dataset_ids bigint[], p_ids bigint[], p_exclude_ids bigint[], p_offset integer, p_limit integer, p_auth_username text, p_auth_password text)\n RETURNS TABLE(id bigint, group_id bigint, contact_id bigint, name text, uid text, url text, phone text, email text, info1 text, info2 text, info3 text, info4 text, info5 text, contact_type text, flatform_type text, source_account_id bigint, source_account_name text, source_account_deleted boolean, dataset_ids bigint[], dataset_names text[], is_friend boolean, is_joined boolean, is_delete boolean, change_revision bigint, provenance jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, primary_origin_id bigint, source_category_item_id bigint, source_code text, source_name text, source_automation_id bigint, source_automation_name text, data_type_category_item_id bigint, data_type_code text, data_type_name text, group_data_type_category_item_id bigint, group_data_type_code text, group_data_type_name text, total_count bigint)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET statement_timeout TO '60s'\nAS $function$\n  SELECT *\n  FROM public.aka_agent_list_data_group_members(\n    p_staff_id, p_organization_id, p_group_id, p_search, p_account_ids,\n    p_include_accountless, p_contact_types, p_flatform_types, p_status,\n    p_dataset_ids, NULL, p_ids, p_exclude_ids, p_offset, p_limit,\n    p_auth_username, p_auth_password\n  );\n$function$\n",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "private.column_filter_predicate_v1(text,jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_text_v1(text[])",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_phone_v1(text)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_tag_values_v1(jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_zalo_tags_v1(jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_uri_decode_v1(text,boolean)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_uri_encode_v1(text,boolean)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_fb_url_v1(text,text)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "private.column_filter_source_match_v1(jsonb,jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "public.aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "public.aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    },
+    {
+      "signature": "public.aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)",
+      "resolved": null,
+      "checksum": null,
+      "definition": null,
+      "owner": null,
+      "prosecdef": null,
+      "provolatile": null,
+      "proconfig": null,
+      "proacl": null
+    }
+  ]
+}

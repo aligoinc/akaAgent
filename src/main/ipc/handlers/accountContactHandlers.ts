@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
-import type { PageInboxScanOptions } from '../../../shared/types'
+import type { PageInboxScanOptions, DataColumnReadRequest } from '../../../shared/types'
 import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, ContactDatasetListQuery, ContactType, IPC_EVENTS, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SaveUploadDatasetRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery } from '../../../shared/types'
+import { executeColumnRead, cancelColumnRead } from '../../data/filters/dataColumnReadService'
 import { SupabaseService } from '../../services/supabase'
 import { ContactLoader } from '../../services/contactLoader'
 import { ZaloServerClient } from '../../services/zaloServerClient'
@@ -13,9 +14,10 @@ import {
 async function ensureContactAccess(
   supabase: SupabaseService,
   accountId: number,
-  contactType?: string | null
+  contactType?: string | null,
+  signal?: AbortSignal
 ): Promise<void> {
-  const account = await supabase.getAccount(accountId)
+  const account = await supabase.getAccount(accountId, signal)
   if (!account) {
     throw new Error('Tài khoản không tồn tại hoặc không thuộc quyền quản lý của bạn')
   }
@@ -47,7 +49,29 @@ export function registerAccountContactHandlers(
     chatContactLoader?: ContactLoader
     isChatSync?: () => boolean
   } = {}
-): void {
+ ): void {
+  const boundReaders = new Set<number>()
+  const bindReader = (sender: Electron.WebContents): string => {
+    if (!boundReaders.has(sender.id)) {
+      boundReaders.add(sender.id)
+      sender.once('destroyed', () => { cancelColumnRead(String(sender.id)); boundReaders.delete(sender.id) })
+      sender.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) cancelColumnRead(String(sender.id)) })
+    }
+    return String(sender.id)
+  }
+  const readColumns = (event: Electron.IpcMainInvokeEvent, request: DataColumnReadRequest, mode: 'page' | 'export' | 'ids') => (
+    executeColumnRead(bindReader(event.sender), request, async signal => {
+      if (request.source === 'data_group') return
+      await ensureContactAccess(supabase, request.accountId!, request.source === 'page_inbox' ? 'page_inbox_customer' : ['group_members','remarketing'].includes(request.source) ? 'zalo_tag' : (request.query as AccountContactListQuery).contactType, signal)
+    }, mode)
+  )
+  ipcMain.handle(IPC_EVENTS.DATA_COLUMN_FILTER_READ, (event, request: DataColumnReadRequest) => readColumns(event, request, 'page'))
+  ipcMain.handle(IPC_EVENTS.DATA_COLUMN_FILTER_EXPORT, (event, request: DataColumnReadRequest, idsOnly?: boolean) => readColumns(event, request, idsOnly === true ? 'ids' : 'export'))
+  ipcMain.handle(IPC_EVENTS.DATA_COLUMN_FILTER_CANCEL, (event, formId: string, requestId?: string) => {
+    if (typeof formId !== 'string' || formId.length > 100 || (requestId !== undefined && (typeof requestId !== 'string' || requestId.length > 100))) return false
+    cancelColumnRead(String(event.sender.id), formId, requestId)
+    return true
+  })
   ipcMain.handle(IPC_EVENTS.CONTACTS_LOAD_FRIENDS, async (_, accountId: number) => {
     await ensureContactAccess(supabase, accountId, 'person')
     const account = await supabase.getAccount(accountId)

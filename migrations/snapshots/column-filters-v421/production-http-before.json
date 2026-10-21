@@ -1,0 +1,50 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "at": "2026-10-21T07:27:32.416Z",
+  "mode": "before",
+  "readOnly": true,
+  "checks": [
+    {
+      "case": "legacy_contact_relationship",
+      "status": 200,
+      "rows": 10,
+      "checksum": "8512b50ac007963c5b84be945e61d8aa2cff083c8e5c2da94a9836339cecd2de",
+      "durationMs": 1576
+    },
+    {
+      "case": "aka_agent_group_sharing",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 110
+    },
+    {
+      "case": "aka_agent_list_data_group_members_v2",
+      "status": 400,
+      "code": "P0001",
+      "message": "automation_auth_required",
+      "durationMs": 220
+    },
+    {
+      "case": "aka_agent_read_filtered_contacts_v1",
+      "status": 404,
+      "code": "PGRST202",
+      "message": "RPC not installed",
+      "durationMs": 249
+    },
+    {
+      "case": "aka_agent_read_filtered_group_v1",
+      "status": 404,
+      "code": "PGRST202",
+      "message": "RPC not installed",
+      "durationMs": 275
+    },
+    {
+      "case": "aka_agent_read_filtered_remarketing_v1",
+      "status": 404,
+      "code": "PGRST202",
+      "message": "RPC not installed",
+      "durationMs": 483
+    }
+  ]
+}

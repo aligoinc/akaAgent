@@ -1,3 +1,6 @@
+import type { PageInboxContactListQuery } from '../../../../shared/types'
+import { ColumnFilterHeader, ColumnFilterBar, useColumnFilters } from '../DataFilters/ColumnFilters'
+import type { DataTableSource } from '../../../../shared/dataColumnFilters'
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import jsQR from 'jsqr'
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Download, Folder, Info, Link2, Maximize2, Minimize2, Plus, QrCode, RefreshCw, Search, Square, X } from 'lucide-react'
@@ -739,7 +742,9 @@ const isZaloGroupLeadershipContact = (contact: AutoAccountContact) => {
 }
 
 const getZaloGroupTotalMember = (contact: AutoAccountContact) => {
-  const parsed = Number(contact.extraData?.totalMember)
+  const value = contact.extraData?.totalMember
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
@@ -832,6 +837,7 @@ const getPageInboxLastMessageAt = (contact: AutoAccountContact) => {
   const date = new Date(raw)
   if (Number.isNaN(date.getTime())) return raw
   return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -897,7 +903,9 @@ const getZaloGenderText = (contact: AutoAccountContact) => {
 }
 
 const getExtraNumber = (contact: AutoAccountContact, key: string) => {
-  const value = Number(contact.extraData?.[key])
+  const raw = contact.extraData?.[key]
+  if (raw === null || raw === undefined || raw === '') return null
+  const value = Number(raw)
   return Number.isFinite(value) ? value : null
 }
 
@@ -1512,6 +1520,19 @@ export default function DataScanModal({
     void loadContactDatasets()
   }, [loadContactDatasets])
 
+  const columnSource: DataTableSource = isUploadDataAction ? 'upload' : selectedDataset ? 'contacts' : isPageInboxAction ? 'page_inbox' : isZaloGroupMembersAction ? 'group_members' : isZaloRemarketingCustomersAction ? 'remarketing' : 'contacts'
+  const columnFilters = useColumnFilters(columnSource, `${accountId}:${action}:${selectedDataset?.id||''}:${zaloGroupMemberGroupId}:${pageInboxAppliedFilters.pageUid}`, () => {
+    contactsLoadIdRef.current++; lastLoadedQueryKeyRef.current=''
+    setPageInboxPage(1); resetPagedContactSelection(); setContacts([]); setPageInboxTotal(0)
+  }, field => {
+    if(field==='friendship'||field==='joined')setStatusFilter('all')
+    if(field==='zaloTags'){setZaloTagFilterIds([]);setZaloNoTagFilter(false)}
+    if(field==='akaBizTags'){setAkaBizTagFilterIds([]);setAkaBizNoTagFilter(false)}
+  })
+  const readFilteredContacts = useCallback(async (query: AccountContactListQuery | ZaloGroupMemberContactListQuery | ZaloRemarketingCustomerListQuery | PageInboxContactListQuery, fallback: () => Promise<{contacts:AutoAccountContact[];total:number}>) => (
+    columnFilters.read(query, accountId || undefined, 'page', fallback)
+  ), [accountId,columnFilters.read])
+
   const getAccountContactListQuery = useCallback((overrides: Partial<AccountContactListQuery> = {}): AccountContactListQuery => ({
     contactType: selectedDataset?.contactType || actionDef.contactType,
     datasetId: selectedDataset?.id,
@@ -1609,11 +1630,8 @@ export default function DataScanModal({
     setLoading(true)
     try {
       setPageInboxPage(1)
-      const result = await window.electronAPI.listZaloGroupMemberContacts(accountId, getZaloGroupMemberListQuery({
-        zaloGroupId: groupId,
-        limit: PAGE_INBOX_PAGE_SIZE,
-        offset: 0
-      }))
+      const query = getZaloGroupMemberListQuery({zaloGroupId:groupId,limit:PAGE_INBOX_PAGE_SIZE,offset:0})
+      const result = await readFilteredContacts(query, () => window.electronAPI.listZaloGroupMemberContacts(accountId, query))
       if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
       setContacts(result.contacts)
       setPageInboxTotal(result.total)
@@ -1625,7 +1643,7 @@ export default function DataScanModal({
     } finally {
       if (mountedRef.current && contactsLoadIdRef.current === loadId) setLoading(false)
     }
-  }, [accountId, getZaloGroupMemberListQuery, showAlert])
+  }, [accountId, getZaloGroupMemberListQuery, showAlert, readFilteredContacts])
 
   const findLinkedZaloGroupByLink = useCallback((link: string) => {
     const normalized = normalizeZaloGroupLink(link)
@@ -1697,20 +1715,22 @@ export default function DataScanModal({
   }, [])
 
   const toggleZaloTagFilter = useCallback((tagId: string) => {
+    columnFilters.remove('zaloTags')
     setZaloTagFilterIds(prev => (
       prev.includes(tagId)
         ? prev.filter(id => id !== tagId)
         : [...prev, tagId]
     ))
-  }, [])
+  }, [columnFilters.remove])
 
   const toggleAkaBizTagFilter = useCallback((tagId: number) => {
+    columnFilters.remove('akaBizTags')
     setAkaBizTagFilterIds(prev => (
       prev.includes(tagId)
         ? prev.filter(id => id !== tagId)
         : [...prev, tagId]
     ))
-  }, [])
+  }, [columnFilters.remove])
 
   const loadZaloRemarketingCustomers = useCallback(async () => {
     if (!window.electronAPI || !accountId) {
@@ -1730,11 +1750,8 @@ export default function DataScanModal({
     contactsLoadIdRef.current = loadId
     setLoading(true)
     try {
-      const result = await window.electronAPI.listZaloRemarketingCustomers(accountId, {
-        ...getZaloRemarketingListQuery(),
-        limit: PAGE_INBOX_PAGE_SIZE,
-        offset: (pageInboxPage - 1) * PAGE_INBOX_PAGE_SIZE
-      })
+      const query = {...getZaloRemarketingListQuery(),limit:PAGE_INBOX_PAGE_SIZE,offset:(pageInboxPage-1)*PAGE_INBOX_PAGE_SIZE}
+      const result = await readFilteredContacts(query, () => window.electronAPI.listZaloRemarketingCustomers(accountId, query))
       if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return null
       setContacts(result.contacts)
       setPageInboxTotal(result.total)
@@ -1752,6 +1769,7 @@ export default function DataScanModal({
       }
     }
   }, [
+    readFilteredContacts,
     accountId,
     getZaloRemarketingListQuery,
     pageInboxPage,
@@ -1777,6 +1795,7 @@ export default function DataScanModal({
     if (!window.electronAPI || !accountId) return null
     const pageToLoad = pageOverride ?? pageInboxPage
     const base = {
+      columnFilters: columnFilters.filters,
       action,
       accountId,
       ...(includePage ? { page: pageToLoad } : {})
@@ -1853,6 +1872,7 @@ export default function DataScanModal({
       }
     })
   }, [
+    columnFilters.filters,
     accountId,
     action,
     getAccountContactListQuery,
@@ -1901,11 +1921,15 @@ export default function DataScanModal({
     setLoading(true)
     try {
       if (selectedDataset) {
-        const result = await window.electronAPI.listContactsPage(accountId, {
+        const result = await readFilteredContacts({
           ...getAccountContactListQuery(),
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
-        })
+        }, () => window.electronAPI.listContactsPage(accountId, {
+          ...getAccountContactListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        }))
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
@@ -1917,7 +1941,7 @@ export default function DataScanModal({
           setPageInboxTotal(0)
           return
         }
-        const result = await window.electronAPI.listPageInboxContacts(accountId, {
+        const result = await readFilteredContacts({
           pageUid: pageInboxFilters.pageUid,
           search: pageInboxFilters.search,
           phoneFilter: pageInboxFilters.phoneFilter,
@@ -1927,7 +1951,17 @@ export default function DataScanModal({
           messageKeywords: pageInboxFilters.messageKeywords,
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
-        })
+        }, () => window.electronAPI.listPageInboxContacts(accountId, {
+          pageUid: pageInboxFilters.pageUid,
+          search: pageInboxFilters.search,
+          phoneFilter: pageInboxFilters.phoneFilter,
+          dateFrom: pageInboxFilters.dateFrom,
+          dateTo: pageInboxFilters.dateTo,
+          messageFilterMode: pageInboxFilters.messageFilterMode,
+          messageKeywords: pageInboxFilters.messageKeywords,
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        }))
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
@@ -1938,20 +1972,28 @@ export default function DataScanModal({
           setPageInboxTotal(0)
           return
         }
-        const result = await window.electronAPI.listZaloGroupMemberContacts(accountId, {
+        const result = await readFilteredContacts({
           ...getZaloGroupMemberListQuery(),
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
-        })
+        }, () => window.electronAPI.listZaloGroupMemberContacts(accountId, {
+          ...getZaloGroupMemberListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        }))
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
       } else if (isZaloRemarketingCustomersAction) {
-        const result = await window.electronAPI.listZaloRemarketingCustomers(accountId, {
+        const result = await readFilteredContacts({
           ...getZaloRemarketingListQuery(),
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
-        })
+        }, () => window.electronAPI.listZaloRemarketingCustomers(accountId, {
+          ...getZaloRemarketingListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        }))
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
@@ -1986,11 +2028,15 @@ export default function DataScanModal({
           setPageInboxTotal(0)
           return
         }
-        const result = await window.electronAPI.listContactsPage(accountId, {
+        const result = await readFilteredContacts({
           ...getAccountContactListQuery(),
           limit: PAGE_INBOX_PAGE_SIZE,
           offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
-        })
+        }, () => window.electronAPI.listContactsPage(accountId, {
+          ...getAccountContactListQuery(),
+          limit: PAGE_INBOX_PAGE_SIZE,
+          offset: (pageToLoad - 1) * PAGE_INBOX_PAGE_SIZE
+        }))
         if (!mountedRef.current || contactsLoadIdRef.current !== loadId) return
         setContacts(result.contacts)
         setPageInboxTotal(result.total)
@@ -2000,7 +2046,7 @@ export default function DataScanModal({
       console.error('Failed to load scan contacts:', err)
       if (mountedRef.current && contactsLoadIdRef.current === loadId) {
         lastLoadedQueryKeyRef.current = ''
-        showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
+        if (!String(err?.message).includes('Đã hủy lượt lọc')) showAlert(err?.message || 'Không thể tải danh sách data.', 'error')
       }
     } finally {
       if (mountedRef.current && contactsLoadIdRef.current === loadId) {
@@ -2009,6 +2055,7 @@ export default function DataScanModal({
     }
   }, [
     accountId,
+    readFilteredContacts,
     actionDef.contactType,
     buildContactsLoadQueryKey,
     clearCachedContactsForPendingQuery,
@@ -3056,6 +3103,7 @@ export default function DataScanModal({
   }
 
   const exportCurrentSelection = async (overrides: any = {}) => {
+    const legacyExport = async (): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI || !accountId) return []
     if (selectedDataset) {
       return window.electronAPI.exportContactsPage(accountId, {
@@ -3085,6 +3133,10 @@ export default function DataScanModal({
       ...getAccountContactListQuery(),
       ...overrides
     })
+  }
+    const query = selectedDataset ? getAccountContactListQuery(overrides) : isPageInboxAction ? {...pageInboxAppliedFilters,...overrides} : isZaloGroupMembersAction ? getZaloGroupMemberListQuery(overrides) : isZaloRemarketingCustomersAction ? getZaloRemarketingListQuery(overrides) : getAccountContactListQuery(overrides)
+    const result = await columnFilters.read(query, accountId || undefined, 'export', async () => ({contacts:await legacyExport()}))
+    return result.contacts
   }
 
   const loadSelectedContacts = async () => {
@@ -4408,7 +4460,7 @@ export default function DataScanModal({
                             type="button"
                             className={`data-scan-tag-filter-option is-all${zaloTagFilterIds.length === 0 && !zaloNoTagFilter ? ' selected' : ''}`}
                             onClick={() => {
-                              setZaloTagFilterIds([])
+                              columnFilters.remove('zaloTags'); setZaloTagFilterIds([])
                               setZaloNoTagFilter(false)
                             }}
                             role="menuitemcheckbox"
@@ -4422,7 +4474,7 @@ export default function DataScanModal({
                           <button
                             type="button"
                             className={`data-scan-tag-filter-option${zaloNoTagFilter ? ' selected' : ''}`}
-                            onClick={() => setZaloNoTagFilter(prev => !prev)}
+                            onClick={() => {columnFilters.remove('zaloTags');setZaloNoTagFilter(prev => !prev)}}
                             role="menuitemcheckbox"
                             aria-checked={zaloNoTagFilter}
                           >
@@ -4475,7 +4527,7 @@ export default function DataScanModal({
                             type="button"
                             className={`data-scan-tag-filter-option is-all${akaBizTagFilterIds.length === 0 && !akaBizNoTagFilter ? ' selected' : ''}`}
                             onClick={() => {
-                              setAkaBizTagFilterIds([])
+                              columnFilters.remove('akaBizTags'); setAkaBizTagFilterIds([])
                               setAkaBizNoTagFilter(false)
                             }}
                             role="menuitemcheckbox"
@@ -4489,7 +4541,7 @@ export default function DataScanModal({
                           <button
                             type="button"
                             className={`data-scan-tag-filter-option${akaBizNoTagFilter ? ' selected' : ''}`}
-                            onClick={() => setAkaBizNoTagFilter(prev => !prev)}
+                            onClick={() => {columnFilters.remove('akaBizTags');setAkaBizNoTagFilter(prev => !prev)}}
                             role="menuitemcheckbox"
                             aria-checked={akaBizNoTagFilter}
                           >
@@ -4548,7 +4600,7 @@ export default function DataScanModal({
                   <select
                     className="stepper-input"
                     value={statusFilter}
-                    onChange={event => setStatusFilter(event.target.value as ContactStatusFilter)}
+                    onChange={event => {columnFilters.replace(columnFilters.filters.filters.filter(f=>f.field!=='friendship'&&f.field!=='joined'));setStatusFilter(event.target.value as ContactStatusFilter)}}
                   >
                     {statusFilterOptions.map(option => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -4797,6 +4849,7 @@ export default function DataScanModal({
             </div>
           )}
 
+          <ColumnFilterBar controller={columnFilters} options={{zaloTags:zaloTagFilterOptions.map(t=>({value:String(t.id),label:t.name})),akaBizTags:akaBizTagFilterOptions.map(t=>({value:String(t.id),label:t.name})),actions:ZALO_REMARKETING_ACTION_FILTER_OPTIONS}} />
           <div className="stepper-grid-container data-scan-table-wrap">
             <table className={`campaign-grid data-scan-table${isUploadDataAction ? ' is-upload-data' : ''}`}>
               <thead>
@@ -4817,54 +4870,54 @@ export default function DataScanModal({
                   <th style={{ width: 64 }}>STT</th>
                   {isUploadDataAction ? (
                     <>
-                      <th>Tên</th>
-                      <th>UID/Link</th>
-                      <th>Số điện thoại</th>
-                      <th>Email</th>
-                      <th>Info 1</th>
-                      <th>Info 2</th>
-                      <th>Info 3</th>
-                      <th>Info 4</th>
-                      <th>Info 5</th>
+                      <ColumnFilterHeader controller={columnFilters} field="name">Tên</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="uid">UID/Link</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="phone">Số điện thoại</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="email">Email</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="info1">Info 1</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="info2">Info 2</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="info3">Info 3</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="info4">Info 4</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="info5">Info 5</ColumnFilterHeader>
                     </>
                   ) : isZaloRemarketingCustomersAction ? (
                     <>
-                      <th>Tên Zalo</th>
-                      <th>Số điện thoại</th>
-                      <th>Zalo Id</th>
-                      {showZaloTagColumn && <th>Tag Zalo</th>}
-                      {showAkaBizTagColumn && <th>Tag akaBiz</th>}
-                      <th>Tên group</th>
-                      <th>Hành động của chiến dịch gần nhất</th>
-                      <th>Số tin đã gửi</th>
-                      <th>Ngày gửi</th>
-                      <th>Ngày gửi gần nhất cách hôm nay số ngày</th>
-                      <th>Trạng thái gửi tin gần nhất</th>
-                      <th>Ghi chú gửi tin gần nhất</th>
-                      <th>Trạng thái của người nhận trong tin nhắn gần nhất</th>
+                      <ColumnFilterHeader controller={columnFilters} field="name">Tên Zalo</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="phone">Số điện thoại</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="uid">Zalo Id</ColumnFilterHeader>
+                      {showZaloTagColumn && <ColumnFilterHeader controller={columnFilters} field="zaloTags">Tag Zalo</ColumnFilterHeader>}
+                      {showAkaBizTagColumn && <ColumnFilterHeader controller={columnFilters} field="akaBizTags">Tag akaBiz</ColumnFilterHeader>}
+                      <ColumnFilterHeader controller={columnFilters} field="groupName">Tên group</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="latestAction">Hành động của chiến dịch gần nhất</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="sentCount">Số tin đã gửi</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="latestSentAt">Ngày gửi</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="daysSinceLatest">Ngày gửi gần nhất cách hôm nay số ngày</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="latestStatus">Trạng thái gửi tin gần nhất</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="latestLog">Ghi chú gửi tin gần nhất</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="recipientStatus">Trạng thái của người nhận trong tin nhắn gần nhất</ColumnFilterHeader>
                     </>
                   ) : (
                     <>
-                  {showAvatarColumn && <th className="data-scan-avatar-col">Ảnh đại diện</th>}
-                  <th>Tên</th>
-                  {showZaloGenderColumn && <th>Giới tính</th>}
-                  {showZaloPhoneColumn && <th>Số điện thoại</th>}
-                  <th>{isPageInboxAction ? 'PSID' : 'UID'}</th>
-                  {showZaloTagColumn && <th>Tag Zalo</th>}
-                  {showAkaBizTagColumn && <th>Tag akaBiz</th>}
+                  {showAvatarColumn && <ColumnFilterHeader controller={columnFilters} field="avatar" className="data-scan-avatar-col">Ảnh đại diện</ColumnFilterHeader>}
+                  <ColumnFilterHeader controller={columnFilters} field="name">Tên</ColumnFilterHeader>
+                  {showZaloGenderColumn && <ColumnFilterHeader controller={columnFilters} field="gender">Giới tính</ColumnFilterHeader>}
+                  {showZaloPhoneColumn && <ColumnFilterHeader controller={columnFilters} field="phone">Số điện thoại</ColumnFilterHeader>}
+                  <ColumnFilterHeader controller={columnFilters} field="uid">{isPageInboxAction ? 'PSID' : 'UID'}</ColumnFilterHeader>
+                  {showZaloTagColumn && <ColumnFilterHeader controller={columnFilters} field="zaloTags">Tag Zalo</ColumnFilterHeader>}
+                  {showAkaBizTagColumn && <ColumnFilterHeader controller={columnFilters} field="akaBizTags">Tag akaBiz</ColumnFilterHeader>}
                   {isPageInboxAction ? (
                     <>
-                      <th>SĐT</th>
-                      <th>Tin nhắn cuối</th>
-                      <th>Thời gian nhắn gần nhất</th>
+                      <ColumnFilterHeader controller={columnFilters} field="phone">SĐT</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="message">Tin nhắn cuối</ColumnFilterHeader>
+                      <ColumnFilterHeader controller={columnFilters} field="lastMessageAt">Thời gian nhắn gần nhất</ColumnFilterHeader>
                     </>
                   ) : null}
-                  {showLinkColumn && <th>Link</th>}
-                  {showZaloGroupMemberCountColumn && <th>Số thành viên</th>}
-                  {showGroupMemberRoleColumn && <th>Vai trò</th>}
-                  {showFriendStatusColumn && <th>Bạn bè</th>}
-                  {effectiveContactType === 'group' && <th>Tham gia</th>}
-                  {showGroupApprovalColumn && <th>Duyệt bài</th>}
+                  {showLinkColumn && <ColumnFilterHeader controller={columnFilters} field="url">Link</ColumnFilterHeader>}
+                  {showZaloGroupMemberCountColumn && <ColumnFilterHeader controller={columnFilters} field="memberCount">Số thành viên</ColumnFilterHeader>}
+                  {showGroupMemberRoleColumn && <ColumnFilterHeader controller={columnFilters} field="role">Vai trò</ColumnFilterHeader>}
+                  {showFriendStatusColumn && <ColumnFilterHeader controller={columnFilters} field="friendship">Bạn bè</ColumnFilterHeader>}
+                  {effectiveContactType === 'group' && <ColumnFilterHeader controller={columnFilters} field="joined">Tham gia</ColumnFilterHeader>}
+                  {showGroupApprovalColumn && <ColumnFilterHeader controller={columnFilters} field="approval">Duyệt bài</ColumnFilterHeader>}
                     </>
                   )}
                 </tr>

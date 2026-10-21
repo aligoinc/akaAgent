@@ -15,6 +15,15 @@ export interface ProcessAuthCredentials {
 
 let _currentUserCredentials: ProcessAuthCredentials | null = null
 
+const sessionChangeListeners = new Set<() => void>()
+export function onCurrentUserSessionChanged(listener: () => void): () => void {
+  sessionChangeListeners.add(listener)
+  return () => sessionChangeListeners.delete(listener)
+}
+function notifySessionChanged(): void {
+  for (const listener of sessionChangeListeners) listener()
+}
+
 export function setCurrentUser(user: AuthUser | null): void {
   if (user && _currentUser && user.staffId === _currentUser.staffId &&
     user.organizationId === _currentUser.organizationId && user.chatWebEnabledAtLogin === undefined) {
@@ -30,6 +39,7 @@ export function setCurrentUser(user: AuthUser | null): void {
     ))
   ) {
     _currentUserCredentials = null
+    notifySessionChanged()
   }
   _currentUser = user
 }
@@ -47,6 +57,7 @@ export function requireCurrentUser(): AuthUser {
 }
 
 export function setCurrentUserCredentials(credentials: ProcessAuthCredentials | null): void {
+  notifySessionChanged()
   if (!credentials) {
     _currentUserCredentials = null
     return

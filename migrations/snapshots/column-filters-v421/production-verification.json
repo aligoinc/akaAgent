@@ -1,0 +1,230 @@
+{
+  "independentMigration": [
+    {
+      "version": "20261021072601",
+      "name": "migration_v422_akabiz_sql_zalo_web_mapped_reuse",
+      "function_name": [
+        "public.akabiz_import_sql_zalo_web_v1"
+      ]
+    }
+  ],
+  "functionTransactions": [
+    {
+      "signature": "public.aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)",
+      "xid": "527409098",
+      "checksum": "6f5c7a310643cf7d63782974ffcdc933"
+    },
+    {
+      "signature": "public.aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)",
+      "xid": "527409098",
+      "checksum": "788154e11ff9c302ed14cabd866fa1da"
+    },
+    {
+      "signature": "public.aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)",
+      "xid": "527409098",
+      "checksum": "17ffadd05bb48b245a4382789c6d59ea"
+    },
+    {
+      "signature": "private.private.column_filter_source_match_v1(jsonb,jsonb)",
+      "xid": "527409098",
+      "checksum": "c96fc3e0f9ec082876fe89275fe435a7"
+    },
+    {
+      "signature": "private.private.column_filter_fb_url_v1(text,text)",
+      "xid": "527409098",
+      "checksum": "2663f1372e16552e0433daafa6854aaa"
+    },
+    {
+      "signature": "private.private.column_filter_uri_encode_v1(text,boolean)",
+      "xid": "527409098",
+      "checksum": "2d19cc24cd1005755a2855124a3d2214"
+    },
+    {
+      "signature": "private.private.column_filter_uri_decode_v1(text,boolean)",
+      "xid": "527409098",
+      "checksum": "4b3ad151607986717af93716dcc7a390"
+    },
+    {
+      "signature": "private.private.column_filter_zalo_tags_v1(jsonb)",
+      "xid": "527409098",
+      "checksum": "7e495fbaac600fd0b6b0bbd22f8d535a"
+    },
+    {
+      "signature": "private.private.column_filter_tag_values_v1(jsonb)",
+      "xid": "527409098",
+      "checksum": "a230119462fc49ccd8d9711e16ad80e2"
+    },
+    {
+      "signature": "private.private.column_filter_phone_v1(text)",
+      "xid": "527409098",
+      "checksum": "2e1679fd24b99b00fde04c91906ebad8"
+    },
+    {
+      "signature": "private.private.column_filter_text_v1(text[])",
+      "xid": "527409098",
+      "checksum": "da410fa01ffdc9d221e490c59c5a1c5d"
+    },
+    {
+      "signature": "private.private.column_filter_predicate_v1(text,jsonb)",
+      "xid": "527409098",
+      "checksum": "069845e69f67531eddb64e543cf57b4f"
+    },
+    {
+      "signature": "public.akabiz_import_sql_zalo_web_v1(jsonb)",
+      "xid": "527373756",
+      "checksum": "e7646343b76af8a1d66f1e82ea1a360b"
+    },
+    {
+      "signature": "public.aka_crm_log_purge(integer)",
+      "xid": "524744419",
+      "checksum": "f9f1b3fb5af596022e75462e524b3676"
+    },
+    {
+      "signature": "public.aka_crm_log_page_time(date,date,text[])",
+      "xid": "524744419",
+      "checksum": "1ff9b67e6d8e2af0a52fae03c6db7503"
+    },
+    {
+      "signature": "public.aka_crm_log_hourly(date,date,text[])",
+      "xid": "524744419",
+      "checksum": "29d016c505a8422d9d97988e22c2be8f"
+    },
+    {
+      "signature": "public.aka_crm_log_workday(date,date,text[],integer)",
+      "xid": "524744419",
+      "checksum": "0cb0bdbe0ebc1234e5969368cd8a0d51"
+    },
+    {
+      "signature": "public.aka_crm_log_presence_upsert(jsonb)",
+      "xid": "524744419",
+      "checksum": "30d17c27a85a63ccf701a2ea0f0f81c1"
+    },
+    {
+      "signature": "private.private.aka_crm_log_guard_append_only()",
+      "xid": "524744419",
+      "checksum": "8bad0a8e65fd61dc5eb02959f64c6fda"
+    },
+    {
+      "signature": "private.private.crm_trial_care_product_key_v1(bigint)",
+      "xid": "524131758",
+      "checksum": "b5b75ead7f40d4c0d51622ec99607cba"
+    },
+    {
+      "signature": "public.crm_trial_care_decision_v1(jsonb)",
+      "xid": "524131758",
+      "checksum": "989bb43381dfb0667a561f69c3b74b58"
+    },
+    {
+      "signature": "private.private.validate_ai_form_config()",
+      "xid": "519293475",
+      "checksum": "5053f2afcc83656f238a2cfdd2c0d3d8"
+    }
+  ],
+  "advisors": {
+    "beforeFindings": 988,
+    "afterFindings": 994,
+    "newFindings": [
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_contacts_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_source text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_contacts_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_source text, p_query jsonb)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_contacts_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_group_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_group_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_group_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_remarketing_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_remarketing_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_remarketing_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_contacts_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_source text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_contacts_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_source text, p_query jsonb)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_contacts_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_group_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_group_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_group_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+        "metadata": {
+          "name": "aka_agent_read_filtered_remarketing_v1",
+          "schema": "public",
+          "language": "plpgsql",
+          "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb",
+          "security_definer": true
+        },
+        "detail": "Function `public.aka_agent_read_filtered_remarketing_v1(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_read_filtered_remarketing_v1`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional."
+      }
+    ],
+    "preExistingLevels": {
+      "ERROR": 259,
+      "WARN": 535,
+      "INFO": 194
+    }
+  },
+  "afterRollbackRehearsalAll26Preserved": true,
+  "applyTransaction": {
+    "xid": "527409098",
+    "functions": 12,
+    "unrelatedFunctions": 0
+  },
+  "migrationSha256Verified": true,
+  "checks": {
+    "rollbackRehearsal": 25,
+    "postApplySQL": 25,
+    "postApplySecurity": 12,
+    "postApplyHTTP": 6
+  },
+  "limitations": [
+    "Legacy compatibility verified at SQL/API contract level, not every old installer.",
+    "Live contact rows changed independently; legacy/new same-run parity passed.",
+    "Production forced timeout/load test not run; previous local evidence retained."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "real_query_20ms_timeout_seconds": 0.0496,
+  "million_history_broad_query": "cancelled at database statement timeout 3s",
+  "rollback_and_narrow_recovery": true,
+  "total_fixture_test_seconds": 25.776,
+  "timings": [
+    "Time: 3009.490 ms (00:03.009)",
+    "Time: 0.244 ms",
+    "Time: 0.096 ms",
+    "Time: 0.081 ms",
+    "Time: 204.642 ms"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "checksum": "490c06769bbf4ac29faacc2eb989119f",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_data_group_source_code(p_origin_kind text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE PARALLEL SAFE\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT CASE lower(btrim(COALESCE(p_origin_kind, '')))\n    WHEN 'manual' THEN 'upload'\n    WHEN 'upload' THEN 'upload'\n    WHEN 'scan' THEN 'scan'\n    WHEN 'automation' THEN 'automation'\n    WHEN 'dynamic_filter' THEN 'dynamic_filter'\n    WHEN 'external_sync' THEN 'external_sync'\n    ELSE NULL\n  END;\n$function$\n",
+  "identity_args": "p_origin_kind text",
+  "name": "aka_agent_data_group_source_code",
+  "owner": "postgres",
+  "proacl": "{postgres=X/postgres}",
+  "proconfig": [
+    "search_path=pg_catalog, public"
+  ],
+  "prosecdef": false,
+  "provolatile": "i",
+  "schema": "public",
+  "signature": "aka_agent_data_group_source_code(text)",
+  "version": "17.6"
+}
