@@ -6,7 +6,7 @@ import {
   AkaBizStaffBasic
 } from '../../shared/types'
 
-const AKA_BIZ_API_BASE_URL = 'https://akabiz-api.vercel.app'
+const AKA_BIZ_API_BASE_URL = 'https://akabiz-api.fly.dev'
 const AKA_BIZ_LEGACY_API_BASE_URL = 'https://api.akaapp.vn'
 const AKA_BIZ_RUNTIME_API_BASE_URL = 'https://app.akabiz.net'
 
