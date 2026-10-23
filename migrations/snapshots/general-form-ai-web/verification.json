@@ -37,8 +37,29 @@
       "rerunFile": "CampaignsPage.test.tsx",
       "rerunPassed": 66,
       "sourceChangesForRerun": false
-    }
+    },
+    "desktopTypechecks": "both passed",
+    "desktopBuild": "passed"
   },
-  "deployed": false,
-  "desktopSourceChanged": false
+  "deployed": true,
+  "desktopSourceChanged": false,
+  "deployment": {
+    "production_url": "https://agent.akabiz.net",
+    "deployed_at": "2026-10-23T18:01:55Z",
+    "image": "registry.fly.io/aka-agent-web-app:web-general-ai-168ba3b-20261024@sha256:bfa517995b0fcac26fae7f480a1fdc2a5958b8d7ba457980f06efca3580c660a",
+    "machine_id": "48ee749f357398",
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 1,
+      "memory_mb": 512
+    },
+    "changed_machine_fields": [
+      "image"
+    ],
+    "http_checks_passed": 20,
+    "runtime_checksums_matched": 7,
+    "browser_cases_passed": 18,
+    "browser_business_api": "mocked; production assets; no campaign writes",
+    "sourceCommit": "168ba3b014e7c9a65d4e3ebcc4dc0e6d22da6a0c"
+  }
 }

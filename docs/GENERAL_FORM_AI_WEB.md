@@ -1,6 +1,6 @@
 # AI Cài đặt chung trên Web — 24/10/2026
 
-Đã port AI Cài đặt chung sang Zalo Server/SMS/Gọi tự động đang có trên Web. Dùng lại config 14, Sol 6.1 ID 21, prompt/schema/options V429 nguyên vẹn. Chỉ đổi tên/chọn tài khoản chính, giữ phụ, khóa tài khoản theo nhóm data và từ chối Page. Code API/UI nằm ở akaAgentWebApp; Desktop runtime không đổi. Web/API chưa deploy.
+Đã port AI Cài đặt chung sang Zalo Server/SMS/Gọi tự động đang có trên Web. Dùng lại config 14, Sol 6.1 ID 21, prompt/schema/options V429 nguyên vẹn. Chỉ đổi tên/chọn tài khoản chính, giữ phụ, khóa tài khoản theo nhóm data và từ chối Page. Code API/UI nằm ở akaAgentWebApp; Desktop runtime không đổi. Web/API đã deploy lúc **01:01:55 VN ngày 24/10/2026**.
 
 ## Apply và bảo toàn
 
@@ -27,9 +27,15 @@ Chín config khác giữ toàn bộ checksum; Nội dung tiếp tục Haiku 24. 
 - `node scripts/campaign-general-ai-http-smoke.cjs`: HTTP anon config nguyên văn, metadata Desktop/Web, model/schema/template/options và Desktop/Mobile binding; đọc account ID -1, không đọc dữ liệu thật. Receipt V429 lịch sử được giữ, lần mới ghi riêng general-form-ai-web.
 - Web: 54 API + 8 UI unit mới, 18 browser Desktop/Android/iPhone (gồm hồi quy bốn section cũ), 5/5 Sol thật với account nhân tạo và log RAM, typecheck 7 workspace/build đạt.
 - Unit tổng 2.721 ca: 2.720 đạt, một test danh sách nháp timeout trong lượt tổng; rerun nguyên file đạt 66/66, không đổi code/test danh sách. Form 122/122 đạt.
-- Không đổi source Desktop nên không chạy lại build Electron trong lượt chỉ binding/audit này. Không gửi Zalo/SMS, tạo chiến dịch hay log production trong test provider.
+- Không đổi source Desktop. Khi chuẩn bị PR, hai typecheck và production build Electron đều đạt trên nền dev_3 mới nhất (9.0.0). Không gửi Zalo/SMS, tạo chiến dịch hay log production trong test provider.
 
 Chi tiết hợp đồng Web, lệnh và receipt provider: [GENERAL_FORM_AI_WEB.md của WebApp](https://github.com/aligoinc/akaAgentWebApp/blob/dev/docs/GENERAL_FORM_AI_WEB.md).
+
+## Deploy Web/API
+
+Đã deploy source `168ba3b014e7c9a65d4e3ebcc4dc0e6d22da6a0c` lên https://agent.akabiz.net lúc 01:01:55 VN ngày 24/10/2026. Image `web-general-ai-168ba3b-20261024`, digest `sha256:bfa517995b0fcac26fae7f480a1fdc2a5958b8d7ba457980f06efca3580c660a`. Chỉ đổi image trên machine `48ee749f357398`, giữ một shared CPU/512 MB; health 1/1, 20 HTTP và bảy checksum runtime đạt. 18 browser production đạt trên Desktop/Android/iPhone với API/WS nghiệp vụ giả lập; không ghi chiến dịch thật.
+
+Không apply lại migration hoặc phát hành Desktop trong lượt deploy. [Biên bản deploy, image rollback và phạm vi kiểm chứng](https://github.com/aligoinc/akaAgentWebApp/blob/dev/docs/GENERAL_FORM_AI_WEB_DEPLOY_20261024.md). Evidence riêng tư: `/Users/lequangnhut/.codex/deployments/general-ai-web-20261024-8ney3xjm`.
 
 ## Rollback
 
