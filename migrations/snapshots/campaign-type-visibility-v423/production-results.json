@@ -1,0 +1,56 @@
+{
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "projectName": "akachat",
+  "migration": {
+    "name": "migration_v423_campaign_type_visibility",
+    "version": "20261023090604"
+  },
+  "appliedAtUtc": "2026-10-23T09:06:04Z",
+  "canonicalSha256": "3d28d812665f69ba75d48cba9ffa9b22edc08c87fd0caca317a1e002faa3ce1f",
+  "localSqlChecks": 22,
+  "preApply": {
+    "checks": 18,
+    "rolledBack": true,
+    "sourceChecksumsMatch": true,
+    "targetMetadataChecks": 7
+  },
+  "postApply": {
+    "checks": 18,
+    "preferenceRowsAfterRollback": 0,
+    "targetMetadataChecks": 7
+  },
+  "matchedTargetFunctions": 7,
+  "unchangedIdentityDependencies": 2,
+  "unchangedRuntimeAndReaderHelpers": 5,
+  "table": {
+    "acl": "{postgres=arwdDxtm/postgres}",
+    "rls": true,
+    "rows": 0,
+    "owner": "postgres"
+  },
+  "roles": [
+    {
+      "role": "anon",
+      "webExecute": false,
+      "tableAccess": false,
+      "desktopExecute": true
+    },
+    {
+      "role": "authenticated",
+      "webExecute": false,
+      "tableAccess": false,
+      "desktopExecute": true
+    },
+    {
+      "role": "service_role",
+      "webExecute": true,
+      "tableAccess": false,
+      "desktopExecute": true
+    }
+  ],
+  "queueCatalogFinding": "accepted; no fix requested",
+  "apiWebDeployed": false,
+  "desktopPackaged": false,
+  "appliedSqlSha256": "82806df8ac080b50f8ebca56b43ab36969c4756b103ef09f71b1c2800749a178",
+  "canonicalFormatting": "Removed extra blank line at EOF before PR; SQL statements and function checksums unchanged."
+}

@@ -1,0 +1,135 @@
+{
+  "before": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "level": "ERROR",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 194
+    },
+    {
+      "name": "security_definer_view",
+      "level": "ERROR",
+      "count": 8
+    },
+    {
+      "name": "function_search_path_mutable",
+      "level": "WARN",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "level": "ERROR",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "level": "WARN",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "count": 205
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "count": 205
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "level": "WARN",
+      "count": 1
+    }
+  ],
+  "after": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "level": "ERROR",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 195
+    },
+    {
+      "name": "security_definer_view",
+      "level": "ERROR",
+      "count": 8
+    },
+    {
+      "name": "function_search_path_mutable",
+      "level": "WARN",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "level": "ERROR",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "level": "WARN",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "count": 206
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "count": 206
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "level": "WARN",
+      "count": 1
+    }
+  ],
+  "added": [
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+      "detail": "Table \\`public.auto_campaign_type_visibility\\` has RLS enabled, but no policies exist",
+      "metadata": {
+        "name": "auto_campaign_type_visibility",
+        "type": "table",
+        "schema": "public"
+      }
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+      "detail": "Function `public.aka_agent_campaign_type_visibility(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_access jsonb, p_operation text, p_changes jsonb, p_include_catalog boolean)` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_campaign_type_visibility`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+      "metadata": {
+        "name": "aka_agent_campaign_type_visibility",
+        "schema": "public",
+        "language": "plpgsql",
+        "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_access jsonb, p_operation text, p_changes jsonb, p_include_catalog boolean",
+        "security_definer": true
+      }
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable",
+      "detail": "Function `public.aka_agent_campaign_type_visibility(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_access jsonb, p_operation text, p_changes jsonb, p_include_catalog boolean)` can be executed by the `authenticated` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_campaign_type_visibility`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+      "metadata": {
+        "name": "aka_agent_campaign_type_visibility",
+        "schema": "public",
+        "language": "plpgsql",
+        "arguments": "p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_access jsonb, p_operation text, p_changes jsonb, p_include_catalog boolean",
+        "security_definer": true
+      }
+    }
+  ]
+}

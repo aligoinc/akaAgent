@@ -1,3 +1,5 @@
+import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
+import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import { displayHistoryEntry } from '../../../../shared/campaignHistory'
 import { campaignEdit, useCampaignEditSession } from './campaignEdit'
 import FacebookRandomRunConfigModal from './FacebookRandomRunConfigModal'
@@ -2486,6 +2488,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     bulkUpdateCampaignInputDataStatus, addCampaignInputDataToCampaign, addCampaignInputDataRows,
     loadCampaignInputData, refreshCampaignInputData, loadCampaignDetails, loadCampaignDetailPage, loadEmailCampaignLinkTrackings, loadCampaignRunEvents, loadCampaignRelationSummaries
   } = useCampaignStore()
+  const { snapshot: campaignVisibility } = useCampaignTypeVisibility()
   const campaignSourceScope = useAuthStore(s => s.user ? `${s.user.organizationId}:${s.user.staffId}` : null)
   const pendingReasons = useCampaignPendingReasons(campaigns, campaignSourceScope)
   const isAdminAkabiz = useAuthStore(s => !!s.user?.isAdminAkabiz)
@@ -2583,6 +2586,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [platformFilters, setPlatformFilters] = useState<string[]>([])
   const [actionFilters, setActionFilters] = useState<string[]>([])
   const pageFilters = useMemo<DesktopCampaignFilters>(() => ({
+    applyDisplaySettings: true,
     ...(debouncedCampaignSearch.trim() ? { search: debouncedCampaignSearch.trim() } : {}),
     ...(timePreset !== 'all' && dateFrom ? { dateFrom } : {}),
     ...(timePreset !== 'all' && dateTo ? { dateTo } : {}),
@@ -3298,7 +3302,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     setOpenCampaignActionMenuId(null)
     setCampaignActionMenuPosition(null)
     campaignActionMenuAnchorRef.current = null
-  }, [pageFilterKey, campaignNameSearch, campaignSourceScope])
+  }, [pageFilterKey, campaignNameSearch, campaignSourceScope, campaignVisibility?.revision])
 
   useEffect(() => {
     const allowedPlatforms = new Set(campaignPlatformOptions.map(option => option.value))
@@ -3474,7 +3478,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const readSelection = async (ids?: number[], allFilters = false): Promise<DesktopCampaignSelection[] | null> => {
     if (campaignSelectionBlocked || selectionLoading || bulkActionLoading) return null
     const request = ++selectionRequest.current
-    const filters = allFilters ? {} : pageFilters
+    const filters = allFilters ? { applyDisplaySettings: true } : pageFilters
     setSelectionLoading(true)
     const rows: DesktopCampaignSelection[] = []
     try {
@@ -5335,8 +5339,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
         platform: inferCampaignPlatformFromActionId(draft.actionId)
       })
     })
-    return Array.from(optionMap.values()).sort(compareCampaignFilterOptionsByPlatform)
-  }, [campaignActions, campaigns, campaignPage, campaignDrafts.items, actionById, accountById])
+    return Array.from(optionMap.values()).filter(option => isCampaignTypeVisible(option.value, campaignVisibility)).sort(compareCampaignFilterOptionsByPlatform)
+  }, [campaignActions, campaigns, campaignPage, campaignDrafts.items, actionById, accountById, campaignVisibility])
 
   const filteredCampaigns = useMemo(() => {
     const pageIds = new Set(campaignPage?.items.map(row => row.id) || [])
@@ -5371,7 +5375,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     statusFilters, accountFilters, platformFilters, actionFilters, actionById, accountById])
 
   const previousPageFilters = useRef(pageFilterKey)
-  const draftAnchors = JSON.stringify(filteredCampaignDrafts.map(({ id, schedule }) => ({ id, schedule })))
+  const draftAnchors = JSON.stringify(filteredCampaignDrafts.map(({ id, schedule, actionId }) => ({ id, schedule, actionId })))
   useEffect(() => {
     const changed = previousPageFilters.current !== pageFilterKey
     previousPageFilters.current = pageFilterKey

@@ -14,8 +14,10 @@ import { useAuthStore } from '../../stores/authStore'
 import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 import MessageOptOutCustomersSettings from './MessageOptOutCustomersSettings'
 import BrowserRunLimitsSettings from './BrowserRunLimitsSettings'
+import DesktopCampaignTypeVisibilitySettings from './DesktopCampaignTypeVisibilitySettings'
+import { Grid2X2 } from 'lucide-react'
 
-export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers' | 'browserRunLimits'
+export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers' | 'browserRunLimits' | 'campaignTypeVisibility'
 export interface GeneralSettingsOpenOptions {
   initialAccountId?: number
   onClose?: () => void
@@ -126,7 +128,8 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
   const [emailSettingsBusy, setEmailSettingsBusy] = useState(false)
   const [blocklistBusy, setBlocklistBusy] = useState(false)
   const [browserRunLimitsBusy, setBrowserRunLimitsBusy] = useState(false)
-  const mutationPending = browserRunLimitsBusy || blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
+  const [campaignVisibilityBusy, setCampaignVisibilityBusy] = useState(false)
+  const mutationPending = campaignVisibilityBusy || browserRunLimitsBusy || blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -599,7 +602,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
 
   return createPortal(
     <div className="modal-overlay general-settings-modal-overlay" onClick={closeSettings}>
-      <div className="general-settings-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
+      <div className={`general-settings-modal ${activeMenu === 'campaignTypeVisibility' ? 'has-campaign-visibility' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
         onKeyDown={event => {
           if (event.key !== 'Tab' || useUiStore.getState().alert.isOpen || useUiStore.getState().confirm.isOpen) return
           const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex="0"]'))
@@ -671,10 +674,14 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
               <Ban size={15} />
               <span>Khách hàng từ chối nhận tin</span>
             </button>
+            <button type="button" className={`general-settings-nav-item ${activeMenu === 'campaignTypeVisibility' ? 'active' : ''}`}
+              onClick={() => setActiveMenu('campaignTypeVisibility')}>
+              <Grid2X2 size={17} /><span>Hiển thị loại chiến dịch</span>
+            </button>
           </aside>
 
           <section className={`general-settings-content ${activeMenu === 'zaloBlocklists' ? 'zalo-blocklist-content' : activeMenu === 'messageOptOutCustomers' ? 'message-opt-out-content' : ''}`}>
-            {activeMenu === 'browserRunLimits' ? <BrowserRunLimitsSettings key={`${user?.organizationId}:${user?.staffId}`} onBusyChange={setBrowserRunLimitsBusy} /> : activeMenu === 'messageOptOutCustomers' ? <MessageOptOutCustomersSettings key={`${user?.organizationId}:${user?.staffId}`} /> : activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
+            {activeMenu === 'campaignTypeVisibility' ? <DesktopCampaignTypeVisibilitySettings onBusyChange={setCampaignVisibilityBusy} /> : activeMenu === 'browserRunLimits' ? <BrowserRunLimitsSettings key={`${user?.organizationId}:${user?.staffId}`} onBusyChange={setBrowserRunLimitsBusy} /> : activeMenu === 'messageOptOutCustomers' ? <MessageOptOutCustomersSettings key={`${user?.organizationId}:${user?.staffId}`} /> : activeMenu === 'chatSync' ? renderChatSyncContent() : activeMenu === 'akabiz' ? (loading ? (
               <div className="text-center text-secondary" style={{ padding: 24 }}>Đang tải...</div>
             ) : (
               <div className="akabiz-integration-grid">

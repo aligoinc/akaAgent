@@ -19,6 +19,7 @@ import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shar
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimitsResult } from '../shared/browserRunLimits'
+import { CAMPAIGN_TYPE_VISIBILITY_IPC, type CampaignTypeVisibilityResult, type CampaignVisibilityChange } from '../shared/campaignTypeVisibility'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
 import { groupSharingAPI } from './groupSharingBridge'
@@ -43,6 +44,8 @@ export type ElectronAPI = typeof electronAPI
 
 const electronAPI = {
   getBrowserRunLimits: (): Promise<BrowserRunLimits> => ipcRenderer.invoke(BROWSER_RUN_LIMITS_IPC.get),
+  getCampaignTypeVisibility: (includeCatalog = false): Promise<CampaignTypeVisibilityResult> => ipcRenderer.invoke(CAMPAIGN_TYPE_VISIBILITY_IPC.get, includeCatalog),
+  patchCampaignTypeVisibility: (changes: CampaignVisibilityChange[]): Promise<CampaignTypeVisibilityResult> => ipcRenderer.invoke(CAMPAIGN_TYPE_VISIBILITY_IPC.patch, changes),
   saveBrowserRunLimits: (settings: BrowserRunLimits): Promise<SaveBrowserRunLimitsResult> => ipcRenderer.invoke(BROWSER_RUN_LIMITS_IPC.save, settings),
   listSendExclusionGroups: (accountId: number): Promise<SendExclusionPage> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.page, accountId),
   saveSendExclusionGroup: (group: SaveSendExclusionGroup): Promise<SendExclusionGroup> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.save, group),

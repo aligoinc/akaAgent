@@ -1,0 +1,10 @@
+{
+  "checks": 22,
+  "timings": {
+    "desktop": 374,
+    "web": 179,
+    "counts": 47
+  },
+  "fixtureRows": 100000,
+  "productionApplied": false
+}

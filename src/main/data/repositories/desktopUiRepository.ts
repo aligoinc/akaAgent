@@ -39,6 +39,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
 
 function validateFilters(filters: DesktopCampaignPageQuery['filters']) {
   if (!filters || typeof filters !== 'object' || Array.isArray(filters)) throw new Error('Bộ lọc không hợp lệ.')
+  if (filters.applyDisplaySettings !== undefined && typeof filters.applyDisplaySettings !== 'boolean') throw new Error('Bộ lọc hiển thị không hợp lệ.')
   for (const date of [filters.dateFrom, filters.dateTo]) {
     if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw new Error('Ngày lọc không hợp lệ.')
   }
@@ -56,7 +57,8 @@ export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery): P
   const { data, error } = await getSupabaseClient().rpc('aka_agent_desktop_campaign_page', {
     ...await scope(), p_filters: validateFilters(query.filters), p_page: query.page,
     p_selected_id: query.selectedId ?? null, p_drafts: (query.drafts ?? []).map(draft => ({
-      id: draft.id, schedule: Number.isFinite(Date.parse(draft.schedule)) ? new Date(draft.schedule).toISOString() : null
+      id: draft.id, schedule: Number.isFinite(Date.parse(draft.schedule)) ? new Date(draft.schedule).toISOString() : null,
+      ...(typeof draft.actionId === 'string' ? { actionId: draft.actionId } : {})
     }))
   }).abortSignal(AbortSignal.timeout(60_000))
   if (error) throw new Error(`Không thể tải trang chiến dịch: ${error.message}`)
@@ -65,6 +67,7 @@ export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery): P
   const rows = await listCampaignSummariesForPage(ids, result.extraAccounts)
   const byId = new Map(rows.map(row => [row.id, row]))
   return {
+    displaySettings: result.displaySettings,
     configVersion: result.configVersion, page: result.page, pageSize: 100, total: result.total, campaignTotal: result.campaignTotal, order: result.order, actionOptions: result.actionOptions, runningCampaigns: result.runningCampaigns, extraAccounts: result.extraAccounts,
     items: result.ids.flatMap(id => byId.has(id) ? [byId.get(id)!] : []),
     selected: result.selectedId ? byId.get(result.selectedId) ?? null : null

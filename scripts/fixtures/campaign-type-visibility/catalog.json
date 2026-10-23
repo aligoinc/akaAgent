@@ -1,0 +1,137 @@
+[
+  {
+    "id": "email_send",
+    "name": "Email - Gửi email tới danh sách",
+    "platform": "email"
+  },
+  {
+    "id": "facebook_comment_seeding",
+    "name": "Facebook - Comment seeding vào danh sách group/page/profile",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_comment_seeding_post",
+    "name": "Facebook - Comment seeding vào danh sách bài post",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_find_data_group",
+    "name": "Facebook - Tìm kiếm data trong group",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_find_data_search",
+    "name": "Facebook - Tìm kiếm data bằng search",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_group_invite",
+    "name": "Facebook - Mời vào group",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_group_post",
+    "name": "Facebook - Đăng bài vào group",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_join_group",
+    "name": "Facebook - Tham gia vào group",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_message_friend",
+    "name": "Facebook - Nhắn tin đến bạn bè",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_message_uid",
+    "name": "Facebook - Nhắn tin & Kết bạn đến UID",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_newsfeed_interaction",
+    "name": "Facebook - Lướt newsfeed và tương tác",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_page_post",
+    "name": "Facebook - Đăng bài lên fanpage",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_page_to_message",
+    "name": "Facebook - Gửi tin nhắn đến khách hàng từng inbox với page",
+    "platform": "facebook"
+  },
+  {
+    "id": "facebook_timeline_post",
+    "name": "Facebook - Đăng bài lên trang cá nhân",
+    "platform": "facebook"
+  },
+  {
+    "id": "sms_send",
+    "name": "SMS - Gửi tin nhắn",
+    "platform": "sms"
+  },
+  {
+    "id": "voice_call",
+    "name": "SMS - Gọi tự động qua SIM",
+    "platform": "sms"
+  },
+  {
+    "id": "zalo_add_group_member",
+    "name": "Zalo - Thêm thành viên vào group",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_cancel_sent_friend_request",
+    "name": "Zalo - Huỷ lời mời kết bạn đã gửi",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_join_group_link",
+    "name": "Zalo - Tham gia vào group bằng link",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_birthday",
+    "name": "Zalo - Gửi tin nhắn chúc mừng sinh nhật",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_friend",
+    "name": "Zalo - Gửi tin nhắn đến bạn bè",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_friend_recommendation",
+    "name": "Zalo - Nhắn tin, kết bạn theo đề xuất Zalo",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_group",
+    "name": "Zalo - Gửi tin nhắn đến group",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_group_member",
+    "name": "Zalo - Nhắn tin, kết bạn đến thành viên group/người lạ",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_group_realtime",
+    "name": "Zalo - Nhắn tin, kết bạn đến người tham gia/rời/tương tác group theo thời gian thực",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_phone",
+    "name": "Zalo - Nhắn tin, kết bạn đến SĐT",
+    "platform": "zalo"
+  },
+  {
+    "id": "zalo_message_remarketing_customer",
+    "name": "Zalo - Nhắn tin, kết bạn đến khách hàng cũ từng gửi tin",
+    "platform": "zalo"
+  }
+]
