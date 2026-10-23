@@ -107,6 +107,10 @@ export default function AccountContextMenu({
   }, [onClose])
 
   const isPaused = account.status === 'tạm dừng'
+  const isRunning = account.status === 'đang chạy'
+  const runningMutationReason = isRunning
+    ? 'Tài khoản đang chạy. Vui lòng tạm dừng trước khi xoá hoặc vô hiệu hoá.'
+    : undefined
   const isDisabled = !account.isActive
   const isZalo = account.flatformType === 'zalo'
   const isZaloShowWeb = isZaloWebAccount(account)
@@ -249,6 +253,8 @@ export default function AccountContextMenu({
         ) : (
           <button
             className="context-menu-item accent-error"
+            disabled={isRunning}
+            title={runningMutationReason}
             onClick={() => handleAction(() => onDisable(account))}
           >
             <Ban size={14} />
@@ -275,6 +281,8 @@ export default function AccountContextMenu({
         </button>
         <button
           className="context-menu-item accent-error"
+          disabled={isRunning}
+          title={runningMutationReason}
           onClick={() => handleAction(() => onDelete(account))}
         >
           <Trash2 size={14} />
