@@ -1,3 +1,4 @@
+import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
@@ -676,6 +677,9 @@ const electronAPI = {
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),
+
+  getCampaignAccountActionSnapshot: (scopes: CampaignAccountActionScope[]): Promise<CampaignAccountActionSnapshot> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_SNAPSHOT, scopes),
 
   enableAccountActionNow: (accountId: number, actionCode: string) =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, accountId, actionCode),

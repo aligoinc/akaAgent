@@ -27,7 +27,9 @@ import { CAMPAIGN_DRAFT_VERSION, CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE, getPreserved
 import { useCampaignDraftField } from './useCampaignDraftField'
 import FacebookPageIdentitySettings from './FacebookPageIdentitySettings'
 import { supportsFacebookPageIdentity, validateFacebookPageIdentitySettings } from '../../../../shared/facebookPageIdentity'
-import { useCampaignActionUsage } from './useCampaignActionUsage'
+import { useCampaignAccountActionSnapshot } from './useCampaignAccountActionSnapshot'
+import CampaignAccountPicker from './CampaignAccountPicker'
+import { buildCampaignAccountActionScopes, canSelectAccountForCampaignAction, getCampaignAccountPickerActionDescriptors } from '../../../../shared/campaignAccountActionSnapshot'
 import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '../../../../shared/accountActionLimits'
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
 import { useState, useEffect, useMemo, useRef, useId, type ChangeEvent, type ReactNode } from 'react'
@@ -38,7 +40,6 @@ import { refreshContentTemplateLibrary, useContentTemplateStore } from '../../st
 import ContentTemplateLoadNotice from '../ContentTemplates/ContentTemplateLoadNotice'
 import {
   ActionLimitConfig,
-  CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES,
   AkaBizCampaignListItem,
   AkaBizCampaignListKind,
   AkaBizContactTag,
@@ -2859,10 +2860,9 @@ export default function CampaignFormModal({
   })
   const selectableAccounts = useMemo(
     () => actionPlatformForAccountSelection
-      ? accounts.filter(account => (
-        normalizeCampaignActionPlatform(account.flatformType) === actionPlatformForAccountSelection
-        && (formData.actionId !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID || !isZaloWebAccount(account))
-      ))
+      ? accounts.filter(account => canSelectAccountForCampaignAction(account, {
+        id: formData.actionId, flatformType: actionPlatformForAccountSelection
+      }))
       : accounts,
     [accounts, actionPlatformForAccountSelection, formData.actionId]
   )
@@ -2948,8 +2948,7 @@ export default function CampaignFormModal({
     if (!platform) return accountIds
     return accountIds.filter(id => {
       const account = accounts.find(item => item.id === id)
-      return normalizeCampaignActionPlatform(account?.flatformType) === platform
-        && (actionId !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID || !account || !isZaloWebAccount(account))
+      return !!account && canSelectAccountForCampaignAction(account, { id: actionId, flatformType: platform })
     })
   }
   const invalidateCampaignNameAiRequest = () => {
@@ -3142,13 +3141,25 @@ export default function CampaignFormModal({
   }
   const limitActionCodes = selectedCampaignAction?.limitCheckActionCodes || []
   const limitActionCodesKey = limitActionCodes.join(',')
-  const actionUsage = useCampaignActionUsage(
-    selectedPrimaryAccount?.id ?? null,
-    selectedCampaignAction?.id || '',
-    // Include optional actions up front so enabling a card does not query again.
-    limitActionCodes.filter(code => !isHiddenActionLimitConfig(code)),
-    authUser ? `${authUser.organizationId}:${authUser.staffId}` : ''
+  const accountActionScopes = useMemo(() => buildCampaignAccountActionScopes(
+    isSavedDataGroupIdentityLocked ? accounts.filter(account => formData.accountIds.includes(account.id)) : accounts,
+    visibleCampaignActions
+      .filter(action => !((draftMode && lockedActionId) || isSavedDataGroupIdentityLocked) || action.id === formData.actionId)
+      .map(action => ({ ...action, limitCheckActionCodes: action.limitCheckActionCodes?.filter(code => !isHiddenActionLimitConfig(code)) }))
+  ), [accounts, visibleCampaignActions, draftMode, lockedActionId, isSavedDataGroupIdentityLocked, formData.accountIds, formData.actionId])
+  const accountActionSnapshot = useCampaignAccountActionSnapshot(
+    accountActionScopes,
+    Boolean(accountCatalogVersion) && !loadingAccounts && campaignActions.length > 0 && campaignVisibility.ready,
+    authUser ? `${authUser.organizationId}:${authUser.staffId}:${authUser.chatWebSessionId || ''}` : ''
   )
+  const accountPickerActions = getCampaignAccountPickerActionDescriptors(formData.actionId, {
+    enableComment: formData.enableComment,
+    enablePostLike: formData.enablePostLike
+  })
+  const actionUsage = {
+    status: selectedPrimaryAccount ? accountActionSnapshot.status : 'idle',
+    rows: selectedPrimaryAccount ? Array.from(accountActionSnapshot.byAccount.get(selectedPrimaryAccount.id)?.values() || []) : []
+  }
   const findDataTargetDataGroupIdsKey = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
     .map(kind => {
       const groupId = Number(formData.findDataTargetDataGroups[kind]?.groupId)
@@ -12837,27 +12848,16 @@ export default function CampaignFormModal({
     const groupLimit = selectedPrimaryAccount?.accountGroupSettings?.byActionCode?.[actionCode]
     const effectiveLimit = resolveAccountActionLimitConfig(limit, groupLimit, dailyLimitCap)
     const usage = actionUsage.rows.find(row => row.actionCode === actionCode)
-    const getUsageDisplay = (kind: 'daily' | 'window') => {
-      const field = kind === 'daily' ? 'dailyLimit' : 'rateLimitCount'
-      const configuredLimit = effectiveLimit?.[field]
-      // Same positive-value fallback as campaignRepository.resolveAccountRateLimitStatus.
-      const threshold = configuredLimit && configuredLimit > 0 ? configuredLimit : kind === 'daily' ? 30 : 9
-      const count = kind === 'daily' ? usage?.dailyActionCount : usage?.windowActionCount
-      const percent = count === undefined ? 0 : Math.min(100, Math.max(0, Math.round(count / threshold * 100)))
-      const full = count !== undefined && count >= threshold
-      const tone = count === undefined ? 'muted' : kind === 'daily'
-        ? full ? 'danger' : percent >= 80 ? 'warning' : 'success'
-        : full ? 'warning' : 'info'
-      return { count, threshold, percent, full, tone, fromGroup: normalizePositiveActionLimit(groupLimit?.[field]) !== undefined }
-    }
-    const dailyUsage = getUsageDisplay('daily')
-    const windowUsage = getUsageDisplay('window')
-    const usageWindowMatchesLimit = actionRateLimitMinutes === CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES &&
-      (normalizePositiveActionLimit(effectiveLimit?.rateLimitMinutes) ?? actionRateLimitMinutes) === CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES
-    const renderUsage = (kind: 'daily' | 'window') => {
+    const configuredLimit = effectiveLimit?.dailyLimit
+    const threshold = configuredLimit && configuredLimit > 0 ? configuredLimit : 30
+    const count = usage?.dailyActionCount
+    const percent = count === undefined ? 0 : Math.min(100, Math.max(0, Math.round(count / threshold * 100)))
+    const full = count !== undefined && count >= threshold
+    const tone = count === undefined ? 'muted' : full ? 'danger' : percent >= 80 ? 'warning' : 'success'
+    const dailyUsage = { count, threshold, tone }
+    const renderDailyUsage = () => {
       if (actionUsage.status === 'idle') return null
-      const { count, threshold, percent, full, tone, fromGroup } = kind === 'daily' ? dailyUsage : windowUsage
-      const usageLabel = `${kind === 'daily' ? 'Đã chạy trong ngày' : `Đã chạy trong giờ (${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút)`}: ${count ?? '—'}/${threshold} ${actionLimitUnit}`
+      const usageLabel = `Đã chạy trong ngày: ${count ?? '—'}/${threshold} ${actionLimitUnit}`
       const remaining = count === undefined ? 'Chưa có số liệu' : full
         ? 'Đã đạt giới hạn ngày'
         : `còn ${threshold - count} ${actionLimitUnit}`
@@ -12867,7 +12867,7 @@ export default function CampaignFormModal({
             <span
               className="action-limit-usage-track"
               role={count === undefined ? undefined : 'progressbar'}
-              aria-label={`Giới hạn ${getActionCodeLabel(actionCode)} ${kind === 'daily' ? 'trong ngày' : `trong ${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút`}`}
+              aria-label={`Giới hạn ${getActionCodeLabel(actionCode)} trong ngày`}
               aria-valuemin={count === undefined ? undefined : 0}
               aria-valuemax={count === undefined ? undefined : threshold}
               aria-valuenow={count === undefined ? undefined : Math.min(count, threshold)}
@@ -12876,16 +12876,11 @@ export default function CampaignFormModal({
             >
               <span className="action-limit-usage-fill" style={{ width: `${percent}%` }} />
             </span>
-            <span
-              className={`action-limit-usage-caption${kind === 'daily' && full ? ' is-full' : ''}`}
-              title={usageLabel}
-            >
-              {actionUsage.status === 'loading' ? 'Đang tải…' : kind === 'daily' ? remaining : (
-                `${usageWindowMatchesLimit ? 'trong giờ' : `trong ${CAMPAIGN_ACTION_USAGE_WINDOW_MINUTES} phút`} ${count ?? '—'}/${threshold}`
-              )}
+            <span className={`action-limit-usage-caption${full ? ' is-full' : ''}`} title={usageLabel}>
+              {actionUsage.status === 'loading' ? 'Đang tải…' : remaining}
             </span>
           </div>
-          {fromGroup && (
+          {normalizePositiveActionLimit(groupLimit?.dailyLimit) !== undefined && (
             <span className="action-limit-usage-source">Theo nhóm {selectedPrimaryAccount?.accountGroupName || 'tài khoản'}</span>
           )}
         </div>
@@ -12918,7 +12913,7 @@ export default function CampaignFormModal({
               />
               <span className="stepper-input-unit">{actionLimitUnit}</span>
             </div>
-            {renderUsage('daily')}
+            {renderDailyUsage()}
           </div>
           <div className="stepper-form-group action-limit-hour-group">
             <div className="action-limit-label-row">
@@ -12946,7 +12941,6 @@ export default function CampaignFormModal({
               />
               <span className="stepper-input-unit">{actionLimitUnit}</span>
             </div>
-            {renderUsage('window')}
             <div
               id={`action-limit-minute-field-${actionCode}`}
               className={`action-limit-minute-field${isRateLimitMinuteEditorOpen ? '' : ' is-hidden'}`}
@@ -15707,112 +15701,28 @@ export default function CampaignFormModal({
 
                       {isAccountDropdownOpen && !isSavedDataGroupIdentityLocked && (
                         <div className="account-select-menu">
-                          <div className="account-checkbox-list account-select-tree">
-                            {selectableAccountGroups.map(group => {
-                              const groupAccounts = groupedSelectableAccounts.byGroup.get(group.id) || []
-                              if (groupAccounts.length === 0) return null
-                              const groupSelected = groupAccounts.every(account => selectedAccountIdsSet.has(account.id))
-                              return (
-                                <div className="account-select-group" key={group.id}>
-                                  <label className="account-checkbox-option account-select-group-row">
-                                    {!isSingleAccountSelection && (
-                                      <input
-                                        type="checkbox"
-                                        checked={groupSelected}
-                                        onChange={() => toggleSelectableAccounts(groupAccounts.map(account => account.id))}
-                                      />
-                                    )}
-                                    <span title={`${group.name} (${groupAccounts.length})`}>{group.name} ({groupAccounts.length})</span>
-                                  </label>
-                                  <div className="account-select-group-items">
-                                    {groupAccounts.map(a => {
-                                      const isSmsAccount = a.flatformType === 'sms'
-
-                                      return (
-                                        <label key={a.id} className="account-checkbox-option account-select-account-row">
-                                          <input
-                                            type={isSingleAccountSelection ? "radio" : "checkbox"}
-                                            name={isSingleAccountSelection ? "account-selection" : undefined}
-                                            checked={selectedAccountIdsSet.has(a.id)}
-                                            onChange={(e) => {
-                                              if (isSingleAccountSelection) {
-                                                selectSingleAccount(a.id)
-                                              } else {
-                                                toggleSelectableAccount(a.id, e.target.checked)
-                                              }
-                                            }}
-                                          />
-                                          <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} — ${getAccountPlatformLabel(a)} (${a.loginStatus || '-'})`}>
-                                            <span className="account-select-account-name">{a.name}</span>
-                                            {a.flatformType === 'zalo' && (
-                                              <span className="account-select-login-status"> — {getAccountPlatformLabel(a)}</span>
-                                            )}
-                                            {!isSmsAccount && (
-                                              <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
-                                                {' '}({a.loginStatus || '-'})
-                                              </span>
-                                            )}
-                                          </span>
-                                        </label>
-                                      )
-                                    })}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                            {groupedSelectableAccounts.ungrouped.length > 0 && (
-                              <div className="account-select-group">
-                                <label className="account-checkbox-option account-select-group-row">
-                                  {!isSingleAccountSelection && (
-                                    <input
-                                      type="checkbox"
-                                      checked={groupedSelectableAccounts.ungrouped.every(account => selectedAccountIdsSet.has(account.id))}
-                                      onChange={() => toggleSelectableAccounts(groupedSelectableAccounts.ungrouped.map(account => account.id))}
-                                    />
-                                  )}
-                                  <span>Chưa có nhóm ({groupedSelectableAccounts.ungrouped.length})</span>
-                                </label>
-                                <div className="account-select-group-items">
-                                  {groupedSelectableAccounts.ungrouped.map(a => {
-                                    const isSmsAccount = a.flatformType === 'sms'
-
-                                    return (
-                                      <label key={a.id} className="account-checkbox-option account-select-account-row">
-                                        <input
-                                          type={isSingleAccountSelection ? "radio" : "checkbox"}
-                                          name={isSingleAccountSelection ? "account-selection" : undefined}
-                                          checked={selectedAccountIdsSet.has(a.id)}
-                                          onChange={(e) => {
-                                            if (isSingleAccountSelection) {
-                                              selectSingleAccount(a.id)
-                                            } else {
-                                              toggleSelectableAccount(a.id, e.target.checked)
-                                            }
-                                          }}
-                                        />
-                                        <span className="account-select-account-label" title={isSmsAccount ? a.name : `${a.name} — ${getAccountPlatformLabel(a)} (${a.loginStatus || '-'})`}>
-                                          <span className="account-select-account-name">{a.name}</span>
-                                          {a.flatformType === 'zalo' && (
-                                            <span className="account-select-login-status"> — {getAccountPlatformLabel(a)}</span>
-                                          )}
-                                          {!isSmsAccount && (
-                                            <span className={`account-select-login-status ${getAccountLoginStatusClass(a.loginStatus || '')}`}>
-                                              {' '}({a.loginStatus || '-'})
-                                            </span>
-                                          )}
-                                        </span>
-                                      </label>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                            {selectableAccounts.length === 0 && (
-                              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '8px 0' }}>
-                                {actionPlatformForAccountSelection ? 'Chưa có tài khoản phù hợp với nền tảng chiến dịch' : 'Chưa có tài khoản nào'}
-                              </div>
-                            )}
-                          </div>
+                          <CampaignAccountPicker
+                            groups={[
+                              ...selectableAccountGroups.map(group => ({
+                                key: String(group.id), name: group.name,
+                                accounts: groupedSelectableAccounts.byGroup.get(group.id) || []
+                              })),
+                              { key: 'ungrouped', name: 'Chưa có nhóm', accounts: groupedSelectableAccounts.ungrouped }
+                            ]}
+                            actions={accountPickerActions}
+                            byAccount={accountActionSnapshot.byAccount}
+                            status={accountActionSnapshot.status}
+                            selectedIds={selectedAccountIdsSet}
+                            singleSelection={isSingleAccountSelection}
+                            onSelect={(accountId, checked) => {
+                              if (isSingleAccountSelection) selectSingleAccount(accountId)
+                              else toggleSelectableAccount(accountId, checked)
+                            }}
+                            onToggleGroup={toggleSelectableAccounts}
+                            getLoginStatusClass={getAccountLoginStatusClass}
+                            emptyMessage={actionPlatformForAccountSelection
+                              ? 'Chưa có tài khoản phù hợp với nền tảng chiến dịch' : 'Chưa có tài khoản nào'}
+                          />
                         </div>
                       )}
                     </div>

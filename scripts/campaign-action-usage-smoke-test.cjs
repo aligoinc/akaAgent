@@ -116,7 +116,7 @@ async function main() {
       const delay = (ms=30) => new Promise(resolve => setTimeout(resolve, ms));
       app.whenReady().then(async () => {
         const win = new BrowserWindow({ show:false, width:1440, height:1000, webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false} });
-        const run = code => win.webContents.executeJavaScript(code);
+        const run = code => win.webContents.executeJavaScript(code).catch(error => { console.error('Failed UI check:', code); throw error; });
         const wait = async code => { for (let i=0;i<200;i++) { if(await run(code)) return; await delay(); } throw new Error('Timed out: '+code); };
         const calls = () => run('usageFixture.calls.length');
         const select = async patch => { await run('usageFixture.select('+JSON.stringify(patch)+')'); await delay(); };
@@ -147,25 +147,110 @@ async function main() {
         await select({actionId:'facebook_timeline_post',codes:['fb_post']}); await wait('usageFixture.calls.length===6');
         await run('usageFixture.pending[5].reject(new Error("offline"))'); await delay(700);
         assert.equal((await probe()).status,'error'); assert.equal(await calls(),6,'no automatic retry');
+        await run('usageFixture.select({ready:false,userScope:"session-a",scopes:[{accountIds:[41,42],actionCodes:["fb_message_stranger","fb_add_friend"]}]});usageFixture.openSnapshotProbe()');
+        await delay(100); assert.equal(await calls(),0,'wait for catalogs');
+        await select({ready:true}); await wait('usageFixture.calls.length===1');
+        await select({scopes:[{accountIds:[41],actionCodes:['fb_add_friend']}],irrelevant:8});
+        await run('usageFixture.pending[0].resolve(15)');
+        await wait('JSON.parse(document.querySelector("#snapshot-probe").textContent).status==="ready"');
+        await delay(350); assert.equal(await calls(),1,'selection/field changes never reload the snapshot, including StrictMode');
+        await select({userScope:'session-b'}); await wait('usageFixture.calls.length===2');
+        await select({userScope:'session-c'}); await wait('usageFixture.calls.length===3');
+        await run('usageFixture.pending[2].resolve(25);usageFixture.pending[1].resolve(99)'); await delay(100);
+        assert.equal(await run('JSON.parse(document.querySelector("#snapshot-probe").textContent).snapshot.accounts[0].actions[0].dailyActionCount'),25,'discard previous-session response');
+        await select({userScope:'session-d'}); await wait('usageFixture.calls.length===4');
+        await run('usageFixture.pending[3].reject(new Error("offline"))'); await delay(500);
+        assert.equal(await run('JSON.parse(document.querySelector("#snapshot-probe").textContent).status'),'error');
+        assert.equal(await calls(),4,'failed snapshot has no automatic retry');
+        for (const cached of [false, true]) {
+          await run('usageFixture.configureVisibility(["facebook_timeline_post"],true,'+(cached ? '[]' : 'undefined')+');usageFixture.openForm("new")');
+          await wait('usageFixture.visibilityPending.length===1');
+          await delay(350); assert.equal(await calls(),0,'wait for fresh visibility even when cache exists: '+cached);
+          await run('usageFixture.visibilityPending[0].resolve()');
+          await wait('usageFixture.calls.length===1');
+          assert.deepEqual(await run('usageFixture.calls'),[{scopes:[{accountIds:[41,42],actionCodes:['fb_message_stranger','fb_add_friend']}]}],
+            'hidden campaign types contribute no action queries');
+          assert.equal(await run('!!document.querySelector("option[value=facebook_timeline_post]")'),false);
+          await run('window.dispatchEvent(new Event("focus"))');
+          await delay(100); assert.equal(await calls(),1);
+        }
+        for (const mode of ['clone','draft']) {
+          await run('usageFixture.configureVisibility(["facebook_message_uid","facebook_timeline_post"]);usageFixture.openForm('+JSON.stringify(mode)+')');
+          await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/40")');
+          assert.deepEqual(await run('usageFixture.calls[0].scopes[0].actionCodes'),['fb_message_stranger','fb_add_friend'],
+            mode+' retains the currently selected hidden action');
+          assert.equal(await calls(),1);
+        }
+        await run('usageFixture.configureVisibility(["facebook_message_uid","facebook_timeline_post"]);usageFixture.openForm("edit")');
+        await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/40")');
+        assert.deepEqual(await run('[...usageFixture.calls[0].scopes[0].actionCodes].sort()'),
+          ['fb_message_stranger','fb_add_friend','fb_post_my_profile'].sort(),
+          'editing preloads every selectable campaign type, including hidden types');
+        assert.equal(await run('!!document.querySelector("option[value=facebook_timeline_post]")'),true);
+        await run('(()=>{const action=Array.from(document.querySelectorAll("select")).find(select=>Array.from(select.options).some(option=>option.value==="facebook_timeline_post"));Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(action,"facebook_timeline_post");action.dispatchEvent(new Event("change",{bubbles:true}));})()');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===2');
+        assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th")).map(cell=>cell.textContent)'),
+          ['Đăng bài trang cá nhân'],'timeline posting never shows unrelated Comment/Like columns');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>cell.textContent.includes("12 - "))'),
+          'switching to a hidden type in edit displays its preloaded statistics');
+        await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/")');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click();window.dispatchEvent(new Event("focus"))');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await delay(150); assert.equal(await calls(),1,'edit action change, focus and reopening the picker never query again');
+        await run('usageFixture.configureVisibility(["facebook_message_uid","facebook_timeline_post"],true);usageFixture.openForm("unselected")');
+        await wait('usageFixture.visibilityPending.length===1');
+        await run('usageFixture.visibilityPending[0].resolve()');
+        await wait('!document.body.textContent.includes("Đang tải cài đặt hiển thị")');
+        await delay(350); assert.equal(await calls(),0,'no visible actions and no selection means no statistics query');
+        await run('usageFixture.configureVisibility(["facebook_timeline_post"],true,[]);usageFixture.openForm("new")');
+        await wait('usageFixture.visibilityPending.length===1');
+        await run('usageFixture.visibilityPending[0].reject(new Error("visibility offline"))');
+        await wait('document.querySelector(".field-error")?.textContent.includes("visibility offline")');
+        await delay(350); assert.equal(await calls(),0,'failed refresh never falls back to querying cached hidden actions');
+        await run('document.querySelector(".field-error button").click()');
+        await wait('usageFixture.visibilityPending.length===2');
+        await run('usageFixture.visibilityPending[1].resolve()');
+        await wait('usageFixture.calls.length===1');
+        assert.deepEqual(await run('usageFixture.calls[0].scopes[0].actionCodes'),['fb_message_stranger','fb_add_friend']);
+        console.log('PASS visibility: fresh/cached loading, hidden scopes, existing edit/clone/draft, empty scope, error/manual retry.');
+        await run('usageFixture.configureVisibility(["facebook_message_uid","facebook_timeline_post"])');
+        await run('usageFixture.openForm("locked-edit")');
+        await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/40")');
+        assert.equal(await run('document.querySelector(".stepper-input[aria-disabled]").getAttribute("aria-disabled")'),'true');
+        assert.deepEqual(await run('usageFixture.calls'),[{scopes:[{accountIds:[41],actionCodes:['fb_message_stranger','fb_add_friend']}]}],
+          'locked data-group form only reads the fixed account and action');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click();window.dispatchEvent(new Event("focus"))');
+        await delay(100);
+        assert.equal(await run('document.querySelectorAll(".campaign-account-picker").length'),0);
+        assert.equal(await calls(),1,'locked picker and focus never reload');
+        await run('usageFixture.configureVisibility([])');
         for(const mode of ['new','edit','clone','draft']) {
           await run('usageFixture.openForm('+JSON.stringify(mode)+')');
           await wait('document.querySelector(".action-limit-used-pill")?.textContent.includes("12/40")');
           assert.equal(await calls(),1,mode+' initializes only once');
-          assert.ok(await run('document.body.textContent.includes("3/7")'),'hourly group limit');
+          assert.deepEqual(await run('usageFixture.calls[0].scopes[0].accountIds'),[41,42],mode+' retains all selectable accounts');
+          assert.ok(!await run('document.body.textContent.includes("3/7")'),'no hourly usage queried or displayed');
           assert.ok(await run('document.body.textContent.includes("Theo nhóm Nhóm smoke")'));
-          assert.ok(await run('document.body.textContent.includes("trong 65 phút 3/7")'));
+          assert.ok(!await run('document.body.textContent.includes("trong 65 phút 3/7")'));
         }
         await run('document.querySelector(".action-limit-minute-toggle").click()');
         await run('const field=document.querySelector(".action-limit-minute-field input");Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(field,"120");field.dispatchEvent(new Event("input",{bubbles:true}));');
         await run('window.dispatchEvent(new Event("focus"));document.querySelectorAll(".stepper-step")[1].click()');
         await delay(700); assert.equal(await calls(),1,'minute edits, navigation and focus do not query');
-        assert.ok(await run('document.body.textContent.includes("trong 65 phút 3/7")'));
+        assert.ok(!await run('document.body.textContent.includes("trong 65 phút 3/7")'));
         await run('const inputs=document.querySelectorAll(".action-limit-card")[1].querySelectorAll("input");for(const [index,value] of [[0,"20"],[1,"4"]]){Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(inputs[index],value);inputs[index].dispatchEvent(new Event("input",{bubbles:true}));}');
         await delay(400); assert.equal(await calls(),1,'editing thresholds does not count again');
         assert.ok(await run('document.querySelectorAll(".action-limit-card")[1].textContent.includes("12/20")'));
-        assert.ok(await run('document.querySelectorAll(".action-limit-card")[1].textContent.includes("3/4")'));
+        assert.ok(!await run('document.querySelectorAll(".action-limit-card")[1].textContent.includes("3/4")'));
         await run('Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Kết bạn").querySelector("input").click()');
         await delay(400); assert.equal(await run('document.querySelectorAll(".action-limit-card").length'),1);
+        await run('Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Nhắn tin").querySelector("input").click();document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===2');
+        assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th")).map(cell=>cell.textContent)'),
+          ['Nhắn tin người lạ','Kết bạn'],'both main Facebook actions remain visible when unchecked');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>cell.textContent.includes("12 - "))'));
+        await run('document.querySelector(".stepper-input[aria-disabled]").click();Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Nhắn tin").querySelector("input").click()');
         await run('Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Kết bạn").querySelector("input").click()');
         await delay(400); assert.equal(await calls(),1,'optional actions reuse the initial snapshot');
         assert.ok(await run('document.querySelectorAll(".action-limit-card")[1].textContent.includes("12/20")'));
@@ -173,13 +258,128 @@ async function main() {
         const screenshot = ${JSON.stringify(join(tmpdir(), 'akaagent-action-usage-smoke.png'))};
         require('node:fs').writeFileSync(screenshot,(await win.webContents.capturePage()).toPNG());
         await run('const action=Array.from(document.querySelectorAll("select")).find(select=>Array.from(select.options).some(option=>option.value==="facebook_timeline_post"));Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(action,"facebook_timeline_post");action.dispatchEvent(new Event("change",{bubbles:true}));');
-        await wait('usageFixture.calls.length===2');
-        assert.deepEqual(await run('usageFixture.calls[1].codes'),['fb_post'],'real form action changes request only the new candidate codes');
+        await delay(500); assert.equal(await calls(),1,'real form action changes filter the opening snapshot');
+        assert.ok(await run('usageFixture.calls[0].scopes[0].actionCodes.includes("fb_post_my_profile")'),'opening snapshot includes other form choices');
         await run('usageFixture.openForm("multiple")'); await delay(700);
-        assert.equal(await calls(),0,'multiple selected accounts never query');
+        assert.equal(await calls(),1,'all selectable accounts share one opening request');
         assert.equal(await run('document.querySelectorAll(".action-limit-usage").length'),0,'multiple accounts hide the usage');
+        await run('const optional=Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Kết bạn").querySelector("input");if(!optional.checked)optional.click()');
+        await delay(100);
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===2');
+        const picker = () => run('document.querySelector(".campaign-account-picker").textContent');
+        assert.ok((await picker()).includes('12 - Bình thường'));
+        assert.ok((await picker()).includes('Bị giới hạn - Còn 18 phút'));
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).some(cell=>cell.textContent.trim()==="12 - Bị giới hạn")'), 'indefinite action limit remains explicit');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).every(row=>row.getBoundingClientRect().height<=34)'), 'compact single-line rows');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>getComputedStyle(cell).whiteSpace==="nowrap")'));
+        assert.equal(await calls(),1);
+        await run('document.querySelectorAll(".campaign-account-picker-row input")[1].click()');
+        await delay(200); assert.equal(await calls(),1,'selecting accounts reuses opening snapshot');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()'); await delay(50);
+        await run('document.querySelector(".stepper-input[aria-disabled]").click();window.dispatchEvent(new Event("focus"))');
+        await delay(300); assert.equal(await calls(),1,'reopening dropdown and focus do not query');
+        await run('document.querySelector(".campaign-account-picker").scrollIntoView({block:"center"})'); await delay(100);
+        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'akaagent-account-picker-smoke.png'))},(await win.webContents.capturePage()).toPNG());
+        await run('usageFixture.openGroupPostForm()');
+        await wait('usageFixture.calls.length===1');
+        assert.deepEqual(await run('usageFixture.calls[0].scopes[0].actionCodes'),['fb_post_group','fb_comment'],
+          'group-post scope reads posting and the separate daily comment limit, with no unused like count');
+        for (const commentEnabled of [true,false,true]) {
+          await run('(()=>{const input=Array.from(document.querySelectorAll("label.schedule-checkbox-label")).find(label=>label.textContent.trim()==="Kiêm comment").querySelector("input");if(input.checked!=='+commentEnabled+') input.click();})()');
+          await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+          await wait('document.querySelectorAll(".campaign-account-picker-row").length===2');
+          assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th")).map(cell=>cell.textContent)'),
+            commentEnabled ? ['Đăng bài group','Comment'] : ['Đăng bài group'],'group posting shows companion Comment only when selected');
+          assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>cell.textContent.includes("12 - "))'));
+          await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+          assert.equal(await calls(),1,'group-post option changes never reload statistics');
+        }
+        for (const actionId of ['facebook_comment_seeding','facebook_comment_seeding_post','facebook_newsfeed_interaction']) {
+          await run('usageFixture.openInteractionForm('+JSON.stringify(actionId)+')');
+          await wait('usageFixture.calls.length===1');
+          const isNewsfeed = actionId === 'facebook_newsfeed_interaction';
+          assert.deepEqual(await run('usageFixture.calls[0].scopes[0].actionCodes'),['fb_comment','fb_like_post'],
+            'optional Like is preloaded even when absent from limitCheckActionCodes');
+          for (const enabled of [false,true,false]) {
+            await run('for (const input of document.querySelectorAll(".newsfeed-action-toggle input, label.schedule-checkbox-label input")) { const label=input.closest("label"); if (input.checked!=='+enabled+' && (label.classList.contains("newsfeed-action-toggle") || label.textContent.includes("Like bài post khi comment"))) input.click(); }');
+            await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+            await wait('document.querySelectorAll(".campaign-account-picker-row").length===2');
+            assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th")).map(cell=>cell.textContent)'),
+              isNewsfeed || enabled ? ['Comment','Like post'] : ['Comment'],actionId+' keeps the correct columns with options '+enabled);
+            assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>cell.textContent.includes("12 - "))'));
+            await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+            assert.equal(await calls(),1,'comment/newsfeed option changes never reload statistics');
+          }
+        }
+        console.log('PASS companion columns: group Comment and seeding Like follow checkboxes using preloaded counts; both newsfeed columns always remain visible.');
+        await run('usageFixture.openZaloForm()'); await delay(700);
+        assert.deepEqual(await run('usageFixture.errors'),[], 'Zalo form renders without errors');
+        if (!await run('!!document.querySelector(".stepper-input[aria-disabled]")')) {
+          console.log('Zalo form state:', await run('document.body.innerText.slice(0,1500)'));
+        }
+        assert.equal(await calls(),1);
+        assert.deepEqual(await run('usageFixture.calls[0].scopes[0].accountIds'),[41,42,43,44,45,46]);
+        assert.deepEqual(await run('usageFixture.calls[0].scopes[0].actionCodes'),['zalo_find_phone_user','zalo_message_stranger','zalo_add_friend'],
+          'Zalo snapshot excludes unused tag/alias counters');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===6');
+        assert.equal(await run('document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th").length'),3,'all main Zalo actions displayed');
+        assert.ok((await picker()).includes('Bị giới hạn - Còn 18 phút'));
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).every(row=>row.getBoundingClientRect().height<=34)'), 'Zalo stays one line');
+        await run('document.querySelector(".campaign-account-picker").scrollIntoView({block:"center"})'); await delay(100);
+        await run('document.querySelector(".campaign-account-picker-scroll").scrollTop=0'); await delay(100);
+        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'akaagent-account-picker-zalo-smoke.png'))},(await win.webContents.capturePage()).toPNG());
+        win.setSize(1000,800); await delay(150);
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>getComputedStyle(cell).whiteSpace==="nowrap")'));
+        assert.equal(await calls(),1,'resizing never queries');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await run('for (const label of document.querySelectorAll("label.schedule-checkbox-label")) { const name=label.textContent.trim(); const input=label.querySelector("input"); if ((["Nhắn tin","Kết bạn"].includes(name) && input.checked) || (label.classList.contains("zalo-auxiliary-toggle") && !input.checked)) input.click(); }');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===6');
+        assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th")).map(cell=>cell.textContent)'),
+          ['Tìm SĐT','Nhắn tin người lạ','Kết bạn'],'Zalo main actions stay visible while enabled tag/alias stay hidden');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>cell.textContent.includes("12 - "))'));
+        assert.equal(await calls(),1,'Zalo option changes reuse the opening snapshot');
+        console.log('PASS picker columns: unchecked main actions stay visible, tag/alias stay hidden, timeline only displays posting; no extra queries.');
+        const realtimeCodes = ['zalo_message_stranger','zalo_add_friend'];
+        const realtimeScope = {accountIds:[41,42,43,44,45],actionCodes:realtimeCodes};
+        for (const locked of [false,true]) {
+          await run('usageFixture.configureVisibility('+JSON.stringify(locked ? [] : ['zalo_message_phone'])+');usageFixture.openZaloForm('+JSON.stringify({actionId:'zalo_message_group_realtime',extraActionId:'zalo_message_phone',locked})+')');
+          await wait('usageFixture.calls.length===1');
+          assert.deepEqual(await run('usageFixture.calls'),[{scopes:[realtimeScope]}],
+            'realtime excludes web statistics when other types are hidden or the form is locked');
+          await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+          await wait('document.querySelectorAll(".campaign-account-picker-row").length===5');
+          assert.deepEqual(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).map(row=>Number(row.dataset.accountId))'),realtimeScope.accountIds,
+            'statistics scope matches selectable QR/server accounts');
+          await run('window.dispatchEvent(new Event("focus"))'); await delay(100); assert.equal(await calls(),1);
+        }
+        await run('usageFixture.configureVisibility([]);usageFixture.openZaloForm({actionId:"zalo_message_group_realtime",extraActionId:"zalo_message_group"})');
+        await wait('usageFixture.calls.length===1');
+        assert.deepEqual(await run('usageFixture.calls.map(call=>({scopes:call.scopes.map(scope=>({...scope,actionCodes:[...scope.actionCodes].sort()}))}))'),[{scopes:[
+          {accountIds:[41,42,43,44,45],actionCodes:[...realtimeCodes,'zalo_message_group'].sort()},
+          {accountIds:[46],actionCodes:['zalo_message_group']}
+        ]}],'mixed choices only add codes from compatible campaign types per account');
+        await run('(()=>{const action=Array.from(document.querySelectorAll("select")).find(select=>Array.from(select.options).some(option=>option.value==="zalo_message_group"));Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,"value").set.call(action,"zalo_message_group");action.dispatchEvent(new Event("change",{bubbles:true}));})()');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('document.querySelectorAll(".campaign-account-picker-row").length===6');
+        assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).find(row=>row.dataset.accountId==="46").querySelector(".campaign-account-picker-action").textContent.includes("12 - Bình thường")'),
+          'switching to a compatible type uses the preloaded web count');
+        assert.equal(await calls(),1,'switching campaign types does not reload statistics');
+        await run('usageFixture.openZaloForm({actionId:"zalo_message_group_realtime",extraActionId:"zalo_message_phone"})');
+        await wait('usageFixture.calls.length===1');
+        assert.equal(await run('usageFixture.calls[0].scopes.length'),1,'equal code sets still share one scope');
+        assert.deepEqual(await run('usageFixture.calls[0].scopes[0].accountIds'),[41,42,43,44,45,46],
+          'shared realtime codes remain available to web accounts through the phone campaign');
+        await run('usageFixture.openZaloForm({actionId:"zalo_message_group_realtime",onlyWeb:true})');
+        await wait('!document.body.textContent.includes("Đang tải cài đặt hiển thị")');
+        await delay(350); assert.equal(await calls(),0,'no compatible accounts means no statistics query');
+        await run('document.querySelector(".stepper-input[aria-disabled]").click()');
+        await wait('!!document.querySelector(".campaign-account-picker-empty")');
+        console.log('PASS account compatibility: hidden/locked realtime, QR/server, mixed and shared action codes, web selection without refetch, empty scope.');
         assert.deepEqual(await run('usageFixture.errors'),[]);
-        console.log('PASS React/form: selection triggers, debounce, in-flight reuse, stale responses, error/no retry, create/edit/clone/draft, multi-account hiding, fixed 65 minutes. Screenshot: '+screenshot);
+        console.log('PASS React/form: selection triggers, debounce, in-flight reuse, stale responses, error/no retry, create/edit/clone/draft, daily-only form snapshot, compact picker, one load across action/account/toggle changes, stale-session guards. Screenshot: '+screenshot);
         win.destroy();app.exit(0);
       }).catch(error=>{console.error(error);app.exit(1)});
     `)
@@ -187,6 +387,9 @@ async function main() {
     const result = spawnSync(require('electron'), [join(directory, 'electron.cjs')], { cwd: root, env, stdio: 'inherit', timeout: 60000 })
     if (result.error) throw result.error
     process.exitCode = result.status ?? 1
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  } finally {
+    if (process.exitCode) console.log('Failed fixture retained:', directory)
+    else rmSync(directory, { recursive: true, force: true })
+  }
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })
