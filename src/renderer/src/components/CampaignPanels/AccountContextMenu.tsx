@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
@@ -87,19 +87,31 @@ export default function AccountContextMenu({
     }
   }, [onClose])
 
-  // Adjust position to avoid overflow
-  useEffect(() => {
-    if (!menuRef.current) return
-    const rect = menuRef.current.getBoundingClientRect()
-    const vw = window.innerWidth
-    const vh = window.innerHeight
-    if (rect.right > vw) {
-      menuRef.current.style.left = `${position.x - rect.width}px`
+  // Measure before paint, without the opening animation's transform.
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    if (!menu) return
+    const updatePosition = () => {
+      const margin = 8
+      const titlebarHeight = parseFloat(getComputedStyle(menu).getPropertyValue('--titlebar-height')) || 0
+      const minTop = titlebarHeight + margin
+      const maxLeft = window.innerWidth - menu.offsetWidth - margin
+      const maxTop = window.innerHeight - menu.offsetHeight - margin
+      const left = position.x > maxLeft ? position.x - menu.offsetWidth : position.x
+      const top = position.y > maxTop ? position.y - menu.offsetHeight : position.y
+      menu.style.left = `${Math.max(margin, Math.min(left, maxLeft))}px`
+      menu.style.top = `${Math.max(minTop, Math.min(top, maxTop))}px`
     }
-    if (rect.bottom > vh) {
-      menuRef.current.style.top = `${position.y - rect.height}px`
+    menu.scrollTop = 0
+    updatePosition()
+    const observer = new ResizeObserver(updatePosition)
+    observer.observe(menu)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updatePosition)
     }
-  }, [position])
+  }, [position.x, position.y])
 
   const handleAction = useCallback((action: () => void) => {
     action()
@@ -118,7 +130,7 @@ export default function AccountContextMenu({
   return (
     <div
       ref={menuRef}
-      className="context-menu animate-fadeIn"
+      className="context-menu account-context-menu animate-fadeIn"
       style={{ left: position.x, top: position.y }}
     >
       <div className="context-menu-group">

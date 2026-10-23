@@ -1366,7 +1366,13 @@ const getCampaignActionMenuPosition = (
 ): CampaignActionMenuPosition => {
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-  const menuWidth = Math.max(CAMPAIGN_ACTION_MENU_WIDTH, menuSize.width || CAMPAIGN_ACTION_MENU_WIDTH)
+  const titlebarHeight = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--titlebar-height')) || 0
+  const minTop = titlebarHeight + CAMPAIGN_ACTION_MENU_MARGIN
+  const viewportMenuHeight = Math.max(0, viewportHeight - minTop - CAMPAIGN_ACTION_MENU_MARGIN)
+  const menuWidth = Math.min(
+    Math.max(CAMPAIGN_ACTION_MENU_WIDTH, menuSize.width || CAMPAIGN_ACTION_MENU_WIDTH),
+    Math.max(0, viewportWidth - CAMPAIGN_ACTION_MENU_MARGIN * 2)
+  )
   const expectedHeight = Math.max(0, menuSize.height || CAMPAIGN_ACTION_MENU_FALLBACK_HEIGHT)
   const maxLeft = Math.max(CAMPAIGN_ACTION_MENU_MARGIN, viewportWidth - menuWidth - CAMPAIGN_ACTION_MENU_MARGIN)
   const left = Math.min(
@@ -1374,18 +1380,18 @@ const getCampaignActionMenuPosition = (
     maxLeft
   )
   const spaceBelow = Math.max(0, viewportHeight - anchor.bottom - CAMPAIGN_ACTION_MENU_GAP - CAMPAIGN_ACTION_MENU_MARGIN)
-  const spaceAbove = Math.max(0, anchor.top - CAMPAIGN_ACTION_MENU_GAP - CAMPAIGN_ACTION_MENU_MARGIN)
+  const spaceAbove = Math.max(0, anchor.top - CAMPAIGN_ACTION_MENU_GAP - minTop)
   const opensAbove = expectedHeight > spaceBelow && spaceAbove > spaceBelow
-  const availableHeight = Math.max(
-    CAMPAIGN_ACTION_MENU_MIN_MAX_HEIGHT,
-    opensAbove ? spaceAbove : spaceBelow
+  const availableHeight = Math.min(
+    viewportMenuHeight,
+    Math.max(CAMPAIGN_ACTION_MENU_MIN_MAX_HEIGHT, opensAbove ? spaceAbove : spaceBelow)
   )
   const renderedHeight = Math.min(expectedHeight, availableHeight)
   const top = opensAbove
-    ? Math.max(CAMPAIGN_ACTION_MENU_MARGIN, anchor.top - CAMPAIGN_ACTION_MENU_GAP - renderedHeight)
+    ? Math.max(minTop, anchor.top - CAMPAIGN_ACTION_MENU_GAP - renderedHeight)
     : Math.min(
-      Math.max(CAMPAIGN_ACTION_MENU_MARGIN, anchor.bottom + CAMPAIGN_ACTION_MENU_GAP),
-      Math.max(CAMPAIGN_ACTION_MENU_MARGIN, viewportHeight - renderedHeight - CAMPAIGN_ACTION_MENU_MARGIN)
+      Math.max(minTop, anchor.bottom + CAMPAIGN_ACTION_MENU_GAP),
+      Math.max(minTop, viewportHeight - renderedHeight - CAMPAIGN_ACTION_MENU_MARGIN)
     )
 
   return { top, left, maxHeight: availableHeight }
@@ -3238,37 +3244,49 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeOpenCampaignActionMenu()
     }
+    const handleDocumentScroll = (event: Event) => {
+      if (event.target instanceof Node && campaignActionMenuRef.current?.contains(event.target)) return
+      closeOpenCampaignActionMenu()
+    }
 
     document.addEventListener('mousedown', handleDocumentMouseDown)
     document.addEventListener('keydown', handleDocumentKeyDown)
-    document.addEventListener('scroll', closeOpenCampaignActionMenu, true)
+    document.addEventListener('scroll', handleDocumentScroll, true)
     window.addEventListener('resize', closeOpenCampaignActionMenu)
     return () => {
       document.removeEventListener('mousedown', handleDocumentMouseDown)
       document.removeEventListener('keydown', handleDocumentKeyDown)
-      document.removeEventListener('scroll', closeOpenCampaignActionMenu, true)
+      document.removeEventListener('scroll', handleDocumentScroll, true)
       window.removeEventListener('resize', closeOpenCampaignActionMenu)
     }
   }, [openCampaignActionMenuId])
 
   useLayoutEffect(() => {
     if (!openCampaignActionMenuId || !campaignActionMenuAnchorRef.current || !campaignActionMenuRef.current) return
-    const menuRect = campaignActionMenuRef.current.getBoundingClientRect()
-    const nextPosition = getCampaignActionMenuPosition(campaignActionMenuAnchorRef.current, {
-      width: menuRect.width,
-      height: campaignActionMenuRef.current.scrollHeight
-    })
-    setCampaignActionMenuPosition(current => {
-      if (
-        current &&
-        Math.abs(current.top - nextPosition.top) < 1 &&
-        Math.abs(current.left - nextPosition.left) < 1 &&
-        Math.abs(current.maxHeight - nextPosition.maxHeight) < 1
-      ) {
-        return current
-      }
-      return nextPosition
-    })
+    const menu = campaignActionMenuRef.current
+    const anchor = campaignActionMenuAnchorRef.current
+    const updatePosition = () => {
+      if (campaignActionMenuRef.current !== menu || campaignActionMenuAnchorRef.current !== anchor) return
+      const nextPosition = getCampaignActionMenuPosition(anchor, {
+        width: menu.offsetWidth,
+        height: menu.scrollHeight + menu.offsetHeight - menu.clientHeight
+      })
+      setCampaignActionMenuPosition(current => {
+        if (
+          !current ||
+          (Math.abs(current.top - nextPosition.top) < 1 &&
+            Math.abs(current.left - nextPosition.left) < 1 &&
+            Math.abs(current.maxHeight - nextPosition.maxHeight) < 1)
+        ) {
+          return current
+        }
+        return nextPosition
+      })
+    }
+    updatePosition()
+    const observer = new ResizeObserver(updatePosition)
+    observer.observe(menu)
+    return () => observer.disconnect()
   }, [openCampaignActionMenuId])
 
   // Fence pending selections as soon as either the entered or applied filters change.
