@@ -1,6 +1,6 @@
 # Hiển thị loại chiến dịch — Desktop và Web
 
-Ngày kiểm chứng: 23/10/2026. **V423 đã apply production akachat lúc 16:06 VN (`20261023090604`); chưa deploy API/Web, chưa đóng gói/phát hành Desktop.** Canonical SQL chỉ nằm ở repo `akaAgent`; Web tham chiếu cùng migration. Không apply lại. Các ghi chú candidate bên dưới là lịch sử trước apply.
+Ngày kiểm chứng: 23/10/2026. **V423 đã apply production akachat lúc 16:06 VN (`20261023090604`); Web/API đã deploy lúc 16:25 VN, chưa đóng gói/phát hành Desktop.** Canonical SQL chỉ nằm ở repo `akaAgent`; Web tham chiếu cùng migration. Không apply lại. Các ghi chú candidate bên dưới là lịch sử trước apply.
 
 ## Hợp đồng
 
@@ -133,3 +133,7 @@ Bước database đã hoàn tất. Chưa deploy phần tính năng này lên API
 ## Kiểm tra trước PR — 23/10/2026
 
 Bản PR Desktop được dựng trên `origin/dev_3` tại `7e3b8ca1`, chỉ gồm Hiển thị loại chiến dịch; không gồm thay đổi picker thống kê tài khoản, phiên bản hay đóng gói đang làm riêng. Hai typecheck và production build đạt; 10 ca repository, 8 kịch bản Electron cài đặt/form và 4 kịch bản danh sách đạt. Badge “Mới” đã bỏ trên Desktop/Web theo yêu cầu. Migration V423 đã apply, không chạy lại khi merge PR.
+
+## Deploy Web/API — 23/10/2026
+
+Web/API đã deploy lên [agent.akabiz.net](https://agent.akabiz.net) lúc 16:25 VN từ `93eeec9`. Chỉ đổi image trên machine Fly hiện có 1 shared CPU/512 MB, health 1/1. Typecheck bảy workspace, build, 2.600 unit test, 15 browser local và 15 browser trên asset production (API/WS giả lập), 21 HTTP và bảy checksum runtime đạt. Đọc lại 14 checksum DB sau deploy vẫn khớp; không apply lại V423. Badge “Mới” đã bỏ và finding queue giữ nguyên theo yêu cầu. Desktop chưa đóng gói/phát hành. Biên bản và rollback nằm ở repo Web: `docs/CAMPAIGN_TYPE_VISIBILITY_DEPLOY_20261023.md`.

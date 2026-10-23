@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Web/API Hiển thị loại chiến dịch đã deploy 23/10/2026 lúc 16:25 VN từ `93eeec9`, machine Fly giữ 1 shared CPU/512 MB và chỉ đổi image, health 1/1. 2.600 unit test, typecheck/build, 15 browser local/15 production, 21 HTTP và checksum runtime/DB đạt. Không apply lại V423; Desktop chưa đóng gói/phát hành. Xem [audit](docs/CAMPAIGN_TYPE_VISIBILITY.md#deploy-webapi--23102026).
+
 V423 Hiển thị loại chiến dịch đã apply akachat ngày 23/10/2026 lúc 16:06 VN (`20261023090604 / migration_v423_campaign_type_visibility`). Giữ patch Desktop V328/Web V415; bảy target và bảy helper/runtime khớp checksum/metadata. 22 SQL local, 18 kiểm tra rollback trước và sau apply đạt; preference thử rollback, bảng 0 hàng, Web RPC service-role-only. Không apply lại; chưa deploy tính năng API/Web hoặc đóng gói/phát hành Desktop. Người dùng chấp nhận không sửa finding queue Web khi pending action mất khỏi catalog; reload/đăng nhập lại xóa lựa chọn chưa lưu. Xem [audit production](docs/CAMPAIGN_TYPE_VISIBILITY.md#apply-production--23102026). Ghi chú candidate bên dưới là lịch sử.
 
 Review Hiển thị loại chiến dịch 23/10/2026: candidate V423 phải REVOKE trực tiếp anon/authenticated (default ACL public cấp riêng, REVOKE PUBLIC không đủ); smoke fixture giữ default ACL production. Web queue theo phiên sống qua route, dispose khi đổi phiên, chỉ ack cập nhật lọc; form tự chọn nền tảng còn hiện. Chưa apply/deploy, xem [audit](docs/CAMPAIGN_TYPE_VISIBILITY.md).
