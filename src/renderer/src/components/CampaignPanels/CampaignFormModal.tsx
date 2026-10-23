@@ -17301,7 +17301,7 @@ export default function CampaignFormModal({
                             disabled={!formData.recentDeliveryCooldownEnabled}
                             onChange={e => setFormData(p => ({ ...p, recentDeliveryCooldownAllAccounts: e.target.checked }))}
                           />
-                          <span>Áp dụng cho tất cả tài khoản</span>
+                          <span>Kiểm tra trên toàn bộ tài khoản</span>
                         </label>
                       )}
                       {isZaloMessagePhoneCampaign && selectedCampaignAction?.showStaffDeliveryCooldown !== true &&

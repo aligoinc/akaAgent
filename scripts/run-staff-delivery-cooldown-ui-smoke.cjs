@@ -22,7 +22,7 @@ async function main() {
     page = await app.firstWindow(); page.setDefaultTimeout(12000)
     await page.waitForFunction(() => !!window.settingsSmoke)
     const form = page.locator('.campaign-full-modal')
-    const option = form.getByLabel('Áp dụng cho tất cả tài khoản', { exact: true })
+    const option = form.getByLabel('Kiểm tra trên toàn bộ tài khoản', { exact: true })
     const main = form.getByRole('checkbox', { name: 'Không gửi tin cho những người có tin gửi trước đó cách số ngày là:', exact: true })
     const reveal = async () => {
       const section = form.locator('.stepper-section').filter({ has: page.locator('.stepper-section-title', { hasText: 'Kiểm tra trùng lặp' }) })
