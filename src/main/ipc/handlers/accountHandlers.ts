@@ -25,6 +25,7 @@ const PLATFORM_URLS: Record<string, string> = {
 }
 const ALWAYS_BROWSERLESS_PLATFORMS = new Set(['email', 'sms'])
 const BROWSERLESS_ACCOUNT_REASON = 'Tài khoản này không dùng trình duyệt trong phiên bản này'
+const ACCOUNT_RUNNING_MUTATION_REASON = 'Tài khoản đang chạy. Vui lòng tạm dừng trước khi xoá hoặc vô hiệu hoá.'
 
 function isBrowserlessAccount(account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb'>): boolean {
   const platform = String(account.flatformType || '').trim().toLowerCase()
@@ -228,9 +229,13 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
-    preemptWebEnrichment(id)
     const normalizedUpdates = updates || {}
     const existing = await supabase.getAccount(id)
+    if (normalizedUpdates.isActive === false && !existing) throw new Error('Không tìm thấy tài khoản')
+    if (normalizedUpdates.isActive === false && existing?.status === 'đang chạy') {
+      throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
+    }
+    if (normalizedUpdates.isActive !== false) preemptWebEnrichment(id)
     const updateKeys = Object.keys(normalizedUpdates)
     const statusOnly = updateKeys.length === 1 && updateKeys[0] === 'status'
     const requestedStatus = normalizedUpdates.status
@@ -341,6 +346,7 @@ export function registerAccountHandlers(
         normalizedUpdates,
         changesZaloType ? { zaloTypeChangePreviousStatus, zaloTypeChangeClaimToken } : undefined
       )
+      if (normalizedUpdates.isActive === false) preemptWebEnrichment(id)
       if (
         changesZaloType &&
         zaloTypeChangePreviousStatus &&
@@ -408,18 +414,22 @@ export function registerAccountHandlers(
   })
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
-    preemptWebEnrichment(id)
     const existing = await supabase.getAccount(id)
+    if (!existing) throw new Error('Không tìm thấy tài khoản')
+    if (existing.status === 'đang chạy') {
+      throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
+    }
+    await supabase.deleteAccount(id)
+    preemptWebEnrichment(id)
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
-    if (existing?.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
+    if (existing.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
       void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
-    } else if (!existing || !shouldRouteZaloAccountToChatApi(existing)) {
+    } else if (!shouldRouteZaloAccountToChatApi(existing)) {
       zaloRuntime?.invalidateAccount(id)
       zaloRuntime?.detachWebSession(id)
     }
-    return supabase.deleteAccount(id)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_GROUPS, async (_, flatformType?: string) => {

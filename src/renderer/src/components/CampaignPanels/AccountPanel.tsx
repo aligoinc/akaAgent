@@ -801,7 +801,13 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   const handleDelete = (account: AutoAccount) => {
     useUiStore.getState().showConfirm(
       `Xoá tài khoản "${account.name}"?`,
-      async () => { await deleteAccount(account.id) },
+      async () => {
+        try {
+          await deleteAccount(account.id)
+        } catch (error) {
+          useUiStore.getState().showAlert(getErrorMessage(error, 'Không thể xoá tài khoản.'), 'error')
+        }
+      },
       { title: 'Xoá tài khoản', confirmText: 'Xoá', variant: 'danger' }
     )
   }
@@ -1058,7 +1064,11 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   }
 
   const handleDisable = async (account: AutoAccount) => {
-    await updateAccount(account.id, { isActive: false, status: 'tạm dừng' })
+    try {
+      await updateAccount(account.id, { isActive: false, status: 'tạm dừng' })
+    } catch (error) {
+      useUiStore.getState().showAlert(getErrorMessage(error, 'Không thể vô hiệu hoá tài khoản.'), 'error')
+    }
   }
 
   const handleViewInfo = (account: AutoAccount) => {
@@ -1406,7 +1416,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
       {/* Context Menu */}
       {contextMenu && (
         <AccountContextMenu
-          account={contextMenu.account}
+          account={accounts.find(account => account.id === contextMenu.account.id) ?? contextMenu.account}
           position={contextMenu.position}
           onClose={() => setContextMenu(null)}
           onViewBrowser={handleViewBrowser}
