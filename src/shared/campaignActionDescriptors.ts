@@ -92,6 +92,9 @@ export function getMessageActionCode(campaign: Campaign): string {
 
 function isActionCheckEnabledForCampaign(campaign: CampaignActionConfiguration, actionCode: string): boolean {
   const extra = campaign.extraSettings || {}
+  // Native group sharing has no resolved destination permalink for follow-up actions.
+  if (campaign.actionId === 'facebook_group_post' && extra.groupPostShareFromPost === true
+    && (actionCode === 'fb_comment' || actionCode === 'fb_like_post')) return false
   switch (actionCode) {
     case 'fb_message_friend':
       return true

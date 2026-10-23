@@ -39,7 +39,7 @@ const MAX_DETAIL_PAGE_SIZE = 500
 const FACEBOOK_GROUP_INVITE_ACTION_CODE = 'fb_group_invite'
 const REPORT_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
 const REPORT_FAILURE_DETAIL_STATUSES: CampaignDetailStatus[] = ['thất bại', 'lỗi', 'không tồn tại']
-const REPORT_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']
+const REPORT_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên', 'bỏ qua']
 const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = [
   ...REPORT_SKIPPED_DETAIL_STATUSES,
   'không tồn tại'

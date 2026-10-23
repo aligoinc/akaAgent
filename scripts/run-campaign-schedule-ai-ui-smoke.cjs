@@ -44,6 +44,11 @@ async function main() {
       assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])
       return
     }
+    if (process.argv.includes('--native-group-share-only')) {
+      await require('./facebook-native-group-share-ui-checks.cjs')(page)
+      assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])
+      return
+    }
     if (process.argv.includes('--exclusions-only')) {
       await require('./campaign-exclusion-ai-ui-checks.cjs')(page)
       assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])

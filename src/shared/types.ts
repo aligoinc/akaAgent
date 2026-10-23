@@ -634,6 +634,8 @@ export interface CampaignExtraSettings {
   autoJoinGroupAfterPost?: boolean         // Tự động tham gia group sau khi đăng bài thành công (chưa tham gia)
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
   skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
+  groupPostShareFromPost?: boolean // Native share of one source post into the current group
+  groupPostShareCaption?: string // Optional plain-text caption for native group share
   enableGroupPostShareToJoinedGroups?: boolean // Đăng bài group dạng chia sẻ thêm vào tối đa 3 nhóm khác trong campaign
   enablePostBump?: boolean                 // Sau khi đăng group thành công, thêm link bài vào campaign comment-post để up tin
   postBumpCount?: number                   // Tổng số lượt up tối đa cho mỗi bài post, max 10

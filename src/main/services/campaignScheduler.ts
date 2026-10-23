@@ -1,3 +1,6 @@
+import {
+  isNativeGroupPostShare, validateGroupPostShareLinks, GROUP_POST_SHARE_WORKFLOW_VERSION
+} from '../../shared/facebookGroupPostShare'
 import * as randomRuns from '../data/repositories/facebookRandomRunRepository'
 import { chooseRandomRound, randomRemaining, type FacebookRandomTurn } from '../../shared/facebookRandomRun'
 import { actionResultSignature, parseActionResultOutput } from '../../shared/actionResultSession'
@@ -228,6 +231,7 @@ interface ZaloShareMessageBadTargetFailure {
 }
 
 interface MilestoneSummary {
+  skippedInputNote?: string
   hasSuccess: boolean
   hasFailure: boolean
   hasHardFailure: boolean
@@ -3472,6 +3476,14 @@ export class CampaignScheduler {
 
       const resultWorkflow = await getWorkflow(workflowSelection.workflowId)
       if (!resultWorkflow) throw new ResultContractError('catalog_invalid', campaign.actionId, 'workflow_missing')
+      if (isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)) {
+        const configError = validateGroupPostShareLinks(campaign.extraSettings?.sourceLinks)
+        if (configError || resultWorkflow.defaultVariables.groupPostShareWorkflowVersion !== GROUP_POST_SHARE_WORKFLOW_VERSION) {
+          await this.updateCampaignAndBroadcast(campaign.id, { status: 'tạm dừng', note: configError || 'Workflow chưa hỗ trợ chia sẻ bài viết vào nhóm. Vui lòng cập nhật workflow.' })
+          await this.releaseRunningAccount(account.id)
+          return
+        }
+      }
       const declarationSources = [resultWorkflow.defaultVariables.resultStatusDeclarations,
         ...resultWorkflow.nodes.map(node => node.config.resultStatusDeclarations)].filter(value => value != null)
       const declarations: { actionCode: string; statusCodes: string[] }[] = []
@@ -3805,7 +3817,7 @@ export class CampaignScheduler {
     }
 
     const sourcePagePostMode = extra.pagePostMode || 'api'
-    const shouldPostWithBackground = !this.isFormattedContentCampaign(campaign) && extra.postWithBackground === true && (
+    const shouldPostWithBackground = !isNativeGroupPostShare(campaign.actionId, extra) && !this.isFormattedContentCampaign(campaign) && extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && sourcePagePostMode === 'ui') ||
       campaign.actionId === GROUP_POST_ACTION_ID
@@ -3821,7 +3833,7 @@ export class CampaignScheduler {
       !shouldPostWithBackground && (
         (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
         (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true) ||
-        (campaign.actionId === 'facebook_group_post' && extra.copyContentFromSource === true)
+        (campaign.actionId === 'facebook_group_post' && (extra.copyContentFromSource === true || isNativeGroupPostShare(campaign.actionId, extra)))
       )
     const sourceLinks = shouldRotateSourceLink
       ? (extra.sourceLinks || '').split(/[,\r\n]+/).map(s => s.trim()).filter(Boolean)
@@ -4418,12 +4430,16 @@ export class CampaignScheduler {
                   ) || ''
                 })
               } else {
+                const skippedNote = !milestoneSummary.hasFailure && !milestoneSummary.hasError
+                  ? milestoneSummary.skippedInputNote : undefined
                 await this.supabase.updateCampaignInputData(detail.id, {
                   status: 'hoàn thành',
-                  note: this.withZaloMessageOptOutWarnings(null, zaloOptOutContext)
+                  note: this.withZaloMessageOptOutWarnings(skippedNote || null, zaloOptOutContext)
                 })
                 consumedGroupPostInputDataIds.add(detail.id)
-                await this.logCampaignProgress(campaign, `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
+                await this.logCampaignProgress(campaign, skippedNote
+                  ? `ℹ️ Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${skippedNote}`
+                  : `✅ Hoàn thành "${this.getInputDataDisplayName(campaign, detail)}"`)
               }
             } else if (pauseCancelledRun) {
               await this.supabase.updateCampaignInputData(detail.id, {
@@ -7347,6 +7363,7 @@ export class CampaignScheduler {
   ): Promise<GroupPostShareTarget[]> {
     if (
       campaign.actionId !== GROUP_POST_ACTION_ID ||
+      isNativeGroupPostShare(campaign.actionId, campaign.extraSettings) ||
       campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
       maxShareCount <= 0
     ) {
@@ -7402,6 +7419,7 @@ export class CampaignScheduler {
   ): Promise<number> {
     if (
       campaign.actionId !== GROUP_POST_ACTION_ID ||
+      isNativeGroupPostShare(campaign.actionId, campaign.extraSettings) ||
       campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
       skipMainPost
     ) {
@@ -10105,6 +10123,7 @@ export class CampaignScheduler {
     skippedLimitActionCodes: Set<string> = new Set()
   ): Promise<Record<string, unknown>> {
     const extra = campaign.extraSettings || {}
+    const nativeGroupShare = isNativeGroupPostShare(campaign.actionId, extra)
     const deferredContent = this.campaignContentPreparationRuns.has(campaign.id)
     if (deferredContent) this.campaignContentMediaPaths.set(campaign.id, mediaTempPaths)
     const formattedContentEnabled = this.isFormattedContentCampaign(campaign)
@@ -10117,7 +10136,7 @@ export class CampaignScheduler {
     const canUseCommentSeedingPostContentConditions = campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID
     const canUsePostContentConditions = canUseFindDataPostContentConditions || canUseCommentSeedingPostContentConditions
     const pagePostMode = extra.pagePostMode || 'api'
-    const postWithBackground = !formattedContentEnabled && extra.postWithBackground === true && (
+    const postWithBackground = !nativeGroupShare && !formattedContentEnabled && extra.postWithBackground === true && (
       campaign.actionId === 'facebook_timeline_post' ||
       (campaign.actionId === PAGE_POST_ACTION_ID && pagePostMode === 'ui') ||
       campaign.actionId === GROUP_POST_ACTION_ID
@@ -10133,7 +10152,7 @@ export class CampaignScheduler {
       (extra.enableComment ?? false) &&
       !isActionSkippedByLimit('fb_comment')
     const enableCommentIterations = usesCommentIterations && enableComment
-    const enablePostLike = (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
+    const enablePostLike = !nativeGroupShare && (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
     const commentGroupMode = extra.commentGroupMode || 'all'
     const commentType = extra.commentType || 'own'
     const rawCommentCount = Math.floor(Number(extra.commentCount ?? 3))
@@ -10312,7 +10331,9 @@ export class CampaignScheduler {
       newsfeedCommentUseAI: extra.newsfeedCommentUseAI === true,
       // Group post extras
       leaveGroupOnPendingApproval: extra.leaveGroupOnPendingApproval ?? false,
-      autoJoinGroupAfterPost: extra.autoJoinGroupAfterPost ?? false,
+      autoJoinGroupAfterPost: !nativeGroupShare && (extra.autoJoinGroupAfterPost ?? false),
+      groupPostShareFromPost: nativeGroupShare,
+      groupPostShareCaption: nativeGroupShare ? String(extra.groupPostShareCaption || '') : '',
       shuffleGroupList: extra.shuffleGroupList ?? false,
       skipPostIfGroupRequiresApproval: extra.skipPostIfGroupRequiresApproval ?? false,
       skipGroupPostByKnownApproval: groupPostApproval?.skipPostByKnownApproval === true,
@@ -10324,9 +10345,9 @@ export class CampaignScheduler {
       // Timeline/page/group post extras
       sharePost: postWithBackground ? false : (extra.sharePost ?? false),
       postWithBackground,
-      copyContentFromSource: postWithBackground ? false : (extra.copyContentFromSource ?? false),
-      includeSourceImages: postWithBackground ? false : (extra.includeSourceImages ?? false),
-      rewriteSourceContentWithAI: postWithBackground ? false : extra.rewriteSourceContentWithAI === true,
+      copyContentFromSource: nativeGroupShare || postWithBackground ? false : (extra.copyContentFromSource ?? false),
+      includeSourceImages: nativeGroupShare || postWithBackground ? false : (extra.includeSourceImages ?? false),
+      rewriteSourceContentWithAI: nativeGroupShare || postWithBackground ? false : extra.rewriteSourceContentWithAI === true,
       sourceContentAiPrompt: postWithBackground ? '' : (extra.sourceContentAiPrompt || ''),
       postAsReels,
       sourceLink: currentSourceLink,
@@ -10513,7 +10534,11 @@ export class CampaignScheduler {
       note: 'Đăng bài dạng chia sẻ'
     })
     consumedGroupPostInputDataIds?.add(target.id)
-    await this.logCampaignProgress(campaign, `🔁 Đã đăng bài dạng chia sẻ vào "${target.name}"`)
+    await this.logGroupPostShareSuccess(campaign, target.name)
+  }
+
+  private logGroupPostShareSuccess(campaign: Campaign, targetName: string): Promise<void> {
+    return this.logCampaignProgress(campaign, `🔁 Đã chia sẽ bài viết vào nhóm "${targetName}"`)
   }
 
   private groupPostMilestonePayload(
@@ -10801,6 +10826,12 @@ export class CampaignScheduler {
             await this.logCampaignProgress(campaign, resultInput
               ? `❌ Lỗi "${this.getInputDataDisplayName(campaign, resultInput)}": ${message}`
               : `❌ ${this.formatZaloProgressLog({ ...helperProgress, log: message })}`)
+          } else if (created?.status === 'thành công' && output.statusCode === 'campaign_detail_success'
+            && output.operationState === 'committed' && output.actionCode === 'fb_post_group'
+            && isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)) {
+            // Keep this inside the source-key write so relays/finalization do
+            // not repeat the result log. Submission does not imply approval.
+            await this.logGroupPostShareSuccess(campaign, this.getInputDataDisplayName(campaign, resultInput))
           }
           if (explicitErrorCode) {
             const receipt: ExplicitResultErrorPolicy = {
@@ -10842,6 +10873,19 @@ export class CampaignScheduler {
         this.applyHelperMilestoneControls(summary, helperLegacy)
         const sources = summary.helperControlSources ??= new Set<string>()
         sources.add(sourceKey)
+      }
+      if (isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)
+        && output.actionCode === 'fb_post_group' && inputDataId === detail?.id
+        && output.operationState !== 'not_committed') {
+        summary.deliveryCommitted ||= output.operationState === 'committed'
+        summary.preventInputRetry ||= output.operationState === 'unknown'
+        if (typeof row.message === 'string') summary.inputCompletionNote = row.message
+      }
+      if (created && isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)
+        && output.actionCode === 'fb_post_group' && output.statusCode === 'campaign_detail_skipped'
+        && output.operationState === 'not_committed' && inputDataId === detail?.id
+        && typeof row.message === 'string' && row.message.trim()) {
+        summary.skippedInputNote = row.message
       }
       if (created) this.recordMilestoneSummary(summary, created.status, created.log, created.actionName)
     }
@@ -16693,6 +16737,7 @@ export class CampaignScheduler {
   }
 
   private campaignUsesCommentIterations(campaign: Campaign): boolean {
+    if (isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)) return false
     return campaign.actionId === GROUP_POST_ACTION_ID ||
       campaign.actionId === COMMENT_SEEDING_FEED_ACTION_ID ||
       campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
@@ -16720,6 +16765,7 @@ export class CampaignScheduler {
   }
 
   private campaignUsesMainContent(campaign: Campaign): boolean {
+    if (isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)) return false
     const extra = campaign.extraSettings || {}
     if (
       campaign.actionId === FIND_DATA_GROUP_ACTION_ID ||

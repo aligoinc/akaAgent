@@ -1,0 +1,47 @@
+{
+  "project_id": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "facebook_native_group_share_search_wait",
+    "version": "20261023162807"
+  },
+  "candidate_path": "supabase/migrations/20261023162331_facebook_native_group_share_search_wait.sql",
+  "candidate_sha256": "3f1277d8dfaf3d3f12f217869f0947b876fc4b18baa2e5a85ef061b402319ca5",
+  "applied_at": "2026-10-23T16:28:07.841346+00:00",
+  "verified_at": "2026-10-23T16:28:17.817082+00:00",
+  "block": {
+    "id": 2835,
+    "name": "fb_select_native_share_group",
+    "before_code_md5": "ef549f46016fe693ce3a5b67bfcba98a",
+    "after_code_md5": "df2493043c83179b3d457744ec4cbeed",
+    "after_row_md5": "d719af3d329443f2e910fc19407bdead"
+  },
+  "checks": {
+    "exact_target_row_matches_except_updated_at": true,
+    "other_native_blocks_unchanged": true,
+    "workflow_checksums_unchanged": [
+      {
+        "id": 1,
+        "name": "facebook_group_post",
+        "row_md5": "3ddcde0d2213758204efe37c797de76f"
+      },
+      {
+        "id": 252,
+        "name": "facebook_group_post__test__facebook_group_post",
+        "row_md5": "cf2b75944e486c61bf60a3b4deba6607"
+      }
+    ],
+    "eight_elements_unchanged": true,
+    "initial_migration_sha256_unchanged": "8643d7a14c482dfff5990cca43213c9eb5fc01f37eb1f9004db5fc25f385ce80",
+    "dom_cases": 24,
+    "react_input_cases": 7,
+    "runtime_cases": 72,
+    "local_migration_cases": 15,
+    "node_typecheck": true,
+    "web_typecheck": true
+  },
+  "rollback_path": "migrations/snapshots/facebook-native-group-share/search-wait-rollback.sql",
+  "limitations": [
+    "No real Facebook post submitted during verification",
+    "Migration rollback rehearsed locally; production left on fixed block"
+  ]
+}

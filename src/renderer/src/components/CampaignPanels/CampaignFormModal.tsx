@@ -1,5 +1,6 @@
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
+import { validateGroupPostShareLinks } from '../../../../shared/facebookGroupPostShare'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
@@ -2048,6 +2049,8 @@ export default function CampaignFormModal({
     pageInboxPageUid: campaign?.extraSettings?.pageInboxPageUid || '',
     pageInboxPageName: campaign?.extraSettings?.pageInboxPageName || '',
     // Nguồn đăng bài (timeline post)
+    groupPostShareFromPost: campaign?.extraSettings?.groupPostShareFromPost ?? false,
+    groupPostShareCaption: campaign?.extraSettings?.groupPostShareCaption || '',
     copyContentFromSource: campaign?.extraSettings?.copyContentFromSource ?? false,
     includeSourceImages: campaign?.extraSettings?.includeSourceImages ?? false,
     rewriteSourceContentWithAI: campaign?.extraSettings?.rewriteSourceContentWithAI ?? false,
@@ -2112,7 +2115,8 @@ export default function CampaignFormModal({
   )
   const [contentSettingsTab, setContentSettingsTab] = useCampaignDraftField<ContentSettingsTab>(draftPayload, draftValuesRef, 'contentSettingsTab',
     campaign?.extraSettings?.copyContentFromSource === true ||
-    campaign?.extraSettings?.sharePost === true
+    campaign?.extraSettings?.sharePost === true ||
+    campaign?.extraSettings?.groupPostShareFromPost === true
       ? 'source'
       : 'content'
   )
@@ -2517,6 +2521,7 @@ export default function CampaignFormModal({
   const isPagePostCampaign = formData.actionId === PAGE_POST_ACTION_ID
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const isSourceContentMode = supportsSourceContent && contentSettingsTab === 'source'
+  const isNativeGroupShareMode = isFacebookGroupPostCampaign && isSourceContentMode && formData.groupPostShareFromPost
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
@@ -2634,7 +2639,7 @@ export default function CampaignFormModal({
   const requiresSourceLinks = hasSourceContentSelection
   const hasSourceLinks = getSourceLinkEntries(formData.sourceLinks).length > 0
   const isUsingSourceContent = isSourceContentMode
-  const usesSourceContentAiPrompt = isUsingSourceContent && formData.rewriteSourceContentWithAI
+  const usesSourceContentAiPrompt = !isNativeGroupShareMode && isUsingSourceContent && formData.rewriteSourceContentWithAI
   const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
     !isFindDataCampaign &&
@@ -3742,15 +3747,17 @@ export default function CampaignFormModal({
     }
     if (isFacebookGroupPostCampaign) {
       const steps = ALL_STEPS.flatMap(step => {
-        if (step.id === 'content') return [withSourceContentField(step), GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
+        if (step.id === 'content') return isNativeGroupShareMode
+          ? [withSourceContentField(step)]
+          : [withSourceContentField(step), GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
         if (step.id === 'extra') {
           return [{
             ...step,
             fields: [
               { key: 'skipPostIfGroupRequiresApproval', label: 'Không đăng bài vào group bị duyệt bài' },
-              { key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' },
+              ...(!isNativeGroupShareMode ? [{ key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' }] : []),
               { key: 'leaveGroupOnPendingApproval', label: 'Rời group chờ duyệt' },
-              { key: 'autoJoinGroupAfterPost', label: 'Tự tham gia group' },
+              ...(!isNativeGroupShareMode ? [{ key: 'autoJoinGroupAfterPost', label: 'Tự tham gia group' }] : []),
               { key: 'shuffleGroupList', label: 'Xáo trộn danh sách group' }
             ]
           }]
@@ -4931,7 +4938,7 @@ export default function CampaignFormModal({
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
-      case 'sourceContent': return (!requiresSourceLinks || hasSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
+      case 'sourceContent': return (!isNativeGroupShareMode || !validateGroupPostShareLinks(formData.sourceLinks)) && (!requiresSourceLinks || hasSourceLinks) && (!usesSourceContentAiPrompt || hasSourceContentAiPrompt)
       case 'images': return true  // optional
       case 'commentImages': return true  // optional
       case 'findDataScope': return formData.isFindInPost || formData.isFindInComment || formData.isFindNewInteractors || formData.isFindInGroupMembers || formData.isFindFacebookGroup
@@ -5890,7 +5897,7 @@ export default function CampaignFormModal({
   }
 
   const prepareAdvancedContentForSave = async (): Promise<AdvancedContentSaveOverride | null> => {
-    if (isSourceContentMode) {
+    if (isSourceContentMode && !isNativeGroupShareMode) {
       return {
         items: [],
         formattedContentEnabled: false,
@@ -5924,7 +5931,8 @@ export default function CampaignFormModal({
       }
     }
 
-    if (!isAdvancedContentMode && pendingContentTemplateGroupId === null) {
+    const hasAdvancedContentForSave = canUseAdvancedContentMode && formData.advancedContentEnabled
+    if (!hasAdvancedContentForSave && pendingContentTemplateGroupId === null) {
       const preserveSavedGroup = advancedContentSourceMode === 'group' &&
         savedAdvancedContentSource === 'group_snapshot' &&
         !!savedAdvancedGroupSnapshot &&
@@ -6303,7 +6311,7 @@ export default function CampaignFormModal({
           .filter(status => formData.externalSmsStatuses.includes(status))
         : []
       const isSavingGroupSnapshot = advancedContentOverride?.source === 'group_snapshot'
-      const canSaveAdvancedContent = !isSourceContentMode && (showContentSection || isSavingGroupSnapshot)
+      const canSaveAdvancedContent = isNativeGroupShareMode || (!isSourceContentMode && (showContentSection || isSavingGroupSnapshot))
       const manualDraftFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
       const manualDraftEmailBodyIsHtml = isEmailCampaign && formData.emailBodyIsHtml
       const manualDraftUsesRichContent = isEmailCampaign
@@ -6347,7 +6355,7 @@ export default function CampaignFormModal({
           ? false
           : formData.rewriteContentEachRun
       }
-      const formattedContentForSave = isSourceContentMode
+      const formattedContentForSave = isSourceContentMode && !isNativeGroupShareMode
         ? false
         : (advancedContentOverride?.formattedContentEnabled ?? manualDraftFormattedContentEnabled)
       const emailBodyIsHtmlForSave = isEmailCampaign
@@ -6355,6 +6363,7 @@ export default function CampaignFormModal({
         : false
       const preserveExistingGroupSnapshotItems = advancedContentOverride?.source === 'group_snapshot' &&
         preserveSavedGroupSnapshotOnSave
+      const preserveNativeGroupSnapshot = isNativeGroupShareMode && preserveExistingGroupSnapshotItems
       const advancedContentItemsForSave = canSaveAdvancedContent
         ? preserveExistingGroupSnapshotItems
           ? (advancedContentOverride?.items ?? [])
@@ -6385,7 +6394,9 @@ export default function CampaignFormModal({
                 : normalizedItem
             })
         : []
-      const contentForSave = isSourceContentMode
+      const contentForSave = preserveNativeGroupSnapshot
+        ? campaign?.content || ''
+        : isSourceContentMode && !isNativeGroupShareMode
         ? ''
         : isSavingGroupSnapshot
           ? String(advancedContentItemsForSave[0]?.content || '')
@@ -6420,17 +6431,19 @@ export default function CampaignFormModal({
             runAsPageUid: runsAsPage ? formData.runAsPageUid : '',
             runAsPageName: runsAsPage ? formData.runAsPageName : '',
             sharePost: isSourceContentMode && supportsSourceSharePost ? formData.sharePost : false,
-            postWithBackground: formattedContentForSave ? false : isPostBackgroundActive,
+            postWithBackground: isNativeGroupShareMode ? formData.postWithBackground : formattedContentForSave ? false : isPostBackgroundActive,
             rewriteContentEachRun: isSavingGroupSnapshot || isMobileManagedSmsCampaign || formattedContentForSave || emailBodyIsHtmlForSave
               ? false
               : manualDraftForSave.rewriteContentEachRun,
             formattedContentEnabled: formattedContentForSave,
-            advancedContentEnabled: isSourceContentMode
+            advancedContentEnabled: isSourceContentMode && !isNativeGroupShareMode
               ? false
               : isSavingGroupSnapshot
               ? true
               : (canUseAdvancedContentMode ? formData.advancedContentEnabled : false),
-            advancedContentItems: advancedContentItemsForSave,
+            advancedContentItems: preserveNativeGroupSnapshot
+              ? campaign?.extraSettings?.advancedContentItems
+              : advancedContentItemsForSave,
             advancedContentSource: advancedContentOverride?.source,
             advancedContentGroupSnapshot: advancedContentOverride?.source === 'group_snapshot'
               ? advancedContentOverride.groupSnapshot
@@ -6470,7 +6483,7 @@ export default function CampaignFormModal({
             recentDeliveryCooldownEnabled: canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled,
             recentDeliveryCooldownAllAccounts: isZaloMessagePhoneCampaign && formData.recentDeliveryCooldownAllAccounts === true,
             recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(formData.recentDeliveryCooldownDays),
-            imageOption: (isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
+            imageOption: ((isSourceContentMode && !isNativeGroupShareMode) || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: isReelsMediaMode ? 1 : formData.randomImageCount,
             commentImageOption: formData.commentImages.length > 0 && formData.commentImageOption !== 'none'
               ? formData.commentImageOption
@@ -6597,7 +6610,9 @@ export default function CampaignFormModal({
               : 0,
             pageInboxPageUid: isPageInboxMessageCampaign ? formData.pageInboxPageUid : '',
             pageInboxPageName: isPageInboxMessageCampaign ? formData.pageInboxPageName : '',
-            copyContentFromSource: isSourceContentMode,
+            groupPostShareFromPost: isNativeGroupShareMode,
+            groupPostShareCaption: isFacebookGroupPostCampaign ? formData.groupPostShareCaption : '',
+            copyContentFromSource: isSourceContentMode && !isNativeGroupShareMode,
             includeSourceImages: isSourceContentMode ? formData.includeSourceImages : false,
             rewriteSourceContentWithAI: isSourceContentMode ? formData.rewriteSourceContentWithAI : false,
             sourceContentAiPrompt: isSourceContentMode && formData.rewriteSourceContentWithAI
@@ -6676,7 +6691,7 @@ export default function CampaignFormModal({
               : [],
             findDataTargetDataGroups: saveFindDataTargetDataGroups
           } as CampaignExtraSettings,
-          images: isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
+          images: (isSourceContentMode && !isNativeGroupShareMode) || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign ? [] : formData.images
         },
         details: (accountChunks[index] || []).map(detail => ({ ...detail })),
         dataGroupSnapshots: isDataGroupSource || !canUseDataGroupSource
@@ -7016,7 +7031,7 @@ export default function CampaignFormModal({
     }
     const shouldValidateBasicCommentMedia =
       (isCommentSeedingCampaign && !isAdvancedContentMode) ||
-      (isFacebookGroupPostCampaign && formData.enableComment)
+      (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enableComment)
     if (shouldValidateBasicCommentMedia) {
       if (!validateCommentMediaPool('Media comment', formData.commentImageOption, formData.commentImages)) return
       if (!validateSelectedImages('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
@@ -7068,6 +7083,10 @@ export default function CampaignFormModal({
           return
         }
       }
+    }
+    if (isNativeGroupShareMode) {
+      const shareLinkError = validateGroupPostShareLinks(formData.sourceLinks)
+      if (shareLinkError) { showAlert(shareLinkError, 'error'); return }
     }
     if (requiresSourceLinks && !hasSourceLinks) {
       showAlert('Vui lòng nhập ít nhất một uid/link nguồn để copy hoặc chia sẻ nội dung.', 'error')
@@ -7383,7 +7402,7 @@ export default function CampaignFormModal({
       )
       return
     }
-    if (isFacebookGroupPostCampaign && formData.enablePostBump) {
+    if (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enablePostBump) {
       if (formData.postBumpMode === 'select' && formData.postBumpTargetCampaignIds.length === 0) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch comment vào bài post để up tin.', 'error')
         return
@@ -10776,6 +10795,20 @@ export default function CampaignFormModal({
 
   const renderSourceContentSettings = () => (
     <div>
+      {isFacebookGroupPostCampaign && (
+        <div className="stepper-form-group">
+          <label className="schedule-checkbox-label">
+            <input type="checkbox" checked={formData.groupPostShareFromPost}
+              onChange={e => setFormData(p => ({ ...p, groupPostShareFromPost: e.target.checked }))} />
+            <span>Đăng bài bằng cách chia sẻ bài viết từ Facebook cá nhân/fanpage</span>
+          </label>
+        </div>
+      )}
+      {isNativeGroupShareMode ? (
+        <div className="schedule-hint" style={{ marginBottom: 12 }}>
+          Mở bài viết nguồn, chọn Chia sẻ lên nhóm và đăng vào từng nhóm trong data.
+        </div>
+      ) : <>
       <div className="schedule-hint" style={{ marginBottom: 12 }}>
         Chế độ này chỉ dùng nội dung lấy từ nguồn. Nội dung và media ở các tab Cơ bản, Nâng cao hoặc Nhóm mẫu nội dung sẽ không được sử dụng.
       </div>
@@ -10809,23 +10842,32 @@ export default function CampaignFormModal({
         </div>
       )}
 
+      </>}
       <div className="stepper-form-group">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-          <label style={{ margin: 0 }}>Danh sách uid/link (page, profile, group, post)</label>
+          <label style={{ margin: 0 }}>{isNativeGroupShareMode ? 'Danh sách link bài viết cần chia sẻ' : 'Danh sách uid/link (page, profile, group, post)'}</label>
           <span style={{ color: 'var(--text-error)', fontSize: 12 }}>(Mỗi link/uid cách nhau bằng dấu phẩy hoặc xuống dòng)</span>
         </div>
         <textarea
           className="stepper-textarea"
-          placeholder={'Ví dụ:\nhttps://facebook.com/abc\nhttps://facebook.com/xyz/posts/12345, 100012345'}
+          placeholder={isNativeGroupShareMode ? 'https://www.facebook.com/xyz/posts/12345' : 'Ví dụ:\nhttps://facebook.com/abc\nhttps://facebook.com/xyz/posts/12345, 100012345'}
           value={formData.sourceLinks}
           onChange={e => setFormData(p => ({ ...p, sourceLinks: e.target.value }))}
           rows={6}
         />
         <div className="schedule-hint" style={{ marginTop: 4 }}>
-          Hệ thống sẽ tự động copy nội dung gần nhất trong link để đăng bài.<br />
-          Nếu có nhiều link, hệ thống sẽ lấy nội dung từ 1 link lần lượt trong danh sách, đảm bảo nội dung không bị trùng lặp.
+          {isNativeGroupShareMode
+            ? 'Mỗi nhóm dùng một link bài viết, lần lượt trong danh sách. Không nhập link trang cá nhân hoặc fanpage.'
+            : 'Hệ thống copy nội dung gần nhất từ nguồn. Nếu có nhiều link, mỗi lượt dùng một link lần lượt trong danh sách.'}
         </div>
       </div>
+      {isNativeGroupShareMode ? (
+        <div className="stepper-form-group" style={{ marginTop: 12 }}>
+          <label htmlFor="group-share-caption">Nội dung kèm bài chia sẻ (không bắt buộc)</label>
+          <textarea id="group-share-caption" className="stepper-textarea" rows={4} value={formData.groupPostShareCaption}
+            onChange={e => setFormData(p => ({ ...p, groupPostShareCaption: e.target.value }))} />
+        </div>
+      ) : <>
       <div style={{ marginTop: 12 }}>
         <label className="schedule-checkbox-label">
           <input
@@ -10848,6 +10890,7 @@ export default function CampaignFormModal({
           />
         </div>
       )}
+      </>}
     </div>
   )
 
@@ -13039,7 +13082,7 @@ export default function CampaignFormModal({
 
       {showGroupPostCommentLimit && renderActionLimitCard('fb_comment')}
 
-      {formData.enableComment && (
+      {!isNativeGroupShareMode && formData.enableComment && (
         <div className="extra-comment-options">
           <div className="stepper-form-group">
             <label>Comment vào group nào</label>
@@ -13178,7 +13221,7 @@ export default function CampaignFormModal({
         </label>
       </div>
 
-      {formData.enablePostBump && renderPostBumpSettings()}
+      {!isNativeGroupShareMode && formData.enablePostBump && renderPostBumpSettings()}
     </div>
   )
 
@@ -13927,7 +13970,7 @@ export default function CampaignFormModal({
               className={isSourceContentMode ? 'active' : ''}
               onClick={switchToSourceContentTab}
             >
-              Copy nguồn nội dung
+              {isFacebookGroupPostCampaign ? 'Nội dung từ bài viết nguồn' : 'Copy nguồn nội dung'}
             </button>
           )}
         </div>
@@ -16939,7 +16982,7 @@ export default function CampaignFormModal({
               )}
             </div>}
 
-            {isFacebookGroupPostCampaign && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['groupComment'] = el }}
@@ -16964,7 +17007,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {isFacebookGroupPostCampaign && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['postBump'] = el }}
@@ -17409,7 +17452,7 @@ export default function CampaignFormModal({
 
                   {isFacebookGroupPostCampaign && (
                     <>
-                      <div className="stepper-form-group">
+                      {!isNativeGroupShareMode && <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
                           <input
                             type="checkbox"
@@ -17418,7 +17461,7 @@ export default function CampaignFormModal({
                           />
                           <span>Đăng bài dạng chia sẻ <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(mỗi lần đăng thì chia sẻ thêm cho 3 nhóm) - Chỉ dành cho nhóm mà bạn đã tham gia</em></span>
                         </label>
-                      </div>
+                      </div>}
 
                       <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
@@ -17445,7 +17488,7 @@ export default function CampaignFormModal({
                       </div>
 
                       {/* Auto join group after post */}
-                      <div className="stepper-form-group">
+                      {!isNativeGroupShareMode && <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
                           <input
                             type="checkbox"
@@ -17454,7 +17497,7 @@ export default function CampaignFormModal({
                           />
                           <span>Tự động THAM GIA GROUP sau khi đăng bài thành công và không bị kiểm duyệt <em style={{ color: 'var(--text-tertiary)', fontWeight: 'normal' }}>(Nếu chưa tham gia)</em></span>
                         </label>
-                      </div>
+                      </div>}
 
                       {/* Shuffle group list */}
                       <div className="stepper-form-group">

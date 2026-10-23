@@ -29,7 +29,7 @@ const names=['prepareSelectedCampaignContent','prepareFacebookCampaignContent','
   'campaignUsesMainContent','campaignUsesMainMedia','campaignUsesMessageMedia','campaignUsesCommentIterations']
 const methods=names.map(name=>cls.members.find(n=>ts.isMethodDeclaration(n)&&n.name.getText(tree)===name).getText(tree)).join('\n')
 let allocator=async()=>0,aiCalls=0,aiFailure=false
-const globals={...core,...spin,...formatted,...advanced,...template,splitSharedContentVariants:spin.splitContentVariants,
+const globals={...load('src/shared/facebookGroupPostShare.ts'),...core,...spin,...formatted,...advanced,...template,splitSharedContentVariants:spin.splitContentVariants,
   takeCampaignContentIndex:args=>allocator(args),isImageOrVideoMediaSource:()=>true,isImageMediaSource:()=>true,isVideoMediaSource:()=>true,
   getErrorMessage:e=>e?.message||String(e),callAiUsing:async(_code,{content})=>{aiCalls++;if(aiFailure)throw Error('AI failed');return {ok:true,content:'AI:'+content}},
   replaceStopMessagesLink:text=>text,ZALO_MESSAGE_OPT_OUT_ACTION_IDS:new Set()}
