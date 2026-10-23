@@ -1,0 +1,44 @@
+{
+  "appliedAt": "2026-10-23T17:44:11Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migrationVersion": "20261023174411",
+  "migrationName": "campaign_general_ai_web",
+  "canonical": "migrations/20261023173046_campaign_general_ai_web.sql",
+  "configCode": "app_facebook_form_general",
+  "configId": 14,
+  "changedFields": [
+    "web_section_id",
+    "updated_at (existing trigger)"
+  ],
+  "modelId": 21,
+  "checks": {
+    "guardedForwardRollback": true,
+    "sourceDriftRejected": true,
+    "rollbackDriftRejected": true,
+    "postApplyRollbackDryRun": true,
+    "nineOtherConfigChecksumsUnchanged": true,
+    "promptSchemaOptionsPreserved": true,
+    "desktopMobileBindingsPreserved": true,
+    "httpAnon": true
+  },
+  "verification": {
+    "typecheckWorkspaces": 7,
+    "build": "passed",
+    "apiNewTests": 54,
+    "uiNewTests": 8,
+    "browserCases": 18,
+    "realProviderCases": 5,
+    "fullSuite": {
+      "cases": 2721,
+      "initialPassed": 2720,
+      "initialFailures": 1,
+      "failedTest": "CampaignsPage: mixes drafts by send time with pending campaigns and excludes them from runtime selection",
+      "failure": "findByRole timeout under combined run",
+      "rerunFile": "CampaignsPage.test.tsx",
+      "rerunPassed": 66,
+      "sourceChangesForRerun": false
+    }
+  },
+  "deployed": false,
+  "desktopSourceChanged": false
+}

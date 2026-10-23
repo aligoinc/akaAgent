@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-10-23T17:47:18.363Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "status": "PASS",
+  "configId": 14,
+  "modelId": 21,
+  "checks": [
+    "exact V429 prompt/scope/name",
+    "schema/template/options/model/Desktop/Mobile bindings preserved",
+    "Web binding added",
+    "public Desktop/Web metadata all scope",
+    "account catalog column permissions; zero account records read"
+  ]
+}
