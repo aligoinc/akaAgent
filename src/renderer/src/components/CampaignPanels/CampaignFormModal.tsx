@@ -1,3 +1,5 @@
+import CampaignFacebookAi from './CampaignFacebookAi'
+import { FACEBOOK_AI_SECTIONS, facebookAiActions, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
@@ -1748,7 +1750,9 @@ export default function CampaignFormModal({
   const [limitsAiBusy, setLimitsAiBusy] = useState(false)
   const [contentAiBusy, setContentAiBusy] = useState(false)
   const [exclusionAiBusy, setExclusionAiBusy] = useState(false)
-  const formAiBusy = scheduleAiBusy || limitsAiBusy || contentAiBusy || exclusionAiBusy
+  const [facebookAiBusyKind, setFacebookAiBusyKind] = useState<FacebookAiKind | null>(null)
+  const facebookAiBusy = facebookAiBusyKind !== null
+  const formAiBusy = scheduleAiBusy || limitsAiBusy || contentAiBusy || exclusionAiBusy || facebookAiBusy
   const saveControlsRef = useRef<CampaignSaveControlsHandle>(null)
   const setSaveProgress: CampaignSaveControlsHandle['setProgress'] = progress => {
     saveControlsRef.current?.setProgress(progress)
@@ -3614,8 +3618,8 @@ export default function CampaignFormModal({
       return [
         generalStep,
         contentStep,
-        detailsStep,
         ...(showFindDataConditionsSection ? [FIND_DATA_CONDITIONS_STEP] : []),
+        detailsStep,
         ...(showFoundDataHandlingSection ? [FOUND_DATA_HANDLING_STEP] : []),
         scheduleStep,
         limitStep
@@ -8796,6 +8800,59 @@ export default function CampaignFormModal({
       )
     }
     addCampaignMedia(target, snapshots)
+  }
+
+  const renderFacebookAi = (kind: FacebookAiKind, title: string) => {
+    if (!facebookAiActions(kind).includes(formData.actionId)
+      || !formAiAvailable(formAiAvailability, FACEBOOK_AI_SECTIONS[kind], formData.actionId)) return null
+    if (kind === 'keywords' && (isEditingSavedCampaign || isDataGroupSource)) return null
+    const lockedFields: string[] = []
+    if (kind === 'general' && (isSavedDataGroupIdentityLocked || isDataGroupSource || hasPendingDirectDataGroupSnapshots)) lockedFields.push('accountIds')
+    if (kind === 'search') {
+      // These targets own links outside this AI's scope. Keep those links and targets intact.
+      const destinations = formData.findDataTargetDataGroups
+      if (handleFoundPhoneSmsData || handleFoundPhoneZaloWebData || handleFoundPhoneZaloMessagePhoneData || handleFoundPhoneAkaBizDesktopData || destinations.phone) lockedFields.push('isFindPhone')
+      if (handleFoundZaloGroupLinkWebData || handleFoundZaloGroupLinkJoinData || handleFoundZaloGroupLinkAkaBizDesktopData || destinations.zalo_group_link) lockedFields.push('isFindLinkGroupZalo')
+      if (isDraftAutoLinkedFindUid || handleFoundUidData || destinations.facebook_uid) lockedFields.push('isFindUid')
+      if (isDraftAutoLinkedPostLink || handleFoundPostLinkData || destinations.post_link) lockedFields.push('isFindPostLink')
+      if (isDraftAutoLinkedFacebookGroup || handleFoundFacebookGroupPostData || handleFoundFacebookGroupCommentData || handleFoundFacebookGroupJoinData || destinations.facebook_group) lockedFields.push('isFindFacebookGroup')
+    }
+    const snapshot = {
+      kind, actionId: formData.actionId, lockedFields,
+      current: facebookAiSnapshot(kind, kind === 'keywords'
+        ? { keywords: parseFindDataSearchKeywordsText(findDataSearchKeywordsText) } : formData),
+      eligibleAccountIds: kind === 'general' ? selectableAccounts.map(account => account.id) : [],
+      // Page mode is checked against the resulting patch by Main, so a new form
+      // can switch back to personal accounts and select several in one request.
+      singleAccountOnly: Boolean(campaign?.id || formData.secondaryAccountId !== null),
+      secondaryAccountId: kind === 'general' ? formData.secondaryAccountId : null
+    }
+    const apply = (patch: FacebookAiPatch) => {
+      if (kind === 'keywords') {
+        if (Array.isArray(patch.keywords)) setFindDataSearchKeywordsText(formatFindDataSearchKeywordList(patch.keywords as string[]))
+      } else {
+        if (kind === 'general') {
+          invalidateCampaignNameAiRequest()
+          if (typeof patch.name === 'string') handleCampaignNameChange(patch.name)
+          // A single AI transaction may choose both account and Page. The normal
+          // manual-account effect must not clear that just-validated Page.
+          if (Array.isArray(patch.accountIds)) previousPageAccountIds.current = patch.accountIds.join(',')
+        }
+        setFormData(current => {
+          const next = { ...current, ...patch }
+          return kind === 'search' ? normalizeFindDataFlagState(next, { isSearchCampaign: isFindDataSearchCampaign }) : next
+        })
+      }
+      setCollapsedSections(previous => ({ ...previous,
+        [kind === 'search' ? 'content' : kind === 'keywords' ? 'details' : kind === 'postSearch' ? 'commentPostSearch' : kind === 'newsfeed' ? 'newsfeedSettings' : kind]: false,
+        ...(kind === 'search' ? { findDataConditions: false } : {})
+      }))
+    }
+    return <CampaignFacebookAi title={title} snapshot={snapshot}
+      disabled={saveBusy || loadingDetails || loadingAccounts || scheduleAiBusy || limitsAiBusy || contentAiBusy || exclusionAiBusy || (facebookAiBusy && facebookAiBusyKind !== kind)}
+      authScope={`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`}
+      zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
+      onBusyChange={busy => setFacebookAiBusyKind(current => busy ? kind : current === kind ? null : current)} onApply={apply} />
   }
 
   const renderNewsfeedInteractionSettings = () => (
@@ -15619,6 +15676,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('general')}</span>
                   <span className="stepper-section-title">Cài đặt chung</span>
+                  {renderFacebookAi('general', 'Cài đặt chung')}
                 </div>
                 {collapsedSections['general'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
               </div>
@@ -15859,6 +15917,7 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('content')}</span>
                     <span className="stepper-section-title">Cấu hình tìm kiếm</span>
+                    {renderFacebookAi('search', 'Cấu hình tìm kiếm và Điều kiện chạy')}
                   </div>
                   {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
@@ -15866,6 +15925,30 @@ export default function CampaignFormModal({
                 {!collapsedSections['content'] && (
                   <div className="stepper-section-body">
                     {renderFindDataSearchConfig()}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showFindDataConditionsSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['findDataConditions'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('findDataConditions')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('findDataConditions')}</span>
+                    <span className="stepper-section-title">Điều kiện chạy</span>
+                  </div>
+                  {collapsedSections['findDataConditions'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+
+                {!collapsedSections['findDataConditions'] && (
+                  <div className="stepper-section-body">
+                    {renderFindDataConditions()}
                   </div>
                 )}
               </div>
@@ -15883,6 +15966,7 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('newsfeedSettings')}</span>
                     <span className="stepper-section-title">Lướt newsfeed</span>
+                    {renderFacebookAi('newsfeed', 'Lướt newsfeed')}
                   </div>
                   {collapsedSections['newsfeedSettings'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
@@ -16104,6 +16188,7 @@ export default function CampaignFormModal({
                                                       ? 'Danh sách UID'
                                                       : 'Danh sách data'}
                   </span>
+                  {isFindDataSearchCampaign && renderFacebookAi('keywords', 'Danh sách từ khóa')}
                   {detailEntryCount > 0 && (
                     <span className="stepper-section-badge">{detailEntryCount}</span>
                   )}
@@ -16607,30 +16692,6 @@ export default function CampaignFormModal({
               )}
             </div>}
 
-            {showFindDataConditionsSection && (
-              <div
-                className="stepper-section"
-                ref={el => { sectionRefs.current['findDataConditions'] = el }}
-              >
-                <div
-                  className="stepper-section-header"
-                  onClick={() => toggleSection('findDataConditions')}
-                >
-                  <div className="stepper-section-header-left">
-                    <span className="stepper-section-num">{getSectionNumber('findDataConditions')}</span>
-                    <span className="stepper-section-title">Điều kiện chạy</span>
-                  </div>
-                  {collapsedSections['findDataConditions'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
-                </div>
-
-                {!collapsedSections['findDataConditions'] && (
-                  <div className="stepper-section-body">
-                    {renderFindDataConditions()}
-                  </div>
-                )}
-              </div>
-            )}
-
             {showFoundDataHandlingSection && (
               <div
                 className="stepper-section"
@@ -16667,6 +16728,7 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('commentPostSearch')}</span>
                     <span className="stepper-section-title">Điều kiện tìm kiếm bài post</span>
+                    {renderFacebookAi('postSearch', 'Điều kiện tìm kiếm bài post')}
                   </div>
                   {collapsedSections['commentPostSearch'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
@@ -16742,7 +16804,7 @@ export default function CampaignFormModal({
                 available: formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.exclusions, formData.actionId),
                 actionId: formData.actionId, enableMessage: formData.enableMessage === true,
                 authScope: `${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`,
-                disabled: saveBusy || scheduleAiBusy || limitsAiBusy || contentAiBusy || loadingDetails || generalSettingsOpen,
+                disabled: saveBusy || facebookAiBusy || scheduleAiBusy || limitsAiBusy || contentAiBusy || loadingDetails || generalSettingsOpen,
                 zIndex: Math.max(3100, (modalZIndex || 3000) + 100), onBusyChange: setExclusionAiBusy
               }}
               onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
@@ -16767,7 +16829,7 @@ export default function CampaignFormModal({
                     items={isAdvancedContentMode
                       ? (normalizedAdvancedContentItems.length ? normalizedAdvancedContentItems : [{ content: '', emailSubject: undefined }]).map(item => ({ content: item.content, emailSubject: isEmailCampaign ? resolveLegacyManualEmailSubject(item) : null }))
                       : basicContentAiItems(isCommentSeedingCampaign ? formData.commentContent : formData.content, isRichContentEditorEnabled, isEmailCampaign ? formData.emailSubject : null)}
-                    disabled={saveBusy || exclusionAiBusy || scheduleAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    disabled={saveBusy || facebookAiBusy || exclusionAiBusy || scheduleAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)} onBusyChange={setContentAiBusy}
                     onApply={patch => {
@@ -16889,6 +16951,7 @@ export default function CampaignFormModal({
                   <div className="stepper-section-header-left">
                     <span className="stepper-section-num">{getSectionNumber('groupComment')}</span>
                     <span className="stepper-section-title">Kiêm comment</span>
+                    {renderFacebookAi('groupComment', 'Kiêm comment')}
                   </div>
                   {collapsedSections['groupComment'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
                 </div>
@@ -16940,7 +17003,7 @@ export default function CampaignFormModal({
                   {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.schedule, formData.actionId) && <CampaignScheduleAi
                     context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
                     schedule={scheduleAiSnapshot(formData)}
-                    disabled={saveBusy || exclusionAiBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
+                    disabled={saveBusy || facebookAiBusy || exclusionAiBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                     onBusyChange={setScheduleAiBusy}
@@ -17160,7 +17223,7 @@ export default function CampaignFormModal({
                           label: getActionCodeLabel(actionCode), unit: getActionLimitUnit(actionCode), ...getDisplayedActionLimit(actionCode),
                           ...limitsAiWindowSnapshot(getDisplayedActionLimit(actionCode).rateLimitMinutes, selectedRateLimitMinuteValues,
                             Boolean(campaign?.id || cloneFromId || editedRateLimitMinuteActions[actionCode])) })) }}
-                      disabled={saveBusy || exclusionAiBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
+                      disabled={saveBusy || facebookAiBusy || exclusionAiBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                       onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}

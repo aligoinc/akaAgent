@@ -1,0 +1,81 @@
+{
+  "testedAt": "2026-10-23T15:15:12.908Z",
+  "syntheticCatalog": true,
+  "productionWrites": false,
+  "receipts": [
+    {
+      "kind": "general",
+      "ok": true,
+      "patch": {
+        "name": "Tháng mười",
+        "accountIds": [
+          12
+        ],
+        "runAsPage": true,
+        "runAsPageUid": "page-b",
+        "runAsPageName": "Shop Hoa"
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "kind": "search",
+      "ok": true,
+      "patch": {
+        "isFindInComment": true,
+        "countCommentFindData": 30,
+        "isFindCommentByKeywords": true,
+        "commentKeywords": "cần mua"
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "kind": "keywords",
+      "ok": true,
+      "patch": {
+        "keywords": [
+          "mua căn hộ",
+          "cần mua căn hộ quận 7",
+          "tìm mua chung cư quận 7",
+          "muốn mua căn hộ quận 7",
+          "cần tìm căn hộ để ở quận 7",
+          "tìm căn hộ quận 7 để đầu tư"
+        ]
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "kind": "postSearch",
+      "ok": true,
+      "patch": {
+        "commentOnlyLatestPost": true,
+        "isFindPostByKeywords": true,
+        "postKeywords": "tuyển dụng"
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "kind": "newsfeed",
+      "ok": true,
+      "patch": {
+        "newsfeedTimeMinutes": 15,
+        "enablePostLike": true,
+        "newsfeedLikeKind": "vui vẻ",
+        "newsfeedLikeLimit": 5,
+        "enableComment": false
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "kind": "groupComment",
+      "ok": true,
+      "patch": {
+        "enableComment": true,
+        "commentGroupMode": "pending_only",
+        "commentType": "others",
+        "commentCount": 3,
+        "commentContent": "Xin chào"
+      },
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

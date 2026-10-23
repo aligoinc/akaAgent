@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+V428 chặn AI Facebook bật Page khi còn tài khoản phụ đã apply akachat 23/10/2026 (`20261023160213 / migration_v428_facebook_ai_page_secondary_guard`): parser từ chối toàn bộ patch, renderer không tự xóa tài khoản phụ; bỏ phụ thủ công rồi chọn Page vẫn hợp lệ. Prompt config 14 bổ sung quy tắc, giữ model/schema/options và chín config khác. 155 contract, service/Electron/IPC, 3 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-chọn-page--v428-23102026).
+
+V427 giữ tài khoản phụ khi AI Facebook đổi tài khoản chính đã apply akachat 23/10/2026 (`20261023155134 / migration_v427_facebook_ai_secondary_account_guard`): snapshot ID phụ, catalog chỉ đọc có quyền và parser chặn trùng chính/phụ atomic. Chỉ sửa prompt config 14, giữ schema/model/options và chín config khác; không thêm query/RPC/connection. 127 contract, service/Electron/IPC, 2 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-đổi-tài-khoản-chính--v427-23102026).
+
+Review AI Facebook V426 đã apply akachat 23/10/2026 (`20261023153444 / migration_v426_facebook_form_ai_review_guards`): giới hạn một tài khoản của form được truyền vào Main/parser; lọc nội dung comment chỉ khi bật nguồn Comment, không tự mở rộng nguồn Tương tác mới. Chỉ cập nhật prompt config 14/15, giữ schema/model/options và tám config khác. 111 contract, service/Electron, 6 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit và rollback mới](docs/FACEBOOK_FORM_AI_V425.md#sửa-hai-finding-review--v426-23102026).
+
+V425 AI form Facebook đã apply akachat 23/10/2026 (`20261023150638 / migration_v425_facebook_form_ai`): sáu section Desktop, Sol 21; tìm kiếm dùng chung AI cho Cấu hình + Điều kiện chạy, từ khóa có AI riêng. Giữ bốn config cũ/Nội dung Haiku 24, nhóm data/media/runtime; không apply lại, chưa đóng gói/phát hành. Hợp đồng, giới hạn catalog và audit: [Facebook form AI](docs/FACEBOOK_FORM_AI_V425.md).
+
 Bộ lọc cột đã apply akachat ngày 21/10/2026: `20261021072852 / data_column_filters_v421`, chỉ 12 hàm mới; 14 dependency/quyền và patch V414 giữ nguyên. SQL/API legacy trước–sau, 25 ca rollback/post-apply, 12 ca auth/tenant và guarded rollback đạt; kiểm tra tương thích ở tầng SQL/API, chưa mở mọi bộ cài cũ. Không apply lại, chưa đóng gói/phát hành app; [audit production và thay đổi độc lập V422](docs/DATA_COLUMN_FILTERS.md#apply-production-và-tương-thích-app-cũ--21102026). Các ghi chú candidate bên dưới là lịch sử trước apply.
 
 Review validate/timeout bộ lọc cột ngày 21/10/2026: điều kiện mới phải hợp lệ trước khi xóa lọc cũ/reset lựa chọn; preflight đọc account nhận AbortSignal/deadline 65 giây qua IPC, abort phải settle rồi giữ ngân sách server 60 giây. 15 UI, 15 contract, 13 service, 7 preflight HTTP local và hai typecheck/build đạt. Không đổi SQL candidate, quyền, query count/connection; chưa apply production/phát hành. Xem [audit validate và timeout](docs/DATA_COLUMN_FILTERS.md#sửa-validate-ui-và-timeout-kiểm-tra-quyền--21102026).
@@ -159,6 +167,8 @@ App.tsx **conditional render** workflow editor (KHÔNG `display: none`) để Re
 PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`). Repo URL: `https://github.com/aligoinc/akaAgent.git` (đã chuyển từ `lequangnhut27/akaBizAutoNew`).
 
 ## Common pitfalls
+
+- **AI form Facebook**: parser phải kiểm tra giới hạn tài khoản thực tế, trùng chính/phụ và Page + tài khoản phụ trước khi apply; từ chối toàn bộ patch, không tự xóa phụ. Lọc nội dung comment cần nguồn Comment, không áp dụng riêng cho Tương tác mới. Xem [hợp đồng và hồi quy](docs/FACEBOOK_FORM_AI_V425.md).
 
 - **Migration RPC overwrite**: trước khi dùng `CREATE OR REPLACE FUNCTION`, phải lấy nội dung của đúng function signature đang chạy trong DB (ví dụ bằng `pg_get_functiondef`) và kiểm tra các patch trước đó; không copy body từ một migration cũ vì có thể làm mất những thay đổi được áp dụng sau migration đó.
 - **Loop iterations**: scheduler `logMilestonesV2` đọc `result.steps` từ engine. Engine v2 maintain `allSteps[]` (mỗi loop iteration 1 row riêng) thay vì snapshot `nodeStates`. Khi đọc per-iteration data, đọc `s.output` (block return value), KHÔNG `s.input` (chỉ là config + parents trực tiếp).

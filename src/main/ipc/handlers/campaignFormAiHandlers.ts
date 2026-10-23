@@ -1,3 +1,5 @@
+import { FACEBOOK_AI_IPC, FACEBOOK_AI_MESSAGES, validateFacebookAiRequest } from '../../../shared/campaignFacebookAi'
+import { generateCampaignFacebook } from '../../services/campaignFacebookAiService'
 import { CAMPAIGN_CONTENT_AI_IPC, CONTENT_AI_MESSAGES, validateContentAiRequest } from '../../../shared/campaignContentAi'
 import { CAMPAIGN_EXCLUSION_AI_IPC, EXCLUSION_AI_MESSAGES, validateExclusionAiRequest } from '../../../shared/campaignExclusionAi'
 import { generateCampaignExclusion } from '../../services/campaignExclusionAiService'
@@ -67,5 +69,6 @@ export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: (
   register(CAMPAIGN_LIMITS_AI_IPC, validateLimitsAiRequest, generateCampaignLimits, LIMITS_AI_MESSAGES)
   register(CAMPAIGN_CONTENT_AI_IPC, validateContentAiRequest, generateCampaignContent, CONTENT_AI_MESSAGES)
   register(CAMPAIGN_EXCLUSION_AI_IPC, validateExclusionAiRequest, generateCampaignExclusion, EXCLUSION_AI_MESSAGES)
+  register(FACEBOOK_AI_IPC, validateFacebookAiRequest, generateCampaignFacebook, FACEBOOK_AI_MESSAGES)
   return { stop }
 }

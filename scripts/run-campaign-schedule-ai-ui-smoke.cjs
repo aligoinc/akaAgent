@@ -34,6 +34,11 @@ async function main() {
     const env = { ...process.env, TZ: 'America/Los_Angeles' }; delete env.ELECTRON_RUN_AS_NODE
     app = await _electron.launch({ executablePath: require('electron'), args: [join(dir, 'main.cjs')], cwd: resolve(__dirname, '..'), env })
     const page = await app.firstWindow(); page.setDefaultTimeout(12000)
+    if (process.argv.includes('--facebook-only')) {
+      await require('./campaign-facebook-ai-ui-checks.cjs')(page)
+      assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])
+      return
+    }
     if (process.argv.includes('--exclusions-only')) {
       await require('./campaign-exclusion-ai-ui-checks.cjs')(page)
       assert.deepEqual(await page.evaluate(() => window.scheduleSmoke.state.errors), [])

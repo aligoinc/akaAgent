@@ -1,5 +1,13 @@
 # AGENTS.md
 
+V428 chặn AI Facebook bật Page khi còn tài khoản phụ đã apply akachat 23/10/2026 (`20261023160213 / migration_v428_facebook_ai_page_secondary_guard`): parser từ chối toàn bộ patch, renderer không tự xóa tài khoản phụ; bỏ phụ thủ công rồi chọn Page vẫn hợp lệ. Prompt config 14 bổ sung quy tắc, giữ model/schema/options và chín config khác. 155 contract, service/Electron/IPC, 3 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-chọn-page--v428-23102026).
+
+V427 giữ tài khoản phụ khi AI Facebook đổi tài khoản chính đã apply akachat 23/10/2026 (`20261023155134 / migration_v427_facebook_ai_secondary_account_guard`): snapshot ID phụ, catalog chỉ đọc có quyền và parser chặn trùng chính/phụ atomic. Chỉ sửa prompt config 14, giữ schema/model/options và chín config khác; không thêm query/RPC/connection. 127 contract, service/Electron/IPC, 2 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-đổi-tài-khoản-chính--v427-23102026).
+
+Review AI Facebook V426 đã apply akachat 23/10/2026 (`20261023153444 / migration_v426_facebook_form_ai_review_guards`): giới hạn một tài khoản của form được truyền vào Main/parser; lọc nội dung comment chỉ khi bật nguồn Comment, không tự mở rộng nguồn Tương tác mới. Chỉ cập nhật prompt config 14/15, giữ schema/model/options và tám config khác. 111 contract, service/Electron, 6 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit và rollback mới](docs/FACEBOOK_FORM_AI_V425.md#sửa-hai-finding-review--v426-23102026).
+
+V425 AI form Facebook đã apply akachat 23/10/2026 (`20261023150638 / migration_v425_facebook_form_ai`): sáu section Desktop, Sol 21; tìm kiếm dùng chung AI cho Cấu hình + Điều kiện chạy, từ khóa có AI riêng. Giữ bốn config cũ/Nội dung Haiku 24, nhóm data/media/runtime; không apply lại, chưa đóng gói/phát hành. Hợp đồng, giới hạn catalog và audit: [Facebook form AI](docs/FACEBOOK_FORM_AI_V425.md).
+
 V424 Kiểm tra trùng lặp toàn staff đã apply akachat 23/10/2026 lúc 17:27 VN (`20261023102718 / migration_v424_staff_delivery_cooldown`): boolean hiển thị và phạm vi cùng staff/tổ chức cho `zalo_message_phone`, giữ UID hoặc SĐT/logic cũ/V367/ACL. 11 ca rollback trước và sau apply, checksum và diễn tập hoàn nguyên đạt; không apply lại, chưa deploy Web/API hoặc phát hành Desktop; [audit](docs/STAFF_DELIVERY_COOLDOWN.md#apply-production--23102026).
 
 Ô chọn tài khoản chiến dịch tải snapshot ngày/trạng thái một lần sau catalog và cấu hình hiển thị mới; lọc theo loại có thể chọn và tài khoản tương thích, đổi lựa chọn chỉ lọc RAM. Reader/IPC riêng dùng HTTP + DB clock hiện có, deadline 15s/chặn phiên cũ/lô <=500 cặp; không đếm giờ/history, ghi quota, polling hoặc connection mới. Phần Giới hạn dùng lại số ngày; overview riêng giữ nguyên. Xem [hợp đồng, phạm vi và smoke](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
@@ -701,6 +709,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **AI form Facebook**: parser phải kiểm tra giới hạn tài khoản thực tế, trùng chính/phụ và Page + tài khoản phụ trước khi apply; từ chối toàn bộ patch, không tự xóa phụ. Lọc nội dung comment cần nguồn Comment, không áp dụng riêng cho Tương tác mới. Xem [hợp đồng và hồi quy](docs/FACEBOOK_FORM_AI_V425.md).
 
 - **Thống kê trong ô chọn tài khoản**: Trạng thái đăng nhập nằm riêng ngoài vùng rút gọn tên/loại tài khoản, giữ đủ chữ trên cùng một hàng. Đăng bài trang cá nhân chỉ hiện đăng bài; Comment của đăng bài group và Like của Comment seeding chỉ hiện khi bật tùy chọn nhưng phải tải sẵn lúc mở form. Lướt newsfeed giữ Comment/Like; Gắn tag/Đổi tên chỉ ẩn ở picker. Đổi lựa chọn chỉ lọc snapshot, không query giờ hoặc tải lại. Xem [hợp đồng](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
 
