@@ -602,7 +602,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
 
   return createPortal(
     <div className="modal-overlay general-settings-modal-overlay" onClick={closeSettings}>
-      <div className={`general-settings-modal ${activeMenu === 'campaignTypeVisibility' ? 'has-campaign-visibility' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
+      <div className="general-settings-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={event => event.stopPropagation()}
         onKeyDown={event => {
           if (event.key !== 'Tab' || useUiStore.getState().alert.isOpen || useUiStore.getState().confirm.isOpen) return
           const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex="0"]'))

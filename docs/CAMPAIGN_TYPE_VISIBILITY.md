@@ -16,7 +16,7 @@ Bảng `public.auto_campaign_type_visibility`: khóa `organization_id`, `hidden_
 
 ## UI và tích hợp
 
-Thiết kế nguồn: `Downloads/Thiết kế akaAgent (13)/Cài đặt chung - Hiển thị loại chiến dịch.dc.html`. Triển khai React trong Cài đặt chung, tab ngay sau Khách hàng từ chối nhận tin. Dùng tên tổ chức thật và catalog thật; màu nền/chữ theo theme của ứng dụng. Desktop tối đa 1320 × 860, sidebar 252px, nội dung cuộn; Web chuyển sidebar ngang và nội dung một cột trên màn hình nhỏ, chừa chỗ cho thanh điều hướng dưới.
+Thiết kế nguồn: `Downloads/Thiết kế akaAgent (13)/Cài đặt chung - Hiển thị loại chiến dịch.dc.html`. Triển khai React trong Cài đặt chung, tab ngay sau Khách hàng từ chối nhận tin. Dùng tên tổ chức thật và catalog thật; màu nền/chữ theo theme của ứng dụng. Thiết kế chỉ áp dụng cho nội dung tính năng. Desktop dùng nguyên khung Cài đặt chung hiện có, gồm kích thước, sidebar, khoảng cách và vùng cuộn; chuyển tab không đổi bố cục khung. Web chuyển sidebar ngang và nội dung một cột trên màn hình nhỏ, chừa chỗ cho thanh điều hướng dưới.
 
 Checkbox native có `indeterminate`, `aria-checked=mixed` và thao tác Space. Nhóm chọn một phần → chọn tất cả; chọn đủ → bỏ tất cả. Tìm tên không dấu/mã chỉ lọc hàng nhìn thấy, không đổi phạm vi thao tác nhóm. Hiện tất cả chỉ gửi catalog của màn hình hiện tại.
 
