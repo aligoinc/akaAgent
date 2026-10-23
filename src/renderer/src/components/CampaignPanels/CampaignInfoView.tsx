@@ -763,6 +763,11 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
       value: `${extra.recentDeliveryCooldownDays ?? 3} ngày (theo ngày Việt Nam)`,
       hidden: !isRecentDeliveryCooldownEnabled(actionId, extra)
     },
+    {
+      label: 'Phạm vi kiểm tra trùng lặp',
+      value: extra.recentDeliveryCooldownAllAccounts === true ? 'Tất cả tài khoản của nhân viên này' : 'Tài khoản của chiến dịch',
+      hidden: actionId !== 'zalo_message_phone' || !isRecentDeliveryCooldownEnabled(actionId, extra)
+    },
     ...byActionCode.map(([code, limit]) => ({
       label: `Giới hạn ${getActionCodeLabel(code)}`,
       value: formatLimitValue(limit, limitWindowMinutes)

@@ -381,6 +381,8 @@ export interface CampaignAction {
   allowMultipleAccounts: boolean
   /** Whether campaigns of this type may configure a fallback account. */
   allowSecondaryAccount: boolean
+  /** Show the staff-wide delivery-history option in the campaign form. */
+  showStaffDeliveryCooldown?: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
   /** Semantic target/source types accepted by this action. */
@@ -606,6 +608,7 @@ export interface CampaignExtraSettings {
   newsfeedMessageRequestRules?: NewsfeedMessageRequestRule[]
   actionLimits?: CampaignActionLimitSettings // giới hạn gửi theo action_code; top-level là fallback cho campaign cũ
   recentDeliveryCooldownEnabled?: boolean // chặn gửi/đăng lại cùng target theo ngày Việt Nam
+  recentDeliveryCooldownAllAccounts?: boolean // xét lịch sử các tài khoản cùng staff
   recentDeliveryCooldownDays?: number // số ngày lịch phải chênh, từ 1 đến 3650
   emailSubject?: string          // Tiêu đề email (chiến dịch email_send)
   emailBodyIsHtml?: boolean      // Nội dung email là HTML (chiến dịch email_send)

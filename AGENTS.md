@@ -1,5 +1,7 @@
 # AGENTS.md
 
+V424 Kiểm tra trùng lặp toàn staff đã apply akachat 23/10/2026 lúc 17:27 VN (`20261023102718 / migration_v424_staff_delivery_cooldown`): boolean hiển thị và phạm vi cùng staff/tổ chức cho `zalo_message_phone`, giữ UID hoặc SĐT/logic cũ/V367/ACL. 11 ca rollback trước và sau apply, checksum và diễn tập hoàn nguyên đạt; không apply lại, chưa deploy Web/API hoặc phát hành Desktop; [audit](docs/STAFF_DELIVERY_COOLDOWN.md#apply-production--23102026).
+
 Ô chọn tài khoản chiến dịch tải snapshot ngày/trạng thái một lần sau catalog và cấu hình hiển thị mới; lọc theo loại có thể chọn và tài khoản tương thích, đổi lựa chọn chỉ lọc RAM. Reader/IPC riêng dùng HTTP + DB clock hiện có, deadline 15s/chặn phiên cũ/lô <=500 cặp; không đếm giờ/history, ghi quota, polling hoặc connection mới. Phần Giới hạn dùng lại số ngày; overview riêng giữ nguyên. Xem [hợp đồng, phạm vi và smoke](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
 
 Web/API Hiển thị loại chiến dịch đã deploy 23/10/2026 lúc 16:25 VN từ `93eeec9`, machine Fly giữ 1 shared CPU/512 MB và chỉ đổi image, health 1/1. 2.600 unit test, typecheck/build, 15 browser local/15 production, 21 HTTP và checksum runtime/DB đạt. Không apply lại V423; Desktop chưa đóng gói/phát hành. Xem [audit](docs/CAMPAIGN_TYPE_VISIBILITY.md#deploy-webapi--23102026).

@@ -1954,6 +1954,7 @@ export default function CampaignFormModal({
       ?? (initialActionId === VOICE_CALL_ACTION_ID ? VOICE_CALL_DEFAULT_RATE_LIMIT_MINUTES : DEFAULT_RATE_LIMIT_MINUTES),
     continueWhenActionLimitReached: initialContinueWhenActionLimitReached,
     recentDeliveryCooldownEnabled: campaign?.extraSettings?.recentDeliveryCooldownEnabled ?? false,
+    recentDeliveryCooldownAllAccounts: campaign?.extraSettings?.recentDeliveryCooldownAllAccounts === true,
     recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(
       campaign?.extraSettings?.recentDeliveryCooldownDays ?? DEFAULT_RECENT_DELIVERY_COOLDOWN_DAYS
     ),
@@ -6463,6 +6464,7 @@ export default function CampaignFormModal({
               byActionCode
             },
             recentDeliveryCooldownEnabled: canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled,
+            recentDeliveryCooldownAllAccounts: isZaloMessagePhoneCampaign && formData.recentDeliveryCooldownAllAccounts === true,
             recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(formData.recentDeliveryCooldownDays),
             imageOption: (isSourceContentMode || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
             randomImageCount: isReelsMediaMode ? 1 : formData.randomImageCount,
@@ -17291,6 +17293,21 @@ export default function CampaignFormModal({
                         />
                         <span className="stepper-input-unit">ngày</span>
                       </div>
+                      {isZaloMessagePhoneCampaign && selectedCampaignAction?.showStaffDeliveryCooldown === true && (
+                        <label className="schedule-checkbox-label" style={{ marginTop: 10 }}>
+                          <input
+                            type="checkbox"
+                            checked={formData.recentDeliveryCooldownAllAccounts === true}
+                            disabled={!formData.recentDeliveryCooldownEnabled}
+                            onChange={e => setFormData(p => ({ ...p, recentDeliveryCooldownAllAccounts: e.target.checked }))}
+                          />
+                          <span>Áp dụng cho tất cả tài khoản</span>
+                        </label>
+                      )}
+                      {isZaloMessagePhoneCampaign && selectedCampaignAction?.showStaffDeliveryCooldown !== true &&
+                        formData.recentDeliveryCooldownEnabled && formData.recentDeliveryCooldownAllAccounts === true && (
+                        <div className="schedule-hint">Phạm vi đã lưu: tất cả tài khoản của nhân viên này.</div>
+                      )}
                     </div>
                   </div>
                 )}
