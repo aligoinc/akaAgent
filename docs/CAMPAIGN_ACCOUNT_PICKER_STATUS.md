@@ -10,6 +10,14 @@ Lướt newsfeed vẫn hiện cả Comment và Like, kể cả khi chưa tích c
 Không hiện Gắn tag/Đổi tên Zalo.
 Quy tắc riêng của picker không đổi màn hình Hành động của tài khoản.
 
+## Sửa trạng thái đăng nhập bị cắt — 23/10/2026
+
+Theo yêu cầu mới, Desktop và Web tách trạng thái đăng nhập khỏi vùng rút gọn tên/loại tài khoản. Trạng thái giữ đủ chữ và màu trên cùng một hàng; tên/loại dài mới dùng dấu `…`, tooltip vẫn chứa nhãn đầy đủ. Cột thống kê và chiều cao hàng giữ gọn. SMS tiếp tục chỉ hiện tên tài khoản.
+
+Đây là thay đổi render/CSS, không đổi snapshot, IPC/API hoặc truy vấn. Các kiểm tra hình học dùng form thật xác nhận chữ trạng thái nằm đủ trong nhãn và viewport của bộ chọn, với tên dài, trạng thái đã/chưa đăng nhập và cửa sổ hẹp. Bản sửa chưa đóng gói/phát hành.
+
+Hồi quy `campaign-action-usage-smoke-test.cjs` bắt được lỗi trên bản cũ và đạt sau sửa, gồm Electron 1440px/1000px cùng các ca snapshot/form hiện có. Hai typecheck và production build đạt. Đã xem ảnh giao diện tên Zalo dài giữ đầy đủ trạng thái.
+
 Mỗi ô là `128 - Bình thường`, `150 - Bị giới hạn - Còn 18 phút`, hoặc
 `20 - Bị giới hạn` khi không có thời điểm mở lại. Số lượng là tổng lượt hành động
 của tài khoản trong ngày Việt Nam, không cộng gộp các loại hành động. Dữ liệu đang
