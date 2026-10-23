@@ -10,7 +10,7 @@ const end = source.indexOf('    // Timeline/Reels only report success', start)
 assert(start > 0 && end > start)
 const ast = ts.createSourceFile('scheduler.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
 const cls = ast.statements.find(s => ts.isClassDeclaration(s) && s.name.text === 'CampaignScheduler')
-const methods = cls.members.filter(m => ['groupPostMilestonePayload', 'groupPostShareTargets'].includes(m.name?.getText(ast)))
+const methods = cls.members.filter(m => ['groupPostMilestonePayload', 'groupPostShareTargets', 'getGroupPostSubStatusCode'].includes(m.name?.getText(ast)))
   .map(m => m.getText(ast).replace(/^private /, '')).join('\n')
 const compiled = ts.transpileModule(`module.exports = class { ${methods}
  async run({steps,campaign,accountId,detail,inputDataName,createCampaignDetail,flushScreenshotLogsForStep}) {
@@ -37,13 +37,13 @@ async function check({ detector, url = '', posted = true, expectedSub = null }) 
  if (posted) {
   assert.equal(details[0].resultOutput.statusCode,'campaign_detail_success')
   assert.equal(details[0].resultOutput.subStatusCode,expectedSub)
-  assert.equal(details[0].log,'Đăng bài thành công vào Fixture group'+(expectedSub?' (chờ duyệt)':''))
+  assert.equal(details[0].log,'Đăng bài thành công vào Fixture group'+(expectedSub==='campaign_detail_post_pending'?' (chờ duyệt)':''))
  } else assert.equal(details[0].resultOutput,undefined)
  return approvals[0]
 }
 async function main() {
  assert.equal(await check({detector:{isPending:true,pendingCheckConclusive:true},expectedSub:'campaign_detail_post_pending'}),true)
- assert.equal(await check({detector:{isPending:false,pendingCheckConclusive:true,postVisible:true}}),false)
+ assert.equal(await check({detector:{isPending:false,pendingCheckConclusive:true,postVisible:true},expectedSub:'campaign_detail_post_approved'}),false)
  assert.equal(await check({detector:{isPending:false,pendingCheckConclusive:false,postVisible:true}}),undefined)
  assert.equal(await check({url:'https://www.facebook.com/groups/1/posts/2/'}),undefined)
  assert.equal(await check({url:'https://www.facebook.com/groups/1/pending_posts/2/',expectedSub:'campaign_detail_post_pending'}),true)

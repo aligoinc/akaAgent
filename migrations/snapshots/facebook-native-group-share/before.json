@@ -1,0 +1,3759 @@
+{
+  "elements": [
+    {
+      "id": 3,
+      "name": "fb_composer_dialog",
+      "xpath": "//*[@role='dialog']//*[@contenteditable='true'] | //form[@method='POST']//*[contains(@class,'notranslate')]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:22.161894+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:43.43+00:00",
+      "description": "Khung soạn nội dung — timeline (dialog) hoặc group (form inline)",
+      "organization_id": 1
+    },
+    {
+      "id": 5,
+      "name": "fb_post_button",
+      "xpath": "//*[@role='dialog']//*[(@aria-label='Đăng' or @aria-label='Post') and @role='button'] | //*[not(@aria-hidden)]/form//*[@role='button' and (contains(.,'Post') or .='Đăng')]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:22.457377+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:43.728+00:00",
+      "description": "Nút Đăng / Post — timeline (dialog aria-label) hoặc group (form text)",
+      "organization_id": 1
+    },
+    {
+      "id": 257,
+      "name": "fb_share_button_inner",
+      "xpath": "//*[@role=\"button\" and (@aria-label=\"Chia sẻ\" or @aria-label=\"Share\" or .=\"Chia sẻ\" or .=\"Share\" or .//*[@data-ad-rendering-role=\"share_button\"])]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T19:13:13.283821+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:45.454+00:00",
+      "description": "Nút Chia sẻ (descendant, append sau container)",
+      "organization_id": 1
+    },
+    {
+      "id": 1729,
+      "name": "SearchAddGroupToPostInp",
+      "xpath": "//input[@role='combobox' and @type='search' and @aria-label='Tìm kiếm nhóm']",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-07-06T09:36:12.230738+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-08-10T03:34:08.634851+00:00",
+      "description": "Ô tìm group trong popup Thêm nhóm",
+      "organization_id": null
+    }
+  ],
+  "workflows": [
+    {
+      "id": 252,
+      "name": "facebook_group_post__test__facebook_group_post",
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-if_composer_opened-sleep1-true",
+          "source": "if_composer_opened",
+          "target": "sleep1",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-sleep1-type_content",
+          "source": "sleep1",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-type_content-drop_images",
+          "source": "type_content",
+          "target": "drop_images"
+        },
+        {
+          "id": "e-drop_images-sleep2",
+          "source": "drop_images",
+          "target": "sleep2"
+        },
+        {
+          "id": "e-sleep2-click_post",
+          "source": "sleep2",
+          "target": "click_post"
+        },
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "target": "loop_comment",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "target": "comment",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "target": "merge_comment",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_leave-leave_group-true",
+          "source": "if_leave",
+          "target": "leave_group",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_leave-merge_leave-false",
+          "source": "if_leave",
+          "target": "merge_leave",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-leave_group-merge_leave",
+          "source": "leave_group",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-merge_leave-if_join",
+          "source": "merge_leave",
+          "target": "if_join"
+        },
+        {
+          "id": "e-if_join-join_group-true",
+          "source": "if_join",
+          "target": "join_group",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_join-merge_join-false",
+          "source": "if_join",
+          "target": "merge_join",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-join_group-merge_join",
+          "source": "join_group",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-dismiss_after_nav-wait_main",
+          "source": "dismiss_after_nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-click_post-verify_submit",
+          "source": "click_post",
+          "target": "verify_submit"
+        },
+        {
+          "id": "e-verify_submit-dismiss_after_submit",
+          "source": "verify_submit",
+          "target": "dismiss_after_submit"
+        },
+        {
+          "id": "e-dismiss_after_submit-if_submitted",
+          "source": "dismiss_after_submit",
+          "target": "if_submitted"
+        },
+        {
+          "id": "e-if_submitted-sleep3-true",
+          "source": "if_submitted",
+          "target": "sleep3",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-sleep3-get_post_link",
+          "source": "sleep3",
+          "target": "get_post_link"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        },
+        {
+          "id": "e-wait_main-if_skip_known_approval",
+          "source": "wait_main",
+          "target": "if_skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-skip_known_approval-true",
+          "source": "if_skip_known_approval",
+          "target": "skip_known_approval",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_skip_known_approval-open_composer-false",
+          "source": "if_skip_known_approval",
+          "target": "open_composer",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-skip_known_approval-merge_known_approval",
+          "source": "skip_known_approval",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-get_post_link-merge_known_approval",
+          "source": "get_post_link",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-merge_known_approval-detect_pending",
+          "source": "merge_known_approval",
+          "target": "detect_pending"
+        },
+        {
+          "id": "e-if-copy-source-true",
+          "source": "if_copy_source",
+          "target": "scrape_source",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if-copy-source-false",
+          "source": "if_copy_source",
+          "target": "resolve_url",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-source-scrape-ai",
+          "source": "scrape_source",
+          "target": "source_ai_prompt"
+        },
+        {
+          "id": "e-source-ai-nav-group",
+          "source": "source_ai_prompt",
+          "target": "nav_group_after_source"
+        },
+        {
+          "id": "e-nav-after-source-merge",
+          "source": "nav_group_after_source",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-nav-merge-source-ready",
+          "source": "nav",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-merge-source-ready-next",
+          "source": "merge_source_ready",
+          "target": "dismiss_after_nav"
+        },
+        {
+          "id": "e-if_composer_opened-select_group_share_targets-true",
+          "source": "if_composer_opened",
+          "target": "select_group_share_targets",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-select_group_share_targets-type_content",
+          "source": "select_group_share_targets",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-compose-formatted-content-type-content",
+          "source": "compose_formatted_content",
+          "target": "type_content"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+          "source": "page_identity_restore_only",
+          "target": "page_identity_restore_join",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+          "source": "page_identity_restore_only",
+          "target": "page_identity_needs_switch",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_original-true",
+          "source": "page_identity_needs_switch",
+          "target": "page_identity_original",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_enter-false",
+          "source": "page_identity_needs_switch",
+          "target": "page_identity_enter",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_switch",
+          "source": "page_identity_original",
+          "target": "page_identity_switch"
+        },
+        {
+          "id": "e-page_identity_switch-page_identity_ready",
+          "source": "page_identity_switch",
+          "target": "page_identity_ready"
+        },
+        {
+          "id": "e-page_identity_ready-page_identity_enter",
+          "source": "page_identity_ready",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_restore_join",
+          "source": "page_identity_original",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_enter-if_copy_source",
+          "source": "page_identity_enter",
+          "target": "if_copy_source"
+        },
+        {
+          "id": "e-merge_join-page_identity_capture_result",
+          "source": "merge_join",
+          "target": "page_identity_capture_result"
+        },
+        {
+          "id": "e-page_identity_capture_result-page_identity_restore_join",
+          "source": "page_identity_capture_result",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_join-page_identity_needs_restore",
+          "source": "page_identity_restore_join",
+          "target": "page_identity_needs_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_restore-true",
+          "source": "page_identity_needs_restore",
+          "target": "page_identity_restore",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+          "source": "page_identity_needs_restore",
+          "target": "page_identity_result_join",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_restore-page_identity_restored",
+          "source": "page_identity_restore",
+          "target": "page_identity_restored"
+        },
+        {
+          "id": "e-page_identity_restored-page_identity_result_join",
+          "source": "page_identity_restored",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_result_join-page_identity_result",
+          "source": "page_identity_result_join",
+          "target": "page_identity_result"
+        },
+        {
+          "id": "e-open_composer-if_composer_opened",
+          "source": "open_composer",
+          "target": "if_composer_opened"
+        },
+        {
+          "id": "e-if_composer_opened-merge_join-false",
+          "source": "if_composer_opened",
+          "target": "merge_join",
+          "sourceHandle": "false"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "resolve_url",
+          "label": "Resolve link/UID → URL group",
+          "config": {
+            "urlType": "group"
+          },
+          "blockId": 612,
+          "position": {
+            "x": 100,
+            "y": -100
+          },
+          "blockName": "fb_resolve_url"
+        },
+        {
+          "id": "nav",
+          "label": "Mở group",
+          "config": {},
+          "blockId": 5,
+          "position": {
+            "x": 100,
+            "y": 0
+          },
+          "blockName": "nav_to_url"
+        },
+        {
+          "id": "wait_main",
+          "label": "Chờ trang group",
+          "config": {
+            "timeout": 10000,
+            "selector": "//*[@role='main']"
+          },
+          "blockId": 21,
+          "position": {
+            "x": 100,
+            "y": 100
+          },
+          "blockName": "wait_for_selector"
+        },
+        {
+          "id": "open_composer",
+          "config": {
+            "composerActionCode": "fb_post_group"
+          },
+          "blockId": 27,
+          "position": {
+            "x": 100,
+            "y": 200
+          },
+          "blockName": "fb_open_composer"
+        },
+        {
+          "id": "sleep1",
+          "config": {
+            "ms": 2000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 300
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "type_content",
+          "config": {},
+          "blockId": 28,
+          "position": {
+            "x": 100,
+            "y": 400
+          },
+          "blockName": "fb_type_post_content"
+        },
+        {
+          "id": "drop_images",
+          "config": {},
+          "blockId": 29,
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "blockName": "fb_drop_post_images"
+        },
+        {
+          "id": "sleep2",
+          "config": {
+            "ms": 5000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 600
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "click_post",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "blockId": 30,
+          "position": {
+            "x": 100,
+            "y": 700
+          },
+          "blockName": "fb_click_post_button"
+        },
+        {
+          "id": "sleep3",
+          "config": {
+            "ms": 3000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 800
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "detect_pending",
+          "config": {},
+          "blockId": 31,
+          "position": {
+            "x": 100,
+            "y": 900
+          },
+          "blockName": "fb_detect_pending_post"
+        },
+        {
+          "id": "if_comment",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1000
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "loop_comment",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "vars.commentIterations"
+          },
+          "blockId": 2,
+          "position": {
+            "x": 0,
+            "y": 1100
+          },
+          "blockName": "loop",
+          "systemType": "loop"
+        },
+        {
+          "id": "comment",
+          "label": "Comment iteration",
+          "config": {},
+          "blockId": 34,
+          "position": {
+            "x": 0,
+            "y": 1200
+          },
+          "blockName": "fb_comment_at_position"
+        },
+        {
+          "id": "merge_comment",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1300
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_leave",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.leaveGroupOnPendingApproval === true && vars.groupPostIsPending === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1400
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "leave_group",
+          "config": {
+            "enabled": true
+          },
+          "blockId": 32,
+          "position": {
+            "x": 0,
+            "y": 1500
+          },
+          "blockName": "fb_leave_group_if_pending"
+        },
+        {
+          "id": "merge_leave",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1600
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_join",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.autoJoinGroupAfterPost === true && vars.groupPostIsPending !== true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1700
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "join_group",
+          "config": {
+            "enabled": true
+          },
+          "blockId": 33,
+          "position": {
+            "x": 0,
+            "y": 1800
+          },
+          "blockName": "fb_join_group_if_not_member"
+        },
+        {
+          "id": "merge_join",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1900
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "dismiss_after_nav",
+          "label": "Click popup group nếu có",
+          "config": {},
+          "blockId": 2625,
+          "position": {
+            "x": 100,
+            "y": 50
+          },
+          "blockName": "fb_click_group_post_prompt_if_present"
+        },
+        {
+          "id": "verify_submit",
+          "label": "Xác nhận form đăng bài đã đóng",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "blockId": 2624,
+          "position": {
+            "x": 100,
+            "y": 760
+          },
+          "blockName": "fb_verify_group_post_form_closed"
+        },
+        {
+          "id": "dismiss_after_submit",
+          "label": "Click popup sau đăng nếu có",
+          "config": {},
+          "blockId": 2625,
+          "position": {
+            "x": 100,
+            "y": 800
+          },
+          "blockName": "fb_click_group_post_prompt_if_present"
+        },
+        {
+          "id": "if_submitted",
+          "label": "Đăng bài thành công?",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 840
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "get_post_link",
+          "label": "Lấy link bài vừa đăng",
+          "config": {},
+          "blockId": 2626,
+          "position": {
+            "x": 100,
+            "y": 880
+          },
+          "blockName": "fb_get_first_group_post_link"
+        },
+        {
+          "id": "adjust_comments_after_pending",
+          "label": "Điều chỉnh comment khi pending",
+          "config": {},
+          "blockId": 2627,
+          "position": {
+            "x": 100,
+            "y": 960
+          },
+          "blockName": "fb_adjust_group_post_comments_after_pending"
+        },
+        {
+          "id": "if_skip_known_approval",
+          "label": "Bỏ qua đăng bài nếu group đã biết cần duyệt?",
+          "config": {
+            "condition": "vars.skipGroupPostByKnownApproval === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 160
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "skip_known_approval",
+          "label": "Bỏ qua đăng bài group cần duyệt",
+          "config": {},
+          "blockId": 2629,
+          "position": {
+            "x": 360,
+            "y": 260
+          },
+          "blockName": "fb_skip_group_post_for_known_approval"
+        },
+        {
+          "id": "merge_known_approval",
+          "label": "Gộp nhánh đăng bài/bỏ qua",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 880
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_copy_source",
+          "label": "Có copy nguồn?",
+          "config": {
+            "condition": "vars.copyContentFromSource === true && !!vars.sourceLink"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -220
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "scrape_source",
+          "label": "Copy nội dung nguồn",
+          "config": {},
+          "blockId": 35,
+          "position": {
+            "x": -500,
+            "y": -80
+          },
+          "blockName": "fb_scrape_post"
+        },
+        {
+          "id": "source_ai_prompt",
+          "label": "AI edit nội dung nguồn",
+          "config": {},
+          "blockId": 2674,
+          "position": {
+            "x": -500,
+            "y": 60
+          },
+          "blockName": "fb_rewrite_source_content_ai"
+        },
+        {
+          "id": "nav_group_after_source",
+          "label": "Quay lại group",
+          "config": {},
+          "blockId": 2676,
+          "position": {
+            "x": -500,
+            "y": 200
+          },
+          "blockName": "fb_navigate_to_target_url"
+        },
+        {
+          "id": "merge_source_ready",
+          "label": "Gộp nguồn trước khi đăng group",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": -260,
+            "y": 340
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "select_group_share_targets",
+          "label": "Chọn group share kèm",
+          "config": {},
+          "blockId": 2794,
+          "position": {
+            "x": 100,
+            "y": 430
+          },
+          "blockName": "fb_select_group_post_share_targets"
+        },
+        {
+          "id": "compose_formatted_content",
+          "label": "Ghép nội dung nguồn và nội dung định dạng",
+          "config": {},
+          "blockId": 2824,
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "blockName": "fb_compose_source_manual_content"
+        },
+        {
+          "id": "page_identity_restore_only",
+          "label": "Chỉ chuyển về danh tính ban đầu?",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -1140
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_needs_switch",
+          "label": "Cần chuyển sang Page?",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -1010
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_original",
+          "label": "Nhớ danh tính ban đầu",
+          "config": {},
+          "blockId": 2670,
+          "position": {
+            "x": -480,
+            "y": -880
+          },
+          "blockName": "fb_get_current_identity_name"
+        },
+        {
+          "id": "page_identity_switch",
+          "label": "Chuyển sang Page đã chọn",
+          "config": {
+            "identityNameFromVars": "runAsPageName"
+          },
+          "blockId": 2671,
+          "position": {
+            "x": -480,
+            "y": -750
+          },
+          "blockName": "fb_switch_identity_by_name"
+        },
+        {
+          "id": "page_identity_ready",
+          "label": "Kiểm tra đã chuyển Page",
+          "config": {
+            "pageIdentityStateOperation": "ready"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -480,
+            "y": -620
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_enter",
+          "label": "Chạy hành động chiến dịch",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": -260,
+            "y": -460
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_capture_result",
+          "label": "Giữ kết quả hành động",
+          "config": {
+            "pageIdentityStateOperation": "capture_result"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -260,
+            "y": 2160
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_restore_join",
+          "label": "Kết thúc phần hành động",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 140,
+            "y": 2290
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_needs_restore",
+          "label": "Cần chuyển về danh tính ban đầu?",
+          "config": {
+            "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 140,
+            "y": 2420
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_restore",
+          "label": "Chuyển về danh tính ban đầu",
+          "config": {
+            "useOriginalIdentity": true
+          },
+          "blockId": 2671,
+          "position": {
+            "x": -80,
+            "y": 2550
+          },
+          "blockName": "fb_switch_identity_by_name"
+        },
+        {
+          "id": "page_identity_restored",
+          "label": "Kiểm tra đã chuyển về",
+          "config": {
+            "pageIdentityStateOperation": "restored"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -80,
+            "y": 2680
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_result_join",
+          "label": "Kết thúc phiên Page",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 140,
+            "y": 2810
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_result",
+          "label": "Trả kết quả hành động",
+          "config": {
+            "pageIdentityStateOperation": "result"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": 140,
+            "y": 2940
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "if_composer_opened",
+          "config": {
+            "condition": "input.opened === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 320,
+            "y": 260
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        }
+      ],
+      "staff_id": 1,
+      "created_at": "2026-06-03T10:01:07.982314+00:00",
+      "is_builtin": false,
+      "updated_at": "2026-10-09T19:44:01.000693+00:00",
+      "description": "Workflow đăng bài vào group (có thể kèm comment, rời nhóm khi pending, tham gia nhóm sau khi đăng)",
+      "organization_id": 1,
+      "variables_schema": [
+        {
+          "name": "inputDataUid",
+          "type": "string",
+          "label": "URL group",
+          "description": "URL hoặc UID group đã normalize bởi scheduler"
+        },
+        {
+          "name": "campaignContent",
+          "type": "string",
+          "label": "Nội dung bài đăng"
+        },
+        {
+          "name": "images",
+          "type": "array",
+          "label": "Ảnh kèm theo (paths)"
+        },
+        {
+          "name": "enableComment",
+          "type": "boolean",
+          "label": "Bật comment sau khi đăng"
+        },
+        {
+          "name": "commentIterations",
+          "type": "array",
+          "label": "Danh sách comment (mỗi item {position, text})"
+        },
+        {
+          "name": "leaveGroupOnPendingApproval",
+          "type": "boolean",
+          "label": "Rời nhóm nếu bài chờ duyệt"
+        },
+        {
+          "name": "autoJoinGroupAfterPost",
+          "type": "boolean",
+          "label": "Tự tham gia nhóm sau khi đăng"
+        },
+        {
+          "name": "copyContentFromSource",
+          "type": "boolean",
+          "label": "Copy nội dung từ nguồn"
+        },
+        {
+          "name": "includeSourceImages",
+          "type": "boolean",
+          "label": "Lấy kèm hình ảnh"
+        },
+        {
+          "name": "sourceLink",
+          "type": "string",
+          "label": "Link nguồn"
+        },
+        {
+          "name": "rewriteSourceContentWithAI",
+          "type": "boolean",
+          "label": "Lời nhắc AI - Edit lại nội dung"
+        },
+        {
+          "name": "sourceContentAiPrompt",
+          "type": "textarea",
+          "label": "Lời nhắc AI",
+          "placeholder": "Viết lại nội dung sau: [content]"
+        },
+        {
+          "name": "enableGroupPostShareToJoinedGroups",
+          "type": "boolean",
+          "label": "Đăng bài dạng chia sẻ"
+        },
+        {
+          "name": "groupPostShareTargets",
+          "type": "json",
+          "label": "Group share ứng viên"
+        },
+        {
+          "name": "groupPostShareMaxCount",
+          "type": "number",
+          "label": "Số group share tối đa"
+        },
+        {
+          "name": "formattedContentEnabled",
+          "type": "boolean",
+          "label": "Nội dung có định dạng"
+        },
+        {
+          "name": "runAsPage",
+          "type": "boolean",
+          "label": "Chạy bằng Page",
+          "default": false
+        },
+        {
+          "name": "runAsPageUid",
+          "type": "string",
+          "label": "ID Page",
+          "default": ""
+        },
+        {
+          "name": "runAsPageName",
+          "type": "string",
+          "label": "Tên Page",
+          "default": ""
+        },
+        {
+          "name": "pageIdentityReady",
+          "type": "boolean",
+          "label": "Đã chuyển Page trong lượt",
+          "default": false
+        },
+        {
+          "name": "originalIdentityName",
+          "type": "string",
+          "label": "Danh tính ban đầu",
+          "default": ""
+        },
+        {
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean",
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "default": false
+        },
+        {
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean",
+          "label": "Chuyển về sau target (chạy thử)",
+          "default": true
+        }
+      ],
+      "default_variables": {
+        "images": [],
+        "runAsPage": false,
+        "sourceLink": "",
+        "inputDataUid": "",
+        "runAsPageUid": "",
+        "enableComment": false,
+        "runAsPageName": "",
+        "campaignContent": "",
+        "commentIterations": [],
+        "pageIdentityReady": false,
+        "includeSourceImages": false,
+        "originalIdentityName": "",
+        "copyContentFromSource": false,
+        "groupPostShareTargets": [],
+        "sourceContentAiPrompt": "",
+        "autoJoinGroupAfterPost": false,
+        "groupPostShareMaxCount": 0,
+        "formattedContentEnabled": false,
+        "pageIdentityRestoreOnly": false,
+        "rewriteSourceContentWithAI": false,
+        "leaveGroupOnPendingApproval": false,
+        "pageIdentityRestoreAfterTarget": true,
+        "campaignContentPreparationVersion": 1,
+        "enableGroupPostShareToJoinedGroups": false
+      }
+    },
+    {
+      "id": 1,
+      "name": "facebook_group_post",
+      "edges": [
+        {
+          "id": "e-resolve_url-nav",
+          "source": "resolve_url",
+          "target": "nav"
+        },
+        {
+          "id": "e-if_composer_opened-sleep1-true",
+          "source": "if_composer_opened",
+          "target": "sleep1",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-sleep1-type_content",
+          "source": "sleep1",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-type_content-drop_images",
+          "source": "type_content",
+          "target": "drop_images"
+        },
+        {
+          "id": "e-drop_images-sleep2",
+          "source": "drop_images",
+          "target": "sleep2"
+        },
+        {
+          "id": "e-sleep2-click_post",
+          "source": "sleep2",
+          "target": "click_post"
+        },
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "target": "loop_comment",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "target": "comment",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "target": "merge_comment",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_leave-leave_group-true",
+          "source": "if_leave",
+          "target": "leave_group",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_leave-merge_leave-false",
+          "source": "if_leave",
+          "target": "merge_leave",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-leave_group-merge_leave",
+          "source": "leave_group",
+          "target": "merge_leave"
+        },
+        {
+          "id": "e-merge_leave-if_join",
+          "source": "merge_leave",
+          "target": "if_join"
+        },
+        {
+          "id": "e-if_join-join_group-true",
+          "source": "if_join",
+          "target": "join_group",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_join-merge_join-false",
+          "source": "if_join",
+          "target": "merge_join",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-join_group-merge_join",
+          "source": "join_group",
+          "target": "merge_join"
+        },
+        {
+          "id": "e-dismiss_after_nav-wait_main",
+          "source": "dismiss_after_nav",
+          "target": "wait_main"
+        },
+        {
+          "id": "e-click_post-verify_submit",
+          "source": "click_post",
+          "target": "verify_submit"
+        },
+        {
+          "id": "e-verify_submit-dismiss_after_submit",
+          "source": "verify_submit",
+          "target": "dismiss_after_submit"
+        },
+        {
+          "id": "e-dismiss_after_submit-if_submitted",
+          "source": "dismiss_after_submit",
+          "target": "if_submitted"
+        },
+        {
+          "id": "e-if_submitted-sleep3-true",
+          "source": "if_submitted",
+          "target": "sleep3",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-sleep3-get_post_link",
+          "source": "sleep3",
+          "target": "get_post_link"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        },
+        {
+          "id": "e-wait_main-if_skip_known_approval",
+          "source": "wait_main",
+          "target": "if_skip_known_approval"
+        },
+        {
+          "id": "e-if_skip_known_approval-skip_known_approval-true",
+          "source": "if_skip_known_approval",
+          "target": "skip_known_approval",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_skip_known_approval-open_composer-false",
+          "source": "if_skip_known_approval",
+          "target": "open_composer",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-skip_known_approval-merge_known_approval",
+          "source": "skip_known_approval",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-get_post_link-merge_known_approval",
+          "source": "get_post_link",
+          "target": "merge_known_approval"
+        },
+        {
+          "id": "e-merge_known_approval-detect_pending",
+          "source": "merge_known_approval",
+          "target": "detect_pending"
+        },
+        {
+          "id": "e-if-copy-source-true",
+          "source": "if_copy_source",
+          "target": "scrape_source",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if-copy-source-false",
+          "source": "if_copy_source",
+          "target": "resolve_url",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-source-scrape-ai",
+          "source": "scrape_source",
+          "target": "source_ai_prompt"
+        },
+        {
+          "id": "e-source-ai-nav-group",
+          "source": "source_ai_prompt",
+          "target": "nav_group_after_source"
+        },
+        {
+          "id": "e-nav-after-source-merge",
+          "source": "nav_group_after_source",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-nav-merge-source-ready",
+          "source": "nav",
+          "target": "merge_source_ready"
+        },
+        {
+          "id": "e-merge-source-ready-next",
+          "source": "merge_source_ready",
+          "target": "dismiss_after_nav"
+        },
+        {
+          "id": "e-if_composer_opened-select_group_share_targets-true",
+          "source": "if_composer_opened",
+          "target": "select_group_share_targets",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-select_group_share_targets-type_content",
+          "source": "select_group_share_targets",
+          "target": "compose_formatted_content"
+        },
+        {
+          "id": "e-compose-formatted-content-type-content",
+          "source": "compose_formatted_content",
+          "target": "type_content"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+          "source": "page_identity_restore_only",
+          "target": "page_identity_restore_join",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+          "source": "page_identity_restore_only",
+          "target": "page_identity_needs_switch",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_original-true",
+          "source": "page_identity_needs_switch",
+          "target": "page_identity_original",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_needs_switch-page_identity_enter-false",
+          "source": "page_identity_needs_switch",
+          "target": "page_identity_enter",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_switch",
+          "source": "page_identity_original",
+          "target": "page_identity_switch"
+        },
+        {
+          "id": "e-page_identity_switch-page_identity_ready",
+          "source": "page_identity_switch",
+          "target": "page_identity_ready"
+        },
+        {
+          "id": "e-page_identity_ready-page_identity_enter",
+          "source": "page_identity_ready",
+          "target": "page_identity_enter"
+        },
+        {
+          "id": "e-page_identity_original-page_identity_restore_join",
+          "source": "page_identity_original",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_enter-if_copy_source",
+          "source": "page_identity_enter",
+          "target": "if_copy_source"
+        },
+        {
+          "id": "e-merge_join-page_identity_capture_result",
+          "source": "merge_join",
+          "target": "page_identity_capture_result"
+        },
+        {
+          "id": "e-page_identity_capture_result-page_identity_restore_join",
+          "source": "page_identity_capture_result",
+          "target": "page_identity_restore_join"
+        },
+        {
+          "id": "e-page_identity_restore_join-page_identity_needs_restore",
+          "source": "page_identity_restore_join",
+          "target": "page_identity_needs_restore"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_restore-true",
+          "source": "page_identity_needs_restore",
+          "target": "page_identity_restore",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+          "source": "page_identity_needs_restore",
+          "target": "page_identity_result_join",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-page_identity_restore-page_identity_restored",
+          "source": "page_identity_restore",
+          "target": "page_identity_restored"
+        },
+        {
+          "id": "e-page_identity_restored-page_identity_result_join",
+          "source": "page_identity_restored",
+          "target": "page_identity_result_join"
+        },
+        {
+          "id": "e-page_identity_result_join-page_identity_result",
+          "source": "page_identity_result_join",
+          "target": "page_identity_result"
+        },
+        {
+          "id": "e-open_composer-if_composer_opened",
+          "source": "open_composer",
+          "target": "if_composer_opened"
+        },
+        {
+          "id": "e-if_composer_opened-merge_join-false",
+          "source": "if_composer_opened",
+          "target": "merge_join",
+          "sourceHandle": "false"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "resolve_url",
+          "label": "Resolve link/UID → URL group",
+          "config": {
+            "urlType": "group"
+          },
+          "blockId": 612,
+          "position": {
+            "x": 100,
+            "y": -100
+          },
+          "blockName": "fb_resolve_url"
+        },
+        {
+          "id": "nav",
+          "label": "Mở group",
+          "config": {},
+          "blockId": 5,
+          "position": {
+            "x": 100,
+            "y": 0
+          },
+          "blockName": "nav_to_url"
+        },
+        {
+          "id": "wait_main",
+          "label": "Chờ trang group",
+          "config": {
+            "timeout": 10000,
+            "selector": "//*[@role='main']"
+          },
+          "blockId": 21,
+          "position": {
+            "x": 100,
+            "y": 100
+          },
+          "blockName": "wait_for_selector"
+        },
+        {
+          "id": "open_composer",
+          "config": {
+            "composerActionCode": "fb_post_group"
+          },
+          "blockId": 27,
+          "position": {
+            "x": 100,
+            "y": 200
+          },
+          "blockName": "fb_open_composer"
+        },
+        {
+          "id": "sleep1",
+          "config": {
+            "ms": 2000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 300
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "type_content",
+          "config": {},
+          "blockId": 28,
+          "position": {
+            "x": 100,
+            "y": 400
+          },
+          "blockName": "fb_type_post_content"
+        },
+        {
+          "id": "drop_images",
+          "config": {},
+          "blockId": 29,
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "blockName": "fb_drop_post_images"
+        },
+        {
+          "id": "sleep2",
+          "config": {
+            "ms": 5000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 600
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "click_post",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "blockId": 30,
+          "position": {
+            "x": 100,
+            "y": 700
+          },
+          "blockName": "fb_click_post_button"
+        },
+        {
+          "id": "sleep3",
+          "config": {
+            "ms": 3000
+          },
+          "blockId": 20,
+          "position": {
+            "x": 100,
+            "y": 800
+          },
+          "blockName": "sleep"
+        },
+        {
+          "id": "detect_pending",
+          "config": {},
+          "blockId": 31,
+          "position": {
+            "x": 100,
+            "y": 900
+          },
+          "blockName": "fb_detect_pending_post"
+        },
+        {
+          "id": "if_comment",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1000
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "loop_comment",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "vars.commentIterations"
+          },
+          "blockId": 2,
+          "position": {
+            "x": 0,
+            "y": 1100
+          },
+          "blockName": "loop",
+          "systemType": "loop"
+        },
+        {
+          "id": "comment",
+          "label": "Comment iteration",
+          "config": {},
+          "blockId": 34,
+          "position": {
+            "x": 0,
+            "y": 1200
+          },
+          "blockName": "fb_comment_at_position"
+        },
+        {
+          "id": "merge_comment",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1300
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_leave",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.leaveGroupOnPendingApproval === true && vars.groupPostIsPending === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1400
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "leave_group",
+          "config": {
+            "enabled": true
+          },
+          "blockId": 32,
+          "position": {
+            "x": 0,
+            "y": 1500
+          },
+          "blockName": "fb_leave_group_if_pending"
+        },
+        {
+          "id": "merge_leave",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1600
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_join",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true && vars.autoJoinGroupAfterPost === true && vars.groupPostIsPending !== true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 1700
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "join_group",
+          "config": {
+            "enabled": true
+          },
+          "blockId": 33,
+          "position": {
+            "x": 0,
+            "y": 1800
+          },
+          "blockName": "fb_join_group_if_not_member"
+        },
+        {
+          "id": "merge_join",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 1900
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "dismiss_after_nav",
+          "label": "Click popup group nếu có",
+          "config": {},
+          "blockId": 2625,
+          "position": {
+            "x": 100,
+            "y": 50
+          },
+          "blockName": "fb_click_group_post_prompt_if_present"
+        },
+        {
+          "id": "verify_submit",
+          "label": "Xác nhận form đăng bài đã đóng",
+          "config": {
+            "screenshotCaptureOn": "failure",
+            "screenshotCaptureTiming": "after"
+          },
+          "blockId": 2624,
+          "position": {
+            "x": 100,
+            "y": 760
+          },
+          "blockName": "fb_verify_group_post_form_closed"
+        },
+        {
+          "id": "dismiss_after_submit",
+          "label": "Click popup sau đăng nếu có",
+          "config": {},
+          "blockId": 2625,
+          "position": {
+            "x": 100,
+            "y": 800
+          },
+          "blockName": "fb_click_group_post_prompt_if_present"
+        },
+        {
+          "id": "if_submitted",
+          "label": "Đăng bài thành công?",
+          "config": {
+            "condition": "vars.groupPostSubmitted === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 840
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "get_post_link",
+          "label": "Lấy link bài vừa đăng",
+          "config": {},
+          "blockId": 2626,
+          "position": {
+            "x": 100,
+            "y": 880
+          },
+          "blockName": "fb_get_first_group_post_link"
+        },
+        {
+          "id": "adjust_comments_after_pending",
+          "label": "Điều chỉnh comment khi pending",
+          "config": {},
+          "blockId": 2627,
+          "position": {
+            "x": 100,
+            "y": 960
+          },
+          "blockName": "fb_adjust_group_post_comments_after_pending"
+        },
+        {
+          "id": "if_skip_known_approval",
+          "label": "Bỏ qua đăng bài nếu group đã biết cần duyệt?",
+          "config": {
+            "condition": "vars.skipGroupPostByKnownApproval === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 100,
+            "y": 160
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "skip_known_approval",
+          "label": "Bỏ qua đăng bài group cần duyệt",
+          "config": {},
+          "blockId": 2629,
+          "position": {
+            "x": 360,
+            "y": 260
+          },
+          "blockName": "fb_skip_group_post_for_known_approval"
+        },
+        {
+          "id": "merge_known_approval",
+          "label": "Gộp nhánh đăng bài/bỏ qua",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 100,
+            "y": 880
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "if_copy_source",
+          "label": "Có copy nguồn?",
+          "config": {
+            "condition": "vars.copyContentFromSource === true && !!vars.sourceLink"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -220
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "scrape_source",
+          "label": "Copy nội dung nguồn",
+          "config": {},
+          "blockId": 35,
+          "position": {
+            "x": -500,
+            "y": -80
+          },
+          "blockName": "fb_scrape_post"
+        },
+        {
+          "id": "source_ai_prompt",
+          "label": "AI edit nội dung nguồn",
+          "config": {},
+          "blockId": 2674,
+          "position": {
+            "x": -500,
+            "y": 60
+          },
+          "blockName": "fb_rewrite_source_content_ai"
+        },
+        {
+          "id": "nav_group_after_source",
+          "label": "Quay lại group",
+          "config": {},
+          "blockId": 2676,
+          "position": {
+            "x": -500,
+            "y": 200
+          },
+          "blockName": "fb_navigate_to_target_url"
+        },
+        {
+          "id": "merge_source_ready",
+          "label": "Gộp nguồn trước khi đăng group",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": -260,
+            "y": 340
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "select_group_share_targets",
+          "label": "Chọn group share kèm",
+          "config": {},
+          "blockId": 2794,
+          "position": {
+            "x": 100,
+            "y": 430
+          },
+          "blockName": "fb_select_group_post_share_targets"
+        },
+        {
+          "id": "compose_formatted_content",
+          "label": "Ghép nội dung nguồn và nội dung định dạng",
+          "config": {},
+          "blockId": 2824,
+          "position": {
+            "x": 100,
+            "y": 500
+          },
+          "blockName": "fb_compose_source_manual_content"
+        },
+        {
+          "id": "page_identity_restore_only",
+          "label": "Chỉ chuyển về danh tính ban đầu?",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -1140
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_needs_switch",
+          "label": "Cần chuyển sang Page?",
+          "config": {
+            "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": -260,
+            "y": -1010
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_original",
+          "label": "Nhớ danh tính ban đầu",
+          "config": {},
+          "blockId": 2670,
+          "position": {
+            "x": -480,
+            "y": -880
+          },
+          "blockName": "fb_get_current_identity_name"
+        },
+        {
+          "id": "page_identity_switch",
+          "label": "Chuyển sang Page đã chọn",
+          "config": {
+            "identityNameFromVars": "runAsPageName"
+          },
+          "blockId": 2671,
+          "position": {
+            "x": -480,
+            "y": -750
+          },
+          "blockName": "fb_switch_identity_by_name"
+        },
+        {
+          "id": "page_identity_ready",
+          "label": "Kiểm tra đã chuyển Page",
+          "config": {
+            "pageIdentityStateOperation": "ready"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -480,
+            "y": -620
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_enter",
+          "label": "Chạy hành động chiến dịch",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": -260,
+            "y": -460
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_capture_result",
+          "label": "Giữ kết quả hành động",
+          "config": {
+            "pageIdentityStateOperation": "capture_result"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -260,
+            "y": 2160
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_restore_join",
+          "label": "Kết thúc phần hành động",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 140,
+            "y": 2290
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_needs_restore",
+          "label": "Cần chuyển về danh tính ban đầu?",
+          "config": {
+            "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 140,
+            "y": 2420
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        },
+        {
+          "id": "page_identity_restore",
+          "label": "Chuyển về danh tính ban đầu",
+          "config": {
+            "useOriginalIdentity": true
+          },
+          "blockId": 2671,
+          "position": {
+            "x": -80,
+            "y": 2550
+          },
+          "blockName": "fb_switch_identity_by_name"
+        },
+        {
+          "id": "page_identity_restored",
+          "label": "Kiểm tra đã chuyển về",
+          "config": {
+            "pageIdentityStateOperation": "restored"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": -80,
+            "y": 2680
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "page_identity_result_join",
+          "label": "Kết thúc phiên Page",
+          "config": {
+            "mode": "any"
+          },
+          "blockId": 4,
+          "position": {
+            "x": 140,
+            "y": 2810
+          },
+          "blockName": "merge",
+          "systemType": "merge"
+        },
+        {
+          "id": "page_identity_result",
+          "label": "Trả kết quả hành động",
+          "config": {
+            "pageIdentityStateOperation": "result"
+          },
+          "blockId": 2829,
+          "position": {
+            "x": 140,
+            "y": 2940
+          },
+          "blockName": "fb_campaign_page_identity_state"
+        },
+        {
+          "id": "if_composer_opened",
+          "config": {
+            "condition": "input.opened === true"
+          },
+          "blockId": 1,
+          "position": {
+            "x": 320,
+            "y": 260
+          },
+          "blockName": "if_else",
+          "systemType": "ifElse"
+        }
+      ],
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:28.76014+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-09T19:44:00.999061+00:00",
+      "description": "Workflow đăng bài vào group (có thể kèm comment, rời nhóm khi pending, tham gia nhóm sau khi đăng)",
+      "organization_id": 1,
+      "variables_schema": [
+        {
+          "name": "inputDataUid",
+          "type": "string",
+          "label": "URL group",
+          "description": "URL hoặc UID group đã normalize bởi scheduler"
+        },
+        {
+          "name": "campaignContent",
+          "type": "string",
+          "label": "Nội dung bài đăng"
+        },
+        {
+          "name": "images",
+          "type": "array",
+          "label": "Ảnh kèm theo (paths)"
+        },
+        {
+          "name": "enableComment",
+          "type": "boolean",
+          "label": "Bật comment sau khi đăng"
+        },
+        {
+          "name": "commentIterations",
+          "type": "array",
+          "label": "Danh sách comment (mỗi item {position, text})"
+        },
+        {
+          "name": "leaveGroupOnPendingApproval",
+          "type": "boolean",
+          "label": "Rời nhóm nếu bài chờ duyệt"
+        },
+        {
+          "name": "autoJoinGroupAfterPost",
+          "type": "boolean",
+          "label": "Tự tham gia nhóm sau khi đăng"
+        },
+        {
+          "name": "copyContentFromSource",
+          "type": "boolean",
+          "label": "Copy nội dung từ nguồn"
+        },
+        {
+          "name": "includeSourceImages",
+          "type": "boolean",
+          "label": "Lấy kèm hình ảnh"
+        },
+        {
+          "name": "sourceLink",
+          "type": "string",
+          "label": "Link nguồn"
+        },
+        {
+          "name": "rewriteSourceContentWithAI",
+          "type": "boolean",
+          "label": "Lời nhắc AI - Edit lại nội dung"
+        },
+        {
+          "name": "sourceContentAiPrompt",
+          "type": "textarea",
+          "label": "Lời nhắc AI",
+          "placeholder": "Viết lại nội dung sau: [content]"
+        },
+        {
+          "name": "enableGroupPostShareToJoinedGroups",
+          "type": "boolean",
+          "label": "Đăng bài dạng chia sẻ"
+        },
+        {
+          "name": "groupPostShareTargets",
+          "type": "json",
+          "label": "Group share ứng viên"
+        },
+        {
+          "name": "groupPostShareMaxCount",
+          "type": "number",
+          "label": "Số group share tối đa"
+        },
+        {
+          "name": "formattedContentEnabled",
+          "type": "boolean",
+          "label": "Nội dung có định dạng"
+        },
+        {
+          "name": "runAsPage",
+          "type": "boolean",
+          "label": "Chạy bằng Page",
+          "default": false
+        },
+        {
+          "name": "runAsPageUid",
+          "type": "string",
+          "label": "ID Page",
+          "default": ""
+        },
+        {
+          "name": "runAsPageName",
+          "type": "string",
+          "label": "Tên Page",
+          "default": ""
+        },
+        {
+          "name": "pageIdentityReady",
+          "type": "boolean",
+          "label": "Đã chuyển Page trong lượt",
+          "default": false
+        },
+        {
+          "name": "originalIdentityName",
+          "type": "string",
+          "label": "Danh tính ban đầu",
+          "default": ""
+        },
+        {
+          "name": "pageIdentityRestoreOnly",
+          "type": "boolean",
+          "label": "Chỉ chuyển về danh tính ban đầu",
+          "default": false
+        },
+        {
+          "name": "pageIdentityRestoreAfterTarget",
+          "type": "boolean",
+          "label": "Chuyển về sau target (chạy thử)",
+          "default": true
+        }
+      ],
+      "default_variables": {
+        "images": [],
+        "runAsPage": false,
+        "sourceLink": "",
+        "inputDataUid": "",
+        "runAsPageUid": "",
+        "enableComment": false,
+        "runAsPageName": "",
+        "campaignContent": "",
+        "commentIterations": [],
+        "pageIdentityReady": false,
+        "includeSourceImages": false,
+        "originalIdentityName": "",
+        "copyContentFromSource": false,
+        "groupPostShareTargets": [],
+        "sourceContentAiPrompt": "",
+        "autoJoinGroupAfterPost": false,
+        "groupPostShareMaxCount": 0,
+        "formattedContentEnabled": false,
+        "pageIdentityRestoreOnly": false,
+        "rewriteSourceContentWithAI": false,
+        "leaveGroupOnPendingApproval": false,
+        "pageIdentityRestoreAfterTarget": true,
+        "campaignContentPreparationVersion": 1,
+        "enableGroupPostShareToJoinedGroups": false
+      }
+    }
+  ],
+  "blocks": [
+    {
+      "id": 1,
+      "code": "",
+      "icon": "GitBranch",
+      "kind": "system",
+      "name": "if_else",
+      "category": "control",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:23.963253+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:46.701+00:00",
+      "description": "Rẽ nhánh true/false dựa trên điều kiện JS",
+      "system_type": "ifElse",
+      "config_schema": [
+        {
+          "name": "condition",
+          "type": "code",
+          "label": "Điều kiện (JS expression)",
+          "required": true,
+          "placeholder": "vars.enableComment === true"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "branch",
+          "type": "string",
+          "label": "Nhánh được chọn (true/false)"
+        },
+        {
+          "name": "conditionResult",
+          "type": "boolean",
+          "label": "Giá trị evaluated"
+        }
+      ],
+      "default_config": {
+        "condition": "true"
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 2,
+      "code": "",
+      "icon": "Repeat",
+      "kind": "system",
+      "name": "loop",
+      "category": "control",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:24.077048+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:46.888+00:00",
+      "description": "Lặp body subgraph theo count/forEach/while",
+      "system_type": "loop",
+      "config_schema": [
+        {
+          "name": "loopType",
+          "type": "select",
+          "label": "Loại loop",
+          "default": "count",
+          "options": [
+            {
+              "label": "count (số lần cố định)",
+              "value": "count"
+            },
+            {
+              "label": "forEach (lặp qua array)",
+              "value": "forEach"
+            },
+            {
+              "label": "while (lặp khi condition true)",
+              "value": "while"
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "count",
+          "type": "number",
+          "label": "count (cho loopType=count)",
+          "placeholder": "3"
+        },
+        {
+          "name": "itemsExpr",
+          "type": "code",
+          "label": "items expression (cho forEach)",
+          "placeholder": "vars.commentIterations"
+        },
+        {
+          "name": "condition",
+          "type": "code",
+          "label": "condition (cho while)",
+          "placeholder": "iter < 10"
+        },
+        {
+          "name": "maxIterations",
+          "type": "number",
+          "label": "maxIterations (cho while)",
+          "default": 1000
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "iterations",
+          "type": "number",
+          "label": "Số iteration đã chạy"
+        }
+      ],
+      "default_config": {
+        "count": 3,
+        "loopType": "count"
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 4,
+      "code": "",
+      "icon": "GitCommit",
+      "kind": "system",
+      "name": "merge",
+      "category": "control",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:24.294508+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:47.185+00:00",
+      "description": "Join point — đợi tất cả parents (mode=all) hoặc 1 parent (mode=any)",
+      "system_type": "merge",
+      "config_schema": [
+        {
+          "name": "mode",
+          "type": "select",
+          "label": "Mode",
+          "default": "all",
+          "options": [
+            {
+              "label": "all — đợi tất cả parents (AND join)",
+              "value": "all"
+            },
+            {
+              "label": "any — chạy khi 1 parent xong (OR join)",
+              "value": "any"
+            }
+          ],
+          "required": true
+        }
+      ],
+      "output_schema": [],
+      "default_config": {
+        "mode": "all"
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 5,
+      "code": "await page.navigate(input.url || vars.url || '')\r\nreturn { currentUrl: page.getURL() }",
+      "icon": "Globe",
+      "kind": "js",
+      "name": "nav_to_url",
+      "category": "navigation",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:24.39727+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:47.326+00:00",
+      "description": "Mở URL trong webview",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "url",
+          "type": "string",
+          "label": "URL",
+          "required": true,
+          "placeholder": "https://www.facebook.com"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "currentUrl",
+          "type": "string",
+          "label": "URL sau khi load"
+        }
+      ],
+      "default_config": {
+        "url": ""
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 20,
+      "code": "await helpers.sleep(Number(input.ms || 1000), signal)\r\nreturn {}",
+      "icon": "Clock",
+      "kind": "js",
+      "name": "sleep",
+      "category": "utility",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:26.42281+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:49.403+00:00",
+      "description": "Pause N ms",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "ms",
+          "type": "number",
+          "label": "ms",
+          "default": 1000,
+          "required": true
+        }
+      ],
+      "output_schema": [],
+      "default_config": {
+        "ms": 1000
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 21,
+      "code": "try { const found = await page.waitForSelector(input.selector, { timeout: Number(input.timeout || 10000) }); return { found } } catch (e) { return { found: false } }",
+      "icon": "Search",
+      "kind": "js",
+      "name": "wait_for_selector",
+      "category": "utility",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:26.538548+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:49.539+00:00",
+      "description": "Đợi element xuất hiện (visible)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "selector",
+          "type": "string",
+          "label": "Selector",
+          "required": true
+        },
+        {
+          "name": "timeout",
+          "type": "number",
+          "label": "Timeout (ms)",
+          "default": 10000
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "found",
+          "type": "boolean",
+          "label": "Có tìm thấy không"
+        }
+      ],
+      "default_config": {
+        "timeout": 10000
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 32,
+      "code": "if (!input.enabled) return { left: false }\r\ntry {\r\n  const menuBtn = await helpers.element('fb_group_menu_button')\r\n  await page.click(menuBtn)\r\n  await helpers.sleep(800, signal)\r\n  const leaveItem = await helpers.element('fb_group_leave_menuitem')\r\n  await page.click(leaveItem)\r\n  await helpers.sleep(800, signal)\r\n  const confirm = await helpers.element('fb_group_leave_confirm')\r\n  await page.click(confirm)\r\n  await helpers.sleep(2000, signal)\r\n  helpers.log('👋 Đã rời nhóm')\r\n  return { left: true }\r\n} catch (e) {\r\n  helpers.log('Không rời được nhóm: ' + e.message)\r\n  return { left: false }\r\n}",
+      "icon": "LogOut",
+      "kind": "js",
+      "name": "fb_leave_group_if_pending",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.802292+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:51.379+00:00",
+      "description": "Rời nhóm nếu bài đang chờ duyệt (qua menu)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "label": "Enable",
+          "default": false
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "left",
+          "type": "boolean",
+          "label": "Đã rời nhóm chưa"
+        }
+      ],
+      "default_config": {
+        "enabled": false
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 33,
+      "code": "if (!input.enabled) return { joined: false }\r\ntry {\r\n  const btn = await helpers.element('fb_group_join_button')\r\n  const found = await page.waitForSelector(btn, { timeout: 2000 })\r\n  if (!found) return { joined: false }\r\n  await page.click(btn)\r\n  await helpers.sleep(1500, signal)\r\n  helpers.log('🤝 Đã nhấn Tham gia nhóm')\r\n  return { joined: true }\r\n} catch (e) {\r\n  return { joined: false }\r\n}",
+      "icon": "UserPlus",
+      "kind": "js",
+      "name": "fb_join_group_if_not_member",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.906155+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:51.513+00:00",
+      "description": "Tự tham gia nhóm sau khi đăng bài",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "label": "Enable",
+          "default": false
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "joined",
+          "type": "boolean",
+          "label": "Đã click tham gia chưa"
+        }
+      ],
+      "default_config": {
+        "enabled": false
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 35,
+      "code": "const link = String(input.sourceLink || vars.sourceLink || '').trim()\nconst appendContent = typeof helpers.prepareCampaignContent === 'function' ? '' : String(input.appendContent || vars.campaignContent || '')\nconst formattedContentEnabled = vars.formattedContentEnabled === true\nconst manualContentNative = String(vars.manualContentNative || appendContent || vars.campaignContent || '')\nconst buildFormattedResult = (sourcePlain, scrapedImages) => {\n  const sourceContentPlain = String(sourcePlain || '')\n  vars.formattedManualContent = manualContentNative\n  vars.copiedSourcePlainText = sourceContentPlain\n  vars.sourceContentPlain = sourceContentPlain\n  vars.campaignContent = manualContentNative\n  return {\n    scrapedText: sourceContentPlain,\n    sourceContent: sourceContentPlain,\n    copiedSourcePlainText: sourceContentPlain,\n    sourceContentPlain,\n    manualContentNative,\n    campaignContent: manualContentNative,\n    scrapedImages\n  }\n}\nif (!link) {\n  if (formattedContentEnabled) return buildFormattedResult('', [])\n  return { scrapedText: appendContent, scrapedImages: [] }\n}\n\n// Build URL từ link (UID/slug/full URL)\nconst url = /^https?:\\/\\//i.test(link) ? link\n  : (/^\\d+$/.test(link) ? 'https://www.facebook.com/profile.php?id=' + link\n    : 'https://www.facebook.com/' + link)\n\nawait page.navigate(url)\nawait helpers.sleep(4000, signal)\ntry { await page.waitForSelector(await helpers.element('fb_main_role'), { timeout: 10000 }) } catch {}\nawait helpers.sleep(1500, signal)\n\n// Lazy-render bài\nawait page.scroll({ direction: 'down', amount: 2000 }).catch(() => {})\nawait helpers.sleep(3000, signal)\n\n// Đợi container bài đăng (union 4 patterns)\nconst containerSel = await helpers.element('fb_post_container')\nconst containerFound = await page.waitForSelector(containerSel, { timeout: 5000 }).catch(() => false)\nif (!containerFound) {\n  helpers.log('⚠️ Không tìm thấy container bài đăng nguồn — fallback về appendContent')\n  if (formattedContentEnabled) return buildFormattedResult('', [])\n  vars.campaignContent = appendContent\n  return { scrapedText: appendContent, scrapedImages: [] }\n}\n\n// Click \"Xem thêm\" tối đa 2 vòng để expand nội dung dài\nconst seeMoreInner = await helpers.element('fb_see_more_inner')\nconst seeMoreSel = containerSel.split('|').map(c => c.trim() + seeMoreInner).join(' | ')\nfor (let i = 0; i < 2; i++) {\n  const probe = await page.waitForSelector(seeMoreSel, { timeout: 1500 }).catch(() => false)\n  if (!probe) break\n  await page.click(seeMoreSel).catch(() => {})\n  await helpers.sleep(1000, signal)\n}\n\n// Lấy nội dung — walk lên dir='auto' wrapper từ marker.\n// Dùng 3 method extract (innerText / innerHTML parse / walkDOM) — pick best\n// để (a) handle emoji FB render bằng <img alt=\"😀\">, (b) giữ ngắt dòng đúng.\nconst contentInner = await helpers.element('fb_post_content_inner')\nconst contentSel = containerSel.split('|').map(c => c.trim() + contentInner).join(' | ')\nconst seeLessInner = await helpers.element('fb_see_less_inner')\nconst seeLessSel = containerSel.split('|').map(c => c.trim() + seeLessInner).join(' | ')\n\n// Build evalCode bằng string concat (tránh template literal lồng nhau gây escape lỗi)\nconst evalCode =\n  'var sel = ' + JSON.stringify(contentSel) + ';' +\n  'var seeLessSel = ' + JSON.stringify(seeLessSel) + ';' +\n  'var marker = null;' +\n  'try { var r = document.evaluate(sel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null); marker = r.singleNodeValue; } catch(e) {}' +\n  'if (!marker) return \"\";' +\n  // Walk lên dir='auto' wrapper\n  'var wrapper = marker, depth = 0;' +\n  'while (wrapper && wrapper.parentElement && depth < 20) {' +\n  '  if (wrapper.tagName === \"DIV\" && wrapper.getAttribute && wrapper.getAttribute(\"dir\") === \"auto\") break;' +\n  '  wrapper = wrapper.parentElement; depth++;' +\n  '}' +\n  'if (!wrapper || wrapper === document.body) wrapper = marker;' +\n  // Method A: innerText (CSS-based, không có emoji <img>)\n  'var aText = (typeof wrapper.innerText === \"string\" ? wrapper.innerText : (wrapper.textContent || \"\")).trim();' +\n  // Method B: innerHTML parse — replace <img alt=\"...\"> thành alt text (= emoji), <br> → \\n, block close → \\n\n  'var html = wrapper.innerHTML || \"\";' +\n  'html = html.replace(/<img[^>]*\\\\balt=\"([^\"]*)\"[^>]*>/gi, \"$1\");' +\n  'html = html.replace(/<img[^>]*\\\\balt=' + \"'\" + '([^' + \"'\" + ']*)' + \"'\" + '[^>]*>/gi, \"$1\");' +\n  'html = html.replace(/<br\\\\s*\\\\/?\\\\s*>/gi, \"\\\\n\");' +\n  'html = html.replace(/<\\\\/(div|p|h[1-6]|li|blockquote)\\\\s*>/gi, \"\\\\n\");' +\n  'var tmp = document.createElement(\"div\");' +\n  'tmp.innerHTML = html;' +\n  'var bText = (tmp.textContent || \"\").replace(/\\\\n{3,}/g, \"\\\\n\\\\n\").trim();' +\n  // Method C: walk DOM tree — handle emoji <img alt> + block element newlines\n  'var BLOCK = {DIV:1,P:1,H1:1,H2:1,H3:1,H4:1,H5:1,H6:1,LI:1,UL:1,OL:1,BLOCKQUOTE:1,ARTICLE:1,SECTION:1};' +\n  'var out = [];' +\n  'function walk(node) {' +\n  '  if (node.nodeType === 3) { out.push(node.nodeValue || \"\"); return; }' +\n  '  if (node.nodeType !== 1) return;' +\n  '  if (node.tagName === \"BR\") { out.push(\"\\\\n\"); return; }' +\n  '  if (node.tagName === \"SCRIPT\" || node.tagName === \"STYLE\") return;' +\n  '  if (node.tagName === \"IMG\") {' +\n  '    var alt = (node.getAttribute && node.getAttribute(\"alt\")) || \"\";' +\n  '    if (alt) out.push(alt);' +\n  '    return;' +\n  '  }' +\n  '  var isBlock = BLOCK[node.tagName] === 1;' +\n  '  if (!isBlock) {' +\n  '    try { var disp = window.getComputedStyle(node).display; isBlock = (disp === \"block\" || disp === \"flex\" || disp === \"grid\" || disp === \"list-item\"); } catch(e) {}' +\n  '  }' +\n  '  if (isBlock && out.length && out[out.length-1].slice(-1) !== \"\\\\n\") out.push(\"\\\\n\");' +\n  '  for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i]);' +\n  '  if (isBlock && out.length && out[out.length-1].slice(-1) !== \"\\\\n\") out.push(\"\\\\n\");' +\n  '}' +\n  'walk(wrapper);' +\n  'var cText = out.join(\"\").replace(/\\\\n{3,}/g, \"\\\\n\\\\n\").trim();' +\n  // Pick best: ưu tiên candidate có \\n (multi-line), trong đó chọn cái dài nhất\n  'var candidates = [{name:\"innerText\",text:aText},{name:\"innerHTML\",text:bText},{name:\"walkDOM\",text:cText}];' +\n  'var withBreaks = candidates.filter(function(c){ return c.text.indexOf(\"\\\\n\") !== -1; });' +\n  'var pool = withBreaks.length > 0 ? withBreaks : candidates;' +\n  'var best = pool[0];' +\n  'for (var i = 1; i < pool.length; i++) { if (pool[i].text.length > best.text.length) best = pool[i]; }' +\n  'var seeLessLabel = \"\";' +\n  'try {' +\n  '  var seeLessResult = document.evaluate(seeLessSel, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);' +\n  '  for (var i = 0; i < seeLessResult.snapshotLength; i++) {' +\n  '    var seeLessButton = seeLessResult.snapshotItem(i);' +\n  '    if (wrapper.contains(seeLessButton)) {' +\n  '      seeLessLabel = (seeLessButton.innerText || seeLessButton.textContent || seeLessButton.getAttribute(\"aria-label\") || \"\").trim();' +\n  '      break;' +\n  '    }' +\n  '  }' +\n  '} catch(e) {}' +\n  'var finalExtractedText = best.text.trim();' +\n  'if (seeLessLabel && finalExtractedText.slice(-seeLessLabel.length) === seeLessLabel) {' +\n  '  finalExtractedText = finalExtractedText.slice(0, -seeLessLabel.length).trim();' +\n  '}' +\n  'return finalExtractedText;'\n\nlet scrapedText = ''\ntry {\n  scrapedText = await page.evaluate(evalCode)\n} catch (e) {\n  helpers.log('Lỗi scrape nội dung: ' + e.message)\n}\n\nif (!scrapedText) {\n  helpers.log('⚠️ Marker tìm thấy nhưng extract rỗng → fallback về appendContent')\n}\n\n// Build finalText: ưu tiên scrapedText, append appendContent vào sau (newline cách)\nconst finalText = scrapedText\n  ? (appendContent ? scrapedText + '\\n\\n' + appendContent : scrapedText)\n  : appendContent\n\n// Mutate vars.campaignContent — output của block không cascade xa qua chain,\n// nhưng vars là shared reference → mọi block downstream sẽ đọc được giá trị mới.\nif (!formattedContentEnabled) vars.campaignContent = finalText\n\n// === SCRAPE IMAGES — fallback vars.includeSourceImages (scheduler set tên này) ===\nlet scrapedImages = []\nconst shouldIncludeImages = input.includeImages === true || vars.includeSourceImages === true\nif (shouldIncludeImages) {\n  // Neo ảnh vào đúng marker nội dung đầu tiên, không quét mọi post container.\n  const imgEvalCode =\n    'var contentSel = ' + JSON.stringify(contentSel) + ';' +\n    'var marker = null;' +\n    'try {' +\n    '  var markerResult = document.evaluate(contentSel, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);' +\n    '  marker = markerResult.singleNodeValue;' +\n    '} catch(e) {}' +\n    'if (!marker) return [];' +\n    'var candidates = [];' +\n    'var node = marker;' +\n    'var depth = 0;' +\n    'while (node && node !== document.body && depth < 20) {' +\n    '  if (node.nodeType === 1 && node.tagName === \"DIV\" && node.getAttribute(\"dir\") === \"auto\") {' +\n    '    candidates.push(node);' +\n    '  }' +\n    '  node = node.parentElement;' +\n    '  depth++;' +\n    '}' +\n    'var relativeImageXPath = \"./following-sibling::*[1]/div[1]//img\";' +\n    'var srcs = [];' +\n    'for (var c = 0; c < candidates.length; c++) {' +\n    '  var r = document.evaluate(relativeImageXPath, candidates[c], null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);' +\n    '  if (r.snapshotLength === 0) continue;' +\n    '  for (var i = 0; i < r.snapshotLength && srcs.length < 10; i++) {' +\n    '    var el = r.snapshotItem(i);' +\n    '    var src = el.src || el.getAttribute(\"src\");' +\n    '    if (src && src.indexOf(\"data:\") !== 0) srcs.push(src);' +\n    '  }' +\n    '  break;' +\n    '}' +\n    'return srcs;'\n\n  let imgSrcs = []\n  try { imgSrcs = await page.evaluate(imgEvalCode) || [] } catch (e) {}\n  helpers.log('📷 Tìm thấy ' + imgSrcs.length + ' URL ảnh, đang tải về...')\n\n  for (const src of imgSrcs) {\n    if (signal.aborted) break\n    try {\n      const dl = await page.downloadUrl(src, { timeout: 30000 })\n      if (dl && dl.filePath) {\n        scrapedImages.push(dl.filePath)\n      }\n    } catch (e) {\n      helpers.log('⚠️ Lỗi tải ảnh: ' + (e.message || e))\n    }\n  }\n  helpers.log('📷 Đã tải ' + scrapedImages.length + '/' + imgSrcs.length + ' ảnh về local')\n\n  // Mutate vars.images: merge ảnh user upload + ảnh scraped (theo thứ tự user trước)\n  if (scrapedImages.length > 0) {\n    const userImages = Array.isArray(vars.images) ? vars.images : []\n    vars.images = userImages.concat(scrapedImages)\n  }\n}\n\nif (typeof helpers.prepareCampaignContent === 'function') {\n  vars.campaignSourceText = scrapedText\n  vars.campaignSourceMedia = scrapedImages\n  return { scrapedText, scrapedImages, sourceContent: scrapedText }\n}\n\nhelpers.log('📋 Scrape: ' + scrapedText.length + ' ký tự + ' + scrapedImages.length + ' ảnh từ ' + link)\nreturn formattedContentEnabled\n  ? buildFormattedResult(scrapedText, scrapedImages)\n  : { scrapedText: finalText, scrapedImages: scrapedImages }",
+      "icon": "Copy",
+      "kind": "js",
+      "name": "fb_scrape_post",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:28.125795+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-06T10:14:35.142327+00:00",
+      "description": "Scrape nội dung bài viết (refactored từ webviewController.fbScrapePost). Tự click \"Xem thêm\" để expand.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "sourceLink",
+          "type": "string",
+          "label": "Source URL (để rỗng = vars.sourceLink)"
+        },
+        {
+          "name": "includeImages",
+          "type": "boolean",
+          "label": "Lấy kèm hình ảnh",
+          "default": false
+        },
+        {
+          "name": "appendContent",
+          "type": "textarea",
+          "label": "Nội dung append vào sau (để rỗng = vars.campaignContent)"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "scrapedText",
+          "type": "string",
+          "label": "Nội dung đã scrape (đã append nếu có)"
+        },
+        {
+          "name": "scrapedImages",
+          "type": "json",
+          "label": "Đường dẫn ảnh đã tải (data URIs hoặc temp paths)"
+        }
+      ],
+      "default_config": {
+        "includeImages": false
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 36,
+      "code": "// Centralized AI rewrite via ai_using.\nconst __aiRewriteUsingCode = \"fb_share_post_rewrite\";\nconst __extractAIText = (value) => {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'string') return value.trim();\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();\n  if (Array.isArray(value)) return value.map(__extractAIText).filter(Boolean).join('\\n').trim();\n  if (typeof value === 'object') {\n    const data = value;\n    const direct = data.content ?? data.data ?? data.Data ?? data.text ?? data.output ?? data.response ?? data.message ?? data.Message ?? data.answer ?? data.result;\n    if (direct !== undefined && direct !== null && direct !== value) {\n      const directText = __extractAIText(direct);\n      if (directText) return directText;\n    }\n    try { return JSON.stringify(value); } catch { return String(value); }\n  }\n  return String(value || '').trim();\n};\nconst __callCentralAI = async (usingCode, payload) => {\n  if (!usingCode) throw new Error('Thiếu mã cấu hình AI');\n  if (typeof helpers.callAIUsing !== 'function') throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  const result = await helpers.callAIUsing(usingCode, payload || {});\n  if (result && result.unsupported) throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));\n  return result;\n};\nconst __callAIText = async (usingCode, payload) => {\n  const result = await __callCentralAI(usingCode, payload);\n  return __extractAIText(result && (result.content ?? result.data ?? result.text ?? result.output ?? result.response ?? result.rawResponse ?? result));\n};\nconst __callAIRewriteContent = async (content) => {\n  const text = String(content || '');\n  return await __callAIText(__aiRewriteUsingCode, {\n    content: text,\n    question: text,\n    source: 'aka_agent'\n  });\n};\n\nconst shouldRewriteContentEachRun = vars.rewriteContentEachRun === true\n\nconst formatTemplateDate = (dayKey, formatKey) => {\n  const d = new Date()\n  const key = String(dayKey || 'TODAY').toUpperCase()\n  if (key === 'TOMORROW') d.setDate(d.getDate() + 1)\n  if (key === 'YESTERDAY') d.setDate(d.getDate() - 1)\n\n  const dd = String(d.getDate()).padStart(2, '0')\n  const mm = String(d.getMonth() + 1).padStart(2, '0')\n  const yyyy = String(d.getFullYear())\n  const format = String(formatKey || 'DD/MM/YYYY').toUpperCase()\n  return format === 'MM/DD/YYYY'\n    ? mm + '/' + dd + '/' + yyyy\n    : dd + '/' + mm + '/' + yyyy\n}\n\nconst renderContentTemplate = async (raw, options = {}) => {\n  let rendered = String(raw || '')\n\n  if (/#\\{\\s*FULL_NAME\\s*\\}/i.test(rendered)) {\n    let fullName = String(vars.campaignInputDataName || vars.inputDataName || '').trim()\n    if (!fullName && options.resolveFullNameFromPage) {\n      const nameXpath = \"//*[contains(@class,'xxymvpz x1dyh7pn')]\"\n      try {\n        const found = await page.waitForSelector(nameXpath, { timeout: 3000 }).catch(() => false)\n        if (found) fullName = String(await page.getText(nameXpath).catch(() => '') || '').trim()\n      } catch (e) {\n        fullName = ''\n      }\n    }\n    rendered = rendered.replace(/#\\{\\s*FULL_NAME\\s*\\}/gi, fullName)\n  }\n\n  rendered = rendered.replace(\n    /#\\{\\s*(TODAY|TOMORROW|YESTERDAY)\\s*(?:\\(\\s*(DD\\/MM\\/YYYY|MM\\/DD\\/YYYY)\\s*\\))?\\s*\\}/gi,\n    (_match, dayKey, formatKey) => formatTemplateDate(dayKey, formatKey)\n  )\n\n  return rendered\n}\n\nconst rewriteContentForRun = async (raw) => {\n  const original = String(raw || '')\n  const content = original.trim()\n  if (!shouldRewriteContentEachRun || !content) return original\n\n  try {\n    const rewritten = await __callAIRewriteContent(content)\n    if (!rewritten) throw new Error('AI trả về nội dung không hợp lệ.')\n    helpers.log('Đã viết lại nội dung bằng AI')\n    return rewritten\n  } catch (e) {\n    const message = e && e.message ? String(e.message) : String(e)\n    helpers.log('AI viết lại nội dung lỗi, dùng nội dung gốc: ' + message)\n    return original\n  }\n}\n\nconst link = String(input.sourceLink || vars.sourceLink || '').trim()\nif (!link) throw new Error('sourceLink rỗng')\nlet content\nif (typeof helpers.prepareCampaignContent === 'function') {\n  const prepared = await helpers.prepareCampaignContent({\n    rewriteCode: __aiRewriteUsingCode,\n    sourceText: vars.campaignSourceText || '',\n    sourceMedia: vars.campaignSourceMedia || []\n  })\n  content = prepared.content\n  vars.campaignContent = prepared.content\n  vars.images = prepared.media\n  vars.contentVariantIndex = prepared.variantIndex\n} else {\n  content = String(input.content || vars.campaignContent || '')\n  content = await renderContentTemplate(content)\n  content = await rewriteContentForRun(content)\n}\n\n// Build URL từ link (UID/slug/full URL)\nconst url = /^https?:\\/\\//i.test(link) ? link\n  : (/^\\d+$/.test(link) ? 'https://www.facebook.com/profile.php?id=' + link\n    : 'https://www.facebook.com/' + link)\n\nawait page.navigate(url)\nawait helpers.sleep(4000, signal)\n\n// Scroll xuống để FB lazy-render bài (tránh waitForSelector container fail oan)\nawait page.scroll({ direction: 'down', amount: 2000 })\nawait helpers.sleep(1500, signal)\n\n// Đợi container bài đăng (union 4 patterns: page/profile/dialog/group)\nconst containerSel = await helpers.element('fb_post_container')\nconst found = await page.waitForSelector(containerSel, { timeout: 10000 }).catch(() => false)\nif (!found) throw new Error('Không tìm thấy container bài đăng nguồn')\nawait helpers.sleep(1500, signal)\n\n// Build share button selector: append descendant pattern sau mỗi container path\nconst shareInner = await helpers.element('fb_share_button_inner')\nconst shareBtnSel = containerSel.split('|').map(c => c.trim() + shareInner).join(' | ')\nawait page.click(shareBtnSel)\nawait helpers.sleep(2500, signal)\n\n// Click \"Chia sẻ ngay\" trong menu pop-up\nconst shareNowSel = await helpers.element('fb_share_now_menuitem')\nawait page.click(shareNowSel)\nawait helpers.sleep(3500, signal)\n\n// Composer dialog mở - thêm content + click Đăng\nconst composer = await helpers.element('fb_composer_dialog')\nconst composerFound = await page.waitForSelector(composer, { timeout: 5000 }).catch(() => false)\nif (composerFound && content) {\n  await page.click(composer).catch(() => {})\n  await helpers.sleep(500, signal)\n  await page.fill(composer, content).catch(() => {})\n  await helpers.sleep(1500, signal)\n}\nconst postBtn = await helpers.element('fb_post_button')\nawait page.click(postBtn)\nawait helpers.sleep(5000, signal)\n\nhelpers.log('Đã chia sẻ từ ' + link)\nreturn { shared: true, sourceLink: link, content, rewrittenContent: shouldRewriteContentEachRun }\n",
+      "icon": "Share2",
+      "kind": "js",
+      "name": "fb_share_post",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:28.232826+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-06T10:14:35.142327+00:00",
+      "description": "Đăng bài bằng cách chia sẻ từ source link (refactored từ webviewController.fbSharePost)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "sourceLink",
+          "type": "string",
+          "label": "Source URL (để rỗng = vars.sourceLink)"
+        },
+        {
+          "name": "content",
+          "type": "textarea",
+          "label": "Nội dung kèm theo (để rỗng = vars.campaignContent)"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "shared",
+          "type": "boolean",
+          "label": "Đã chia sẻ thành công"
+        },
+        {
+          "name": "sourceLink",
+          "type": "string",
+          "label": "Source link đã share"
+        }
+      ],
+      "default_config": {},
+      "organization_id": 1
+    },
+    {
+      "id": 612,
+      "code": "// Verify input có thể là UID thuần (\"164469482423151\"), slug (\"quangnhut27\"),\r\n// hoặc link đầy đủ (\"https://www.facebook.com/groups/164...\", \"fb.com/quangnhut27\").\r\n// Trả về { uid, url } đã normalize theo urlType.\r\n\r\nconst raw = String(input.raw || vars.inputDataUid || vars.targetUrl || '').trim()\r\nif (!raw) throw new Error('fb_resolve_url: missing input (raw + vars.inputDataUid + vars.targetUrl are empty)')\r\n\r\n// Extract UID gốc — ưu tiên profile.php?id, fallback last segment của pathname\r\nlet uid = raw\r\ntry {\r\n  const u = new URL(/^https?:\\/\\//i.test(raw) ? raw : 'https://' + raw)\r\n  const idParam = u.searchParams.get('id')\r\n  if (idParam) {\r\n    uid = idParam\r\n  } else {\r\n    const parts = u.pathname.split('/').filter(Boolean)\r\n    if (parts.length > 0) {\r\n      // Loại bỏ prefix 'groups' nếu có (vd /groups/164... → uid = 164...)\r\n      uid = parts[parts.length - 1]\r\n    }\r\n  }\r\n} catch (e) {\r\n  // Không phải URL hợp lệ → giữ nguyên uid = raw\r\n}\r\n\r\nconst urlType = String(input.urlType || 'group')\r\nlet url = ''\r\n\r\nif (urlType === 'group') {\r\n  if (/^https?:\\/\\//i.test(raw)) url = raw\r\n  else if (/^(www\\.)?facebook\\.com\\//i.test(raw)) url = 'https://' + raw\r\n  else if (/^groups\\//i.test(raw)) url = 'https://www.facebook.com/' + raw.replace(/^\\/+|\\/+$/g, '')\r\n  else url = 'https://www.facebook.com/groups/' + uid + '/'\r\n} else if (urlType === 'messenger') {\r\n  // Messenger luôn theo bare UID (không hỗ trợ paste link profile vào /messages/t/)\r\n  url = 'https://www.facebook.com/messages/t/' + uid\r\n} else {\r\n  // profile (mặc định)\r\n  if (/^https?:\\/\\//i.test(raw)) url = raw\r\n  else if (/^(www\\.)?facebook\\.com\\//i.test(raw)) url = 'https://' + raw\r\n  else if (/^\\d+$/.test(uid)) url = 'https://www.facebook.com/profile.php?id=' + uid\r\n  else url = 'https://www.facebook.com/' + uid\r\n}\r\n\r\nhelpers.log('🔗 ' + urlType + ' URL: ' + url + ' (UID: ' + uid + ')')\r\nreturn { uid: uid, url: url }",
+      "icon": "Link2",
+      "kind": "js",
+      "name": "fb_resolve_url",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T18:49:36.942922+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-06T09:30:25.467+00:00",
+      "description": "Verify input là UID hay link, normalize thành URL FB đầy đủ theo type (group/profile/messenger).",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "urlType",
+          "type": "select",
+          "label": "Loại URL",
+          "default": "group",
+          "options": [
+            {
+              "label": "Group (đăng bài vào nhóm)",
+              "value": "group"
+            },
+            {
+              "label": "Profile (trang cá nhân)",
+              "value": "profile"
+            },
+            {
+              "label": "Messenger (cuộc trò chuyện)",
+              "value": "messenger"
+            }
+          ],
+          "required": true
+        },
+        {
+          "name": "raw",
+          "type": "string",
+          "label": "Input raw (fallback: vars.inputDataUid or vars.targetUrl)",
+          "placeholder": "UID hoặc link FB"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "uid",
+          "type": "string",
+          "label": "UID đã extract"
+        },
+        {
+          "name": "url",
+          "type": "string",
+          "label": "URL FB đầy đủ"
+        }
+      ],
+      "default_config": {
+        "urlType": "group"
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 29,
+      "code": "\nconst imgs = Array.isArray(input.images) && input.images.length > 0\n  ? input.images\n  : (Array.isArray(vars.images) ? vars.images : [])\nif (imgs.length === 0) return { fileCount: 0 }\nconst form = await helpers.element('FbComposerForm')\nconst result = await uploadPostMediaInput(form, imgs)\nif (!result || result.fileCount !== imgs.length) {\n  throw new Error('Không đưa đủ ảnh/video vào form đăng bài')\n}\nawait helpers.sleep(2000, signal)\nreturn result\n\n// Prefer the composer's real file input; use legacy drop only when none exists.\n// uploadFile resolves a visible container before finding its hidden file input.\nasync function uploadPostMediaInput(formXPath, files) {\n  if (signal.aborted) throw new Error('Đã dừng upload ảnh/video')\n  const token = 'post_media_' + Date.now() + '_' + Math.random().toString(36).slice(2)\n  const attribute = 'data-aka-post-media-upload'\n  const prepared = await page.evaluate(`\n    const formXPath = __args[0];\n    const token = __args[1];\n    const attribute = __args[2];\n    const fileCount = __args[3];\n    const matches = document.evaluate(formXPath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    if (matches.snapshotLength !== 1) {\n      throw new Error('Cần đúng 1 form đăng bài, tìm thấy ' + matches.snapshotLength);\n    }\n    const form = matches.snapshotItem(0);\n    if (!form || form.tagName !== 'FORM') throw new Error('Element đăng bài không phải form');\n    const inputs = Array.from(form.querySelectorAll('input[type=\"file\"]'));\n    if (inputs.length === 0) {\n      if (form.hasAttribute(attribute)) throw new Error('Form đăng bài đang có lượt upload khác');\n      form.setAttribute(attribute, token);\n      return 'drop';\n    }\n    if (inputs.length !== 1) {\n      throw new Error('Cần đúng 1 input file trong form đăng bài, tìm thấy ' + inputs.length);\n    }\n    const input = inputs[0];\n    if (input.matches(':disabled')) throw new Error('Input ảnh/video đang bị vô hiệu hóa');\n    if (!/(image|video)/i.test(input.accept || '')) {\n      throw new Error('Input trong form không nhận ảnh/video');\n    }\n    if (fileCount > 1 && !input.multiple) {\n      throw new Error('Input trong form không hỗ trợ chọn nhiều ảnh/video');\n    }\n    if (form.hasAttribute(attribute)) throw new Error('Form đăng bài đang có lượt upload khác');\n    form.setAttribute(attribute, token);\n    return 'upload';\n  `, formXPath, token, attribute, files.length)\n  if (prepared !== 'upload' && prepared !== 'drop') throw new Error('Không xác minh được input ảnh/video của form đăng bài')\n\n  try {\n    if (signal.aborted) throw new Error('Đã dừng upload ảnh/video')\n    const selector = 'form[' + attribute + '=\"' + token + '\"]'\n    if (prepared === 'drop') return await page.dropFile(selector, files)\n    // The visible form contains exactly one validated, possibly hidden file input.\n    return await page.uploadFile(selector, files)\n  } finally {\n    await page.evaluate(`\n      const attribute = __args[0];\n      const token = __args[1];\n      for (const form of document.querySelectorAll('form[' + attribute + ']')) {\n        if (form.getAttribute(attribute) === token) form.removeAttribute(attribute);\n      }\n    `, attribute, token).catch(() => null)\n  }\n}\n",
+      "icon": "Image",
+      "kind": "js",
+      "name": "fb_drop_post_images",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.489108+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-09-21T07:12:29.048708+00:00",
+      "description": "Drop ảnh vào composer (fallback vars.images)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "images",
+          "type": "json",
+          "label": "Images (array path) — để rỗng để dùng vars.images",
+          "default": []
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "fileCount",
+          "type": "number",
+          "label": "Số ảnh đã drop"
+        }
+      ],
+      "default_config": {
+        "images": []
+      },
+      "organization_id": 1
+    },
+    {
+      "id": 2794,
+      "code": "\nconst enabled = vars.enableGroupPostShareToJoinedGroups === true || input.enableGroupPostShareToJoinedGroups === true;\nconst rawTargets = Array.isArray(vars.groupPostShareTargets)\n  ? vars.groupPostShareTargets\n  : (Array.isArray(input.groupPostShareTargets) ? input.groupPostShareTargets : []);\nconst maxSelect = Math.min(3, Math.max(0, Math.floor(Number(vars.groupPostShareMaxCount ?? input.groupPostShareMaxCount ?? 3))));\nconst stepMs = Math.max(0, Number(vars.facebookStepMs || input.facebookStepMs || 1000));\n\nconst targets = rawTargets\n  .map(item => {\n    const record = item && typeof item === 'object' ? item : {};\n    return {\n      id: Number(record.id),\n      name: String(record.name || '').replace(/\\s+/g, ' ').trim(),\n      uid: String(record.uid || '').trim()\n    };\n  })\n  .filter(item => Number.isFinite(item.id) && item.id > 0 && item.name)\n  .slice(0, 10);\n\nif (!enabled || maxSelect <= 0 || targets.length === 0 || !page) {\n  return {\n    enabled,\n    skipped: true,\n    reason: !enabled ? 'disabled' : maxSelect <= 0 ? 'no_quota_capacity' : targets.length === 0 ? 'no_candidates' : 'no_page',\n    candidateCount: targets.length,\n    attemptedCount: 0,\n    selectedCount: 0,\n    selectedTargets: []\n  };\n}\n\nconst addButton = await helpers.element('AddGroupToPostBtn');\nconst searchInput = await helpers.element('SearchAddGroupToPostInp');\nconst selectTemplate = await helpers.element('SelectGroupToPostChk');\nconst confirmButton = await helpers.element('ConfirmGroupToPostBtn');\nconst backButton = await helpers.element('BackToPostFormBtn');\n\nfunction xpathLiteral(value) {\n  const text = String(value || '');\n  if (!text.includes(\"'\")) return \"'\" + text + \"'\";\n  if (!text.includes('\"')) return '\"' + text + '\"';\n  return \"concat('\" + text.replace(/'/g, \"',\\\"'\\\",'\") + \"')\";\n}\n\nfunction selectorForGroupName(template, groupName) {\n  const literal = xpathLiteral(groupName);\n  if (template.includes(\"'$group_name'\")) return template.replace(/'\\$group_name'/g, literal);\n  if (template.includes('\"$group_name\"')) return template.replace(/\"\\$group_name\"/g, literal);\n  return template.replace(/\\$group_name/g, groupName);\n}\n\nasync function rawClick(xpath) {\n  return await page.evaluate(`\n    const xpath = String(__args[0] || '');\n    function firstByXPath(value) {\n      try {\n        return document.evaluate(value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      } catch (e) {\n        return null;\n      }\n    }\n    const el = firstByXPath(xpath);\n    if (!el) return { found: false, clicked: false };\n    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) {}\n    const init = { bubbles: true, cancelable: true, view: window };\n    try { el.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, init, { pointerId: 1, pointerType: 'mouse' }))); } catch (e) {}\n    try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch (e) {}\n    try { el.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, init, { pointerId: 1, pointerType: 'mouse' }))); } catch (e) {}\n    try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch (e) {}\n    try { el.click(); } catch (e) { return { found: true, clicked: false, message: e && e.message ? e.message : String(e) }; }\n    return { found: true, clicked: true };\n  `, xpath).catch(err => ({ found: false, clicked: false, message: err && err.message ? err.message : String(err) }));\n}\n\nasync function rawClear(xpath) {\n  return await page.evaluate(`\n    const xpath = String(__args[0] || '');\n    function firstByXPath(value) {\n      try {\n        return document.evaluate(value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      } catch (e) {\n        return null;\n      }\n    }\n    const el = firstByXPath(xpath);\n    if (!el) return { found: false, cleared: false };\n    try { el.focus(); } catch (e) {}\n    try {\n      if (typeof el.select === 'function') el.select();\n      else if (typeof el.setSelectionRange === 'function') el.setSelectionRange(0, String(el.value || '').length);\n    } catch (e) {}\n    try { document.execCommand('delete', false); } catch (e) {}\n    if ('value' in el) {\n      const proto = Object.getPrototypeOf(el);\n      const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;\n      if (desc && typeof desc.set === 'function') desc.set.call(el, '');\n      else el.value = '';\n    }\n    try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward', data: null })); } catch (e) { el.dispatchEvent(new Event('input', { bubbles: true })); }\n    el.dispatchEvent(new Event('change', { bubbles: true }));\n    return { found: true, cleared: true };\n  `, xpath).catch(err => ({ found: false, cleared: false, message: err && err.message ? err.message : String(err) }));\n}\n\nasync function rawType(xpath, text) {\n  return await page.evaluate(`\n    const xpath = String(__args[0] || '');\n    const text = String(__args[1] || '');\n    function firstByXPath(value) {\n      try {\n        return document.evaluate(value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      } catch (e) {\n        return null;\n      }\n    }\n    const el = firstByXPath(xpath);\n    if (!el) return { found: false, typed: false };\n    try { el.focus(); } catch (e) {}\n    if ('value' in el) {\n      const proto = Object.getPrototypeOf(el);\n      const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;\n      if (desc && typeof desc.set === 'function') desc.set.call(el, text);\n      else el.value = text;\n    } else {\n      try { document.execCommand('insertText', false, text); } catch (e) {}\n    }\n    try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })); } catch (e) { el.dispatchEvent(new Event('input', { bubbles: true })); }\n    el.dispatchEvent(new Event('change', { bubbles: true }));\n    return { found: true, typed: true };\n  `, xpath, text).catch(err => ({ found: false, typed: false, message: err && err.message ? err.message : String(err) }));\n}\n\nlet attemptedCount = 0;\nlet opened = false;\nlet confirmed = false;\nconst checkboxSelectedTargets = [];\nlet selectedTargets = [];\n\ntry {\n  const openedResult = await rawClick(addButton);\n  opened = openedResult && openedResult.clicked === true;\n  if (!opened) {\n    return {\n      enabled: true,\n      skipped: true,\n      reason: openedResult && openedResult.found === false ? 'add_group_button_not_found' : 'add_group_button_not_clicked',\n      candidateCount: targets.length,\n      attemptedCount: 0,\n      selectedCount: 0,\n      selectedTargets: []\n    };\n  }\n  await helpers.sleep(stepMs + 1000, signal);\n\n  for (const target of targets) {\n    if (checkboxSelectedTargets.length >= maxSelect) break;\n    attemptedCount += 1;\n    try {\n      if (signal && signal.aborted) throw new Error('Aborted');\n      const cleared = await rawClear(searchInput);\n      if (!cleared || cleared.found !== true) continue;\n      await helpers.sleep(stepMs + 500, signal);\n\n      const typed = await rawType(searchInput, target.name);\n      if (!typed || typed.found !== true) continue;\n      await helpers.sleep(stepMs + 500, signal);\n\n      const selectXpath = selectorForGroupName(selectTemplate, target.name);\n      const selected = await rawClick(selectXpath);\n      if (!selected || selected.clicked !== true) continue;\n      checkboxSelectedTargets.push(target);\n      await helpers.sleep(stepMs + 500, signal);\n    } catch (err) {\n      if (signal && signal.aborted) throw err;\n    }\n  }\n} catch (err) {\n  if (signal && signal.aborted) throw err;\n  helpers.log('Không chọn được group share kèm: ' + (err && err.message ? err.message : String(err)));\n} finally {\n  if (opened) {\n    try {\n      if (checkboxSelectedTargets.length > 0) {\n        const confirmResult = await rawClick(confirmButton);\n        confirmed = confirmResult && confirmResult.clicked === true;\n        if (confirmed) {\n          selectedTargets = checkboxSelectedTargets;\n          await helpers.sleep(stepMs + 500, signal);\n        }\n      } else {\n        const backResult = await rawClick(backButton);\n        if (backResult && backResult.clicked === true) await helpers.sleep(stepMs + 500, signal);\n      }\n    } catch (err) {\n      if (signal && signal.aborted) throw err;\n    }\n  }\n}\n\nvars.groupPostShareSelectedTargets = selectedTargets;\n\nreturn {\n  enabled: true,\n  skipped: false,\n  candidateCount: targets.length,\n  attemptedCount,\n  checkboxSelectedCount: checkboxSelectedTargets.length,\n  selectedCount: selectedTargets.length,\n  confirmed,\n  selectedTargets\n};\n",
+      "icon": "Share2",
+      "kind": "js",
+      "name": "fb_select_group_post_share_targets",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-07-06T09:36:12.230738+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-07-06T09:36:12.230738+00:00",
+      "description": "Chọn tối đa 3 group để đăng bài dạng chia sẻ trong composer group.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "enableGroupPostShareToJoinedGroups",
+          "type": "boolean",
+          "label": "Bật đăng bài dạng chia sẻ"
+        },
+        {
+          "name": "groupPostShareTargets",
+          "type": "json",
+          "label": "Danh sách group ứng viên"
+        },
+        {
+          "name": "groupPostShareMaxCount",
+          "type": "number",
+          "label": "Số group share tối đa"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "selectedCount",
+          "type": "number",
+          "label": "Số group đã chọn"
+        },
+        {
+          "name": "selectedTargets",
+          "type": "json",
+          "label": "Group đã chọn"
+        },
+        {
+          "name": "attemptedCount",
+          "type": "number",
+          "label": "Số group đã thử"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2625,
+      "code": "\nconst selector = await helpers.element('GroupPostDismissDialogOrUsePageButton');\n\nconst result = await page.evaluate(`\n  const selector = __args[0];\n\n  function isVisible(el) {\n    if (!el) return false;\n    const style = window.getComputedStyle(el);\n    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;\n    const rect = el.getBoundingClientRect();\n    return rect.width > 0 && rect.height > 0;\n  }\n\n  function xpathAll(xpath) {\n    const out = [];\n    if (!xpath) return out;\n    try {\n      const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      for (let i = 0; i < result.snapshotLength; i++) {\n        const item = result.snapshotItem(i);\n        if (item) out.push(item);\n      }\n    } catch {}\n    return out;\n  }\n\n  function clickSynthetic(el) {\n    if (!el) return;\n    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n    const init = { bubbles: true, cancelable: true, view: window };\n    const pointerInit = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n    try { el.dispatchEvent(new PointerEvent('pointerdown', pointerInit)); } catch {}\n    try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n    try { el.dispatchEvent(new PointerEvent('pointerup', pointerInit)); } catch {}\n    try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n    try { el.click(); } catch {}\n  }\n\n  const el = xpathAll(selector).find(isVisible) || null;\n  if (!el) return { clicked: false, label: '' };\n\n  const label = el.getAttribute('aria-label') || (el.innerText || el.textContent || '').trim();\n  clickSynthetic(el);\n  return { clicked: true, label };\n`, selector);\n\nconst clicked = result && result.clicked === true;\nif (clicked) {\n  await helpers.sleep(500, signal);\n  helpers.log('Đã xử lý popup group nếu có');\n}\n\nreturn {\n  clicked,\n  label: String(result && result.label ? result.label : '')\n};\n",
+      "icon": "MousePointerClick",
+      "kind": "js",
+      "name": "fb_click_group_post_prompt_if_present",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-18T07:27:39.438454+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-18T07:27:39.438454+00:00",
+      "description": "Click popup Đóng/Dùng Trang trong group nếu xuất hiện",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "clicked",
+          "type": "boolean",
+          "label": "Đã click"
+        },
+        {
+          "name": "label",
+          "type": "string",
+          "label": "Nhãn"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 34,
+      "code": "// Read only after comment submit/settle and the existing frequency-limit check.\n// Missing links do not retry the comment or change its successful result.\nasync function getFirstCommentUrl() {\n  try {\n    const selector = await helpers.element('fb_comment_permalink')\n    return await page.evaluate(`\n      const link = document.evaluate(__args[0], document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      const raw = link ? String(link.href || link.getAttribute('href') || '').trim() : '';\n      if (!raw) return '';\n      try {\n        const url = new URL(raw, 'https://www.facebook.com');\n        // Keep comment/reply and post routing parameters; remove tracking only.\n        for (const key of Array.from(url.searchParams.keys())) {\n          if (key.startsWith('__') || key.startsWith('utm_') ||\n              ['fbclid', 'mibextid', 'ref', 'refid', 'refsrc', 'locale'].includes(key)) {\n            url.searchParams.delete(key);\n          }\n        }\n        return url.toString();\n      } catch {\n        return raw;\n      }\n    `, selector)\n  } catch (error) {\n    if (signal.aborted) throw error\n    return ''\n  }\n}\n\n// Centralized AI rewrite via ai_using.\nconst __aiRewriteUsingCode = \"fb_comment_at_position_rewrite\";\nconst __extractAIText = (value) => {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'string') return value.trim();\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();\n  if (Array.isArray(value)) return value.map(__extractAIText).filter(Boolean).join('\\n').trim();\n  if (typeof value === 'object') {\n    const data = value;\n    const direct = data.content ?? data.data ?? data.Data ?? data.text ?? data.output ?? data.response ?? data.message ?? data.Message ?? data.answer ?? data.result;\n    if (direct !== undefined && direct !== null && direct !== value) {\n      const directText = __extractAIText(direct);\n      if (directText) return directText;\n    }\n    try { return JSON.stringify(value); } catch { return String(value); }\n  }\n  return String(value || '').trim();\n};\nconst __callCentralAI = async (usingCode, payload) => {\n  if (!usingCode) throw new Error('Thiếu mã cấu hình AI');\n  if (typeof helpers.callAIUsing !== 'function') throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  const result = await helpers.callAIUsing(usingCode, payload || {});\n  if (result && result.unsupported) throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));\n  return result;\n};\nconst __callAIText = async (usingCode, payload) => {\n  const result = await __callCentralAI(usingCode, payload);\n  return __extractAIText(result && (result.content ?? result.data ?? result.text ?? result.output ?? result.response ?? result.rawResponse ?? result));\n};\nconst __callAIRewriteContent = async (content) => {\n  const text = String(content || '');\n  return await __callAIText(__aiRewriteUsingCode, {\n    content: text,\n    question: text,\n    source: 'aka_agent'\n  });\n};\n\nconst commentFrequencyLimitMessage = 'Facebook báo giới hạn tần suất comment'\nconst shouldRewriteCommentContentEachRun = vars.rewriteCommentContentEachRun === true\n\nasync function hasVisibleElement(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n\n    function isVisible(el) {\n      if (!el) return false;\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;\n      const rect = el.getBoundingClientRect();\n      return rect.width > 0 && rect.height > 0;\n    }\n\n    function xpathAll(xpath) {\n      const out = [];\n      if (!xpath) return out;\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n\n    return xpathAll(selector).some(isVisible);\n  `, selector);\n}\n\nasync function throwIfCommentFrequencyLimited() {\n  const frequencyLimitError = await helpers.element('GroupPostFrequencyLimitError');\n  const hasFrequencyLimitError = await hasVisibleElement(frequencyLimitError);\n  if (hasFrequencyLimitError) {\n    helpers.log(commentFrequencyLimitMessage);\n    throw new Error(commentFrequencyLimitMessage);\n  }\n}\n\nconst formatTemplateDate = (dayKey, formatKey) => {\n  const d = new Date()\n  const key = String(dayKey || 'TODAY').toUpperCase()\n  if (key === 'TOMORROW') d.setDate(d.getDate() + 1)\n  if (key === 'YESTERDAY') d.setDate(d.getDate() - 1)\n\n  const dd = String(d.getDate()).padStart(2, '0')\n  const mm = String(d.getMonth() + 1).padStart(2, '0')\n  const yyyy = String(d.getFullYear())\n  const format = String(formatKey || 'DD/MM/YYYY').toUpperCase()\n  return format === 'MM/DD/YYYY'\n    ? mm + '/' + dd + '/' + yyyy\n    : dd + '/' + mm + '/' + yyyy\n}\n\nconst renderCommentTemplate = async (raw) => {\n  let rendered = String(raw || '')\n\n  if (/#\\{\\s*FULL_NAME\\s*\\}/i.test(rendered)) {\n    const fullName = String(vars.campaignInputDataName || vars.inputDataName || '').trim()\n    rendered = rendered.replace(/#\\{\\s*FULL_NAME\\s*\\}/gi, fullName)\n  }\n\n  rendered = rendered.replace(\n    /#\\{\\s*(TODAY|TOMORROW|YESTERDAY)\\s*(?:\\(\\s*(DD\\/MM\\/YYYY|MM\\/DD\\/YYYY)\\s*\\))?\\s*\\}/gi,\n    (_match, dayKey, formatKey) => formatTemplateDate(dayKey, formatKey)\n  )\n\n  return rendered\n}\n\nconst rewriteCommentForRun = async (raw) => {\n  const original = String(raw || '')\n  const content = original.trim()\n  if (!shouldRewriteCommentContentEachRun || !content) return original\n\n  try {\n    const rewritten = await __callAIRewriteContent(content)\n    if (!rewritten) throw new Error('AI trả về nội dung không hợp lệ.')\n    helpers.log('Đã viết lại nội dung comment bằng AI')\n    return rewritten\n  } catch (e) {\n    const message = e && e.message ? String(e.message) : String(e)\n    helpers.log('AI viết lại nội dung comment lỗi, dùng nội dung gốc: ' + message)\n    return original\n  }\n}\n\nconst item = (vars && vars.loopItem) ? vars.loopItem : {}\nconst pos = Number(input.position || item.position || 1)\nlet text\nlet images\nif (typeof helpers.prepareCampaignContent === 'function') {\n  const prepared = await helpers.prepareCampaignContent({ kind: 'comment', rewriteCode: __aiRewriteUsingCode })\n  text = prepared.content.replace(/\\t/g, '      ')\n  images = prepared.media.slice(0, 1)\n  vars.contentVariantIndex = prepared.variantIndex\n} else {\ntext = String(input.text || item.text || '')\ntext = await renderCommentTemplate(text)\ntext = await rewriteCommentForRun(text)\ntext = text.replace(/\\t/g, '      ')\nconst batchIndex = Number(vars && vars.loopIndex)\nconst batchImages = Array.isArray(vars && vars.commentImageBatches) && Array.isArray(vars.commentImageBatches[batchIndex])\n  ? vars.commentImageBatches[batchIndex]\n  : []\nconst fallbackImages = Array.isArray(vars && vars.commentImages) ? vars.commentImages : []\nconst rawImages = Array.isArray(input.images) && input.images.length > 0\n  ? input.images\n  : (Array.isArray(item.images) && item.images.length > 0\n      ? item.images\n      : (batchImages.length > 0 ? batchImages : fallbackImages))\nimages = rawImages.map(x => String(x || '').trim()).filter(Boolean).slice(0, 1)\n}\n\nif (!text && images.length === 0) return { commented: false, position: pos, text: '', imageCount: 0 }\n\nlet imageCount = 0\n\ntry {\n  // FB comment box dùng Lexical -> page.fill dispatch paste như akaBizAuto DispatchPaste.\n  // Pattern: click -> sleep 2s -> paste/drop -> Enter.\n  const boxXpath = await helpers.elementWith('fb_comment_box_at_n', { n: pos })\n  await page.waitForSelector(boxXpath, { timeout: 8000 })\n  await page.click(boxXpath)\n  await helpers.sleep(2000, signal)\n  const inputXpath = await helpers.element('fb_comment_dialog_textbox')\n  await page.waitForSelector(inputXpath, { timeout: 8000 })\n\n  if (text) {\n    await page.fill(inputXpath, text)\n    await helpers.sleep(1000, signal)\n    // Append a real space after paste so the final word no longer ends at the caret.\n    await page.type(inputXpath, ' ')\n    await helpers.sleep(500, signal)\n  }\n\n  if (images.length > 0) {\n    const dropResult = await page.dropFile(inputXpath, images)\n    imageCount = Number(dropResult.fileCount || 0)\n    await helpers.sleep(10000, signal)\n    if (!text && imageCount <= 0) {\n      return { commented: false, position: pos, text: '', imageCount: 0 }\n    }\n  }\n\n  await page.press('Enter')\n  await helpers.sleep(10000, signal)\n  await throwIfCommentFrequencyLimited()\n  const commentUrl = await getFirstCommentUrl()\n  const logSuffix = text ? ': ' + text.substring(0, 50) : ''\n  helpers.log('💬 Đã comment vào bài #' + pos + logSuffix)\n  return { commented: true, commentUrl, position: pos, text: text, imageCount: imageCount, rewrittenContent: shouldRewriteCommentContentEachRun }\n} catch (e) {\n  const message = e && e.message ? String(e.message) : String(e)\n  if (message.includes(commentFrequencyLimitMessage)) throw e\n  try {\n    await page.press('Escape')\n    await helpers.sleep(500, signal)\n  } catch {}\n  helpers.log('⚠️ Không comment được bài #' + pos + ': ' + message)\n  return {\n    commented: false,\n    commentFailed: true,\n    position: pos,\n    text: text,\n    imageCount: imageCount,\n    error: message,\n    rewrittenContent: shouldRewriteCommentContentEachRun\n  }\n}\n",
+      "icon": "MessageCircle",
+      "kind": "js",
+      "name": "fb_comment_at_position",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:28.017367+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-12T22:11:39.655208+00:00",
+      "description": "Comment vào bài thứ N, hỗ trợ nội dung và 1 ảnh comment (fallback vars.loopItem khi chạy trong loop)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "position",
+          "type": "number",
+          "label": "Vị trí (1-based, để rỗng = lấy từ loopItem)"
+        },
+        {
+          "name": "text",
+          "type": "textarea",
+          "label": "Nội dung comment (để rỗng = lấy từ loopItem)"
+        },
+        {
+          "name": "images",
+          "type": "json",
+          "label": "Ảnh comment (array path, chỉ dùng ảnh đầu tiên; để rỗng = lấy từ loopItem/vars)"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "commented",
+          "type": "boolean",
+          "label": "Đã comment chưa"
+        },
+        {
+          "name": "commentFailed",
+          "type": "boolean",
+          "label": "Comment lỗi"
+        },
+        {
+          "name": "position",
+          "type": "number",
+          "label": "Vị trí đã comment"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "label": "Nội dung đã comment"
+        },
+        {
+          "name": "imageCount",
+          "type": "number",
+          "label": "Số ảnh đã gửi"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "label": "Lỗi comment"
+        },
+        {
+          "name": "commentUrl",
+          "type": "string",
+          "label": "Link comment"
+        }
+      ],
+      "default_config": {},
+      "organization_id": 1
+    },
+    {
+      "id": 2624,
+      "code": "\nconst submitButton = await helpers.element('GroupPostSubmitButtonAfterClick');\nconst frequencyLimitError = await helpers.element('GroupPostFrequencyLimitError');\nconst publishMedia = Array.isArray(vars.images) ? vars.images : []\nconst publishHasVideo = publishMedia.some(path => /^data:video\\//i.test(String(path || '')) || /\\.(3g2|3gp|avi|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)(?:[?#].*)?$/i.test(String(path || '')))\nconst publishTimeoutMs = publishHasVideo ? 180000 : 60000\nconst publishStarted = Number(vars.facebookPostPublishStartedAt) || Date.now();\nlet posted = false;\nlet message = '';\n\nasync function hasVisibleElement(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n\n    function isVisible(el) {\n      if (!el) return false;\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;\n      const rect = el.getBoundingClientRect();\n      return rect.width > 0 && rect.height > 0;\n    }\n\n    function xpathAll(xpath) {\n      const out = [];\n      if (!xpath) return out;\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n\n    return xpathAll(selector).some(isVisible);\n  `, selector);\n}\n\nwhile (true) {\n  if (signal.aborted) throw new Error('Đã dừng chờ xác nhận đăng bài');\n  if (!await hasVisibleElement(submitButton)) {\n    posted = true;\n    message = 'Form đăng bài đã đóng';\n    break;\n  }\n  const remainingMs = publishTimeoutMs - (Date.now() - publishStarted);\n  if (remainingMs <= 0) break;\n  await helpers.sleep(Math.min(500, remainingMs), signal);\n}\nif (!posted) {\n  const hasFrequencyLimitError = await hasVisibleElement(frequencyLimitError);\n  if (hasFrequencyLimitError) {\n    message = 'Facebook báo giới hạn tần suất bạn đăng bài';\n    vars.groupPostSubmitted = false;\n    vars.groupPostFrequencyLimitError = true;\n    helpers.log(message);\n    throw new Error(message);\n  }\n  message = 'Form đăng bài chưa đóng sau ' + (publishTimeoutMs / 1000) + ' giây';\n}\n\nvars.groupPostSubmitted = posted;\nif (!posted) helpers.log(message);\n\nreturn {\n  ok: posted,\n  posted,\n  submitClosed: posted,\n  publishTimeoutMs,\n  message\n};\n",
+      "icon": "CheckCircle",
+      "kind": "js",
+      "name": "fb_verify_group_post_form_closed",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-18T07:27:39.438454+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-09-13T15:28:51.393417+00:00",
+      "description": "Xác nhận form đăng bài group đã đóng sau khi click Post/Đăng",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "ok",
+          "type": "boolean",
+          "label": "Submit OK"
+        },
+        {
+          "name": "posted",
+          "type": "boolean",
+          "label": "Đã đăng"
+        },
+        {
+          "name": "submitClosed",
+          "type": "boolean",
+          "label": "Form đã đóng"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "label": "Thông báo"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2626,
+      "code": "\nconst rawSelector = await helpers.element('GroupPostRawPostLink');\nconst linkSelector = await helpers.element('GroupPostPostLink');\n\nconst result = await page.evaluate(`\n  const rawSelector = __args[0];\n  const linkSelector = __args[1];\n\n  function delay(ms) {\n    return new Promise(resolve => setTimeout(resolve, ms));\n  }\n\n  function xpathAll(xpath) {\n    const out = [];\n    if (!xpath) return out;\n    try {\n      const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      for (let i = 0; i < result.snapshotLength; i++) {\n        const item = result.snapshotItem(i);\n        if (item) out.push(item);\n      }\n    } catch {}\n    return out;\n  }\n\n  function hrefOf(el) {\n    return el ? (el.href || el.getAttribute('href') || '') : '';\n  }\n\n  function cleanPostHref(href) {\n    if (!href) return '';\n    try {\n      const url = new URL(href, location.href);\n      if (/^(m|mbasic|mobile)\\\\.facebook\\\\.com$/i.test(url.hostname)) {\n        url.hostname = 'www.facebook.com';\n      }\n      url.hash = '';\n      Array.from(url.searchParams.keys()).forEach(key => {\n        if (\n          key.startsWith('__') ||\n          key === 'mibextid' ||\n          key === 'ref' ||\n          key === 'locale' ||\n          key === 'comment_id' ||\n          key === 'reply_comment_id'\n        ) {\n          url.searchParams.delete(key);\n        }\n      });\n      return url.href;\n    } catch {\n      return String(href || '').trim();\n    }\n  }\n\n  function isCommentPermalink(href) {\n    if (!href) return false;\n    try {\n      const url = new URL(href, location.href);\n      if (url.searchParams.has('comment_id') || url.searchParams.has('reply_comment_id')) return true;\n      const rawQuery = String(url.search || '').toLowerCase();\n      return rawQuery.includes('comment_id=') || rawQuery.includes('reply_comment_id=');\n    } catch {\n      const raw = String(href || '').toLowerCase();\n      return raw.includes('comment_id=') || raw.includes('reply_comment_id=');\n    }\n  }\n\n  function isPostPermalink(href) {\n    if (!href || isCommentPermalink(href)) return false;\n    return href.includes('/pending_posts/') || href.includes('/posts/') || href.includes('story_fbid=');\n  }\n\n  function simulateFocusin(element) {\n    if (!element) return;\n    try {\n      element.scrollIntoView({ block: 'center', inline: 'nearest' });\n    } catch {}\n    try {\n      element.dispatchEvent(new FocusEvent('focusin', {\n        view: window,\n        bubbles: true,\n        cancelable: true\n      }));\n    } catch {\n      try { element.dispatchEvent(new Event('focusin', { bubbles: true, cancelable: true })); } catch {}\n    }\n  }\n\n  const rawEl = xpathAll(rawSelector)[0] || null;\n  const rawPostLink = rawEl ? cleanPostHref(hrefOf(rawEl)) : '';\n  if (rawEl) {\n    simulateFocusin(rawEl);\n    await delay(700);\n  }\n\n  const postUrl = xpathAll(linkSelector)\n    .map(el => cleanPostHref(hrefOf(el)))\n    .filter(Boolean)\n    .filter(isPostPermalink)[0] || '';\n\n  return { rawPostLink, postUrl };\n`, rawSelector, linkSelector);\n\nconst rawPostLink = String(result && result.rawPostLink ? result.rawPostLink : '').trim();\nconst postUrl = String(result && result.postUrl ? result.postUrl : '').trim();\nvars.groupPostRawPostLink = rawPostLink;\nvars.groupPostPostUrl = postUrl;\nhelpers.log(postUrl ? 'Đã lấy được link bài post' : 'Chưa lấy được link bài post sau khi đăng');\n\nreturn {\n  ok: postUrl.length > 0,\n  rawPostLink,\n  postUrl,\n  link: postUrl\n};\n",
+      "icon": "Link",
+      "kind": "js",
+      "name": "fb_get_first_group_post_link",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-18T07:27:39.438454+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-18T07:27:39.438454+00:00",
+      "description": "Lấy link bài group đầu tiên sau khi đăng bằng raw link + focusin",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "ok",
+          "type": "boolean",
+          "label": "Có link"
+        },
+        {
+          "name": "rawPostLink",
+          "type": "string",
+          "label": "Raw post link"
+        },
+        {
+          "name": "postUrl",
+          "type": "string",
+          "label": "Post URL"
+        },
+        {
+          "name": "link",
+          "type": "string",
+          "label": "Link"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2627,
+      "code": "\nconst originalIterations = Array.isArray(vars.commentIterations) ? vars.commentIterations : [];\nconst enableComment = vars.enableComment === true;\nconst isPending = vars.groupPostIsPending === true;\nconst rawCommentType = String(vars.commentType || 'own');\nconst commentType = ['own', 'others', 'all'].includes(rawCommentType) ? rawCommentType : 'own';\nconst rawGroupMode = String(vars.commentGroupMode || 'all');\nconst commentGroupMode = ['all', 'pending_only', 'published_only'].includes(rawGroupMode) ? rawGroupMode : 'all';\n\nlet commentIterations = originalIterations;\nlet adjusted = false;\nlet skippedOwnPending = false;\nlet skippedByGroupMode = false;\nlet skipReason = '';\n\nif (enableComment) {\n  if (commentGroupMode === 'pending_only' && !isPending) {\n    commentIterations = [];\n    adjusted = true;\n    skippedByGroupMode = true;\n    skipReason = 'Bỏ qua comment vì chỉ chọn comment group bị duyệt đăng bài';\n    helpers.log(skipReason);\n  } else if (commentGroupMode === 'published_only' && isPending) {\n    commentIterations = [];\n    adjusted = true;\n    skippedByGroupMode = true;\n    skipReason = 'Bỏ qua comment vì chỉ chọn comment group đăng bài thành công ngay';\n    helpers.log(skipReason);\n  } else if (isPending && commentType === 'own') {\n    commentIterations = [];\n    adjusted = true;\n    skippedOwnPending = true;\n    helpers.log('Bài đang chờ duyệt nên bỏ qua comment vào bài của mình');\n  } else if (isPending && commentType === 'others') {\n    commentIterations = originalIterations.map((item, index) => {\n      const row = item && typeof item === 'object' ? item : {};\n      const currentPosition = Number(row.position || index + 2);\n      return {\n        ...row,\n        position: Math.max(1, currentPosition - 1)\n      };\n    });\n    adjusted = true;\n    helpers.log('Bài đang chờ duyệt nên comment bài khác bắt đầu từ bài đầu tiên');\n  }\n}\n\nvars.commentIterations = commentIterations;\n\nreturn {\n  adjusted,\n  skippedOwnPending,\n  skippedByGroupMode,\n  skipReason,\n  commentGroupMode,\n  commentType,\n  isPending,\n  commentIterations\n};\n",
+      "icon": "ListFilter",
+      "kind": "js",
+      "name": "fb_adjust_group_post_comments_after_pending",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-18T07:41:08.202413+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-18T08:55:38.385057+00:00",
+      "description": "Điều chỉnh danh sách comment group post theo trạng thái duyệt bài và tuỳ chọn post cần comment",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "adjusted",
+          "type": "boolean",
+          "label": "Đã điều chỉnh"
+        },
+        {
+          "name": "skippedOwnPending",
+          "type": "boolean",
+          "label": "Bỏ qua comment bài mình"
+        },
+        {
+          "name": "skippedByGroupMode",
+          "type": "boolean",
+          "label": "Bỏ qua theo tuỳ chọn group"
+        },
+        {
+          "name": "skipReason",
+          "type": "string",
+          "label": "Lý do bỏ qua"
+        },
+        {
+          "name": "commentGroupMode",
+          "type": "string",
+          "label": "Kiểu group được comment"
+        },
+        {
+          "name": "commentType",
+          "type": "string",
+          "label": "Kiểu post được comment"
+        },
+        {
+          "name": "isPending",
+          "type": "boolean",
+          "label": "Bài pending"
+        },
+        {
+          "name": "commentIterations",
+          "type": "json",
+          "label": "Danh sách comment"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2629,
+      "code": "\nconst shouldSkip = vars.skipGroupPostByKnownApproval === true;\n\nif (!shouldSkip) {\n  return { skipped: false, isPending: false };\n}\n\nconst isPending = vars.groupPostRequiresPostApproval === true;\nvars.groupPostSkippedByKnownApproval = true;\nvars.groupPostSubmitted = false;\nvars.groupPostIsPending = isPending;\n\nconst message = 'Bỏ qua đăng bài vì group đã biết cần duyệt bài';\nhelpers.log(message);\n\nreturn {\n  skipped: true,\n  isPending,\n  source: vars.groupPostApprovalSource || 'account_contact',\n  message\n};\n",
+      "icon": "Ban",
+      "kind": "js",
+      "name": "fb_skip_group_post_for_known_approval",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-18T09:15:37.030388+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-18T09:15:37.030388+00:00",
+      "description": "Bỏ qua đăng bài group khi account contact đã biết group cần duyệt bài",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "skipped",
+          "type": "boolean",
+          "label": "Đã bỏ qua đăng bài"
+        },
+        {
+          "name": "isPending",
+          "type": "boolean",
+          "label": "Group cần duyệt bài"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Nguồn trạng thái"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "label": "Thông báo"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 28,
+      "code": "// Centralized AI rewrite via ai_using.\nconst __aiRewriteUsingCode = \"fb_type_post_content_rewrite\";\nconst __extractAIText = (value) => {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'string') return value.trim();\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();\n  if (Array.isArray(value)) return value.map(__extractAIText).filter(Boolean).join('\\n').trim();\n  if (typeof value === 'object') {\n    const data = value;\n    const direct = data.content ?? data.data ?? data.Data ?? data.text ?? data.output ?? data.response ?? data.message ?? data.Message ?? data.answer ?? data.result;\n    if (direct !== undefined && direct !== null && direct !== value) {\n      const directText = __extractAIText(direct);\n      if (directText) return directText;\n    }\n    try { return JSON.stringify(value); } catch { return String(value); }\n  }\n  return String(value || '').trim();\n};\nconst __callCentralAI = async (usingCode, payload) => {\n  if (!usingCode) throw new Error('Thiếu mã cấu hình AI');\n  if (typeof helpers.callAIUsing !== 'function') throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  const result = await helpers.callAIUsing(usingCode, payload || {});\n  if (result && result.unsupported) throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));\n  return result;\n};\nconst __callAIText = async (usingCode, payload) => {\n  const result = await __callCentralAI(usingCode, payload);\n  return __extractAIText(result && (result.content ?? result.data ?? result.text ?? result.output ?? result.response ?? result.rawResponse ?? result));\n};\nconst __callAIRewriteContent = async (content) => {\n  const text = String(content || '');\n  return await __callAIText(__aiRewriteUsingCode, {\n    content: text,\n    question: text,\n    source: 'aka_agent'\n  });\n};\n\nconst formattedContentEnabled = vars.formattedContentEnabled === true\nconst shouldRewriteContentEachRun = vars.rewriteContentEachRun === true && !formattedContentEnabled\nconst escapeHtml = (value) => String(value || '')\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\"/g, '&quot;')\n  .replace(/'/g, '&#39;')\n\nconst formatTemplateDate = (dayKey, formatKey) => {\n  const d = new Date()\n  const key = String(dayKey || 'TODAY').toUpperCase()\n  if (key === 'TOMORROW') d.setDate(d.getDate() + 1)\n  if (key === 'YESTERDAY') d.setDate(d.getDate() - 1)\n\n  const dd = String(d.getDate()).padStart(2, '0')\n  const mm = String(d.getMonth() + 1).padStart(2, '0')\n  const yyyy = String(d.getFullYear())\n  const format = String(formatKey || 'DD/MM/YYYY').toUpperCase()\n  return format === 'MM/DD/YYYY'\n    ? mm + '/' + dd + '/' + yyyy\n    : dd + '/' + mm + '/' + yyyy\n}\n\nconst renderContentTemplate = async (raw, options = {}) => {\n  let rendered = String(raw || '')\n\n  if (/#\\{\\s*FULL_NAME\\s*\\}/i.test(rendered)) {\n    let fullName = String(vars.campaignInputDataName || vars.inputDataName || '').trim()\n    if (!fullName && options.resolveFullNameFromPage) {\n      const nameXpath = \"//*[contains(@class,'xxymvpz x1dyh7pn')]\"\n      try {\n        const found = await page.waitForSelector(nameXpath, { timeout: 3000 }).catch(() => false)\n        if (found) fullName = String(await page.getText(nameXpath).catch(() => '') || '').trim()\n      } catch (e) {\n        fullName = ''\n      }\n    }\n    rendered = rendered.replace(\n      /#\\{\\s*FULL_NAME\\s*\\}/gi,\n      formattedContentEnabled ? escapeHtml(fullName) : fullName\n    )\n  }\n\n  rendered = rendered.replace(\n    /#\\{\\s*(TODAY|TOMORROW|YESTERDAY)\\s*(?:\\(\\s*(DD\\/MM\\/YYYY|MM\\/DD\\/YYYY)\\s*\\))?\\s*\\}/gi,\n    (_match, dayKey, formatKey) => formatTemplateDate(dayKey, formatKey)\n  )\n\n  return rendered\n}\n\nconst rewriteContentForRun = async (raw) => {\n  const original = String(raw || '')\n  const content = original.trim()\n  if (!shouldRewriteContentEachRun || !content) return original\n\n  try {\n    const rewritten = await __callAIRewriteContent(content)\n    if (!rewritten) throw new Error('AI trả về nội dung không hợp lệ.')\n    helpers.log('Đã viết lại nội dung bằng AI')\n    return rewritten\n  } catch (e) {\n    const message = e && e.message ? String(e.message) : String(e)\n    helpers.log('AI viết lại nội dung lỗi, dùng nội dung gốc: ' + message)\n    return original\n  }\n}\n\nlet text\nif (typeof helpers.prepareCampaignContent === 'function') {\n  const prepared = await helpers.prepareCampaignContent({\n    rewriteCode: __aiRewriteUsingCode,\n    sourceText: vars.campaignSourceText || '',\n    sourceMedia: vars.campaignSourceMedia || []\n  })\n  text = prepared.content\n  vars.campaignContent = prepared.content\n  vars.images = prepared.media\n  vars.contentVariantIndex = prepared.variantIndex\n} else {\n  text = String(input.content || vars.campaignContent || '')\n  text = await renderContentTemplate(text)\n  text = await rewriteContentForRun(text)\n}\n\nconst backgroundButtonSelector = await helpers.element('FbComposerBackgroundButton')\nconst backgroundOptionSelector = await helpers.element('FbComposerBackgroundOption')\n\nasync function rawClick(selector, options) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    const options = __args[1] || {};\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const arr = xpathAll(selector);\n    let el = null;\n    if (options.last === true) el = arr[arr.length - 1] || null;\n    else if (typeof options.index === 'number') el = arr[options.index] || null;\n    else el = arr[0] || null;\n    if (!el) return { clicked: false, count: arr.length, label: '' };\n    const label = el.getAttribute('aria-label') || String(el.innerText || el.textContent || '').trim();\n    clickSynthetic(el);\n    return { clicked: true, count: arr.length, label };\n  `, selector, options || {})\n}\n\nasync function rawCount(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    try {\n      const result = document.evaluate(selector, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      return result.snapshotLength;\n    } catch {\n      return 0;\n    }\n  `, selector)\n}\n\nconst dialog = await helpers.element('fb_composer_dialog')\nawait page.waitForSelector(dialog, { timeout: 10000 })\nif (!formattedContentEnabled) await helpers.sleep(800, signal)\nif (!formattedContentEnabled && vars.postWithBackground === true && String(text || '').trim()) {\n  try {\n    helpers.log('Đang chọn phông nền bài viết')\n    const showBackgroundSelectBtn = await rawClick(backgroundButtonSelector)\n    if (showBackgroundSelectBtn && showBackgroundSelectBtn.clicked === true) {\n      await helpers.sleep(Number(vars.facebookStepMs || 1000) + 1000, signal)\n      const backgroundCount = await rawCount(backgroundOptionSelector)\n      if (backgroundCount > 0) {\n        const iBg = Math.floor(Math.random() * backgroundCount)\n        await rawClick(backgroundOptionSelector, { index: iBg })\n        await helpers.sleep(Number(vars.facebookStepMs || 1000) + 1000, signal)\n      }\n    }\n  } catch (e) {\n    const errMessage = e && e.message ? String(e.message) : String(e)\n    helpers.log('Chọn phông nền lỗi, tiếp tục đăng bài: ' + errMessage)\n  }\n}\nif (formattedContentEnabled) {\n  text = String(text || '')\n  await page.focus(dialog)\n  await helpers.sleep(Number(vars.facebookStepMs || input.facebookStepMs || 1000), signal)\n  try {\n    await page.paste(dialog, text, { mimeType: 'text/html' })\n  } catch (e) {\n    if (signal && signal.aborted) throw e\n    await page.paste(dialog, text, { mimeType: 'text/html' })\n  }\n  await page.insertText(' ')\n} else {\n  await page.fill(dialog, text)\n}\nreturn { typed: true, content: text, rewrittenContent: shouldRewriteContentEachRun }\n",
+      "icon": "Type",
+      "kind": "js",
+      "name": "fb_type_post_content",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.388837+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-06T10:14:35.142327+00:00",
+      "description": "Gõ nội dung vào khung composer (fallback vars.campaignContent)",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "content",
+          "type": "textarea",
+          "label": "Nội dung (để rỗng để dùng vars.campaignContent)"
+        }
+      ],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": 1
+    },
+    {
+      "id": 31,
+      "code": "if (vars.groupPostSkippedByKnownApproval === true || vars.skipGroupPostByKnownApproval === true) {\n  const isPending = vars.groupPostRequiresPostApproval === true;\n  vars.groupPostIsPending = isPending;\n  return {\n    isPending,\n    postUrl: '',\n    skippedPost: true,\n    source: vars.groupPostApprovalSource || 'account_contact',\n    pendingCheckConclusive: true\n  };\n}\n\nconst groupPostUrl = String(vars.groupPostPostUrl || input.postUrl || input.link || '').trim();\nif (groupPostUrl.includes('/pending_posts/')) {\n  vars.groupPostIsPending = true;\n  return {\n    isPending: true,\n    postUrl: groupPostUrl,\n    pendingCheckConclusive: true,\n    source: 'post_url'\n  };\n}\n\nfunction extractGroupKey(value) {\n  const raw = String(value || '').trim();\n  if (!raw) return '';\n\n  const cleaned = raw.replace(/^\\/+|\\/+$/g, '');\n  if (/^groups\\//i.test(cleaned)) {\n    const parts = cleaned.split('/').filter(Boolean);\n    return parts[1] || '';\n  }\n\n  try {\n    const url = new URL(/^https?:\\/\\//i.test(raw) ? raw : 'https://' + raw);\n    const parts = url.pathname.split('/').filter(Boolean);\n    const groupIdx = parts.findIndex(part => part.toLowerCase() === 'groups');\n    if (groupIdx >= 0 && parts[groupIdx + 1]) return parts[groupIdx + 1];\n  } catch {}\n\n  if (/^[a-zA-Z0-9._-]+$/.test(cleaned)) return cleaned;\n  return '';\n}\n\nfunction buildPendingContentUrl() {\n  const sources = [\n    vars.targetUrl,\n    vars.inputDataUid,\n    input.targetUrl,\n    groupPostUrl,\n    vars.groupPostRawPostLink,\n    input.rawPostLink\n  ];\n\n  for (const source of sources) {\n    const groupKey = extractGroupKey(source);\n    if (groupKey) {\n      return 'https://www.facebook.com/groups/' + encodeURIComponent(groupKey) + '/my_pending_content';\n    }\n  }\n  return '';\n}\n\nconst pendingContentUrl = buildPendingContentUrl();\nif (!pendingContentUrl) {\n  vars.groupPostIsPending = false;\n  helpers.log('Không dựng được URL my_pending_content để kiểm tra bài chờ duyệt');\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl: '',\n    pendingContentLinks: [],\n    pendingCheckConclusive: false,\n    source: 'missing_pending_content_url'\n  };\n}\n\nconst rawSelector = await helpers.element('GroupPostRawPostLink');\nconst linkSelector = await helpers.element('GroupPostPostLink');\n\nhelpers.log('Đang kiểm tra trang bài chờ duyệt: ' + pendingContentUrl);\n\nlet check;\ntry {\n  check = await helpers.checkGroupPendingContent({\n    url: pendingContentUrl,\n    rawSelector,\n    linkSelector,\n    timeoutMs: 18000\n  });\n} catch (err) {\n  const message = err && err.message ? String(err.message) : String(err);\n  vars.groupPostIsPending = false;\n  helpers.log('Không kiểm tra được trang bài chờ duyệt: ' + message);\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl,\n    pendingContentLinks: [],\n    pendingCheckConclusive: false,\n    source: 'pending_content_error',\n    error: message\n  };\n}\n\nconst links = Array.isArray(check && check.links)\n  ? check.links.map(link => String(link || '').trim()).filter(Boolean)\n  : [];\nconst conclusive = check && check.conclusive === true;\n\nif (!conclusive) {\n  const message = check && check.error ? String(check.error) : 'không kết luận được';\n  vars.groupPostIsPending = false;\n  helpers.log('Không kết luận được trạng thái chờ duyệt từ my_pending_content: ' + message);\n  return {\n    isPending: false,\n    postUrl: groupPostUrl,\n    pendingContentUrl,\n    pendingContentLinks: links,\n    pendingCheckConclusive: false,\n    source: 'pending_content_inconclusive',\n    error: message\n  };\n}\n\nconst isPending = links.length > 0;\nvars.groupPostIsPending = isPending;\n\nhelpers.log(isPending\n  ? 'Phát hiện bài trong trang chờ duyệt của group'\n  : 'Không thấy bài trong trang chờ duyệt của group');\n\nreturn {\n  isPending,\n  postUrl: groupPostUrl,\n  pendingContentUrl,\n  pendingContentLinks: links,\n  pendingCheckConclusive: true,\n  source: isPending ? 'pending_content' : 'pending_content_empty'\n};",
+      "icon": "AlertCircle",
+      "kind": "js",
+      "name": "fb_detect_pending_post",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.70052+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-07-06T10:53:49.826+00:00",
+      "description": "Phát hiện bài group chờ duyệt bằng link hoặc trang my_pending_content trên page phụ",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "isPending",
+          "type": "boolean",
+          "label": "Bài có đang chờ duyệt không"
+        },
+        {
+          "name": "postUrl",
+          "type": "string",
+          "label": "Post URL"
+        },
+        {
+          "name": "skippedPost",
+          "type": "boolean",
+          "label": "Đã bỏ qua đăng bài"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "label": "Nguồn trạng thái"
+        },
+        {
+          "name": "pendingContentUrl",
+          "type": "string",
+          "label": "URL trang bài chờ duyệt"
+        },
+        {
+          "name": "pendingContentLinks",
+          "type": "json",
+          "label": "Link tìm thấy trong trang bài chờ duyệt"
+        },
+        {
+          "name": "pendingCheckConclusive",
+          "type": "boolean",
+          "label": "Đã kết luận được từ trang pending"
+        },
+        {
+          "name": "error",
+          "type": "string",
+          "label": "Lỗi kiểm tra pending"
+        }
+      ],
+      "default_config": {},
+      "organization_id": 1
+    },
+    {
+      "id": 2674,
+      "code": "// Updated runtimes combine/rewrite the selected bundle at its consumer.\nif (typeof helpers.prepareCampaignContent === 'function') return input\n\n// Centralized AI chat/check via ai_using.\nconst __aiChatUsingCode = \"fb_rewrite_source_content_ai\";\nconst __extractAIText = (value) => {\n  if (value === null || value === undefined) return '';\n  if (typeof value === 'string') return value.trim();\n  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();\n  if (Array.isArray(value)) return value.map(__extractAIText).filter(Boolean).join('\\n').trim();\n  if (typeof value === 'object') {\n    const data = value;\n    const direct = data.content ?? data.data ?? data.Data ?? data.text ?? data.output ?? data.response ?? data.message ?? data.Message ?? data.answer ?? data.result;\n    if (direct !== undefined && direct !== null && direct !== value) {\n      const directText = __extractAIText(direct);\n      if (directText) return directText;\n    }\n    try { return JSON.stringify(value); } catch { return String(value); }\n  }\n  return String(value || '').trim();\n};\nconst __callCentralAI = async (usingCode, payload) => {\n  if (!usingCode) throw new Error('Thiếu mã cấu hình AI');\n  if (typeof helpers.callAIUsing !== 'function') throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  const result = await helpers.callAIUsing(usingCode, payload || {});\n  if (result && result.unsupported) throw new Error('Runtime chưa hỗ trợ helper callAIUsing');\n  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));\n  return result;\n};\nconst __callAIText = async (usingCode, payload) => {\n  const result = await __callCentralAI(usingCode, payload);\n  return __extractAIText(result && (result.content ?? result.data ?? result.text ?? result.output ?? result.response ?? result.rawResponse ?? result));\n};\nconst __callAIChatContent = async (question) => {\n  const text = String(question || '');\n  return await __callAIText(__aiChatUsingCode, {\n    question: text,\n    content: text,\n    source: 'aka_agent'\n  });\n};\n\n\nconst toText = (value) => value === undefined || value === null ? '' : String(value)\nconst trimText = (value) => toText(value).trim()\nconst pickText = (...values) => {\n  for (const value of values) {\n    const text = trimText(value)\n    if (text) return text\n  }\n  return ''\n}\nconst pickPayloadValue = (obj, lowerKey, upperKey) => {\n  if (!obj || typeof obj !== 'object') return undefined\n  if (Object.prototype.hasOwnProperty.call(obj, lowerKey)) return obj[lowerKey]\n  if (Object.prototype.hasOwnProperty.call(obj, upperKey)) return obj[upperKey]\n  return undefined\n}\nconst extractAiText = (value) => {\n  if (typeof value === 'string') return value.trim()\n  if (!value || typeof value !== 'object') return ''\n  return pickText(\n    value.content,\n    value.Content,\n    value.answer,\n    value.Answer,\n    value.text,\n    value.Text,\n    value.result,\n    value.Result,\n    value.message,\n    value.Message\n  )\n}\nconst stripManualContent = (combined, manual) => {\n  const source = trimText(combined)\n  const suffix = trimText(manual)\n  if (!source || !suffix || source === suffix) return ''\n  const idx = source.lastIndexOf(suffix)\n  if (idx < 0) return ''\n  return (source.slice(0, idx) + source.slice(idx + suffix.length))\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim()\n}\nconst buildFinalContent = (combined, originalSource, rewrittenSource, manualContent) => {\n  const current = trimText(combined)\n  const source = trimText(originalSource)\n  const rewritten = trimText(rewrittenSource)\n  const manual = trimText(manualContent)\n  if (!rewritten) return current\n  if (current && source && current.includes(source)) {\n    return current.replace(source, rewritten).trim()\n  }\n  return [rewritten, manual].filter(Boolean).join('\\n\\n')\n}\n\nif (vars.copyContentFromSource !== true || vars.rewriteSourceContentWithAI !== true) {\n  return input\n}\n\nconst rawPrompt = trimText(vars.sourceContentAiPrompt || input.sourceContentAiPrompt)\nif (!rawPrompt) {\n  helpers.log('Cảnh báo: Chưa có lời nhắc AI cho nội dung nguồn, dùng nội dung copy gốc.')\n  return input\n}\n\nconst formattedContentEnabled = vars.formattedContentEnabled === true\nconst originalCampaignContent = trimText(vars.originalCampaignContent || vars.campaignContent)\nconst combinedContent = pickText(input.campaignContent, vars.campaignContent, input.content)\nconst formattedManualContent = toText(\n  vars.formattedManualContent || vars.manualContentNative || originalCampaignContent || vars.campaignContent\n)\nlet sourceContent = formattedContentEnabled\n  ? pickText(\n      input.copiedSourcePlainText,\n      input.sourceContentPlain,\n      vars.copiedSourcePlainText,\n      vars.sourceContentPlain\n    )\n  : pickText(\n      input.sourceContent,\n      input.scrapedContent,\n      input.scrapedText,\n      input.copiedSourceContent,\n      input.copiedContent,\n      input.postText,\n      input.text\n    )\n\nif (!sourceContent && !formattedContentEnabled) {\n  sourceContent = stripManualContent(combinedContent, originalCampaignContent) || trimText(combinedContent)\n}\n\nif (!sourceContent) {\n  helpers.log('Cảnh báo: Không lấy được nội dung nguồn để gửi AI, tiếp tục với nội dung copy gốc.')\n  return input\n}\n\nconst question = /\\[content\\]/i.test(rawPrompt)\n  ? rawPrompt.replace(/\\[content\\]/gi, sourceContent)\n  : rawPrompt + '\\nNội dung: ' + sourceContent\n\ntry {\n  const rewrittenSourceContent = await __callAIChatContent(question)\n  if (!rewrittenSourceContent) {\n    throw new Error('AI trả về nội dung nguồn không hợp lệ.')\n  }\n\n  const finalContent = formattedContentEnabled\n    ? formattedManualContent\n    : buildFinalContent(combinedContent, sourceContent, rewrittenSourceContent, originalCampaignContent)\n  if (formattedContentEnabled) {\n    vars.formattedManualContent = formattedManualContent\n    vars.copiedSourcePlainText = rewrittenSourceContent\n    vars.sourceContentPlain = rewrittenSourceContent\n  }\n  vars.campaignContent = finalContent\n  if (Array.isArray(input.images) && input.images.length > 0 && vars.includeSourceImages === true) {\n    vars.images = input.images\n  }\n\n  helpers.log('Đã edit nội dung nguồn bằng AI')\n  return {\n    ...input,\n    sourceContent: rewrittenSourceContent,\n    scrapedContent: rewrittenSourceContent,\n    scrapedText: rewrittenSourceContent,\n    copiedSourceContent: rewrittenSourceContent,\n    ...(formattedContentEnabled\n      ? {\n          copiedSourcePlainText: rewrittenSourceContent,\n          sourceContentPlain: rewrittenSourceContent,\n          manualContentNative: formattedManualContent\n        }\n      : {}),\n    content: finalContent,\n    campaignContent: finalContent,\n    rewrittenSourceContentWithAI: true\n  }\n} catch (e) {\n  if (signal && signal.aborted) throw e\n  const message = e && e.message ? String(e.message) : String(e)\n  helpers.log('Cảnh báo: AI edit nội dung nguồn lỗi, dùng nội dung copy gốc: ' + message)\n  return {\n    ...input,\n    rewrittenSourceContentWithAI: false,\n    sourceContentAiError: message\n  }\n}\n",
+      "icon": "WandSparkles",
+      "kind": "js",
+      "name": "fb_rewrite_source_content_ai",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-25T04:32:28.868283+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-06T10:14:35.142327+00:00",
+      "description": "Edit riêng phần nội dung copy từ nguồn bằng prompt AI trước khi đăng bài.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "rewriteSourceContentWithAI",
+          "type": "boolean",
+          "label": "Lời nhắc AI - Edit lại nội dung"
+        },
+        {
+          "name": "sourceContentAiPrompt",
+          "type": "textarea",
+          "label": "Lời nhắc AI",
+          "placeholder": "Viết lại nội dung sau: [content]"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "campaignContent",
+          "type": "string",
+          "label": "Nội dung sau khi edit nguồn"
+        },
+        {
+          "name": "sourceContent",
+          "type": "string",
+          "label": "Nội dung nguồn sau khi edit"
+        },
+        {
+          "name": "rewrittenSourceContentWithAI",
+          "type": "boolean",
+          "label": "Đã edit nội dung nguồn bằng AI"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2676,
+      "code": "\nconst rawTargetUrl = String(input.targetUrl || vars.targetUrl || vars.inputDataUid || '').trim()\nconst targetUrl = helpers.normalizeFbUrl(rawTargetUrl)\nif (!targetUrl) throw new Error('Thiếu link group để quay lại sau khi copy nguồn')\n\nhelpers.log('Quay lại group để đăng bài')\nawait page.navigate(targetUrl)\nawait helpers.sleep(2500, signal)\nreturn { targetUrl }\n",
+      "icon": "Navigation",
+      "kind": "js",
+      "name": "fb_navigate_to_target_url",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-25T05:17:25.697717+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-25T05:21:06.743284+00:00",
+      "description": "Quay lại link mục tiêu sau khi copy nội dung nguồn.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "targetUrl",
+          "type": "string",
+          "label": "Link mục tiêu"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "targetUrl",
+          "type": "string",
+          "label": "Link mục tiêu đã mở"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 30,
+      "code": "\nlet nextClicked = false\ntry {\n  const nextSelector = await helpers.element('FbComposerNextButton')\n  const nextButton = await page.$(nextSelector)\n  if (nextButton) {\n    await page.click(nextSelector)\n    nextClicked = true\n  }\n} catch {}\n\nif (nextClicked) await helpers.sleep(2000, signal)\n\nconst publishMedia = Array.isArray(vars.images) ? vars.images : []\nconst publishHasVideo = publishMedia.some(path => /^data:video\\//i.test(String(path || '')) || /\\.(3g2|3gp|avi|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)(?:[?#].*)?$/i.test(String(path || '')))\nconst publishTimeoutMs = publishHasVideo ? 180000 : 60000\n// Match the existing Group visibility check; a disabled button still exists.\nasync function postSubmitButtonIsVisible(selector) {\n  return await page.evaluate(`\n    const result = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    for (let i = 0; i < result.snapshotLength; i++) {\n      const el = result.snapshotItem(i);\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;\n      const rect = el.getBoundingClientRect();\n      if (rect.width > 0 && rect.height > 0) return true;\n    }\n    return false;\n  `, selector);\n}\n\nconst btn = await helpers.element('fb_post_button')\nawait page.waitForSelector(btn, { timeout: 10000 })\nawait page.click(btn)\nvars.facebookPostPublishStartedAt = Date.now()\nif (input.verifyPostAfterClick === true) {\n  while (true) {\n    if (signal.aborted) throw new Error('Đã dừng chờ xác nhận đăng bài')\n    if (!await postSubmitButtonIsVisible(btn)) {\n      return { ok: true, posted: true, submitClosed: true, publishTimeoutMs }\n    }\n    const remainingMs = publishTimeoutMs - (Date.now() - vars.facebookPostPublishStartedAt)\n    if (remainingMs <= 0) throw new Error('Form đăng bài chưa đóng sau ' + (publishTimeoutMs / 1000) + ' giây')\n    await helpers.sleep(Math.min(500, remainingMs), signal)\n  }\n}\n// Group retains its separate verify block and frequency-limit policy.\nawait helpers.sleep(3000, signal)\nreturn { posted: true }\n",
+      "icon": "Send",
+      "kind": "js",
+      "name": "fb_click_post_button",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.592899+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-09-13T15:28:51.393417+00:00",
+      "description": "Click nút Đăng + chờ trang xử lý",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "posted",
+          "type": "boolean",
+          "label": "Đã click"
+        }
+      ],
+      "default_config": {},
+      "organization_id": 1
+    },
+    {
+      "id": 2670,
+      "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst currentSelector = await helpers.element('FbCurrentIdentityLink')\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\nasync function rawText(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    const el = xpathAll(selector)[0] || null;\n    return el ? String(el.innerText || el.textContent || '').trim() : '';\n  `, selector)\n}\n\nhelpers.log('Đang lấy tên Facebook identity hiện tại')\nawait page.navigate('https://facebook.com')\nconst opened = await rawClick(menuSelector)\nif (!opened || opened.clicked !== true) throw new Error('Không tìm thấy nút mở menu profile/page hiện tại')\nawait helpers.sleep(stepMs + 500, signal)\n\nconst identityName = String(await rawText(currentSelector) || '').trim()\nawait rawClick(menuSelector).catch(() => null)\nawait helpers.sleep(stepMs + 500, signal)\n\nif (!identityName) throw new Error('Không lấy được tên Facebook identity hiện tại')\nvars.originalIdentityName = identityName\nhelpers.log('Identity hiện tại: ' + identityName)\nreturn { ok: true, identityName }\n",
+      "icon": "UserRound",
+      "kind": "js",
+      "name": "fb_get_current_identity_name",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-23T05:52:27.137819+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-23T05:52:27.137819+00:00",
+      "description": "Lấy tên profile/page Facebook hiện tại bằng menu identity theo C# DOM.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "facebookStepMs",
+          "type": "number",
+          "label": "Step delay"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "ok",
+          "type": "boolean",
+          "label": "OK"
+        },
+        {
+          "name": "identityName",
+          "type": "string",
+          "label": "Tên identity"
+        }
+      ],
+      "default_config": {
+        "facebookStepMs": 1000
+      },
+      "organization_id": null
+    },
+    {
+      "id": 2671,
+      "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst useOriginalIdentity = input.useOriginalIdentity === true\nconst identityNameFromVars = String(input.identityNameFromVars || '').trim()\nconst identityName = String(\n  useOriginalIdentity\n    ? (vars.originalIdentityName || '')\n    : identityNameFromVars\n      ? (vars[identityNameFromVars] || '')\n      : (input.identityName || vars.identityName || vars.pageName || '')\n).trim()\n\nif (!identityName) {\n  return {\n    ok: false,\n    identityName,\n    message: useOriginalIdentity ? 'Không có tên profile gốc để chuyển lại' : 'Thiếu tên identity/page cần chuyển'\n  }\n}\n\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst seeAllSelector = await helpers.element('FbIdentitySeeAllButton')\nconst searchSelector = await helpers.element('FbIdentitySearchInput')\nconst selectTemplate = await helpers.element('FbIdentitySelectByNameButton')\n\nfunction xpathLiteral(value) {\n  const text = String(value || '')\n  if (!text.includes(\"'\")) return \"'\" + text + \"'\"\n  const singleQuoteLiteral = '\"\\'\"'\n  return 'concat(' + text.split(\"'\").map(part => \"'\" + part + \"'\").join(', ' + singleQuoteLiteral + ', ') + ')'\n}\n\nconst selectSelector = selectTemplate.replace(\"'$page_name'\", xpathLiteral(identityName)).replace('$page_name', identityName)\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\ntry {\n  helpers.log('Đang chuyển Facebook identity sang \"' + identityName + '\"')\n  await page.navigate('https://facebook.com')\n  const opened = await rawClick(menuSelector)\n  if (!opened || opened.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút mở menu profile/page hiện tại' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  const seeAll = await rawClick(seeAllSelector)\n  if (!seeAll || seeAll.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút xem tất cả profile/page' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  let selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  await page.type(searchSelector, identityName, { clearFirst: true })\n  await helpers.sleep(stepMs + 500, signal)\n\n  selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  return { ok: false, identityName, message: 'Không tìm thấy page/profile \"' + identityName + '\"' }\n} catch (e) {\n  if (signal && signal.aborted) throw e\n  const message = e && e.message ? String(e.message) : String(e)\n  return { ok: false, identityName, message: 'Có lỗi xảy ra khi chọn page/profile: ' + message }\n}\n",
+      "icon": "RefreshCw",
+      "kind": "js",
+      "name": "fb_switch_identity_by_name",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-23T05:52:27.137819+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-23T06:42:04.706605+00:00",
+      "description": "Chuyển Facebook sang profile/page theo tên bằng switcher identity theo C# DOM.",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "identityName",
+          "type": "string",
+          "label": "Tên identity"
+        },
+        {
+          "name": "facebookStepMs",
+          "type": "number",
+          "label": "Step delay"
+        }
+      ],
+      "output_schema": [
+        {
+          "name": "ok",
+          "type": "boolean",
+          "label": "OK"
+        },
+        {
+          "name": "identityName",
+          "type": "string",
+          "label": "Tên identity"
+        },
+        {
+          "name": "message",
+          "type": "string",
+          "label": "Thông báo"
+        }
+      ],
+      "default_config": {
+        "facebookStepMs": 1000
+      },
+      "organization_id": null
+    },
+    {
+      "id": 2829,
+      "code": "const mode = String(input.pageIdentityStateOperation || '')\nif (mode === 'ready' || mode === 'restored') {\n  if (input.ok !== true) throw new Error(String(input.message || (mode === 'ready' ? 'Không chuyển được sang Page đã chọn' : 'Không chuyển về được danh tính ban đầu')))\n  vars.pageIdentityReady = mode === 'ready'\n  return { ok: true, identityName: input.identityName }\n}\nif (mode === 'capture_result') { vars.pageIdentityResult = { ...input }; delete vars.pageIdentityResult.pageIdentityStateOperation; return vars.pageIdentityResult }\nif (mode === 'result') return vars.pageIdentityResult || {}\nthrow new Error('Cấu hình trạng thái phiên Page không hợp lệ')",
+      "icon": null,
+      "kind": "js",
+      "name": "fb_campaign_page_identity_state",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-09-15T12:13:24.600083+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-09-15T12:13:24.600083+00:00",
+      "description": "Giữ trạng thái phiên Page và kết quả hành động; không thao tác DOM",
+      "system_type": null,
+      "config_schema": [
+        {
+          "name": "pageIdentityStateOperation",
+          "type": "string",
+          "label": "Bước trạng thái (ready/capture_result/restored/result)"
+        }
+      ],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2824,
+      "code": "// Updated runtimes combine/rewrite the selected bundle at its consumer.\nif (typeof helpers.prepareCampaignContent === 'function') return input\n\n\nif (vars.formattedContentEnabled !== true) return input\n\nconst sourceContentPlain = String(\n  vars.copiedSourcePlainText || vars.sourceContentPlain || input.copiedSourcePlainText || input.sourceContentPlain || ''\n)\nconst manualContentNative = String(\n  vars.formattedManualContent || vars.manualContentNative || vars.campaignContent || ''\n)\n\nconst composed = await page.evaluate(String.raw`\n  const source = String(__args[0] || '');\n  const manual = String(__args[1] || '');\n  const allowed = new Set([\n    'p', 'div', 'br', 'h1', 'h2', 'h3',\n    'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'del',\n    'ul', 'ol', 'li', 'blockquote', 'a'\n  ]);\n  const discardWithContent = new Set(['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math']);\n  const escapeHtml = (value) => String(value || '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\n  const renderNode = (node) => {\n    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || '');\n    if (node.nodeType !== Node.ELEMENT_NODE) return '';\n    const tag = String(node.tagName || '').toLowerCase();\n    if (discardWithContent.has(tag)) return '';\n    let children = Array.from(node.childNodes || []).map(renderNode).join('');\n    if (!allowed.has(tag)) return children;\n    if (tag === 'br') return '<br>';\n    let attrs = '';\n    const styles = [];\n    if (tag === 'a') {\n      const href = String(node.getAttribute('href') || '').trim();\n      if (/^https?:\\/\\//i.test(href)) attrs += ' href=\"' + escapeHtml(href) + '\"';\n    }\n    const style = String(node.getAttribute('style') || '');\n    const align = style.match(/(?:^|;)\\s*text-align\\s*:\\s*(left|center|right)\\s*(?:;|$)/i);\n    if (align && (tag === 'p' || /^h[1-3]$/.test(tag))) {\n      styles.push('text-align: ' + align[1].toLowerCase());\n    }\n    const indentRaw = String(node.getAttribute('data-indent') || '').trim();\n    const parsedIndent = Number(indentRaw);\n    const indent = /^\\d+$/.test(indentRaw) && Number.isSafeInteger(parsedIndent) && parsedIndent > 0\n      ? Math.min(8, parsedIndent)\n      : 0;\n    const hasVisibleContent = String(node.textContent || '').replace(/\\u00a0/g, ' ').trim().length > 0;\n    if (indent > 0 && hasVisibleContent && !node.closest('li') && (tag === 'p' || /^h[1-3]$/.test(tag))) {\n      children = '&#160;'.repeat(indent * 6) + children;\n    }\n    if (styles.length > 0) attrs += ' style=\"' + styles.join('; ') + '\"';\n    return '<' + tag + attrs + '>' + children + '</' + tag + '>';\n  };\n  const parsed = new DOMParser().parseFromString(manual, 'text/html');\n  const safeManual = Array.from(parsed.body.childNodes || []).map(renderNode).join('').trim();\n  const safeSource = source\n    ? source\n      .replace(/\\r\\n?/g, '\\n')\n      .split('\\n')\n      .map((line) => line ? '<p>' + escapeHtml(line) + '</p>' : '<p><br></p>')\n      .join('')\n      .trim()\n    : '';\n  return [safeSource, safeManual].filter(Boolean).join('<p><br></p>');\n`, sourceContentPlain, manualContentNative)\n\nvars.formattedManualContent = manualContentNative\nvars.copiedSourcePlainText = sourceContentPlain\nvars.sourceContentPlain = sourceContentPlain\nvars.campaignContent = String(composed || '')\n\nreturn {\n  ...input,\n  content: vars.campaignContent,\n  campaignContent: vars.campaignContent,\n  copiedSourcePlainText: sourceContentPlain,\n  sourceContentPlain,\n  manualContentNative\n}\n",
+      "icon": "FileType2",
+      "kind": "js",
+      "name": "fb_compose_source_manual_content",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-07-16T05:01:41.866358+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-06T10:14:35.142327+00:00",
+      "description": "Ghép nội dung nguồn plain với nội dung định dạng trước khi paste lên Facebook.",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [
+        {
+          "name": "campaignContent",
+          "type": "string",
+          "label": "HTML đã ghép"
+        },
+        {
+          "name": "sourceContentPlain",
+          "type": "string",
+          "label": "Nội dung nguồn plain"
+        },
+        {
+          "name": "manualContentNative",
+          "type": "string",
+          "label": "HTML do người dùng nhập"
+        }
+      ],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 27,
+      "code": "// Composer errors use the standard result contract; workflow gates publishing on opened.\nasync function waitForComposer(selector, stage) {\n  try { await page.waitForSelector(selector, { timeout: 15000 }); }\n  catch (cause) {\n    const raw = cause && cause.message ? String(cause.message) : String(cause);\n    const actionCode = input.composerActionCode;\n    if (signal.aborted || !raw.startsWith('waitForSelector timeout:') ||\n        !['fb_post_group', 'fb_post_my_profile'].includes(actionCode)) throw cause;\n    const actionResult = {\n      actionCode, statusCode: 'campaign_detail_error', errorCode: \"err_fb_composer_editor_not_found\",\n      inputDataId: vars.inputDataId ?? null,\n      operationState: 'not_committed', message: \"Không tìm thấy ô đăng bài\",\n      data: { error: raw, selector, stage, source: 'fb_open_composer' }\n    };\n    return { opened: false, actionResult };\n  }\n}\nconst btn = await helpers.element('fb_composer_button')\r\nconst buttonFailure = await waitForComposer(btn, 'composer_button')\nif (buttonFailure) return buttonFailure\r\nawait helpers.sleep(500, signal)\r\nawait page.click(btn)\r\n// Chờ form đăng bài (//form[@method='POST']) — giống pattern cũ sleep 5s\r\nawait helpers.sleep(5000, signal)\r\nconst dialog = await helpers.element('fb_composer_dialog')\r\nconst dialogFailure = await waitForComposer(dialog, 'composer_dialog')\nif (dialogFailure) return dialogFailure\r\nreturn { opened: true }",
+      "icon": "Edit",
+      "kind": "js",
+      "name": "fb_open_composer",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:27.28203+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-09T19:44:00.998463+00:00",
+      "description": "Click button \"Bạn đang nghĩ gì?\" + chờ form đăng bài hiện ra",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": 1
+    }
+  ],
+  "schema": [
+    {
+      "type": "bigint",
+      "table": "auto_blocks",
+      "column": "id",
+      "default": "nextval('auto_blocks_id_seq'::regclass)",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "name",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "description",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "icon",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "category",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "kind",
+      "default": "'js'::text",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "system_type",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "text",
+      "table": "auto_blocks",
+      "column": "code",
+      "default": "''::text",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_blocks",
+      "column": "config_schema",
+      "default": "'[]'::jsonb",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_blocks",
+      "column": "output_schema",
+      "default": "'[]'::jsonb",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_blocks",
+      "column": "default_config",
+      "default": "'{}'::jsonb",
+      "nullable": "YES"
+    },
+    {
+      "type": "boolean",
+      "table": "auto_blocks",
+      "column": "is_builtin",
+      "default": "false",
+      "nullable": "NO"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_blocks",
+      "column": "staff_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_blocks",
+      "column": "organization_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_blocks",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_blocks",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "YES"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_elements",
+      "column": "id",
+      "default": "nextval('auto_elements_id_seq'::regclass)",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_elements",
+      "column": "name",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_elements",
+      "column": "xpath",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_elements",
+      "column": "description",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "text",
+      "table": "auto_elements",
+      "column": "category",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "boolean",
+      "table": "auto_elements",
+      "column": "is_builtin",
+      "default": "false",
+      "nullable": "NO"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_elements",
+      "column": "staff_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_elements",
+      "column": "organization_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_elements",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_elements",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "YES"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_workflows",
+      "column": "id",
+      "default": "nextval('auto_workflows_id_seq'::regclass)",
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_workflows",
+      "column": "name",
+      "default": null,
+      "nullable": "NO"
+    },
+    {
+      "type": "text",
+      "table": "auto_workflows",
+      "column": "description",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_workflows",
+      "column": "nodes",
+      "default": "'[]'::jsonb",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_workflows",
+      "column": "edges",
+      "default": "'[]'::jsonb",
+      "nullable": "NO"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_workflows",
+      "column": "variables_schema",
+      "default": "'[]'::jsonb",
+      "nullable": "YES"
+    },
+    {
+      "type": "jsonb",
+      "table": "auto_workflows",
+      "column": "default_variables",
+      "default": "'{}'::jsonb",
+      "nullable": "YES"
+    },
+    {
+      "type": "boolean",
+      "table": "auto_workflows",
+      "column": "is_builtin",
+      "default": "false",
+      "nullable": "NO"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_workflows",
+      "column": "staff_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "bigint",
+      "table": "auto_workflows",
+      "column": "organization_id",
+      "default": null,
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_workflows",
+      "column": "created_at",
+      "default": "now()",
+      "nullable": "YES"
+    },
+    {
+      "type": "timestamp with time zone",
+      "table": "auto_workflows",
+      "column": "updated_at",
+      "default": "now()",
+      "nullable": "YES"
+    }
+  ]
+}

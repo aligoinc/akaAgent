@@ -238,7 +238,7 @@ const CAMPAIGN_DATA_GROUP_FALLBACK_GROUP_CACHE_MS = 60_000
 let hasWarnedCampaignDataGroupSummaryRpcUnavailable = false
 let hasWarnedCampaignDataGroupSummaryFallbackFailure = false
 const CAMPAIGN_RELATION_SUCCESS_DETAIL_STATUSES: CampaignDetailStatus[] = ['thành công', 'đã xem', 'đã click']
-const CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên']
+const CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = ['đã gửi lời mời', 'đã là thành viên', 'bỏ qua']
 const FACEBOOK_GROUP_INVITE_SKIPPED_DETAIL_STATUSES: CampaignDetailStatus[] = [
   ...CAMPAIGN_RELATION_SKIPPED_DETAIL_STATUSES,
   'không tồn tại'

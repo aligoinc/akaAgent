@@ -839,6 +839,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const pagePostMode = extra.pagePostMode || 'api'
   const isUsingSourceContent =
     (actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
+    (actionId === FACEBOOK_GROUP_POST_ACTION_ID && extra.groupPostShareFromPost === true) ||
     ((actionId === FACEBOOK_GROUP_POST_ACTION_ID || actionId === PAGE_POST_ACTION_ID) && extra.copyContentFromSource === true)
   const isReelsMediaMode = actionId === 'facebook_timeline_post' && extra.postAsReels === true && !isUsingSourceContent
   const isZaloMessageCampaign = [
@@ -881,6 +882,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     (actionId === PAGE_POST_ACTION_ID && pagePostMode === 'api') ||
     extra.copyContentFromSource === true ||
     extra.sharePost === true ||
+    (isFacebookGroupPostCampaign && extra.groupPostShareFromPost === true) ||
     isReelsMediaMode
   const canUsePostBackground = isPostBackgroundCampaign && !isPostBackgroundDisabled
   const isPostBackgroundActive = canUsePostBackground && formData.postWithBackground && !isFormattedContentEnabled
@@ -2019,7 +2021,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         nextExtraSettings.smsUseUnicode = formData.smsUseUnicode
         nextExtraSettings.smsKeepNewLines = formData.smsKeepNewLines
       }
-      if (isPostBackgroundCampaign && !isLegacyManualAdvancedSource) {
+      if (isPostBackgroundCampaign && !isLegacyManualAdvancedSource && !(isFacebookGroupPostCampaign && extra.groupPostShareFromPost)) {
         nextExtraSettings.postWithBackground = isFormattedContentEnabled ? false : isPostBackgroundActive
         if (isPostBackgroundActive) {
           nextExtraSettings.copyContentFromSource = false

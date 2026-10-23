@@ -1,0 +1,169 @@
+{
+  "blocks": [
+    {
+      "id": 2834,
+      "code": "// The target is already open through the existing resolve/navigation blocks.\nsignal.throwIfAborted();\nconst titleXPath = await helpers.element('fb_group_share_target_title');\nconst title = await page.evaluate(`\n  const rows = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n  if (rows.snapshotLength !== 1) return null;\n  return { name: rows.snapshotItem(0).textContent.trim(), url: location.href };\n`, titleXPath);\nif (!title || !title.name) throw new Error('Không lấy được tên nhóm để chia sẻ');\nconst identity = value => {\n  try { return decodeURIComponent(new URL(value).pathname.match(/^\\/groups\\/([^/]+)/i)?.[1] || '').toLowerCase(); }\n  catch { return ''; }\n};\nconst original = String(vars.inputDataUid || vars.targetUrl || '').trim();\nconst originalKey = identity(original) || (/^[\\w.-]+$/.test(original) ? original.toLowerCase() : '');\nconst currentKey = identity(title.url);\nif (!currentKey) throw new Error('Không xác minh được trang nhóm đích');\nvars.groupShareTarget = { name: title.name, url: title.url, keys: [...new Set([originalKey, currentKey].filter(Boolean))] };\nvars.groupShareSourceUrl = String(vars.sourceLink || '').trim();\nvars.groupShareSelected = false;\nvars.groupPostSubmitted = false;\nvars.groupPostUrl = '';\nvars.postUrl = '';\nif (!vars.groupShareSourceUrl) throw new Error('Thiếu link bài viết để chia sẻ');\nreturn { groupName: title.name, groupUrl: title.url };\n",
+      "icon": null,
+      "kind": "js",
+      "name": "fb_prepare_native_group_share",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Native share of a specific source post into one group; version 1.",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2835,
+      "code": "signal.throwIfAborted();\nconst target = vars.groupShareTarget;\nif (!target || !target.name || !Array.isArray(target.keys) || !target.keys.length) throw new Error('Thiếu định danh nhóm để chia sẻ');\nconst stepMs = Math.max(0, Number(vars.facebookStepMs) || 1000);\nconst scoped = (root, xpath) => xpath.split('|').map(part => root + part.trim()).join(' | ');\nconst shareXPath = scoped(\"//*[@role='dialog']\", await helpers.element('fb_share_button_inner'));\nconst toGroupXPath = await helpers.element('fb_share_to_group_button');\nconst searchXPath = scoped(\"//*[@role='dialog']\", await helpers.element('SearchAddGroupToPostInp'));\nconst resultsXPath = await helpers.element('fb_share_group_result');\nconst emptyXPath = await helpers.element('fb_share_group_search_empty');\nasync function clickUnique(xpath) {\n  signal.throwIfAborted();\n  await page.evaluate(`\n    const rows = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    if (rows.snapshotLength !== 1) throw new Error('Không xác định được duy nhất nút chia sẻ');\n    rows.snapshotItem(0).click();\n  `, xpath);\n}\n// Reuse rawClear/rawType from live fb_select_group_post_share_targets (2794).\n// The prototype setter bypasses React's tracked instance value setter.\nasync function rawClear(xpath) {\n  return await page.evaluate(`\n    const xpath = String(__args[0] || '');\n    function firstByXPath(value) {\n      try {\n        return document.evaluate(value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      } catch (e) {\n        return null;\n      }\n    }\n    const el = firstByXPath(xpath);\n    if (!el) return { found: false, cleared: false };\n    try { el.focus(); } catch (e) {}\n    try {\n      if (typeof el.select === 'function') el.select();\n      else if (typeof el.setSelectionRange === 'function') el.setSelectionRange(0, String(el.value || '').length);\n    } catch (e) {}\n    try { document.execCommand('delete', false); } catch (e) {}\n    if ('value' in el) {\n      const proto = Object.getPrototypeOf(el);\n      const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;\n      if (desc && typeof desc.set === 'function') desc.set.call(el, '');\n      else el.value = '';\n    }\n    try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward', data: null })); } catch (e) { el.dispatchEvent(new Event('input', { bubbles: true })); }\n    el.dispatchEvent(new Event('change', { bubbles: true }));\n    return { found: true, cleared: true };\n  `, xpath).catch(err => ({ found: false, cleared: false, message: err && err.message ? err.message : String(err) }));\n}\n\nasync function rawType(xpath, text) {\n  return await page.evaluate(`\n    const xpath = String(__args[0] || '');\n    const text = String(__args[1] || '');\n    function firstByXPath(value) {\n      try {\n        return document.evaluate(value, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;\n      } catch (e) {\n        return null;\n      }\n    }\n    const el = firstByXPath(xpath);\n    if (!el) return { found: false, typed: false };\n    try { el.focus(); } catch (e) {}\n    if ('value' in el) {\n      const proto = Object.getPrototypeOf(el);\n      const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;\n      if (desc && typeof desc.set === 'function') desc.set.call(el, text);\n      else el.value = text;\n    } else {\n      try { document.execCommand('insertText', false, text); } catch (e) {}\n    }\n    try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text })); } catch (e) { el.dispatchEvent(new Event('input', { bubbles: true })); }\n    el.dispatchEvent(new Event('change', { bubbles: true }));\n    return { found: true, typed: true };\n  `, xpath, text).catch(err => ({ found: false, typed: false, message: err && err.message ? err.message : String(err) }));\n}\nawait page.navigate(vars.groupShareSourceUrl);\nawait helpers.sleep(stepMs + 2000, signal);\nawait page.waitForSelector(shareXPath, { timeout: 10000 });\nawait clickUnique(shareXPath);\nawait helpers.sleep(stepMs + 2000, signal);\nawait page.waitForSelector(toGroupXPath, { timeout: 10000 });\nawait clickUnique(toGroupXPath);\nawait page.waitForSelector(searchXPath, { timeout: 10000 });\nsignal.throwIfAborted();\nconst cleared = await rawClear(searchXPath);\nif (!cleared || cleared.cleared !== true) throw new Error('Không xóa được ô tìm kiếm nhóm');\nawait helpers.sleep(stepMs + 500, signal);\nsignal.throwIfAborted();\nconst typed = await rawType(searchXPath, target.name);\nif (!typed || typed.typed !== true) throw new Error('Không nhập được tên nhóm để chia sẻ');\nconst deadline = Date.now() + 10000;\nwhile (true) {\n  signal.throwIfAborted();\n  const state = await page.evaluate(`\n    const [searchXPath, resultXPath, emptyXPath] = __args;\n    const all = (xpath, root = document) => {\n      const rows = document.evaluate(xpath, root, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      return Array.from({ length: rows.snapshotLength }, (_, i) => rows.snapshotItem(i));\n    };\n    const searches = all(searchXPath);\n    if (searches.length !== 1) throw new Error('Hộp tìm nhóm không còn sẵn sàng');\n    const search = searches[0], dialog = search.closest('[role=\"dialog\"]');\n    if (!dialog) throw new Error('Không tìm thấy hộp chọn nhóm');\n    return { query: search.value, empty: all(emptyXPath).some(el => dialog.contains(el)),\n      results: all(resultXPath).filter(el => dialog.contains(el)).map(el => ({\n        href: el.href, name: el.textContent.trim()\n      })) };\n  `, searchXPath, resultsXPath, emptyXPath);\n  signal.throwIfAborted();\n  if (state.query !== target.name) throw new Error('Tên tìm kiếm nhóm đã thay đổi');\n  const matches = state.results.filter(row => {\n    try {\n      const key = decodeURIComponent(new URL(row.href).pathname.match(/^\\/groups\\/([^/]+)/i)?.[1] || '').toLowerCase();\n      return target.keys.includes(key);\n    } catch { return false; }\n  });\n  if (matches.length > 1) throw new Error('Có nhiều kết quả cùng định danh nhóm');\n  if (matches.length === 1) {\n    signal.throwIfAborted();\n    await page.evaluate(`\n      const rows = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n      const matches = Array.from({length: rows.snapshotLength}, (_, i) => rows.snapshotItem(i)).filter(el => el.href === __args[1]);\n      if (matches.length !== 1) throw new Error('Kết quả chọn nhóm đã thay đổi');\n      const button = matches[0].closest('[role=\"button\"]');\n      if (!button) throw new Error('Không tìm thấy nút chọn nhóm');\n      button.click();\n    `, resultsXPath, matches[0].href);\n    await helpers.sleep(stepMs + 2000, signal);\n    vars.groupShareSelected = true;\n    return { selected: true, groupName: target.name };\n  }\n  // Allow the full search window before skipping a missing target. A stable\n  // list is not evidence that Facebook has finished the current query.\n  if (Date.now() >= deadline) {\n    if (!state.empty && !state.results.length) {\n      throw new Error('Hết thời gian chờ kết quả tìm kiếm nhóm để chia sẻ');\n    }\n    // This message is the sole wording source for history and input-data note.\n    const message = 'Không tìm thấy nhóm để chia sẻ, chưa tham gia nhóm';\n    await page.navigate(target.url);\n    signal.throwIfAborted();\n    return { selected: false, actionResult: { actionCode: 'fb_post_group',\n      statusCode: 'campaign_detail_skipped', operationState: 'not_committed', message,\n      data: { shareMode: 'native_group_share', groupUrl: target.url, sourceUrl: vars.groupShareSourceUrl } } };\n  }\n  await helpers.sleep(Math.min(500, Math.max(0, deadline - Date.now())), signal);\n}\n",
+      "icon": null,
+      "kind": "js",
+      "name": "fb_select_native_share_group",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Native share of a specific source post into one group; version 1.",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": null
+    },
+    {
+      "id": 2836,
+      "code": "signal.throwIfAborted();\nif (vars.groupShareSelected !== true) throw new Error('Chưa chọn nhóm để chia sẻ');\nconst postXPath = await helpers.element('fb_post_button');\nconst editorXPath = await helpers.element('fb_composer_dialog');\n// Use the existing selectors relative to the form containing the Post button.\n// Do not write to the other contenteditable fields in the nested share dialogs.\nconst form = await page.evaluate(`\n  const all = xpath => {\n    const rows = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    return Array.from({length: rows.snapshotLength}, (_, i) => rows.snapshotItem(i));\n  };\n  const buttons = all(__args[0]);\n  if (buttons.length !== 1) throw new Error('Không xác định được duy nhất nút Đăng bài chia sẻ');\n  if (buttons[0].getAttribute('aria-disabled') === 'true') throw new Error('Nút Đăng bài chia sẻ chưa sẵn sàng');\n  const form = buttons[0].closest('form');\n  if (!form) throw new Error('Không tìm thấy form chia sẻ vào nhóm');\n  const editors = all(__args[1]).filter(el => form.contains(el));\n  if (editors.length !== 1) throw new Error('Không xác định được ô nội dung bài chia sẻ');\n  return true;\n`, postXPath, editorXPath);\nif (!form) throw new Error('Form chia sẻ chưa sẵn sàng');\nconst caption = String(vars.groupPostShareCaption || '');\nconst scopedEditor = `(${postXPath})/ancestor::form[1]//*`;\nif (caption) {\n  // Intersect the existing editor selector with the verified form's descendants.\n  const editorInForm = editorXPath.split('|').map(part => part.trim() + `[count(. | ${scopedEditor}) = count(${scopedEditor})]`).join(' | ');\n  await page.fill(editorInForm, caption);\n  await helpers.sleep(1500, signal);\n}\nsignal.throwIfAborted();\ntry {\n  await page.evaluate(`\n    const rows = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    if (rows.snapshotLength !== 1 || rows.snapshotItem(0).getAttribute('aria-disabled') === 'true') throw new Error('Nút Đăng bài chia sẻ chưa sẵn sàng');\n    rows.snapshotItem(0).click();\n  `, postXPath);\n  const deadline = Date.now() + 60000;\n  while (Date.now() < deadline) {\n    signal.throwIfAborted();\n    await helpers.sleep(500, signal);\n    const open = await page.evaluate(`return document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null).snapshotLength > 0;`, postXPath);\n    if (!open) {\n      vars.groupPostSubmitted = true;\n      return { posted: true, actionResult: { actionCode: 'fb_post_group', statusCode: 'campaign_detail_success',\n        operationState: 'committed', message: 'Đã chia sẻ bài viết vào ' + vars.groupShareTarget.name,\n        data: { shareMode: 'native_group_share', groupUrl: vars.groupShareTarget.url, sourceUrl: vars.groupShareSourceUrl,\n          destinationPostUrl: null, submitClosed: true } } };\n    }\n  }\n  throw new Error('Form chia sẻ bài viết chưa đóng sau 60 giây');\n\n} catch (error) {\n  // The click may have reached Facebook even when cancellation/transport\n  // interrupts its acknowledgement. Preserve uncertainty; never auto-retry.\n  return { posted: false, actionResult: { actionCode: 'fb_post_group',\n    statusCode: 'campaign_detail_error', operationState: 'unknown', errorCode: 'err_undefined',\n    message: 'Chưa xác nhận được kết quả chia sẻ sau khi bấm Đăng: ' + String(error.message || error),\n    data: { shareMode: 'native_group_share', groupUrl: vars.groupShareTarget.url,\n      sourceUrl: vars.groupShareSourceUrl, destinationPostUrl: null } } };\n}\n",
+      "icon": null,
+      "kind": "js",
+      "name": "fb_submit_native_group_share",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Native share of a specific source post into one group; version 1.",
+      "system_type": null,
+      "config_schema": [],
+      "output_schema": [],
+      "default_config": {},
+      "organization_id": null
+    }
+  ],
+  "elements": [
+    {
+      "id": 3,
+      "name": "fb_composer_dialog",
+      "xpath": "//*[@role='dialog']//*[@contenteditable='true'] | //form[@method='POST']//*[contains(@class,'notranslate')]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:22.161894+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:43.43+00:00",
+      "description": "Khung soạn nội dung — timeline (dialog) hoặc group (form inline)",
+      "organization_id": 1
+    },
+    {
+      "id": 5,
+      "name": "fb_post_button",
+      "xpath": "//*[@role='dialog']//*[(@aria-label='Đăng' or @aria-label='Post') and @role='button'] | //*[not(@aria-hidden)]/form//*[@role='button' and (contains(.,'Post') or .='Đăng')]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:22.457377+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:43.728+00:00",
+      "description": "Nút Đăng / Post — timeline (dialog aria-label) hoặc group (form text)",
+      "organization_id": 1
+    },
+    {
+      "id": 257,
+      "name": "fb_share_button_inner",
+      "xpath": "//*[@role=\"button\" and (@aria-label=\"Chia sẻ\" or @aria-label=\"Share\" or .=\"Chia sẻ\" or .=\"Share\" or .//*[@data-ad-rendering-role=\"share_button\"])]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T19:13:13.283821+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-04-29T10:24:45.454+00:00",
+      "description": "Nút Chia sẻ (descendant, append sau container)",
+      "organization_id": 1
+    },
+    {
+      "id": 1729,
+      "name": "SearchAddGroupToPostInp",
+      "xpath": "//input[@role='combobox' and @type='search' and @aria-label='Tìm kiếm nhóm']",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-07-06T09:36:12.230738+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-08-10T03:34:08.634851+00:00",
+      "description": "Ô tìm group trong popup Thêm nhóm",
+      "organization_id": null
+    },
+    {
+      "id": 1794,
+      "name": "fb_group_share_target_title",
+      "xpath": "//*[@role='main']//h1",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Tên nhóm hiện tại để tìm trong hộp chia sẻ.",
+      "organization_id": null
+    },
+    {
+      "id": 1795,
+      "name": "fb_share_to_group_button",
+      "xpath": "//*[@role='dialog']//*[@role='button' and @aria-label='Chia sẻ lên nhóm']",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Chọn chia sẻ bài viết lên nhóm.",
+      "organization_id": null
+    },
+    {
+      "id": 1796,
+      "name": "fb_share_group_result",
+      "xpath": "//*[@role='dialog']//a[contains(@href,'/groups/') and ancestor::*[@role='button']]",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Link định danh của kết quả chọn nhóm.",
+      "organization_id": null
+    },
+    {
+      "id": 1797,
+      "name": "fb_share_group_search_empty",
+      "xpath": "//*[@role='dialog']//*[normalize-space(text())='Không có nhóm nào khớp với tìm kiếm của bạn.']",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-10-23T15:54:15.894832+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-10-23T15:54:15.894832+00:00",
+      "description": "Kết quả tìm nhóm rỗng đã xác minh DOM ngày 23/10/2026.",
+      "organization_id": null
+    }
+  ],
+  "workflows": [
+    {
+      "id": 1,
+      "name": "facebook_group_post",
+      "row_md5": "3ddcde0d2213758204efe37c797de76f"
+    },
+    {
+      "id": 252,
+      "name": "facebook_group_post__test__facebook_group_post",
+      "row_md5": "cf2b75944e486c61bf60a3b4deba6607"
+    }
+  ],
+  "captured_at": "2026-10-23T16:22:53.783702+00:00"
+}

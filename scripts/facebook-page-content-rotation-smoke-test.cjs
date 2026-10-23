@@ -30,14 +30,14 @@ const methods = methodNames.map(name => {
   return method.getText(source)
 }).join('\n')
 const globals = {
-  ActionResultBoundary: class { observe() {} accepted(steps) { return steps } },
+  ActionResultBoundary: class { observe() { return true } accepted(steps) { return steps } },
   managedTargetEffects: () => null,
   ResultContractError: class extends Error {},
   CampaignRunUnitOwnershipLostError: class extends Error {},
   ...loadShared('src/shared/facebookRandomRun.ts'),
   MOBILE_MANAGED_SMS_ACTION_IDS: new Set(['sms_send', 'voice_call']),
   getWorkflow: async () => ({ defaultVariables: {} }),
-  ...advanced, ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
+  ...advanced, ...loadShared('src/shared/facebookGroupPostShare.ts'), ZALO_MESSAGE_OPT_OUT_ACTION_IDS: new Set(),
   isRecentDeliveryCooldownEnabled: (_action, extra) => extra.recentDeliveryCooldownEnabled === true,
   supportsFacebookRestBrowse: () => false,
   isImageMediaSource: () => true, isImageOrVideoMediaSource: () => true,
@@ -126,9 +126,10 @@ function fixture(options = {}) {
       return { triggered: false }
     },
     applyRecentDeliveryCooldown: async () => ({ allowedInputDataIds: new Set(), pausedInputDataIds: new Set([1]) }),
-    engineV2: { run: async (_workflowId, variables) => {
+    engineV2: { run: async (_workflowId, variables, _page, context) => {
       assert.equal(stats.claimed, true, 'content is only published inside a claimed unit')
       stats.variables.push(structuredClone(variables))
+      for(const step of options.progressSteps || []) context.onStepProgress(structuredClone(step))
       options.beforeResult?.(saved)
       return options.result || { status: 'completed', steps: [{
         blockName: options.mode === 'ui' ? 'fb_post_current_identity_ui' : 'fb_page_post_api',

@@ -1,0 +1,497 @@
+{
+  "project_id": "cgjbsmqtfhqvttudyjzq",
+  "project_name": "akachat",
+  "migration": {
+    "name": "facebook_native_group_share",
+    "version": "20261023155415"
+  },
+  "candidate_path": "supabase/migrations/20261023142009_facebook_native_group_share.sql",
+  "candidate_sha256": "8643d7a14c482dfff5990cca43213c9eb5fc01f37eb1f9004db5fc25f385ce80",
+  "applied_at": "2026-10-23 15:54:15.894832+00",
+  "verified_at": "2026-10-23T15:54:37.51626+00:00",
+  "success": true,
+  "workflow_comparison": "Full rows equal generated candidate after resolving block IDs by name; ignores created_at and updated_at only.",
+  "workflows_before": [
+    {
+      "id": 1,
+      "row_md5": "b14ee0e3e68f4fb0c10536d6bb3534c5"
+    },
+    {
+      "id": 252,
+      "row_md5": "635995d256f019df7081dff6631b4602"
+    }
+  ],
+  "workflows_after": [
+    {
+      "id": 1,
+      "name": "facebook_group_post",
+      "row_md5": "3ddcde0d2213758204efe37c797de76f",
+      "updated_at": "2026-10-23 15:54:15.894832+00"
+    },
+    {
+      "id": 252,
+      "name": "facebook_group_post__test__facebook_group_post",
+      "row_md5": "cf2b75944e486c61bf60a3b4deba6607",
+      "updated_at": "2026-10-23 15:54:15.894832+00"
+    }
+  ],
+  "new_blocks": [
+    {
+      "id": 2834,
+      "name": "fb_prepare_native_group_share",
+      "code_md5": "fde5a4b592c39cfff6e4b5c22677b771",
+      "row_md5": "6c2eea547181954027961028819c60ae"
+    },
+    {
+      "id": 2835,
+      "name": "fb_select_native_share_group",
+      "code_md5": "ef549f46016fe693ce3a5b67bfcba98a",
+      "row_md5": "bd2b6a2d9138c2b0243a61c6e68e38e1"
+    },
+    {
+      "id": 2836,
+      "name": "fb_submit_native_group_share",
+      "code_md5": "f5425652ce36b9f43d2126227b16cda0",
+      "row_md5": "b3c9551f156505e51cef73de3c0ee000"
+    }
+  ],
+  "new_elements": [
+    {
+      "id": 1794,
+      "name": "fb_group_share_target_title",
+      "xpath": "//*[@role='main']//h1"
+    },
+    {
+      "id": 1795,
+      "name": "fb_share_to_group_button",
+      "xpath": "//*[@role='dialog']//*[@role='button' and @aria-label='Chia sẻ lên nhóm']"
+    },
+    {
+      "id": 1796,
+      "name": "fb_share_group_result",
+      "xpath": "//*[@role='dialog']//a[contains(@href,'/groups/') and ancestor::*[@role='button']]"
+    },
+    {
+      "id": 1797,
+      "name": "fb_share_group_search_empty",
+      "xpath": "//*[@role='dialog']//*[normalize-space(text())='Không có nhóm nào khớp với tìm kiếm của bạn.']"
+    }
+  ],
+  "dependencies_before": {
+    "checked_at": "2026-10-23T15:51:28.875643+00:00",
+    "shared_blocks": [
+      {
+        "id": 1,
+        "name": "if_else",
+        "matches": true,
+        "row_md5": "e1d0ad733aea4dbbf77a7382ac7f6ce2"
+      },
+      {
+        "id": 2,
+        "name": "loop",
+        "matches": true,
+        "row_md5": "2c8753415452c6ff377fc5207ca46db0"
+      },
+      {
+        "id": 4,
+        "name": "merge",
+        "matches": true,
+        "row_md5": "d293b9fb04f766d63a8b0fe68a6109da"
+      },
+      {
+        "id": 5,
+        "name": "nav_to_url",
+        "matches": true,
+        "row_md5": "d923d0fa240ba092c3d79b020840b948"
+      },
+      {
+        "id": 20,
+        "name": "sleep",
+        "matches": true,
+        "row_md5": "12f0975ca7ba943407ac1104f1dbbc3e"
+      },
+      {
+        "id": 21,
+        "name": "wait_for_selector",
+        "matches": true,
+        "row_md5": "c9a89373d01a800c69b34546886694ec"
+      },
+      {
+        "id": 32,
+        "name": "fb_leave_group_if_pending",
+        "matches": true,
+        "row_md5": "0c2a576bf121f7b2d1832ce10a010b9c"
+      },
+      {
+        "id": 33,
+        "name": "fb_join_group_if_not_member",
+        "matches": true,
+        "row_md5": "fdae4efc8787b0f90af97668887c07d5"
+      },
+      {
+        "id": 35,
+        "name": "fb_scrape_post",
+        "matches": true,
+        "row_md5": "aeec7044c31a5c0b93323cef85a433dc"
+      },
+      {
+        "id": 36,
+        "name": "fb_share_post",
+        "matches": true,
+        "row_md5": "6d381e0d3adcc8381dc8ed1804a9e7f4"
+      },
+      {
+        "id": 612,
+        "name": "fb_resolve_url",
+        "matches": true,
+        "row_md5": "781e320100215dc8ab81a2a85b6b1831"
+      },
+      {
+        "id": 29,
+        "name": "fb_drop_post_images",
+        "matches": true,
+        "row_md5": "96b5951c22ed09e493c7dc8e11747d18"
+      },
+      {
+        "id": 2794,
+        "name": "fb_select_group_post_share_targets",
+        "matches": true,
+        "row_md5": "3b41bf384c48c49c8bb3a1f4047519d4"
+      },
+      {
+        "id": 2625,
+        "name": "fb_click_group_post_prompt_if_present",
+        "matches": true,
+        "row_md5": "39c5f798a3e7379aa49e638d4c44362c"
+      },
+      {
+        "id": 34,
+        "name": "fb_comment_at_position",
+        "matches": true,
+        "row_md5": "6b52897790f3c222c0adaf02726d6be9"
+      },
+      {
+        "id": 2624,
+        "name": "fb_verify_group_post_form_closed",
+        "matches": true,
+        "row_md5": "f90e20b40e0d1c41f54edcc8b997290c"
+      },
+      {
+        "id": 2626,
+        "name": "fb_get_first_group_post_link",
+        "matches": true,
+        "row_md5": "f78b98179b1e71e5b16f3a36e6c9aca4"
+      },
+      {
+        "id": 2629,
+        "name": "fb_skip_group_post_for_known_approval",
+        "matches": true,
+        "row_md5": "46cc14685f3c776734c9f27bb18080af"
+      },
+      {
+        "id": 2627,
+        "name": "fb_adjust_group_post_comments_after_pending",
+        "matches": true,
+        "row_md5": "c4d46de4f7dcd9be04934f13be88dca1"
+      },
+      {
+        "id": 31,
+        "name": "fb_detect_pending_post",
+        "matches": true,
+        "row_md5": "892ad0a3247742395960cbda0d357cde"
+      },
+      {
+        "id": 28,
+        "name": "fb_type_post_content",
+        "matches": true,
+        "row_md5": "de82c06ce52441a5191a2484bc80a454"
+      },
+      {
+        "id": 2674,
+        "name": "fb_rewrite_source_content_ai",
+        "matches": true,
+        "row_md5": "11fadcbad7167b8fef74237751886fcd"
+      },
+      {
+        "id": 2676,
+        "name": "fb_navigate_to_target_url",
+        "matches": true,
+        "row_md5": "4afca38e2a2b1af6a11d3d9cee9e3b94"
+      },
+      {
+        "id": 30,
+        "name": "fb_click_post_button",
+        "matches": true,
+        "row_md5": "798eba24b91c8cd020839fb9efbab750"
+      },
+      {
+        "id": 2670,
+        "name": "fb_get_current_identity_name",
+        "matches": true,
+        "row_md5": "352cbb6e5ae03deb0f8be09bd99e5312"
+      },
+      {
+        "id": 2671,
+        "name": "fb_switch_identity_by_name",
+        "matches": true,
+        "row_md5": "73a6a7dbde023a7ecbc7f31991c033cd"
+      },
+      {
+        "id": 2829,
+        "name": "fb_campaign_page_identity_state",
+        "matches": true,
+        "row_md5": "29f247e71f06d8bfa8ef63570a098d10"
+      },
+      {
+        "id": 2824,
+        "name": "fb_compose_source_manual_content",
+        "matches": true,
+        "row_md5": "186f7397afe3baf7556c0fdb929b1ec2"
+      },
+      {
+        "id": 27,
+        "name": "fb_open_composer",
+        "matches": true,
+        "row_md5": "514d0609a5f11e7c86810527bd7b229c"
+      }
+    ],
+    "shared_elements": [
+      {
+        "id": 3,
+        "name": "fb_composer_dialog",
+        "matches": true,
+        "row_md5": "386e127c2001d936f9ca5c7f20aa8ea6"
+      },
+      {
+        "id": 5,
+        "name": "fb_post_button",
+        "matches": true,
+        "row_md5": "84da565403577c1b97ccc12a8579e2e4"
+      },
+      {
+        "id": 257,
+        "name": "fb_share_button_inner",
+        "matches": true,
+        "row_md5": "2ba093d5cbbca2cc525e85b50e608746"
+      },
+      {
+        "id": 1729,
+        "name": "SearchAddGroupToPostInp",
+        "matches": true,
+        "row_md5": "ff1e33bb64c2f33f53691c53e5179cab"
+      }
+    ]
+  },
+  "dependencies_after": {
+    "checked_at": "2026-10-23T15:54:36.884309+00:00",
+    "shared_blocks": [
+      {
+        "id": 1,
+        "name": "if_else",
+        "matches": true,
+        "row_md5": "e1d0ad733aea4dbbf77a7382ac7f6ce2"
+      },
+      {
+        "id": 2,
+        "name": "loop",
+        "matches": true,
+        "row_md5": "2c8753415452c6ff377fc5207ca46db0"
+      },
+      {
+        "id": 4,
+        "name": "merge",
+        "matches": true,
+        "row_md5": "d293b9fb04f766d63a8b0fe68a6109da"
+      },
+      {
+        "id": 5,
+        "name": "nav_to_url",
+        "matches": true,
+        "row_md5": "d923d0fa240ba092c3d79b020840b948"
+      },
+      {
+        "id": 20,
+        "name": "sleep",
+        "matches": true,
+        "row_md5": "12f0975ca7ba943407ac1104f1dbbc3e"
+      },
+      {
+        "id": 21,
+        "name": "wait_for_selector",
+        "matches": true,
+        "row_md5": "c9a89373d01a800c69b34546886694ec"
+      },
+      {
+        "id": 32,
+        "name": "fb_leave_group_if_pending",
+        "matches": true,
+        "row_md5": "0c2a576bf121f7b2d1832ce10a010b9c"
+      },
+      {
+        "id": 33,
+        "name": "fb_join_group_if_not_member",
+        "matches": true,
+        "row_md5": "fdae4efc8787b0f90af97668887c07d5"
+      },
+      {
+        "id": 35,
+        "name": "fb_scrape_post",
+        "matches": true,
+        "row_md5": "aeec7044c31a5c0b93323cef85a433dc"
+      },
+      {
+        "id": 36,
+        "name": "fb_share_post",
+        "matches": true,
+        "row_md5": "6d381e0d3adcc8381dc8ed1804a9e7f4"
+      },
+      {
+        "id": 612,
+        "name": "fb_resolve_url",
+        "matches": true,
+        "row_md5": "781e320100215dc8ab81a2a85b6b1831"
+      },
+      {
+        "id": 29,
+        "name": "fb_drop_post_images",
+        "matches": true,
+        "row_md5": "96b5951c22ed09e493c7dc8e11747d18"
+      },
+      {
+        "id": 2794,
+        "name": "fb_select_group_post_share_targets",
+        "matches": true,
+        "row_md5": "3b41bf384c48c49c8bb3a1f4047519d4"
+      },
+      {
+        "id": 2625,
+        "name": "fb_click_group_post_prompt_if_present",
+        "matches": true,
+        "row_md5": "39c5f798a3e7379aa49e638d4c44362c"
+      },
+      {
+        "id": 34,
+        "name": "fb_comment_at_position",
+        "matches": true,
+        "row_md5": "6b52897790f3c222c0adaf02726d6be9"
+      },
+      {
+        "id": 2624,
+        "name": "fb_verify_group_post_form_closed",
+        "matches": true,
+        "row_md5": "f90e20b40e0d1c41f54edcc8b997290c"
+      },
+      {
+        "id": 2626,
+        "name": "fb_get_first_group_post_link",
+        "matches": true,
+        "row_md5": "f78b98179b1e71e5b16f3a36e6c9aca4"
+      },
+      {
+        "id": 2629,
+        "name": "fb_skip_group_post_for_known_approval",
+        "matches": true,
+        "row_md5": "46cc14685f3c776734c9f27bb18080af"
+      },
+      {
+        "id": 2627,
+        "name": "fb_adjust_group_post_comments_after_pending",
+        "matches": true,
+        "row_md5": "c4d46de4f7dcd9be04934f13be88dca1"
+      },
+      {
+        "id": 31,
+        "name": "fb_detect_pending_post",
+        "matches": true,
+        "row_md5": "892ad0a3247742395960cbda0d357cde"
+      },
+      {
+        "id": 28,
+        "name": "fb_type_post_content",
+        "matches": true,
+        "row_md5": "de82c06ce52441a5191a2484bc80a454"
+      },
+      {
+        "id": 2674,
+        "name": "fb_rewrite_source_content_ai",
+        "matches": true,
+        "row_md5": "11fadcbad7167b8fef74237751886fcd"
+      },
+      {
+        "id": 2676,
+        "name": "fb_navigate_to_target_url",
+        "matches": true,
+        "row_md5": "4afca38e2a2b1af6a11d3d9cee9e3b94"
+      },
+      {
+        "id": 30,
+        "name": "fb_click_post_button",
+        "matches": true,
+        "row_md5": "798eba24b91c8cd020839fb9efbab750"
+      },
+      {
+        "id": 2670,
+        "name": "fb_get_current_identity_name",
+        "matches": true,
+        "row_md5": "352cbb6e5ae03deb0f8be09bd99e5312"
+      },
+      {
+        "id": 2671,
+        "name": "fb_switch_identity_by_name",
+        "matches": true,
+        "row_md5": "73a6a7dbde023a7ecbc7f31991c033cd"
+      },
+      {
+        "id": 2829,
+        "name": "fb_campaign_page_identity_state",
+        "matches": true,
+        "row_md5": "29f247e71f06d8bfa8ef63570a098d10"
+      },
+      {
+        "id": 2824,
+        "name": "fb_compose_source_manual_content",
+        "matches": true,
+        "row_md5": "186f7397afe3baf7556c0fdb929b1ec2"
+      },
+      {
+        "id": 27,
+        "name": "fb_open_composer",
+        "matches": true,
+        "row_md5": "514d0609a5f11e7c86810527bd7b229c"
+      }
+    ],
+    "shared_elements": [
+      {
+        "id": 3,
+        "name": "fb_composer_dialog",
+        "matches": true,
+        "row_md5": "386e127c2001d936f9ca5c7f20aa8ea6"
+      },
+      {
+        "id": 5,
+        "name": "fb_post_button",
+        "matches": true,
+        "row_md5": "84da565403577c1b97ccc12a8579e2e4"
+      },
+      {
+        "id": 257,
+        "name": "fb_share_button_inner",
+        "matches": true,
+        "row_md5": "2ba093d5cbbca2cc525e85b50e608746"
+      },
+      {
+        "id": 1729,
+        "name": "SearchAddGroupToPostInp",
+        "matches": true,
+        "row_md5": "ff1e33bb64c2f33f53691c53e5179cab"
+      }
+    ]
+  },
+  "shared_dependencies_unchanged": true,
+  "normal_posting_default": true,
+  "rollback_path": "migrations/snapshots/facebook-native-group-share/rollback.sql",
+  "limitations": [
+    "No actual Facebook post submitted for validation",
+    "Desktop not packaged or released in this apply"
+  ]
+}
