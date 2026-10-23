@@ -230,12 +230,12 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_ACCOUNT, async (_, id: number, updates) => {
     const normalizedUpdates = updates || {}
-    const existing = await supabase.getAccount(id)
-    if (normalizedUpdates.isActive === false && !existing) throw new Error('Không tìm thấy tài khoản')
-    if (normalizedUpdates.isActive === false && existing?.status === 'đang chạy') {
-      throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
-    }
     if (normalizedUpdates.isActive !== false) preemptWebEnrichment(id)
+    const existing = await supabase.getAccount(id)
+    if (normalizedUpdates.isActive === false) {
+      if (existing?.status === 'đang chạy') throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
+      preemptWebEnrichment(id)
+    }
     const updateKeys = Object.keys(normalizedUpdates)
     const statusOnly = updateKeys.length === 1 && updateKeys[0] === 'status'
     const requestedStatus = normalizedUpdates.status
@@ -346,7 +346,6 @@ export function registerAccountHandlers(
         normalizedUpdates,
         changesZaloType ? { zaloTypeChangePreviousStatus, zaloTypeChangeClaimToken } : undefined
       )
-      if (normalizedUpdates.isActive === false) preemptWebEnrichment(id)
       if (
         changesZaloType &&
         zaloTypeChangePreviousStatus &&
@@ -415,21 +414,18 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.DB_DELETE_ACCOUNT, async (_, id: number) => {
     const existing = await supabase.getAccount(id)
-    if (!existing) throw new Error('Không tìm thấy tài khoản')
-    if (existing.status === 'đang chạy') {
-      throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
-    }
-    await supabase.deleteAccount(id)
+    if (existing?.status === 'đang chạy') throw new Error(ACCOUNT_RUNNING_MUTATION_REASON)
     preemptWebEnrichment(id)
     if (webviewRegistry.isRegistered(id)) {
       webviewRegistry.unregister(id)
     }
-    if (existing.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
+    if (existing?.flatformType === 'zalo' && shouldRouteZaloAccountCleanupToServer(existing)) {
       void zaloServerClient?.executeCommand('zalo.runtime.invalidate', id).catch(() => {})
-    } else if (!shouldRouteZaloAccountToChatApi(existing)) {
+    } else if (!existing || !shouldRouteZaloAccountToChatApi(existing)) {
       zaloRuntime?.invalidateAccount(id)
       zaloRuntime?.detachWebSession(id)
     }
+    return supabase.deleteAccount(id)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_GROUPS, async (_, flatformType?: string) => {

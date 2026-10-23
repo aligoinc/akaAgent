@@ -799,6 +799,10 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   }, [showForm, onAccountFormClosed])
 
   const handleDelete = (account: AutoAccount) => {
+    if (account.status === 'đang chạy') {
+      useUiStore.getState().showAlert('Tài khoản đang chạy. Vui lòng tạm dừng trước khi xoá hoặc vô hiệu hoá.', 'error')
+      return
+    }
     useUiStore.getState().showConfirm(
       `Xoá tài khoản "${account.name}"?`,
       async () => {
@@ -1064,6 +1068,10 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   }
 
   const handleDisable = async (account: AutoAccount) => {
+    if (account.status === 'đang chạy') {
+      useUiStore.getState().showAlert('Tài khoản đang chạy. Vui lòng tạm dừng trước khi xoá hoặc vô hiệu hoá.', 'error')
+      return
+    }
     try {
       await updateAccount(account.id, { isActive: false, status: 'tạm dừng' })
     } catch (error) {
@@ -1416,7 +1424,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
       {/* Context Menu */}
       {contextMenu && (
         <AccountContextMenu
-          account={accounts.find(account => account.id === contextMenu.account.id) ?? contextMenu.account}
+          account={contextMenu.account}
           position={contextMenu.position}
           onClose={() => setContextMenu(null)}
           onViewBrowser={handleViewBrowser}

@@ -394,9 +394,6 @@ export async function updateAccount(
   const payload: any = { updated_at: new Date().toISOString() }
   const current = await getAccount(id)
   if (!current) throw new Error('Không tìm thấy tài khoản')
-  if (updates.isActive === false && current.status === 'đang chạy') {
-    throw new Error('Tài khoản đang chạy. Vui lòng tạm dừng trước khi xoá hoặc vô hiệu hoá.')
-  }
   const targetFlatformType = updates.flatformType ?? current.flatformType
   if (
     targetFlatformType !== current.flatformType &&
@@ -507,10 +504,6 @@ export async function updateAccount(
     .update(payload)
     .eq('id', id)
     .eq('staff_id', u.staffId)
-  if (updates.isActive === false) {
-    // Recheck status in the write itself; the earlier read may already be stale.
-    updateQuery = updateQuery.or('status.neq.đang chạy,status.is.null')
-  }
   if (changesZaloRuntimeType) {
     updateQuery = updateQuery
       .eq('flatform_type', 'zalo')
@@ -525,9 +518,6 @@ export async function updateAccount(
 
   if (error) throw new Error(`Failed to update account: ${error.message}`)
   if (!data) {
-    if (updates.isActive === false) {
-      throw new Error('Tài khoản đang chạy hoặc không còn khả dụng. Vui lòng tải lại danh sách tài khoản.')
-    }
     throw new Error(changesZaloRuntimeType
       ? 'Tài khoản Zalo đã bắt đầu chạy hoặc loại tài khoản đã thay đổi. Vui lòng thử lại.'
       : 'Không tìm thấy tài khoản')
@@ -964,19 +954,13 @@ export async function clearAccountEmailSession(id: number): Promise<AutoAccount>
 
 export async function deleteAccount(id: number): Promise<void> {
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const { error } = await client()
     .from('auto_accounts')
     .update({ is_delete: true, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('staff_id', u.staffId)
-    .or('status.neq.đang chạy,status.is.null')
-    .select('id')
-    .maybeSingle()
 
   if (error) throw new Error(`Failed to delete account: ${error.message}`)
-  if (!data) {
-    throw new Error('Tài khoản đang chạy hoặc không còn khả dụng. Vui lòng tải lại danh sách tài khoản.')
-  }
 }
 
 export async function getEligibleAccounts(): Promise<AutoAccount[]> {
