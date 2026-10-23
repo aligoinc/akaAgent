@@ -25305,11 +25305,6 @@ body.theme-light :is(
   white-space: nowrap;
 }
 
-.context-menu-item:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .context-menu-item:hover {
   background: var(--bg-hover);
 }

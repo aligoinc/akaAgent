@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Xóa/vô hiệu hóa tài khoản chỉ chặn `status='đang chạy'`: UI/IPC kiểm tra trạng thái, [repository](src/main/data/repositories/accountRepository.ts) giữ điều kiện ngay trong UPDATE và báo lỗi khi không ghi được hàng. IPC từ chối tài khoản đọc ra `null`, chỉ cleanup sau ghi thành công; hồi quy race/NULL/quyền và trạng thái khác: `node scripts/account-mutation-status-smoke.cjs`. Không kiểm tra chiến dịch/claim/token hoặc đổi DB schema.
+Xóa/vô hiệu hóa tài khoản chỉ kiểm tra `status === 'đang chạy'` trước thao tác ở UI/IPC. Qua bước này thì chạy luồng cũ, cleanup trước ghi; không kiểm tra lại trong UPDATE, không thêm điều kiện chiến dịch/claim/token hoặc xử lý race. Repository giữ nguyên trước PR #536.
 
 Menu chiến dịch có **Hành động của tài khoản** ngay dưới Thông tin tài khoản: [AccountInfoView](src/renderer/src/components/CampaignPanels/AccountInfoView.tsx) tải cấu hình mới trước khi mở/làm mới rồi truyền `actionCodes` tùy chọn qua IPC `ACCOUNT_ACTION_OVERVIEW` xuống repository. Lọc catalog bằng `code IN`, chỉ đọc/tạo/reset trạng thái và đếm lượt của các mã hợp lệ theo nền tảng/gói; không truyền mã giữ màn hình tài khoản đầy đủ, danh sách rỗng không query và mã sai bị từ chối. [Bộ mô tả hiển thị dùng chung](src/shared/campaignActionDescriptors.ts) bao gồm Gắn tag/Đổi tên theo tùy chọn của sáu loại chiến dịch Zalo hỗ trợ, loại share bạn bè và loại không hỗ trợ; giữ nguyên bộ lọc scheduler/quota. Giữ Chạy lại ngay, RPC mở khóa đến hạn, DB clock, cách đếm explicit/legacy; chặn phản hồi phiên cũ, không migration/connection/polling mới. [Smoke query PostgREST](scripts/account-action-overview-scope-smoke.cjs), 31 ca UI Electron, 128 tổ hợp mô tả/đối chiếu runtime, hồi quy chẩn đoán, hai typecheck và build đạt; cần restart main/preload khi chạy dev, chưa đóng gói/phát hành.
 
@@ -691,6 +691,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Xóa/vô hiệu hóa tài khoản**: guard chỉ xét trạng thái lúc bắt đầu UI/IPC. Sau khi qua guard, giữ cleanup trước ghi và repository cũ; tài khoản bắt đầu chạy sau đó vẫn thực hiện thao tác, không bổ sung kiểm tra race.
 
 - Import Link sheet Google phải đọc CSV theo dấu phẩy cố định; dấu `;` trong ô là dữ liệu để verify tách SĐT sau mapping. CSV khách hàng vẫn nhận diện dấu phân cột; xem [hồi quy](docs/CAMPAIGN_IMPORT_VERIFICATION.md#sửa-review-link-sheet-google--21102026).
 
