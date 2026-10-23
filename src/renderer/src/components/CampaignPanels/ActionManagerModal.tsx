@@ -19,6 +19,7 @@ interface ActionFormData {
   limitCheckActionCodes: string[]
   allowMultipleAccounts: boolean
   allowSecondaryAccount: boolean
+  showStaffDeliveryCooldown: boolean
   isActive: boolean
 }
 
@@ -31,6 +32,7 @@ const emptyForm: ActionFormData = {
   limitCheckActionCodes: [],
   allowMultipleAccounts: false,
   allowSecondaryAccount: false,
+  showStaffDeliveryCooldown: false,
   isActive: true
 }
 
@@ -103,6 +105,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       limitCheckActionCodes: action.limitCheckActionCodes || [],
       allowMultipleAccounts: action.allowMultipleAccounts ?? false,
       allowSecondaryAccount: action.allowSecondaryAccount ?? false,
+      showStaffDeliveryCooldown: action.showStaffDeliveryCooldown === true,
       isActive: action.isActive
     })
     setIsEditing(true)
@@ -188,6 +191,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
       testWorkflowId: formData.testWorkflowId === '' ? undefined : Number(formData.testWorkflowId),
       allowMultipleAccounts: formData.allowMultipleAccounts,
       allowSecondaryAccount: formData.allowSecondaryAccount,
+      showStaffDeliveryCooldown: formData.showStaffDeliveryCooldown,
       limitCheckActionCodes: formData.limitCheckActionCodes
     }
 
@@ -396,6 +400,14 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                       />
                       <span>Cho phép chọn tài khoản phụ</span>
                     </label>
+                    {formData.id === 'zalo_message_phone' && <label className="action-manager-toggle">
+                      <input
+                        type="checkbox"
+                        checked={formData.showStaffDeliveryCooldown}
+                        onChange={e => setFormData(prev => ({ ...prev, showStaffDeliveryCooldown: e.target.checked }))}
+                      />
+                      <span>Hiển thị kiểm tra trùng lặp trên tất cả tài khoản của staff</span>
+                    </label>}
                   </div>
 
                   <div className="action-code-picker-block">

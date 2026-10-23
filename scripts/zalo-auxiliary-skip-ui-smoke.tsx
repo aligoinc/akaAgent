@@ -95,7 +95,9 @@ function App() {
     resetData(); state.failZaloLabels = false; state.holdLabels = null; state.pendingLabels = []; state.emptyLabels = false
     setOptions(overrides); setMode(next); setActionId(action); setGeneration(value => value + 1)
   }
-  ;(window as any).settingsSmoke = { state, open }
+  ;(window as any).settingsSmoke = { state, open, setStaffDeliveryCooldown: (show: boolean) => {
+    useCampaignStore.setState(current => ({ campaignActions: current.campaignActions.map(action => ({ ...action, showStaffDeliveryCooldown: show })) }))
+  } }
   const formData = { name: 'Điều kiện Zalo', actionId, accountIds: [11], schedule: '2035-01-01T09:00',
     content: 'Nội dung', enableMessage: true, zaloFriendTargetMode: 'all_friends',
     enableZaloTag: true, zaloTagId: '7', zaloTagName: 'Tag mới',
