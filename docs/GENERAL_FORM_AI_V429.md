@@ -1,5 +1,7 @@
 # AI Cài đặt chung cho mọi loại tài khoản — V429
 
+**Cập nhật 24/10/2026:** Web đã được gắn vào config 14, prompt/schema/model V429 giữ nguyên. Ghi chú Web NULL bên dưới mô tả mốc V429 ban đầu; trạng thái mới và thứ tự rollback Web trước V429 xem [AI Cài đặt chung Web](GENERAL_FORM_AI_WEB.md).
+
 ## Hành vi
 
 Cài đặt chung trên Desktop dùng AI cho Facebook, Zalo (QR, trình duyệt, Server), Email và SMS; Gọi tự động dùng nền tảng SMS. AI đổi tên và chọn tài khoản chính theo yêu cầu. Chạy bằng Page chỉ có hiệu lực với các loại chiến dịch Facebook vốn hỗ trợ Page. Năm section AI chuyên biệt còn lại giữ phạm vi Facebook.

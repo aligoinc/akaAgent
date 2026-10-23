@@ -1,0 +1,151 @@
+[
+  {
+    "id": 1,
+    "code": "app_campaign_action_limits",
+    "name": "Điền giới hạn hành động chiến dịch",
+    "desktop_section_id": "campaign.action_limits",
+    "web_section_id": "campaign.action_limits",
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "all",
+    "campaign_action_ids": [],
+    "is_active": true,
+    "checksum": "024ed86e3a0ae0a3188f9bb074923897"
+  },
+  {
+    "id": 2,
+    "code": "app_campaign_schedule",
+    "name": "Điền lịch chạy chiến dịch",
+    "desktop_section_id": "campaign.schedule",
+    "web_section_id": "campaign.schedule",
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "all",
+    "campaign_action_ids": [],
+    "is_active": true,
+    "checksum": "fea29b7f2cc1c8449a63c790b24e7ed6"
+  },
+  {
+    "id": 5,
+    "code": "app_campaign_content",
+    "name": "Nội dung",
+    "desktop_section_id": "campaign.content",
+    "web_section_id": "campaign.content",
+    "mobile_section_id": null,
+    "model_id": 24,
+    "campaign_scope": "all",
+    "campaign_action_ids": [],
+    "is_active": true,
+    "checksum": "9b8bb5bbe9b71782005d681f7a745673"
+  },
+  {
+    "id": 7,
+    "code": "app_campaign_send_exclusions",
+    "name": "Loại trừ gửi cho khách hàng",
+    "desktop_section_id": "campaign.send_exclusions",
+    "web_section_id": "campaign.send_exclusions",
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "zalo_message_phone",
+      "zalo_message_friend",
+      "zalo_message_birthday",
+      "zalo_message_group_member",
+      "zalo_message_group_realtime",
+      "zalo_message_remarketing_customer",
+      "zalo_message_friend_recommendation"
+    ],
+    "is_active": true,
+    "checksum": "f364a9aebf1826695c8ba82c76920a57"
+  },
+  {
+    "id": 14,
+    "code": "app_facebook_form_general",
+    "name": "Cài đặt chung chiến dịch",
+    "desktop_section_id": "campaign.facebook.general",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "all",
+    "campaign_action_ids": [],
+    "is_active": true,
+    "checksum": "1e7c3783de9f65165548bf1bdc7e2ebe"
+  },
+  {
+    "id": 15,
+    "code": "app_facebook_form_search",
+    "name": "Cấu hình tìm kiếm và Điều kiện chạy Facebook",
+    "desktop_section_id": "campaign.facebook.search",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "facebook_find_data_group",
+      "facebook_find_data_search"
+    ],
+    "is_active": true,
+    "checksum": "5c57b8619155251fca865f96297da9f7"
+  },
+  {
+    "id": 16,
+    "code": "app_facebook_form_keywords",
+    "name": "Danh sách từ khóa Facebook",
+    "desktop_section_id": "campaign.facebook.keywords",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "facebook_find_data_search"
+    ],
+    "is_active": true,
+    "checksum": "9f417a19fb8be69c8411c5779f453a1c"
+  },
+  {
+    "id": 17,
+    "code": "app_facebook_form_post_search",
+    "name": "Điều kiện tìm kiếm bài post Facebook",
+    "desktop_section_id": "campaign.facebook.post_search",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "facebook_comment_seeding"
+    ],
+    "is_active": true,
+    "checksum": "29aa0c44171fbb915bce6bf440a74d22"
+  },
+  {
+    "id": 18,
+    "code": "app_facebook_form_newsfeed",
+    "name": "Lướt newsfeed Facebook",
+    "desktop_section_id": "campaign.facebook.newsfeed",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "facebook_newsfeed_interaction"
+    ],
+    "is_active": true,
+    "checksum": "04fe3eba0678a8aa68d795fa850974d6"
+  },
+  {
+    "id": 19,
+    "code": "app_facebook_form_group_comment",
+    "name": "Kiêm comment Facebook",
+    "desktop_section_id": "campaign.facebook.group_comment",
+    "web_section_id": null,
+    "mobile_section_id": null,
+    "model_id": 21,
+    "campaign_scope": "selected",
+    "campaign_action_ids": [
+      "facebook_group_post"
+    ],
+    "is_active": true,
+    "checksum": "ff17014d87fbc61925209d2829042d69"
+  }
+]

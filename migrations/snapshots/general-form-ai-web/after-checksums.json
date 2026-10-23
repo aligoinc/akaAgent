@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "code": "app_campaign_action_limits",
+    "web_section_id": "campaign.action_limits",
+    "model_id": 21,
+    "checksum": "024ed86e3a0ae0a3188f9bb074923897",
+    "system_checksum": "1630c388c4e1e00f0aedc17577e672f6",
+    "user_checksum": "4a74d0a05bb23c699701d34a7e3b626c",
+    "schema_checksum": "0ef315bf0f4095b18bf06052c0b0a3e5"
+  },
+  {
+    "id": 2,
+    "code": "app_campaign_schedule",
+    "web_section_id": "campaign.schedule",
+    "model_id": 21,
+    "checksum": "fea29b7f2cc1c8449a63c790b24e7ed6",
+    "system_checksum": "12165bf38ec3d7d4bf7532f13ebbfa3d",
+    "user_checksum": "dd3972bb667d3063b88a43b0ef8307df",
+    "schema_checksum": "434cb2378c31a66b67063e790c25640b"
+  },
+  {
+    "id": 5,
+    "code": "app_campaign_content",
+    "web_section_id": "campaign.content",
+    "model_id": 24,
+    "checksum": "9b8bb5bbe9b71782005d681f7a745673",
+    "system_checksum": "c36434266b7c7a633fd00483e8ded3d1",
+    "user_checksum": "02f73c8f8da1a38945fb399e7e862235",
+    "schema_checksum": "0edc82964483311a6f49cbdfda2394d7"
+  },
+  {
+    "id": 7,
+    "code": "app_campaign_send_exclusions",
+    "web_section_id": "campaign.send_exclusions",
+    "model_id": 21,
+    "checksum": "f364a9aebf1826695c8ba82c76920a57",
+    "system_checksum": "8864fd5e394f3801c46c39627f4b20aa",
+    "user_checksum": "c2f67697bcfb75842318c45fa374ab5f",
+    "schema_checksum": "bfa300625ed72495d9923502c40aab29"
+  },
+  {
+    "id": 14,
+    "code": "app_facebook_form_general",
+    "web_section_id": "campaign.facebook.general",
+    "model_id": 21,
+    "checksum": "8fca42886abc4b29b5d76271d13fb0b6",
+    "system_checksum": "09c2d19b3c2013fe67171c86460924e7",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "843499cdd0558a329aa315d9dd14085b"
+  },
+  {
+    "id": 15,
+    "code": "app_facebook_form_search",
+    "web_section_id": null,
+    "model_id": 21,
+    "checksum": "5c57b8619155251fca865f96297da9f7",
+    "system_checksum": "e2cba8bcefb43d2625aebb56e4865b9a",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "3eb9840ee325c8c665152cdaa19bc8d8"
+  },
+  {
+    "id": 16,
+    "code": "app_facebook_form_keywords",
+    "web_section_id": null,
+    "model_id": 21,
+    "checksum": "9f417a19fb8be69c8411c5779f453a1c",
+    "system_checksum": "7c2daae5aca28f29c2cf61355fd5b5be",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "503a23b2a72d075a7c672eb66db2b2d0"
+  },
+  {
+    "id": 17,
+    "code": "app_facebook_form_post_search",
+    "web_section_id": null,
+    "model_id": 21,
+    "checksum": "29aa0c44171fbb915bce6bf440a74d22",
+    "system_checksum": "11d3b1df71512f2e02612dce229261de",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "dfce9393d9fa5060e1957214e9f29d88"
+  },
+  {
+    "id": 18,
+    "code": "app_facebook_form_newsfeed",
+    "web_section_id": null,
+    "model_id": 21,
+    "checksum": "04fe3eba0678a8aa68d795fa850974d6",
+    "system_checksum": "645c8cf62c7aecc9c893f12f50a7b010",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "37f4198d1b13849fe3cb2ce6fb89e8a2"
+  },
+  {
+    "id": 19,
+    "code": "app_facebook_form_group_comment",
+    "web_section_id": null,
+    "model_id": 21,
+    "checksum": "ff17014d87fbc61925209d2829042d69",
+    "system_checksum": "f43778be40ed4b8c8265b10240b2ed2f",
+    "user_checksum": "e74dcd6c0a4a6dc635b1f82acf32ee4c",
+    "schema_checksum": "91b5863bbea028ec26809d5bb4684858"
+  }
+]
