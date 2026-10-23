@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Ô chọn tài khoản chiến dịch tải snapshot ngày/trạng thái một lần sau catalog và cấu hình hiển thị mới; lọc theo loại có thể chọn và tài khoản tương thích, đổi lựa chọn chỉ lọc RAM. Reader/IPC riêng dùng HTTP + DB clock hiện có, deadline 15s/chặn phiên cũ/lô <=500 cặp; không đếm giờ/history, ghi quota, polling hoặc connection mới. Phần Giới hạn dùng lại số ngày; overview riêng giữ nguyên. Xem [hợp đồng, phạm vi và smoke](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
+
 Web/API Hiển thị loại chiến dịch đã deploy 23/10/2026 lúc 16:25 VN từ `93eeec9`, machine Fly giữ 1 shared CPU/512 MB và chỉ đổi image, health 1/1. 2.600 unit test, typecheck/build, 15 browser local/15 production, 21 HTTP và checksum runtime/DB đạt. Không apply lại V423; Desktop chưa đóng gói/phát hành. Xem [audit](docs/CAMPAIGN_TYPE_VISIBILITY.md#deploy-webapi--23102026).
 
 V423 Hiển thị loại chiến dịch đã apply akachat ngày 23/10/2026 lúc 16:06 VN (`20261023090604 / migration_v423_campaign_type_visibility`). Giữ patch Desktop V328/Web V415; bảy target và bảy helper/runtime khớp checksum/metadata. 22 SQL local, 18 kiểm tra rollback trước và sau apply đạt; preference thử rollback, bảng 0 hàng, Web RPC service-role-only. Không apply lại; chưa deploy tính năng API/Web hoặc đóng gói/phát hành Desktop. Người dùng chấp nhận không sửa finding queue Web khi pending action mất khỏi catalog; reload/đăng nhập lại xóa lựa chọn chưa lưu. Xem [audit production](docs/CAMPAIGN_TYPE_VISIBILITY.md#apply-production--23102026). Ghi chú candidate bên dưới là lịch sử.
@@ -697,6 +699,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Thống kê trong ô chọn tài khoản**: Đăng bài trang cá nhân chỉ hiện đăng bài; Comment của đăng bài group và Like của Comment seeding chỉ hiện khi bật tùy chọn nhưng phải tải sẵn lúc mở form. Lướt newsfeed giữ Comment/Like; Gắn tag/Đổi tên chỉ ẩn ở picker. Đổi lựa chọn chỉ lọc snapshot, không query giờ hoặc tải lại. Xem [hợp đồng](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
 
 - **Xóa/vô hiệu hóa tài khoản**: guard chỉ xét trạng thái lúc bắt đầu UI/IPC. Sau khi qua guard, giữ cleanup trước ghi và repository cũ; tài khoản bắt đầu chạy sau đó vẫn thực hiện thao tác, không bổ sung kiểm tra race.
 

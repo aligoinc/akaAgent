@@ -26,7 +26,7 @@ Desktop: IPC `settings:campaign-type-visibility:get/patch`, chỉ main frame; d�
 
 Hai RPC phân trang nhận `p_filters.applyDisplaySettings` tùy chọn. Client Desktop/Web mới bật cờ; client cũ/native không truyền vẫn giữ kết quả cũ. Loại bị ẩn được lọc trong CTE trước phân trang, total và selection, kể cả explicit IDs. Anchor nháp client mới thêm `actionId`, lọc nháp và campaign cùng lượt đọc. Response trả `displaySettings` cùng trang; nhịp polling cũ nhận thay đổi máy khác, không tạo lượt đọc thêm vì revision của page thay đổi. Lưu tại máy hiện tại phát tín hiệu tải lại ngay. Revision thấp và phản hồi phiên cũ không ghi đè snapshot mới; thay đổi cấu hình xóa lựa chọn hàng loạt cũ.
 
-Catalog nghiệp vụ vẫn đầy đủ cho runtime, báo cáo, liên kết và form sửa campaign đã tạo. Form thêm lọc bộ chọn nhưng luôn giữ loại đang chọn và dữ liệu đang soạn. Không chạm scheduler/quota, trạng thái chiến dịch hoặc lịch chạy; phần chi tiết đang ghim và nhãn tài khoản đang chạy giữ nguồn dữ liệu cũ.
+Catalog nghiệp vụ vẫn đầy đủ cho runtime, báo cáo, liên kết và form sửa campaign đã tạo. Form thêm lọc bộ chọn nhưng luôn giữ loại đang chọn và dữ liệu đang soạn. Phạm vi đọc thống kê tài khoản của picker theo đúng loại được phép chọn trong form: form thêm/nhân bản/nháp chỉ lấy loại hiển thị + loại đang chọn; form sửa lấy catalog đầy đủ từ lần mở đầu để đổi sang loại đã ẩn vẫn có số liệu mà không query thêm. Form bị khóa loại/tài khoản vẫn chỉ lấy phạm vi cố định. Không chạm scheduler/quota, trạng thái chiến dịch hoặc lịch chạy; phần chi tiết đang ghim và nhãn tài khoản đang chạy giữ nguồn dữ liệu cũ.
 
 ## Migration và preflight
 

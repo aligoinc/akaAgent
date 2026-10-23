@@ -1,4 +1,5 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
+import type { CampaignAccountActionScope } from '../../../shared/campaignAccountActionSnapshot'
 import { preemptWebEnrichment } from '../../services/webEnrichmentControl'
 import { AutoAccount, AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
@@ -491,6 +492,10 @@ export function registerAccountHandlers(
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, async (_, accountId: number, actionCodes: string[]) => {
     return supabase.getCampaignActionUsage(accountId, actionCodes)
+  })
+
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_SNAPSHOT, async (_, scopes: CampaignAccountActionScope[]) => {
+    return supabase.getCampaignAccountActionSnapshot(scopes)
   })
 
   ipcMain.handle(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, async (_, accountId: number, actionCode: string) => {

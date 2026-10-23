@@ -3305,6 +3305,7 @@ export const IPC_EVENTS = {
   ACCOUNT_STATUS_UPDATED: 'account:status-updated',
   ACCOUNT_ACTION_OVERVIEW: 'account:action-overview',
   ACCOUNT_CAMPAIGN_ACTION_USAGE: 'account:campaign-action-usage',
+  ACCOUNT_CAMPAIGN_ACTION_SNAPSHOT: 'account:campaign-action-snapshot',
   ACCOUNT_ACTION_ENABLE_NOW: 'account:action-enable-now',
   ACCOUNT_SMS_RESET_MOBILE_DEVICE: 'account:sms-reset-mobile-device',
   ZALO_LOGIN_QR_START: 'zalo:login-qr-start',

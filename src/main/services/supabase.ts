@@ -8,6 +8,7 @@ import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepo
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
 import * as accountActionRepo from '../data/repositories/accountActionRepository'
+import * as campaignAccountActionSnapshotRepo from '../data/repositories/campaignAccountActionSnapshotRepository'
 import * as errorPolicyRepo from '../data/repositories/errorPolicyRepository'
 import * as contentTemplateRepo from '../data/repositories/contentTemplateRepository'
 import * as mediaFileRepo from '../data/repositories/mediaFileRepository'
@@ -28,6 +29,9 @@ import * as runtimeClockRepo from '../data/repositories/runtimeClockRepository'
  * Keeps a thin service API so callers do not know repository boundaries.
  */
 export class SupabaseService {
+  getCampaignAccountActionSnapshot(...args: Parameters<typeof campaignAccountActionSnapshotRepo.getCampaignAccountActionSnapshot>) {
+    return campaignAccountActionSnapshotRepo.getCampaignAccountActionSnapshot(...args)
+  }
   getZaloPhoneCheckUsage(...args: Parameters<typeof zaloPhoneCheckRepo.getZaloPhoneCheckUsage>) {
     return zaloPhoneCheckRepo.getZaloPhoneCheckUsage(...args)
   }
