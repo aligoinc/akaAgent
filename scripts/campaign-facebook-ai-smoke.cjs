@@ -22,7 +22,7 @@ try {
     assert.equal(m.formAiAvailable(metadata,config.desktop_section_id,'zalo_message_friend'),false);checks++
   }
   const general=request('general',{accountIds:[11],runAsPage:false,runAsPageUid:'',name:'Keep'})
-  const catalog={accounts:[{id:11,name:'A'},{id:12,name:'B'}],pages:[{accountId:12,uid:'page-b',name:'Page B'}],allowMultipleAccounts:true,hasSecondaryAccount:false,secondaryAccount:null}
+  const catalog={platform:'facebook',allowPageIdentity:true,accounts:[{id:11,name:'A'},{id:12,name:'B'}],pages:[{accountId:12,uid:'page-b',name:'Page B'}],allowMultipleAccounts:true,hasSecondaryAccount:false,secondaryAccount:null}
   check(parse(general,{accountIds:[12],runAsPage:true,runAsPageUid:'page-b'},catalog))
   assert.equal(parse(general,{accountIds:[12],runAsPage:true,runAsPageUid:'page-b'},catalog).patch.runAsPageName,'Page B');checks++
   check(parse(general,{accountIds:[999]},catalog),false)
@@ -94,9 +94,18 @@ try {
   check(parse(request('newsfeed'),{newsfeedCheckMessageRequests:true}),false)
   check(parse(request('newsfeed'),{enablePostLike:true,newsfeedLikeLimit:5,newsfeedTimeMinutes:10}))
   check(parse(request('groupComment'),{enableComment:true,commentType:'others',commentGroupMode:'pending_only',commentCount:3,commentContent:'Xin chào | Chào bạn'}))
-  for(const kind of ['general','search','keywords','postSearch','newsfeed','groupComment']) {
+  for(const kind of ['search','keywords','postSearch','newsfeed','groupComment']) {
     assert.throws(()=>m.validateFacebookAiRequest({...request(kind),actionId:'zalo_message_friend'}));checks++
   }
+  for(const [actionId,platform] of [['zalo_message_phone','zalo'],['email_send','email'],['sms_send','sms'],['voice_call','sms']]) {
+    const r=m.validateFacebookAiRequest({...general,actionId}),c={...catalog,platform,allowPageIdentity:false,pages:[]}
+    check(parse(r,{name:'Tên mới',accountIds:[12]},c))
+    for(const patch of [{runAsPage:true,runAsPageUid:'page-b'},{runAsPage:false},{runAsPageUid:''}])check(parse(r,patch,c),false)
+    assert.equal(m.campaignSectionAiSupportsAction('general',actionId),true);checks++
+  }
+  check(parse(general,{accountIds:[12],runAsPage:true,runAsPageUid:'page-b'},{...catalog,platform:'zalo'}),false)
+  check(parse(general,{accountIds:[12],runAsPage:true,runAsPageUid:'page-b'},{...catalog,allowPageIdentity:false}),false)
+  for(const actionId of ['', ' ', 'a'.repeat(101)]){assert.throws(()=>m.validateFacebookAiRequest({...general,actionId}));checks++}
   const broken=m.facebookAiSchema('keywords');broken.properties.changes.properties.keywords.items.type='number'
   assert.throws(()=>m.compileFormAiSchema(broken,m.FACEBOOK_AI_SECTIONS.keywords));checks++
   console.log(`PASS ${checks} Facebook AI checks: schemas, seed parity, scope, protected fields, accounts/Page ownership, bounds and search dependencies`)

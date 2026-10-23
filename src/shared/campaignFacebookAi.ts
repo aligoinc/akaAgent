@@ -3,6 +3,8 @@ import { supportsFacebookPageIdentity } from './facebookPageIdentity'
 
 export const FACEBOOK_AI_IPC = { generate: 'campaign-facebook-ai:generate', cancel: 'campaign-facebook-ai:cancel' } as const
 export const FACEBOOK_AI_SECTIONS = {
+  // Keep the deployed general-section binding/IPC for older Desktop clients.
+  // General is shared across platforms; the other five sections remain Facebook-only.
   general: 'campaign.facebook.general', search: 'campaign.facebook.search', keywords: 'campaign.facebook.keywords',
   postSearch: 'campaign.facebook.post_search', newsfeed: 'campaign.facebook.newsfeed', groupComment: 'campaign.facebook.group_comment'
 } as const
@@ -21,6 +23,9 @@ export const facebookAiActions = (kind: FacebookAiKind): string[] => kind === 'g
   : kind === 'search' ? ['facebook_find_data_group', 'facebook_find_data_search']
   : kind === 'keywords' ? ['facebook_find_data_search'] : kind === 'postSearch' ? ['facebook_comment_seeding']
   : kind === 'newsfeed' ? ['facebook_newsfeed_interaction'] : ['facebook_group_post']
+export function campaignSectionAiSupportsAction(kind: FacebookAiKind, actionId: string): boolean {
+  return !!actionId.trim() && (kind === 'general' || facebookAiActions(kind).includes(actionId))
+}
 
 type Field = { type: 'boolean' | 'integer' | 'string' | 'ids' | 'strings'; label: string; min?: number; max?: number; choices?: string[] }
 const b = (label: string): Field => ({ type: 'boolean', label })
@@ -75,11 +80,13 @@ export interface FacebookAiRequest {
   secondaryAccountId: number | null
 }
 export interface FacebookAiCatalog {
-  accounts: { id: number; name: string }[]
+  platform: string
+  allowPageIdentity: boolean
+  accounts: { id: number; name: string; accountType?: string }[]
   pages: { accountId: number; uid: string; name: string }[]
   allowMultipleAccounts: boolean
   hasSecondaryAccount: boolean
-  secondaryAccount: { id: number; name: string } | null
+  secondaryAccount: { id: number; name: string; accountType?: string } | null
 }
 export type FacebookAiResult = CampaignFormAiResult<FacebookAiPatch>
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)
@@ -99,8 +106,8 @@ export function facebookAiSnapshot(kind: FacebookAiKind, form: Record<string, un
 export function validateFacebookAiRequest(input: unknown): FacebookAiRequest {
   if (!record(input) || !string(input.requestId, 36) || !/^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(input.requestId)
     || !string(input.description, CAMPAIGN_FORM_AI_MAX_PROMPT) || !input.description.trim()
-    || !string(input.kind) || !Object.hasOwn(FACEBOOK_AI_FIELDS, input.kind) || !string(input.actionId)
-    || !facebookAiActions(input.kind as FacebookAiKind).includes(input.actionId) || !record(input.current)
+    || !string(input.kind) || !Object.hasOwn(FACEBOOK_AI_FIELDS, input.kind) || !string(input.actionId, 100)
+    || !campaignSectionAiSupportsAction(input.kind as FacebookAiKind, input.actionId) || !record(input.current)
     || JSON.stringify(input.current).length > 100_000 || !Array.isArray(input.lockedFields) || !ids(input.eligibleAccountIds)
     || typeof input.singleAccountOnly !== 'boolean'
     || input.secondaryAccountId !== null && !(typeof input.secondaryAccountId === 'number' && Number.isSafeInteger(input.secondaryAccountId) && input.secondaryAccountId > 0)) throw new Error(FACEBOOK_AI_MESSAGES.invalid)
@@ -165,7 +172,7 @@ export function parseFacebookAiResponse(content: string, request: FacebookAiRequ
         if (!next.runAsPage && patch.runAsPageUid) return invalid()
         if (next.runAsPage) {
           const page = catalog.pages.find(p => p.accountId === (next.accountIds as number[])[0] && p.uid === next.runAsPageUid)
-          if (!page || !supportsFacebookPageIdentity(request.actionId)) return invalid()
+          if (!page || catalog.platform !== 'facebook' || !catalog.allowPageIdentity || !supportsFacebookPageIdentity(request.actionId)) return invalid()
           patch.runAsPageName = page.name
         } else if (patch.runAsPage === false || patch.accountIds) { patch.runAsPageUid = ''; patch.runAsPageName = '' }
       }

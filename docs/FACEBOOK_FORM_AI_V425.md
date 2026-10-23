@@ -1,5 +1,7 @@
 # AI điền form Facebook — V425
 
+V429 mở riêng **Cài đặt chung** cho mọi nền tảng tài khoản, giữ slot/IPC/model/schema và năm section Facebook còn lại. Trạng thái hiện hành và rollback xem [GENERAL_FORM_AI_V429.md](GENERAL_FORM_AI_V429.md).
+
 ## Phạm vi
 
 Desktop có sáu cấu hình mới, model Sol 6.1 (`ai_model.id=21`):

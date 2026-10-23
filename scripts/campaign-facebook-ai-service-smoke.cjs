@@ -1,8 +1,10 @@
 const assert=require('node:assert/strict'), fs=require('node:fs'), os=require('node:os'), path=require('node:path'), {execFileSync}=require('node:child_process'), {build}=require('esbuild')
 const root=path.resolve(__dirname,'..'), tmp=fs.mkdtempSync(path.join(os.tmpdir(),'facebook-ai-service-')), live=process.argv.includes('--live')
-const overrides=[...require('../migrations/snapshots/facebook-form-ai-v428/prompt-overrides.json'),...require('../migrations/snapshots/facebook-form-ai-v427/prompt-overrides.json'),...require('../migrations/snapshots/facebook-form-ai-v426/prompt-overrides.json')]
+const generalOverride=require('../migrations/snapshots/general-form-ai-v429/config-override.json')
+const overrides=[generalOverride,...require('../migrations/snapshots/facebook-form-ai-v428/prompt-overrides.json'),...require('../migrations/snapshots/facebook-form-ai-v427/prompt-overrides.json'),...require('../migrations/snapshots/facebook-form-ai-v426/prompt-overrides.json')]
 const specs=require('../migrations/snapshots/facebook-form-ai-v425/configs.json').map(spec=>({...spec,prompt_system:overrides.find(row=>row.kind===spec.kind)?.prompt_system||spec.prompt_system}))
-let row, model, output, requests=[],logs=[],reads=[], allowed=true, blockFetch=false
+let row, model, output, requests=[],logs=[],reads=[], blockFetch=false
+global.__fbUser={staffId:7,organizationId:9,entitlements:{facebookCore:true,zalo:true,email:true,sms:true},zaloAccountCapabilities:{qr:true,web:true,server:true}}
 const nativeFetch=global.fetch
 const actions=specs[0].campaign_action_ids.map(id=>({id,flatform_type:'facebook',is_active:true,is_delete:false,allow_multiple_accounts:true}))
 const accounts=[{id:11,name:'Tài khoản An',staff_id:7,organization_id:9,is_delete:false,flatform_type:'facebook'},
@@ -23,8 +25,8 @@ global.__fbDb={from(table){let filters=[],single=false,insert,signal,select,limi
 async function main(){
   await build({stdin:{contents:`export * from './src/shared/campaignFacebookAi'; export * from './src/main/services/campaignFacebookAiService';`,resolveDir:root},outfile:path.join(tmp,'m.cjs'),bundle:true,platform:'node',logLevel:'silent',plugins:[{name:'fixtures',setup(b){
     b.onLoad({filter:/\/supabaseClient\.ts$/},()=>({contents:'export const getSupabaseClient=()=>globalThis.__fbDb',loader:'ts'}))
-    b.onLoad({filter:/\/currentUser\.ts$/},()=>({contents:'export const getCurrentUser=()=>({staffId:7,organizationId:9});export const requireCurrentUser=getCurrentUser',loader:'ts'}))
-    b.onLoad({filter:/\/entitlementRepository\.ts$/},()=>({contents:'export const ensureCurrentUserCanUseCampaignAction=async()=>{if(!globalThis.__fbAllowed)throw Error("no capability")};export const ensureCurrentUserCanUseAccountPlatform=ensureCurrentUserCanUseCampaignAction;',loader:'ts'}))
+    b.onLoad({filter:/\/currentUser\.ts$/},()=>({contents:'export const getCurrentUser=()=>({...globalThis.__fbUser,entitlements:globalThis.__fbAllowed?globalThis.__fbUser.entitlements:{}});export const requireCurrentUser=getCurrentUser',loader:'ts'}))
+    // Keep entitlementRepository real so subtype guards exercise the account policy.
   }}]})
   const m=require(path.join(tmp,'m.cjs'))
   if(live){
@@ -37,7 +39,19 @@ async function main(){
     options.signal.throwIfAborted()
     const body=JSON.parse(options.body);requests.push(body)
     if(blockFetch)return new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}))
-    if(live)return nativeFetch(url,options)
+    if(live){
+      if(process.argv.includes('--legacy-catalog')) {
+        // Rehearse the old Desktop wire context with the new DB prompt.
+        for(const message of body.input||[]) for(const content of message.content||[]) {
+          if(content.type!=='input_text')continue
+          const context=JSON.parse(content.text)
+          delete context.platform
+          if(context.catalog){delete context.catalog.platform;delete context.catalog.allowPageIdentity}
+          content.text=JSON.stringify(context)
+        }
+      }
+      return nativeFetch(url,{...options,body:JSON.stringify(body)})
+    }
     return new Response(JSON.stringify({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(output)}]}],usage:{input_tokens:10,output_tokens:20}}))
   }
   const base={requestId:'12345678-1234-1234-1234-123456789012',lockedFields:[],eligibleAccountIds:[11,12,99],singleAccountOnly:false,secondaryAccountId:null}
@@ -51,9 +65,10 @@ async function main(){
   ]
   global.__fbAllowed=true
   const receipts=[]
+  const generalOnly=live&&process.argv.includes('--general-only')
   const secondaryOnly=live&&process.argv.includes('--secondary-only')
   const pageSecondaryOnly=live&&process.argv.includes('--page-secondary-only')
-  for(const [kind,description,current,expected]of (live&&(process.argv.includes('--review-only')||secondaryOnly||pageSecondaryOnly)?[]:cases)){
+  for(const [kind,description,current,expected]of (live&&(process.argv.includes('--review-only')||secondaryOnly||pageSecondaryOnly||generalOnly)?[]:cases)){
     const spec=specs.find(r=>r.kind===kind)
     row={...spec,id:101+cases.findIndex(c=>c[0]===kind),model_id:21,is_active:true,campaign_scope:'selected',timeout_ms:120000,request_options:{}}
     output={status:'ok',reason:'',changes:{...Object.fromEntries(Object.keys(m.FACEBOOK_AI_FIELDS[kind]).map(k=>[k,null])),...expected}}
@@ -89,7 +104,7 @@ async function main(){
     {name:'AI cannot remove secondary to select Page',pageSecondary:true,kind:'general',current:{...currentGeneral,accountIds:[12]},singleAccountOnly:true,secondaryAccountId:13,eligibleAccountIds:[11,12,13],description:'Bỏ tài khoản phụ rồi chạy bằng Page Shop Hoa',status:'unsupported',patch:{}},
     {name:'Page works after secondary removed',pageSecondary:true,kind:'general',current:currentGeneral,singleAccountOnly:true,description:'Chạy bằng Page Shop Hoa của tài khoản Bình',patch:{accountIds:[12],runAsPage:true,runAsPageUid:'page-b'}}
   ]
-  for(const test of reviewCases.filter(test=>(!secondaryOnly||test.secondaryAccountId)&&(!pageSecondaryOnly||test.pageSecondary))){
+  for(const test of reviewCases.filter(test=>!generalOnly&&(!secondaryOnly||test.secondaryAccountId)&&(!pageSecondaryOnly||test.pageSecondary))){
     const spec=specs.find(row=>row.kind===test.kind)
     row={...spec,id:test.kind==='general'?14:15,model_id:21,is_active:true,campaign_scope:'selected',timeout_ms:120000,request_options:{}}
     output={status:test.status||'ok',reason:test.status?'Form hiện tại chưa hỗ trợ yêu cầu này.':'',changes:{...Object.fromEntries(Object.keys(m.FACEBOOK_AI_FIELDS[test.kind]).map(k=>[k,null])),...test.patch}}
@@ -116,6 +131,10 @@ async function main(){
     }
     console.log(`PASS ${live?'live Sol':'fixture runtime'} review: ${test.name}`)
   }
+  if (!live || generalOnly) {
+    await require('./campaign-general-ai-service-checks.cjs')({ m, live, base, receipts, model, generalSpec:specs.find(r=>r.kind==='general'),
+      accounts, actions, reads, logs, requests, setRow:value=>{row=value}, setOutput:value=>{output=value} })
+  }
   if(!live){
     const generalSpec=specs.find(r=>r.kind==='general'),action=actions.find(r=>r.id==='facebook_group_post')
     row={...generalSpec,id:14,model_id:21,is_active:true,campaign_scope:'selected',timeout_ms:120000,request_options:{}}
@@ -129,7 +148,7 @@ async function main(){
     assert.deepEqual(secondaryContext.catalog.secondaryAccount,{id:12,name:'Tài khoản Bình'})
     assert.deepEqual(secondaryContext.catalog.pages,[])
     assert.equal(secondaryContext.catalog.allowMultipleAccounts,false)
-    assert.deepEqual(reads.slice(readStart).map(r=>r.table),['ai_form_configs','ai_model','auto_campaign_actions','auto_accounts','auto_account_contacts','ai_log'])
+    assert.deepEqual(reads.slice(readStart).map(r=>r.table),['auto_campaign_actions','ai_form_configs','ai_model','auto_accounts','auto_account_contacts','ai_log'])
     // An unowned secondary ID must never reveal its name via the new context.
     output.changes={...output.changes,name:null,accountIds:[12]}
     const different=await m.generateCampaignFacebook({...secondaryRequest,secondaryAccountId:99},AbortSignal.timeout(5000))
@@ -164,6 +183,6 @@ async function main(){
     const cancel=new AbortController(),timer=setTimeout(()=>cancel.abort(),50)
     await assert.rejects(()=>m.generateCampaignFacebook(request,cancel.signal));clearTimeout(timer)
     console.log('PASS service guards: inactive config/model, scope, tenant, capability, preabort, in-flight abort, compatible model switch, log binding and server catalog')
-  }else fs.writeFileSync(path.join(root,'migrations/snapshots/facebook-form-ai-v428',pageSecondaryOnly?'page-secondary-smoke.json':secondaryOnly?'secondary-account-smoke.json':'provider-smoke.json'),JSON.stringify({testedAt:new Date().toISOString(),syntheticCatalog:true,productionWrites:false,receipts},null,2)+'\n')
+  }else fs.writeFileSync(path.join(root,'migrations/snapshots/general-form-ai-v429',generalOnly?'general-provider-smoke.json':process.argv.includes('--legacy-catalog')?'legacy-provider-smoke.json':pageSecondaryOnly?'page-secondary-smoke.json':secondaryOnly?'secondary-account-smoke.json':'provider-smoke.json'),JSON.stringify({testedAt:new Date().toISOString(),legacyCatalog:process.argv.includes('--legacy-catalog'),syntheticCatalog:true,productionWrites:false,receipts},null,2)+'\n')
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1}).finally(()=>{global.fetch=nativeFetch;fs.rmSync(tmp,{recursive:true,force:true})})

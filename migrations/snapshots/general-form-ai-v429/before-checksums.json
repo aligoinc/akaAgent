@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "code": "app_campaign_action_limits",
+    "row_md5": "243aa41a6f4111f6ffaa69392be2dbb4",
+    "config_md5": "024ed86e3a0ae0a3188f9bb074923897",
+    "stable_md5": "0a2c47b68d317046a7530268745da35d"
+  },
+  {
+    "id": 2,
+    "code": "app_campaign_schedule",
+    "row_md5": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6",
+    "config_md5": "fea29b7f2cc1c8449a63c790b24e7ed6",
+    "stable_md5": "eff8582fade810717cdbdbccc03c6a25"
+  },
+  {
+    "id": 5,
+    "code": "app_campaign_content",
+    "row_md5": "6dd75fc8e4cd95821602d3088397fb43",
+    "config_md5": "9b8bb5bbe9b71782005d681f7a745673",
+    "stable_md5": "09177e620cac0561bdf1051ef6fc2f63"
+  },
+  {
+    "id": 7,
+    "code": "app_campaign_send_exclusions",
+    "row_md5": "cf5c07d8f50596be2db9c26b193bec63",
+    "config_md5": "f364a9aebf1826695c8ba82c76920a57",
+    "stable_md5": "f282828aa4a5158f5cf49bc3be2340e8"
+  },
+  {
+    "id": 14,
+    "code": "app_facebook_form_general",
+    "row_md5": "094f52fd02a02a051300f17a685caca8",
+    "config_md5": "0fb5656a4b28aaba3eb1afcc992a84da",
+    "stable_md5": "47fa535b443370a2c92bb0bd18b712bc"
+  },
+  {
+    "id": 15,
+    "code": "app_facebook_form_search",
+    "row_md5": "38c9e8fc97b4073e650b48a84e727ba6",
+    "config_md5": "5c57b8619155251fca865f96297da9f7",
+    "stable_md5": "173c59975c3c30a9c2b7346230bf3e27"
+  },
+  {
+    "id": 16,
+    "code": "app_facebook_form_keywords",
+    "row_md5": "3589337606a59059c223df258af256e1",
+    "config_md5": "9f417a19fb8be69c8411c5779f453a1c",
+    "stable_md5": "4edb012a06233db9b168db98ac7e1852"
+  },
+  {
+    "id": 17,
+    "code": "app_facebook_form_post_search",
+    "row_md5": "cfa02a5f8b22aed40ce62a74978f66d1",
+    "config_md5": "29aa0c44171fbb915bce6bf440a74d22",
+    "stable_md5": "6fe2f34ef95f54ad992aa35e7d3b47a1"
+  },
+  {
+    "id": 18,
+    "code": "app_facebook_form_newsfeed",
+    "row_md5": "e8f5332d01bbe3d09d40830e4cd46845",
+    "config_md5": "04fe3eba0678a8aa68d795fa850974d6",
+    "stable_md5": "1e5ee29c8cb727b481726de1107cc1f9"
+  },
+  {
+    "id": 19,
+    "code": "app_facebook_form_group_comment",
+    "row_md5": "5be8ba543be6121731767a5f53e2a09e",
+    "config_md5": "ff17014d87fbc61925209d2829042d69",
+    "stable_md5": "13dbeafb35af8ec4c6b48cce74befe63"
+  }
+]
