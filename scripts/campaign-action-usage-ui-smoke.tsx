@@ -100,7 +100,7 @@ function App() {
       zaloAccountCapabilities: { qr: true, web: true, server: true }
     } as any })
     useCampaignStore.setState({ accountCatalogVersion: 'zalo-fixture',
-      accounts: ['zl MN sv', 'ax', 'zl MN', 'zl QN', 'zl QN sv', 'zl QN 2'].map((name, index) => ({
+      accounts: ['Zalo Chăm sóc khách hàng miền Nam', 'ax', 'zl MN', 'zl QN', 'zl QN sv', 'zl QN 2'].map((name, index) => ({
         id: 41 + index, name, flatformType: 'zalo', status: 'chờ xử lý',
         isZaloServer: index === 0 || index === 4, isZaloShowWeb: index === 5,
         loginStatus: index === 4 ? 'đã đăng nhập' : 'chưa đăng nhập',

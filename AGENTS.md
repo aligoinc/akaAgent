@@ -702,7 +702,7 @@ Trước khi bắt đầu task mới trong repo này, sync code từ remote về
 
 ## Common pitfalls
 
-- **Thống kê trong ô chọn tài khoản**: Đăng bài trang cá nhân chỉ hiện đăng bài; Comment của đăng bài group và Like của Comment seeding chỉ hiện khi bật tùy chọn nhưng phải tải sẵn lúc mở form. Lướt newsfeed giữ Comment/Like; Gắn tag/Đổi tên chỉ ẩn ở picker. Đổi lựa chọn chỉ lọc snapshot, không query giờ hoặc tải lại. Xem [hợp đồng](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
+- **Thống kê trong ô chọn tài khoản**: Trạng thái đăng nhập nằm riêng ngoài vùng rút gọn tên/loại tài khoản, giữ đủ chữ trên cùng một hàng. Đăng bài trang cá nhân chỉ hiện đăng bài; Comment của đăng bài group và Like của Comment seeding chỉ hiện khi bật tùy chọn nhưng phải tải sẵn lúc mở form. Lướt newsfeed giữ Comment/Like; Gắn tag/Đổi tên chỉ ẩn ở picker. Đổi lựa chọn chỉ lọc snapshot, không query giờ hoặc tải lại. Xem [hợp đồng](docs/CAMPAIGN_ACCOUNT_PICKER_STATUS.md).
 
 - **Xóa/vô hiệu hóa tài khoản**: guard chỉ xét trạng thái lúc bắt đầu UI/IPC. Sau khi qua guard, giữ cleanup trước ghi và repository cũ; tài khoản bắt đầu chạy sau đó vẫn thực hiện thao tác, không bổ sung kiểm tra race.
 

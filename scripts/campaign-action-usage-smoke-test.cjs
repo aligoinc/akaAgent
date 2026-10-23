@@ -121,6 +121,9 @@ async function main() {
         const calls = () => run('usageFixture.calls.length');
         const select = async patch => { await run('usageFixture.select('+JSON.stringify(patch)+')'); await delay(); };
         const probe = () => run('JSON.parse(document.querySelector("#usage-probe").textContent)');
+        const assertPickerLoginsFit = async () => assert.ok(await run(
+          'Array.from(document.querySelectorAll(".campaign-account-picker-row")).every(row=>{const label=row.querySelector(".account-select-account-label");const text=document.createRange();text.selectNodeContents(label.lastElementChild);const bounds=text.getBoundingClientRect();const container=label.getBoundingClientRect();const viewport=row.closest(".campaign-account-picker-scroll").getBoundingClientRect();return bounds.width>0&&bounds.left>=container.left-1&&bounds.right<=container.right+1&&bounds.top>=container.top-1&&bounds.bottom<=container.bottom+1&&bounds.right<=viewport.right+1;})'
+        ), 'full login status stays visible beside long names, including in a narrow window');
         await win.loadFile(join(__dirname, 'index.html'));
         await wait('!!window.usageFixture');
         await delay(400); assert.equal(await calls(),0);
@@ -272,6 +275,7 @@ async function main() {
         assert.ok((await picker()).includes('Bị giới hạn - Còn 18 phút'));
         assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).some(cell=>cell.textContent.trim()==="12 - Bị giới hạn")'), 'indefinite action limit remains explicit');
         assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).every(row=>row.getBoundingClientRect().height<=34)'), 'compact single-line rows');
+        await assertPickerLoginsFit();
         assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>getComputedStyle(cell).whiteSpace==="nowrap")'));
         assert.equal(await calls(),1);
         await run('document.querySelectorAll(".campaign-account-picker-row input")[1].click()');
@@ -327,10 +331,12 @@ async function main() {
         assert.equal(await run('document.querySelectorAll(".campaign-account-picker thead tr:nth-child(2) th").length'),3,'all main Zalo actions displayed');
         assert.ok((await picker()).includes('Bị giới hạn - Còn 18 phút'));
         assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-row")).every(row=>row.getBoundingClientRect().height<=34)'), 'Zalo stays one line');
+        await assertPickerLoginsFit();
         await run('document.querySelector(".campaign-account-picker").scrollIntoView({block:"center"})'); await delay(100);
         await run('document.querySelector(".campaign-account-picker-scroll").scrollTop=0'); await delay(100);
         require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'akaagent-account-picker-zalo-smoke.png'))},(await win.webContents.capturePage()).toPNG());
         win.setSize(1000,800); await delay(150);
+        await assertPickerLoginsFit();
         assert.ok(await run('Array.from(document.querySelectorAll(".campaign-account-picker-action")).every(cell=>getComputedStyle(cell).whiteSpace==="nowrap")'));
         assert.equal(await calls(),1,'resizing never queries');
         await run('document.querySelector(".stepper-input[aria-disabled]").click()');

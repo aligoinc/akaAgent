@@ -54,10 +54,12 @@ export default function CampaignAccountPicker({ groups, actions, byAccount, stat
                     checked={selectedIds.has(account.id)}
                     onChange={event => onSelect(account.id, event.target.checked)} />
                   <span className="account-select-account-label" title={identity}>
-                    <span className="account-select-account-name">{account.name}</span>
-                    {account.flatformType === 'zalo' && <span className="account-select-login-status"> — {getAccountPlatformLabel(account)}</span>}
-                    {!isSms && <span className={`account-select-login-status ${getLoginStatusClass(account.loginStatus || '')}`}>
-                      {' '}({account.loginStatus || '-'})
+                    <span className="campaign-account-picker-identity">
+                      <span className="account-select-account-name">{account.name}</span>
+                      {account.flatformType === 'zalo' && <span className="account-select-login-status"> — {getAccountPlatformLabel(account)}</span>}
+                    </span>
+                    {!isSms && <span className={`account-select-login-status campaign-account-picker-login ${getLoginStatusClass(account.loginStatus || '')}`}>
+                      ({account.loginStatus || '-'})
                     </span>}
                   </span>
                 </label>

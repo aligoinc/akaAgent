@@ -49,9 +49,25 @@
   padding-left: 18px;
 }
 
-.campaign-account-picker .account-select-account-label {
+.campaign-account-picker .account-checkbox-option .account-select-account-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   min-width: 230px;
   max-width: 360px;
+  overflow: visible;
+}
+
+.campaign-account-picker-identity {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-account-picker-login {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .campaign-account-picker-group {
