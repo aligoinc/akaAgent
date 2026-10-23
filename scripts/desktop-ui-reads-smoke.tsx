@@ -1,5 +1,6 @@
 // Real stores/panel/coordinator, fake IPC only. Runner blocks all HTTP.
 import React from 'react'
+import { campaignVisibilitySession, campaignVisibilityScope } from '../src/renderer/src/stores/campaignTypeVisibilityStore'
 import { createRoot } from 'react-dom/client'
 import CampaignPanel from '../src/renderer/src/components/CampaignPanels/CampaignPanel'
 import AppNotificationBar from '../src/renderer/src/components/AppNotificationBar/AppNotificationBar'
@@ -22,7 +23,7 @@ const listen = (key: string) => (callback: (payload: any) => void) => {
   (listeners[key] ||= new Set()).add(callback)
   return () => { listeners[key].delete(callback) }
 }
-const matches = (row: any, filters: any) => (!filters.search || row.name.toLowerCase().includes(filters.search.toLowerCase())) && (!filters.statuses || filters.statuses.includes(row.status))
+const matches = (row: any, filters: any) => (!filters.applyDisplaySettings || !state.visibility?.hiddenActionIds.includes(row.actionId)) && (!filters.search || row.name.toLowerCase().includes(filters.search.toLowerCase())) && (!filters.statuses || filters.statuses.includes(row.status))
 const pageSummary = (row: any) => {
   const { content, extraSettings, images, log, readVersion, ...summary } = row
   return { ...summary, relationSettings: { emailCheckLinkClicks: row.relationSettings.emailCheckLinkClicks === true } }
@@ -55,7 +56,7 @@ const handlers: Record<string, any> = {
     const page = Math.min(query.page, Math.max(1, Math.ceil(filtered.length / 100)))
     const items = filtered.slice((page - 1) * 100, page * 100).map(pageSummary)
     const selected = rows.find(row => row.id === query.selectedId)
-    const result = { configVersion: selected ? { id: selected.id, version: selected.readVersion || 'a'.repeat(32) } : null, items, selected: selected ? pageSummary(selected) : null, order: items.map(row => ({ kind: 'campaign', id: String(row.id) })), total: filtered.length, campaignTotal: filtered.length, page, pageSize: 100, actionOptions: [] }
+    const result = { ...(state.visibility && query.filters.applyDisplaySettings ? { displaySettings: structuredClone(state.visibility) } : {}), configVersion: selected ? { id: selected.id, version: selected.readVersion || 'a'.repeat(32) } : null, items, selected: selected ? pageSummary(selected) : null, order: items.map(row => ({ kind: 'campaign', id: String(row.id) })), total: filtered.length, campaignTotal: filtered.length, page, pageSize: 100, actionOptions: [] }
     if (state.hold === 'campaign') await new Promise(resolve => { state.release = resolve })
     return result
   },
@@ -85,7 +86,7 @@ window.addEventListener('unhandledrejection', event => state.errors.push(String(
 useAuthStore.setState({ user: { staffId: 41, organizationId: 1, entitlements: normalizeEntitlements({ zalo: true }), zaloAccountCapabilities: { qr: false, web: false, server: true } } as any })
 useCampaignStore.setState({ accounts: [account], campaignActions: [{ id: 'zalo_message_phone', name: 'Nhắn tin', flatformType: 'zalo', isActive: true, isDelete: false }] as any, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { if (type === 'error') state.errors.push(message) } })
-;(window as any).desktopSmoke = { state, store: useCampaignStore, ui: useUiStore, polling: useDesktopPollingStore, rows, emit: (key: string, payload: any) => listeners[key]?.forEach(fn => fn(payload)), accountEvent: () => accountEvent() }
+;(window as any).desktopSmoke = { state, visibility: campaignVisibilitySession, visibilityScope: campaignVisibilityScope, store: useCampaignStore, ui: useUiStore, polling: useDesktopPollingStore, rows, emit: (key: string, payload: any) => listeners[key]?.forEach(fn => fn(payload)), accountEvent: () => accountEvent() }
 function App() {
   const user = useAuthStore(state => state.user)
   useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, true, true)

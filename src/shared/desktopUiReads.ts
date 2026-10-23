@@ -1,4 +1,5 @@
 import type { AutoAccount, CampaignListItem } from './types'
+import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
 
 export const DESKTOP_POLL_KEYS = {
   campaigns: 'desktop.campaigns.poll_interval_seconds',
@@ -13,6 +14,7 @@ export function parseDesktopPollSeconds(value: unknown): number {
 }
 
 export interface DesktopCampaignFilters {
+  applyDisplaySettings?: boolean
   search?: string
   dateFrom?: string
   dateTo?: string
@@ -26,9 +28,10 @@ export interface DesktopCampaignPageQuery {
   filters: DesktopCampaignFilters
   page: number
   selectedId?: number | null
-  drafts?: Array<{ id: string; schedule: string }>
+  drafts?: Array<{ id: string; schedule: string; actionId?: string }>
 }
 export interface DesktopCampaignPage {
+  displaySettings?: CampaignTypeVisibilitySnapshot
   configVersion?: { id: number; version: string } | null
   items: CampaignListItem[]
   selected: CampaignListItem | null

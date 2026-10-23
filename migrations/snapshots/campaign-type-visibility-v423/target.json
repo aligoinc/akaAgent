@@ -1,0 +1,87 @@
+[
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "fd44617ea1d6c9fd9186e6090d796bb7",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "prosecdef": true,
+    "signature": "private.aka_agent_campaign_visibility_snapshot(bigint,bigint)",
+    "provolatile": "s"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres}",
+    "checksum": "6960198a9816d8e3cce62dae28568b5a",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "prosecdef": true,
+    "signature": "private.aka_agent_campaign_visibility_actions(jsonb,text)",
+    "provolatile": "s"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres}",
+    "checksum": "9d00adbc6d496c67155cf4f92aaca063",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=10s",
+      "lock_timeout=5s"
+    ],
+    "prosecdef": true,
+    "signature": "private.aka_agent_campaign_type_visibility(bigint,bigint,jsonb,text,text,jsonb,boolean)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "a00e37f313f156db71971e29aaf25e3e",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=10s",
+      "lock_timeout=5s"
+    ],
+    "prosecdef": true,
+    "signature": "aka_agent_campaign_type_visibility(bigint,bigint,text,text,jsonb,text,jsonb,boolean)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "38cef8f7febb9b4e2147a0b9b99c2898",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=10s",
+      "lock_timeout=5s"
+    ],
+    "prosecdef": true,
+    "signature": "aka_agent_control_campaign_type_visibility(bigint,bigint,text[],text,jsonb,boolean)",
+    "provolatile": "v"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "12d454fbc38217dea3497addd39ed832",
+    "proconfig": [
+      "search_path=public, pg_temp",
+      "statement_timeout=20s"
+    ],
+    "prosecdef": false,
+    "signature": "aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+    "provolatile": "s"
+  },
+  {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "3a16a880e5906c7d4a55b19f8b4c13c7",
+    "proconfig": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=60s"
+    ],
+    "prosecdef": true,
+    "signature": "aka_agent_desktop_campaign_page(bigint,bigint,text,text,jsonb,jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+    "provolatile": "s"
+  }
+]

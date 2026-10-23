@@ -4,6 +4,7 @@ import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { create } from 'zustand'
 import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
 import { useAuthStore } from './authStore'
+import { acceptCampaignVisibility } from './campaignTypeVisibilityStore'
 
 interface CampaignStore {
   // Accounts
@@ -532,6 +533,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     }
     const operation = (async () => {
       let firstRequest = true
+      let retriedVisibility = false
       do {
         loadState.trailingRequested = false
         const revision = campaignPageRevision
@@ -543,6 +545,12 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
           if (JSON.stringify(get().campaignPageQuery) !== queryKey) { loadState.trailingRequested = true; continue }
           const loaded = [...page.items, ...(page.selected && !page.items.some(row => row.id === page.selected!.id) ? [page.selected] : [])]
           if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) break
+          if (page.displaySettings && !acceptCampaignVisibility(page.displaySettings)) {
+            if (retriedVisibility) throw new Error('Cấu hình hiển thị đã thay đổi. Vui lòng tải lại danh sách.')
+            retriedVisibility = true
+            loadState.trailingRequested = true
+            continue
+          }
           if (page.configVersion && campaignConfigReadVersions.get(page.configVersion.id) !== page.configVersion.version) {
             const { id, version } = page.configVersion
             campaignConfigReadVersions.delete(id); campaignConfigReadVersions.set(id, version)

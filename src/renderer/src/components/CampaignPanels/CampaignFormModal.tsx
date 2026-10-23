@@ -1,3 +1,5 @@
+import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
+import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
 import { applyContentAiItems } from '../../../../shared/campaignContentAi'
 import { basicContentAiItems, applyBasicContentAiPatch } from '../../../../shared/campaignContentAiForm'
@@ -2781,6 +2783,7 @@ export default function CampaignFormModal({
       : isMobileManagedSmsCampaign
         ? (isEditingSavedCampaign ? 9 : 10)
         : (isEditingSavedCampaign ? 5 : 6)) + (isZaloMessagePhoneCampaign ? 5 : 0)
+  const campaignVisibility = useCampaignTypeVisibility(true)
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
@@ -2788,9 +2791,13 @@ export default function CampaignFormModal({
       .sort(compareCampaignActionsByPlatform),
     [campaignActions, canUseZaloQrAccount, entitlements]
   )
+  const displayedCampaignActions = useMemo(() => availableCampaignActions.filter(action =>
+    action.id === formData.actionId || (campaignVisibility.snapshot !== null && isCampaignTypeVisible(action.id, campaignVisibility.snapshot))
+  ), [availableCampaignActions, formData.actionId, campaignVisibility.snapshot])
+  const visibleCampaignActions = campaign?.id ? availableCampaignActions : displayedCampaignActions
   const campaignActionPlatformOptions = useMemo(() => {
     const platforms = new Set<string>()
-    for (const action of availableCampaignActions) {
+    for (const action of visibleCampaignActions) {
       const platform = normalizeCampaignActionPlatform(action.flatformType)
       if (!platform) continue
       platforms.add(platform)
@@ -2807,12 +2814,12 @@ export default function CampaignFormModal({
         if (leftOrder !== rightOrder) return leftOrder - rightOrder
         return left.label.localeCompare(right.label, 'vi', { sensitivity: 'base' })
       })
-  }, [availableCampaignActions])
+  }, [visibleCampaignActions])
   const filteredCampaignActions = useMemo(
     () => selectedActionPlatformFilter
-      ? availableCampaignActions.filter(action => normalizeCampaignActionPlatform(action.flatformType) === selectedActionPlatformFilter)
-      : availableCampaignActions,
-    [availableCampaignActions, selectedActionPlatformFilter]
+      ? visibleCampaignActions.filter(action => normalizeCampaignActionPlatform(action.flatformType) === selectedActionPlatformFilter)
+      : visibleCampaignActions,
+    [visibleCampaignActions, selectedActionPlatformFilter]
   )
   const selectedCampaignAction = availableCampaignActions.find(action => action.id === formData.actionId)
   const selectedActionPlatform = normalizeCampaignActionPlatform(selectedCampaignAction?.flatformType)
@@ -15637,6 +15644,8 @@ export default function CampaignFormModal({
                       </option>
                       {filteredCampaignActions.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </select>
+                    {campaignVisibility.error && <span role="alert" className="field-error">{campaignVisibility.error} <button type="button" onClick={campaignVisibility.retry}>Thử lại</button></span>}
+                    {!campaignVisibility.snapshot && !campaignVisibility.error && <span role="status">Đang tải cài đặt hiển thị…</span>}
                   </div>
 
                   <div className="stepper-form-group" ref={accountDropdownRef}>

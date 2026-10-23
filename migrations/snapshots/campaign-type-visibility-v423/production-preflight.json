@@ -1,0 +1,239 @@
+{
+  "columns": [
+    {
+      "type": "int8",
+      "table": "auto_accounts",
+      "column": "id"
+    },
+    {
+      "type": "text",
+      "table": "auto_accounts",
+      "column": "flatform_type"
+    },
+    {
+      "type": "bool",
+      "table": "auto_accounts",
+      "column": "is_active"
+    },
+    {
+      "type": "bool",
+      "table": "auto_accounts",
+      "column": "is_delete"
+    },
+    {
+      "type": "int8",
+      "table": "auto_accounts",
+      "column": "staff_id"
+    },
+    {
+      "type": "int8",
+      "table": "auto_accounts",
+      "column": "organization_id"
+    },
+    {
+      "type": "bool",
+      "table": "auto_accounts",
+      "column": "is_zalo_show_web"
+    },
+    {
+      "type": "bool",
+      "table": "auto_accounts",
+      "column": "is_zalo_server"
+    },
+    {
+      "type": "text",
+      "table": "auto_campaign_actions",
+      "column": "id"
+    },
+    {
+      "type": "text",
+      "table": "auto_campaign_actions",
+      "column": "flatform_type"
+    },
+    {
+      "type": "bool",
+      "table": "auto_campaign_actions",
+      "column": "is_active"
+    },
+    {
+      "type": "bool",
+      "table": "auto_campaign_actions",
+      "column": "is_delete"
+    },
+    {
+      "type": "int8",
+      "table": "auto_campaigns",
+      "column": "id"
+    },
+    {
+      "type": "text",
+      "table": "auto_campaigns",
+      "column": "action_id"
+    },
+    {
+      "type": "bool",
+      "table": "auto_campaigns",
+      "column": "is_delete"
+    },
+    {
+      "type": "int8",
+      "table": "auto_campaigns",
+      "column": "staff_id"
+    },
+    {
+      "type": "int8",
+      "table": "auto_campaigns",
+      "column": "organization_id"
+    },
+    {
+      "type": "int8",
+      "table": "org_organization",
+      "column": "id"
+    },
+    {
+      "type": "int8",
+      "table": "org_staff",
+      "column": "id"
+    },
+    {
+      "type": "int8",
+      "table": "org_staff",
+      "column": "organization_id"
+    },
+    {
+      "type": "bool",
+      "table": "org_staff",
+      "column": "is_active"
+    },
+    {
+      "type": "bool",
+      "table": "org_staff",
+      "column": "is_admin"
+    },
+    {
+      "type": "bool",
+      "table": "org_staff",
+      "column": "is_zalo_server"
+    },
+    {
+      "type": "timestamptz",
+      "table": "org_staff",
+      "column": "deleted_at"
+    }
+  ],
+  "defaults": [
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "type": "f",
+      "owner": "postgres",
+      "schema": "public"
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "type": "r",
+      "owner": "postgres",
+      "schema": "public"
+    },
+    {
+      "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+      "type": "S",
+      "owner": "postgres",
+      "schema": "public"
+    }
+  ],
+  "privateAcl": "{postgres=UC/postgres,anon=U/postgres,authenticated=U/postgres,service_role=U/postgres,aka_agent_chat_api=U/postgres,crm_interest_worker=U/postgres}",
+  "existingTable": null,
+  "recentMigrations": [
+    {
+      "name": "crm_log_report_functions",
+      "version": "20261021094904"
+    },
+    {
+      "name": "data_column_filters_v421",
+      "version": "20261021072852"
+    },
+    {
+      "name": "migration_v422_akabiz_sql_zalo_web_mapped_reuse",
+      "version": "20261021072601"
+    },
+    {
+      "name": "migration_v421_akabiz_sql_zalo_web_account_identity",
+      "version": "20261021070657"
+    },
+    {
+      "name": "migration_v420_akabiz_sql_zalo_web_import",
+      "version": "20261021063329"
+    },
+    {
+      "name": "crm_log_detach_triggers",
+      "version": "20261021051319"
+    },
+    {
+      "name": "crm_log_detach_org_organization_product",
+      "version": "20261021051303"
+    },
+    {
+      "name": "crm_log_detach_aka_order",
+      "version": "20261021051258"
+    }
+  ],
+  "existingNewFunctions": [],
+  "runtimeGuards": [
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "bc35534b174333a0012c3bf84ca81ef2",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,date,uuid,bigint[])",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "dc5d650ca0f8e63c00ce97c4606ef245",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "fdff962116bb5f2c98830dbfaec6a7f4",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_control_campaign_progress(bigint,bigint,bigint[])",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "954ab48ce0eec97b433d2cdc6da3b57e",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_control_campaign_progress(bigint,bigint,bigint[],text,text)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "cd15cf96e7848c42071ed22b415fe246",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "TimeZone=UTC"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_desktop_campaign_config_version(auto_campaigns)",
+      "provolatile": "s"
+    }
+  ]
+}
