@@ -9,7 +9,7 @@ Chỉ áp dụng cho loại `zalo_message_phone` — **Zalo - Nhắn tin, kết 
 | Trường | Ý nghĩa |
 | --- | --- |
 | `auto_campaign_actions.show_staff_delivery_cooldown` | Boolean, mặc định `false`; candidate bật `true` cho `zalo_message_phone`. Chỉ quyết định hiển thị checkbox trên form. Có thể chỉnh trong màn quản lý loại chiến dịch Desktop. |
-| `extra_settings.recentDeliveryCooldownAllAccounts` | Boolean, mặc định `false`. Checkbox **Áp dụng cho tất cả tài khoản**, nằm dưới số ngày của Kiểm tra trùng lặp. |
+| `extra_settings.recentDeliveryCooldownAllAccounts` | Boolean, mặc định `false`. Checkbox **Kiểm tra trên toàn bộ tài khoản**, nằm dưới số ngày của Kiểm tra trùng lặp. |
 
 - Không tích hoặc thiếu trường mới: xét tài khoản của chiến dịch như trước.
 - Tích: xét lịch sử của các tài khoản cùng `staff_id` và `organization_id` đã được RPC xác thực.

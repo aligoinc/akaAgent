@@ -406,7 +406,7 @@ export default function ActionManagerModal({ onClose }: ActionManagerModalProps)
                         checked={formData.showStaffDeliveryCooldown}
                         onChange={e => setFormData(prev => ({ ...prev, showStaffDeliveryCooldown: e.target.checked }))}
                       />
-                      <span>Hiển thị kiểm tra trùng lặp trên tất cả tài khoản của staff</span>
+                      <span>Hiển thị tùy chọn “Kiểm tra trên toàn bộ tài khoản”</span>
                     </label>}
                   </div>
 
