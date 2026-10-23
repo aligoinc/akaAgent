@@ -186,6 +186,11 @@ async function main() {
   task = generateFacebook(facebookRequest); await flush(); mock.credentials = {}
   mock.pending.shift().resolve({ ok: true, patch: {} }); assert.equal((await task).code, 'cancelled')
   console.log('PASS Facebook main-frame, invalid scope, shared flight, channel cancellation, deadline and auth')
-
+  for(const actionId of ['zalo_message_friend','email_send','sms_send','voice_call']){
+    task=generateFacebook({...facebookRequest,kind:'general',actionId,current:{name:'Initial',accountIds:[11],runAsPage:false,runAsPageUid:''},eligibleAccountIds:[11]});await flush()
+    const pending=mock.pending.shift();assert.equal(pending.request.actionId,actionId)
+    pending.resolve({ok:true,patch:{name:'General'}});assert.equal((await task).ok,true)
+  }
+  console.log('PASS general IPC accepts Zalo/Email/SMS/voice with the existing request/response contract')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 }).finally(() => fs.rmSync(directory, { recursive: true, force: true }))

@@ -1,0 +1,13 @@
+{
+  "checkedAt": "2026-10-23T16:55:35.218Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "status": "PASS",
+  "configId": 14,
+  "modelId": 21,
+  "checks": [
+    "exact new prompt/scope/name",
+    "schema/template/options/model/bindings preserved",
+    "public metadata all scope",
+    "account catalog column permissions; zero account records read"
+  ]
+}

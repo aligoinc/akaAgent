@@ -1,4 +1,5 @@
 import { FACEBOOK_AI_SECTIONS, FACEBOOK_AI_ACTIONS, FACEBOOK_AI_FIELDS, parseFacebookAiResponse, validateFacebookAiRequest } from '../src/shared/campaignFacebookAi'
+import { supportsFacebookPageIdentity } from '../src/shared/facebookPageIdentity'
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CampaignFormModal from '../src/renderer/src/components/CampaignPanels/CampaignFormModal'
@@ -21,8 +22,8 @@ window.setTimeout = ((callback: any, ms?: number, ...args: any[]) => {
   if (ms === 120000) state.deadlines.push(() => { clearTimeout(id); callback() })
   return id
 }) as typeof window.setTimeout
-const actions = [...FACEBOOK_AI_ACTIONS, 'zalo_message_group_realtime', 'zalo_message_friend', 'email_send'].map(id => ({
-  id, allowSecondaryAccount: id === 'facebook_group_post', name: id, limitCheckActionCodes: id === 'facebook_timeline_post' ? ['fb_post_my_profile'] : id === 'facebook_group_post' ? ['fb_post_group', 'fb_comment'] : id === 'facebook_comment_seeding' ? ['fb_comment', 'fb_like_post'] : id === 'zalo_message_friend' ? ['zalo_message_friend'] : id === 'email_send' ? ['email_send'] : ['zalo_message_stranger', 'zalo_add_friend'], flatformType: id.startsWith('facebook') ? 'facebook' : id === 'email_send' ? 'email' : 'zalo', isActive: true, isDelete: false
+const actions = [...FACEBOOK_AI_ACTIONS, 'zalo_message_group_realtime', 'zalo_message_friend', 'zalo_message_phone', 'email_send', 'sms_send', 'voice_call'].map(id => ({
+  id, allowSecondaryAccount: ['facebook_group_post','zalo_message_phone'].includes(id), allowMultipleAccounts: !['zalo_message_friend','zalo_message_group_realtime'].includes(id), name: id, limitCheckActionCodes: id === 'facebook_timeline_post' ? ['fb_post_my_profile'] : id === 'facebook_group_post' ? ['fb_post_group', 'fb_comment'] : id === 'facebook_comment_seeding' ? ['fb_comment', 'fb_like_post'] : id === 'zalo_message_friend' ? ['zalo_message_friend'] : id === 'email_send' ? ['email_send'] : ['sms_send','voice_call'].includes(id) ? [id] : ['zalo_message_stranger', 'zalo_add_friend'], flatformType: id.startsWith('facebook') ? 'facebook' : id === 'email_send' ? 'email' : ['sms_send','voice_call'].includes(id) ? 'sms' : 'zalo', isActive: true, isDelete: false
 }))
 const account: any = { id: 11, name: 'Tài khoản kiểm thử', flatformType: 'facebook', isActive: true, isDelete: false,
   status: 'chờ xử lý', loginStatus: 'đã đăng nhập', staffId: 7, organizationId: 9 }
@@ -64,7 +65,7 @@ window.electronAPI = new Proxy(handlers, { get(target, key: string) {
 } }) as any
 window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
-useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: normalizeEntitlements({ facebookCore: true, zalo: true, email: true }) } as any })
+useAuthStore.setState({ user: { staffId: 7, organizationId: 9, entitlements: normalizeEntitlements({ facebookCore: true, zalo: true, email: true, sms: true }) } as any })
 useCampaignStore.setState({ accounts: [account], campaignActions: actions as any, campaigns: [],
   loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { state.alerts.push({ message, type }) }, showConfirm: (_message, confirm) => { void confirm() } })
@@ -74,6 +75,12 @@ function App() {
   const [providedCampaign, setProvidedCampaign] = useState<any>()
   const [initialAccounts, setInitialAccounts] = useState([11])
   ;(window as any).scheduleSmoke = { state,
+    openGeneral: (actionId: string, platform: string, accountFlags: any = {}, campaignOverrides: any = {}) => {
+      useCampaignStore.setState({ accounts: [11,12,13].map(id => ({...account,id,name:'Tài khoản '+id,flatformType:platform,...accountFlags})), campaignActions: actions as any })
+      setInitialAccounts([11]); setDraft(undefined); setNewForm(false); setProvidedCampaign({
+        name:'Cài đặt chung kiểm thử',actionId,accountId:11,status:'tạm dừng',schedule:'2026-10-23T02:00:00Z',scheduleType:'daily',content:'Giữ nội dung',extraSettings:{},...campaignOverrides
+      }); setClosed(false); setGeneration(value => value + 1)
+    },
     openFacebook: (actionId: string, extraSettings: any = {}, campaignOverrides: any = {}, extraAccountIds: number[] = []) => {
       useCampaignStore.setState({ accounts: [account, {...account, id:12, name:'Tài khoản thứ hai'}, ...extraAccountIds.map(id => ({...account,id,name:'Tài khoản '+id}))], campaignActions: actions as any })
       setInitialAccounts([11]); setDraft(undefined); setNewForm(false); setProvidedCampaign({
@@ -106,6 +113,7 @@ function App() {
       const wire = { status:'ok', reason:'', changes:{ ...Object.fromEntries(Object.keys(FACEBOOK_AI_FIELDS[request.kind]).map(key => [key,null])), ...patch } }
       // Real parser at the IPC boundary; fixture catalog is already authorized.
       const result = parseFacebookAiResponse(JSON.stringify(wire), request, {
+        platform:actions.find(action => action.id === request.actionId)!.flatformType, allowPageIdentity:supportsFacebookPageIdentity(request.actionId),
         accounts:useCampaignStore.getState().accounts.map(({id,name}) => ({id,name})), pages:[{accountId:12,uid:'page-b',name:'Page B'}], allowMultipleAccounts:!request.singleAccountOnly, hasSecondaryAccount:request.secondaryAccountId !== null, secondaryAccount:null
       })
       state.pending.shift().resolve(result)

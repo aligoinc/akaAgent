@@ -4,6 +4,10 @@ Native group share cập nhật 24/10/2026: form ẩn comment/up tin/chia sẻ t
 
 Sửa chọn nhóm native đã apply akachat 23/10/2026 lúc 23:28 VN (`20261023162807 / facebook_native_group_share_search_wait`): block 2835 chờ đủ 10 giây sau nhập, xác minh UID/slug và click trong một lượt DOM cùng dialog; không chọn gợi ý sớm. Code MD5 `df2493043c83179b3d457744ec4cbeed`; hai workflow/tám element và block khác giữ nguyên. 24 DOM + 7 React, 72 runtime, 15 migration và hai typecheck đạt; không apply lại, lần chạy workflow mới nạp block sửa. [Audit/rollback](docs/FACEBOOK_NATIVE_GROUP_SHARE.md#sửa-chờ-tìm-nhóm-và-chọn-cùng-lượt-dom--23102026).
 
+Review V429 ngày 24/10/2026: Main lọc quyền QR/trình duyệt/Server bằng helper capability hiện có trước khi tạo catalog AI cho cả chính/phụ; không tin `eligibleAccountIds` từ renderer. Service smoke dùng entitlement thật, 8 tổ hợp/32 ca chính/24 ca phụ đạt; không đổi prompt/schema/model/DB hoặc query count, chưa phát hành. [Audit](docs/GENERAL_FORM_AI_V429.md#sửa-finding-quyền-loại-tài-khoản-zalo--24102026).
+
+V429 AI Cài đặt chung đã apply akachat 23/10/2026 (`20261023164417 / migration_v429_general_form_ai_all_platforms`): config 14 scope all, dùng Facebook/Zalo QR–trình duyệt–Server/Email/SMS; Page chỉ Facebook hỗ trợ. Main lấy nền tảng từ action DB, giữ loại tài khoản phụ Zalo; giữ Sol 21/schema/options và chín config khác. 179 contract, service/IPC/Electron, 11 ca Sol thật, SQL rollback/HTTP, hai typecheck/build đạt; không apply lại, Desktop chưa phát hành. [Hợp đồng và audit](docs/GENERAL_FORM_AI_V429.md).
+
 V428 chặn AI Facebook bật Page khi còn tài khoản phụ đã apply akachat 23/10/2026 (`20261023160213 / migration_v428_facebook_ai_page_secondary_guard`): parser từ chối toàn bộ patch, renderer không tự xóa tài khoản phụ; bỏ phụ thủ công rồi chọn Page vẫn hợp lệ. Prompt config 14 bổ sung quy tắc, giữ model/schema/options và chín config khác. 155 contract, service/Electron/IPC, 3 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-chọn-page--v428-23102026).
 
 V427 giữ tài khoản phụ khi AI Facebook đổi tài khoản chính đã apply akachat 23/10/2026 (`20261023155134 / migration_v427_facebook_ai_secondary_account_guard`): snapshot ID phụ, catalog chỉ đọc có quyền và parser chặn trùng chính/phụ atomic. Chỉ sửa prompt config 14, giữ schema/model/options và chín config khác; không thêm query/RPC/connection. 127 contract, service/Electron/IPC, 2 ca Sol thật, SQL rollback/parity, hai typecheck/build đạt; không apply lại, chưa phát hành. [Audit](docs/FACEBOOK_FORM_AI_V425.md#giữ-tài-khoản-phụ-khi-ai-đổi-tài-khoản-chính--v427-23102026).
@@ -715,6 +719,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **AI Cài đặt chung đa nền tảng**: slot/IPC còn tên Facebook để giữ tương thích, không dùng tên đó để khóa General. Main lấy platform từ DB; khi có phụ Zalo phải lọc QR/browser/server trước trả patch để effect UI không xóa phụ. Page chỉ action Facebook hỗ trợ. Xem [V429](docs/GENERAL_FORM_AI_V429.md).
 
 - **AI form Facebook**: parser phải kiểm tra giới hạn tài khoản thực tế, trùng chính/phụ và Page + tài khoản phụ trước khi apply; từ chối toàn bộ patch, không tự xóa phụ. Lọc nội dung comment cần nguồn Comment, không áp dụng riêng cho Tương tác mới. Xem [hợp đồng và hồi quy](docs/FACEBOOK_FORM_AI_V425.md).
 
