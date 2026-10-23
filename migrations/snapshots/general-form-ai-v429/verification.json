@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "20261023164417",
+  "contractChecks": 179,
+  "providerChecks": 11,
+  "checks": [
+    "Main service platform/permission/catalog/scope/secondary/Page guards",
+    "Electron general six account cases and three secondary subtypes",
+    "Electron Facebook six-section regression",
+    "Electron content regression",
+    "IPC lifecycle and cross-platform general wire",
+    "SQL forward/rollback/drift parity; post-apply rollback rehearsal",
+    "HTTP public metadata/exact config/preserved schema; catalog column permissions",
+    "tsconfig.node.json typecheck",
+    "tsconfig.web.json typecheck",
+    "production build",
+    "git diff --check"
+  ],
+  "capabilityReviewFix": {
+    "dateVietnam": "2026-10-24",
+    "status": "PASS",
+    "realEntitlementPolicy": true,
+    "capabilityCombinations": 8,
+    "primarySelections": 32,
+    "secondarySelections": 24,
+    "noAdditionalDbReads": true,
+    "typechecksAndBuild": "PASS",
+    "migrationRequired": false
+  },
+  "productionCampaignWrites": false,
+  "released": false
+}

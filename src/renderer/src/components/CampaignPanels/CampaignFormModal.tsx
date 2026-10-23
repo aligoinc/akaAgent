@@ -1,5 +1,5 @@
 import CampaignFacebookAi from './CampaignFacebookAi'
-import { FACEBOOK_AI_SECTIONS, facebookAiActions, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
+import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
@@ -8803,7 +8803,7 @@ export default function CampaignFormModal({
   }
 
   const renderFacebookAi = (kind: FacebookAiKind, title: string) => {
-    if (!facebookAiActions(kind).includes(formData.actionId)
+    if (!campaignSectionAiSupportsAction(kind, formData.actionId)
       || !formAiAvailable(formAiAvailability, FACEBOOK_AI_SECTIONS[kind], formData.actionId)) return null
     if (kind === 'keywords' && (isEditingSavedCampaign || isDataGroupSource)) return null
     const lockedFields: string[] = []
