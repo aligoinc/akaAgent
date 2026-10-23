@@ -1,0 +1,70 @@
+{
+  "testedAt": "2026-10-23T15:38:50.905Z",
+  "syntheticCatalog": true,
+  "productionWrites": false,
+  "receipts": [
+    {
+      "name": "single-account rejects multiple selection",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Form hiện tại chỉ cho phép chọn một tài khoản, không thể chọn cả An và Bình."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "single-account allows replacement",
+      "result": {
+        "ok": true,
+        "patch": {
+          "accountIds": [
+            12
+          ],
+          "runAsPageUid": "",
+          "runAsPageName": ""
+        }
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "new interactors reject keyword filter",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Nguồn Những người tương tác mới không hỗ trợ lọc nội dung bình luận theo từ khóa, nên không thể chỉ lấy người có bình luận chứa “cần mua”."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "new interactors reject semantic filter",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Nguồn Những người tương tác mới không hỗ trợ lọc nội dung comment bằng AI. Bộ lọc này chỉ có hiệu lực với nguồn Comment; bật nguồn đó sẽ không giữ nguyên nguồn hiện tại."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "new interactors allow scan count",
+      "result": {
+        "ok": true,
+        "patch": {
+          "countCommentFindData": 30
+        }
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "explicit Comment source permits content filter",
+      "result": {
+        "ok": true,
+        "patch": {
+          "isFindInComment": true,
+          "isFindCommentByKeywords": true,
+          "commentKeywords": "cần mua"
+        }
+      },
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

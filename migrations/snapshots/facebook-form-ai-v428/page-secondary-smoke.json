@@ -1,0 +1,40 @@
+{
+  "testedAt": "2026-10-23T16:04:09.484Z",
+  "syntheticCatalog": true,
+  "productionWrites": false,
+  "receipts": [
+    {
+      "name": "Page on a different primary keeps secondary",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Chạy bằng Page không dùng tài khoản phụ. Bạn cần bỏ tài khoản phụ trên form trước khi chọn Page."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "AI cannot remove secondary to select Page",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Bạn cần bỏ tài khoản phụ trên form trước khi chọn Page. Tôi không thể tự bỏ tài khoản phụ trong section này."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "Page works after secondary removed",
+      "result": {
+        "ok": true,
+        "patch": {
+          "accountIds": [
+            12
+          ],
+          "runAsPage": true,
+          "runAsPageUid": "page-b",
+          "runAsPageName": "Shop Hoa"
+        }
+      },
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

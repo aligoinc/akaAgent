@@ -1,0 +1,160 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "version": "20261023150638",
+  "name": "migration_v425_facebook_form_ai",
+  "rows": [
+    {
+      "id": 1,
+      "code": "app_campaign_action_limits",
+      "model_id": 21,
+      "desktop_section_id": "campaign.action_limits",
+      "web_section_id": "campaign.action_limits",
+      "mobile_section_id": null,
+      "campaign_scope": "all",
+      "campaign_action_ids": [],
+      "is_active": true,
+      "checksum": "243aa41a6f4111f6ffaa69392be2dbb4"
+    },
+    {
+      "id": 2,
+      "code": "app_campaign_schedule",
+      "model_id": 21,
+      "desktop_section_id": "campaign.schedule",
+      "web_section_id": "campaign.schedule",
+      "mobile_section_id": null,
+      "campaign_scope": "all",
+      "campaign_action_ids": [],
+      "is_active": true,
+      "checksum": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6"
+    },
+    {
+      "id": 5,
+      "code": "app_campaign_content",
+      "model_id": 24,
+      "desktop_section_id": "campaign.content",
+      "web_section_id": "campaign.content",
+      "mobile_section_id": null,
+      "campaign_scope": "all",
+      "campaign_action_ids": [],
+      "is_active": true,
+      "checksum": "6dd75fc8e4cd95821602d3088397fb43"
+    },
+    {
+      "id": 7,
+      "code": "app_campaign_send_exclusions",
+      "model_id": 21,
+      "desktop_section_id": "campaign.send_exclusions",
+      "web_section_id": "campaign.send_exclusions",
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "zalo_message_phone",
+        "zalo_message_friend",
+        "zalo_message_birthday",
+        "zalo_message_group_member",
+        "zalo_message_group_realtime",
+        "zalo_message_remarketing_customer",
+        "zalo_message_friend_recommendation"
+      ],
+      "is_active": true,
+      "checksum": "cf5c07d8f50596be2db9c26b193bec63"
+    },
+    {
+      "id": 14,
+      "code": "app_facebook_form_general",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.general",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_comment_seeding",
+        "facebook_comment_seeding_post",
+        "facebook_find_data_group",
+        "facebook_find_data_search",
+        "facebook_group_invite",
+        "facebook_group_post",
+        "facebook_join_group",
+        "facebook_message_friend",
+        "facebook_message_uid",
+        "facebook_newsfeed_interaction",
+        "facebook_page_post",
+        "facebook_page_to_message",
+        "facebook_timeline_post"
+      ],
+      "is_active": true,
+      "checksum": "efec185180ec5e50a8fd515841bb110e"
+    },
+    {
+      "id": 15,
+      "code": "app_facebook_form_search",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.search",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_find_data_group",
+        "facebook_find_data_search"
+      ],
+      "is_active": true,
+      "checksum": "a7697b507752abe3922f49ecd6fe8d2f"
+    },
+    {
+      "id": 16,
+      "code": "app_facebook_form_keywords",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.keywords",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_find_data_search"
+      ],
+      "is_active": true,
+      "checksum": "3589337606a59059c223df258af256e1"
+    },
+    {
+      "id": 17,
+      "code": "app_facebook_form_post_search",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.post_search",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_comment_seeding"
+      ],
+      "is_active": true,
+      "checksum": "cfa02a5f8b22aed40ce62a74978f66d1"
+    },
+    {
+      "id": 18,
+      "code": "app_facebook_form_newsfeed",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.newsfeed",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_newsfeed_interaction"
+      ],
+      "is_active": true,
+      "checksum": "e8f5332d01bbe3d09d40830e4cd46845"
+    },
+    {
+      "id": 19,
+      "code": "app_facebook_form_group_comment",
+      "model_id": 21,
+      "desktop_section_id": "campaign.facebook.group_comment",
+      "web_section_id": null,
+      "mobile_section_id": null,
+      "campaign_scope": "selected",
+      "campaign_action_ids": [
+        "facebook_group_post"
+      ],
+      "is_active": true,
+      "checksum": "5be8ba543be6121731767a5f53e2a09e"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "testedAt": "2026-10-23T15:52:24.917Z",
+  "syntheticCatalog": true,
+  "productionWrites": false,
+  "receipts": [
+    {
+      "name": "secondary account cannot become primary",
+      "result": {
+        "ok": false,
+        "code": "unsupported",
+        "message": "Bình đang là tài khoản phụ. Bạn cần đổi hoặc bỏ tài khoản phụ trên form trước khi chọn Bình làm tài khoản chính."
+      },
+      "model": "gpt-6.1-sol"
+    },
+    {
+      "name": "different primary preserves secondary",
+      "result": {
+        "ok": true,
+        "patch": {
+          "accountIds": [
+            13
+          ],
+          "runAsPageUid": "",
+          "runAsPageName": ""
+        }
+      },
+      "model": "gpt-6.1-sol"
+    }
+  ]
+}

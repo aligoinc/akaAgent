@@ -1,3 +1,4 @@
+import { FACEBOOK_AI_IPC, type FacebookAiRequest, type FacebookAiResult } from '../shared/campaignFacebookAi'
 import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
@@ -327,6 +328,8 @@ const electronAPI = {
   cancelCampaignExclusionAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_EXCLUSION_AI_IPC.cancel, requestId),
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
+  generateCampaignFacebookAi: (request: FacebookAiRequest): Promise<FacebookAiResult> => ipcRenderer.invoke(FACEBOOK_AI_IPC.generate, request),
+  cancelCampaignFacebookAi: (requestId: string): Promise<void> => ipcRenderer.invoke(FACEBOOK_AI_IPC.cancel, requestId),
   generateCampaignContentAi: (request: ContentAiRequest): Promise<ContentAiResult> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.generate, request),
   cancelCampaignContentAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.cancel, requestId),
   generateCampaignLimitsAi: (request: LimitsAiRequest): Promise<LimitsAiResult> => ipcRenderer.invoke(CAMPAIGN_LIMITS_AI_IPC.generate, request),
