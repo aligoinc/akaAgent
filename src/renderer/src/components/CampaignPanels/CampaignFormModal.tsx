@@ -17294,7 +17294,7 @@ export default function CampaignFormModal({
                         <span className="stepper-input-unit">ngày</span>
                       </div>
                       {isZaloMessagePhoneCampaign && selectedCampaignAction?.showStaffDeliveryCooldown === true && (
-                        <label className="schedule-checkbox-label" style={{ marginTop: 10 }}>
+                        <label className="schedule-checkbox-label" style={{ marginTop: 16 }}>
                           <input
                             type="checkbox"
                             checked={formData.recentDeliveryCooldownAllAccounts === true}
