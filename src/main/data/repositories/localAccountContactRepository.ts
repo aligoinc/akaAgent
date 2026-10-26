@@ -12,7 +12,7 @@ import {
 import { getCurrentUserCredentials, requireCurrentUser } from '../currentUser'
 import { columnFilterDateBoundary } from '../../../shared/dataColumnFilters'
 import { compilePageInboxColumnFilters } from '../filters/sqliteColumnFilters'
-import { readSqliteFilterPage } from '../filters/sqliteFilterReader'
+import { PAGE_INBOX_CAMPAIGN_COLUMNS, readSqliteFilterPage } from '../filters/sqliteFilterReader'
 
 const LOCAL_DATA_DIR = 'local-data'
 const LOCAL_DB_FILE = 'aka_agent_local.db'
@@ -384,7 +384,7 @@ export async function listFilteredPageInboxContacts(
   if (query.excludeIds?.length) { where += ' AND id NOT IN (SELECT value FROM json_each(?))'; params.push(JSON.stringify(normalizeIds(query.excludeIds))) }
   if (query.dateFrom) { where += " AND julianday(json_extract(extra_data,'$.lastMessageAt')) >= julianday(?)"; params.push(columnFilterDateBoundary(query.dateFrom)) }
   if (query.dateTo) { where += " AND julianday(json_extract(extra_data,'$.lastMessageAt')) < julianday(?)"; params.push(columnFilterDateBoundary(query.dateTo, true)) }
-  const result = await readSqliteFilterPage(getLocalDataDbPath(), where, params, query.limit ?? 100, query.offset ?? 0, signal)
+  const result = await readSqliteFilterPage(getLocalDataDbPath(), where, params, query.limit ?? 100, query.offset ?? 0, signal, undefined, query.projection)
   const currentUser = requireCurrentUser()
   if (signal.aborted || getCurrentUserCredentials() !== session || currentUser.staffId !== user.staffId || currentUser.organizationId !== user.organizationId) throw new Error('Lượt lọc hoặc phiên đăng nhập đã thay đổi.')
   return { contacts: result.rows.map(mapLocalContact), total: result.total }
@@ -426,8 +426,9 @@ export function exportPageInboxContacts(accountId: number, query: PageInboxConta
     const { sql, params } = buildPageInboxWhere(accountId, u.staffId, query)
     const paginationSql = limit === null ? '' : 'LIMIT ? OFFSET ?'
     const paginationParams = limit === null ? [] : [limit, offset]
+    const columns = query.projection === 'campaign' ? PAGE_INBOX_CAMPAIGN_COLUMNS : '*'
     const rows = db.prepare(`
-      SELECT *
+      SELECT ${columns}
       FROM auto_account_contacts
       ${sql}
       ORDER BY datetime(COALESCE(json_extract(extra_data, '$.lastMessageAt'), updated_at)) DESC, id DESC

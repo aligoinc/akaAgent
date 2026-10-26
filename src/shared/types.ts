@@ -1610,6 +1610,8 @@ export type PageInboxScanStopReason = 'date_limit' | 'customer_limit' | 'exhaust
 
 export interface PageInboxContactListQuery {
   columnFilters?: ColumnFilterRequest
+  /** Compact recipient/Page fields for campaign selection; filters still use full history. */
+  projection?: 'campaign'
   pageUid?: string
   search?: string
   phoneFilter?: PageInboxPhoneFilter

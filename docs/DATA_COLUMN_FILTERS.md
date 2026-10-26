@@ -98,7 +98,7 @@ Không tự retry timeout hoặc chuyển sang lọc trên các dòng đã tải
 
 Đọc account ở bước kiểm tra quyền nhận cùng AbortSignal của lượt đọc: hết deadline, hủy form hoặc đổi phiên đều hủy HTTP này. Chờ transport kết thúc rồi giữ ngân sách server 60 giây nếu bị abort; không dùng `Promise.race` để bỏ lại request đang chạy. Vì vậy timeout giao diện 65 giây không đồng nghĩa slot được nhả ngay. Các kiểm tra gói/capability vẫn đọc snapshot hiện có, không thêm query hoặc thay quyền.
 
-Page Inbox dùng process Electron Node đọc SQLite readonly, mở transaction count+page, timeout 3 giây, kill process và đợi đóng thật khi hủy. Thử nghiệm cho thấy terminate Worker không ngắt được một native SQLite call đang chạy nên dùng process có thể dừng. Không giữ worker/pool nền. Cần smoke lại native helper trên bộ cài Windows/macOS khi đến lượt đóng gói.
+Page Inbox dùng process Electron Node đọc SQLite readonly, mở transaction count+page, timeout 15 giây mỗi lượt đọc (tăng từ 3 giây ngày 26/10/2026 để thử chọn nhiều khách), kill process và đợi đóng thật khi hủy. Deadline toàn lượt vẫn 65 giây; giới hạn 16 MiB mỗi phản hồi reader và 32 MiB tổng kết quả giữ nguyên. Đây là giá trị trong code Desktop, cần cập nhật app để áp dụng, không phải setting DB. Thử nghiệm cho thấy terminate Worker không ngắt được một native SQLite call đang chạy nên dùng process có thể dừng. Không giữ worker/pool nền. Cần smoke lại native helper trên bộ cài Windows/macOS khi đến lượt đóng gói.
 
 PostgREST phải đọc được function setting khi tạo schema cache. Timeout này đã được kiểm chứng qua HTTP PostgREST cục bộ; gọi trực tiếp bằng psql phải đặt timeout session/transaction trước statement. Tham chiếu cơ chế [transaction-scoped settings của PostgREST](https://docs.postgrest.org/en/stable/references/transactions.html) và [hoisted settings](https://docs.postgrest.org/en/stable/references/configuration.html#db-hoisted-tx-settings).
 
@@ -187,6 +187,30 @@ Local đã thử:
 4. Đóng gói/test helper SQLite native trên các nền tảng, rồi mới phát hành Desktop khi có yêu cầu.
 5. Nếu RPC chưa có: Desktop tự đọc đường cũ khi chưa áp dụng điều kiện cột, khóa nút lọc kèm thông báo. Có điều kiện thì báo lỗi, không fallback sang toàn bộ dữ liệu. Cache thiếu RPC 60 giây, chỉ xét lại khi có request, không polling.
 6. Rollback: đóng form/hạ phiên bản ứng dụng phù hợp, kiểm tra checksum target rồi dùng file rollback không CASCADE. Không có backfill hoặc dữ liệu nghiệp vụ cần đảo. Sau gỡ RPC, cập nhật schema cache và xác nhận luồng legacy.
+
+## Chọn 5.000–10.000 khách Page Inbox — 26/10/2026
+
+Lỗi chậm được tái hiện bằng 15.211 khách giả có lịch sử hội thoại lớn. Reader cũ nối stdout rồi gọi `Buffer.byteLength(output)` cho toàn bộ phần đã nhận ở mỗi chunk: một lô khoảng 5,8 MiB thành 742 chunk, riêng nối/đếm tốn khoảng 2,2–2,3 giây, dù SQL chỉ khoảng 0,3–0,5 giây. Reader mới cộng số byte của chunk mới và ghép các chunk một lần trước parse; giữ giới hạn UTF-8 16 MiB, hủy/kill/drain và timeout đã tăng lên 15 giây mỗi lượt đọc, deadline toàn lượt 65 giây.
+
+Khi bấm **Chọn** để đưa khách Page Inbox vào chiến dịch, `PageInboxContactListQuery.projection='campaign'` được truyền qua API bộ lọc hiện có. SQLite chỉ trả các cột nhận diện khách và `source/pageUid/pageName/phone` trong `extra_data`; không truyền `messages/messageHistory` vào bộ đếm 32 MiB. WHERE, bộ lọc nội dung cũ/cột, ngày và ORDER BY vẫn xét bản ghi đầy đủ trong SQLite; không cắt bớt người được chọn hoặc lọc trên trang đang hiển thị. Reader legacy hỗ trợ cùng projection để fallback vẫn đúng. Mặc định không có projection: danh sách, xuất Excel và lưu nhóm data giữ dữ liệu đầy đủ. Không đổi RPC, schema/index, ngân sách connection hoặc dữ liệu thật.
+
+Kiểm chứng bằng Electron/native SQLite thật, database tạm gồm 15.211 khách, 25 tin/khách, JSON hội thoại khoảng 14.387 byte/khách:
+
+| Lượt chọn | Kết quả | Dung lượng trả về | Thời gian tham chiếu local |
+|---|---|---|---|
+| 5.000 khách, offset 1.000 | Đủ 5.000, đúng thứ tự, không trùng ID/UID | 1.962.351 byte (~1,87 MiB) | 3,79 giây |
+| 10.000 khách | Đủ 10.000, đúng thứ tự, không trùng ID/UID | 3.926.185 byte (~3,74 MiB) | 7,05 giây |
+
+`scripts/page-inbox-selection-smoke-test.cjs` còn kiểm tra danh sách 10.000 ID, loại trừ, lọc tin cũ/cột/ngày/SĐT, scope account/staff/org/Page/deleted, fallback, dữ liệu đầy đủ ở mặc định và hủy/phục hồi. Giới hạn 32 MiB vẫn chặn xuất toàn bộ hội thoại quá lớn; giới hạn 16 MiB vẫn chặn phản hồi UTF-8 lớn, trong khi chọn compact cùng khách vẫn thành công. `scripts/page-inbox-selection-ui-smoke.cjs` dùng form React thật với IPC fixture để kiểm tra chọn khoảng 5.000/10.000, chọn tất cả 15.211, fallback, giữ form khi đọc lỗi, Excel và nhóm data giữ nội dung.
+
+Hai typecheck và production build đạt; hồi quy SQLite, service/coordinator, bộ lọc UI và Page Inbox scan đạt. Đây là đo local bằng dữ liệu giả, chưa xác nhận trên máy Windows trong ảnh hoặc database thật của Page đó. Cần đóng gói/cập nhật Desktop để máy đang dùng bộ cài nhận sửa đổi; chưa đóng gói/phát hành.
+
+Chạy lại riêng phần này:
+
+```sh
+node scripts/page-inbox-selection-smoke-test.cjs
+node scripts/page-inbox-selection-ui-smoke.cjs
+```
 
 ## Chạy lại cục bộ
 

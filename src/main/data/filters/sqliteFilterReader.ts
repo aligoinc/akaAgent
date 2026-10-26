@@ -1,6 +1,15 @@
 import { spawn } from 'node:child_process'
 
 export interface SqliteFilterPage { rows: Record<string, unknown>[]; total: number }
+// Campaign inputs need recipient/Page identity, not the conversation history.
+// WHERE and ORDER BY still use the complete stored row before this projection.
+export const PAGE_INBOX_CAMPAIGN_COLUMNS = `id, account_id, contact_type, name, uid, url,
+  json_object('source', json_extract(extra_data, '$.source'),
+    'pageUid', json_extract(extra_data, '$.pageUid'),
+    'pageName', json_extract(extra_data, '$.pageName'),
+    'phone', json_extract(extra_data, '$.phone')) AS extra_data,
+  is_friend, requires_post_approval, is_joined, is_delete,
+  staff_id, organization_id, created_at, updated_at`
 // SQLite executes native synchronous calls. A killable process, rather than a
 // JS timeout around that call, provides an actual execution deadline.
 const readerSource = `
@@ -12,9 +21,10 @@ process.stdin.on('end',()=>{
   const work=JSON.parse(input),Database=require(work.driver);
   db=new Database(work.path,{readonly:true,fileMustExist:true,timeout:250});
   db.function('column_filter_fold',{deterministic:true},v=>v==null?null:String(v).normalize('NFC').toLocaleLowerCase('vi-VN'));
+  const columns=work.projection==='campaign'?${JSON.stringify(PAGE_INBOX_CAMPAIGN_COLUMNS)}:'*';
   const result=db.transaction(()=>{
    const total=db.prepare('SELECT COUNT(*) AS total FROM auto_account_contacts '+work.where).get(...work.params).total;
-   const rows=db.prepare("SELECT * FROM auto_account_contacts "+work.where+" ORDER BY datetime(COALESCE(json_extract(extra_data, '$.lastMessageAt'), updated_at)) DESC, id DESC LIMIT ? OFFSET ?").all(...work.params,work.limit,work.offset);
+   const rows=db.prepare("SELECT "+columns+" FROM auto_account_contacts "+work.where+" ORDER BY datetime(COALESCE(json_extract(extra_data, '$.lastMessageAt'), updated_at)) DESC, id DESC LIMIT ? OFFSET ?").all(...work.params,work.limit,work.offset);
    return {rows,total};
   })();
   process.stdout.write(JSON.stringify({result}));
@@ -24,7 +34,8 @@ process.stdin.on('end',()=>{
 `
 export async function readSqliteFilterPage(
   path: string, where: string, params: unknown[], limit: number, offset: number, signal: AbortSignal,
-  deadlineMs = 3000
+  deadlineMs = 15_000,
+  projection?: 'campaign'
 ): Promise<SqliteFilterPage> {
   if (signal.aborted) throw new Error('Đã hủy lượt lọc dữ liệu.')
   if (!Number.isInteger(limit) || limit < 1 || limit > 500 || !Number.isInteger(offset) || offset < 0) throw new Error('Phân trang bộ lọc không hợp lệ.')
@@ -34,7 +45,8 @@ export async function readSqliteFilterPage(
   const closed = new Promise<void>(resolve => child.once('close', () => resolve()))
   try {
     return await new Promise<SqliteFilterPage>((resolve, reject) => {
-      let settled = false, output = ''
+      let settled = false, outputBytes = 0
+      const outputChunks: string[] = []
       const finish = (error?: Error, result?: SqliteFilterPage): void => {
         if (settled) return
         settled = true; clearTimeout(timer); signal.removeEventListener('abort', onAbort)
@@ -46,8 +58,13 @@ export async function readSqliteFilterPage(
       if (signal.aborted) onAbort()
       child.stdout.setEncoding('utf8')
       child.stdout.on('data', chunk => {
-        output += chunk
-        if (Buffer.byteLength(output) > 16 * 1024 * 1024) finish(new Error('Trang dữ liệu quá lớn. Hãy giảm số dòng mỗi trang.'))
+        if (settled) return
+        outputBytes += Buffer.byteLength(chunk)
+        if (outputBytes > 16 * 1024 * 1024) {
+          finish(new Error('Trang dữ liệu quá lớn. Hãy giảm số dòng mỗi trang.'))
+          return
+        }
+        outputChunks.push(chunk)
       })
       child.stderr.resume() // Do not forward native paths or row content to the renderer.
       child.stdin.once('error', error => finish(error))
@@ -55,14 +72,14 @@ export async function readSqliteFilterPage(
       child.once('close', code => {
         if (settled) return
         try {
-          const message = JSON.parse(output)
+          const message = JSON.parse(outputChunks.join(''))
           if (code !== 0 || message.error) return finish(new Error('Không thể đọc dữ liệu Page Inbox. Vui lòng thử lại.'))
           const result = message.result
           if (!result || !Array.isArray(result.rows) || result.rows.length > limit || !Number.isSafeInteger(result.total) || result.total < 0) throw new Error('invalid response')
           finish(undefined, result)
         } catch { finish(new Error('Phản hồi bộ đọc Page Inbox không hợp lệ.')) }
       })
-      child.stdin.end(JSON.stringify({ path, where, params, limit, offset, driver: require.resolve('better-sqlite3') }))
+      child.stdin.end(JSON.stringify({ path, where, params, limit, offset, projection, driver: require.resolve('better-sqlite3') }))
     })
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
