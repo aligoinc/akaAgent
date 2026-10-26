@@ -1,0 +1,88 @@
+{
+  "before": [
+    {
+      "role": "16480",
+      "from": "2026-10-26 07:47:50.04716+00",
+      "to": "2026-10-26 07:52:54.356444+00",
+      "seconds": 304.309,
+      "calls": 478,
+      "total_exec_ms": 127455.53831999004,
+      "mean_exec_ms": 266.64338560667375,
+      "sharedHits": 1706489,
+      "sharedReads": 96010
+    },
+    {
+      "role": "16482",
+      "from": "2026-10-26 07:47:50.047174+00",
+      "to": "2026-10-26 07:52:54.356458+00",
+      "seconds": 304.309,
+      "calls": 0,
+      "total_exec_ms": 0,
+      "mean_exec_ms": null,
+      "sharedHits": 0,
+      "sharedReads": 0
+    }
+  ],
+  "after": [
+    {
+      "role": "16480",
+      "from": "2026-10-26 07:54:29.416263+00",
+      "to": "2026-10-26 07:59:48.424428+00",
+      "seconds": 319.008,
+      "calls": 574,
+      "total_exec_ms": 44008.63389800489,
+      "mean_exec_ms": 76.67009389896322,
+      "sharedHits": 1738428,
+      "sharedReads": 103178
+    },
+    {
+      "role": "16482",
+      "from": "2026-10-26 07:54:29.416278+00",
+      "to": "2026-10-26 07:59:48.424444+00",
+      "seconds": 319.008,
+      "calls": 0,
+      "total_exec_ms": 0,
+      "mean_exec_ms": null,
+      "sharedHits": 0,
+      "sharedReads": 0
+    }
+  ],
+  "beforeHttp": {
+    "result": [
+      {
+        "errors_4xx_5xx": 5,
+        "errors_5xx": 5,
+        "mean_origin_ms": 374.01,
+        "p95_origin_ms": 2355.25,
+        "requests": 480
+      }
+    ]
+  },
+  "afterHttp": {
+    "result": [
+      {
+        "errors_4xx_5xx": 0,
+        "errors_5xx": 0,
+        "mean_origin_ms": 148.78,
+        "p95_origin_ms": 471.4999999999983,
+        "requests": 567
+      }
+    ]
+  },
+  "advisors": [
+    {
+      "type": "performance",
+      "before": 8,
+      "after": 8,
+      "added": [],
+      "removed": []
+    },
+    {
+      "type": "security",
+      "before": 9,
+      "after": 9,
+      "added": [],
+      "removed": []
+    }
+  ]
+}

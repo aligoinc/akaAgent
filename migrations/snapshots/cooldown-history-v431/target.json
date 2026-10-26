@@ -1,0 +1,57 @@
+[
+  {
+    "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "checksum": "07630b82e68cba560a8c7538b24702d5"
+  },
+  {
+    "signature": "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "i",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "f356ae8c97cab7890f4a1740b99adce3"
+  },
+  {
+    "signature": "aka_agent_internal_normalize_facebook_identity(text)",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "i",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "d063c95ebfedc16eeabe4dabf73a211d"
+  },
+  {
+    "signature": "aka_agent_internal_normalize_phone(text)",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "i",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "b3ad52bceed9a68a6648956fbc622629"
+  },
+  {
+    "signature": "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "s",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "a8e94d7a35d42064236d369c6e0e088d"
+  }
+]
