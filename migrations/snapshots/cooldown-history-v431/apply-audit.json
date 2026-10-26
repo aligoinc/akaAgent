@@ -1,0 +1,1126 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": [
+    {
+      "checked_at": "2026-10-26 07:54:59.535506+00",
+      "checksum": "07630b82e68cba560a8c7538b24702d5",
+      "fixture_campaigns": 0,
+      "fixture_inputs": 0,
+      "fixture_details": 0,
+      "migration": [
+        {
+          "name": "migration_v431_cooldown_history_lookup",
+          "version": "20261026075350"
+        }
+      ]
+    }
+  ],
+  "metadata": [
+    {
+      "verified_at": "2026-10-26 07:54:28.873061+00",
+      "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "07630b82e68cba560a8c7538b24702d5"
+    },
+    {
+      "verified_at": "2026-10-26 07:54:28.873067+00",
+      "signature": "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "f356ae8c97cab7890f4a1740b99adce3"
+    },
+    {
+      "verified_at": "2026-10-26 07:54:28.873069+00",
+      "signature": "aka_agent_internal_normalize_facebook_identity(text)",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "d063c95ebfedc16eeabe4dabf73a211d"
+    },
+    {
+      "verified_at": "2026-10-26 07:54:28.87307+00",
+      "signature": "aka_agent_internal_normalize_phone(text)",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "b3ad52bceed9a68a6648956fbc622629"
+    },
+    {
+      "verified_at": "2026-10-26 07:54:28.873071+00",
+      "signature": "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "checksum": "a8e94d7a35d42064236d369c6e0e088d"
+    },
+    {
+      "verified_at": "2026-10-26 07:54:28.873072+00",
+      "signature": "normalize_phone(text)",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "i",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "f6ccb574895043480e6523193f7be007"
+    }
+  ],
+  "preapplySmoke": [
+    {
+      "smoke": "PASS: 11 checks (default, staff history, pending, caller scope, input scope, batch order, staff isolation, day boundary, V367 evidence, friend-only gate, side effects); fixtures rolled back"
+    }
+  ],
+  "postapplySmoke": [
+    {
+      "smoke": "PASS: 11 checks (default, staff history, pending, caller scope, input scope, batch order, staff isolation, day boundary, V367 evidence, friend-only gate, side effects); fixtures rolled back"
+    }
+  ],
+  "rollbackRehearsal": [
+    {
+      "rehearsed_source_checksum": "7801667ffff0dcdd5b999641e4dbed96"
+    }
+  ],
+  "beforeStart": [
+    {
+      "observed_at": "2026-10-26 07:47:50.04716+00",
+      "queryid": "8576754265993678410",
+      "userid": "16480",
+      "calls": 1285410,
+      "total_exec_time": 103183976.282587,
+      "rows": 1285410,
+      "shared_blks_hit": 4422657078,
+      "shared_blks_read": 52537854,
+      "wal_bytes": "1380605811"
+    },
+    {
+      "observed_at": "2026-10-26 07:47:50.047174+00",
+      "queryid": "8576754265993678410",
+      "userid": "16482",
+      "calls": 526,
+      "total_exec_time": 16264.353339,
+      "rows": 526,
+      "shared_blks_hit": 570728,
+      "shared_blks_read": 4455,
+      "wal_bytes": "3251771"
+    }
+  ],
+  "beforeEnd": [
+    {
+      "observed_at": "2026-10-26 07:52:54.356444+00",
+      "queryid": "8576754265993678410",
+      "userid": "16480",
+      "calls": 1285888,
+      "total_exec_time": 103311431.820907,
+      "rows": 1285888,
+      "shared_blks_hit": 4424363567,
+      "shared_blks_read": 52633864,
+      "wal_bytes": "1381139892"
+    },
+    {
+      "observed_at": "2026-10-26 07:52:54.356458+00",
+      "queryid": "8576754265993678410",
+      "userid": "16482",
+      "calls": 526,
+      "total_exec_time": 16264.353339,
+      "rows": 526,
+      "shared_blks_hit": 570728,
+      "shared_blks_read": 4455,
+      "wal_bytes": "3251771"
+    }
+  ],
+  "afterStart": [
+    {
+      "observed_at": "2026-10-26 07:54:29.416263+00",
+      "queryid": "8576754265993678410",
+      "userid": "16480",
+      "calls": 1286037,
+      "total_exec_time": 103338333.160788,
+      "rows": 1286037,
+      "shared_blks_hit": 4424864324,
+      "shared_blks_read": 52672652,
+      "wal_bytes": "1381314900"
+    },
+    {
+      "observed_at": "2026-10-26 07:54:29.416278+00",
+      "queryid": "8576754265993678410",
+      "userid": "16482",
+      "calls": 526,
+      "total_exec_time": 16264.353339,
+      "rows": 526,
+      "shared_blks_hit": 570728,
+      "shared_blks_read": 4455,
+      "wal_bytes": "3251771"
+    }
+  ],
+  "localChecks": 60,
+  "typecheckNode": true,
+  "typecheckWeb": true,
+  "build": true,
+  "benchmarks": [
+    {
+      "label": "single-warm-old",
+      "executionMs": 397.363,
+      "planningMs": 3.084,
+      "sharedHits": 20313,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.762
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.72
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 1.651
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.738
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.075
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 2355,
+          "Actual Loops": 1,
+          "Actual Total Time": 391.427
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "aka_agent_internal_send_delivery_history",
+          "Actual Rows": 2355,
+          "Actual Loops": 1,
+          "Actual Total Time": 391.031
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 396.892
+        }
+      ]
+    },
+    {
+      "label": "single-warm-candidate",
+      "executionMs": 97.087,
+      "planningMs": 6.797,
+      "sharedHits": 12527,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.268
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.603
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 1.575
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.614
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.059
+        },
+        {
+          "Node Type": "Aggregate",
+          "Subplan Name": "CTE requested_keys",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.306
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.003
+        },
+        {
+          "Node Type": "Append",
+          "Subplan Name": "CTE history_accounts",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.006
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 96.52
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "auto_detail_committed_delivery_v367",
+          "Actual Rows": 500,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.016
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "idx_campaign_details_delivery_cooldown",
+          "Actual Rows": 1855,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 500,
+          "Actual Total Time": 12.78
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 2355,
+          "Actual Total Time": 0.007
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 96.558
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaigns",
+          "Index Name": "auto_campaigns_pkey",
+          "Actual Rows": 0,
+          "Actual Loops": 0,
+          "Actual Total Time": 0
+        }
+      ]
+    },
+    {
+      "label": "staff-old",
+      "executionMs": 377.274,
+      "planningMs": 3.181,
+      "sharedHits": 19323,
+      "sharedReads": 3,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 5.444
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.321
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 206,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 3.291
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.338
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.064
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 2037,
+          "Actual Loops": 1,
+          "Actual Total Time": 369.992
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_accounts",
+          "Index Name": "auto_accounts_staff_id_idx",
+          "Actual Rows": 4,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 0.082
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "aka_agent_internal_send_delivery_history",
+          "Actual Rows": 509,
+          "Actual Loops": 4,
+          "Actual Total Time": 92.381
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 376.886
+        }
+      ]
+    },
+    {
+      "label": "staff-candidate",
+      "executionMs": 99.208,
+      "planningMs": 6.247,
+      "sharedHits": 12437,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 2.381
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.695
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 206,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 0.671
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.707
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.064
+        },
+        {
+          "Node Type": "Aggregate",
+          "Subplan Name": "CTE requested_keys",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 2.429
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.008
+        },
+        {
+          "Node Type": "Append",
+          "Subplan Name": "CTE history_accounts",
+          "Actual Rows": 4,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.082
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_accounts",
+          "Index Name": "auto_accounts_staff_id_idx",
+          "Actual Rows": 4,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 0.077
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 98.63
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "auto_detail_committed_delivery_v367",
+          "Actual Rows": 509,
+          "Actual Loops": 4,
+          "Actual Total Time": 4.073
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "idx_campaign_details_delivery_cooldown",
+          "Actual Rows": 0,
+          "Actual Loops": 4,
+          "Rows Removed by Filter": 508,
+          "Actual Total Time": 0.88
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 2037,
+          "Actual Total Time": 0.01
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 98.657
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaigns",
+          "Index Name": "auto_campaigns_pkey",
+          "Actual Rows": 0,
+          "Actual Loops": 0,
+          "Actual Total Time": 0
+        }
+      ]
+    },
+    {
+      "label": "facebook-old",
+      "executionMs": 18.934,
+      "planningMs": 3.013,
+      "sharedHits": 1224,
+      "sharedReads": 27,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 11.082
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 8.81
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 1131,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 8.714
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 8.828
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.902
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 26,
+          "Actual Loops": 1,
+          "Actual Total Time": 7.57
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "aka_agent_internal_send_delivery_history",
+          "Actual Rows": 26,
+          "Actual Loops": 1,
+          "Actual Total Time": 7.556
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 18.697
+        }
+      ]
+    },
+    {
+      "label": "facebook-candidate",
+      "executionMs": 5.42,
+      "planningMs": 6.14,
+      "sharedHits": 426,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.073
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.101
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 1131,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 3.011
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 3.117
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.042
+        },
+        {
+          "Node Type": "Aggregate",
+          "Subplan Name": "CTE requested_keys",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.112
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.007
+        },
+        {
+          "Node Type": "Append",
+          "Subplan Name": "CTE history_accounts",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.005
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.994
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "auto_detail_committed_delivery_v367",
+          "Actual Rows": 26,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.425
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "idx_campaign_details_delivery_cooldown",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 26,
+          "Actual Total Time": 0.095
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 26,
+          "Actual Total Time": 0.003
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Actual Total Time": 5.026
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaigns",
+          "Index Name": "auto_campaigns_pkey",
+          "Actual Rows": 0,
+          "Actual Loops": 0,
+          "Actual Total Time": 0
+        }
+      ]
+    },
+    {
+      "label": "batch-250-new",
+      "executionMs": 224.547,
+      "planningMs": 7.458,
+      "sharedHits": 13656,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 50.764
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.716
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 1.632
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.851
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 250,
+          "Actual Total Time": 0.007
+        },
+        {
+          "Node Type": "Aggregate",
+          "Subplan Name": "CTE requested_keys",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 52.674
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 250,
+          "Actual Total Time": 0.002
+        },
+        {
+          "Node Type": "Append",
+          "Subplan Name": "CTE history_accounts",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.006
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 42,
+          "Actual Loops": 1,
+          "Actual Total Time": 219.147
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "auto_detail_committed_delivery_v367",
+          "Actual Rows": 501,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.458
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "idx_campaign_details_delivery_cooldown",
+          "Actual Rows": 1855,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 501,
+          "Actual Total Time": 22.773
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 2356,
+          "Actual Total Time": 0.009
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 42,
+          "Actual Loops": 1,
+          "Actual Total Time": 223.93
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaigns",
+          "Index Name": "auto_campaigns_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 42,
+          "Actual Total Time": 0.004
+        }
+      ]
+    },
+    {
+      "label": "batch-250-old",
+      "executionMs": 684.495,
+      "planningMs": 4.811,
+      "sharedHits": 21318,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 54.633
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 2.253
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 2.157
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 2.451
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 250,
+          "Actual Total Time": 0.009
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 2356,
+          "Actual Loops": 1,
+          "Actual Total Time": 396.239
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "aka_agent_internal_send_delivery_history",
+          "Actual Rows": 2356,
+          "Actual Loops": 1,
+          "Actual Total Time": 395.863
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 42,
+          "Actual Loops": 1,
+          "Actual Total Time": 683.887
+        }
+      ]
+    },
+    {
+      "label": "batch-250-new",
+      "executionMs": 174.688,
+      "planningMs": 7.103,
+      "sharedHits": 13656,
+      "sharedReads": 0,
+      "nodes": [
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE requested",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 40.655
+        },
+        {
+          "Node Type": "Limit",
+          "Subplan Name": "InitPlan 1",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.623
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "idx_campaign_input_data_campaign_id",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 0,
+          "Actual Total Time": 1.542
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 250,
+          "Actual Loops": 1,
+          "Actual Total Time": 1.732
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 250,
+          "Actual Total Time": 0.005
+        },
+        {
+          "Node Type": "Aggregate",
+          "Subplan Name": "CTE requested_keys",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 42.255
+        },
+        {
+          "Node Type": "Function Scan",
+          "Function Name": "unnest",
+          "Actual Rows": 1,
+          "Actual Loops": 250,
+          "Actual Total Time": 0.002
+        },
+        {
+          "Node Type": "Append",
+          "Subplan Name": "CTE history_accounts",
+          "Actual Rows": 1,
+          "Actual Loops": 1,
+          "Actual Total Time": 0.006
+        },
+        {
+          "Node Type": "Nested Loop",
+          "Subplan Name": "CTE history",
+          "Actual Rows": 42,
+          "Actual Loops": 1,
+          "Actual Total Time": 169.611
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "auto_detail_committed_delivery_v367",
+          "Actual Rows": 501,
+          "Actual Loops": 1,
+          "Actual Total Time": 4.093
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_details",
+          "Index Name": "idx_campaign_details_delivery_cooldown",
+          "Actual Rows": 1855,
+          "Actual Loops": 1,
+          "Rows Removed by Filter": 501,
+          "Actual Total Time": 15.447
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaign_input_data",
+          "Index Name": "auto_campaign_input_data_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 2356,
+          "Actual Total Time": 0.007
+        },
+        {
+          "Node Type": "Unique",
+          "Subplan Name": "CTE latest",
+          "Actual Rows": 42,
+          "Actual Loops": 1,
+          "Actual Total Time": 174.079
+        },
+        {
+          "Node Type": "Index Scan",
+          "Relation Name": "auto_campaigns",
+          "Index Name": "auto_campaigns_pkey",
+          "Actual Rows": 1,
+          "Actual Loops": 42,
+          "Actual Total Time": 0.004
+        }
+      ]
+    }
+  ],
+  "parity": [
+    {
+      "case": 0,
+      "result": [
+        {
+          "old_count": 42,
+          "new_count": 42,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "case": 1,
+      "result": [
+        {
+          "old_count": 0,
+          "new_count": 0,
+          "identical": true
+        }
+      ]
+    },
+    {
+      "case": 2,
+      "result": [
+        {
+          "old_count": 0,
+          "new_count": 0,
+          "identical": true
+        }
+      ]
+    }
+  ],
+  "benchmarkCases": [
+    {
+      "campaignId": 39379,
+      "accountId": 1580,
+      "staffId": 385,
+      "organizationId": 365,
+      "days": 90,
+      "allAccounts": false,
+      "batches": [
+        1,
+        250
+      ]
+    },
+    {
+      "campaignId": 40653,
+      "accountId": 5404,
+      "staffId": 1242,
+      "organizationId": 1149,
+      "days": 15,
+      "allAccounts": true,
+      "batches": [
+        1,
+        50
+      ]
+    },
+    {
+      "campaignId": 34033,
+      "accountId": 8053,
+      "staffId": 1696,
+      "organizationId": 1581,
+      "days": 2,
+      "allAccounts": false,
+      "batches": [
+        1,
+        50
+      ]
+    }
+  ],
+  "limitations": [
+    "SELECT/EXPLAIN benchmarks isolate the history read, not complete RPC lock/update latency.",
+    "Warm and cold buffer samples are separate; no guarantee of fixed production speedup.",
+    "Natural traffic windows can have different accounts and history sizes; execution time includes waits and is not CPU time.",
+    "Existing account/action/time indexes are reused; eligible history details are still read."
+  ]
+}
