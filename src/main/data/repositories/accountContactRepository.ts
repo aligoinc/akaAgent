@@ -2593,12 +2593,11 @@ async function getExistingZaloUsers(
   const chunkSize = 100
   for (let i = 0; i < zaloUids.length; i += chunkSize) {
     const chunk = zaloUids.slice(i, i + chunkSize)
-    const { data, error } = await client()
-      .from('zalo_users')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('staff_id', staffId)
-      .in('zalo_uid', chunk)
+    const { data, error } = await client().rpc('aka_agent_lookup_zalo_users', {
+      p_account_id: accountId,
+      p_staff_id: staffId,
+      p_zalo_uids: chunk
+    })
 
     if (error) throw new Error(`Failed to list existing Zalo users: ${error.message}`)
     for (const row of data || []) existing.set(String(row.zalo_uid || '').trim(), row)

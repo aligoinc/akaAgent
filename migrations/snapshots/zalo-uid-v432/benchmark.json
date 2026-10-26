@@ -1,0 +1,158 @@
+{
+  "measured_at": "2026-10-26",
+  "account_id": 1578,
+  "staff_id": 385,
+  "outer_plan": "force_generic_plan",
+  "samples": [
+    {
+      "case": 1,
+      "round": 1,
+      "kind": "old",
+      "uid_count": 1,
+      "execution_ms": 4.614,
+      "planning_ms": 0.844,
+      "rows": 0,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.58,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":4.58,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.582,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":4.581,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 1,
+      "round": 1,
+      "kind": "new",
+      "uid_count": 1,
+      "execution_ms": 1.127,
+      "planning_ms": 0.076,
+      "rows": 0,
+      "hits": 36,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":1.068,\"Local Read Blocks\":0,\"Shared Hit Blocks\":36,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.068,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":1.069,\"Local Read Blocks\":0,\"Shared Hit Blocks\":36,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.069,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 1,
+      "round": 2,
+      "kind": "new",
+      "uid_count": 1,
+      "execution_ms": 0.331,
+      "planning_ms": 0.018,
+      "rows": 0,
+      "hits": 3,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.308,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.308,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.309,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.309,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 1,
+      "round": 2,
+      "kind": "old",
+      "uid_count": 1,
+      "execution_ms": 4.477,
+      "planning_ms": 0.016,
+      "rows": 0,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.448,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":4.447,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":0,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.449,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":4.448,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 2,
+      "round": 1,
+      "kind": "old",
+      "uid_count": 1,
+      "execution_ms": 4.915,
+      "planning_ms": 0.022,
+      "rows": 1,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.882,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.477,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.884,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.478,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 2,
+      "round": 1,
+      "kind": "new",
+      "uid_count": 1,
+      "execution_ms": 0.442,
+      "planning_ms": 0.021,
+      "rows": 1,
+      "hits": 4,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.415,\"Local Read Blocks\":0,\"Shared Hit Blocks\":4,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.415,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.416,\"Local Read Blocks\":0,\"Shared Hit Blocks\":4,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.415,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 2,
+      "round": 2,
+      "kind": "new",
+      "uid_count": 1,
+      "execution_ms": 0.298,
+      "planning_ms": 0.016,
+      "rows": 1,
+      "hits": 4,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.279,\"Local Read Blocks\":0,\"Shared Hit Blocks\":4,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.278,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":0.28,\"Local Read Blocks\":0,\"Shared Hit Blocks\":4,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.279,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 2,
+      "round": 2,
+      "kind": "old",
+      "uid_count": 1,
+      "execution_ms": 4.48,
+      "planning_ms": 0.016,
+      "rows": 1,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.451,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.526,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":1,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":4.452,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.527,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 3,
+      "round": 1,
+      "kind": "old",
+      "uid_count": 100,
+      "execution_ms": 16.57,
+      "planning_ms": 0.039,
+      "rows": 100,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":16.517,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.149,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":16.531,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.15,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 3,
+      "round": 1,
+      "kind": "new",
+      "uid_count": 100,
+      "execution_ms": 51.256,
+      "planning_ms": 0.041,
+      "rows": 100,
+      "hits": 312,
+      "reads": 88,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":51.162,\"Local Read Blocks\":0,\"Shared Hit Blocks\":312,\"Shared Read Blocks\":88,\"Actual Startup Time\":51.148,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":51.173,\"Local Read Blocks\":0,\"Shared Hit Blocks\":312,\"Shared Read Blocks\":88,\"Actual Startup Time\":51.149,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 3,
+      "round": 2,
+      "kind": "new",
+      "uid_count": 100,
+      "execution_ms": 1.505,
+      "planning_ms": 0.042,
+      "rows": 100,
+      "hits": 400,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"aka_agent_lookup_zalo_users\",\"Node Type\":\"Function Scan\",\"Plan Rows\":100,\"Plan Width\":676,\"Total Cost\":1.25,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.25,\"Async Capable\":false,\"Function Name\":\"aka_agent_lookup_zalo_users\",\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":1.42,\"Local Read Blocks\":0,\"Shared Hit Blocks\":400,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.411,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":10,\"Plan Width\":676,\"Total Cost\":0.45,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.35,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":1.43,\"Local Read Blocks\":0,\"Shared Hit Blocks\":400,\"Shared Read Blocks\":0,\"Actual Startup Time\":1.412,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    },
+    {
+      "case": 3,
+      "round": 2,
+      "kind": "old",
+      "uid_count": 100,
+      "execution_ms": 16.676,
+      "planning_ms": 0.04,
+      "rows": 100,
+      "hits": 3679,
+      "reads": 0,
+      "nodes": "{\"Plans\":[{\"Alias\":\"zalo_users\",\"Node Type\":\"Index Scan\",\"Plan Rows\":1,\"Index Name\":\"idx_zalo_users_staff_account\",\"Plan Width\":1288,\"Total Cost\":3.59,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":0.43,\"Async Capable\":false,\"Relation Name\":\"zalo_users\",\"Parallel Aware\":false,\"Scan Direction\":\"Forward\",\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":16.62,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.153,\"Parent Relationship\":\"Outer\",\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0,\"Rows Removed by Index Recheck\":0}],\"Node Type\":\"Limit\",\"Plan Rows\":1,\"Plan Width\":1288,\"Total Cost\":6.76,\"Actual Rows\":100,\"Actual Loops\":1,\"Startup Cost\":3.59,\"Async Capable\":false,\"Parallel Aware\":false,\"Local Hit Blocks\":0,\"Temp Read Blocks\":0,\"Actual Total Time\":16.635,\"Local Read Blocks\":0,\"Shared Hit Blocks\":3679,\"Shared Read Blocks\":0,\"Actual Startup Time\":0.154,\"Temp Written Blocks\":0,\"Local Dirtied Blocks\":0,\"Local Written Blocks\":0,\"Shared Dirtied Blocks\":0,\"Shared Written Blocks\":0}"
+    }
+  ],
+  "notes": [
+    "READ-only workload in transaction rollback; all data remains unchanged.",
+    "Buffer hits/reads are PostgreSQL blocks, not physical disk I/O measurements.",
+    "Alternate old/new order; warm one-UID 3679 -> 4 buffers; warm 100-UID 3679 -> 400 buffers.",
+    "First candidate 100-UID call read 88 previously uncached blocks and took 51.256ms; do not compare it to the old warm time as a cold-to-cold speedup."
+  ]
+}

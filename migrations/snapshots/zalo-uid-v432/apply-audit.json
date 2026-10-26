@@ -1,0 +1,43 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261026090510",
+    "name": "migration_v432_zalo_uid_lookup"
+  },
+  "source": "signature and function name absent",
+  "target": "bbed74070ff8bf987c3311b5fb14bcfc",
+  "after": {
+    "table": {
+      "acl": [
+        "postgres=arwdDxtm/postgres",
+        "anon=arwdDxtm/postgres",
+        "authenticated=arwdDxtm/postgres",
+        "service_role=arwdDxtm/postgres",
+        "aka_agent_chat_api=arw/postgres"
+      ],
+      "rls": false,
+      "owner": "postgres",
+      "force_rls": false
+    },
+    "checked_at": "2026-10-26T09:09:46.888195+00:00",
+    "target_md5": "bbed74070ff8bf987c3311b5fb14bcfc",
+    "index_count": 6
+  },
+  "verification": {
+    "local_sql_checks": 36,
+    "repository_checks": 11,
+    "server_dataset_checks": 11,
+    "contact_filter_checks": 19,
+    "live_parity": "three accounts, <=100 UIDs, NULL input, oversized guard; before and after apply in rollback transactions",
+    "rollback": "guarded drop rehearsed with ROLLBACK; target metadata preserved",
+    "typecheck_node": "pass",
+    "typecheck_web": "pass",
+    "build": "Desktop and Server pass",
+    "advisors": "no new lint groups; no finding names new RPC"
+  },
+  "rollout": {
+    "database": "applied",
+    "applications": "source fixed; not packaged/published/deployed",
+    "chat_worker": "unchanged"
+  }
+}
