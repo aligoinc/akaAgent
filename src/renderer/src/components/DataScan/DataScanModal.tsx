@@ -3102,7 +3102,8 @@ export default function DataScanModal({
     setAutomaticallyExcludedZaloLeadershipIds(new Set())
   }
 
-  const exportCurrentSelection = async (overrides: any = {}) => {
+  const exportCurrentSelection = async (overrides: any = {}, projection?: PageInboxContactListQuery['projection']) => {
+    const pageInboxQuery = { ...pageInboxAppliedFilters, ...overrides, ...(projection ? { projection } : {}) }
     const legacyExport = async (): Promise<AutoAccountContact[]> => {
     if (!window.electronAPI || !accountId) return []
     if (selectedDataset) {
@@ -3112,10 +3113,7 @@ export default function DataScanModal({
       })
     }
     if (isPageInboxAction) {
-      return window.electronAPI.exportPageInboxContacts(accountId, {
-        ...pageInboxAppliedFilters,
-        ...overrides
-      })
+      return window.electronAPI.exportPageInboxContacts(accountId, pageInboxQuery)
     }
     if (isZaloGroupMembersAction) {
       return window.electronAPI.exportZaloGroupMemberContacts(accountId, {
@@ -3134,36 +3132,36 @@ export default function DataScanModal({
       ...overrides
     })
   }
-    const query = selectedDataset ? getAccountContactListQuery(overrides) : isPageInboxAction ? {...pageInboxAppliedFilters,...overrides} : isZaloGroupMembersAction ? getZaloGroupMemberListQuery(overrides) : isZaloRemarketingCustomersAction ? getZaloRemarketingListQuery(overrides) : getAccountContactListQuery(overrides)
+    const query = selectedDataset ? getAccountContactListQuery(overrides) : isPageInboxAction ? pageInboxQuery : isZaloGroupMembersAction ? getZaloGroupMemberListQuery(overrides) : isZaloRemarketingCustomersAction ? getZaloRemarketingListQuery(overrides) : getAccountContactListQuery(overrides)
     const result = await columnFilters.read(query, accountId || undefined, 'export', async () => ({contacts:await legacyExport()}))
     return result.contacts
   }
 
-  const loadSelectedContacts = async () => {
+  const loadSelectedContacts = async (projection?: PageInboxContactListQuery['projection']) => {
     if (!window.electronAPI || !accountId) return []
     if (pageInboxSelectAllMatching) {
       return exportCurrentSelection({
         excludeIds: Array.from(pageInboxExcludedIds)
-      })
+      }, projection)
     }
     if (pageInboxSelectedRange) {
       const rangeContacts = await exportCurrentSelection({
         excludeIds: Array.from(pageInboxExcludedIds),
         offset: pageInboxSelectedRange.start - 1,
         limit: pageInboxSelectedRange.end - pageInboxSelectedRange.start + 1
-      })
+      }, projection)
       const extraIds = Array.from(selectedIds)
       if (extraIds.length === 0) return rangeContacts
-      const extraContacts = await exportCurrentSelection({ ids: extraIds })
+      const extraContacts = await exportCurrentSelection({ ids: extraIds }, projection)
       return dedupeContacts([...rangeContacts, ...extraContacts])
     }
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return []
-    return exportCurrentSelection({ ids })
+    return exportCurrentSelection({ ids }, projection)
   }
 
-  const loadOutputContacts = async () => {
-    const selectedContacts = await loadSelectedContacts()
+  const loadOutputContacts = async (projection?: PageInboxContactListQuery['projection']) => {
+    const selectedContacts = await loadSelectedContacts(projection)
     const rawContacts = [...selectedContacts, ...selectedGroupContacts]
     const allowedContacts = shouldExcludeZaloGroupLeadership
       ? rawContacts.filter(contact => !isZaloGroupLeadershipContact(contact))
@@ -3894,7 +3892,7 @@ export default function DataScanModal({
     if (!onSelect || selectingOutput) return
     setSelectingOutput(true)
     try {
-      const selected = await loadOutputContacts()
+      const selected = await loadOutputContacts(isDataGroupTargetMode ? undefined : 'campaign')
       if (selected.length === 0) {
         showAlert(
           isDataGroupTargetMode
