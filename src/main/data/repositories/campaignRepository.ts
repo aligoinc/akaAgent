@@ -4395,15 +4395,15 @@ async function loadZaloRemarketingLookup(
   for (let i = 0; i < normalizedUids.length; i += chunkSize) {
     const chunk = normalizedUids.slice(i, i + chunkSize)
     const { data, error } = await client()
-      .from('zalo_users')
+      .rpc('aka_agent_lookup_zalo_users', {
+        p_account_id: accountId,
+        p_staff_id: staffId,
+        p_zalo_uids: chunk
+      })
       .select('zalo_uid, display_name, zalo_name, phone_number, is_fr, gender, raw_payload')
-      .eq('account_id', accountId)
-      .eq('staff_id', staffId)
-      .in('zalo_uid', chunk)
 
     if (error) throw new Error(`Failed to list Zalo remarketing customer users: ${error.message}`)
-    for (const row of data || []) {
-      const record = row as Record<string, unknown>
+    for (const record of (data || []) as Record<string, unknown>[]) {
       const uid = textValue(record.zalo_uid)
       const rawPayload = normalizeRecord(record.raw_payload) || {}
       const name = firstText(record.display_name, record.zalo_name)

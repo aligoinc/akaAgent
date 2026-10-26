@@ -29,6 +29,7 @@ async function main() {
             ? 'export const getSupabaseClient = () => globalThis.__contactStatusTestDb;'
             : `export const requireCurrentUser = () => ({ staffId: 7, organizationId: 9 });
                export const getCurrentUser = requireCurrentUser;
+               export const getCurrentUserCredentials = () => { throw new Error('Live credentials are blocked'); };
                export const requireCurrentUserCredentials = () => { throw new Error('Live credentials are blocked'); };`,
           loader: 'js'
         }))

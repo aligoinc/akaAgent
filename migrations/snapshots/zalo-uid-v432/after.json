@@ -1,0 +1,14 @@
+{
+  "signature": "aka_agent_lookup_zalo_users(bigint,bigint,text[])",
+  "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_lookup_zalo_users(p_account_id bigint, p_staff_id bigint, p_zalo_uids text[])\n RETURNS SETOF zalo_users\n LANGUAGE plpgsql\n STABLE ROWS 100\n SET search_path TO 'pg_catalog', 'public'\n SET plan_cache_mode TO 'force_custom_plan'\n SET statement_timeout TO '60s'\nAS $function$\nBEGIN\n  IF p_account_id IS NULL OR p_account_id <= 0\n     OR p_staff_id IS NULL OR p_staff_id <= 0 THEN\n    RAISE EXCEPTION 'Invalid Zalo user lookup scope' USING ERRCODE = '22023';\n  END IF;\n  IF cardinality(p_zalo_uids) > 100 THEN\n    RAISE EXCEPTION 'Zalo user lookup accepts at most 100 UIDs' USING ERRCODE = '22023';\n  END IF;\n  IF coalesce(cardinality(p_zalo_uids), 0) = 0 THEN\n    RETURN;\n  END IF;\n\n  -- Keep exact UID matching, ANY duplicate/null semantics and both filters.\n  -- The unique (account_id,zalo_uid) index bounds each lateral lookup to one\n  -- row. LIMIT prevents flattening back into a staff/account-wide scan.\n  -- Staff is checked after that unique lookup, never used as the scan key.\n  RETURN QUERY\n    SELECT u.*\n    FROM (\n      SELECT DISTINCT requested.uid\n      FROM unnest(p_zalo_uids) AS requested(uid)\n      WHERE requested.uid IS NOT NULL\n    ) AS requested\n    CROSS JOIN LATERAL (\n      SELECT stored.*\n      FROM public.zalo_users AS stored\n      WHERE stored.account_id = p_account_id\n        AND stored.zalo_uid = requested.uid\n      LIMIT 1\n    ) AS u\n    WHERE u.staff_id = p_staff_id;\nEND\n$function$\n",
+  "checksum": "bbed74070ff8bf987c3311b5fb14bcfc",
+  "owner": "postgres",
+  "prosecdef": false,
+  "provolatile": "s",
+  "proconfig": [
+    "search_path=pg_catalog, public",
+    "plan_cache_mode=force_custom_plan",
+    "statement_timeout=60s"
+  ],
+  "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+}

@@ -1,0 +1,215 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "rpc": null,
+  "table": {
+    "acl": [
+      "postgres=arwdDxtm/postgres",
+      "anon=arwdDxtm/postgres",
+      "authenticated=arwdDxtm/postgres",
+      "service_role=arwdDxtm/postgres",
+      "aka_agent_chat_api=arw/postgres"
+    ],
+    "rls": false,
+    "owner": "postgres",
+    "force_rls": false
+  },
+  "columns": [
+    {
+      "name": "id",
+      "type": "bigint",
+      "notnull": true
+    },
+    {
+      "name": "account_id",
+      "type": "bigint",
+      "notnull": true
+    },
+    {
+      "name": "zalo_uid",
+      "type": "text",
+      "notnull": true
+    },
+    {
+      "name": "user_id",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "username",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "display_name",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "zalo_name",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "avatar",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "bgavatar",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "cover",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "gender",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "dob",
+      "type": "bigint",
+      "notnull": false
+    },
+    {
+      "name": "sdob",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "status",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "phone_number",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "is_fr",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "is_blocked",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "last_action_time",
+      "type": "bigint",
+      "notnull": false
+    },
+    {
+      "name": "last_update_time",
+      "type": "bigint",
+      "notnull": false
+    },
+    {
+      "name": "is_active",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "key",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "type",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "is_active_pc",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "is_active_web",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "is_valid",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "user_key",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "account_status",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "oa_info",
+      "type": "jsonb",
+      "notnull": false
+    },
+    {
+      "name": "user_mode",
+      "type": "integer",
+      "notnull": false
+    },
+    {
+      "name": "global_id",
+      "type": "text",
+      "notnull": false
+    },
+    {
+      "name": "biz_pkg",
+      "type": "jsonb",
+      "notnull": false
+    },
+    {
+      "name": "created_ts",
+      "type": "bigint",
+      "notnull": false
+    },
+    {
+      "name": "oa_status",
+      "type": "jsonb",
+      "notnull": false
+    },
+    {
+      "name": "raw_payload",
+      "type": "jsonb",
+      "notnull": true
+    },
+    {
+      "name": "last_seen_at",
+      "type": "timestamp with time zone",
+      "notnull": false
+    },
+    {
+      "name": "created_at",
+      "type": "timestamp with time zone",
+      "notnull": true
+    },
+    {
+      "name": "updated_at",
+      "type": "timestamp with time zone",
+      "notnull": true
+    },
+    {
+      "name": "staff_id",
+      "type": "bigint",
+      "notnull": false
+    },
+    {
+      "name": "organization_id",
+      "type": "bigint",
+      "notnull": false
+    }
+  ],
+  "policies": [],
+  "captured_at": "2026-10-26T08:52:37.290405+00:00"
+}

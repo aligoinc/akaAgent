@@ -609,6 +609,8 @@ Relations between find-data source campaigns and internal target campaigns are c
 
 ### Data layer
 
+Tra UID Zalo trước lưu hồ sơ chiến dịch/thành viên nhóm và đọc Remarketing dùng RPC invoker `aka_agent_lookup_zalo_users`, lô <=100, tra unique account/UID rồi lọc staff; giữ custom plan và timeout bulk 60s. V432 đã apply akachat `20261026090510 / migration_v432_zalo_uid_lookup`; không apply lại, cần cập nhật Desktop/App Server để đổi caller, không deploy Chat Worker. [Audit/rollback](docs/ZALO_UID_LOOKUP_V432.md).
+
 Danh sách không gửi tin Zalo dùng `listZaloFriendBlocklistPage()` trong [accountContactRepository.ts](src/main/data/repositories/accountContactRepository.ts) để phân trang DB tối đa 100 người/lần, lọc tên/UID và membership trước phân trang; số lượng danh sách dùng count-only. Giữ lựa chọn qua trang, reset khi đổi tìm kiếm/tài khoản/danh sách hoặc tải lại thủ công; thêm/xóa chạy tuần tự theo chunk 100 và trả `ZaloFriendBlocklistMutationResult` khi lỗi để UI tự refresh nhưng giữ `remainingIds` (kể cả chunk chưa rõ kết quả) cho retry, không tăng Max rows chung hoặc tải toàn bộ contacts/members; smoke: `node scripts/run-zalo-friend-blocklist-smoke-test.cjs`.
 
 Quản lý từ form chiến dịch truyền `initialAccountId` và callback `onClose` qua `OpenGeneralSettings`; giữ form mounted/inert, chờ thao tác ghi trước khi đóng rồi tải lại danh sách/tag, giữ ID được chọn và cập nhật tên. Danh sách/tag bị xóa không tự tắt tùy chọn đã bật; lỗi tải giữ lựa chọn, có retry và chặn lưu chiến dịch khi đang dùng dữ liệu chưa xác minh. Smoke Electron: `node scripts/run-campaign-settings-ui-smoke.cjs`.
