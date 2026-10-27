@@ -1,0 +1,44 @@
+{
+  "verified_at": "2026-10-27T05:28:09.806438+00:00",
+  "production_changed": false,
+  "migrations_applied": false,
+  "installers_packaged": false,
+  "checks": {
+    "sql": {
+      "postgresql_16_15": 123,
+      "postgresql_17_11": 129
+    },
+    "auth": 129,
+    "client": 55,
+    "node_typecheck": "passed",
+    "web_typecheck": "passed",
+    "desktop_build": "passed",
+    "server_build": "passed (sequential, verified out-server)",
+    "staff_session_expiry": "passed",
+    "electron_restart": "passed",
+    "renderer_recovery": "passed",
+    "guard_generator_cross_version": "passed; semantic ACL and deterministic overload order"
+  },
+  "sha256": {
+    "supabase/migrations/20261027044346_staff_rls_client_api.sql": "9102172db49eeddc23526323c11f2f54c8bf75da53aa847feba105ea3b7fd1f4",
+    "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql": "ef2668f87b1151e1544e29d23aea3e71a5d428af0a35aa1df6db22ce284ec636",
+    "supabase/migrations/20261027044628_staff_rls_activation.sql": "81896fd5e4d85a585769700348b2638daa56965d5794b833932279170e386eed",
+    "src/main/data/repositories/authRepository.ts": "a4bcf9078b543391dfa1ae5754d5b63feefe4e92f73dc69bf906389fbb00e660",
+    "src/main/data/repositories/staffClientRepository.ts": "34b98aef399d0cf806a5bdc8ff873f773f2efb99861f7933660ae527a0bdb98c",
+    "src/main/services/staffDeviceRecovery.ts": "870738656cc8c8e17d69f6c78a9f1f1e3c0d66170a14d1fbf48867f3a3e49310",
+    "src/main/data/supabaseClient.ts": "1fe8d4b996f2f42e9122b8d12ca3b2e58357c2672534ac8e08b6feb478bea4e9",
+    "src/server/main/index.ts": "144f98146e453bde7c6935dfd3900e0cc3ee94dcc364e5e440fe569abfc9ee0c",
+    "src/server/main/serverDatabaseAccess.ts": "e6166cd20d1e699c0b18f3be8288213498756a0cab9dbd9f3e5a37ee29fe2f40",
+    "scripts/staff-rls/guard-cutover.py": "1a061d260151618047d6bb63db2087a6bad74bf75aaed1530707798a0d06265b",
+    "scripts/staff-rls/run-sql-smoke.cjs": "ab904da514a95aa473d3a35b6ed0ec152ef442366d81cb5226d4317f0baf2b34",
+    "scripts/staff-rls/client-smoke.cjs": "9ba3097e6b043a59f3b5dec700d2f31cc3c12d4fdf2aedb70ab82b8cbd86c343",
+    "migrations/snapshots/staff-rls/rollback-activation.sql": "775a7fab302e225c01b5b8dcc69f8eeb8be322f9e21fab412284e07442a5977f",
+    "migrations/snapshots/staff-rls/rollback-runtime.sql": "ccd20e27221cefc0a2b5d2f36a1e2829c60d573ac759f4565b2dfc64439b4f21",
+    "migrations/snapshots/staff-rls/sql-verification-pg16.json": "264d2798967f386d41e0caead4d6532099cb843c136ae8092ccb5678663acd5d",
+    "migrations/snapshots/staff-rls/sql-verification-pg17.json": "22514df1af1ba56de4297d080e79dbe7c98fc8d740f4c6d7808890f342ed4912"
+  },
+  "review_fixes": {
+    "view_acl": "Use version-specific owner defaults and exact SELECT-only grants; reject all additional roles, privileges, grant options and column grants in activation and rollback.",
+    "recovery_key": "Repair malformed/empty files through authenticated enrollment, then atomically rename a synced 0600 temporary file; serialize enrollment, preserve healthy keys, fail closed on recovery/read errors."
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-10-27T05:39:00.661Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "checks": [
+    {
+      "name": "security-status",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "name": "invalid-login",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "name": "invalid-field",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "name": "invalid-recovery",
+      "status": 400,
+      "passed": true
+    },
+    {
+      "name": "runtime-view",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "name": "legacy-staff-read",
+      "status": 200,
+      "passed": true
+    }
+  ],
+  "customer_data_read": false,
+  "business_data_written": false
+}

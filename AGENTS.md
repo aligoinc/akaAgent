@@ -1,5 +1,7 @@
 # AGENTS.md
 
+RLS staff A/B đã apply akachat 27/10/2026 lúc 12:37 VN: `20261027053735 / staff_rls_client_api`, `20261027053753 / staff_rls_runtime_compatibility`. Không apply lại; **C chưa chạy, org_staff vẫn RLS=false**, giữ ACL/policy staff và tổ chức. 41 target/checksum/ACL và 52 hàm ngoài phạm vi khớp; dry run rollback trước apply, 12 SQL/6 HTTP sau apply đạt, không ghi dữ liệu nghiệp vụ khách. Giữ 34 RPC invoker/token/CAS và patch V397/V389. Desktop dùng RPC xác thực, proof máy tự sửa atomic sau login; Server chỉ máy chủ quản lý; theo yêu cầu tiếp theo đã đóng gói nội bộ Windows x64 9.0.0 kèm khóa lấy tự động qua Supabase CLI, output riêng `dist-server/private/2026-10-27T05-51-18-438Z/`, không chia sẻ công khai. `build:server:win:private` dùng staging ngoài source, không đưa khóa vào Git/Desktop/JS/log, env/userData vẫn ưu tiên để xoay khóa. Hai typecheck/build, 59+14 smoke, payload EXE và loader không cấu hình đạt; bộ cài cũ/native host giữ checksum. Chưa chạy Windows thật, triển khai hoặc đóng gói Desktop cập nhật; chỉ bật C khi người dùng xác nhận sau cập nhật, không tự bật tối nay. [Audit, chữ ký/checksum và rollback](docs/STAFF_RLS_ROLLOUT.md#apply-ab-production--27102026).
+
 Cooldown V431 đã apply akachat 26/10/2026 (`20261026075350 / migration_v431_cooldown_history_lookup`): lọc khóa lô trước materialize lịch sử, giữ V424/V367, chữ ký/ACL và helper. Không apply lại hoặc deploy client; khi sửa helper lịch sử/chuẩn hóa phải đối chiếu biểu thức inline trong RPC. [Audit, số đo và rollback](docs/COOLDOWN_HISTORY_V431.md).
 
 AI Cài đặt chung Web ngày 24/10/2026: binding config 14 đã apply akachat `20261023174411 / campaign_general_ai_web`, giữ nguyên Sol 21/prompt/schema/options và chín config khác. Web Zalo Server/SMS/voice giữ phụ, khóa Page/nhóm data; 18 browser local, 5 Sol thật, typecheck/build đạt. Web/API đã deploy từ `168ba3b` lúc 01:01:55 VN, chỉ đổi image trên machine cũ 1 shared CPU/512 MB; health 1/1, 20 HTTP, bảy checksum runtime và 18 browser production giả lập đạt. Desktop runtime giữ nguyên, hai typecheck/build đạt trước PR; giữ hai race gợi ý tên được người dùng chấp nhận. Không apply lại; rollback Web trước V429. Xem [audit](docs/GENERAL_FORM_AI_WEB.md).
@@ -727,6 +729,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Staff RLS và bộ cài Server nội bộ**: A/B đã live; C cần xác nhận riêng sau cập nhật client. Khôi phục bằng máy dùng proof, lỗi proof/status không mở fallback; sửa file proof chỉ sau xác thực thành công. `build:server:win:private` chứa khóa backend có thể trích xuất, chỉ giữ local/máy chủ quản lý; không commit/upload bộ cài hoặc đưa khóa vào Desktop. Xem [rollout và kiểm chứng](docs/STAFF_RLS_ROLLOUT.md).
 
 - **AI Cài đặt chung đa nền tảng**: slot/IPC còn tên Facebook để giữ tương thích, không dùng tên đó để khóa General. Main lấy platform từ DB; khi có phụ Zalo phải lọc QR/browser/server trước trả patch để effect UI không xóa phụ. Page chỉ action Facebook hỗ trợ. Xem [V429](docs/GENERAL_FORM_AI_V429.md).
 

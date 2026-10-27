@@ -1,0 +1,1031 @@
+{
+  "drift": null,
+  "roles": [
+    {
+      "name": "crm_interest_worker",
+      "bypass": true
+    },
+    {
+      "name": "service_role",
+      "bypass": true
+    },
+    {
+      "name": "aka_agent_chat_api",
+      "bypass": true
+    }
+  ],
+  "tables": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,anon=r/postgres,authenticated=r/postgres,crm_interest_worker=r/postgres}",
+      "rls": true,
+      "name": "org_organization",
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "org_organization_compat_read_all",
+          "check": null,
+          "roles": [
+            "16480",
+            "16481"
+          ],
+          "using": "true",
+          "command": "r"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,crm_interest_worker=r/postgres}",
+      "rls": false,
+      "name": "org_staff",
+      "forceRls": false,
+      "policies": null
+    }
+  ],
+  "database": "postgres",
+  "new_view": null,
+  "functions": [
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres}",
+      "checksum": "ec4117c4cc813bf8fe926c21e7da3c8d",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "TimeZone=UTC",
+        "statement_timeout=8s",
+        "lock_timeout=3s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_admin_notifications(bigint,text,text,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "74d42a41077050f99e82b33ae75d76f3",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_advance_zalo_server_multi_daily_slot(bigint,bigint,bigint,timestamp with time zone)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "07630b82e68cba560a8c7538b24702d5",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "65cd07b8ae16017794e56977c2f76aff",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "79f9f689e1e87631ca8a704a7ffff9b4",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=10s",
+        "lock_timeout=5s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_browser_run_limits(bigint,bigint,text,text,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "9391f47e1be976e0d7e595325d3c2f31",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "a943ffce5b3bb36020a3cf5c7f548b85",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "841a8fc8da0bca527508e71dcdc6b8fa",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "8ea465944efda08fb2e89da9589e065a",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_check_campaign_daily_boundary(bigint,bigint,bigint,text,date)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "087a04ad6f98cc2cff5267dabcead7cd",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_check_daily_maintenance_barrier(bigint,text,date)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "92b00c0827a801e9ffece28d14805f84",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "b721f2bf997eef62f72eaf5e2728fb8c",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "bc35534b174333a0012c3bf84ca81ef2",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,date,uuid,bigint[])",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "dc5d650ca0f8e63c00ce97c4606ef245",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "1d2e9fe42c493c523641741389496b5c",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_claim_zalo_server_run_unit(bigint,bigint,bigint,bigint[])",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "f941b9177b447ca5da721d10dacf55e8",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "f506f8695e3e874642e3c845e103e42d",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "b504f4928a9dd271dec783796a7a0374",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_device_presence(text,text,uuid,jsonb,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "a5c7a6181fb3af9b1d47eeed8bc912cf",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_facebook_account_operation(bigint,bigint,text,uuid,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "4ab7e726d3bc9c9e17c35b61f186ed55",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_facebook_login(bigint,text,text,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "2c7b2243ebe72dbd544a270dd56310fc",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "df426447a1fd533e052437699bb8dd5d",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "a56637c5ec588f1d6b20622e4096db38",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_finalize_zalo_server_campaign(bigint,bigint,text,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "c97300fa762faa37e7b931761a9b2abb",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "d6ea4c72508274a8c3fc8c827e52276d",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "66dedeb5be692b600b4a762a9ac6a60d",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_get_data_group_panel(bigint,bigint,bigint,text,text)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "5b849d4685b10d6446b4922ed70b0219",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "d6bbdca20f780005a411e8a6be6ae8e5",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "e68d635b48d4a15a18db0f338904d7bd",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=10s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_list_message_opt_out_customers(bigint,bigint,text,text,text,integer)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "28589c77ed8e440a0d8b6b4304e0311f",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_prepare_device_change_v2(text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "4752e10a9ab45fee879d9f55d4c2817b",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_prepare_device_change(text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "0217c031e0d6aaef63c2589cbe1f7b94",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "788154e11ff9c302ed14cabd866fa1da",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "6f5c7a310643cf7d63782974ffcdc933",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "16822ed5a6af165668d9d3ed2d5283c2",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_read_report_page(bigint,bigint,text,text,jsonb)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "048ea7194cd77589ffeb1820353f500c",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "dfc6d177499fbf9fc51526d7b9fba6f4",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_reset_device_binding_v2(text,text,text,uuid,jsonb,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "20528bcb292a243fd4f0166dec3cb05e",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_reset_device_binding(text,text,text,uuid,jsonb,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "f8b736faac1c365999f6741054f08680",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_set_desktop_campaign_status_v2(bigint,bigint,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "81578dbe29f58ae5736948d34e77f36c",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_set_zalo_server_account_status(bigint,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "8811f009a969f2ce8dda19df95a8c614",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_set_zalo_server_campaign_status(bigint,bigint,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "a46368117d2815b67442383cd753089b",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "5ebb1d085d5a70a1dde3ad85268349f4",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "ca59bfbfa79c7e40ec50788e77b9d022",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_staff_access(bigint,text,text)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "689c389e3380c75497c720e7e6c5dafb",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_staff_management(bigint,text,text,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,=X/postgres}",
+      "checksum": "a294e60011edd8d42e90ac2f74ce744c",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_staff_time_allowed(bigint)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "006a6da075ede4e9c6b07194422f65c9",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "b4be76b63cd90ef5f4d7bdd93a22b288",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "e16a89cf47725bda16696ad5ff7272ea",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "aka_agent_yield_campaign_daily_boundary(bigint,bigint,bigint,text,uuid,date)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,anon=X/postgres,authenticated=X/postgres}",
+      "checksum": "91fb0001b629cb058a41454068b439d2",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=5s"
+      ],
+      "prosecdef": true,
+      "signature": "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "f3a5d9dc95b0424eb38100ac394060cd",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": true,
+      "signature": "chat_zalo_sync_conversation_contact_info()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "e590eca5b11f0b258309bcd13b01e6a6",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "claim_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "4d23cf3365d335072c4fcb01e7942dd1",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "2f925040dd0bdc49725e0cebbf07c407",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "prosecdef": false,
+      "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "e6c30bd94f312d1e181f936ac41bd026",
+      "proconfig": [
+        "search_path=public",
+        "statement_timeout=60s"
+      ],
+      "prosecdef": false,
+      "signature": "discover_zalo_server_account_runtime_users(bigint,integer)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "43b0f0efadb0fadcfbfdec7b16dcd083",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "discover_zalo_server_runtime_users(bigint,integer)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "d41280de429610e294cee7a3fe425724",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "enqueue_campaign_zalo_realtime_group_event(bigint,bigint,bigint,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,jsonb)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "734f2729275a42f020bfa6b79222abb4",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "ensure_sms_auto_account_for_staff(bigint)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "469ce4cfda4f3c4ffe6020b80594d83f",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_alert_bug_stuck(numeric)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "b6cf6dcbcdb2fba39ab8546babcbfa24",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_alert_stacked_unanswered(integer,integer)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "9fe95baa08c1a88959483227d75623fe",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_birthday_care_process_job_v2(bigint,boolean,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "dbb61247aab3c44f0f0feadd8ae58464",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "prosecdef": true,
+      "signature": "fn_chat_followup_post_ai_filter_v1(date,bigint,uuid,text,uuid,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "d9fc462ce04785c6a5cb473e7380b708",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_contact_match_aka_customer()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "7d1e6d4e92c598d93861da88f5701ce6",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_digest_unresolved_bugs()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "6d32d422c91d5b9f016555543b513f37",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_escalate_repeat_offenders(integer)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "d58b873a5f31031325d8ae45443fb8e1",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_notify_answer_quality()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "ea3d15639657c9ff359b02db286b3b97",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_notify_sales_unanswered()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "1c3ab0533a7a2ebf1fd868b8a73dc7d4",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "prosecdef": false,
+      "signature": "fn_opp_ctx(aka_salesopportunity)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "6e81001c760a4f46d2c343a9c72a2ac2",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "prosecdef": true,
+      "signature": "fn_opp_sinh_buoc(bigint,date)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "3ae1f01b7f090553107d71dff2504d2e",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "7652a944b18262dc819fccc0f0654531",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "prosecdef": true,
+      "signature": "fn_tao_co_hoi_ban_hang(bigint,bigint,text,bigint,bigint,date,bigint,bigint,text,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "498d5a0aa49afb5133120fc11815678d",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "fn_weekly_staff_digest()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "8eba22004de37bbf1c2ba79a9ef4cb43",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "get_managed_staff(bigint)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "6354ae2e66d0d7624e090750ac820a2b",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": false,
+      "signature": "get_staff_zalo_account_capabilities(bigint)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "cf1fdfe5733240f9a52a0395e2cdefa1",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "get_staff_zalo_runtime_mode(bigint)",
+      "provolatile": "s"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "a84efaee5acdf271c6b1a50c4fce1428",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "inspect_staff_zalo_running_state(bigint)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "331a13b1e8fcf0f1cc0eacb60afd756d",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "normalize_legacy_zalo_account_server_owner()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "d465015c7cd383fbe37f44b9aed404d9",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "recover_server_zalo_running_state(bigint,text,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "8b5a01bc1606fca27eeff6fd5e27e08b",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "release_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "b32f324928cef0699697f259b3899c75",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "c8962dc3218edc9c1a42567bd800ebaa",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "bfda9371f3964c1e3a0d3bccb58167b9",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "dc304ed20a0b6cab0824f9bbfbcb30c8",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": false,
+      "signature": "reset_desktop_running_statuses(bigint,boolean,boolean)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "9f5d852cdacc736186f5558885d505e7",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "run_attitude_alerts()",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "0b299e3f67e8f4e28c2264dad207341a",
+      "proconfig": [
+        "search_path=public"
+      ],
+      "prosecdef": true,
+      "signature": "run_attitude_backfill(integer,text)",
+      "provolatile": "v"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "2d31e06b05f05e685ce531ba957e4e13",
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "prosecdef": true,
+      "signature": "trg_aka_crm_sales_opportunity()",
+      "provolatile": "v"
+    }
+  ],
+  "checked_at": "2026-10-27T05:35:37.907223+00:00",
+  "migrations": null,
+  "new_client": null,
+  "new_recovery": null,
+  "server_version": "17.6",
+  "functions_checked": 86,
+  "functions_unchanged": 86,
+  "source_definitions": "source.json",
+  "authorization": "Apply A and B only; C remains deferred."
+}

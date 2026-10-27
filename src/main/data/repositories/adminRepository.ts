@@ -2,6 +2,7 @@ import { canAccessAdmin, type AdminApiDoc } from '../../../shared/admin'
 import type { AuthUser } from '../../../shared/types'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
+import { callCurrentStaffClient } from './staffClientRepository'
 
 export class AdminAccessError extends Error {
   constructor() { super('Bạn không có quyền truy cập Admin akaBiz.'); this.name = 'AdminAccessError' }
@@ -71,7 +72,8 @@ export async function getAdminDoc(id: number): Promise<AdminApiDoc> {
 /** Reuses the existing 30-second auth refresh, only for organization 1. */
 export async function readLiveAdminFlag(user: AuthUser): Promise<boolean> {
   if (user.organizationId !== 1) return user.isAdmin === true
-  const { data, error } = await getSupabaseClient().from('org_staff').select('is_admin,is_active')
-    .eq('id', user.staffId).eq('organization_id', 1).abortSignal(AbortSignal.timeout(5000)).maybeSingle()
-  return !error && data?.is_active === true && data.is_admin === true
+  try {
+    const staff = await callCurrentStaffClient('read')
+    return staff.id === user.staffId && staff.organization_id === 1 && staff.is_active && staff.is_admin === true
+  } catch { return false }
 }

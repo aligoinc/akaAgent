@@ -1,0 +1,437 @@
+[
+  {
+    "table_name": "auto_accounts",
+    "name": "id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "name",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "flatform_type",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "login_status",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "status",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "is_active",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "is_delete",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "created_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "updated_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "sleep_between_actions",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "daily_limit",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "rate_limit_count",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "rate_limit_minutes",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "staff_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "organization_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "account_group_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "proxy_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_account_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_session",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_session_updated_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_session_last_verified_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_session_last_error",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "email_session",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "email_session_updated_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "email_session_last_verified_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "email_session_last_error",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "username",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "password",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "mobile_device_id",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "mobile_device_info",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "mobile_device_registered_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "mobile_device_last_seen_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "is_zalo_show_web",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "runtime_operation_claim_token",
+    "type": "uuid"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "is_zalo_server",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_uid",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_login_managed",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_login_claim_generation",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "is_gom",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_random_run_enabled",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_random_run_config",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_web_enrichment_enabled",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "facebook_web_enrichment_config",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_accounts",
+    "name": "zalo_phone_check_usage",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "name",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "action_id",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "account_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "status",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "schedule",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "log",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "is_delete",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "created_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "updated_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "content",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "schedule_type",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "schedule_end_date",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "schedule_days",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "schedule_week_days",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "continue_next_day",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "refresh_data",
+    "type": "boolean"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "extra_settings",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "images",
+    "type": "jsonb"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "staff_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "organization_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "note",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "daily_stop_time",
+    "type": "time without time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "original_schedule",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "completed_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "last_run_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "time_sleep_between_2",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "control_idempotency_key",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "data_target_source_mode",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "data_group_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "provisioning_state",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "creation_bundle_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "creation_bundle_child_index",
+    "type": "integer"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "secondary_account_id",
+    "type": "bigint"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_claim_token",
+    "type": "uuid"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_claim_target",
+    "type": "text"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_claim_vietnam_date",
+    "type": "date"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_claimed_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_unit_token",
+    "type": "uuid"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_unit_vietnam_date",
+    "type": "date"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_unit_claimed_at",
+    "type": "timestamp with time zone"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "runtime_unit_input_data_ids",
+    "type": "bigint[]"
+  },
+  {
+    "table_name": "auto_campaigns",
+    "name": "content_rotation_indexes",
+    "type": "jsonb"
+  }
+]

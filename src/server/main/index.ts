@@ -1,5 +1,5 @@
 import { setAccountLogSource } from '../../main/services/accountLogService'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
@@ -16,6 +16,7 @@ import { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerGateway } from './zaloServerGateway'
 import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
 import { ZaloServerAdminUpdates } from './zaloServerAdminUpdates'
+import { configureServerDatabaseAccess } from './serverDatabaseAccess'
 
 // This process hosts the legacy Zalo Server runtime, including startup recovery.
 setAccountLogSource('zalo_server')
@@ -223,6 +224,14 @@ if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     electronApp.setAppUserModelId('com.akabiz.zalo-server')
     app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+    try {
+      configureServerDatabaseAccess(serverDataPath, app.isPackaged ? process.resourcesPath : undefined)
+    } catch (error) {
+      console.error('[akaAgent Zalo Server] Backend credential configuration failed.')
+      dialog.showErrorBox('Không khởi động được App Server', error instanceof Error ? error.message : 'Không đọc được cấu hình DB máy chủ.')
+      app.quit()
+      return
+    }
     mainWindow = createWindow()
     try {
       await Promise.all([startServer(), loadRenderer(mainWindow)])

@@ -15,6 +15,7 @@
     "postinstall": "electron-builder install-app-deps",
     "build:win": "node scripts/build-win.cjs",
     "build:server:win": "node scripts/build-server-win.cjs",
+    "build:server:win:private": "node scripts/build-server-win.cjs --private",
     "test:zalo-origin-policy": "node scripts/run-zalo-server-origin-policy-smoke-test.cjs",
     "test:zalo-ticket-verifier": "node scripts/run-zalo-server-ticket-verifier-smoke-test.cjs",
     "test:zalo-local-chat-sync-status": "node scripts/run-zalo-local-chat-sync-status-smoke-test.cjs",
