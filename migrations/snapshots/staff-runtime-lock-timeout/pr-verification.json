@@ -1,0 +1,8 @@
+{
+  "nodeTypecheck": "PASS",
+  "rendererTypecheck": "PASS",
+  "buildExitCode": 0,
+  "buildSeconds": 26.3,
+  "outputBytes": 39246249,
+  "buildLog": "/tmp/akaagent-staff-runtime-lock-timeout-build.log"
+}

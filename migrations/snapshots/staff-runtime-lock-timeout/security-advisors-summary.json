@@ -1,0 +1,32 @@
+{
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "before": {
+    "total": 9,
+    "counts": {
+      "policy_exists_rls_disabled": 1,
+      "rls_enabled_no_policy": 1,
+      "security_definer_view": 1,
+      "function_search_path_mutable": 1,
+      "rls_disabled_in_public": 1,
+      "extension_in_public": 1,
+      "anon_security_definer_function_executable": 1,
+      "authenticated_security_definer_function_executable": 1,
+      "auth_leaked_password_protection": 1
+    }
+  },
+  "after": {
+    "total": 9,
+    "counts": {
+      "policy_exists_rls_disabled": 1,
+      "rls_enabled_no_policy": 1,
+      "security_definer_view": 1,
+      "function_search_path_mutable": 1,
+      "rls_disabled_in_public": 1,
+      "extension_in_public": 1,
+      "anon_security_definer_function_executable": 1,
+      "authenticated_security_definer_function_executable": 1,
+      "auth_leaked_password_protection": 1
+    }
+  },
+  "note": "Categories returned by the advisor are unchanged; this is not a full-project security clearance."
+}

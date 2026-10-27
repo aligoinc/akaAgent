@@ -1,0 +1,19 @@
+{
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-10-27 08:33:43 UTC",
+  "functions": [
+    {
+      "signature": "aka_agent_staff_runtime_scope(bigint,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_staff_runtime_scope(p_staff_id bigint, p_lock text)\n RETURNS SETOF aka_agent_staff_runtime_profile\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\n SET lock_timeout TO '3s'\nAS $function$\nBEGIN\n IF p_staff_id IS NULL OR p_staff_id<=0 OR p_lock IS NULL OR p_lock NOT IN ('share','update') THEN\n  RAISE EXCEPTION 'staff_runtime_scope_invalid';\n END IF;\n IF p_lock='share' THEN\n  RETURN QUERY SELECT s.id,s.organization_id,s.name,s.phone,s.username,s.is_active,s.is_admin,s.is_admin_akabiz,s.use_test_workflow,s.deleted_at,s.expiration_date,s.max_running_zalo_web_accounts,s.max_running_facebook_accounts FROM public.org_staff s WHERE s.id=p_staff_id FOR SHARE OF s;\n ELSE\n  RETURN QUERY SELECT s.id,s.organization_id,s.name,s.phone,s.username,s.is_active,s.is_admin,s.is_admin_akabiz,s.use_test_workflow,s.deleted_at,s.expiration_date,s.max_running_zalo_web_accounts,s.max_running_facebook_accounts FROM public.org_staff s WHERE s.id=p_staff_id FOR UPDATE OF s;\n END IF;\nEND;\n$function$\n",
+      "checksum": "092a2f9248212405948944410f40172c",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s"
+      ],
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+    }
+  ]
+}

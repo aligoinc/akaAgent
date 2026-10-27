@@ -1,0 +1,163 @@
+{
+  "serverVersion": "16.15 (Homebrew)",
+  "checks": 33,
+  "sourceChecksum": "092a2f9248212405948944410f40172c",
+  "targetChecksum": "41d7a8af8bb781e59157a5b919621492",
+  "productionChanged": false,
+  "observations": [
+    {
+      "mode": "share",
+      "route": "direct",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 4203,
+      "success": true,
+      "lockError": false,
+      "statementError": false
+    },
+    {
+      "mode": "share",
+      "route": "helper-before",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 3017,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "update",
+      "route": "direct",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 4207,
+      "success": true,
+      "lockError": false,
+      "statementError": false
+    },
+    {
+      "mode": "update",
+      "route": "helper-before",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 3017,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "share",
+      "route": "helper-after",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 4206,
+      "success": true,
+      "lockError": false,
+      "statementError": false
+    },
+    {
+      "mode": "share",
+      "route": "direct",
+      "holdSeconds": 0.4,
+      "lockTimeout": "100ms",
+      "statementTimeout": "8s",
+      "elapsedMs": 117,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "share",
+      "route": "direct",
+      "holdSeconds": 0.4,
+      "lockTimeout": "8s",
+      "statementTimeout": "100ms",
+      "elapsedMs": 116,
+      "success": false,
+      "lockError": false,
+      "statementError": true
+    },
+    {
+      "mode": "share",
+      "route": "helper-after",
+      "holdSeconds": 0.4,
+      "lockTimeout": "100ms",
+      "statementTimeout": "8s",
+      "elapsedMs": 118,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "share",
+      "route": "helper-after",
+      "holdSeconds": 0.4,
+      "lockTimeout": "8s",
+      "statementTimeout": "100ms",
+      "elapsedMs": 119,
+      "success": false,
+      "lockError": false,
+      "statementError": true
+    },
+    {
+      "mode": "update",
+      "route": "helper-after",
+      "holdSeconds": 4.2,
+      "lockTimeout": "8s",
+      "statementTimeout": "8s",
+      "elapsedMs": 4207,
+      "success": true,
+      "lockError": false,
+      "statementError": false
+    },
+    {
+      "mode": "update",
+      "route": "direct",
+      "holdSeconds": 0.4,
+      "lockTimeout": "100ms",
+      "statementTimeout": "8s",
+      "elapsedMs": 117,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "update",
+      "route": "direct",
+      "holdSeconds": 0.4,
+      "lockTimeout": "8s",
+      "statementTimeout": "100ms",
+      "elapsedMs": 117,
+      "success": false,
+      "lockError": false,
+      "statementError": true
+    },
+    {
+      "mode": "update",
+      "route": "helper-after",
+      "holdSeconds": 0.4,
+      "lockTimeout": "100ms",
+      "statementTimeout": "8s",
+      "elapsedMs": 120,
+      "success": false,
+      "lockError": true,
+      "statementError": false
+    },
+    {
+      "mode": "update",
+      "route": "helper-after",
+      "holdSeconds": 0.4,
+      "lockTimeout": "8s",
+      "statementTimeout": "100ms",
+      "elapsedMs": 113,
+      "success": false,
+      "lockError": false,
+      "statementError": true
+    }
+  ]
+}
