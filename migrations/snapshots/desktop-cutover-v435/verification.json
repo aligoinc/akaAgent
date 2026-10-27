@@ -1,0 +1,27 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "20261027165325",
+  "name": "migration_v435_desktop_permission_cutover",
+  "applied_at_vietnam": "2026-10-27 23:53:25 +07:00",
+  "tables_and_views": 113,
+  "tables_with_rls": 109,
+  "rls_enabled_now": 47,
+  "sequence_acl_targets": 87,
+  "rpc_acl_targets": 596,
+  "rpc_acls_changed": 232,
+  "all_1245_function_definitions_owner_config_unchanged": true,
+  "existing_policies_preserved": 46,
+  "policies_added": 48,
+  "roles_memberships_defaults_constraints_triggers_unchanged": true,
+  "after_matches_production_rollback_trial": true,
+  "post_apply_catalog_digest": "2b27a17c504a2c7eb855a999009af162",
+  "migration_sha256": "e0d60021ac9a43029af9b425884fd57060bcf2120a2ee54d135b61d21992b80a",
+  "targeted_checksums": {
+    "aka_agent_block_denied_ip_request()": "ff086d95d4ba66cad668bfe48a705e11",
+    "aka_agent_desktop_ai_identity(uuid,uuid)": "5600c48f72d1343670b3e7cfd31ce491",
+    "aka_agent_get_vault_secret(text)": "a99f67a293add94677a9f85145fe211d",
+    "aka_agent_staff_time_allowed(bigint)": "a294e60011edd8d42e90ac2f74ce744c"
+  },
+  "rollback_sha256": "42cfbad87db46407f8aba11c2c0f425032c6daf48ab535c4624fc92cf50cd7fa",
+  "generator_reproducible": true
+}

@@ -1,0 +1,94 @@
+{
+  "version": "9.1.0",
+  "built_on": "2026-10-27",
+  "timezone": "Asia/Saigon",
+  "branch": "dev_3",
+  "source_commit": "c9fd49fc64745c66cf95d8048daa0e69ca212158",
+  "source_version_overlay": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "build_input_files_verified": 998,
+  "verified_at": "2026-10-27T16:34:39.351Z",
+  "checks": {
+    "preflight_groups": 10,
+    "all_preflight_passed": true,
+    "packaged_output_parity": "passed",
+    "windows_installer_payload": "passed",
+    "server_installer_payload": "passed",
+    "mac_arm64": {
+      "architecture": "passed",
+      "signature": "passed (ad-hoc)",
+      "native_sqlite_load": "passed",
+      "dmg_checksum": "passed",
+      "mounted_payload_parity": "passed"
+    },
+    "mac_intel": {
+      "architecture": "passed",
+      "signature": "passed (ad-hoc)",
+      "native_sqlite_load": "passed",
+      "dmg_checksum": "passed",
+      "mounted_payload_parity": "passed"
+    },
+    "desktop_backend_and_previous_anon_absent": "passed (three targets)",
+    "private_server": {
+      "windows_x64": true,
+      "installer_payload_parity": true,
+      "clean_host_credential_loading": true,
+      "server_main_parity": true,
+      "credential_absent_from_source_desktop_and_js": true,
+      "source_and_output_files_scanned": 3220,
+      "git_ignored": true,
+      "existing_server_installers_unchanged": true,
+      "host_native_restored": true
+    },
+    "host_native_restored_exactly": true,
+    "existing_untracked_proposal_preserved": true
+  },
+  "artifacts": [
+    {
+      "platform": "Windows x64",
+      "path": "dist/akaAgent-Setup-9.1.0.exe",
+      "size_bytes": 118755180,
+      "sha256": "a0cee55eed055cdf622631df8ffe192390bf9e2cc7f07882b3b35158c15294a3",
+      "private": false,
+      "verified_original_path": "dist/build-9.1.0/akaAgent-Setup-9.1.0.exe"
+    },
+    {
+      "platform": "macOS ARM64",
+      "path": "dist/akaAgent.dmg",
+      "size_bytes": 144457229,
+      "sha256": "506018b3bf03aa3576c950c80fb67cc48b5c7654077716e1b48f7be4d8b9bb09",
+      "private": false,
+      "verified_original_path": "dist/build-9.1.0/akaAgent.dmg"
+    },
+    {
+      "platform": "macOS Intel x64",
+      "path": "dist/akaAgentIntel.dmg",
+      "size_bytes": 151636236,
+      "sha256": "fd4cd8ed37c49760ec04f926e6c5d5686da38dc55d9fd54ba31caf750947b76f",
+      "private": false,
+      "verified_original_path": "dist/build-9.1.0/akaAgentIntel.dmg"
+    },
+    {
+      "platform": "App Server Windows x64 (internal)",
+      "path": "dist-server/akaAgent-Zalo-Server-Internal-Setup-9.1.0.exe",
+      "size_bytes": 107231501,
+      "sha256": "fc87126d44d5cf7bcda4457b3cbdb51401663703ceac72449d3b08b38fbc4e52",
+      "private": true,
+      "verified_original_path": "dist-server/private/2026-10-27T16-33-47-301Z/akaAgent-Zalo-Server-Internal-Setup-9.1.0.exe"
+    }
+  ],
+  "limitations": [
+    "Windows runtime not executed on a Windows host",
+    "macOS signing is ad-hoc; no Apple notarization",
+    "Private Server installer contains a backend credential and is only for managed servers"
+  ],
+  "uploaded": false,
+  "published": false,
+  "database_migration_applied_in_this_build": false,
+  "anon_revoked": false,
+  "rls_changed": false,
+  "local_evidence": "dist/build-9.1.0/"
+}

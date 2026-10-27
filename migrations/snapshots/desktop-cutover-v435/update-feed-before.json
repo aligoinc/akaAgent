@@ -1,0 +1,17 @@
+[
+  {
+    "target": "win",
+    "http": 200,
+    "version": "9.0.0"
+  },
+  {
+    "target": "mac-arm",
+    "http": 200,
+    "version": "9.0.0"
+  },
+  {
+    "target": "mac-intel",
+    "http": 200,
+    "version": "9.0.0"
+  }
+]

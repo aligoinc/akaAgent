@@ -1,5 +1,7 @@
 # Desktop: thay anon JWT bằng token đăng nhập
 
+**Cutover đã hoàn tất lúc 23:53:25 VN ngày 27/10/2026:** V435 (`20261027165325`) thu hồi anon/authenticated trên dữ liệu akaAgent, bật RLS còn thiếu và bỏ quyền Desktop đọc AI key. Quyền token đã thu hẹp, backend và bootstrap giữ nguyên; app cũ chỉ được đọc một dòng cấu hình cập nhật để nhận 9.1.0. V435 thay bước B và staff C lịch sử; **không chạy B/C hoặc rollback cũ**. Xem [audit V435](DESKTOP_PERMISSION_CUTOVER_V435.md). Các trạng thái chưa thu hồi/chưa deploy bên dưới ghi nhận những giai đoạn trước đó.
+
 **Cập nhật ngày 27/10/2026:** đã thu hẹp quyền token theo tính năng thực tế và bổ sung SELECT `category_type` bị thiếu trong embedded join lúc 21:52 VN. Không còn đọc/ghi trực tiếp staff, sửa tổ chức hoặc gọi Vault; 268 hàm dư bị gỡ, giữ 837 quyền bảng/cột cần dùng. Anon và RLS giữ nguyên. **B/rollback cũ đã bị chặn, không còn là candidate có thể apply**; phải dựng cutover mới từ quyền hiện tại khi người dùng cho phép. Source Desktop mới đã chuyển AI qua akaAgentWebApp và bỏ đọc `api_key`; V434/API còn chưa apply/deploy, quyền đọc key production vẫn giữ. Xem [proxy AI](DESKTOP_AI_PROXY.md) và [audit quyền](DESKTOP_TOKEN_PERMISSIONS.md).
 
 ## Phạm vi ban đầu trước rà soát quyền ngày 27/10/2026 (lịch sử)

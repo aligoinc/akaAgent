@@ -1,0 +1,45 @@
+{
+  "location": "~/.codex/deployments/desktop-cutover-v435-20261027",
+  "files": [
+    {
+      "name": "before.json",
+      "bytes": 8299998,
+      "sha256": "1531a8c5ed7386dd0cd4497cc5c200a287e1e69d8d76ca880e15dbd818aabd9e"
+    },
+    {
+      "name": "before-envelope.json",
+      "bytes": 9297474,
+      "sha256": "5ba98544b9fdd2a84490b81ebb022deaeaa389b1d29a477c23ce5481096ac6a2"
+    },
+    {
+      "name": "after.json",
+      "bytes": 8352599,
+      "sha256": "598c0fa0ac9b8f7892bd32c5255ff2e4440279a6f41fac94ffbcd8fcd3054b0d"
+    },
+    {
+      "name": "after-envelope.json",
+      "bytes": 9360863,
+      "sha256": "3307765a849d990af262a3b203719e976c77da39860a5e246f2e4f0899a212e9"
+    },
+    {
+      "name": "trial-after.json",
+      "bytes": 8352599,
+      "sha256": "598c0fa0ac9b8f7892bd32c5255ff2e4440279a6f41fac94ffbcd8fcd3054b0d"
+    },
+    {
+      "name": "trial-envelope.json",
+      "bytes": 9360863,
+      "sha256": "2f6f68d441e1d335e0b6d685afe686b332b2da5aac8f456219a4049c88a62add"
+    },
+    {
+      "name": "guard.json",
+      "bytes": 3013265,
+      "sha256": "0d090489093abc97b32c7d23180d72f3111314a08ba4c399b8f6faea8bfd8838"
+    },
+    {
+      "name": "guard-digest-envelope.json",
+      "bytes": 5480220,
+      "sha256": "c5e2b8664d715f7a2f3393531afea8c67292fb7827b55f09089cbdba775e5e59"
+    }
+  ]
+}
