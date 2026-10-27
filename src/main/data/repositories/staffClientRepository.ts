@@ -1,3 +1,4 @@
+import type { DeviceV3Decision } from '../../../shared/deviceIdentity'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials, type ProcessAuthCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -14,6 +15,8 @@ export interface StaffClientProfile {
   use_test_workflow: boolean
   is_policy_accepted: boolean
   policy_accepted_at: string | null
+  aka_agent_device_identity_version?: 2 | 3
+  deviceV3?: DeviceV3Decision | null
   aka_agent_device_fingerprint_hash: string | null
   device_label: string | null
   device_platform: string | null
@@ -24,13 +27,14 @@ export interface StaffClientProfile {
   updated_at: string
 }
 
-type StaffClientAction = 'read' | 'bind_device' | 'accept_policy' | 'change_password' | 'set_test_workflow' | 'save_integration' | 'register_recovery'
+type StaffClientAction = 'prepare_device_v3' | 'bind_device_v3' | 'read' | 'bind_device' | 'accept_policy' | 'change_password' | 'set_test_workflow' | 'save_integration' | 'register_recovery'
 const messages: Record<string, string> = {
   staff_client_auth_invalid: 'Tên đăng nhập hoặc mật khẩu không đúng.',
   staff_client_inactive: 'Tài khoản đã bị khoá.',
   staff_client_expired: 'Tài khoản nhân viên đã hết hạn sử dụng.',
   staff_client_device_locked: 'Tài khoản này đang liên kết với máy tính khác. Vui lòng chọn Đổi máy tính trên trang đăng nhập hoặc liên hệ hỗ trợ.',
   staff_client_forbidden: 'Bạn không có quyền thực hiện thao tác này.',
+  staff_client_policy_required: 'Vui lòng xác nhận chính sách sử dụng để tiếp tục.',
   staff_client_invalid_input: 'Thông tin nhập chưa hợp lệ. Vui lòng kiểm tra lại.'
 }
 
@@ -53,6 +57,15 @@ export async function callStaffClient(
     || data.username !== credentials.username.trim() || typeof data.is_active !== 'boolean'
     || Object.prototype.hasOwnProperty.call(data, 'password')) throw new Error('Không thể xác minh thông tin tài khoản.')
   if (input.staffId !== undefined && data.id !== input.staffId) throw new Error('Phiên đăng nhập đã thay đổi.')
+  if (action === 'prepare_device_v3' || action === 'bind_device_v3') {
+    const d = data.deviceV3
+    if (!d || !['allowed', 'manual_login_required', 'device_locked'].includes(d.decision)
+      || typeof d.automaticAllowed !== 'boolean' || typeof d.needsBinding !== 'boolean'
+      || !d.binding || ![2, 3].includes(d.binding.version) || !/^[0-9]+$/.test(d.binding.revision)
+      || !(d.binding.hash === null || (typeof d.binding.hash === 'string' && /^[a-f0-9]{64}$/.test(d.binding.hash)))) {
+      throw new Error('Không thể xác minh liên kết máy tính.')
+    }
+  }
   return data as StaffClientProfile
 }
 

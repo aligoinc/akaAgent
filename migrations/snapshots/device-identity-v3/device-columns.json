@@ -1,0 +1,135 @@
+[
+  {
+    "default_expression": null,
+    "name": "request_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "uuid"
+  },
+  {
+    "default_expression": null,
+    "name": "staff_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "bigint"
+  },
+  {
+    "default_expression": null,
+    "name": "organization_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "bigint"
+  },
+  {
+    "default_expression": null,
+    "name": "source",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "text"
+  },
+  {
+    "default_expression": null,
+    "name": "old_binding",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "jsonb"
+  },
+  {
+    "default_expression": null,
+    "name": "requesting_device",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "jsonb"
+  },
+  {
+    "default_expression": null,
+    "name": "remaining_before",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "integer"
+  },
+  {
+    "default_expression": null,
+    "name": "remaining_after",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "integer"
+  },
+  {
+    "default_expression": "clock_timestamp()",
+    "name": "created_at",
+    "not_null": true,
+    "table_name": "auto_staff_device_change_history",
+    "type": "timestamp with time zone"
+  },
+  {
+    "default_expression": null,
+    "name": "instance_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "uuid"
+  },
+  {
+    "default_expression": null,
+    "name": "staff_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "bigint"
+  },
+  {
+    "default_expression": null,
+    "name": "organization_id",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "bigint"
+  },
+  {
+    "default_expression": null,
+    "name": "device_fingerprint_hash",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "text"
+  },
+  {
+    "default_expression": null,
+    "name": "device_label",
+    "not_null": false,
+    "table_name": "auto_staff_device_presence",
+    "type": "text"
+  },
+  {
+    "default_expression": null,
+    "name": "device_platform",
+    "not_null": false,
+    "table_name": "auto_staff_device_presence",
+    "type": "text"
+  },
+  {
+    "default_expression": null,
+    "name": "app_version",
+    "not_null": false,
+    "table_name": "auto_staff_device_presence",
+    "type": "text"
+  },
+  {
+    "default_expression": "clock_timestamp()",
+    "name": "started_at",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "timestamp with time zone"
+  },
+  {
+    "default_expression": "clock_timestamp()",
+    "name": "last_seen_at",
+    "not_null": true,
+    "table_name": "auto_staff_device_presence",
+    "type": "timestamp with time zone"
+  },
+  {
+    "default_expression": null,
+    "name": "ended_at",
+    "not_null": false,
+    "table_name": "auto_staff_device_presence",
+    "type": "timestamp with time zone"
+  }
+]

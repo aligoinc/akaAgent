@@ -2900,7 +2900,8 @@ export interface AuthUser {
 }
 
 export type AuthLoginResult =
-  | { status: 'authenticated'; user: AuthUser; loginState?: AuthLocalState }
+  | { status: 'authenticated'; user: AuthUser; loginState?: AuthLocalState; automaticLoginAllowed?: boolean }
+  | { status: 'manual_login_required'; loginState?: AuthLocalState }
   | { status: 'policy_required' }
 
 export interface ChatWebState {
@@ -2931,6 +2932,7 @@ export interface SavedLoginCredentials {
 }
 
 export interface AuthLocalState {
+  manualLoginRequired?: boolean
   loginOptions: LoginPreferences
   rememberedLogin: { username: string; hasCredential: boolean; source?: 'recovery' } | null
   warningMessage?: string | null

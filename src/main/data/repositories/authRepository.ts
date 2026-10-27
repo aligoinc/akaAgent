@@ -1,3 +1,7 @@
+import { app } from 'electron'
+import { join } from 'node:path'
+import type { DeviceLoginSource, DeviceV3Decision } from '../../../shared/deviceIdentity'
+import { DeviceBindingMigration } from '../../services/deviceBindingMigration'
 import {
   AuthLoginResult,
   AuthUser,
@@ -5,12 +9,12 @@ import {
   LoginPreferences,
   SavedLoginCredentials
 } from '../../../shared/types'
-import { getCurrentDeviceIdentity, getLegacyDeviceIdentity } from '../../services/deviceIdentity'
+import { getCurrentDeviceIdentity, getV2DeviceIdentity } from '../../services/deviceIdentity'
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
 import { requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 import { callStaffClient, callCurrentStaffClient } from './staffClientRepository'
-import { legacyStaffRecoveryAllowed, recoverStaffDeviceCredentials, registerStaffDeviceRecovery } from '../../services/staffDeviceRecovery'
+import { recoverStaffDeviceCredentials, registerStaffDeviceRecovery } from '../../services/staffDeviceRecovery'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
   ensureAkaAgentSubscriptionActive,
@@ -53,44 +57,6 @@ interface StaffRow extends StaffDeviceColumns {
   policy_accepted_at?: string | null
 }
 
-interface DeviceLoginSettingsRow {
-  id: number
-  staff_id: number
-  organization_id?: number | null
-  device_fingerprint_hash: string
-  device_label?: string | null
-  device_platform?: string | null
-  remember_login?: boolean | null
-  auto_login?: boolean | null
-  startup_enabled?: boolean | null
-  last_login_at?: string | null
-  last_used_at?: string | null
-  is_delete?: boolean | null
-  created_at?: string
-  updated_at?: string
-}
-
-const STAFF_SELECT = [
-  'id',
-  'organization_id',
-  'name',
-  'phone',
-  'username',
-  'password',
-  'is_active',
-  'is_admin',
-  'is_admin_akabiz',
-  'use_test_workflow',
-  'is_policy_accepted',
-  'policy_accepted_at',
-  'aka_agent_device_fingerprint_hash',
-  'device_fingerprint_hash',
-  'device_label',
-  'device_platform',
-  'device_bound_at',
-  'device_last_seen_at'
-].join(', ')
-
 export function normalizeLoginPreferences(options?: Partial<LoginPreferences> | null): LoginPreferences {
   const merged = {
     ...DEFAULT_LOGIN_PREFERENCES,
@@ -112,10 +78,6 @@ function deviceLockedMessage(): string {
   return 'Tài khoản này đang liên kết với máy tính khác. Vui lòng chọn Đổi máy tính trên trang đăng nhập hoặc liên hệ hỗ trợ.'
 }
 
-function normalizeDeviceHash(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
 function throwAuthTechnicalError(context: string, userMessage: string, error: unknown): never {
   console.error(`[auth] ${context}:`, error)
   throw new Error(userMessage)
@@ -126,23 +88,6 @@ async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organ
   if (!access.isActive) throw new Error('Tài khoản đã bị khoá.')
   if (!access.timeAllowed) throw new Error('Tài khoản nhân viên đã hết hạn sử dụng.')
   await ensureAkaAgentSubscriptionActive(staff.organization_id)
-}
-
-async function loadStaffById(staffId: number): Promise<StaffRow | null> {
-  const { data, error } = await client()
-    .from('org_staff')
-    .select(STAFF_SELECT)
-    .eq('id', staffId)
-    .maybeSingle()
-
-  if (error) {
-    throwAuthTechnicalError(
-      'load remembered staff',
-      'Không thể tải tài khoản đã ghi nhớ. Vui lòng đăng nhập lại.',
-      error
-    )
-  }
-  return data as unknown as StaffRow | null
 }
 
 async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumns): Promise<AuthUser> {
@@ -193,140 +138,93 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   }
 }
 
-async function ensureStaffDeviceLock(staff: StaffRow): Promise<StaffDeviceColumns> {
-  const device = await getCurrentDeviceIdentity()
-  // The RPC verifies the password and the live binding under the same row lock.
-  const confirmed = await callStaffClient({ username: staff.username, password: staff.password }, 'bind_device', {
-    staffId: staff.id, fingerprintHash: device.fingerprintHash
+interface PreparedDeviceLogin {
+  staff: StaffRow
+  device: Awaited<ReturnType<typeof getCurrentDeviceIdentity>>
+  legacyHash: string | null
+  decision: DeviceV3Decision
+  source: DeviceLoginSource
+}
+async function prepareDeviceLogin(username: string, password: string, source: DeviceLoginSource): Promise<PreparedDeviceLogin> {
+  if (!username.trim() || !password) throw new Error('Vui lòng nhập tên đăng nhập và mật khẩu.')
+  const device = await getCurrentDeviceIdentity(true)
+  // v2 is only a comparison value. Its missing/corrupt storage never creates a new installation ID.
+  let legacyHash: string | null = null
+  try { legacyHash = (await getV2DeviceIdentity()).fingerprintHash } catch { /* server rejects a bound v2 account without a matching proof */ }
+  const profile = await callStaffClient({ username, password }, 'prepare_device_v3', {
+    fingerprintHash: device.fingerprintHash, legacyHash, source
   })
+  const staff: StaffRow = { ...profile, password }
+  await ensureStaffSubscriptionActive(staff)
+  const decision = profile.deviceV3!
+  if (decision.decision === 'device_locked') throw new Error(deviceLockedMessage())
+  return { staff, device, legacyHash, decision, source }
+}
+
+/** Called even when auto-login is off, before exposing the remembered username to renderer. */
+export async function checkRememberedDeviceLogin(credentials: SavedLoginCredentials): Promise<boolean> {
+  const prepared = await prepareDeviceLogin(credentials.username, credentials.password, 'remembered')
+  return prepared.decision.decision === 'allowed'
+}
+
+export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials | null> {
+  const { fingerprintHash } = await getCurrentDeviceIdentity(true)
+  const recovered = await recoverStaffDeviceCredentials(fingerprintHash, async () => (await getV2DeviceIdentity()).fingerprintHash)
+  if (recovered === 'manual_login_required') return null
+  if (!recovered) throw new Error('Máy chưa đăng ký khôi phục. Vui lòng nhập tên đăng nhập và mật khẩu.')
+  const prepared = await prepareDeviceLogin(recovered.username, recovered.password, 'recovery')
+  if (prepared.decision.decision === 'manual_login_required') return null
+  return recovered
+}
+
+async function completeDeviceLogin(prepared: PreparedDeviceLogin, assertCurrent?: () => void): Promise<AuthLoginResult> {
+  if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
+  assertCurrent?.()
+  const { staff, device, source, legacyHash } = prepared
+  const migration = new DeviceBindingMigration(join(app.getPath('userData'), 'device-binding-v3'))
+  const request = await migration.request({ staffId: staff.id, fingerprintHash: device.fingerprintHash,
+    legacyHash, source, expected: prepared.decision.binding }, staff.organization_id, prepared.decision.needsBinding)
+  // Re-read selected hardware; errors cannot silently substitute other sources.
+  if ((await getCurrentDeviceIdentity(true)).fingerprintHash !== device.fingerprintHash) throw new Error(deviceLockedMessage())
+  assertCurrent?.()
+  const confirmed = await callStaffClient({ username: staff.username, password: staff.password }, 'bind_device_v3', { ...request })
+  assertCurrent?.()
   if (confirmed.organization_id !== staff.organization_id) throw new Error('Tổ chức của tài khoản đã thay đổi. Vui lòng đăng nhập lại.')
-  try {
-    await registerStaffDeviceRecovery({ username: staff.username, password: staff.password }, staff.id, device.fingerprintHash)
-  } catch { console.warn('[auth] Không đăng ký được khóa khôi phục trên máy; đăng nhập vẫn hợp lệ.') }
-  return { aka_agent_device_fingerprint_hash: device.fingerprintHash, device_label: device.label, device_platform: device.platform }
-}
-
-function mapLoginPreferencesFromRow(row: DeviceLoginSettingsRow | null | undefined): LoginPreferences {
-  if (!row) return DEFAULT_LOGIN_PREFERENCES
-  return normalizeLoginPreferences({
-    rememberLogin: row.remember_login ?? DEFAULT_LOGIN_PREFERENCES.rememberLogin,
-    autoLogin: row.auto_login ?? DEFAULT_LOGIN_PREFERENCES.autoLogin,
-    startupEnabled: row.startup_enabled ?? DEFAULT_LOGIN_PREFERENCES.startupEnabled
-  })
-}
-
-/** Explicit recovery uses only the current akaAgent binding, independently of remember preferences. */
-export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials> {
-  const { fingerprintHash } = await getCurrentDeviceIdentity()
-  const recovered = await recoverStaffDeviceCredentials(fingerprintHash)
-  if (recovered) {
-    const staff = await verifyStaffLogin(recovered.username, recovered.password)
-    if (staff.aka_agent_device_fingerprint_hash !== fingerprintHash) throw new Error(deviceLockedMessage())
-    return recovered
+  await migration.confirmed(staff.id)
+  if (confirmed.deviceV3!.decision === 'manual_login_required') return { status: 'manual_login_required' }
+  if (confirmed.deviceV3!.decision !== 'allowed') throw new Error(deviceLockedMessage())
+  if (confirmed.deviceV3!.binding.version !== 3 || confirmed.deviceV3!.binding.hash !== device.fingerprintHash || confirmed.deviceV3!.needsBinding) throw new Error('Không thể xác minh liên kết máy tính.')
+  const automaticLoginAllowed = confirmed.deviceV3!.automaticAllowed
+  if (automaticLoginAllowed) {
+    try { await registerStaffDeviceRecovery({ username: staff.username, password: staff.password }, staff.id, device.fingerprintHash) }
+    catch { console.warn('[auth] Không đăng ký được khóa khôi phục trên máy; đăng nhập vẫn hợp lệ.') }
   }
-  if (!await legacyStaffRecoveryAllowed()) throw new Error('Máy chưa đăng ký khôi phục. Vui lòng đăng nhập bằng mật khẩu một lần hoặc liên hệ hỗ trợ.')
-  const uniqueStaffId = async (): Promise<number> => {
-    // Count before filtering active staff or entitlements; an inactive duplicate is still ambiguous.
-    const { data, error } = await client().from('org_staff').select('id')
-      .eq('aka_agent_device_fingerprint_hash', fingerprintHash).limit(2)
-    if (error) throwAuthTechnicalError('recover device staff', 'Không thể lấy thông tin đăng nhập. Vui lòng thử lại.', error)
-    if (!data?.length) throw new Error('Không tìm thấy tài khoản đang liên kết với máy tính này. Vui lòng nhập thông tin đăng nhập.')
-    if (data.length !== 1) throw new Error('Có nhiều tài khoản cùng liên kết với máy tính này. Vui lòng tự nhập tên đăng nhập và mật khẩu.')
-    return Number(data[0].id)
-  }
-  const staffId = await uniqueStaffId()
-  const staff = await loadStaffById(staffId)
-  if (!staff || normalizeDeviceHash(staff.aka_agent_device_fingerprint_hash) !== fingerprintHash) {
-    throw new Error('Liên kết máy tính đã thay đổi. Vui lòng nhập thông tin đăng nhập hoặc thử lại.')
-  }
-  if (!staff.is_active) throw new Error('Tài khoản đã bị khoá.')
-  if (!staff.username?.trim() || !staff.password) throw new Error('Tài khoản chưa có đủ thông tin đăng nhập. Vui lòng liên hệ hỗ trợ.')
-  await ensureStaffSubscriptionActive(staff)
-  if (await uniqueStaffId() !== staffId) throw new Error('Liên kết máy tính đã thay đổi. Vui lòng thử lại.')
-  await registerStaffDeviceRecovery({ username: staff.username, password: staff.password }, staff.id, fingerprintHash)
-  return { username: staff.username, password: staff.password }
-}
-
-/** Only for first migration. Password is loaded after both fingerprint gates pass. */
-export async function loadLegacyLoginCandidate(): Promise<{ loginOptions: LoginPreferences; credentials: SavedLoginCredentials | null } | null> {
-  if (!await legacyStaffRecoveryAllowed()) return null
-  const device = await getCurrentDeviceIdentity()
-  const { data: existing, error: existenceError } = await client().from('org_staff').select('id')
-    .eq('aka_agent_device_fingerprint_hash', device.fingerprintHash).limit(1)
-  if (existenceError) throwAuthTechnicalError('check v2 fingerprint', 'Không thể kiểm tra máy. Vui lòng đăng nhập thủ công hoặc thử lại.', existenceError)
-  if (existing?.length) return null
-  const legacy = await getLegacyDeviceIdentity()
-  // Deliberately count before active/entitlement/remember filters. Two is enough to reject ambiguity.
-  const { data: matches, error } = await client().from('org_staff')
-    .select('id, aka_agent_device_fingerprint_hash').eq('device_fingerprint_hash', legacy.fingerprintHash).limit(2)
-  if (error) throwAuthTechnicalError('check legacy fingerprint', 'Không thể lấy thông tin ghi nhớ cũ. Vui lòng đăng nhập thủ công.', error)
-  if (matches?.length !== 1) return null
-  const match = matches[0]
-  if (normalizeDeviceHash(match.aka_agent_device_fingerprint_hash)) return null
-  const { data: settings, error: settingsError } = await client().from('auto_staff_device_login_settings')
-    .select('remember_login, auto_login, startup_enabled').eq('staff_id', match.id)
-    .eq('device_fingerprint_hash', legacy.fingerprintHash).eq('is_delete', false).maybeSingle()
-  if (settingsError) throwAuthTechnicalError('load legacy options', 'Không thể đọc tuỳ chọn cũ. Vui lòng đăng nhập thủ công.', settingsError)
-  if (!settings) return null
-  const loginOptions = mapLoginPreferencesFromRow(settings as DeviceLoginSettingsRow)
-  if (!loginOptions.rememberLogin) return { loginOptions, credentials: null }
-  const staff = await loadStaffById(Number(match.id))
-  if (!staff || !staff.is_active || normalizeDeviceHash(staff.aka_agent_device_fingerprint_hash)
-    || normalizeDeviceHash(staff.device_fingerprint_hash) !== legacy.fingerprintHash) return null
-  await ensureStaffSubscriptionActive(staff)
-  return { loginOptions, credentials: { username: staff.username, password: staff.password } }
+  assertCurrent?.()
+  return { status: 'authenticated', automaticLoginAllowed, user: await buildAuthUser(staff, {
+    aka_agent_device_fingerprint_hash: device.fingerprintHash, device_label: device.label, device_platform: device.platform
+  }) }
 }
 
 function hasAcceptedPolicy(staff: StaffRow): boolean {
   return staff.is_policy_accepted === true
 }
 
-async function verifyStaffLogin(username: string, password: string): Promise<StaffRow> {
-  const u = (username || '').trim()
-  const p = password || ''
-  if (!u || !p) throw new Error('Vui lòng nhập tên đăng nhập và mật khẩu.')
-
-  const profile = await callStaffClient({ username: u, password: p }, 'read')
-  // Password comes only from the caller, never from a row read / RPC response.
-  const staffRow: StaffRow = { ...profile, password: p }
-  await ensureStaffSubscriptionActive(staffRow)
-
-  return staffRow
-}
-
-async function completeStaffLogin(staffRow: StaffRow, assertCurrent?: () => void): Promise<AuthUser> {
+export async function login(username: string, password: string, assertCurrent?: () => void, source: DeviceLoginSource = 'manual'): Promise<AuthLoginResult> {
+  const prepared = await prepareDeviceLogin(username.trim(), password, source)
   assertCurrent?.()
-  const deviceRecord = await ensureStaffDeviceLock(staffRow)
-  return buildAuthUser(staffRow, deviceRecord)
+  if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
+  if (!hasAcceptedPolicy(prepared.staff)) return { status: 'policy_required' }
+  return completeDeviceLogin(prepared, assertCurrent)
 }
 
-export async function login(username: string, password: string, assertCurrent?: () => void): Promise<AuthLoginResult> {
-  const staffRow = await verifyStaffLogin(username, password)
-  if (!hasAcceptedPolicy(staffRow)) {
-    return { status: 'policy_required' }
-  }
-
-  return {
-    status: 'authenticated',
-    user: await completeStaffLogin(staffRow, assertCurrent)
-  }
-}
-
-export async function acceptPolicyAndLogin(username: string, password: string, assertCurrent?: () => void): Promise<AuthUser> {
-  const staffRow = await verifyStaffLogin(username, password)
-
-  if (!hasAcceptedPolicy(staffRow)) {
-    await callStaffClient({ username: staffRow.username, password }, 'accept_policy', { staffId: staffRow.id })
-  }
-
-  // Re-read and revalidate after the conditional update. This makes concurrent
-  // confirmations idempotent while allowing an admin to reset only the boolean.
-  const acceptedStaff = await verifyStaffLogin(username, password)
-  if (!hasAcceptedPolicy(acceptedStaff)) {
-    throw new Error('Không thể ghi nhận đồng ý chính sách. Vui lòng thử lại sau.')
-  }
-
-  return completeStaffLogin(acceptedStaff, assertCurrent)
+export async function acceptPolicyAndLogin(username: string, password: string, assertCurrent?: () => void, source: DeviceLoginSource = 'manual'): Promise<AuthLoginResult> {
+  const prepared = await prepareDeviceLogin(username.trim(), password, source)
+  assertCurrent?.()
+  if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
+  if (!hasAcceptedPolicy(prepared.staff)) await callStaffClient({ username: prepared.staff.username, password }, 'accept_policy', { staffId: prepared.staff.id })
+  assertCurrent?.()
+  // Revalidate identity and policy after confirmation, preserving the original login source.
+  return login(username, password, assertCurrent, source)
 }
 
 export async function resetDeviceLock(user: AuthUser): Promise<DeviceLockResetResult> {
@@ -345,7 +243,7 @@ export async function changePassword(user: AuthUser, oldPassword: string, newPas
     staffId: user.staffId, newPassword: nextPassword
   })
   try {
-    const device = await getCurrentDeviceIdentity()
+    const device = await getCurrentDeviceIdentity(true)
     await registerStaffDeviceRecovery({ username: user.username, password: nextPassword }, user.staffId, device.fingerprintHash)
   } catch { console.warn('[auth] Chưa cập nhật khóa khôi phục sau khi đổi mật khẩu.') }
 

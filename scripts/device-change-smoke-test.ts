@@ -256,6 +256,7 @@ async function presenceQuitSmoke(): Promise<void> {
       quitCleanupStarted: false, quitCleanupCompleted: false,
       runtimeCredentials: credentials, restartRequiredActivation: null,
       devicePresence: service,
+      campaignDiagnostics: { stop: noop }, campaignFormAi: { stop: noop }, facebookLogin: { stop: async () => {} },
       campaignSupport: { stop: noop }, admin: { reset: async () => {} }, accountOperationRegistry: { stop: noop },
       chatWeb: { reset: async () => {} }, crmWeb: { reset: async () => {} },
       app: { on: (_event: string, handler: typeof beforeQuit) => { beforeQuit = handler }, quit: () => { order.push('quit') } },

@@ -13,6 +13,7 @@ interface AuthState {
   errorMessage: string | null
   loginOptions: LoginPreferences
   rememberedLogin: AuthLocalState['rememberedLogin']
+  manualLoginRequired: boolean
   zaloRuntimeRestartRequired: ZaloRuntimeRestartRequiredPayload | null
 
   setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
@@ -119,7 +120,7 @@ function formatAuthErrorMessage(err: unknown, fallback: string): string {
 
 let optionsRevision = 0
 let authRevision = 0
-const localState = (state: AuthLocalState) => ({ loginOptions: state.loginOptions, rememberedLogin: state.rememberedLogin })
+const localState = (state: AuthLocalState) => ({ loginOptions: state.loginOptions, rememberedLogin: state.rememberedLogin, manualLoginRequired: state.manualLoginRequired === true })
 function warnStorage(state: AuthLocalState): void {
   if (state.warningMessage) useUiStore.getState().showAlert(state.warningMessage, 'info')
 }
@@ -127,18 +128,19 @@ function warnStorage(state: AuthLocalState): void {
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null, initializing: true, loggingIn: false, acceptingPolicy: false,
   recoveringCredentials: false, resettingDevice: false, policyAcceptanceRequired: false,
-  errorMessage: null, loginOptions: DEFAULT_LOGIN_OPTIONS, rememberedLogin: null, zaloRuntimeRestartRequired: null,
+  errorMessage: null, loginOptions: DEFAULT_LOGIN_OPTIONS, rememberedLogin: null, manualLoginRequired: false, zaloRuntimeRestartRequired: null,
 
   setLoginOptions: async (updates) => {
     const revision = ++optionsRevision
+    const auth = authRevision
     const next = { ...get().loginOptions, ...updates }
     if (updates.autoLogin === true && updates.rememberLogin !== false) next.rememberLogin = true
     const options = normalizeLoginOptions(next)
     set({ loginOptions: options, ...(!options.rememberLogin ? { rememberedLogin: null } : {}) })
     try {
       const state = await window.electronAPI.updateLoginPreferences(updates)
-      if (revision === optionsRevision) { set(localState(state)); warnStorage(state) }
-    } catch (error) { set({ errorMessage: formatAuthErrorMessage(error, 'Chưa lưu được tuỳ chọn đăng nhập.') }) }
+      if (revision === optionsRevision && auth === authRevision) { set(localState(state)); warnStorage(state) }
+    } catch (error) { if (revision === optionsRevision && auth === authRevision) set({ errorMessage: formatAuthErrorMessage(error, 'Chưa lưu được tuỳ chọn đăng nhập.') }) }
   },
 
   login: async (username, password, options) => {
@@ -151,6 +153,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         ? await window.electronAPI.login(username, password, options || get().loginOptions)
         : await window.electronAPI.loginRemembered(username, options || get().loginOptions)
       if (auth !== authRevision) return
+      if (result.status === 'manual_login_required') { set({ user: null, policyAcceptanceRequired: false, errorMessage: null, rememberedLogin: null, manualLoginRequired: true, ...(result.loginState ? localState(result.loginState) : {}) }); return }
       if (result.status === 'policy_required') { set({ policyAcceptanceRequired: true }); return }
       set({ user: result.user, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
       if (result.loginState) warnStorage(result.loginState)
@@ -170,6 +173,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const result = await window.electronAPI.acceptPolicyAndLogin()
       if (auth !== authRevision) return
+      if (result.status === 'manual_login_required') { set({ user: null, policyAcceptanceRequired: false, errorMessage: null, rememberedLogin: null, manualLoginRequired: true, ...(result.loginState ? localState(result.loginState) : {}) }); return }
       if (result.status !== 'authenticated') return
       set({ user: result.user, policyAcceptanceRequired: false, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
       if (result.loginState) warnStorage(result.loginState)
@@ -196,7 +200,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const state = await window.electronAPI.recoverDeviceCredentials()
       if (auth !== authRevision || revision !== optionsRevision) return
       set(localState(state)); warnStorage(state)
-      if (!state.rememberedLogin) set({ errorMessage: 'Không tìm thấy thông tin đăng nhập cho máy này. Vui lòng nhập thông tin tài khoản.' })
+      if (!state.rememberedLogin && !state.manualLoginRequired) set({ errorMessage: 'Không tìm thấy thông tin đăng nhập cho máy này. Vui lòng nhập thông tin tài khoản.' })
     } catch (error) {
       if (auth === authRevision && revision === optionsRevision) set({ errorMessage: formatAuthErrorMessage(error, 'Không lấy được thông tin đăng nhập.') })
     }

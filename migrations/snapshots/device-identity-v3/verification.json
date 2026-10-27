@@ -1,0 +1,53 @@
+{
+  "verifiedAt": "2026-10-27T07:57:54.627696+00:00",
+  "baseHead": "9771aa8071b83b833303f0f8396f795687b162d6",
+  "productionChanged": false,
+  "productionProject": "cgjbsmqtfhqvttudyjzq",
+  "candidateMigration": "20261027071650_device_identity_v3.sql",
+  "checks": {
+    "clientV3": 38,
+    "sqlV3": 29,
+    "staffRlsSql": 124,
+    "v2Compatibility": 40,
+    "staffRlsClient": 59,
+    "deviceChangePresenceQuit": "passed",
+    "rendererElectron": "passed",
+    "macArm64HardwareRestart": "passed",
+    "macX64RosettaHardwareRestart": "passed",
+    "typecheckNode": "passed",
+    "typecheckWeb": "passed",
+    "desktopBuild": "passed",
+    "serverBuild": "passed",
+    "diffCheck": "passed"
+  },
+  "limitations": [
+    "No Windows hardware or installer execution",
+    "No physical Intel Mac execution (x64 tested through Rosetta)",
+    "No live customer authentication",
+    "No production migration, RLS cutover, installer packaging or publication"
+  ],
+  "sourceSha256": {
+    "src/main/services/hardwareDeviceIdentity.ts": "dd9e059eca4b1ab2821f745a5378c57d7ae1c51d89a0f25d756bde3609f43512",
+    "src/main/services/deviceIdentity.ts": "f3bee5f86c46ae69d482065c1d247704d192b49839a5aca9c29bc51b51c337ea",
+    "src/main/services/deviceHardwareReaders.ts": "ef59bf635e9904b5a91f30d427456096d6ec9324fdf7ffbee67c317338f6cb22",
+    "src/main/services/deviceBindingMigration.ts": "ecbe21c1ebeeaff91a0d2704a8e3b2e9a109a957f389e25f12a7a3f448e8bc80",
+    "src/main/services/localLoginStore.ts": "4dd0fd94b504a2ed5932dd442510b98d2ce4bb8df0cc0899fc577f97ee4dd893",
+    "src/main/services/staffDeviceRecovery.ts": "8168282a5efdc4c46b8ad49f6cfa1f1a76261173966cdac7170437d9053e375f",
+    "src/main/services/deviceChangeService.ts": "f556ce0626dcc2a0ce7f9b6bf068dc83bacf585f31a2a922de7badaef656a974",
+    "src/main/data/repositories/authRepository.ts": "dffd8ad0042be8d0d4e980de8e264d0dae5c982c7bb38979ebfc33b6d1c3c722",
+    "src/main/data/repositories/staffClientRepository.ts": "4d8a42639b9ea18f819550b683077d05ae543e7292d442043db523afc5d7a3a6",
+    "src/main/ipc/handlers/authHandlers.ts": "979d7f15fee5b3147948399d5bac9ba22c47f6221475c927c882fefdd32e334f",
+    "src/shared/deviceIdentity.ts": "e21ff63a5bc06317de54a89fea316bbabeb75e7d311aa6f38b27dce96cbe72e6",
+    "src/shared/types.ts": "9ded409388e4af82851c6b53c8f502560e1ddd9fce031a283de7b99ff5bfa55e",
+    "src/renderer/src/stores/authStore.ts": "261684ea9d6518a49c438272c3a215da3d1fbebd65a0383a7179f08d5baf72b5",
+    "src/renderer/src/pages/LoginPage.tsx": "a7ee981011315abe7a86d14616f91fcf91566766f8231dddd666a679d6ed7d90",
+    "supabase/migrations/20261027071650_device_identity_v3.sql": "e2a576c4cd56f2daed6f601f62aefcbb8d1e69cace18f5c9036bc26e24cf7eef",
+    "supabase/migrations/20261027044628_staff_rls_activation.sql": "c04a347adafc39132649c02021d19e100027c5195d8a4972e26a401cf3412a9f"
+  },
+  "bundleSha256": {
+    "out/main/index.js": "0360c8b36fa088e65bde05553247365eaf8c4e0ebb3ea6db02a1c875dd581aa1",
+    "out/preload/index.js": "dbcc9fc8a5c4a2c929ec27512153ff30cd738537b43293609e30846b3e5392a2",
+    "out-server/main/index.js": "8c62148764fe44b30b36ab04b2e434494a606d7fef8d22731d2c4dd5f79ac60a",
+    "out-server/preload/index.js": "2f9f43dc53b057dda699e9db63217ec26bda847c147678afb73a6998c5b9b9c8"
+  }
+}

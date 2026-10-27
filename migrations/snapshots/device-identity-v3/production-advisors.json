@@ -1,0 +1,126 @@
+{
+  "before": {
+    "groups": [
+      {
+        "name": "policy_exists_rls_disabled",
+        "level": "ERROR",
+        "count": 3
+      },
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "count": 197
+      },
+      {
+        "name": "security_definer_view",
+        "level": "ERROR",
+        "count": 9
+      },
+      {
+        "name": "function_search_path_mutable",
+        "level": "WARN",
+        "count": 126
+      },
+      {
+        "name": "rls_disabled_in_public",
+        "level": "ERROR",
+        "count": 248
+      },
+      {
+        "name": "extension_in_public",
+        "level": "WARN",
+        "count": 4
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "count": 211
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "count": 211
+      },
+      {
+        "name": "auth_leaked_password_protection",
+        "level": "WARN",
+        "count": 1
+      }
+    ],
+    "v3Findings": []
+  },
+  "after": {
+    "groups": [
+      {
+        "name": "policy_exists_rls_disabled",
+        "level": "ERROR",
+        "count": 3
+      },
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "count": 199
+      },
+      {
+        "name": "security_definer_view",
+        "level": "ERROR",
+        "count": 9
+      },
+      {
+        "name": "function_search_path_mutable",
+        "level": "WARN",
+        "count": 126
+      },
+      {
+        "name": "rls_disabled_in_public",
+        "level": "ERROR",
+        "count": 248
+      },
+      {
+        "name": "extension_in_public",
+        "level": "WARN",
+        "count": 4
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "count": 211
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "count": 211
+      },
+      {
+        "name": "auth_leaked_password_protection",
+        "level": "WARN",
+        "count": 1
+      }
+    ],
+    "v3Findings": [
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "detail": "Table \\`private.aka_agent_device_collisions\\` has RLS enabled, but no policies exist",
+        "metadata": {
+          "name": "aka_agent_device_collisions",
+          "type": "table",
+          "schema": "private"
+        }
+      },
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "detail": "Table \\`private.aka_agent_device_migrations\\` has RLS enabled, but no policies exist",
+        "metadata": {
+          "name": "aka_agent_device_migrations",
+          "type": "table",
+          "schema": "private"
+        }
+      }
+    ]
+  },
+  "interpretation": "Only two new INFO notices for intentional private RPC-only RLS tables without client policies; direct ACL checks deny anon/authenticated. Existing out-of-scope warnings unchanged; RLS C not enabled."
+}

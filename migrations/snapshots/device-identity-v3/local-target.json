@@ -1,0 +1,61 @@
+[
+  {
+    "signature": "aka_agent_recover_staff_credentials(text,text)",
+    "checksum": "2da69a5f5e7a79d3f93ee9adb0299e77",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public",
+      "lock_timeout=3s",
+      "statement_timeout=8s"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "aka_agent_staff_client(text,text,text,jsonb)",
+    "checksum": "73830b14c79b98802050cc9419cfd6c1",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public",
+      "lock_timeout=3s",
+      "statement_timeout=12s"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"
+  },
+  {
+    "signature": "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)",
+    "checksum": "085e1d4488d0239df62a78dbf1ba941e",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "private.aka_agent_device_v3(bigint,text,jsonb)",
+    "checksum": "7c27dd3bcff7c784597586ecf875d744",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  {
+    "signature": "private.aka_agent_track_device_binding()",
+    "checksum": "0bf3e38f6931919408fe0d514039e6b6",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "acl": "{postgres=X/postgres}"
+  }
+]

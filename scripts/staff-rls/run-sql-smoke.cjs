@@ -74,7 +74,15 @@ try {
  sql("UPDATE org_staff SET password='test-alice' WHERE id=1;");reg()
  sql(fs.readFileSync(files[1],'utf8'));pass('all exact-source runtime patches pass live-definition/ACL preflight')
  sql(fs.readFileSync(path.join(root,'supabase/migrations/20261027083342_staff_runtime_inherit_lock_timeout.sql'),'utf8'));pass('runtime helper inherits caller lock timeout before cutover')
- const receiptDirectory=process.env.STAFF_RLS_RECEIPT_DIR||'staff-runtime-lock-timeout'
+ const v3File=path.join(root,'supabase/migrations/20261027071650_device_identity_v3.sql')
+ const withV3=fs.existsSync(v3File)
+ if(withV3){
+  const v3Source=JSON.parse(fs.readFileSync(path.join(root,'migrations/snapshots/device-identity-v3/source.json')))
+  sql('SET check_function_bodies=off;'+v3Source.filter(f=>/^(aka_agent_device_presence|aka_agent_prepare_device_change_v2|aka_agent_reset_device_binding_v2)\(/.test(f.signature)).map(f=>f.definition+';'+`REVOKE ALL ON FUNCTION public.${f.signature} FROM PUBLIC,anon,authenticated,service_role;`+f.acl.slice(1,-1).split(',').filter(Boolean).map(x=>`GRANT EXECUTE ON FUNCTION public.${f.signature} TO ${x.split('=')[0]||'PUBLIC'};`).join('')).join('\n'))
+  sql(fs.readFileSync(v3File,'utf8'));pass('v3 candidate prepares the updated phase C checksum gate')
+ }
+ const receiptDirectory=process.env.STAFF_RLS_RECEIPT_DIR||(withV3?'device-identity-v3':'staff-runtime-lock-timeout')
+
  for(const f of patches){const current=json(`SELECT json_build_object('def',pg_get_functiondef(oid),'acl',proacl::text,'definer',prosecdef,'owner',pg_get_userbyid(proowner),'config',proconfig,'volatility',provolatile) FROM pg_proc WHERE oid='public.${f.signature}'::regprocedure;`);assert.equal(current.acl,f.proacl);assert.equal(current.definer,false);assert.equal(current.owner,f.owner);assert.deepEqual(current.config,f.proconfig);assert.equal(current.volatility,f.provolatile);checks++}
  const viewName='public.aka_agent_staff_runtime_profile'
  const drift=[

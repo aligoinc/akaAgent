@@ -1,0 +1,36 @@
+{
+  "baseCommit": "3ba161c163c82df197861cc3de246c91e75045e7",
+  "targetBranch": "dev_3",
+  "branch": "codex/device-identity-v3",
+  "typecheckNode": true,
+  "typecheckWeb": true,
+  "builds": [
+    {
+      "command": "build",
+      "passed": true,
+      "seconds": 25.69,
+      "bytes": 39259943
+    },
+    {
+      "command": "build:server",
+      "passed": true,
+      "seconds": 1.64,
+      "bytes": 2432576
+    }
+  ],
+  "checks": {
+    "v3Client": 65,
+    "v3SqlPostgres17": 35,
+    "rlsSqlPostgres17": 132,
+    "authV2": 40,
+    "staffClient": 59,
+    "deviceChangeSmoke": true,
+    "electronArm64TwoProcesses": true,
+    "electronRenderer": true,
+    "cutoverGuardFunctions": 44,
+    "gitDiffCheck": true
+  },
+  "productionModifiedDuringPrPreparation": false,
+  "appReleased": false,
+  "rlsCEnabled": false
+}

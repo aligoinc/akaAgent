@@ -4,7 +4,9 @@ import { hostname } from 'os'
 import { promisify } from 'util'
 import { app } from 'electron'
 import { join } from 'node:path'
-import { HardwareDeviceIdentity } from './hardwareDeviceIdentity'
+import { CompositeHardwareDeviceIdentity, HardwareDeviceIdentity, SelectedHardwareMissingError } from './hardwareDeviceIdentity'
+import { parseMacComposite, parseWindowsComposite, WINDOWS_COMPOSITE_SCRIPT } from './deviceHardwareReaders'
+import { unlink } from 'node:fs/promises'
 
 const execFileAsync = promisify(execFile)
 
@@ -96,11 +98,11 @@ export function getLegacyDeviceIdentity(): Promise<DeviceIdentity> {
 
 let hardwareIdentity: HardwareDeviceIdentity | null = null
 let currentIdentity: Promise<DeviceIdentity> | null = null
-export function getCurrentDeviceIdentity(): Promise<DeviceIdentity> {
+export function getV2DeviceIdentity(): Promise<DeviceIdentity> {
   if (!currentIdentity) currentIdentity = (async () => {
     const platform = getDevicePlatform()
     hardwareIdentity ??= new HardwareDeviceIdentity({
-      platform, file: join(app.getPath('userData'), 'device-identity-v2.json'),
+      platform, file: join(app.getPath('userData'), 'device-identity-v2.json'), allowInstallationFallback: false,
       readHardware: async () => {
         if (platform === 'mac') return { uuid: await readMacMachineId() }
         const script = "$ErrorActionPreference='Stop'; $system=Get-CimInstance -ClassName Win32_ComputerSystemProduct; $boards=Get-CimInstance -ClassName Win32_BaseBoard; @{uuid=$system.UUID; serials=@($boards | ForEach-Object { $_.SerialNumber })} | ConvertTo-Json -Compress"
@@ -113,4 +115,56 @@ export function getCurrentDeviceIdentity(): Promise<DeviceIdentity> {
     return { fingerprintHash: await hardwareIdentity.fingerprint(), platform, label: buildLabel(platform) }
   })().catch(error => { currentIdentity = null; throw error })
   return currentIdentity
+}
+
+let compositeIdentity: CompositeHardwareDeviceIdentity | null = null
+let compositeFlight: Promise<DeviceIdentity> | null = null
+let lastCompositeRead: DeviceIdentity | null = null
+export function getCurrentDeviceIdentity(refresh = false): Promise<DeviceIdentity> {
+  // Presence reuses its session identity; authentication explicitly refreshes hardware.
+  if (!refresh && lastCompositeRead) return Promise.resolve(lastCompositeRead)
+  if (!compositeFlight) compositeFlight = (async () => {
+    const platform = getDevicePlatform()
+    compositeIdentity ??= new CompositeHardwareDeviceIdentity({
+      platform, file: join(app.getPath('userData'), 'device-identity-v3.json'),
+      readHardware: async () => {
+        try {
+          const { stdout } = platform === 'win'
+            ? await execFileAsync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_COMPOSITE_SCRIPT], { windowsHide: true, timeout: 10_000, maxBuffer: 16 * 1024 * 1024 })
+            : await execFileAsync('/usr/sbin/ioreg', ['-a', '-l', '-p', 'IOService'], { timeout: 10_000, maxBuffer: 32 * 1024 * 1024 })
+          return platform === 'win' ? parseWindowsComposite(stdout) : parseMacComposite(stdout)
+        } catch { throw new Error('Không đọc được định danh phần cứng. Vui lòng thử lại.') }
+      }
+    })
+    const result = { fingerprintHash: await compositeIdentity.fingerprint(), platform, label: buildLabel(platform) }
+    lastCompositeRead = result
+    return result
+  })().finally(() => { compositeFlight = null })
+  return compositeFlight
+}
+
+/** Reset is explicitly requested by the user. Its audit payload is not an authentication credential. */
+export async function getDeviceForBindingReset(): Promise<DeviceIdentity> {
+  try { return await getCurrentDeviceIdentity(true) }
+  catch (error) {
+    if (!(error instanceof SelectedHardwareMissingError) || !error.resetAuditFingerprintHash) throw error
+    // A fresh v3 install may have no usable v2 identity at all. This hash comes
+    // from the successful hardware read above, for reset audit only. It is never
+    // cached as a login/presence identity or written to the source selection.
+    const platform = getDevicePlatform()
+    return { fingerprintHash: error.resetAuditFingerprintHash, platform, label: buildLabel(platform) }
+  }
+}
+export async function resetCompositeSelection(): Promise<void> {
+  // This file belongs to the machine, not the account being reset. Keep a valid
+  // selection even when a newly available source would now rank ahead of it.
+  // Re-read after the server confirms the reset: a transient failure must never
+  // erase the selection, and hardware that returned meanwhile needs no repair.
+  try { await getCurrentDeviceIdentity(true); return }
+  catch (error) { if (!(error instanceof SelectedHardwareMissingError)) throw error }
+  await unlink(join(app.getPath('userData'), 'device-identity-v3.json')).catch(error => {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Không cập nhật được định danh máy. Vui lòng kiểm tra quyền ghi dữ liệu ứng dụng.')
+  })
+  compositeIdentity = null
+  lastCompositeRead = null
 }

@@ -215,7 +215,8 @@ export default function LoginPage() {
     loginOptions,
     setLoginOptions,
     recoverDeviceCredentials,
-    rememberedLogin
+    rememberedLogin,
+    manualLoginRequired
   } = useAuthStore()
   const usernameEdited = useRef(false)
   const [username, setUsername] = useState('')
@@ -228,6 +229,10 @@ export default function LoginPage() {
     if (!rememberedLogin || usernameEdited.current) return
     setUsername(rememberedLogin.username)
   }, [rememberedLogin])
+
+  useEffect(() => {
+    if (manualLoginRequired) { setUsername(''); setPassword(''); usernameEdited.current = false }
+  }, [manualLoginRequired])
 
   const canUseRemembered = !!rememberedLogin?.hasCredential && rememberedLogin.username === username.trim()
 
