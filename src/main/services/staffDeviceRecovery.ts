@@ -60,12 +60,25 @@ export function registerStaffDeviceRecovery(credentials: ProcessAuthCredentials,
 }
 
 /** Read only the locally held proof. A fingerprint on its own never recovers credentials. */
-export async function recoverStaffDeviceCredentials(fingerprintHash: string): Promise<ProcessAuthCredentials | null> {
+export async function recoverStaffDeviceCredentials(
+  fingerprintHash: string,
+  previousFingerprint?: () => Promise<string>
+): Promise<ProcessAuthCredentials | 'manual_login_required' | null> {
   const secret = await readSecret()
   if (!secret) return null
-  const { data, error } = await getSupabaseClient().rpc('aka_agent_recover_staff_credentials', {
-    p_secret: secret, p_fingerprint_hash: fingerprintHash
-  }).abortSignal(AbortSignal.timeout(10_000))
+  const deadline = AbortSignal.timeout(10_000)
+  const recover = (hash: string) => getSupabaseClient().rpc('aka_agent_recover_staff_credentials', {
+    p_secret: secret, p_fingerprint_hash: hash
+  }).abortSignal(deadline)
+  let { data, error } = await recover(fingerprintHash)
+  // An existing v2 proof remains bound to v2 until migration succeeds. Only an
+  // explicit proof rejection permits this bounded retry, using the SAME local
+  // secret. Network/SQL errors and collision decisions must not fall through.
+  if (error?.code === 'P0001' && error.message === 'staff_recovery_invalid' && previousFingerprint) {
+    const previousHash = await previousFingerprint()
+    if (previousHash !== fingerprintHash) ({ data, error } = await recover(previousHash))
+  }
+  if (!error && data?.status === 'manual_login_required') return 'manual_login_required'
   if (error || !data?.username || !data?.password) throw new Error('Không thể lấy lại thông tin trên máy này. Vui lòng nhập mật khẩu hoặc liên hệ hỗ trợ.')
   return { username: String(data.username), password: String(data.password) }
 }

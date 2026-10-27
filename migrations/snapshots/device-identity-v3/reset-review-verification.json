@@ -1,0 +1,52 @@
+{
+  "verifiedAt": "2026-10-27T08:40:56.885526+00:00",
+  "productionChanged": false,
+  "candidateV3SqlChanged": false,
+  "fixes": [
+    "Reset audit can use nonempty remaining normalized hardware when a selected component is missing, without v2 or a new login identity",
+    "Reset journal schema 2 durably stores ID/CAS/device and replays without hardware reads; preserve old v2 journals through one-time metadata upgrade"
+  ],
+  "checks": {
+    "clientV3": 65,
+    "sqlV3": 35,
+    "staffRlsClient": 59,
+    "v2Compatibility": 40,
+    "deviceChangePresenceQuit": "passed",
+    "rendererElectron": "passed",
+    "macArm64HardwareRestart": "passed",
+    "typecheckNode": "passed",
+    "typecheckWeb": "passed",
+    "desktopBuild": "passed",
+    "serverBuild": "passed",
+    "diffCheck": "passed"
+  },
+  "sourceSha256": {
+    "src/main/services/deviceIdentity.ts": "8b80032a2d71dc183ab58149d9974ed22d80e4b96e8935afd55f4525f11cc336",
+    "src/main/services/hardwareDeviceIdentity.ts": "ee84f55cfd7e50f5d8f86cf2ba9cc6dfc2ec62a221b8c0e16bb7e810b086a1c1",
+    "src/main/services/deviceChangeRequest.ts": "7fec2977a4b390678e0f8d0f90f107af08600925a3f2953ccf79d14e4a8988a8",
+    "src/main/services/deviceChangeService.ts": "25df393c71f1cd486f0a3eb07639712dd96c085fdc2760e54ab6ff94100b0c02",
+    "scripts/device-identity-v3/review-regressions.ts": "f877f30c17363c801f7406e56f9cf1a4a9341da3191d72a9cf471133a5146dc4",
+    "scripts/device-identity-v3/sql-smoke.cjs": "3d6173d7a0cc25c9fb4be8af5b75f52863d0bcb22bd4e9e3dab4b1684d746cab"
+  },
+  "unchangedSqlSha256": {
+    "supabase/migrations/20261027071650_device_identity_v3.sql": "e2a576c4cd56f2daed6f601f62aefcbb8d1e69cace18f5c9036bc26e24cf7eef"
+  },
+  "relatedRlsGuard": {
+    "path": "supabase/migrations/20261027044628_staff_rls_activation.sql",
+    "currentSha256": "e06a3c72c01ebdc8ef29fd079caaa5bb17f67161c477abce96006d0d985414ca",
+    "previousVerifiedSha256": "c04a347adafc39132649c02021d19e100027c5195d8a4972e26a401cf3412a9f",
+    "changedOutsideResetFix": true,
+    "reverifiedInThisPass": false
+  },
+  "bundleSha256": {
+    "out/main/index.js": "3752ecc28787e59d927b075ce357fe1550b7918c04cd0872315382aeed8f0c99",
+    "out/preload/index.js": "dbcc9fc8a5c4a2c929ec27512153ff30cd738537b43293609e30846b3e5392a2",
+    "out-server/main/index.js": "8c62148764fe44b30b36ab04b2e434494a606d7fef8d22731d2c4dd5f79ac60a",
+    "out-server/preload/index.js": "2f9f43dc53b057dda699e9db63217ec26bda847c147678afb73a6998c5b9b9c8"
+  },
+  "limitations": [
+    "No physical Windows or Intel execution",
+    "No installer packaging, production apply, RLS activation or publication",
+    "Old schema-1 journal lacks the original device payload: its v2 hash must remain readable for one-time upgrade; failure preserves the journal instead of guessing"
+  ]
+}

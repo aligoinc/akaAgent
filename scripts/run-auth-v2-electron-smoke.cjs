@@ -51,14 +51,14 @@ try {
         assert.equal(JSON.parse(readFileSync(loginFile, 'utf8')).credentials, null);
       }
       assert.equal(encryptionCalls, 0, 'no encryption or Keychain calls');
-      console.log('Electron local login without Keychain and '+identity.platform+' hardware identity '+process.env.AKA_AUTH_SMOKE_PHASE+' passed');
+      console.log(process.arch+' Electron local login without Keychain and '+identity.platform+' hardware identity '+process.env.AKA_AUTH_SMOKE_PHASE+' passed');
       app.exit(0);
     }).catch(error => { console.error(error); app.exit(1); });
   `)
   for (const phase of ['write', 'read']) {
     const env = { ...process.env, AKA_AUTH_SMOKE_DIRECTORY: directory, AKA_AUTH_SMOKE_PHASE: phase }
     delete env.ELECTRON_RUN_AS_NODE
-    const result = spawnSync(require('electron'), [join(directory, 'test.cjs')], { cwd: root, env, stdio: 'inherit', timeout: 60000 })
+    const result = spawnSync(process.env.AKA_AUTH_ELECTRON_BINARY || require('electron'), [join(directory, 'test.cjs')], { cwd: root, env, stdio: 'inherit', timeout: 60000 })
     if (result.error) throw result.error
     if (result.status !== 0) { process.exitCode = result.status ?? 1; break }
   }

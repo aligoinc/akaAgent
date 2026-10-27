@@ -1,0 +1,42 @@
+{
+  "verifiedAt": "2026-10-27T08:21:47.531978+00:00",
+  "productionChanged": false,
+  "candidateSqlChanged": false,
+  "reviewFixes": [
+    "Recover an existing v2 proof using the same local key only after explicit v3 proof rejection; preserve collision and credential gates",
+    "Keep valid machine component selection for all account resets; repair only confirmed missing hardware after successful reset"
+  ],
+  "checks": {
+    "clientV3": 57,
+    "sqlV3": 33,
+    "staffRlsClient": 59,
+    "v2Compatibility": 40,
+    "deviceChangePresenceQuit": "passed",
+    "rendererElectron": "passed",
+    "macArm64HardwareRestart": "passed",
+    "typecheckNode": "passed",
+    "typecheckWeb": "passed",
+    "desktopBuild": "passed",
+    "serverBuild": "passed"
+  },
+  "sourceSha256": {
+    "src/main/services/deviceIdentity.ts": "0a5ca3c050e1d95c5328596ed606f4e94410994a7b3799aa10646ef7ff1033d0",
+    "src/main/services/hardwareDeviceIdentity.ts": "2ed745085de7134a8be364051f23950999aeb9f4dc07827b67cd901476f1b937",
+    "src/main/services/staffDeviceRecovery.ts": "c54413fe0508f6dfa894ae130a4075345b63c5be462830f798df66d5616aea12",
+    "src/main/data/repositories/authRepository.ts": "6ae1109259fbd6c225604a5a9054ade050bbd793ef696ca6e176c65273ff8d0e",
+    "scripts/device-identity-v3/client-smoke.ts": "710cf0b2fa49249f377b21ab0f81e98df1982164ac98120551f8637563544734",
+    "scripts/device-identity-v3/review-regressions.ts": "23a1346094f59ab87de142b01e6aa3676742070da7c4101473b42d5d6b14a334",
+    "scripts/device-identity-v3/sql-smoke.cjs": "4c1d4da3ec91d2793c412c538e9f350516388e3fde306a91d4e985a29ff67ab1"
+  },
+  "bundleSha256": {
+    "out/main/index.js": "b402cd2d0f5ddcf62876fc27ff22c5f601c4b6eca7f1f4bea4843efdc343a096",
+    "out/preload/index.js": "dbcc9fc8a5c4a2c929ec27512153ff30cd738537b43293609e30846b3e5392a2",
+    "out-server/main/index.js": "8c62148764fe44b30b36ab04b2e434494a606d7fef8d22731d2c4dd5f79ac60a",
+    "out-server/preload/index.js": "2f9f43dc53b057dda699e9db63217ec26bda847c147678afb73a6998c5b9b9c8"
+  },
+  "limitations": [
+    "No physical Windows or Intel execution",
+    "x64 Rosetta evidence belongs to the earlier implementation check; not rerun for these review fixes",
+    "No installer packaging, production apply, RLS activation or publication"
+  ]
+}

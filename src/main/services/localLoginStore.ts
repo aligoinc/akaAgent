@@ -14,6 +14,7 @@ interface LoginFile {
   options: LoginPreferences
   credentials: SavedLoginCredentials | null
   requiresManualLogin: boolean
+  manualLoginReason?: 'device'
 }
 const MANUAL_LOGIN_WARNING = 'Vui lòng nhập lại tên đăng nhập và mật khẩu một lần. Các tùy chọn ghi nhớ và khởi động cùng máy tính vẫn được giữ nguyên.'
 interface Options {
@@ -32,6 +33,7 @@ export class LocalLoginStore {
   private missing = false
   private preferencesOnly = false
   private requiresManualLogin = false
+  private deviceManualLogin = false
   private revision = 0
   constructor(private readonly config: Options) {}
 
@@ -47,6 +49,7 @@ export class LocalLoginStore {
       this.options = normalizeLocalLoginOptions(raw.options)
       if (typeof raw.requiresManualLogin !== 'boolean') throw new Error('Invalid login storage')
       this.requiresManualLogin = raw.requiresManualLogin
+      this.deviceManualLogin = raw.manualLoginReason === 'device' && raw.requiresManualLogin
       if (raw.credentials !== null) {
         const value = raw.credentials
         if (!value || typeof value.username !== 'string' || !value.username.trim() || typeof value.password !== 'string' || !value.password
@@ -65,8 +68,8 @@ export class LocalLoginStore {
     }
   }
   snapshot(): AuthLocalState {
-    return { loginOptions: { ...this.options }, rememberedLogin: this.credentials ? { username: this.credentials.username, hasCredential: true } : null,
-      warningMessage: this.warning ?? (this.requiresManualLogin ? MANUAL_LOGIN_WARNING : null) }
+    return { manualLoginRequired: this.deviceManualLogin, loginOptions: { ...this.options }, rememberedLogin: this.credentials ? { username: this.credentials.username, hasCredential: true } : null,
+      warningMessage: this.warning ?? (this.requiresManualLogin && !this.deviceManualLogin ? MANUAL_LOGIN_WARNING : null) }
   }
   getCredentials(): SavedLoginCredentials | null { return this.credentials ? { ...this.credentials } : null }
   getRevision(): number { return this.revision }
@@ -104,29 +107,42 @@ export class LocalLoginStore {
       if (updates.autoLogin === true && updates.rememberLogin !== false) next.rememberLogin = true
       this.options = normalizeLocalLoginOptions(next)
       if (!this.options.rememberLogin) { this.credentials = null; this.credentialVerified = false }
-      else if (authenticated) { this.credentials = { ...authenticated }; this.credentialVerified = true; this.requiresManualLogin = false }
+      else if (authenticated && !this.deviceManualLogin) { this.credentials = { ...authenticated }; this.credentialVerified = true; this.requiresManualLogin = false }
       // An imported credential has not been authenticated yet; options-only saves
       // must not turn it into a durable password.
       await this.persist(this.credentialVerified ? this.credentials : null)
       return this.snapshot()
     })
   }
-  saveAuthenticated(credentials: SavedLoginCredentials): Promise<AuthLocalState> {
+  saveAuthenticated(credentials: SavedLoginCredentials, allowRemembered = !this.deviceManualLogin): Promise<AuthLocalState> {
     return this.serialize(async () => {
       await this.initialize()
-      this.credentials = this.options.rememberLogin ? { ...credentials } : null
-      this.credentialVerified = true
-      this.requiresManualLogin = false
+      this.deviceManualLogin = !allowRemembered
+      this.credentials = this.options.rememberLogin && allowRemembered ? { ...credentials } : null
+      this.credentialVerified = allowRemembered
+      this.requiresManualLogin = !allowRemembered
       await this.persist(credentials)
+      return this.snapshot()
+    })
+  }
+  requireManualDeviceLogin(): Promise<AuthLocalState> {
+    this.revision++
+    return this.serialize(async () => {
+      await this.initialize()
+      this.credentials = null
+      this.credentialVerified = false
+      this.requiresManualLogin = true
+      this.deviceManualLogin = true
+      await this.persist(null)
       return this.snapshot()
     })
   }
   private async persist(authenticated: SavedLoginCredentials | null): Promise<void> {
     this.missing = false
     try {
-      const candidate = this.options.rememberLogin ? authenticated : null
+      const candidate = this.options.rememberLogin && !this.requiresManualLogin ? authenticated : null
       const file: LoginFile = { version: 3, options: this.options, credentials: candidate,
-        requiresManualLogin: this.requiresManualLogin }
+        requiresManualLogin: this.requiresManualLogin, ...(this.deviceManualLogin ? { manualLoginReason: 'device' as const } : {}) }
       await (this.config.write ?? writeAtomicLocalFile)(this.config.file, JSON.stringify(file))
       this.warning = null
     } catch {

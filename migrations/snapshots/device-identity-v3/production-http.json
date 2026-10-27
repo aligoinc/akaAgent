@@ -1,0 +1,46 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "checkedAt": "2026-10-27T08:59:51.912Z",
+  "customerRowsRead": 0,
+  "businessWrites": false,
+  "checks": [
+    {
+      "name": "security status keeps C disabled",
+      "status": 200,
+      "passed": true
+    },
+    {
+      "name": "prepare v3 requires credentials",
+      "status": 400,
+      "code": "P0001",
+      "message": "staff_client_auth_invalid",
+      "passed": true
+    },
+    {
+      "name": "bind v3 requires credentials",
+      "status": 400,
+      "code": "P0001",
+      "message": "staff_client_auth_invalid",
+      "passed": true
+    },
+    {
+      "name": "existing read still requires credentials",
+      "status": 400,
+      "code": "P0001",
+      "message": "staff_client_auth_invalid",
+      "passed": true
+    },
+    {
+      "name": "fingerprint alone cannot recover credentials",
+      "status": 400,
+      "code": "P0001",
+      "message": "staff_recovery_invalid",
+      "passed": true
+    },
+    {
+      "name": "legacy table ACL retained without reading rows",
+      "status": 200,
+      "passed": true
+    }
+  ]
+}

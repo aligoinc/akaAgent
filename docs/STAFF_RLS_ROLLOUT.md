@@ -1,5 +1,7 @@
 # Bảo vệ org_staff bằng RLS — A/B đã apply, C đang hoãn
 
+**Nhận diện máy v3 đã apply akachat 27/10/2026 lúc 15:57 VN:** `20261027085744 / device_identity_v3`; hai RPC auth và ba helper khớp target, giữ 363 hàm ngoài phạm vi/ACL/policy. DB đã có các đối tượng v3 mà guard C yêu cầu; **C vẫn chưa apply, app chưa phát hành**. Không apply lại v3; [audit](DEVICE_IDENTITY_V3.md#apply-production--27102026).
+
 **Timeout staff đã sửa production 27/10/2026 lúc 15:50 VN:** `20261027085042 / staff_runtime_inherit_lock_timeout` chỉ bỏ override chờ khóa 3s của helper B; giữ caller timeout, body/ACL và 38 hàm liên quan. C vẫn chưa bật. Không apply lại; [audit và rollback](STAFF_RUNTIME_LOCK_TIMEOUT.md).
 
 **A/B đã apply akachat lúc 12:37 ngày 27/10/2026 (giờ Việt Nam) theo yêu cầu để test. C chưa apply, `org_staff` vẫn RLS=false. Server nội bộ 9.0.0 đã đóng gói local lúc 12:53; Desktop chưa đóng gói cập nhật, chưa triển khai/phát hành.** Người dùng yêu cầu cập nhật Desktop/App Server trước, rồi mới cho phép bật RLS. Không tự thực hiện bước cuối theo giờ hoặc chỉ vì đã phát hành bộ cài.

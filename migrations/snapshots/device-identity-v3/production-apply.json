@@ -1,0 +1,70 @@
+{
+  "project": "akachat",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "migrationVersion": "20261027085744",
+  "migrationName": "device_identity_v3",
+  "appliedAtVietnam": "2026-10-27T15:57:44+07:00",
+  "canonicalSql": "supabase/migrations/20261027071650_device_identity_v3.sql",
+  "sqlSha256": "e2a576c4cd56f2daed6f601f62aefcbb8d1e69cace18f5c9036bc26e24cf7eef",
+  "sqlMd5": "e601a549dc0563b17783b94ff1e5aced",
+  "migrationHistorySqlMatches": true,
+  "checksums": [
+    {
+      "signature": "aka_agent_recover_staff_credentials(text,text)",
+      "sourceChecksum": "6f831ff1691807ebb32e5052f6df3f05",
+      "targetChecksum": "2da69a5f5e7a79d3f93ee9adb0299e77"
+    },
+    {
+      "signature": "aka_agent_staff_client(text,text,text,jsonb)",
+      "sourceChecksum": "16a1f5c7f327d3de9b7bd809ba94d31c",
+      "targetChecksum": "73830b14c79b98802050cc9419cfd6c1"
+    },
+    {
+      "signature": "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)",
+      "sourceChecksum": null,
+      "targetChecksum": "085e1d4488d0239df62a78dbf1ba941e"
+    },
+    {
+      "signature": "private.aka_agent_device_v3(bigint,text,jsonb)",
+      "sourceChecksum": null,
+      "targetChecksum": "7c27dd3bcff7c784597586ecf875d744"
+    },
+    {
+      "signature": "private.aka_agent_track_device_binding()",
+      "sourceChecksum": null,
+      "targetChecksum": "0bf3e38f6931919408fe0d514039e6b6"
+    }
+  ],
+  "preservedFunctionCount": 363,
+  "sourceFunctionPreflightCount": 7,
+  "publicAclAndPoliciesUnchanged": true,
+  "orgStaffRlsEnabled": false,
+  "releaseOrDeployPerformed": false,
+  "existingAccountsMigratedByApply": 0,
+  "collisionGroupsSeeded": 13,
+  "staffInDuplicateGroupsAtPreflight": 49,
+  "verification": {
+    "postgres17Local": {
+      "checks": 35,
+      "version": "17.11",
+      "passed": true
+    },
+    "productionDryRunRollback": {
+      "checkedAt": "2026-10-27T08:57:05.509807+00:00",
+      "orgStaffRls": false,
+      "rolledBack": true
+    },
+    "productionPostApplyRollbackSmoke": {
+      "checkedAt": "2026-10-27T08:59:05.134951+00:00",
+      "orgStaffRls": false,
+      "passed": true
+    },
+    "productionHttp": {
+      "checks": 6,
+      "passed": true
+    },
+    "privateTablesAclRlsAndIndexes": "passed",
+    "advisors": "only two expected INFO notices for private RLS tables without client policies"
+  },
+  "checkedAt": "2026-10-27T09:01:03.272581+00:00"
+}

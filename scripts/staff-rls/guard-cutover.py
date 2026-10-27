@@ -3,12 +3,24 @@ import json
 from pathlib import Path
 base=Path('migrations/snapshots/staff-rls')
 target=sorted(json.loads((base/'local-target.json').read_text()),key=lambda f:f['signature'])
+# v3 extends the still-unapplied phase C gate; never weaken or remove old RPC guards.
+v3path=Path('migrations/snapshots/device-identity-v3/local-target.json')
+v3=[]
+if v3path.exists():
+ v3=json.loads(v3path.read_text())
+ by={f['signature']:f for f in target}
+ for f in v3:
+  by[f['signature']]={**f,'securityDefiner':f['security_definer']}
+ target=sorted(by.values(),key=lambda f:f['signature'])
+
+# Keep C and its rollback gated on the timeout correction as well as v3.
 timeout_target=Path('migrations/snapshots/staff-runtime-lock-timeout/local-target.json')
 if timeout_target.exists():
  by={f['signature']:f for f in target}
  for f in json.loads(timeout_target.read_text()):
   by[f['signature']]=f
  target=sorted(by.values(),key=lambda f:f['signature'])
+
 patches=json.loads((base/'runtime-patches.json').read_text())
 source=json.loads((base/'source.json').read_text())
 q=lambda x:"'"+x.replace("'","''")+"'"
@@ -53,6 +65,16 @@ DO $view$ BEGIN
   RAISE EXCEPTION 'staff recovery/view protection changed; re-audit';
  END IF;
 END; $view$;"""
+if v3:
+ gate += """
+DO $device_v3$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.org_staff'::regclass AND tgname='aka_agent_track_device_binding' AND tgfoid=to_regprocedure('private.aka_agent_track_device_binding()') AND tgenabled='O')
+ OR EXISTS(SELECT 1 FROM pg_class c WHERE c.oid IN ('private.aka_agent_device_collisions'::regclass,'private.aka_agent_device_migrations'::regclass) AND (NOT c.relrowsecurity OR has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE') OR has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE')))
+ OR NOT EXISTS(SELECT 1 FROM pg_index WHERE indexrelid=to_regclass('public.org_staff_aka_agent_device_identity_idx') AND indisvalid) THEN
+  RAISE EXCEPTION 'device v3 protection changed; re-audit';
+ END IF;
+END; $device_v3$;
+"""
 p=Path('supabase/migrations/20261027044628_staff_rls_activation.sql')
 s=p.read_text();start='-- BEGIN GENERATED TARGET GUARD';end='-- END GENERATED TARGET GUARD'
 if start in s:s=s[:s.index(start)]+s[s.index(end)+len(end):].lstrip('\n')
