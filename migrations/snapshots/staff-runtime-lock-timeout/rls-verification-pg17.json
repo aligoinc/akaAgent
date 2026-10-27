@@ -1,6 +1,6 @@
 {
   "serverVersion": "17.11 (Homebrew)",
-  "checks": 131,
+  "checks": 132,
   "productionChanged": false,
   "productionDefaultAclFixture": true,
   "viewAcl": "{postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=r/postgres}",

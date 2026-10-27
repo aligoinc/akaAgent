@@ -1,6 +1,6 @@
 {
   "serverVersion": "16.15 (Homebrew)",
-  "checks": 125,
+  "checks": 126,
   "productionChanged": false,
   "productionDefaultAclFixture": true,
   "viewAcl": "{postgres=arwdDxt/postgres,anon=r/postgres,authenticated=r/postgres,service_role=r/postgres}",
