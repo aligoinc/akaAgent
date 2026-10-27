@@ -20,14 +20,14 @@ Candidate dùng `ALTER FUNCTION ... RESET lock_timeout` để kế thừa cấu 
 - [Candidate](../supabase/migrations/20261027083342_staff_runtime_inherit_lock_timeout.sql), tạo tên bằng Supabase CLI. Chặn checksum/owner/security/config/ACL khác trước khi ALTER; kiểm tra lại target trong cùng transaction. Không sửa migration A/B đã apply.
 - [Rollback riêng](../migrations/snapshots/staff-runtime-lock-timeout/rollback.sql): chỉ nhận target chính xác và khôi phục giới hạn 3 giây; không đổi RLS hoặc quyền bảng. Đây là đường hoàn nguyên kỹ thuật, không phải khuyến nghị khôi phục regression.
 
-Generator, C chưa apply và rollback C đã cập nhật guard helper mới; giữ đủ 41 guard hiện có trên dev_3. C phải từ chối nếu helper còn giới hạn 3 giây. Chỉ bật C sau khi cập nhật và kiểm tra các client, theo [rollout staff](STAFF_RLS_ROLLOUT.md).
+Generator, C chưa apply và rollback C đã cập nhật guard helper mới; giữ đủ 44 guard hàm sau khi tích hợp v3. C phải từ chối nếu helper còn giới hạn 3 giây. Candidate này độc lập với v3, nhưng thứ tự phát hành v3/C vẫn theo [hợp đồng v3](DEVICE_IDENTITY_V3.md) và [rollout staff](STAFF_RLS_ROLLOUT.md).
 
 ## Kiểm chứng
 
 - `node scripts/staff-rls/lock-timeout-smoke.cjs`: **33 kiểm tra trên PostgreSQL 16.15 và 33 trên 17.11**, fixture riêng không dữ liệu khách. So sánh trước/sau, caller lock timeout 100ms, statement timeout 100ms, kết quả/quyền/RLS không đổi, validation, drift body/ACL/config/missing function, diễn tập migration trong transaction ROLLBACK, rollback riêng và apply lại sau rollback.
-- `STAFF_RLS_RECEIPT_DIR=staff-runtime-lock-timeout node scripts/staff-rls/run-sql-smoke.cjs`: **125 kiểm tra PG16 và 131 PG17**. Giữ 34 RPC/metadata, quyền và recovery, khóa đến cuối transaction, C từ chối helper cũ, local C và rollback. PR kiểm chứng trên dev_3, không gồm thay đổi nhận diện máy v3 đang làm riêng.
+- `STAFF_RLS_RECEIPT_DIR=staff-runtime-lock-timeout node scripts/staff-rls/run-sql-smoke.cjs`: **126 kiểm tra PG16 và 132 PG17**. Giữ 34 RPC/metadata, quyền và recovery, khóa đến cuối transaction, C từ chối helper cũ, local C và rollback; gồm candidate v3 trong fixture; lượt kiểm thử local này không apply migration lên production.
 - Receipts: [timeout PG16](../migrations/snapshots/staff-runtime-lock-timeout/timeout-verification-pg16.json), [timeout PG17](../migrations/snapshots/staff-runtime-lock-timeout/timeout-verification-pg17.json), [RLS PG16](../migrations/snapshots/staff-runtime-lock-timeout/rls-verification-pg16.json), [RLS PG17](../migrations/snapshots/staff-runtime-lock-timeout/rls-verification-pg17.json).
-- JS syntax và `git diff --check` đạt. Không sửa mã ứng dụng. Hai typecheck đạt; production build trên worktree PR đạt trong 26,3 giây, output 39.246.249 byte. [Receipt PR](../migrations/snapshots/staff-runtime-lock-timeout/pr-verification.json).
+- JS syntax và `git diff --check` đạt. Không sửa mã ứng dụng. Hai typecheck đạt; production build trên worktree PR #556 đạt trong 26,3 giây, output 39.246.249 byte. [Receipt PR](../migrations/snapshots/staff-runtime-lock-timeout/pr-verification.json). Các kiểm tra của PR #556 chạy trên `dev_3` tại thời điểm đó, chưa gồm phần v3 được merge sau trong PR #557.
 
 ## Apply production — 27/10/2026
 
@@ -37,4 +37,4 @@ Sau apply, helper khớp target `41d7a8af8bb781e59157a5b919621492`, chỉ bỏ `
 
 [Preflight](../migrations/snapshots/staff-runtime-lock-timeout/production-preflight.json), [sau apply](../migrations/snapshots/staff-runtime-lock-timeout/production-applied.json), [SQL smoke](../scripts/staff-rls/lock-timeout-production-smoke.sql). `production-unchanged.json` lưu lần kiểm tra lịch sử trước apply.
 
-Không bật RLS C, apply v3, chạy lại A/B, deploy hoặc đóng gói app. Bản sửa không cần build lại app. Nó chỉ xử lý regression chờ khóa đã xác nhận; không phải chứng nhận mọi luồng RPC tương đương toàn bộ hành vi cũ. Rollback riêng chỉ khi có quyết định hoàn nguyên và live còn khớp target.
+Trong lượt sửa timeout này, không bật RLS C, apply v3, chạy lại A/B, deploy hoặc đóng gói app. V3 được apply trong lượt riêng sau đó, theo [audit v3](DEVICE_IDENTITY_V3.md#apply-production--27102026). Bản sửa không cần build lại app. Nó chỉ xử lý regression chờ khóa đã xác nhận; không phải chứng nhận mọi luồng RPC tương đương toàn bộ hành vi cũ. Rollback riêng chỉ khi có quyết định hoàn nguyên và live còn khớp target.
