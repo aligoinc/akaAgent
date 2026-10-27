@@ -1,0 +1,1107 @@
+[
+  {
+    "name": "_cskh_send_log_temp_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "_qc_miss_20260825_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "_qc_miss_20260827_n_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "_qc_miss_webhook_20260824_run3_seq_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "_qc_send_20260907_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "_qc_w2_20260826_urid_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "accounts_account_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "agent_conversation_turns_sequence_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "agent_fix3_events_sequence_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "ai_form_configs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "ai_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres,anon=U/postgres,authenticated=U/postgres,crm_interest_worker=rU/postgres}"
+  },
+  {
+    "name": "ai_model_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "ai_personalization_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "ai_prompt_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "ai_using_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_affiliate_attributions_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_affiliate_clicks_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_affiliate_commissions_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_affiliate_leads_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_affiliate_sites_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_answer_quality_alert_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_bank_transfer_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_birthday_care_job_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_call_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_chat_answer_evaluation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_chat_followup_filter_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_chat_support_evaluation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_crm_call_delay_alert_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "aka_crm_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,crm_interest_worker=rU/postgres}"
+  },
+  {
+    "name": "aka_crm_log_change_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_crm_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_crm_message_quality_evaluation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_crm_pancake_override_audit_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_crm_status_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_crm_type_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_crmsettings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_cron_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,crm_interest_worker=rU/postgres}"
+  },
+  {
+    "name": "aka_cskh_action_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_cskh_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_customer_feedback_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_customer_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_customer_lifecycle_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "aka_customer_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_customer_loyalty_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_customer_qc_criteria_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_customer_qc_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_customer_qc_issue_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_data_split_rules_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_function_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_inbound_auto_reply_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_ingest_watchdog_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_lead_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_notifications_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_order_history_access_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "aka_order_history_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "aka_order_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_payment_order_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_phone_nudge_job_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_promotion_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_push_subscriptions_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_quiz_hoithoai_result_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_quiz_result_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_receiving_account_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_sale_order_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_sale_order_item_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_salesopportunity_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rU/postgres}"
+  },
+  {
+    "name": "aka_salesopportunity_type_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_staff_attitude_alert_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_staff_digest_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_staff_escalation_log_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_template_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_tinh_nang_moi_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "aka_webhook_link_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "akabiz_portal_rate_limit_events_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "app_events_event_seq_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_action_status_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_account_action_status_policies_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_actions_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contact_group_dynamic_filter_rules_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contact_group_dynamic_filters_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contact_group_member_origins_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contact_group_members_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contact_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contacts_dataset_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_contacts_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_account_error_state_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_account_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_account_logs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,anon=U/postgres,authenticated=U/postgres,aka_agent_chat_api=U/postgres}"
+  },
+  {
+    "name": "auto_account_random_run_days_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_accounts_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_admin_api_docs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "auto_automation_detail_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_automation_enqueue_failures_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_automation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_automation_trigger_statuses_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_blocks_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_action_detail_statuses_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_creation_bundles_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_data_group_sources_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_details_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_campaign_error_state_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_campaign_input_data_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_campaign_input_origins_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_input_target_aliases_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_inputs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_logs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_run_events_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_send_exclusion_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_send_exclusion_rules_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_campaign_zalo_realtime_group_events_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_campaigns_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_contact_tags_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_content_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_content_templates_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_data_group_external_sync_runs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_data_group_external_sync_sources_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_data_ingest_batches_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_elements_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_email_link_trackings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_email_message_trackings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_email_notification_deliveries_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_email_notification_settings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_error_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_filter_field_options_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_filter_fields_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_filter_operators_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_media_files_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_media_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "auto_pancake_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_proxies_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_run_steps_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_runs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_staff_device_login_settings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_status_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_system_settings_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_table_logs_id_seq",
+    "owner": "postgres",
+    "acl": null
+  },
+  {
+    "name": "auto_voice_call_events_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_voice_call_jobs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_voice_device_profiles_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_voice_tts_assets_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_workflows_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "auto_zalo_api_error_logs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "category_item_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "category_type_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_staff_conversation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_staff_message_attachment_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_staff_message_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_staff_preference_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_conversation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_conversation_tag_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_group_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_group_member_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_organization_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_organization_staff_access_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_tag_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_account_user_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_action_attachment_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_action_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_api_token_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_contact_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_contact_info_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_note_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_ping_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_ping_recipient_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_ping_target_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_staff_state_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_supporter_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_conversation_system_tag_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_friend_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_friend_list_entry_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_gom_outbox_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_group_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_group_event_member_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_mention_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_reaction_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_reaction_target_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_receipt_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_message_style_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_quick_reply_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_quick_reply_media_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_runtime_event_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "chat_zalo_staff_notification_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "chat_zalo_staff_preference_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "context_gia_tri_hien_tai_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_khach_hang_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_khach_hang_ma_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_lan_thu_thap_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_lua_chon_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_nguon_thu_thap_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_nhat_ky_gia_tri_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_tin_hieu_pheu_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "context_truong_thong_tin_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "cskh_send_log_20260519_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "lark_send_queue_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "message_gom_queue_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_customer_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_group_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "org_group_staff_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "org_organization_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_organization_product_history_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres}"
+  },
+  {
+    "name": "org_organization_product_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_package_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_product_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_product_package_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "org_staff_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "outbox_messages_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "sync_logs_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "test_bill_compare_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "test_fn_backup_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "test_jev_compare_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "test_luna_compare_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "webhook_inbox_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "zalo_accounts_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "zalo_group_members_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}"
+  },
+  {
+    "name": "zalo_groups_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  },
+  {
+    "name": "zalo_users_id_seq",
+    "owner": "postgres",
+    "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres,aka_agent_chat_api=rU/postgres}"
+  }
+]

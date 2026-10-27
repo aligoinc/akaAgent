@@ -19,3 +19,8 @@ verify_jwt = false
 
 [functions.create-aka-crm]
 verify_jwt = false
+
+# Bootstrap verifies staff credentials/device binding itself, then verifies the
+# managed Auth user before registering or revoking a private session mapping.
+[functions.aka-agent-desktop-session]
+verify_jwt = false

@@ -1,0 +1,33 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "date": "2026-10-27",
+  "signature": "public.aka_agent_desktop_login_content()",
+  "queryMode": "BEGIN READ ONLY ... ROLLBACK",
+  "existing_signature": null,
+  "columns": [
+    {
+      "type": "bigint",
+      "column": "id"
+    },
+    {
+      "type": "text",
+      "column": "key"
+    },
+    {
+      "type": "text",
+      "column": "value"
+    },
+    {
+      "type": "boolean",
+      "column": "is_secret"
+    },
+    {
+      "type": "boolean",
+      "column": "is_active"
+    },
+    {
+      "type": "timestamp with time zone",
+      "column": "updated_at"
+    }
+  ]
+}

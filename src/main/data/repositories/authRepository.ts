@@ -12,12 +12,12 @@ import {
 import { getCurrentDeviceIdentity, getV2DeviceIdentity } from '../../services/deviceIdentity'
 import { getDeviceChangeRequests } from '../../services/deviceChangeService'
 import { requireCurrentUserCredentials } from '../currentUser'
-import { getSupabaseClient } from '../supabaseClient'
+import { getSupabaseClient, desktopSession, desktopSessionTransport, callDesktopSessionEndpoint } from '../supabaseClient'
 import { callStaffClient, callCurrentStaffClient } from './staffClientRepository'
 import { recoverStaffDeviceCredentials, registerStaffDeviceRecovery } from '../../services/staffDeviceRecovery'
 import {
   ACCOUNT_EXPIRED_MESSAGE,
-  ensureAkaAgentSubscriptionActive,
+  ensureLoginProductsActive,
   loadOrganizationAccountProducts,
   loadOrganizationChatSyncProducts,
   loadOrganizationEntitlementAccess
@@ -83,11 +83,17 @@ function throwAuthTechnicalError(context: string, userMessage: string, error: un
   throw new Error(userMessage)
 }
 
-async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organization_id' | 'username' | 'password'>): Promise<void> {
+async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organization_id' | 'username' | 'password'>, fingerprintHash: string): Promise<void> {
   const access = await readStaffAccess(staff.id, staff.username, staff.password)
   if (!access.isActive) throw new Error('Tài khoản đã bị khoá.')
   if (!access.timeAllowed) throw new Error('Tài khoản nhân viên đã hết hạn sử dụng.')
-  await ensureAkaAgentSubscriptionActive(staff.organization_id)
+  const result = await callDesktopSessionEndpoint<{ staffId: number; organizationId: number; products: unknown[] }>({
+    action: 'check', username: staff.username, password: staff.password, fingerprintHash
+  }, AbortSignal.timeout(15_000))
+  if (result.staffId !== staff.id || result.organizationId !== staff.organization_id || !Array.isArray(result.products)) {
+    throw new Error('Thông tin xác thực đã thay đổi. Vui lòng đăng nhập lại.')
+  }
+  ensureLoginProductsActive(result.products)
 }
 
 async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumns): Promise<AuthUser> {
@@ -155,7 +161,7 @@ async function prepareDeviceLogin(username: string, password: string, source: De
     fingerprintHash: device.fingerprintHash, legacyHash, source
   })
   const staff: StaffRow = { ...profile, password }
-  await ensureStaffSubscriptionActive(staff)
+  await ensureStaffSubscriptionActive(staff, device.fingerprintHash)
   const decision = profile.deviceV3!
   if (decision.decision === 'device_locked') throw new Error(deviceLockedMessage())
   return { staff, device, legacyHash, decision, source }
@@ -178,6 +184,7 @@ export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials 
 }
 
 async function completeDeviceLogin(prepared: PreparedDeviceLogin, assertCurrent?: () => void): Promise<AuthLoginResult> {
+  const sessionRevision = desktopSession.revision()
   if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
   assertCurrent?.()
   const { staff, device, source, legacyHash } = prepared
@@ -200,9 +207,20 @@ async function completeDeviceLogin(prepared: PreparedDeviceLogin, assertCurrent?
     catch { console.warn('[auth] Không đăng ký được khóa khôi phục trên máy; đăng nhập vẫn hợp lệ.') }
   }
   assertCurrent?.()
-  return { status: 'authenticated', automaticLoginAllowed, user: await buildAuthUser(staff, {
+  const session = await desktopSessionTransport.login({
+    username: staff.username, password: staff.password, fingerprintHash: device.fingerprintHash
+  }, AbortSignal.timeout(45_000))
+  try {
+    assertCurrent?.()
+    if (session.staffId !== staff.id || session.organizationId !== staff.organization_id) throw new Error('Danh tính phiên không khớp.')
+    desktopSession.install(session, sessionRevision)
+  } catch (error) {
+    void desktopSessionTransport.revoke(session.accessToken, AbortSignal.timeout(3_000)).catch(() => {})
+    throw error
+  }
+  try { return { status: 'authenticated', automaticLoginAllowed, user: await buildAuthUser(staff, {
     aka_agent_device_fingerprint_hash: device.fingerprintHash, device_label: device.label, device_platform: device.platform
-  }) }
+  }) } } catch (error) { desktopSession.clear(); throw error }
 }
 
 function hasAcceptedPolicy(staff: StaffRow): boolean {

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { AuthUser } from '../../shared/types'
+import { desktopSession, isTrustedServerSupabaseConfigured } from './supabaseClient'
 
 let _currentUser: AuthUser | null = null
 const currentUserStorage = new AsyncLocalStorage<AuthUser>()
@@ -25,6 +26,9 @@ function notifySessionChanged(): void {
 }
 
 export function setCurrentUser(user: AuthUser | null): void {
+  if (!isTrustedServerSupabaseConfigured() && (!user || !desktopSession.matches(user.staffId, user.organizationId))) {
+    desktopSession.clear()
+  }
   if (user && _currentUser && user.staffId === _currentUser.staffId &&
     user.organizationId === _currentUser.organizationId && user.chatWebEnabledAtLogin === undefined) {
     // Repository refreshes may return a new AuthUser without desktop-only fields.

@@ -119,7 +119,8 @@ async function main(){
  // Shared client requires explicit Server initialization; merely having an env
  // secret cannot promote Desktop. No browser auth session replaces backend key.
  let created
- const make=()=>load('src/main/data/supabaseClient.ts',{'@supabase/supabase-js':{createClient:(url,key,options)=>(created={url,key,options})},dotenv:{config(){}},ws:class{}},{process:{env:{SUPABASE_ANON_KEY:'public-fixture',AKA_AGENT_SERVER_SUPABASE_SECRET_KEY:'sb_secret_not_for_desktop'},cwd:()=>tmp}})
+ const sessionMocks={'./desktopSession':{DesktopSessionManager:class{}},'./desktopSessionTransport':{createDesktopSessionTransport:()=>({})}}
+ const make=()=>load('src/main/data/supabaseClient.ts',{...sessionMocks,'@supabase/supabase-js':{createClient:(url,key,options)=>(created={url,key,options})},dotenv:{config(){}},ws:class{}},{process:{env:{SUPABASE_PUBLISHABLE_KEY:'public-fixture',SUPABASE_ANON_KEY:'ignored-legacy-key',AKA_AGENT_SERVER_SUPABASE_SECRET_KEY:'sb_secret_not_for_desktop'},cwd:()=>tmp}})
  const desktop=make();desktop.getSupabaseClient();assert.equal(created.key,'public-fixture');assert.throws(()=>desktop.configureTrustedServerSupabase('sb_secret_late'));checks++
  const server=make();assert.throws(()=>server.configureTrustedServerSupabase('public-fixture'));server.configureTrustedServerSupabase('sb_secret_server');server.getSupabaseClient();assert.equal(created.key,'sb_secret_server');assert.equal(created.options.auth.persistSession,false);checks++
  console.log(`Staff RLS client smoke passed: ${checks} checks`)

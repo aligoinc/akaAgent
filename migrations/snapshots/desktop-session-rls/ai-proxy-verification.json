@@ -1,0 +1,139 @@
+{
+  "checkedAt": "2026-10-27T15:21:43.649179+00:00",
+  "status": "source-verified-candidate-not-applied-or-deployed",
+  "productionMutated": false,
+  "rlsChanged": false,
+  "anonOrKeyReadRevoked": false,
+  "providerKeysRotated": false,
+  "desktopPackaged": false,
+  "providerLiveCalls": false,
+  "source": {
+    "akaAgent": {
+      "head": "91031bb08fd9e1721e4c28099638917051efeba9",
+      "sha256": {
+        "src/main/services/desktopAiTransport.ts": "a613263772d62ea0ba943c87eb7311c35171e1ff147e2730c5e8aff060ce0858",
+        "src/main/services/aiRuntimeService.ts": "ea5a0df0f22efc468f07b791a275921e12886a506b45a5243ec255d36761dbbb",
+        "src/main/data/repositories/aiRepository.ts": "5130feecbabbd93952fa863bc5d4dc40e91622a98d4e402b44cfdf2eaf40c729",
+        "migrations/migration_v434_desktop_ai_proxy_identity.sql": "8a14b9cab673c56925a9e814d0c491756a09a09202fb266d8b03b8931c3f4420",
+        "scripts/desktop-ai-proxy-smoke.cjs": "727313eb4b7b5f9f21bd4d14c126dac60f11805a0c9be19eb14eef63dc6735d6",
+        "scripts/desktop-session-rls/ai-proxy-identity-smoke.cjs": "5badebfe337e32574f874af2427890f9d51113206d7d85482a1594ff9981c09c"
+      }
+    },
+    "akaAgentWebApp": {
+      "head": "9f3d4ee363e0e7e9e6420f33c7a7fda019485e0e",
+      "sha256": {
+        "apps/api/src/app.ts": "a42acd330c45e1017a7bfd93af249f35bc000b5d416e2935fd5e489168c4b699",
+        "apps/api/src/modules/desktop-ai/desktop-ai.routes.ts": "08229057e2ef43bb398f99c44d21a63e12922ab36d952550d4d74fcbd3e313b2",
+        "apps/api/src/modules/desktop-ai/desktop-ai.routes.test.ts": "1389a8e5810e9a55b3485d83130cba40433b7b14b26dde16044b7d79c51d2ceb",
+        "apps/api/src/modules/desktop-ai/desktop-ai.auth.test.ts": "a7541c65ca7e5b7c77a2f36ef806a6453289d892dc729d84882fef61a47762d1",
+        "scripts/desktop-ai-load-smoke.cjs": "43364ecbe6399fe3ace2f196c6bfe503b9b06ac2f6abbb77d81ae84a30f69f9f",
+        "fly.toml": "33a8dd740385becdca8baa65437ed420b912ee024bdf3f074ea4811798ccaad7"
+      }
+    }
+  },
+  "identity": {
+    "signature": "public.aka_agent_desktop_ai_identity(uuid,uuid)",
+    "checksum": "5600c48f72d1343670b3e7cfd31ce491",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "s",
+    "config": [
+      "search_path=pg_catalog",
+      "statement_timeout=10s"
+    ],
+    "acl": [
+      "postgres=X/postgres",
+      "service_role=X/postgres"
+    ]
+  },
+  "checks": {
+    "desktopTypecheckNode": "passed",
+    "desktopTypecheckWeb": "passed",
+    "desktopProductionBuild": "passed",
+    "webAppSevenWorkspaceTypecheck": "passed",
+    "webAppProductionBuild": "passed",
+    "apiTypecheckAndBuildAfterFinalCode": "passed",
+    "desktopHttpOldNewParityCases": 16,
+    "newApiTests": 22,
+    "disposablePg17Cases": 14,
+    "legacyAiSmokes": [
+      "ai-form-configs-smoke",
+      "campaign-content-ai-smoke",
+      "campaign-exclusion-ai-smoke",
+      "campaign-facebook-ai-service-smoke"
+    ],
+    "selectAudit": {
+      "selects": 313,
+      "embedded": 60,
+      "unresolved": 0,
+      "unknownPayloads": 0,
+      "resolverSmoke": "passed"
+    },
+    "webAppFullTestRun": {
+      "status": "failed-two-web-ui-cases",
+      "controlApiPassed": 33,
+      "campaignCorePassed": 263,
+      "controlClientPassed": 55,
+      "apiPassed": 1304,
+      "mobilePassed": 247,
+      "webPassed": 848,
+      "webFailed": 2,
+      "failures": [
+        "CampaignsPage: ignores a page started during resume that returns the pre-command state late",
+        "CampaignsPage: keeps the post-resume diagnostic read alive for a visible off-page campaign"
+      ],
+      "wholeCampaignsPageFileRerun": {
+        "passed": 66,
+        "failed": 0
+      },
+      "note": "Full run predates the two added AI admission/body-disconnect tests; final targeted AI suite passes 22. No claim of a clean full-suite run."
+    },
+    "diffCheckBothRepos": "passed"
+  },
+  "loadProbe": {
+    "status": "passed",
+    "runs": [
+      {
+        "count": 24,
+        "bodyBytes": 65621,
+        "elapsedMs": 123,
+        "peakRss": 126550016,
+        "rss": 128188416
+      },
+      {
+        "count": 8,
+        "bodyBytes": 2097237,
+        "elapsedMs": 128,
+        "peakRss": 211894272,
+        "rss": 186941440
+      },
+      {
+        "count": 1,
+        "bodyBytes": 32505941,
+        "elapsedMs": 205,
+        "peakRss": 351649792,
+        "rss": 309755904
+      }
+    ],
+    "scope": "Synthetic isolated Node process; not production throughput or total WebApp memory"
+  },
+  "limits": {
+    "bodyBytes": 33554432,
+    "aggregateBodyBytesPerProcess": 33554432,
+    "requestsPerProcess": 32,
+    "authConfigSetupMs": 12000,
+    "flyIdleSecondsCandidate": 600
+  },
+  "rollout": [
+    "Review and rollback-validate/apply V434 when authorized",
+    "Deploy API with Fly idle timeout on existing resources",
+    "Package/update Desktop",
+    "Only revoke key/anon access or enable RLS on explicit user request"
+  ],
+  "unverified": [
+    "production identity RPC and API deployment",
+    "real provider canary",
+    "full production WebApp memory/capacity",
+    "installer/Windows runtime"
+  ]
+}

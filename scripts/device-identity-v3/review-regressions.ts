@@ -75,9 +75,9 @@ export async function reviewRegressions(root: string): Promise<number> {
       electron: { app: { getPath: () => directory } }, '../../services/deviceBindingMigration': { DeviceBindingMigration },
       '../../services/deviceIdentity': { getCurrentDeviceIdentity: async () => ({ fingerprintHash: hash(3), platform: 'win', label: 'fixture' }),
         getV2DeviceIdentity: async () => { oldReads++; if (scenario === 'hardware-error') throw new Error('WMI unavailable'); return { fingerprintHash: hash(2) } } },
-      '../../services/deviceChangeService': {}, '../currentUser': {}, '../supabaseClient': { getSupabaseClient: () => client },
+      '../../services/deviceChangeService': {}, '../currentUser': {}, '../supabaseClient': { callDesktopSessionEndpoint:async()=>({staffId:1,organizationId:1,products:[]}),desktopSession:{revision:()=>0,install:()=>{},clear:()=>{}},desktopSessionTransport:{login:async()=>({staffId:1,organizationId:1,accessToken:'fixture'}),revoke:async()=>{}},getSupabaseClient: () => client },
       './staffClientRepository': { callStaffClient: rpc }, '../../services/staffDeviceRecovery': proof,
-      './entitlementRepository': { ensureAkaAgentSubscriptionActive: async () => {}, loadOrganizationEntitlementAccess: async () => ({ entitlements: {}, zaloAccountCapabilities: {}, chatSyncEnabled: false }), loadOrganizationAccountProducts: async () => [], loadOrganizationChatSyncProducts: async () => [] },
+      './entitlementRepository': { ensureLoginProductsActive: async () => {}, loadOrganizationEntitlementAccess: async () => ({ entitlements: {}, zaloAccountCapabilities: {}, chatSyncEnabled: false }), loadOrganizationAccountProducts: async () => [], loadOrganizationChatSyncProducts: async () => [] },
       './zaloRuntimeModeRepository': { loadStaffZaloServerModeSnapshot: async () => ({}) },
       './staffManagementRepository': { readStaffAccess: async () => ({ isActive: true, timeAllowed: true }) }
     })

@@ -1,0 +1,134 @@
+{
+  "checkedAt": "2026-10-27T15:34:04.467589+00:00",
+  "status": "fly-resized-source-fixes-verified-api-and-migration-not-deployed",
+  "fly": {
+    "verifiedAt": "2026-10-27T15:28:35.719734+00:00",
+    "machine": "48ee749f357398",
+    "region": "sin",
+    "state": "started",
+    "oldGuest": {
+      "cpu_kind": "shared",
+      "cpus": 1,
+      "memory_mb": 512
+    },
+    "newGuest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 2048
+    },
+    "onlyGuestChanged": true,
+    "imageUnchanged": true,
+    "checks": [
+      {
+        "name": "servicecheck-00-http-8080",
+        "status": "passing",
+        "output": "ok",
+        "updated_at": "2026-10-27T15:26:10.769Z"
+      }
+    ],
+    "http": [
+      {
+        "path": "/healthz",
+        "status": 200,
+        "bytes": 3
+      },
+      {
+        "path": "/",
+        "status": 200,
+        "bytes": 1958
+      },
+      {
+        "path": "/api/aka-agent/control/v1/me",
+        "status": 401
+      }
+    ]
+  },
+  "databaseChanged": false,
+  "rlsChanged": false,
+  "anonOrKeyReadRevoked": false,
+  "providerKeysRotated": false,
+  "aiApiDeployed": false,
+  "desktopPackaged": false,
+  "providerLiveCalls": false,
+  "limits": {
+    "bodyBytes": 67108864,
+    "activeBodyBytes": 134217728,
+    "activeAi": 128,
+    "queuedAi": 256,
+    "activeAuthConfig": 8,
+    "queuedAuthConfig": 384,
+    "preConfigReceiveDeadlineMs": 300000,
+    "authOrConfigNetworkDeadlineMs": 12000,
+    "flyIdleSecondsCandidateNotLive": 600
+  },
+  "checks": {
+    "newAiAndAdmissionTests": {
+      "passed": 33,
+      "failed": 0
+    },
+    "fullApiTestsBeforeLastTwoQueueTests": {
+      "files": 68,
+      "passed": 1315,
+      "failed": 0
+    },
+    "desktopRealHttpParityCases": 16,
+    "webAppSevenWorkspaceTypecheck": "passed",
+    "finalApiTypecheckIncludingAllTests": "passed",
+    "webAppProductionBuild": "passed",
+    "fullUiSuiteRerun": false,
+    "databaseSql": "unchanged; prior 14 PG17 cases retained",
+    "diffCheckBothRepos": "passed"
+  },
+  "load": {
+    "status": "passed",
+    "runs": [
+      {
+        "count": 180,
+        "bodyBytes": 65621,
+        "elapsedMs": 772,
+        "peakRss": 211681280,
+        "rss": 212910080
+      },
+      {
+        "count": 8,
+        "bodyBytes": 8388693,
+        "elapsedMs": 687,
+        "peakRss": 499040256,
+        "rss": 424411136
+      },
+      {
+        "count": 4,
+        "bodyBytes": 41943125,
+        "elapsedMs": 1401,
+        "peakRss": 917929984,
+        "rss": 835223552
+      },
+      {
+        "count": 1,
+        "bodyBytes": 66060373,
+        "elapsedMs": 636,
+        "peakRss": 1090273280,
+        "rss": 959250432
+      }
+    ],
+    "scope": "Synthetic isolated Node process; not production throughput or total WebApp memory"
+  },
+  "source": {
+    "webHead": "9f3d4ee363e0e7e9e6420f33c7a7fda019485e0e",
+    "webSha256": {
+      "apps/api/src/modules/desktop-ai/desktop-ai.routes.ts": "c1648632753631ea12c2aa1bd0312f65ced70fd17b961d41e2efed740360a20a",
+      "apps/api/src/modules/desktop-ai/desktop-ai.admission.ts": "61538839d71242495fa1f80514e22f730c0cf88cdbe5297bc0ff44f1968d5fc5",
+      "apps/api/src/modules/desktop-ai/desktop-ai.routes.test.ts": "318ee57535fe547fd198c5dc61729b46c9340c4f94d0c994bf3a3a29d497e4f0",
+      "apps/api/src/modules/desktop-ai/desktop-ai.auth.test.ts": "a7541c65ca7e5b7c77a2f36ef806a6453289d892dc729d84882fef61a47762d1",
+      "apps/api/src/modules/desktop-ai/desktop-ai.admission.test.ts": "abb5752a45e7c639d149623571ac2eb4b68a6489a89f165fdf42280efaf451d6",
+      "scripts/desktop-ai-load-smoke.cjs": "668be8b36f42a8484fd992441ad34144f467dec7f87322e4461d31be1a3ff6c6",
+      "fly.toml": "6c186121b29d2e2bda6365c084418aba7a25bc6f9b93b51d24391090223eb024"
+    }
+  },
+  "knownLimits": [
+    "Not a production/provider canary; API still needs V434 and deployment",
+    "Synthetic payloads and fake provider; measured isolated-process RSS is not full production WebApp memory",
+    "Queued requests remain subject to existing AI total deadline; emergency queue exhaustion and upstream failures can still fail requests",
+    "User retains direct ai_model.api_key access via existing DB permissions until explicitly authorized cutover"
+  ]
+}

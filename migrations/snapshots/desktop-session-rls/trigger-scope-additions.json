@@ -1,0 +1,125 @@
+{
+  "functions": [
+    {
+      "signature": "aka_agent_claim_email_notification_deliveries(integer)",
+      "arguments": "p_limit integer DEFAULT 10",
+      "result": "SETOF auto_email_notification_deliveries",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": null,
+      "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "checksum": "dde7c26acf31616d82b21d0f71ffbc6e",
+      "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_claim_email_notification_deliveries(p_limit integer DEFAULT 10)\n RETURNS SETOF auto_email_notification_deliveries\n LANGUAGE sql\n SECURITY DEFINER\nAS $function$\n  WITH next_rows AS (\n    SELECT id\n    FROM public.auto_email_notification_deliveries\n    WHERE status IN ('pending', 'retrying')\n      AND next_attempt_at <= now()\n      AND retry_count <= max_retry_count\n    ORDER BY next_attempt_at ASC, id ASC\n    LIMIT GREATEST(COALESCE(p_limit, 10), 1)\n    FOR UPDATE SKIP LOCKED\n  ),\n  updated AS (\n    UPDATE public.auto_email_notification_deliveries d\n    SET status = 'sending',\n        attempt_count = d.attempt_count + 1,\n        locked_at = now(),\n        updated_at = now()\n    FROM next_rows\n    WHERE d.id = next_rows.id\n    RETURNING d.*\n  )\n  SELECT * FROM updated;\n$function$\n"
+    }
+  ],
+  "tables": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=ar/postgres}",
+      "rls": false,
+      "kind": "r",
+      "name": "auto_email_notification_deliveries",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "staff_id",
+          "type": "bigint",
+          "nullable": false
+        },
+        {
+          "name": "type",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "dedupe_key",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false
+        },
+        {
+          "name": "attempt_count",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "retry_count",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "max_retry_count",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        },
+        {
+          "name": "locked_at",
+          "type": "timestamp with time zone",
+          "nullable": true
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+      "rls": true,
+      "kind": "r",
+      "name": "auto_control_web_device_policy",
+      "columns": [
+        {
+          "name": "singleton",
+          "type": "boolean",
+          "nullable": false
+        },
+        {
+          "name": "max_devices",
+          "type": "integer",
+          "nullable": false
+        },
+        {
+          "name": "revision",
+          "type": "uuid",
+          "nullable": false
+        }
+      ]
+    }
+  ],
+  "policies": []
+}

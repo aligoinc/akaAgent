@@ -10,7 +10,7 @@ global.__contentDb = { from(table) {
   let filters = [], single = false, insert, s
   const q = { select: () => q, eq: (k, v) => { filters.push(r => r[k] === v); return q },
     not: (k, _op, v) => { filters.push(r => r[k] !== v); return q },
-    abortSignal: v => { s = v; return q }, single: () => { single = true; return q }, maybeSingle: () => { single = true; return q },
+    abortSignal: v => { s = v; return q }, returns: () => q, single: () => { single = true; return q }, maybeSingle: () => { single = true; return q },
     insert: v => { insert = v; return q }, then: (ok, fail) => Promise.resolve().then(() => {
       s?.throwIfAborted()
       if (insert) { logs.push(insert); return { data: { id: 10 }, error: null } }
@@ -21,7 +21,7 @@ global.__contentDb = { from(table) {
 } }
 async function main() {
   await build({ stdin: { contents: `export * from './src/shared/campaignContentAi'; export * from './src/shared/campaignContentAiForm'; export * from './src/shared/formAiClaude'; export * from './src/main/services/campaignContentAiService'; export * from './src/main/data/repositories/aiRepository'; export * from './src/shared/campaignFormAiConfig';`, resolveDir: root }, outfile: path.join(tmp, 'm.cjs'), bundle: true, platform: 'node', logLevel: 'silent', plugins: [{ name: 'fixtures', setup(b) {
-    b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const getSupabaseClient = () => globalThis.__contentDb', loader: 'ts' }))
+    b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const isTrustedServerSupabaseConfigured = () => true; export const desktopSession = { token: async () => null }; export const getSupabaseClient = () => globalThis.__contentDb', loader: 'ts' }))
     b.onLoad({ filter: /\/currentUser\.ts$/ }, () => ({ contents: 'export const getCurrentUser = () => ({organizationId:9}); export const requireCurrentUser = getCurrentUser;', loader: 'ts' }))
   } }] })
   const m = require(path.join(tmp, 'm.cjs'))

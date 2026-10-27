@@ -4,6 +4,7 @@ import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
 import { registerSendExclusionHandlers } from './handlers/campaignSendExclusionHandlers'
 import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
+import { desktopSession } from '../data/supabaseClient'
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
 import { AuthEntitlements, AuthUser, IPC_EVENTS, ZaloLoginQrEvent } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
@@ -748,10 +749,10 @@ export function registerIpcHandlers(
     sessionExpiryTimer = null
   }
 
-  const notifyRendererSessionExpired = (): void => {
+  const notifyRendererSessionExpired = (message = ACCOUNT_EXPIRED_MESSAGE): void => {
     try {
       if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(IPC_EVENTS.AUTH_SESSION_EXPIRED, { message: ACCOUNT_EXPIRED_MESSAGE })
+        mainWindow.webContents.send(IPC_EVENTS.AUTH_SESSION_EXPIRED, { message })
       }
     } catch {
       // Window may be closed
@@ -768,7 +769,7 @@ export function registerIpcHandlers(
     }
   }
 
-  const expireCurrentSession = async (reason: 'login' | 'daily' | 'runtime'): Promise<void> => {
+  const expireCurrentSession = async (reason: 'login' | 'daily' | 'runtime' | 'token'): Promise<void> => {
     const user = getCurrentUser()
     if (!user) return
 
@@ -804,9 +805,14 @@ export function registerIpcHandlers(
       devicePresence.stop()
       setCurrentUserCredentials(null)
       setCurrentUser(null)
-      notifyRendererSessionExpired()
+      notifyRendererSessionExpired(reason === 'token' ? 'Phiên truy cập dữ liệu không còn hợp lệ. Vui lòng đăng nhập lại.' : undefined)
     }
   }
+
+  const removeTokenListener = desktopSession.onRejected(() => {
+    void expireCurrentSession('token').catch(() => {})
+  })
+  mainWindow.once('closed', removeTokenListener)
 
   const runSessionExpiryCheck = async (reason: 'login' | 'daily' | 'runtime'): Promise<void> => {
     if (sessionExpiryCheckRunning) return

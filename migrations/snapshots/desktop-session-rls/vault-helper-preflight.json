@@ -1,0 +1,21 @@
+{
+  "project_id": "cgjbsmqtfhqvttudyjzq",
+  "captured_at_vietnam": "2026-10-27",
+  "purpose": "Read-only metadata capture for the omitted Vault helper. No secret values queried. Preserve the definition; change EXECUTE ACLs only in the separately approved cutover.",
+  "source_checksum": "a99f67a293add94677a9f85145fe211d",
+  "target_checksum": "a99f67a293add94677a9f85145fe211d",
+  "function": {
+    "signature": "aka_agent_get_vault_secret(text)",
+    "arguments": "p_name text",
+    "result": "text",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "v",
+    "config": [
+      "search_path=public, vault"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "a99f67a293add94677a9f85145fe211d",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_get_vault_secret(p_name text)\n RETURNS text\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public', 'vault'\nAS $function$\n  SELECT decrypted_secret\n  FROM vault.decrypted_secrets\n  WHERE name = p_name\n  LIMIT 1;\n$function$\n"
+  }
+}

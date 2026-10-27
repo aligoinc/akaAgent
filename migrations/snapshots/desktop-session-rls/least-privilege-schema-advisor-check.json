@@ -1,0 +1,170 @@
+{
+  "schemas": [
+    {
+      "schema": "aka_message_private",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "auth",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "context_kiem_thu",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "cron",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 2
+    },
+    {
+      "schema": "extensions",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 2
+    },
+    {
+      "schema": "graphql",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "graphql_public",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "net",
+      "usage": true,
+      "create_objects": false,
+      "accessible_relations": 2
+    },
+    {
+      "schema": "private",
+      "usage": true,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "public",
+      "usage": true,
+      "create_objects": false,
+      "accessible_relations": 54
+    },
+    {
+      "schema": "realtime",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "retired_customer_intake_20260901",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "retired_customer_intake_live_20260901",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "retired_customer_intake_private_20260901",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "retired_customer_intake_public_20260901",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "storage",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "supabase_functions",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "supabase_migrations",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    },
+    {
+      "schema": "vault",
+      "usage": false,
+      "create_objects": false,
+      "accessible_relations": 0
+    }
+  ],
+  "net_api_probe": {
+    "status": 406,
+    "body": "{\"code\":\"PGRST106\",\"details\":null,\"hint\":\"Only the following schemas are exposed: public, graphql_public\",\"message\":\"Invalid schema: net\"}"
+  },
+  "advisors": [
+    {
+      "name": "policy_exists_rls_disabled",
+      "level": "ERROR",
+      "count": 3
+    },
+    {
+      "name": "rls_enabled_no_policy",
+      "level": "INFO",
+      "count": 200
+    },
+    {
+      "name": "security_definer_view",
+      "level": "ERROR",
+      "count": 9
+    },
+    {
+      "name": "function_search_path_mutable",
+      "level": "WARN",
+      "count": 126
+    },
+    {
+      "name": "rls_disabled_in_public",
+      "level": "ERROR",
+      "count": 248
+    },
+    {
+      "name": "extension_in_public",
+      "level": "WARN",
+      "count": 4
+    },
+    {
+      "name": "anon_security_definer_function_executable",
+      "level": "WARN",
+      "count": 213
+    },
+    {
+      "name": "authenticated_security_definer_function_executable",
+      "level": "WARN",
+      "count": 211
+    },
+    {
+      "name": "auth_leaked_password_protection",
+      "level": "WARN",
+      "count": 1
+    }
+  ],
+  "note": "No schema CREATE access. Extension default grants are not customer Data API access: net rejected PGRST106; API exposes public and graphql_public only. No extension changes in this audit."
+}

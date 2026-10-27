@@ -1,0 +1,240 @@
+{
+  "metadata": {
+    "rls": "03b6a0e7507d7b9fa2b1b1a4d41a5b37",
+    "roles": "73c8f2096c1d3e0917a8b52e2f49eb29",
+    "policies": "35d87e6bfdea9f728444a63fd27945b2",
+    "functions": "84784dc472ea2f261473d039a2cd6cfb",
+    "memberships": "4cd3ab569f5ae9dca471c2ee0bdad54b"
+  },
+  "other_roles": {
+    "anon": {
+      "tables": "48cf51ac33918f697295d5779887070f",
+      "columns": "bbdf8950ecf596b43e1fc7ea19e872f6",
+      "functions": "c154e18ff54e45ea2de9b6bbd8fcff18",
+      "sequences": "41f72fe30ea16b343f94c22b76cd2b42"
+    },
+    "postgres": {
+      "tables": "8d1ec61e1c691505903a985140809648",
+      "columns": "3e33d0764c2d1b9d58b62e13c6578178",
+      "functions": "efdfdf9d3e89ca2edcf71c7557cc2672",
+      "sequences": "7b22ec4d9ecfbf69934f678a79a82cff"
+    },
+    "pgbouncer": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_monitor": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_maintain": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "service_role": {
+      "tables": "48402a1a32395edf397fc8583101aa3e",
+      "columns": "aee49d08642c04095aba696cdcda04b7",
+      "functions": "6e12710da2b32813cde39ee6097b20bb",
+      "sequences": "f76821c954dd338a70c96553171d0f6f"
+    },
+    "authenticated": {
+      "tables": "48cf51ac33918f697295d5779887070f",
+      "columns": "bbdf8950ecf596b43e1fc7ea19e872f6",
+      "functions": "ac516f263ac1b1b7a0b17e36ebdeba40",
+      "sequences": "41f72fe30ea16b343f94c22b76cd2b42"
+    },
+    "authenticator": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_checkpoint": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "dashboard_user": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_admin": {
+      "tables": "8d1ec61e1c691505903a985140809648",
+      "columns": "3e33d0764c2d1b9d58b62e13c6578178",
+      "functions": "0628d7ed10d0a8ce3ca73783a5a4b7d6",
+      "sequences": "7b22ec4d9ecfbf69934f678a79a82cff"
+    },
+    "pg_read_all_data": {
+      "tables": "deeaa8f835bdc389d1db46266112a31a",
+      "columns": "b60ca86f7de10d89dedab152477c1b78",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "cd64d405b2f910c9afc4c911c6a6dbc6"
+    },
+    "pg_database_owner": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_read_all_stats": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_signal_backend": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_write_all_data": {
+      "tables": "b61ee6efa9a6025122f0626f34bd83e0",
+      "columns": "9d1df3decb888fa4600fea2c1dacce33",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "acefdaf184d788bd29f378c4aee5675d"
+    },
+    "aka_agent_chat_api": {
+      "tables": "264209625a26450adde81cde95ded47c",
+      "columns": "32d15bad1c160e1679e8af5f8360ff08",
+      "functions": "2d3d2fe004284b310e800c52a140259b",
+      "sequences": "7ea37e1fb93f0ad110fef92261c17ce3"
+    },
+    "cli_login_postgres": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_etl_admin": {
+      "tables": "deeaa8f835bdc389d1db46266112a31a",
+      "columns": "b60ca86f7de10d89dedab152477c1b78",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "cd64d405b2f910c9afc4c911c6a6dbc6"
+    },
+    "crm_interest_worker": {
+      "tables": "1737757954ddfa0e6fd1926fe94ebbee",
+      "columns": "7c9be144b9c5a6bcae2c949e3725f80a",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "11070d24e805f28b3a42ca776a5af297"
+    },
+    "pg_stat_scan_tables": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_auth_admin": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_read_all_settings": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_read_server_files": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_write_server_files": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_create_subscription": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_storage_admin": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_read_only_user": {
+      "tables": "deeaa8f835bdc389d1db46266112a31a",
+      "columns": "b60ca86f7de10d89dedab152477c1b78",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "cd64d405b2f910c9afc4c911c6a6dbc6"
+    },
+    "supabase_realtime_admin": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "aka_message_ingest_owner": {
+      "tables": "37d910ac22e3d1ad71d19d66284eee33",
+      "columns": "25a7aa44f24bb248de41f6c201906d15",
+      "functions": "a1d8ea434019b66350711ab3746a81dd",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_functions_admin": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_privileged_role": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_execute_server_program": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "supabase_replication_admin": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    },
+    "pg_use_reserved_connections": {
+      "tables": "5296b6fc809e7f5f4acada0f373528cf",
+      "columns": "c5a4dd7f6ca31647197ce3c195123f42",
+      "functions": "efe920e58e4769ff01df336209334571",
+      "sequences": "1c298b311d2f6c105ec60fd25b7c976d"
+    }
+  },
+  "privileges": {
+    "removed_rpcs": 268,
+    "required_grants": 836,
+    "removed_rpcs_pass": true,
+    "retained_rpcs_pass": true,
+    "required_grants_pass": true,
+    "organization_read_only": true
+  },
+  "migrations": [
+    {
+      "name": "desktop_token_least_privilege",
+      "version": "20261027143544"
+    },
+    {
+      "name": "desktop_proxy_payload_permissions",
+      "version": "20261027143914"
+    }
+  ],
+  "checked_at": "2026-10-27 14:39:44.857428+00"
+}

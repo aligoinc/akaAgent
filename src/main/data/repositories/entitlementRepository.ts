@@ -335,7 +335,6 @@ export function getFeatureUnavailableMessage(feature: EntitlementFeature): strin
 export async function loadOrganizationEntitlementAccess(
   organizationId: number
 ): Promise<OrganizationEntitlementAccess> {
-  const entitlements = emptyAuthEntitlements()
   const { data, error } = await client()
     .from('org_organization_product')
     .select('id, product_id, expiration_date, package_type, max_sends_per_day, max_accounts, is_zalo_show_web, is_zalo_server, is_chat_sync, created_at')
@@ -349,7 +348,11 @@ export async function loadOrganizationEntitlementAccess(
     throw new Error('Không thể kiểm tra quyền sử dụng. Vui lòng thử lại sau.')
   }
 
-  const rows = (data || []) as unknown as OrganizationProductRow[]
+  return resolveOrganizationEntitlementAccess((data || []) as unknown as OrganizationProductRow[])
+}
+
+export function resolveOrganizationEntitlementAccess(rows: OrganizationProductRow[]): OrganizationEntitlementAccess {
+  const entitlements = emptyAuthEntitlements()
   for (const [feature, productIds] of Object.entries(FEATURE_PRODUCT_IDS) as Array<[EntitlementFeature, readonly number[]]>) {
     const featureRows = rows.filter(row => productIds.includes(Number(row.product_id)))
     const isGroupedFeature = feature === 'facebookCore'
@@ -478,6 +481,12 @@ export async function loadOrganizationAccountProducts(organizationId: number): P
 export async function ensureAkaAgentSubscriptionActive(organizationId: number): Promise<void> {
   const entitlements = await loadOrganizationEntitlements(organizationId)
   if (!hasAnyEntitlement(entitlements)) throw new Error(ACCOUNT_EXPIRED_MESSAGE)
+}
+
+export function ensureLoginProductsActive(rows: unknown[]): void {
+  if (!hasAnyEntitlement(resolveOrganizationEntitlementAccess(rows as OrganizationProductRow[]).entitlements)) {
+    throw new Error(ACCOUNT_EXPIRED_MESSAGE)
+  }
 }
 
 export function hasFeatureEntitlement(

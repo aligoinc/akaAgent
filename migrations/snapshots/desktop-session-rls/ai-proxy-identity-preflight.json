@@ -1,0 +1,16 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "function": {
+    "signature": "aka_agent_staff_time_allowed(bigint)",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_staff_time_allowed(p_staff_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT coalesce((SELECT s.is_active AND s.deleted_at IS NULL AND\n    (NOT o.use_staff_expiration OR s.expiration_date IS NULL OR\n      timezone('Asia/Ho_Chi_Minh',s.expiration_date)::date >= timezone('Asia/Ho_Chi_Minh',now())::date)\n    FROM public.org_staff s JOIN public.org_organization o ON o.id=s.organization_id WHERE s.id=p_staff_id),false);\n$function$\n",
+    "checksum": "a294e60011edd8d42e90ac2f74ce744c",
+    "owner": "postgres",
+    "prosecdef": true,
+    "provolatile": "s",
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,=X/postgres,aka_agent_desktop=X/postgres}"
+  },
+  "status": "candidate-not-applied"
+}

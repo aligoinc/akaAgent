@@ -1,9 +1,12 @@
 import { AiCallMetadata, AiLogInput, AiModel, AiPrompt, AiUsing, AiUsingConfig } from '../../../shared/aiTypes'
 import { getCurrentUser } from '../currentUser'
-import { getSupabaseClient } from '../supabaseClient'
+import { getSupabaseClient, isTrustedServerSupabaseConfigured } from '../supabaseClient'
 import { formAiApplies, formAiAvailability, type FormAiSection, type FormAiAvailability } from '../../../shared/campaignFormAiConfig'
 
 const client = () => getSupabaseClient()
+// Desktop reads configuration only. Provider credentials stay on the API host.
+const MODEL_PUBLIC_COLUMNS = 'id,code,provider,model,endpoint,default_body,organization_id,is_system,is_active,created_at,updated_at'
+const modelColumns = (): string => isTrustedServerSupabaseConfigured() ? '*' : MODEL_PUBLIC_COLUMNS
 
 function toJsonObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -104,10 +107,10 @@ export async function getAiUsingConfigByCode(code: string, metadata?: AiCallMeta
   const [{ data: modelRow, error: modelError }, { data: promptRow, error: promptError }] = await Promise.all([
     client()
       .from('ai_model')
-      .select('*')
+      .select(modelColumns())
       .eq('id', using.modelId)
       .eq('is_active', true)
-      .maybeSingle(),
+      .maybeSingle().returns<Record<string, unknown>>(),
     client()
       .from('ai_prompt')
       .select('*')
@@ -141,8 +144,8 @@ export async function getFormAiConfig(section: FormAiSection, actionId: string, 
   if (error || !row || !formAiApplies({
     campaignScope: row.campaign_scope, campaignActionIds: row.campaign_action_ids
   }, actionId)) throw new Error('AI chưa được cấu hình cho loại chiến dịch này.')
-  const { data: model, error: modelError } = await client().from('ai_model').select('*')
-    .eq('id', row.model_id).eq('is_active', true).abortSignal(signal).maybeSingle()
+  const { data: model, error: modelError } = await client().from('ai_model').select(modelColumns())
+    .eq('id', row.model_id).eq('is_active', true).abortSignal(signal).maybeSingle().returns<Record<string, unknown>>()
   if (modelError || !model || model.organization_id != null) throw new Error('Model AI không khả dụng.')
   return {
     // IDs are only used for legacy logging; form calls log their own FK instead.

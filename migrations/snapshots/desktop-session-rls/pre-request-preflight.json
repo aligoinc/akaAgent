@@ -1,0 +1,39 @@
+{
+  "function": {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "checksum": "ff086d95d4ba66cad668bfe48a705e11",
+    "signature": "aka_agent_block_denied_ip_request()",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_block_denied_ip_request()\n RETURNS void\n LANGUAGE plpgsql\n STABLE\n SET search_path TO 'pg_catalog'\nAS $function$\nDECLARE\n  v_headers jsonb := COALESCE(\n    NULLIF(pg_catalog.current_setting('request.headers', true), '')::jsonb,\n    '{}'::jsonb\n  );\n  v_candidate text;\n  v_ip inet;\nBEGIN\n  -- Cloudflare supplies cf-connecting-ip on this project's live API route.\n  -- Inspect all forwarded candidates as well, so supplying a different\n  -- client-controlled forwarded value cannot hide a denied originating hop.\n  -- No writes: this also works for GET/HEAD read-only transactions.\n  FOREACH v_candidate IN ARRAY pg_catalog.string_to_array(\n    pg_catalog.concat_ws(',',\n      v_headers ->> 'cf-connecting-ip',\n      v_headers ->> 'x-real-ip',\n      v_headers ->> 'x-forwarded-for'\n    ), ','\n  ) LOOP\n    v_candidate := pg_catalog.btrim(v_candidate);\n    IF v_candidate = '' THEN\n      CONTINUE;\n    END IF;\n\n    BEGIN\n      v_ip := v_candidate::inet;\n    EXCEPTION WHEN invalid_text_representation THEN\n      CONTINUE;\n    END;\n\n    IF pg_catalog.host(v_ip) IN ('14.254.197.100', '::ffff:14.254.197.100') THEN\n      RAISE SQLSTATE 'PT403' USING MESSAGE = 'Access denied';\n    END IF;\n  END LOOP;\nEND;\n$function$\n",
+    "volatility": "s",
+    "anon_execute": true,
+    "desktop_execute": false,
+    "security_definer": false
+  },
+  "staff_rls": false,
+  "authenticator": {
+    "role": "authenticator",
+    "config": [
+      "session_preload_libraries=safeupdate",
+      "statement_timeout=8s",
+      "lock_timeout=8s",
+      "pgrst.db_pre_request=public.aka_agent_block_denied_ip_request"
+    ]
+  },
+  "stage_b_count": 0,
+  "role_db_settings": [
+    {
+      "role": "authenticator",
+      "config": [
+        "session_preload_libraries=safeupdate",
+        "statement_timeout=8s",
+        "lock_timeout=8s",
+        "pgrst.db_pre_request=public.aka_agent_block_denied_ip_request"
+      ],
+      "database": "ALL"
+    }
+  ]
+}

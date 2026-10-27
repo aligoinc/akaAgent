@@ -1,0 +1,10 @@
+{
+  "checksums": {
+    "supabase/migrations/20261027095004_desktop_session_identity.sql": "acc064f9687dabaf8a696e9e5e8740e2b73aa76476122fae24eb7c26d14e0dc7",
+    "supabase/migrations/20261027141754_desktop_token_least_privilege.sql": "414e720362df8f113aca1cd4d1842a9d358f782efb20e8c770c602eefa6e76f4",
+    "supabase/migrations/20261027143747_desktop_proxy_payload_permissions.sql": "7215704dedb7c1d42e8ff352a23e6c7d376bca60308a3ebe10d713d396cac580"
+  },
+  "postgres_smoke": "PASS ACL/function drift rejects the candidate before mutations\nPASS complete Proxy builder payload works for create and update\nPASS account/campaign writes, runtime profile, AI model read, staff RPC and gateway hook remain compatible\nPASS Desktop cannot read/write staff, read Vault, hard-delete accounts/campaigns, truncate, or edit unused catalog columns\nPASS legacy anon reads and old Vault access remain unchanged as explicitly requested\nPASS effective table/column/function/sequence rights of every other role remain identical\nPASS all function bodies/config/owners and all RLS/policies remain unchanged\nPASS 836 required table/column privileges are available\nPASS 268 unused application functions are not callable by Desktop, including PUBLIC paths\nPASS legacy cutover and rollback cannot restore excess Desktop grants, even with their old approval flags\n{\"checks\":10,\"stubbedUnrelatedFunctions\":149,\"status\":\"passed\"}\n",
+  "typechecks": "tsconfig.node.json and tsconfig.web.json passed in this turn before ACL apply; no runtime source edits in this permission audit",
+  "source_payload_correction": "Record spread builder fields are resolved before inferred types; only 7 proxy columns x INSERT/UPDATE were missing, corrected by separate applied migration"
+}
