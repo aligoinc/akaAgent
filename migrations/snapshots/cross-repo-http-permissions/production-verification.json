@@ -1,0 +1,106 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261027181400",
+    "name": "cross_repo_http_permissions",
+    "source": "supabase/migrations/20261027173856_cross_repo_http_permissions.sql",
+    "sha256": "d6ff712dd644fbda5ad881e5f2a30006d7adf101d16624928acc0dfcd9f99a76"
+  },
+  "applied": true,
+  "unchangedExistingFunctions": 1246,
+  "unchangedRelations": 769,
+  "policiesUnchanged": true,
+  "columnAclUnchanged": true,
+  "databaseStableAfterSmoke": true,
+  "newFunctions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=3s"
+      ],
+      "checksum": "3d617a075b57042966d0b532e4e7137a",
+      "security": false,
+      "signature": "aka_agent_chat_aux_settings(text)",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=3s"
+      ],
+      "checksum": "34db9ee25c12c111d73813d5c7b1c8b5",
+      "security": false,
+      "signature": "akamap_create_data_group(jsonb)",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=3s"
+      ],
+      "checksum": "3ca461cf05ba92b3fd8f1e6ec30a48b2",
+      "security": false,
+      "signature": "akamap_data_group_types(jsonb)",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=60s"
+      ],
+      "checksum": "7edb60e44988e9576d3442157c1498ab",
+      "security": false,
+      "signature": "akamap_ingest_data_group(jsonb)",
+      "volatility": "v"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=60s"
+      ],
+      "checksum": "6d3e3aed770aacb2b22923b9aff88ae9",
+      "security": false,
+      "signature": "akamap_list_data_group_datasets(jsonb)",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=60s"
+      ],
+      "checksum": "c8fd0c4b8c4e013b869ff13483a7e4d5",
+      "security": false,
+      "signature": "akamap_list_data_groups(jsonb)",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "checksum": "fa192c26786b71d42ba2ed3917c3dc0f",
+      "security": false,
+      "signature": "private.akamap_assert_data_group_identity(jsonb)",
+      "volatility": "s"
+    }
+  ],
+  "liveReadonlySmoke": {
+    "ipDenials": 120,
+    "invalidIdentityDenials": 5,
+    "catalogListDatasetParity": true,
+    "engagementParity": true
+  }
+}
