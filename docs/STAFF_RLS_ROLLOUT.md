@@ -1,4 +1,6 @@
-# Bảo vệ org_staff bằng RLS — A/B đã apply, C đang hoãn
+# Bảo vệ org_staff bằng RLS — đã cutover qua V435
+
+**Trạng thái mới nhất, 23:53:25 VN ngày 27/10/2026:** phần khóa quyền của C đã được thực hiện trong `20261027165325 / migration_v435_desktop_permission_cutover`. `org_staff` đã bật RLS; anon/authenticated/Desktop không có quyền đọc/ghi trực tiếp, RPC bootstrap và quyền backend được giữ. V435 cũng thu hồi `get_managed_staff(bigint)` khỏi PUBLIC/anon/authenticated. **Không chạy file C hoặc rollback C cũ**; dùng [audit và phương án hoàn nguyên V435](DESKTOP_PERMISSION_CUTOVER_V435.md). Các ghi chú “C chưa apply” bên dưới là lịch sử trước cutover, không còn mô tả trạng thái bảo vệ hiện tại.
 
 **Bổ sung quyền Chat worker đã apply lúc 17:29:39 VN ngày 27/10/2026:** migration `20261027102939 / staff_runtime_chat_worker_permissions` cấp SELECT view và EXECUTE helper runtime cho `aka_agent_chat_api`. Kiểm chứng A/B ban đầu bỏ sót dependency mới của role này; xem [nguyên nhân, số đo phục hồi và smoke](STAFF_RUNTIME_CHAT_PERMISSIONS.md). **Guard C/rollback C hiện chưa nhận ACL bổ sung và sẽ chặn; cần audit lại trước cutover, không thu hồi quyền Chat để vượt guard.** C chưa apply.
 

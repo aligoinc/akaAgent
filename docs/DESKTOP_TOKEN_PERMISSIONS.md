@@ -1,5 +1,7 @@
 # Rà soát quyền token Desktop — 27/10/2026
 
+**Cập nhật sau cutover:** V435 đã apply lúc 23:53:25 VN ngày 27/10/2026, thu hồi quyền anon/authenticated và bật RLS trong phạm vi akaAgent; Desktop chỉ còn đọc metadata `ai_model`, không đọc `api_key`. Các quyền tối thiểu bên dưới được giữ nguyên. Những ghi chú “anon giữ nguyên” trong tài liệu này mô tả đợt rà soát trước V435; trạng thái hiện tại và rollback ở [audit V435](DESKTOP_PERMISSION_CUTOVER_V435.md).
+
 Đã apply **chỉ phần quyền của `aka_agent_desktop`** trên akachat `cgjbsmqtfhqvttudyjzq`. Không thu hồi anon/authenticated, không bật hoặc đổi RLS/policy, không sửa dữ liệu khách hàng, không thay source ứng dụng/query/mapper/timeout trong lượt này. Không cần build lại chỉ để nhận thay đổi ACL; bộ cài token mới vẫn chưa phát hành.
 
 | Migration production | Giờ Việt Nam | Canonical |
