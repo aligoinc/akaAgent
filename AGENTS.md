@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Sửa quyền Chat worker đã apply akachat 27/10/2026 lúc 17:29:39 VN (`20261027102939 / staff_runtime_chat_worker_permissions`): cấp SELECT view runtime và EXECUTE helper staff cho `aka_agent_chat_api`, giữ body/ACL cũ và RLS=false; gỡ 82 chiến dịch/37 staff không restart. Không apply lại; C/rollback C cần audit lại ACL trước cutover. [Audit](docs/STAFF_RUNTIME_CHAT_PERMISSIONS.md).
+
 Nhận diện máy v3 đã apply akachat 27/10/2026 lúc 15:57 VN (`20261027085744 / device_identity_v3`): ghép UUID/serial/MachineGuid/MAC gốc, bỏ bootstrap credential theo hash; chuyển v2→v3 bằng credential + CAS/receipt. Seed 13 nhóm v2 trùng/49 staff; chưa chuyển binding khách. Năm target/363 hàm ngoài phạm vi khớp, 35 SQL PG17 + rollback live trước/sau + 6 HTTP đạt. Giữ auth A/B, reset/presence/quota/ACL; **org_staff vẫn RLS=false, chưa bật C hoặc phát hành app**. Không apply lại v3. [Hợp đồng, audit, kiểm chứng và rollout](docs/DEVICE_IDENTITY_V3.md#apply-production--27102026).
 
 Review v3 ngày 27/10/2026: giữ khôi phục proof v2 bằng cùng khóa local sau phản hồi từ chối v3 rõ ràng; vẫn qua gate trùng và source recovery. Reset giữ selection hợp lệ của máy dù đổi tài khoản nào; chỉ sửa khi hardware đọc thành công xác nhận nguồn đã mất và reset đã được server xác nhận. 57 client/33 SQL, 59 proof/40 tương thích, reset smoke và hai typecheck đạt; không đổi candidate SQL hoặc production. [Audit](docs/DEVICE_IDENTITY_V3.md).
@@ -737,6 +739,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **RPC invoker và dependency mới**: giữ ACL của RPC chưa đủ; phải kiểm tra SELECT/EXECUTE trên view/helper bằng role SQL thật `aka_agent_chat_api`. BYPASSRLS không thay quyền object; [sự cố và smoke](docs/STAFF_RUNTIME_CHAT_PERMISSIONS.md).
 
 - **Staff RLS và bộ cài Server nội bộ**: A/B đã live; C cần xác nhận riêng sau cập nhật client. Khôi phục bằng máy dùng proof, lỗi proof/status không mở fallback; sửa file proof chỉ sau xác thực thành công. `build:server:win:private` chứa khóa backend có thể trích xuất, chỉ giữ local/máy chủ quản lý; không commit/upload bộ cài hoặc đưa khóa vào Desktop. Xem [rollout và kiểm chứng](docs/STAFF_RLS_ROLLOUT.md).
 

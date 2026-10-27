@@ -1,5 +1,7 @@
 # Bảo vệ org_staff bằng RLS — A/B đã apply, C đang hoãn
 
+**Bổ sung quyền Chat worker đã apply lúc 17:29:39 VN ngày 27/10/2026:** migration `20261027102939 / staff_runtime_chat_worker_permissions` cấp SELECT view và EXECUTE helper runtime cho `aka_agent_chat_api`. Kiểm chứng A/B ban đầu bỏ sót dependency mới của role này; xem [nguyên nhân, số đo phục hồi và smoke](STAFF_RUNTIME_CHAT_PERMISSIONS.md). **Guard C/rollback C hiện chưa nhận ACL bổ sung và sẽ chặn; cần audit lại trước cutover, không thu hồi quyền Chat để vượt guard.** C chưa apply.
+
 **Nhận diện máy v3 đã apply akachat 27/10/2026 lúc 15:57 VN:** `20261027085744 / device_identity_v3`; hai RPC auth và ba helper khớp target, giữ 363 hàm ngoài phạm vi/ACL/policy. DB đã có các đối tượng v3 mà guard C yêu cầu; **C vẫn chưa apply, app chưa phát hành**. Không apply lại v3; [audit](DEVICE_IDENTITY_V3.md#apply-production--27102026).
 
 **Timeout staff đã sửa production 27/10/2026 lúc 15:50 VN:** `20261027085042 / staff_runtime_inherit_lock_timeout` chỉ bỏ override chờ khóa 3s của helper B; giữ caller timeout, body/ACL và 38 hàm liên quan. C vẫn chưa bật. Không apply lại; [audit và rollback](STAFF_RUNTIME_LOCK_TIMEOUT.md).
