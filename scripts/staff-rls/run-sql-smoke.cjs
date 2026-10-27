@@ -73,6 +73,8 @@ try {
  denies(`PERFORM public.aka_agent_recover_staff_credentials('${token}','${hash}')`);pass('password change and reset/rebind revoke recovery')
  sql("UPDATE org_staff SET password='test-alice' WHERE id=1;");reg()
  sql(fs.readFileSync(files[1],'utf8'));pass('all exact-source runtime patches pass live-definition/ACL preflight')
+ sql(fs.readFileSync(path.join(root,'supabase/migrations/20261027083342_staff_runtime_inherit_lock_timeout.sql'),'utf8'));pass('runtime helper inherits caller lock timeout before cutover')
+ const receiptDirectory=process.env.STAFF_RLS_RECEIPT_DIR||'staff-runtime-lock-timeout'
  for(const f of patches){const current=json(`SELECT json_build_object('def',pg_get_functiondef(oid),'acl',proacl::text,'definer',prosecdef,'owner',pg_get_userbyid(proowner),'config',proconfig,'volatility',provolatile) FROM pg_proc WHERE oid='public.${f.signature}'::regprocedure;`);assert.equal(current.acl,f.proacl);assert.equal(current.definer,false);assert.equal(current.owner,f.owner);assert.deepEqual(current.config,f.proconfig);assert.equal(current.volatility,f.provolatile);checks++}
  const viewName='public.aka_agent_staff_runtime_profile'
  const drift=[
@@ -100,6 +102,7 @@ try {
  }
  pass(`cutover/rollback view guards accept reordered owner defaults and reject privilege drift on PostgreSQL ${serverVersion}`)
  let blocked=false;try{sql(fs.readFileSync(files[2],'utf8'))}catch(e){blocked=e.message.includes('STOP: staff RLS activation')};assert(blocked);pass('cutover refuses accidental application')
+ let missingTimeoutFix=false;try{sql("BEGIN; SET LOCAL aka_agent.staff_rls_cutover='approved-after-client-update'; ALTER FUNCTION public.aka_agent_staff_runtime_scope(bigint,text) SET lock_timeout='3s';\n"+fs.readFileSync(files[2],'utf8'))}catch(e){missingTimeoutFix=e.message.includes('staff RLS prepared function drift')};assert(missingTimeoutFix);pass('cutover refuses the old 3s runtime helper')
  sql("SET aka_agent.staff_rls_cutover='approved-after-client-update';\n"+fs.readFileSync(files[2],'utf8'));pass('explicit local cutover succeeds')
  assert.deepEqual(runtimeSnapshot(),runtimeBefore);checks+=runtimeBefore.length;pass('runtime boundary/ownership/deletion/held-expiry parity before and after RLS')
  for(const role of ['anon','authenticated']){
@@ -116,9 +119,9 @@ try {
  assert.equal(json(`SELECT public.aka_agent_staff_security_status();`).legacyRecoveryAllowed,false)
  assert.equal(json(`SET ROLE anon; SELECT public.aka_agent_recover_staff_credentials('${token}','${hash}');`).username,'alice');pass('recovery survives cutover without public reads')
  const targets=json("SELECT json_agg(json_build_object('signature',oid::regprocedure::text,'checksum',md5(pg_get_functiondef(oid)),'owner',pg_get_userbyid(proowner),'securityDefiner',prosecdef,'volatility',provolatile,'config',proconfig,'acl',proacl::text) ORDER BY proname) FROM pg_proc WHERE (pronamespace='public'::regnamespace AND (proname LIKE 'aka_agent_staff_%' OR proname='aka_agent_recover_staff_credentials' OR oid=ANY(ARRAY["+patches.map(f=>quote('public.'+f.signature)+'::regprocedure').join(',')+"])) OR oid=to_regprocedure('private.aka_agent_invalidate_staff_recovery()'));")
- fs.writeFileSync(path.join(root,'migrations/snapshots/staff-rls/local-target.json'),JSON.stringify(targets,null,2)+'\n')
+ fs.writeFileSync(path.join(root,`migrations/snapshots/${receiptDirectory}/rls-local-target.json`),JSON.stringify(targets,null,2)+'\n')
  const view=json("SELECT json_build_object('checksum',md5(pg_get_viewdef(oid,true)),'owner',pg_get_userbyid(relowner),'options',reloptions,'acl',relacl::text) FROM pg_class WHERE oid='public.aka_agent_staff_runtime_profile'::regclass;")
- fs.writeFileSync(path.join(root,'migrations/snapshots/staff-rls/local-view.json'),JSON.stringify(view,null,2)+'\n')
+ fs.writeFileSync(path.join(root,`migrations/snapshots/${receiptDirectory}/rls-local-view.json`),JSON.stringify(view,null,2)+'\n')
  for(const mode of ['share','update']){
   const child=spawn('psql',args,{stdio:['pipe','pipe','pipe']});let output='',errors=''
   child.stderr.on('data',x=>errors+=x);const done=new Promise((resolve,reject)=>{child.on('close',code=>code===0?resolve():reject(Error(errors)));child.on('error',reject)})
@@ -137,7 +140,7 @@ try {
  for(const f of patches)assert.equal(sql(`SELECT md5(pg_get_functiondef('public.${f.signature}'::regprocedure));`).trim(),f.checksum)
  pass('runtime rollback restores all 34 source definitions')
  const receipt={serverVersion,checks,productionChanged:false,productionDefaultAclFixture:true,viewAcl:view.acl,viewGuardDriftCases:drift.length,checkedViewGuards:2}
- fs.writeFileSync(path.join(root,`migrations/snapshots/staff-rls/sql-verification-pg${Math.floor(serverVersionNum/10000)}.json`),JSON.stringify(receipt,null,2)+'\n')
+ fs.writeFileSync(path.join(root,`migrations/snapshots/${receiptDirectory}/rls-verification-pg${Math.floor(serverVersionNum/10000)}.json`),JSON.stringify(receipt,null,2)+'\n')
  console.log(JSON.stringify(receipt))
 }finally{if(started)run('pg_ctl',['-D',path.join(tmp,'db'),'-m','immediate','stop']);fs.rmSync(tmp,{recursive:true,force:true})}
 

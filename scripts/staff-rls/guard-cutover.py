@@ -3,6 +3,12 @@ import json
 from pathlib import Path
 base=Path('migrations/snapshots/staff-rls')
 target=sorted(json.loads((base/'local-target.json').read_text()),key=lambda f:f['signature'])
+timeout_target=Path('migrations/snapshots/staff-runtime-lock-timeout/local-target.json')
+if timeout_target.exists():
+ by={f['signature']:f for f in target}
+ for f in json.loads(timeout_target.read_text()):
+  by[f['signature']]=f
+ target=sorted(by.values(),key=lambda f:f['signature'])
 patches=json.loads((base/'runtime-patches.json').read_text())
 source=json.loads((base/'source.json').read_text())
 q=lambda x:"'"+x.replace("'","''")+"'"
