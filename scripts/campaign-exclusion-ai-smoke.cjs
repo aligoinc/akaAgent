@@ -26,7 +26,7 @@ global.__exclusionDb = {
     let filters = [], single = false, insert, signal
     const q = { select: () => q, eq: (key, value) => { filters.push(row => row[key] === value); return q },
       not: (key, _, value) => { filters.push(row => row[key] !== value); return q },
-      abortSignal: value => { signal = value; return q }, maybeSingle: () => { single = true; return q },
+      abortSignal: value => { signal = value; return q }, returns: () => q, maybeSingle: () => { single = true; return q },
       insert: value => { insert = value; return q }, then: (ok, fail) => Promise.resolve().then(() => {
         signal?.throwIfAborted()
         if (insert) { assert.equal(table, 'ai_log'); logs.push(insert); return { data: { id: 10 }, error: null } }
@@ -39,7 +39,7 @@ global.__exclusionDb = {
 async function main() {
   await build({ stdin: { contents: `export * from './src/shared/campaignExclusionAi'; export * from './src/main/services/campaignExclusionAiService'; export * from './src/main/data/repositories/aiRepository';`, resolveDir: root },
     outfile: path.join(tmp, 'm.cjs'), bundle: true, platform: 'node', logLevel: 'silent', plugins: [{ name: 'fixtures', setup(b) {
-      b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const getSupabaseClient = () => globalThis.__exclusionDb', loader: 'ts' }))
+      b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const isTrustedServerSupabaseConfigured = () => true; export const desktopSession = { token: async () => null }; export const getSupabaseClient = () => globalThis.__exclusionDb', loader: 'ts' }))
       b.onLoad({ filter: /\/currentUser\.ts$/ }, () => ({ contents: `const a=globalThis.__exclusionAuth;
         export const getCurrentUser=()=>a.user; export const requireCurrentUser=getCurrentUser;
         export const getCurrentUserCredentials=()=>a.credentials; export const requireCurrentUserCredentials=getCurrentUserCredentials;`, loader: 'ts' }))

@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { normalizePublicLinkUrl, parseAppNotification } from '../src/shared/appNotification'
 import { getLoginScreenContent } from '../src/main/data/repositories/loginScreenRepository'
 import { getActiveAppNotification } from '../src/main/data/repositories/appNotificationRepository'
-import { setCurrentUser } from '../src/main/data/currentUser'
+import { setCurrentUser, setCurrentUserCredentials } from '../src/main/data/currentUser'
 import { registerAppNotificationHandlers } from '../src/main/ipc/handlers/appNotificationHandlers'
 import { IPC_EVENTS, type AuthUser } from '../src/shared/types'
 
 type Row = Record<string, unknown>
 const fixtures: Record<string, Row[]> = { auto_system_settings: [], org_staff: [] }
 const calls: { table: string; columns: string; filters: [string, unknown][] }[] = []
+const rpcCalls: { name: string; args: unknown }[] = []
 let databaseError = false
 const handlers = new Map<string, (...args: unknown[]) => unknown>()
 Object.assign(globalThis, { loginSmokeHandlers: handlers })
@@ -32,7 +33,27 @@ class Query {
     return Promise.resolve(this.result()).then(resolve, reject)
   }
 }
-Object.assign(globalThis, { loginSmokeClient: { from: (table: string) => new Query(table) } })
+Object.assign(globalThis, { loginSmokeClient: {
+  from: (table: string) => new Query(table),
+  rpc: (name: string, args?: unknown) => {
+    rpcCalls.push({ name, args })
+    if (name === 'aka_agent_staff_client') {
+      const input = args as { p_username: string; p_password: string; p_action: string; p_data: { staffId: number } }
+      assert.equal(input.p_action, 'read')
+      const staff = fixtures.org_staff.find(row => row.id === input.p_data.staffId && row.username === input.p_username)
+      return { abortSignal: (signal: AbortSignal) => {
+        assert.equal(signal.aborted, false)
+        return Promise.resolve({ data: staff ?? null, error: null })
+      } }
+    }
+    assert.equal(name, 'aka_agent_desktop_login_content')
+    assert.equal(args, undefined)
+    // Fixture response only; the actual SQL allowlist/ACL is tested separately.
+    return new Query('auto_system_settings').select('id,key,value,updated_at')
+      .in('key', ['app.notification', 'akabiz.links.website', 'akabiz.links.user_guide', 'akabiz.links.upgrade_payment', 'akabiz.links.contact_us'])
+      .eq('is_active', true).eq('is_secret', false)
+  }
+} })
 
 function setting(key: string, value: string | null, extra: Row = {}): Row {
   return { id: 1, key, value, is_active: true, is_secret: false, updated_at: '2026-09-07T00:00:00Z', ...extra }
@@ -72,13 +93,7 @@ async function run() {
   const result = await (getLoginScreenContent as (...args: unknown[]) => ReturnType<typeof getLoginScreenContent>)(['private.key'])
   assert.equal(result.notification?.message, 'Thông báo hệ thống')
   assert.deepEqual(result.links, { website: 'https://akabiz.net/', userGuide: 'https://www.youtube.com/@akabizai', upgradePayment: null, contactUs: null })
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].table, 'auto_system_settings')
-  assert.equal(calls[0].columns, 'id,key,value,updated_at')
-  assert.deepEqual(calls[0].filters, [
-    ['key', ['app.notification', 'akabiz.links.website', 'akabiz.links.user_guide', 'akabiz.links.upgrade_payment', 'akabiz.links.contact_us']],
-    ['is_active', true], ['is_secret', false]
-  ])
+  assert.deepEqual(rpcCalls, [{ name: 'aka_agent_desktop_login_content', args: undefined }])
   assert.equal(JSON.stringify(result).includes('MUST NOT LEAK'), false)
   fixtures.auto_system_settings = [
     setting('app.notification', 'Secret notice', { is_secret: true }),
@@ -94,14 +109,17 @@ async function run() {
   await assert.rejects(getActiveAppNotification, /Chưa đăng nhập/)
   fixtures.auto_system_settings = [setting('app.notification', 'System')]
   fixtures.org_staff = [
-    { id: 7, organization_id: 10, is_active: true, app_notification: 'Staff' },
-    { id: 8, organization_id: 20, is_active: true, app_notification: 'Other tenant' }
+    { id: 7, organization_id: 10, username: 'staff-7', is_active: true, app_notification: 'Staff' },
+    { id: 8, organization_id: 20, username: 'staff-8', is_active: true, app_notification: 'Other tenant' }
   ]
-  setCurrentUser({ staffId: 7, organizationId: 10 } as AuthUser)
-  const beforeStaff = calls.length
+  setCurrentUser({ staffId: 7, organizationId: 10, username: 'staff-7' } as AuthUser)
+  setCurrentUserCredentials({ username: 'staff-7', password: 'fixture-only' })
+  const beforeStaff = rpcCalls.length
   assert.equal((await getActiveAppNotification())?.message, 'Staff')
-  assert.equal(calls.length, beforeStaff + 1)
-  assert.deepEqual(calls.at(-1)?.filters, [['id', 7], ['organization_id', 10], ['is_active', true]])
+  assert.equal(rpcCalls.length, beforeStaff + 1)
+  assert.deepEqual(rpcCalls.at(-1), { name: 'aka_agent_staff_client', args: {
+    p_username: 'staff-7', p_password: 'fixture-only', p_action: 'read', p_data: { staffId: 7 }
+  } })
   for (const value of [null, ' ', '{"message":"Expired","endsAt":"2000-01-01"}', '{"message":"Future","startsAt":"2999-01-01"}']) {
     fixtures.org_staff[0].app_notification = value
     assert.equal((await getActiveAppNotification())?.message, 'System')

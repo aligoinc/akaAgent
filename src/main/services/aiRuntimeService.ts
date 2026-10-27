@@ -1,5 +1,7 @@
 import { isFormAiClaude, formAiClaudeBody, formAiClaudeText, mergeFormAiClaudeOptions } from '../../shared/formAiClaude'
 import { AiCallMetadata, AiCallResult, AiUsingConfig } from '../../shared/aiTypes'
+import { isTrustedServerSupabaseConfigured } from '../data/supabaseClient'
+import { fetchDesktopAi } from './desktopAiTransport'
 import * as aiRepo from '../data/repositories/aiRepository'
 
 const DEFAULT_AI_TIMEOUT_MS = 120_000
@@ -347,7 +349,7 @@ export async function callAiUsing(
   const request = buildRequest(config, payload)
   const timeoutMs = Math.max(1000, Number(config.using.timeoutMs || DEFAULT_AI_TIMEOUT_MS))
 
-  if (!config.model.apiKey) {
+  if (isTrustedServerSupabaseConfigured() && !config.model.apiKey) {
     const error = `Chưa cấu hình API key cho AI model: ${config.model.code}`
     const durationMs = Date.now() - startedAt
     const logId = await createAiLogSafe({
@@ -384,18 +386,19 @@ export async function callAiUsing(
   }
 
   try {
-    const response = await fetch(endpoint, {
+    const requestSignal = options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
+    const response = isTrustedServerSupabaseConfigured() ? await fetch(endpoint, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'application/json',
         ...(config.formConfigId && isFormAiClaude(config.model.provider)
-          ? { 'x-api-key': config.model.apiKey, 'anthropic-version': '2023-06-01' }
+          ? { 'x-api-key': config.model.apiKey!, 'anthropic-version': '2023-06-01' }
           : { authorization: `Bearer ${config.model.apiKey}` })
       },
       body: JSON.stringify(request.body),
-      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs)
-    })
+      signal: requestSignal
+    }) : await fetchDesktopAi(config, request.body, requestSignal)
     const durationMs = Date.now() - startedAt
     const responseText = await response.text()
     options.signal?.throwIfAborted()

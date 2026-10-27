@@ -10,13 +10,8 @@ export const STARTUP_UPDATE_PROMPT_MAX_VERSION_KEY = 'desktop.updates.startup_pr
 // Keep missing/disabled rows distinct from an explicit SQL NULL (all versions).
 export async function getStartupUpdatePromptMaxVersion(): Promise<string | null | undefined> {
   const { data, error } = await client()
-    .from('auto_system_settings')
-    .select('value')
-    .eq('key', STARTUP_UPDATE_PROMPT_MAX_VERSION_KEY)
-    .eq('is_active', true)
-    .eq('is_secret', false)
+    .rpc('aka_agent_desktop_startup_policy')
     .abortSignal(AbortSignal.timeout(5_000))
-    .maybeSingle()
 
   if (error) throw new Error('Không thể tải cấu hình thông báo cập nhật.')
   return data ? data.value as string | null : undefined

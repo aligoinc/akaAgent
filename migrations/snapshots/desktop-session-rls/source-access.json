@@ -1,0 +1,1315 @@
+{
+  "tables": {
+    "ai_form_configs": [
+      "src/main/data/repositories/aiRepository.ts:131",
+      "src/main/data/repositories/aiRepository.ts:139"
+    ],
+    "ai_log": [
+      "src/main/data/repositories/aiRepository.ts:191"
+    ],
+    "ai_model": [
+      "src/main/data/repositories/aiRepository.ts:105",
+      "src/main/data/repositories/aiRepository.ts:144"
+    ],
+    "ai_prompt": [
+      "src/main/data/repositories/aiRepository.ts:111"
+    ],
+    "ai_using": [
+      "src/main/data/repositories/aiRepository.ts:94"
+    ],
+    "aka_crm_status": [
+      "src/main/data/repositories/contentTemplateRepository.ts:378"
+    ],
+    "auto_account_action_status": [
+      "src/main/data/repositories/accountActionRepository.ts:132",
+      "src/main/data/repositories/accountActionRepository.ts:242",
+      "src/main/data/repositories/accountActionRepository.ts:268",
+      "src/main/data/repositories/accountActionRepository.ts:286",
+      "src/main/data/repositories/accountActionRepository.ts:369",
+      "src/main/data/repositories/accountActionRepository.ts:502",
+      "src/main/data/repositories/accountActionRepository.ts:528",
+      "src/main/data/repositories/accountRepository.ts:316",
+      "src/main/data/repositories/campaignAccountActionSnapshotRepository.ts:95",
+      "src/main/data/repositories/campaignDiagnosticsRepository.ts:51",
+      "src/main/data/repositories/campaignPendingChatLimitRepository.ts:21"
+    ],
+    "auto_account_actions": [
+      "src/main/data/repositories/accountActionRepository.ts:209",
+      "src/main/data/repositories/campaignAccountActionSnapshotRepository.ts:51",
+      "src/main/data/repositories/actionStatusPolicyRepository.ts:14 (reviewed dynamic)"
+    ],
+    "auto_account_contact_group_members": [
+      "src/main/data/repositories/accountContactRepository.ts:1136",
+      "src/main/data/repositories/accountContactRepository.ts:3305",
+      "src/main/data/repositories/accountContactRepository.ts:3455",
+      "src/main/data/repositories/accountContactRepository.ts:3474",
+      "src/main/data/repositories/accountContactRepository.ts:3571",
+      "src/main/data/repositories/accountContactRepository.ts:3585",
+      "src/main/data/repositories/accountContactRepository.ts:3607",
+      "src/main/data/repositories/accountContactRepository.ts:3624",
+      "src/main/data/repositories/accountContactRepository.ts:3827",
+      "src/main/data/repositories/accountContactRepository.ts:3841",
+      "src/main/data/repositories/accountContactRepository.ts:3861",
+      "src/main/data/repositories/accountContactRepository.ts:3884"
+    ],
+    "auto_account_contact_groups": [
+      "src/main/data/repositories/accountContactRepository.ts:1116",
+      "src/main/data/repositories/accountContactRepository.ts:3225",
+      "src/main/data/repositories/accountContactRepository.ts:3276",
+      "src/main/data/repositories/accountContactRepository.ts:3364",
+      "src/main/data/repositories/accountContactRepository.ts:3413",
+      "src/main/data/repositories/accountContactRepository.ts:3443",
+      "src/main/data/repositories/accountContactRepository.ts:3649",
+      "src/main/data/repositories/dataGroupRepository.ts:420"
+    ],
+    "auto_account_contacts": [
+      "src/main/data/repositories/accountContactRepository.ts:285",
+      "src/main/data/repositories/accountContactRepository.ts:527",
+      "src/main/data/repositories/accountContactRepository.ts:576",
+      "src/main/data/repositories/accountContactRepository.ts:593",
+      "src/main/data/repositories/accountContactRepository.ts:605",
+      "src/main/data/repositories/accountContactRepository.ts:1520",
+      "src/main/data/repositories/accountContactRepository.ts:1554",
+      "src/main/data/repositories/accountContactRepository.ts:1573",
+      "src/main/data/repositories/accountContactRepository.ts:1787",
+      "src/main/data/repositories/accountContactRepository.ts:1961",
+      "src/main/data/repositories/accountContactRepository.ts:2057",
+      "src/main/data/repositories/accountContactRepository.ts:2152",
+      "src/main/data/repositories/accountContactRepository.ts:2326",
+      "src/main/data/repositories/accountContactRepository.ts:2457",
+      "src/main/data/repositories/accountContactRepository.ts:2617",
+      "src/main/data/repositories/accountContactRepository.ts:2779",
+      "src/main/data/repositories/accountContactRepository.ts:3077",
+      "src/main/data/repositories/accountContactRepository.ts:3198",
+      "src/main/data/repositories/accountContactRepository.ts:3251",
+      "src/main/data/repositories/accountContactRepository.ts:3494",
+      "src/main/data/repositories/accountContactRepository.ts:3553",
+      "src/main/data/repositories/accountContactRepository.ts:3683",
+      "src/main/data/repositories/accountContactRepository.ts:3811",
+      "src/main/data/repositories/accountContactRepository.ts:3895",
+      "src/main/data/repositories/accountContactRepository.ts:3927",
+      "src/main/data/repositories/accountContactRepository.ts:3951",
+      "src/main/data/repositories/accountContactRepository.ts:3962",
+      "src/main/data/repositories/campaignRepository.ts:4434",
+      "src/main/data/repositories/contactTagRepository.ts:64",
+      "src/main/data/repositories/contactTagRepository.ts:141",
+      "src/main/data/repositories/contactTagRepository.ts:263",
+      "src/main/data/repositories/contactTagRepository.ts:313",
+      "src/main/services/campaignFacebookAiService.ts:41"
+    ],
+    "auto_account_error_state": [
+      "src/main/data/repositories/errorPolicyRepository.ts:131",
+      "src/main/data/repositories/errorPolicyRepository.ts:166",
+      "src/main/data/repositories/errorPolicyRepository.ts:178",
+      "src/main/data/repositories/errorPolicyRepository.ts:191",
+      "src/main/data/repositories/errorPolicyRepository.ts:206"
+    ],
+    "auto_account_groups": [
+      "src/main/data/repositories/accountGroupRepository.ts:67",
+      "src/main/data/repositories/accountGroupRepository.ts:87",
+      "src/main/data/repositories/accountGroupRepository.ts:116",
+      "src/main/data/repositories/accountGroupRepository.ts:158",
+      "src/main/data/repositories/accountGroupRepository.ts:185"
+    ],
+    "auto_account_logs": [
+      "src/main/services/accountLogService.ts:23"
+    ],
+    "auto_accounts": [
+      "src/main/data/repositories/accountActionRepository.ts:424",
+      "src/main/data/repositories/accountContactRepository.ts:2088",
+      "src/main/data/repositories/accountGroupRepository.ts:142",
+      "src/main/data/repositories/accountGroupRepository.ts:173",
+      "src/main/data/repositories/accountRepository.ts:117",
+      "src/main/data/repositories/accountRepository.ts:127",
+      "src/main/data/repositories/accountRepository.ts:154",
+      "src/main/data/repositories/accountRepository.ts:171",
+      "src/main/data/repositories/accountRepository.ts:201",
+      "src/main/data/repositories/accountRepository.ts:232",
+      "src/main/data/repositories/accountRepository.ts:266",
+      "src/main/data/repositories/accountRepository.ts:298",
+      "src/main/data/repositories/accountRepository.ts:373",
+      "src/main/data/repositories/accountRepository.ts:502",
+      "src/main/data/repositories/accountRepository.ts:580",
+      "src/main/data/repositories/accountRepository.ts:609",
+      "src/main/data/repositories/accountRepository.ts:701",
+      "src/main/data/repositories/accountRepository.ts:743",
+      "src/main/data/repositories/accountRepository.ts:774",
+      "src/main/data/repositories/accountRepository.ts:801",
+      "src/main/data/repositories/accountRepository.ts:828",
+      "src/main/data/repositories/accountRepository.ts:859",
+      "src/main/data/repositories/accountRepository.ts:895",
+      "src/main/data/repositories/accountRepository.ts:921",
+      "src/main/data/repositories/accountRepository.ts:936",
+      "src/main/data/repositories/accountRepository.ts:957",
+      "src/main/data/repositories/accountRepository.ts:970",
+      "src/main/data/repositories/accountRepository.ts:988",
+      "src/main/data/repositories/accountRepository.ts:1096",
+      "src/main/data/repositories/campaignAccountActionSnapshotRepository.ts:64",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:25",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:120",
+      "src/main/data/repositories/campaignRepository.ts:1146",
+      "src/main/data/repositories/campaignRepository.ts:4721",
+      "src/main/data/repositories/proxyRepository.ts:62",
+      "src/main/data/repositories/proxyRepository.ts:85",
+      "src/main/data/repositories/reportRepository.ts:293",
+      "src/main/data/repositories/reportRepository.ts:501",
+      "src/main/services/accountLogService.ts:141",
+      "src/main/services/campaignFacebookAiService.ts:20"
+    ],
+    "auto_blocks": [
+      "src/main/data/repositories/blockRepository.ts:72",
+      "src/main/data/repositories/blockRepository.ts:84",
+      "src/main/data/repositories/blockRepository.ts:94",
+      "src/main/data/repositories/blockRepository.ts:113",
+      "src/main/data/repositories/blockRepository.ts:125"
+    ],
+    "auto_campaign_action_data_types": [
+      "src/main/data/repositories/campaignActionRepository.ts:22"
+    ],
+    "auto_campaign_actions": [
+      "src/main/data/repositories/campaignActionRepository.ts:74",
+      "src/main/data/repositories/campaignActionRepository.ts:89",
+      "src/main/data/repositories/campaignActionRepository.ts:100",
+      "src/main/data/repositories/campaignActionRepository.ts:127",
+      "src/main/data/repositories/campaignActionRepository.ts:149",
+      "src/main/data/repositories/campaignActionRepository.ts:161",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:44",
+      "src/main/data/repositories/campaignRepository.ts:2008",
+      "src/main/services/campaignFacebookAiService.ts:51",
+      "src/main/domain/reports/actionStatusReportCatalog.ts:11 (reviewed dynamic)"
+    ],
+    "auto_campaign_details": [
+      "src/main/data/repositories/accountActionRepository.ts:320",
+      "src/main/data/repositories/accountActionRepository.ts:333",
+      "src/main/data/repositories/campaignDiagnosticsRepository.ts:77",
+      "src/main/data/repositories/campaignPendingChatLimitRepository.ts:59",
+      "src/main/data/repositories/campaignRepository.ts:880",
+      "src/main/data/repositories/campaignRepository.ts:892",
+      "src/main/data/repositories/campaignRepository.ts:913",
+      "src/main/data/repositories/campaignRepository.ts:925",
+      "src/main/data/repositories/campaignRepository.ts:4756",
+      "src/main/data/repositories/campaignRepository.ts:4940",
+      "src/main/data/repositories/campaignRepository.ts:6106",
+      "src/main/data/repositories/campaignRepository.ts:6118",
+      "src/main/data/repositories/campaignRepository.ts:6209",
+      "src/main/data/repositories/campaignRepository.ts:6226",
+      "src/main/data/repositories/campaignRepository.ts:6246",
+      "src/main/data/repositories/campaignRepository.ts:6265",
+      "src/main/data/repositories/campaignRepository.ts:6303",
+      "src/main/data/repositories/campaignRepository.ts:6338",
+      "src/main/data/repositories/emailTrackingRepository.ts:165",
+      "src/main/data/repositories/emailTrackingRepository.ts:178"
+    ],
+    "auto_campaign_error_state": [
+      "src/main/data/repositories/campaignRepository.ts:6034",
+      "src/main/data/repositories/campaignRepository.ts:6065",
+      "src/main/data/repositories/campaignRepository.ts:6076",
+      "src/main/data/repositories/campaignRepository.ts:6091"
+    ],
+    "auto_campaign_input_data": [
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:71",
+      "src/main/data/repositories/campaignRepository.ts:624",
+      "src/main/data/repositories/campaignRepository.ts:697",
+      "src/main/data/repositories/campaignRepository.ts:847",
+      "src/main/data/repositories/campaignRepository.ts:2262",
+      "src/main/data/repositories/campaignRepository.ts:2780",
+      "src/main/data/repositories/campaignRepository.ts:3765",
+      "src/main/data/repositories/campaignRepository.ts:3786",
+      "src/main/data/repositories/campaignRepository.ts:3905",
+      "src/main/data/repositories/campaignRepository.ts:3988",
+      "src/main/data/repositories/campaignRepository.ts:4214",
+      "src/main/data/repositories/campaignRepository.ts:4233",
+      "src/main/data/repositories/campaignRepository.ts:4252",
+      "src/main/data/repositories/campaignRepository.ts:4303",
+      "src/main/data/repositories/campaignRepository.ts:4923",
+      "src/main/data/repositories/campaignRepository.ts:5113",
+      "src/main/data/repositories/campaignRepository.ts:5136",
+      "src/main/data/repositories/campaignRepository.ts:5148",
+      "src/main/data/repositories/campaignRepository.ts:5159",
+      "src/main/data/repositories/campaignRepository.ts:5357",
+      "src/main/data/repositories/campaignRepository.ts:5378",
+      "src/main/data/repositories/campaignRepository.ts:5449",
+      "src/main/data/repositories/campaignRepository.ts:5488",
+      "src/main/data/repositories/campaignRepository.ts:5561",
+      "src/main/data/repositories/campaignRepository.ts:5682",
+      "src/main/data/repositories/campaignRepository.ts:5736",
+      "src/main/data/repositories/campaignRepository.ts:5891",
+      "src/main/data/repositories/campaignRepository.ts:5927",
+      "src/main/data/repositories/campaignRepository.ts:5946",
+      "src/main/data/repositories/campaignRepository.ts:5965",
+      "src/main/data/repositories/campaignRepository.ts:6008",
+      "src/main/data/repositories/campaignRepository.ts:6590"
+    ],
+    "auto_campaign_inputs": [
+      "src/main/data/repositories/campaignRepository.ts:2745",
+      "src/main/data/repositories/campaignRepository.ts:2755",
+      "src/main/data/repositories/campaignRepository.ts:3892",
+      "src/main/data/repositories/campaignRepository.ts:3917",
+      "src/main/data/repositories/campaignRepository.ts:3940",
+      "src/main/data/repositories/campaignRepository.ts:3961",
+      "src/main/data/repositories/campaignRepository.ts:3973"
+    ],
+    "auto_campaign_run_events": [
+      "src/main/data/repositories/campaignRunEventRepository.ts:74",
+      "src/main/data/repositories/campaignRunEventRepository.ts:88",
+      "src/main/data/repositories/campaignRunEventRepository.ts:116",
+      "src/main/data/repositories/campaignRunEventRepository.ts:133"
+    ],
+    "auto_campaigns": [
+      "src/main/data/repositories/campaignDiagnosticsRepository.ts:12",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:14",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:54",
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:105",
+      "src/main/data/repositories/campaignRepository.ts:611",
+      "src/main/data/repositories/campaignRepository.ts:635",
+      "src/main/data/repositories/campaignRepository.ts:1172",
+      "src/main/data/repositories/campaignRepository.ts:1198",
+      "src/main/data/repositories/campaignRepository.ts:1216",
+      "src/main/data/repositories/campaignRepository.ts:1788",
+      "src/main/data/repositories/campaignRepository.ts:1824",
+      "src/main/data/repositories/campaignRepository.ts:1863",
+      "src/main/data/repositories/campaignRepository.ts:1896",
+      "src/main/data/repositories/campaignRepository.ts:1933",
+      "src/main/data/repositories/campaignRepository.ts:2093",
+      "src/main/data/repositories/campaignRepository.ts:2134",
+      "src/main/data/repositories/campaignRepository.ts:2219",
+      "src/main/data/repositories/campaignRepository.ts:2287",
+      "src/main/data/repositories/campaignRepository.ts:2433",
+      "src/main/data/repositories/campaignRepository.ts:2498",
+      "src/main/data/repositories/campaignRepository.ts:2540",
+      "src/main/data/repositories/campaignRepository.ts:2565",
+      "src/main/data/repositories/campaignRepository.ts:2602",
+      "src/main/data/repositories/campaignRepository.ts:2630",
+      "src/main/data/repositories/campaignRepository.ts:2652",
+      "src/main/data/repositories/campaignRepository.ts:2666",
+      "src/main/data/repositories/campaignRepository.ts:2677",
+      "src/main/data/repositories/campaignRepository.ts:2706",
+      "src/main/data/repositories/campaignRepository.ts:2843",
+      "src/main/data/repositories/campaignRepository.ts:2855",
+      "src/main/data/repositories/campaignRepository.ts:2883",
+      "src/main/data/repositories/campaignRepository.ts:2911",
+      "src/main/data/repositories/campaignRepository.ts:3469",
+      "src/main/data/repositories/campaignRepository.ts:3494",
+      "src/main/data/repositories/campaignRepository.ts:3532",
+      "src/main/data/repositories/campaignRepository.ts:3853",
+      "src/main/data/repositories/campaignRepository.ts:3868",
+      "src/main/data/repositories/campaignRepository.ts:3879",
+      "src/main/data/repositories/campaignRepository.ts:4272",
+      "src/main/data/repositories/campaignRepository.ts:4998",
+      "src/main/data/repositories/campaignRepository.ts:5207",
+      "src/main/data/repositories/campaignRepository.ts:5472",
+      "src/main/data/repositories/campaignRepository.ts:5598",
+      "src/main/data/repositories/campaignRepository.ts:5723",
+      "src/main/data/repositories/campaignRepository.ts:5762",
+      "src/main/data/repositories/campaignRepository.ts:5981",
+      "src/main/data/repositories/desktopUiRepository.ts:110",
+      "src/main/data/repositories/desktopUiRepository.ts:119",
+      "src/main/data/repositories/reportRepository.ts:399"
+    ],
+    "auto_contact_tags": [
+      "src/main/data/repositories/contactTagRepository.ts:51",
+      "src/main/data/repositories/contactTagRepository.ts:77",
+      "src/main/data/repositories/contactTagRepository.ts:102",
+      "src/main/data/repositories/contactTagRepository.ts:125",
+      "src/main/data/repositories/contactTagRepository.ts:168"
+    ],
+    "auto_content_groups": [
+      "src/main/data/repositories/contentTemplateRepository.ts:401",
+      "src/main/data/repositories/contentTemplateRepository.ts:568",
+      "src/main/data/repositories/contentTemplateRepository.ts:606",
+      "src/main/data/repositories/contentTemplateRepository.ts:631"
+    ],
+    "auto_content_templates": [
+      "src/main/data/repositories/contentTemplateRepository.ts:452",
+      "src/main/data/repositories/contentTemplateRepository.ts:477",
+      "src/main/data/repositories/contentTemplateRepository.ts:511",
+      "src/main/data/repositories/contentTemplateRepository.ts:530",
+      "src/main/data/repositories/contentTemplateRepository.ts:544"
+    ],
+    "auto_elements": [
+      "src/main/data/repositories/elementV2Repository.ts:58",
+      "src/main/data/repositories/elementV2Repository.ts:95",
+      "src/main/data/repositories/elementV2Repository.ts:107",
+      "src/main/data/repositories/elementV2Repository.ts:125",
+      "src/main/data/repositories/elementV2Repository.ts:136",
+      "src/main/data/repositories/elementV2Repository.ts:147",
+      "src/main/services/webEnrichmentService.ts:180"
+    ],
+    "auto_email_link_trackings": [
+      "src/main/data/repositories/emailTrackingRepository.ts:91",
+      "src/main/data/repositories/emailTrackingRepository.ts:123"
+    ],
+    "auto_email_message_trackings": [
+      "src/main/data/repositories/emailTrackingRepository.ts:69",
+      "src/main/data/repositories/emailTrackingRepository.ts:109",
+      "src/main/data/repositories/emailTrackingRepository.ts:133",
+      "src/main/data/repositories/emailTrackingRepository.ts:148"
+    ],
+    "auto_email_notification_settings": [
+      "src/main/data/repositories/emailNotificationRepository.ts:64",
+      "src/main/data/repositories/emailNotificationRepository.ts:96"
+    ],
+    "auto_error": [
+      "src/main/data/repositories/errorPolicyRepository.ts:40",
+      "src/main/data/repositories/errorPolicyRepository.ts:66",
+      "src/main/data/repositories/errorPolicyRepository.ts:83",
+      "src/main/data/repositories/errorPolicyRepository.ts:101",
+      "src/main/data/repositories/actionStatusPolicyRepository.ts:14 (reviewed dynamic)"
+    ],
+    "auto_media_files": [
+      "src/main/data/repositories/mediaFileRepository.ts:293",
+      "src/main/data/repositories/mediaFileRepository.ts:464",
+      "src/main/data/repositories/mediaFileRepository.ts:488",
+      "src/main/data/repositories/mediaFileRepository.ts:751",
+      "src/main/data/repositories/mediaFileRepository.ts:874"
+    ],
+    "auto_media_group_items": [
+      "src/main/data/repositories/mediaFileRepository.ts:531",
+      "src/main/data/repositories/mediaFileRepository.ts:660",
+      "src/main/data/repositories/mediaFileRepository.ts:676",
+      "src/main/data/repositories/mediaFileRepository.ts:702",
+      "src/main/data/repositories/mediaFileRepository.ts:731",
+      "src/main/data/repositories/mediaFileRepository.ts:889"
+    ],
+    "auto_media_groups": [
+      "src/main/data/repositories/mediaFileRepository.ts:508",
+      "src/main/data/repositories/mediaFileRepository.ts:576",
+      "src/main/data/repositories/mediaFileRepository.ts:601",
+      "src/main/data/repositories/mediaFileRepository.ts:628",
+      "src/main/data/repositories/mediaFileRepository.ts:648",
+      "src/main/data/repositories/mediaFileRepository.ts:712",
+      "src/main/data/repositories/mediaFileRepository.ts:740"
+    ],
+    "auto_proxies": [
+      "src/main/data/repositories/proxyRepository.ts:75",
+      "src/main/data/repositories/proxyRepository.ts:110",
+      "src/main/data/repositories/proxyRepository.ts:131",
+      "src/main/data/repositories/proxyRepository.ts:151",
+      "src/main/data/repositories/proxyRepository.ts:171"
+    ],
+    "auto_run_steps": [
+      "src/main/data/repositories/runV2Repository.ts:99",
+      "src/main/data/repositories/runV2Repository.ts:116",
+      "src/main/data/repositories/runV2Repository.ts:135",
+      "src/main/data/repositories/runV2Repository.ts:173"
+    ],
+    "auto_runs": [
+      "src/main/data/repositories/runV2Repository.ts:62",
+      "src/main/data/repositories/runV2Repository.ts:78",
+      "src/main/data/repositories/runV2Repository.ts:124",
+      "src/main/data/repositories/runV2Repository.ts:149",
+      "src/main/data/repositories/runV2Repository.ts:203"
+    ],
+    "auto_system_settings": [
+      "src/main/data/repositories/desktopUiRepository.ts:28",
+      "src/main/data/repositories/mediaFileRepository.ts:321",
+      "src/main/data/repositories/mediaFileRepository.ts:396",
+      "src/main/data/repositories/systemSettingsRepository.ts:38",
+      "src/main/data/repositories/zaloPhoneCheckRepository.ts:9",
+      "src/main/services/zaloCampaignEngagement.ts:13"
+    ],
+    "auto_workflows": [
+      "src/main/data/repositories/campaignPendingReasonRepository.ts:135",
+      "src/main/data/repositories/workflowV2Repository.ts:63",
+      "src/main/data/repositories/workflowV2Repository.ts:74",
+      "src/main/data/repositories/workflowV2Repository.ts:84",
+      "src/main/data/repositories/workflowV2Repository.ts:102",
+      "src/main/data/repositories/workflowV2Repository.ts:113"
+    ],
+    "auto_zalo_api_error_logs": [
+      "src/main/data/repositories/zaloApiErrorLogRepository.ts:95"
+    ],
+    "category_item": [
+      "src/main/data/repositories/campaignActionRepository.ts:35",
+      "src/main/data/repositories/dataGroupRepository.ts:314"
+    ],
+    "org_organization": [
+      "src/main/data/repositories/authRepository.ts:101",
+      "src/main/data/repositories/blockRepository.ts:10",
+      "src/main/data/repositories/elementV2Repository.ts:10",
+      "src/main/data/repositories/serverRuntimeRepository.ts:233",
+      "src/main/data/repositories/workflowV2Repository.ts:10"
+    ],
+    "org_organization_product": [
+      "src/main/data/repositories/entitlementRepository.ts:338",
+      "src/main/data/repositories/entitlementRepository.ts:384",
+      "src/main/data/repositories/entitlementRepository.ts:428",
+      "src/main/data/repositories/serverRuntimeRepository.ts:297"
+    ],
+    "org_staff": [
+      "src/main/data/repositories/serverRuntimeRepository.ts:521",
+      "src/main/data/repositories/serverRuntimeRepository.ts:557",
+      "src/main/data/repositories/staffIntegrationRepository.ts:44",
+      "src/main/services/zaloCampaignEngagement.ts:545"
+    ],
+    "zalo_accounts": [
+      "src/main/data/repositories/accountRepository.ts:644"
+    ],
+    "zalo_group_members": [
+      "src/main/data/repositories/accountContactRepository.ts:2851",
+      "src/main/data/repositories/accountContactRepository.ts:2867",
+      "src/main/data/repositories/accountContactRepository.ts:2975",
+      "src/main/data/repositories/accountContactRepository.ts:3008",
+      "src/main/data/repositories/accountContactRepository.ts:3139",
+      "src/main/data/repositories/campaignRepository.ts:4476"
+    ],
+    "zalo_groups": [
+      "src/main/data/repositories/accountContactRepository.ts:2016",
+      "src/main/data/repositories/accountContactRepository.ts:2523",
+      "src/main/data/repositories/accountContactRepository.ts:2718",
+      "src/main/data/repositories/accountContactRepository.ts:2764",
+      "src/main/data/repositories/accountContactRepository.ts:2826",
+      "src/main/data/repositories/accountContactRepository.ts:3053",
+      "src/main/data/repositories/campaignRepository.ts:4510"
+    ],
+    "zalo_users": [
+      "src/main/data/repositories/accountContactRepository.ts:2222",
+      "src/main/data/repositories/accountContactRepository.ts:2377",
+      "src/main/data/repositories/accountContactRepository.ts:2694"
+    ],
+    "auto_account_action_status_policies": [
+      "src/main/data/repositories/actionStatusPolicyRepository.ts:14 (reviewed dynamic)"
+    ],
+    "auto_status": [
+      "src/main/data/repositories/actionStatusPolicyRepository.ts:14 (reviewed dynamic)",
+      "src/main/domain/reports/actionStatusReportCatalog.ts:11 (reviewed dynamic)"
+    ],
+    "auto_campaign_action_detail_statuses": [
+      "src/main/domain/reports/actionStatusReportCatalog.ts:11 (reviewed dynamic)"
+    ]
+  },
+  "rpcs": {
+    "aka_agent_advance_zalo_server_multi_daily_slot": [
+      "src/main/data/repositories/campaignRepository.ts:1514",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_apply_campaign_delivery_cooldown": [
+      "src/main/data/repositories/campaignRepository.ts:6520",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_apply_zalo_server_campaign_tags": [
+      "src/main/data/repositories/contactTagRepository.ts:243"
+    ],
+    "aka_agent_bind_campaign_data_group_source": [
+      "src/main/data/repositories/campaignRepository.ts:2832",
+      "src/main/data/repositories/dataGroupRepository.ts:572",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_browser_run_limits": [
+      "src/main/data/repositories/browserRunLimitsRepository.ts:9"
+    ],
+    "aka_agent_campaign_diagnostics_evidence": [
+      "src/main/data/repositories/campaignDiagnosticsRepository.ts:29"
+    ],
+    "aka_agent_campaign_drafts": [
+      "src/main/data/repositories/campaignDraftRepository.ts:11"
+    ],
+    "aka_agent_campaign_send_exclusion_runtime": [
+      "src/main/data/repositories/campaignSendExclusionRepository.ts:26"
+    ],
+    "aka_agent_campaign_type_visibility": [
+      "src/main/data/repositories/campaignTypeVisibilityRepository.ts:13"
+    ],
+    "aka_agent_check_campaign_daily_boundary": [
+      "src/main/data/repositories/campaignRepository.ts:3362",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_check_daily_maintenance_barrier": [
+      "src/main/data/repositories/campaignRepository.ts:3440",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_check_zalo_message_opt_out": [
+      "src/main/data/repositories/campaignRepository.ts:6545",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_claim_account_operation": [
+      "src/main/data/repositories/accountRepository.ts:1125"
+    ],
+    "aka_agent_claim_campaign_run_unit_v2": [
+      "src/main/data/repositories/campaignRepository.ts:3083",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_claim_campaign_runtime_v2": [
+      "src/main/data/repositories/campaignRepository.ts:3026",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_claim_zalo_server_run_unit": [
+      "src/main/data/repositories/campaignRepository.ts:1348",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_cleanup_account_operation": [
+      "src/main/data/repositories/accountRepository.ts:1140"
+    ],
+    "aka_agent_cleanup_failed_campaign_runtime": [
+      "src/main/data/repositories/campaignRepository.ts:3201",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_control_campaign_progress": [
+      "src/main/data/repositories/campaignRepository.ts:1557",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_create_campaign_creation_bundle": [
+      "src/main/data/repositories/dataGroupRepository.ts:914",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_create_data_group_v2": [
+      "src/main/data/repositories/dataGroupRepository.ts:336",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_data_group_external_sync": [
+      "src/main/data/repositories/dataGroupExternalSyncRepository.ts:20"
+    ],
+    "aka_agent_delete_data_group_with_options": [
+      "src/main/data/repositories/dataGroupRepository.ts:396",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_desktop_account_snapshot": [
+      "src/main/data/repositories/desktopUiRepository.ts:89"
+    ],
+    "aka_agent_desktop_campaign_detail": [
+      "src/main/data/repositories/desktopUiRepository.ts:138"
+    ],
+    "aka_agent_desktop_campaign_logs": [
+      "src/main/data/repositories/desktopUiRepository.ts:151",
+      "src/main/data/repositories/desktopUiRepository.ts:160"
+    ],
+    "aka_agent_desktop_campaign_page": [
+      "src/main/data/repositories/desktopUiRepository.ts:57",
+      "src/main/data/repositories/desktopUiRepository.ts:79"
+    ],
+    "aka_agent_desktop_login_content": [
+      "src/main/data/repositories/loginScreenRepository.ts:10"
+    ],
+    "aka_agent_desktop_startup_policy": [
+      "src/main/data/repositories/systemSettingsRepository.ts:12"
+    ],
+    "aka_agent_device_presence": [
+      "src/main/services/devicePresenceService.ts:9"
+    ],
+    "aka_agent_duplicate_data_group": [
+      "src/main/data/repositories/dataGroupRepository.ts:424",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_facebook_account_operation": [
+      "src/main/data/repositories/accountRepository.ts:1124",
+      "src/main/data/repositories/accountRepository.ts:1139"
+    ],
+    "aka_agent_facebook_login": [
+      "src/main/data/repositories/facebookLoginRepository.ts:23"
+    ],
+    "aka_agent_facebook_random_run": [
+      "src/main/data/repositories/facebookRandomRunRepository.ts:12"
+    ],
+    "aka_agent_facebook_web_enrichment_settings": [
+      "src/main/data/repositories/webEnrichmentRepository.ts:9"
+    ],
+    "aka_agent_finalize_campaign": [
+      "src/main/data/repositories/campaignRepository.ts:1419",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_zalo_server_campaign": [
+      "src/main/data/repositories/campaignRepository.ts:1382",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_zalo_server_maintenance_campaign": [
+      "src/main/data/repositories/campaignRepository.ts:1464",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_get_account_action_status_today": [
+      "src/main/data/repositories/accountActionRepository.ts:97"
+    ],
+    "aka_agent_get_campaign_data_group_source": [
+      "src/main/data/repositories/dataGroupRepository.ts:934",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_get_data_group_account_options": [
+      "src/main/data/repositories/dataGroupRepository.ts:349",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_get_data_group_dynamic_filter": [
+      "src/main/data/repositories/dataGroupRepository.ts:880",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_get_data_group_latest_ingest_stats": [
+      "src/main/data/repositories/dataGroupRepository.ts:648",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_get_runtime_clock": [
+      "src/main/data/repositories/runtimeClockRepository.ts:101"
+    ],
+    "aka_agent_get_zalo_server_run_control_state": [
+      "src/main/data/repositories/campaignRepository.ts:1295",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_group_sharing": [
+      "src/main/data/repositories/groupSharingRepository.ts:8"
+    ],
+    "aka_agent_ingest_data_group": [
+      "src/main/data/repositories/dataGroupRepository.ts:505",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_list_automation_refs_by_detail_ids": [
+      "src/main/data/repositories/campaignRepository.ts:4113",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_data_group_source_summaries": [
+      "src/main/data/repositories/campaignRepository.ts:1736",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_detail_automation_triggers": [
+      "src/main/data/repositories/campaignRepository.ts:4067",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_details_page_v2": [
+      "src/main/data/repositories/campaignRepository.ts:6175",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_list_contact_dataset_member_ids": [
+      "src/main/data/repositories/accountContactRepository.ts:1081",
+      "src/main/data/repositories/accountContactRepository.ts:1468",
+      "src/main/data/repositories/accountContactRepository.ts:1469",
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)"
+    ],
+    "aka_agent_list_contact_datasets": [
+      "src/main/data/repositories/accountContactRepository.ts:832",
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)"
+    ],
+    "aka_agent_list_email_campaign_link_tracking_summaries": [
+      "src/main/data/repositories/emailTrackingRepository.ts:193"
+    ],
+    "aka_agent_list_message_opt_out_customers": [
+      "src/main/data/repositories/messageOptOutCustomerRepository.ts:9"
+    ],
+    "aka_agent_lookup_zalo_users": [
+      "src/main/data/repositories/accountContactRepository.ts:2596",
+      "src/main/data/repositories/campaignRepository.ts:4397",
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_mutate_contact_tags": [
+      "src/main/data/repositories/contactTagRepository.ts:204"
+    ],
+    "aka_agent_preflight_campaign_data_group_change": [
+      "src/main/data/repositories/dataGroupRepository.ts:633",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_prepare_zalo_message_opt_out": [
+      "src/main/data/repositories/campaignRepository.ts:6568",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_preview_data_group_campaign_targets": [
+      "src/main/data/repositories/dataGroupRepository.ts:586",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_read_report_page": [
+      "src/main/domain/reports/reportReadRpc.ts:33"
+    ],
+    "aka_agent_recover_campaign_runtime_unit_leases": [
+      "src/main/data/repositories/campaignRepository.ts:3233",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_recover_staff_credentials": [
+      "src/main/services/staffDeviceRecovery.ts:70"
+    ],
+    "aka_agent_save_data_group_dynamic_filter": [
+      "src/main/data/repositories/dataGroupRepository.ts:901",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_save_upload_contact_datasets": [
+      "src/main/data/repositories/accountContactRepository.ts:954",
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)"
+    ],
+    "aka_agent_send_exclusion_groups": [
+      "src/main/data/repositories/campaignSendExclusionRepository.ts:7"
+    ],
+    "aka_agent_set_desktop_campaign_status_v2": [
+      "src/main/data/repositories/campaignRepository.ts:3273",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_set_zalo_server_account_status": [
+      "src/main/data/repositories/accountRepository.ts:541"
+    ],
+    "aka_agent_set_zalo_server_campaign_status": [
+      "src/main/data/repositories/campaignRepository.ts:1254",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_settle_action_results_v1": [
+      "src/main/services/actionResultRuntime.ts:200"
+    ],
+    "aka_agent_settle_campaign_run_unit_v2": [
+      "src/main/data/repositories/campaignRepository.ts:3169",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_snapshot_data_group_to_direct_campaign": [
+      "src/main/data/repositories/dataGroupRepository.ts:606",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_staff_access": [
+      "src/main/data/repositories/staffManagementRepository.ts:49"
+    ],
+    "aka_agent_staff_client": [
+      "src/main/data/repositories/staffClientRepository.ts:46"
+    ],
+    "aka_agent_staff_management": [
+      "src/main/data/repositories/staffManagementRepository.ts:25"
+    ],
+    "aka_agent_staff_security_status": [
+      "src/main/services/staffDeviceRecovery.ts:88"
+    ],
+    "aka_agent_take_campaign_content_index": [
+      "src/main/data/repositories/campaignContentRepository.ts:16"
+    ],
+    "aka_agent_update_data_group_note": [
+      "src/main/data/repositories/dataGroupRepository.ts:862",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_update_data_group_v2": [
+      "src/main/data/repositories/dataGroupRepository.ts:376",
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_write_action_result_v1": [
+      "src/main/services/actionResultRuntime.ts:173"
+    ],
+    "aka_agent_yield_campaign_daily_boundary": [
+      "src/main/data/repositories/campaignRepository.ts:3395",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_zalo_phone_check_usage": [
+      "src/main/data/repositories/zaloPhoneCheckRepository.ts:27"
+    ],
+    "append_auto_campaign_log": [
+      "src/main/data/repositories/campaignRepository.ts:2898",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "claim_campaign_runtime": [
+      "src/main/data/repositories/campaignRepository.ts:2958",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "discover_zalo_server_account_runtime_users": [
+      "src/main/data/repositories/serverRuntimeRepository.ts:333"
+    ],
+    "enable_due_auto_account_actions": [
+      "src/main/data/repositories/accountActionRepository.ts:548"
+    ],
+    "enqueue_campaign_zalo_realtime_group_event": [
+      "src/main/data/repositories/campaignRepository.ts:1960",
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "get_staff_zalo_account_capabilities": [
+      "src/main/data/repositories/zaloRuntimeModeRepository.ts:42"
+    ],
+    "get_staff_zalo_runtime_mode": [
+      "src/main/data/repositories/zaloRuntimeModeRepository.ts:69"
+    ],
+    "increment_auto_account_action_count": [
+      "src/main/data/repositories/accountActionRepository.ts:466"
+    ],
+    "inspect_staff_zalo_running_state": [
+      "src/main/data/repositories/accountRepository.ts:1243"
+    ],
+    "recover_server_zalo_running_state": [
+      "src/main/data/repositories/accountRepository.ts:1282"
+    ],
+    "release_zalo_account_runtime_operation": [
+      "src/main/data/repositories/accountRepository.ts:1227"
+    ],
+    "reset_auto_account_action_status_daily": [
+      "src/main/data/repositories/accountActionRepository.ts:553"
+    ],
+    "reset_desktop_running_statuses_no_retry": [
+      "src/main/data/repositories/accountRepository.ts:1343"
+    ],
+    "validate_control_session": [
+      "src/main/data/repositories/serverRuntimeRepository.ts:498"
+    ],
+    "aka_agent_read_filtered_contacts_v1": [
+      "src/main/data/filters/dataColumnReadService.ts:138 (reviewed dynamic)"
+    ],
+    "aka_agent_read_filtered_group_v1": [
+      "src/main/data/filters/dataColumnReadService.ts:138 (reviewed dynamic)"
+    ],
+    "aka_agent_read_filtered_remarketing_v1": [
+      "src/main/data/filters/dataColumnReadService.ts:138 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_contact_dataset": [
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_zalo_server_contact_dataset": [
+      "src/main/data/repositories/accountContactRepository.ts:888 (reviewed dynamic)"
+    ],
+    "aka_agent_admin_cron": [
+      "src/main/data/repositories/adminRepository.ts:46 (reviewed dynamic)"
+    ],
+    "aka_agent_admin_docs": [
+      "src/main/data/repositories/adminRepository.ts:46 (reviewed dynamic)"
+    ],
+    "aka_agent_admin_notifications": [
+      "src/main/data/repositories/adminRepository.ts:46 (reviewed dynamic)"
+    ],
+    "aka_agent_admin_settings": [
+      "src/main/data/repositories/adminRepository.ts:46 (reviewed dynamic)"
+    ],
+    "aka_agent_admin_triggers": [
+      "src/main/data/repositories/adminRepository.ts:46 (reviewed dynamic)"
+    ],
+    "aka_agent_delete_automation": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_get_automation": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_get_automation_options": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_ingest_automation_data_group_result": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_list_automation_details": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_list_automations": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_automation_details": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_save_automation": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_set_automation_active": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "claim_auto_automation_details": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "materialize_auto_automation_detail": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "reconcile_auto_automation_enqueue_failures": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "recover_stale_auto_automation_details": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "retry_auto_automation_detail": [
+      "src/main/data/repositories/automationRepository.ts:379 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_input_data_page_by_ids": [
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_list_campaign_input_data_page_v2": [
+      "src/main/data/repositories/campaignRepository.ts:4155 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_data_group_campaign": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_expired_data_group_campaigns": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_expired_zalo_server_data_group_campaigns": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_finalize_zalo_server_data_group_campaign": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_move_data_group_members": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_reactivate_campaign_data_group_source": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_remove_data_group_members": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_stop_campaign_data_group_source": [
+      "src/main/data/repositories/dataGroupRepository.ts:543 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:949 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:999 (reviewed dynamic)",
+      "src/main/data/repositories/dataGroupRepository.ts:1037 (reviewed dynamic)"
+    ],
+    "aka_agent_prepare_device_change": [
+      "src/main/services/deviceChangeRequest.ts:100 (reviewed dynamic)",
+      "src/main/services/deviceChangeRequest.ts:115 (reviewed dynamic)",
+      "src/main/services/deviceChangeService.ts:19 (reviewed dynamic)"
+    ],
+    "aka_agent_prepare_device_change_v2": [
+      "src/main/services/deviceChangeRequest.ts:100 (reviewed dynamic)",
+      "src/main/services/deviceChangeRequest.ts:115 (reviewed dynamic)",
+      "src/main/services/deviceChangeService.ts:19 (reviewed dynamic)"
+    ],
+    "aka_agent_reset_device_binding": [
+      "src/main/services/deviceChangeRequest.ts:100 (reviewed dynamic)",
+      "src/main/services/deviceChangeRequest.ts:115 (reviewed dynamic)",
+      "src/main/services/deviceChangeService.ts:19 (reviewed dynamic)"
+    ],
+    "aka_agent_reset_device_binding_v2": [
+      "src/main/services/deviceChangeRequest.ts:100 (reviewed dynamic)",
+      "src/main/services/deviceChangeRequest.ts:115 (reviewed dynamic)",
+      "src/main/services/deviceChangeService.ts:19 (reviewed dynamic)"
+    ],
+    "aka_agent_read_campaign_engagement": [
+      "src/main/services/zaloCampaignEngagement.ts:246 (reviewed dynamic)"
+    ],
+    "aka_agent_record_campaign_engagement": [
+      "src/main/services/zaloCampaignEngagement.ts:246 (reviewed dynamic)"
+    ],
+    "aka_agent_register_campaign_engagement": [
+      "src/main/services/zaloCampaignEngagement.ts:246 (reviewed dynamic)"
+    ]
+  },
+  "realtime": [],
+  "dynamic": [
+    {
+      "method": "rpc",
+      "expression": "rpc",
+      "location": "src/main/data/filters/dataColumnReadService.ts:138",
+      "resolved": [
+        "aka_agent_read_filtered_contacts_v1",
+        "aka_agent_read_filtered_group_v1",
+        "aka_agent_read_filtered_remarketing_v1"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "rpc",
+      "location": "src/main/data/repositories/accountContactRepository.ts:888",
+      "resolved": [
+        "aka_agent_finalize_contact_dataset",
+        "aka_agent_finalize_zalo_server_contact_dataset",
+        "aka_agent_list_contact_dataset_member_ids",
+        "aka_agent_list_contact_datasets",
+        "aka_agent_lookup_zalo_users",
+        "aka_agent_save_upload_contact_datasets"
+      ]
+    },
+    {
+      "method": "from",
+      "expression": "table",
+      "location": "src/main/data/repositories/actionStatusPolicyRepository.ts:14",
+      "resolved": [
+        "auto_account_action_status_policies",
+        "auto_account_actions",
+        "auto_error",
+        "auto_status"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "`aka_agent_admin_${resource}`",
+      "location": "src/main/data/repositories/adminRepository.ts:46",
+      "resolved": [
+        "aka_agent_admin_cron",
+        "aka_agent_admin_docs",
+        "aka_agent_admin_notifications",
+        "aka_agent_admin_settings",
+        "aka_agent_admin_triggers"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "name",
+      "location": "src/main/data/repositories/automationRepository.ts:379",
+      "resolved": [
+        "aka_agent_delete_automation",
+        "aka_agent_get_automation",
+        "aka_agent_get_automation_options",
+        "aka_agent_ingest_automation_data_group_result",
+        "aka_agent_list_automation_details",
+        "aka_agent_list_automations",
+        "aka_agent_list_campaign_automation_details",
+        "aka_agent_save_automation",
+        "aka_agent_set_automation_active",
+        "claim_auto_automation_details",
+        "materialize_auto_automation_detail",
+        "reconcile_auto_automation_enqueue_failures",
+        "recover_stale_auto_automation_details",
+        "retry_auto_automation_detail"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "ids === undefined\n    ? 'aka_agent_list_campaign_input_data_page_v2'\n    : 'aka_agent_list_campaign_input_data_page_by_ids'",
+      "location": "src/main/data/repositories/campaignRepository.ts:4155",
+      "resolved": [
+        "aka_agent_advance_zalo_server_multi_daily_slot",
+        "aka_agent_apply_campaign_delivery_cooldown",
+        "aka_agent_bind_campaign_data_group_source",
+        "aka_agent_check_campaign_daily_boundary",
+        "aka_agent_check_daily_maintenance_barrier",
+        "aka_agent_check_zalo_message_opt_out",
+        "aka_agent_claim_campaign_run_unit_v2",
+        "aka_agent_claim_campaign_runtime_v2",
+        "aka_agent_claim_zalo_server_run_unit",
+        "aka_agent_cleanup_failed_campaign_runtime",
+        "aka_agent_control_campaign_progress",
+        "aka_agent_finalize_campaign",
+        "aka_agent_finalize_zalo_server_campaign",
+        "aka_agent_finalize_zalo_server_maintenance_campaign",
+        "aka_agent_get_zalo_server_run_control_state",
+        "aka_agent_list_automation_refs_by_detail_ids",
+        "aka_agent_list_campaign_data_group_source_summaries",
+        "aka_agent_list_campaign_detail_automation_triggers",
+        "aka_agent_list_campaign_details_page_v2",
+        "aka_agent_list_campaign_input_data_page_by_ids",
+        "aka_agent_list_campaign_input_data_page_v2",
+        "aka_agent_lookup_zalo_users",
+        "aka_agent_prepare_zalo_message_opt_out",
+        "aka_agent_recover_campaign_runtime_unit_leases",
+        "aka_agent_set_desktop_campaign_status_v2",
+        "aka_agent_set_zalo_server_campaign_status",
+        "aka_agent_settle_campaign_run_unit_v2",
+        "aka_agent_yield_campaign_daily_boundary",
+        "append_auto_campaign_log",
+        "claim_campaign_runtime",
+        "enqueue_campaign_zalo_realtime_group_event"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "rpcName",
+      "location": "src/main/data/repositories/dataGroupRepository.ts:543",
+      "resolved": [
+        "aka_agent_bind_campaign_data_group_source",
+        "aka_agent_create_campaign_creation_bundle",
+        "aka_agent_create_data_group_v2",
+        "aka_agent_delete_data_group_with_options",
+        "aka_agent_duplicate_data_group",
+        "aka_agent_finalize_data_group_campaign",
+        "aka_agent_finalize_expired_data_group_campaigns",
+        "aka_agent_finalize_expired_zalo_server_data_group_campaigns",
+        "aka_agent_finalize_zalo_server_data_group_campaign",
+        "aka_agent_get_campaign_data_group_source",
+        "aka_agent_get_data_group_account_options",
+        "aka_agent_get_data_group_dynamic_filter",
+        "aka_agent_get_data_group_latest_ingest_stats",
+        "aka_agent_ingest_data_group",
+        "aka_agent_move_data_group_members",
+        "aka_agent_preflight_campaign_data_group_change",
+        "aka_agent_preview_data_group_campaign_targets",
+        "aka_agent_reactivate_campaign_data_group_source",
+        "aka_agent_remove_data_group_members",
+        "aka_agent_save_data_group_dynamic_filter",
+        "aka_agent_snapshot_data_group_to_direct_campaign",
+        "aka_agent_stop_campaign_data_group_source",
+        "aka_agent_update_data_group_note",
+        "aka_agent_update_data_group_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "rpcName",
+      "location": "src/main/data/repositories/dataGroupRepository.ts:949",
+      "resolved": [
+        "aka_agent_bind_campaign_data_group_source",
+        "aka_agent_create_campaign_creation_bundle",
+        "aka_agent_create_data_group_v2",
+        "aka_agent_delete_data_group_with_options",
+        "aka_agent_duplicate_data_group",
+        "aka_agent_finalize_data_group_campaign",
+        "aka_agent_finalize_expired_data_group_campaigns",
+        "aka_agent_finalize_expired_zalo_server_data_group_campaigns",
+        "aka_agent_finalize_zalo_server_data_group_campaign",
+        "aka_agent_get_campaign_data_group_source",
+        "aka_agent_get_data_group_account_options",
+        "aka_agent_get_data_group_dynamic_filter",
+        "aka_agent_get_data_group_latest_ingest_stats",
+        "aka_agent_ingest_data_group",
+        "aka_agent_move_data_group_members",
+        "aka_agent_preflight_campaign_data_group_change",
+        "aka_agent_preview_data_group_campaign_targets",
+        "aka_agent_reactivate_campaign_data_group_source",
+        "aka_agent_remove_data_group_members",
+        "aka_agent_save_data_group_dynamic_filter",
+        "aka_agent_snapshot_data_group_to_direct_campaign",
+        "aka_agent_stop_campaign_data_group_source",
+        "aka_agent_update_data_group_note",
+        "aka_agent_update_data_group_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "rpcName",
+      "location": "src/main/data/repositories/dataGroupRepository.ts:999",
+      "resolved": [
+        "aka_agent_bind_campaign_data_group_source",
+        "aka_agent_create_campaign_creation_bundle",
+        "aka_agent_create_data_group_v2",
+        "aka_agent_delete_data_group_with_options",
+        "aka_agent_duplicate_data_group",
+        "aka_agent_finalize_data_group_campaign",
+        "aka_agent_finalize_expired_data_group_campaigns",
+        "aka_agent_finalize_expired_zalo_server_data_group_campaigns",
+        "aka_agent_finalize_zalo_server_data_group_campaign",
+        "aka_agent_get_campaign_data_group_source",
+        "aka_agent_get_data_group_account_options",
+        "aka_agent_get_data_group_dynamic_filter",
+        "aka_agent_get_data_group_latest_ingest_stats",
+        "aka_agent_ingest_data_group",
+        "aka_agent_move_data_group_members",
+        "aka_agent_preflight_campaign_data_group_change",
+        "aka_agent_preview_data_group_campaign_targets",
+        "aka_agent_reactivate_campaign_data_group_source",
+        "aka_agent_remove_data_group_members",
+        "aka_agent_save_data_group_dynamic_filter",
+        "aka_agent_snapshot_data_group_to_direct_campaign",
+        "aka_agent_stop_campaign_data_group_source",
+        "aka_agent_update_data_group_note",
+        "aka_agent_update_data_group_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "rpcName",
+      "location": "src/main/data/repositories/dataGroupRepository.ts:1037",
+      "resolved": [
+        "aka_agent_bind_campaign_data_group_source",
+        "aka_agent_create_campaign_creation_bundle",
+        "aka_agent_create_data_group_v2",
+        "aka_agent_delete_data_group_with_options",
+        "aka_agent_duplicate_data_group",
+        "aka_agent_finalize_data_group_campaign",
+        "aka_agent_finalize_expired_data_group_campaigns",
+        "aka_agent_finalize_expired_zalo_server_data_group_campaigns",
+        "aka_agent_finalize_zalo_server_data_group_campaign",
+        "aka_agent_get_campaign_data_group_source",
+        "aka_agent_get_data_group_account_options",
+        "aka_agent_get_data_group_dynamic_filter",
+        "aka_agent_get_data_group_latest_ingest_stats",
+        "aka_agent_ingest_data_group",
+        "aka_agent_move_data_group_members",
+        "aka_agent_preflight_campaign_data_group_change",
+        "aka_agent_preview_data_group_campaign_targets",
+        "aka_agent_reactivate_campaign_data_group_source",
+        "aka_agent_remove_data_group_members",
+        "aka_agent_save_data_group_dynamic_filter",
+        "aka_agent_snapshot_data_group_to_direct_campaign",
+        "aka_agent_stop_campaign_data_group_source",
+        "aka_agent_update_data_group_note",
+        "aka_agent_update_data_group_v2"
+      ]
+    },
+    {
+      "method": "from",
+      "expression": "table",
+      "location": "src/main/domain/reports/actionStatusReportCatalog.ts:11",
+      "resolved": [
+        "auto_campaign_action_detail_statuses",
+        "auto_campaign_actions",
+        "auto_status"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "this.options.bindingVersion === 2 ? 'aka_agent_prepare_device_change_v2' : 'aka_agent_prepare_device_change'",
+      "location": "src/main/services/deviceChangeRequest.ts:100",
+      "resolved": [
+        "aka_agent_prepare_device_change",
+        "aka_agent_prepare_device_change_v2",
+        "aka_agent_reset_device_binding",
+        "aka_agent_reset_device_binding_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "this.options.bindingVersion === 2 ? 'aka_agent_reset_device_binding_v2' : 'aka_agent_reset_device_binding'",
+      "location": "src/main/services/deviceChangeRequest.ts:115",
+      "resolved": [
+        "aka_agent_prepare_device_change",
+        "aka_agent_prepare_device_change_v2",
+        "aka_agent_reset_device_binding",
+        "aka_agent_reset_device_binding_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "name",
+      "location": "src/main/services/deviceChangeService.ts:19",
+      "resolved": [
+        "aka_agent_prepare_device_change",
+        "aka_agent_prepare_device_change_v2",
+        "aka_agent_reset_device_binding",
+        "aka_agent_reset_device_binding_v2"
+      ]
+    },
+    {
+      "method": "rpc",
+      "expression": "`aka_agent_${mode}_campaign_engagement`",
+      "location": "src/main/services/zaloCampaignEngagement.ts:246",
+      "resolved": [
+        "aka_agent_read_campaign_engagement",
+        "aka_agent_record_campaign_engagement",
+        "aka_agent_register_campaign_engagement"
+      ]
+    }
+  ]
+}

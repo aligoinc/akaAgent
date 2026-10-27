@@ -14,7 +14,7 @@ const accounts=[{id:11,name:'Tài khoản An',staff_id:7,organization_id:9,is_de
 const pages=[{account_id:12,uid:'page-b',name:'Shop Hoa',staff_id:7,is_delete:false,contact_type:'page'}]
 global.__fbDb={from(table){let filters=[],single=false,insert,signal,select,limit=Infinity
   const q={select: v=>{select=v;return q},eq:(k,v)=>{filters.push(r=>r[k]===v);return q},in:(k,v)=>{filters.push(r=>v.includes(r[k]));return q},
-    limit:v=>{limit=v;return q},order:()=>q,abortSignal:v=>{signal=v;return q},maybeSingle:()=>{single=true;return q},
+    limit:v=>{limit=v;return q},order:()=>q,abortSignal:v=>{signal=v;return q},returns:()=>q,maybeSingle:()=>{single=true;return q},
     insert:v=>{insert=v;return q},then:(ok,fail)=>Promise.resolve().then(()=>{
       signal?.throwIfAborted(); reads.push({table,select,signal})
       if(insert){logs.push(insert);return {data:{id:10},error:null}}
@@ -24,7 +24,7 @@ global.__fbDb={from(table){let filters=[],single=false,insert,signal,select,limi
 }}
 async function main(){
   await build({stdin:{contents:`export * from './src/shared/campaignFacebookAi'; export * from './src/main/services/campaignFacebookAiService';`,resolveDir:root},outfile:path.join(tmp,'m.cjs'),bundle:true,platform:'node',logLevel:'silent',plugins:[{name:'fixtures',setup(b){
-    b.onLoad({filter:/\/supabaseClient\.ts$/},()=>({contents:'export const getSupabaseClient=()=>globalThis.__fbDb',loader:'ts'}))
+    b.onLoad({filter:/\/supabaseClient\.ts$/},()=>({contents:'export const isTrustedServerSupabaseConfigured = () => true; export const desktopSession = { token: async () => null }; export const getSupabaseClient=()=>globalThis.__fbDb',loader:'ts'}))
     b.onLoad({filter:/\/currentUser\.ts$/},()=>({contents:'export const getCurrentUser=()=>({...globalThis.__fbUser,entitlements:globalThis.__fbAllowed?globalThis.__fbUser.entitlements:{}});export const requireCurrentUser=getCurrentUser',loader:'ts'}))
     // Keep entitlementRepository real so subtype guards exercise the account policy.
   }}]})

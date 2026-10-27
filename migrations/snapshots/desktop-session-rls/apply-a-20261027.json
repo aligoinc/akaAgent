@@ -1,0 +1,234 @@
+{
+  "projectId": "cgjbsmqtfhqvttudyjzq",
+  "projectName": "akachat",
+  "migration": {
+    "name": "desktop_session_identity",
+    "version": "20261027133417"
+  },
+  "appliedAtVietnam": "2026-10-27T20:34:17+07:00",
+  "verifiedAt": "2026-10-27T13:34:44.734022+00:00",
+  "canonicalFile": "supabase/migrations/20261027095004_desktop_session_identity.sql",
+  "canonicalSha256": "acc064f9687dabaf8a696e9e5e8740e2b73aa76476122fae24eb7c26d14e0dc7",
+  "appliedSha256": "7001198e811079e5dfbe5276014881fb5dc79c16d7edfa92165999395a538138",
+  "executionOnlySettings": {
+    "lock_timeout": "3s",
+    "statement_timeout": "30s"
+  },
+  "stage": "A",
+  "stageBApplied": false,
+  "staffPhaseCAppliedByThisTask": false,
+  "edgeEndpointDeployed": false,
+  "validation": {
+    "dryRunTransactionRolledBack": true,
+    "postApplyMatchesDryRun": true,
+    "existingRelationsAndRlsUnchanged": 113,
+    "existingFunctionDefinitionsAndAttributesUnchanged": 540,
+    "legacyTableColumnAndRpcAclsUnchanged": true,
+    "existingSequenceAclsUnchanged": 87,
+    "existingPoliciesUnchanged": 13,
+    "newEquivalentPoliciesOnAlreadyRlsEnabledTables": 13,
+    "businessRowsWritten": 0
+  },
+  "newFunctions": [
+    {
+      "sourceChecksum": null,
+      "acl": [
+        [
+          "aka_agent_desktop",
+          "EXECUTE",
+          false
+        ],
+        [
+          "anon",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "service_role",
+          "EXECUTE",
+          false
+        ]
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "checksum": "997f54ddf67f808a1b3ac47596981036",
+      "security": true,
+      "signature": "aka_agent_desktop_login_content()",
+      "volatility": "s"
+    },
+    {
+      "sourceChecksum": null,
+      "acl": [
+        [
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "service_role",
+          "EXECUTE",
+          false
+        ]
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=12s",
+        "lock_timeout=3s"
+      ],
+      "checksum": "0f7bf99a4f0b78914c97133a47486f97",
+      "security": true,
+      "signature": "aka_agent_desktop_session_admin(text,jsonb)",
+      "volatility": "v"
+    },
+    {
+      "sourceChecksum": null,
+      "acl": [
+        [
+          "aka_agent_desktop",
+          "EXECUTE",
+          false
+        ],
+        [
+          "anon",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "service_role",
+          "EXECUTE",
+          false
+        ]
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "checksum": "b8f48557c26ed1039fec5cdb87212936",
+      "security": true,
+      "signature": "aka_agent_desktop_startup_policy()",
+      "volatility": "s"
+    }
+  ],
+  "role": {
+    "name": "aka_agent_desktop",
+    "login": false,
+    "config": [
+      "statement_timeout=3s",
+      "lock_timeout=8s"
+    ],
+    "inherit": false,
+    "bypassrls": false
+  },
+  "authenticatorMembership": true,
+  "mapping": {
+    "rls": true,
+    "rows": 0,
+    "anon_select": false,
+    "desktop_select": false
+  },
+  "businessRlsSample": {
+    "org_staff": false,
+    "auto_accounts": false,
+    "auto_campaigns": false,
+    "org_organization": true
+  },
+  "httpSmoke": {
+    "checkedAt": "2026-10-27T13:35:15.560Z",
+    "projectId": "cgjbsmqtfhqvttudyjzq",
+    "status": "passed",
+    "checks": [
+      {
+        "check": "login_content_matches_legacy",
+        "status": "passed",
+        "rows": 5
+      },
+      {
+        "check": "startup_policy_matches_legacy",
+        "status": "passed"
+      },
+      {
+        "check": "legacy_anon_org_staff",
+        "status": "passed",
+        "rows": 0
+      },
+      {
+        "check": "legacy_anon_org_organization",
+        "status": "passed",
+        "rows": 0
+      },
+      {
+        "check": "legacy_anon_auto_accounts",
+        "status": "passed",
+        "rows": 0
+      },
+      {
+        "check": "legacy_anon_auto_campaigns",
+        "status": "passed",
+        "rows": 0
+      },
+      {
+        "check": "issuer_denies_public_key",
+        "status": "passed",
+        "http": 401
+      }
+    ]
+  },
+  "advisors": {
+    "newObjectFindings": [
+      {
+        "lint": "rls_enabled_no_policy",
+        "level": "INFO",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy",
+        "detail": "Table \\`private.aka_agent_desktop_users\\` has RLS enabled, but no policies exist",
+        "metadata": {
+          "name": "aka_agent_desktop_users",
+          "type": "table",
+          "schema": "private"
+        },
+        "observed_at": "2026-10-27T13:35:45.242Z"
+      },
+      {
+        "lint": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+        "detail": "Function `public.aka_agent_desktop_login_content()` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_desktop_login_content`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+        "metadata": {
+          "name": "aka_agent_desktop_login_content",
+          "schema": "public",
+          "language": "sql",
+          "arguments": "",
+          "security_definer": true
+        },
+        "observed_at": "2026-10-27T13:35:45.242Z"
+      },
+      {
+        "lint": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable",
+        "detail": "Function `public.aka_agent_desktop_startup_policy()` can be executed by the `anon` role as a `SECURITY DEFINER` function via `/rest/v1/rpc/aka_agent_desktop_startup_policy`. Revoke `EXECUTE` or switch it to `SECURITY INVOKER` if that is not intentional.",
+        "metadata": {
+          "name": "aka_agent_desktop_startup_policy",
+          "schema": "public",
+          "language": "sql",
+          "arguments": "",
+          "security_definer": true
+        },
+        "observed_at": "2026-10-27T13:35:45.242Z"
+      }
+    ],
+    "assessment": "Expected: private mapping has no direct-client policy or grants. Two public SECURITY DEFINER readers intentionally expose fixed active non-secret settings before login. No unrelated advisory changes made."
+  }
+}

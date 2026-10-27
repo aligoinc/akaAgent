@@ -1,0 +1,229 @@
+{
+  "checkedAt": "2026-10-27T16:05:44.832Z",
+  "status": "real-desktop-session-canary-passed",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "endpoint": "https://agent.akabiz.net/api/aka-agent/desktop/v1/ai",
+  "session": {
+    "method": "Existing logged-in Desktop UI from main repository, localhost:5173",
+    "accountLabel": "Lê Quang Nhựt",
+    "tokensExtracted": false,
+    "credentialsCopied": false,
+    "newAuthUserCreated": false
+  },
+  "tests": [
+    {
+      "name": "Legacy content rewrite",
+      "logId": 1172618,
+      "apiRequestId": "req-31",
+      "result": "passed",
+      "durationMs": 2995,
+      "unicodeAndEmoji": "preserved"
+    },
+    {
+      "name": "Form schedule structured output",
+      "logId": 1172625,
+      "apiRequestId": "req-3c",
+      "result": "passed",
+      "durationMs": 3569,
+      "ui": {
+        "weeklyDays": [
+          "Monday",
+          "Wednesday",
+          "Friday"
+        ],
+        "startDate": "2026-10-28",
+        "startTime": "08:30",
+        "stopTime": "17:45"
+      }
+    },
+    {
+      "name": "Form content native Claude structured output",
+      "logId": 1172631,
+      "apiRequestId": "req-3g",
+      "result": "passed",
+      "durationMs": 3505,
+      "output": "Chào bạn! Nội dung thử nghiệm AI ngày 27/10 đây. Chúc bạn một ngày thật vui 😊"
+    },
+    {
+      "name": "Cancel in-flight schedule change",
+      "apiRequestId": "req-3u",
+      "result": "passed in Desktop UI",
+      "ui": "08:30 retained after cancellation, no late patch observed",
+      "log": "API received request; no completed response in captured logs; Desktop did not create success ai_log",
+      "providerBillingOrInternalProcessingVerified": false
+    },
+    {
+      "name": "Explicit new schedule request after cancellation",
+      "logId": 1172648,
+      "apiRequestId": "req-3v",
+      "result": "passed",
+      "durationMs": 3810,
+      "ui": "Only start time changed to 09:15; existing dates/weekdays/17:45 stop preserved"
+    }
+  ],
+  "aiLogs": [
+    {
+      "id": 1172618,
+      "created_at": "2026-10-27 16:01:52.378357+00",
+      "using_code": "app_ai_rewrite_content",
+      "form_config_id": null,
+      "provider": "openai",
+      "model": "gpt-5-nano",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 2995,
+      "error_message": null
+    },
+    {
+      "id": 1172625,
+      "created_at": "2026-10-27 16:02:31.370319+00",
+      "using_code": "app_campaign_schedule",
+      "form_config_id": 2,
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 3569,
+      "error_message": null
+    },
+    {
+      "id": 1172631,
+      "created_at": "2026-10-27 16:02:54.986228+00",
+      "using_code": "app_campaign_content",
+      "form_config_id": 5,
+      "provider": "claude",
+      "model": "claude-haiku-5-5",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 3505,
+      "error_message": null
+    },
+    {
+      "id": 1172648,
+      "created_at": "2026-10-27 16:04:06.619494+00",
+      "using_code": "app_campaign_schedule",
+      "form_config_id": 2,
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "status": "success",
+      "http_status": 200,
+      "duration_ms": 3810,
+      "error_message": null
+    }
+  ],
+  "unchangedMetadata": {
+    "existingFunctions": true,
+    "tableAclRls": true,
+    "columnAcl": true,
+    "policies": true,
+    "defaultAcl": true,
+    "functions": true
+  },
+  "guardChecksumsBefore": {
+    "existingFunctions": {
+      "count": 1242,
+      "checksum": "cc95b5dcde19e7f506bf99b55a127d9f"
+    },
+    "tableAclRls": "48aff12c951465ca6ef5d1ce23df8c01",
+    "columnAcl": "3b20675800c0d38b75ac314d374d26ec",
+    "policies": "9a3639695602c2be421c1fab22b345ab"
+  },
+  "changes": {
+    "anonRevoked": false,
+    "keyReadRevoked": false,
+    "rlsChanged": false,
+    "sqlMigrationApplied": false,
+    "providerConfigChanged": false,
+    "apiRedeployed": false,
+    "desktopPackaged": false,
+    "campaignSaved": false,
+    "draftSaved": false,
+    "campaignStarted": false,
+    "normalAiAuditRowsWritten": 4
+  },
+  "cleanup": "Closed the new test campaign form using Cancel; left existing campaigns unchanged.",
+  "evidenceDirectory": "/Users/lequangnhut/.codex/deployments/desktop-ai-real-canary-20261027-3vn5rt2x",
+  "screenshot": "/Users/lequangnhut/.codex/deployments/desktop-ai-real-canary-20261027-3vn5rt2x/schedule-success.png",
+  "scope": "Real authenticated Desktop → deployed Fly API → Supabase Auth/RPC/config → real OpenAI/Sol/Claude providers → Desktop parser/UI. Synthetic test text; no actual campaign send. Image inputs, large payloads, long deadlines, expired token, sleep and network outage were not re-tested in this live canary.",
+  "apiRequests": [
+    {
+      "timestamp": "2026-10-27T16:01:49.530521123Z",
+      "reqId": "req-31",
+      "msg": "incoming request"
+    },
+    {
+      "timestamp": "2026-10-27T16:01:52.239888878Z",
+      "reqId": "req-31",
+      "msg": "request completed",
+      "res": {
+        "statusCode": 200
+      },
+      "responseTime": 2709.0563520000433
+    },
+    {
+      "timestamp": "2026-10-27T16:02:27.702118217Z",
+      "reqId": "req-3c",
+      "msg": "incoming request"
+    },
+    {
+      "timestamp": "2026-10-27T16:02:31.216320702Z",
+      "reqId": "req-3c",
+      "msg": "request completed",
+      "res": {
+        "statusCode": 200
+      },
+      "responseTime": 3513.884083999961
+    },
+    {
+      "timestamp": "2026-10-27T16:02:51.423189431Z",
+      "reqId": "req-3g",
+      "msg": "incoming request"
+    },
+    {
+      "timestamp": "2026-10-27T16:02:54.875171355Z",
+      "reqId": "req-3g",
+      "msg": "request completed",
+      "res": {
+        "statusCode": 200
+      },
+      "responseTime": 3451.675701000029
+    },
+    {
+      "timestamp": "2026-10-27T16:03:53.138449731Z",
+      "reqId": "req-3u",
+      "msg": "incoming request"
+    },
+    {
+      "timestamp": "2026-10-27T16:04:02.774305086Z",
+      "reqId": "req-3v",
+      "msg": "incoming request"
+    },
+    {
+      "timestamp": "2026-10-27T16:04:06.426717172Z",
+      "reqId": "req-3v",
+      "msg": "request completed",
+      "res": {
+        "statusCode": 200
+      },
+      "responseTime": 3651.972512999957
+    }
+  ],
+  "healthAfter": {
+    "machines": 1,
+    "state": "started",
+    "image": "registry.fly.io/aka-agent-web-app:desktop-ai-v434-20261027@sha256:a3727317370d334073ecf38c21955336bf6f4cbee675c0a17cd541ec2afe3c49",
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 2048
+    },
+    "health": [
+      {
+        "name": "servicecheck-00-http-8080",
+        "status": "passing",
+        "output": "ok",
+        "updated_at": "2026-10-27T15:55:51.495Z"
+      }
+    ]
+  }
+}

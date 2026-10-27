@@ -1,0 +1,495 @@
+[
+  {
+    "table": "auto_proxies",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_error_state",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_zalo_realtime_group_events",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_blocks",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_elements",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "zalo_users",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_email_notification_settings",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "zalo_groups",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_inputs",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_workflows",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_runs",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_run_steps",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_actions",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_actions",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_run_events",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_error_state",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_staff_device_login_settings",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_groups",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_system_settings",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "zalo_group_members",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "ai_using",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "ai_model",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_contact_tags",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "zalo_accounts",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_contacts",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_media_files",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "ai_prompt",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_media_groups",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_media_group_items",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_email_message_trackings",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_email_link_trackings",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_zalo_api_error_logs",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_action_status",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_automation_actions",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "auto_automation_actions_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_automation_data_types",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "auto_automation_data_types_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_campaign_action_data_types",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "auto_campaign_action_data_types_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_account_contact_group_members",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "category_type",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "category_type_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "category_item",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "category_item_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "aka_crm_status",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_logs",
+    "name": "desktop_legacy_0",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((EXISTS ( SELECT 1\n   FROM auto_accounts a\n  WHERE (a.id = auto_account_logs.account_id))) AND ((campaign_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM auto_campaigns c\n  WHERE ((c.id = auto_account_logs.campaign_id) AND ((c.account_id = auto_account_logs.account_id) OR (c.secondary_account_id = auto_account_logs.account_id)))))))",
+    "origin": "auto_account_logs_insert",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "org_organization_product",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "org_organization_product_read_all",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "ai_form_configs",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "is_active",
+    "with_check": null,
+    "origin": "ai_form_configs_active_read",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_content_templates",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "ai_log",
+    "name": "desktop_legacy_0",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(COALESCE(block_name, ''::text) <> 'chat-followup-precreate-v2'::text)",
+    "origin": "chat_followup_ai_log_client_insert_guard",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "ai_log",
+    "name": "desktop_legacy_1",
+    "cmd": "SELECT",
+    "qual": "(created_at >= (now() - '00:05:00'::interval))",
+    "with_check": null,
+    "origin": "ai_log_client_select_after_insert",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_status",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_action_status_policies",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "action_status_catalog_read",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_error",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_account_contact_groups",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_content_groups",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_control_sessions",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "org_organization",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "org_organization_compat_read_all",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "auto_campaign_details",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_action_detail_statuses",
+    "name": "desktop_legacy_0",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null,
+    "origin": "auto_campaign_action_detail_statuses_read_catalog",
+    "permissive": "PERMISSIVE"
+  },
+  {
+    "table": "org_staff",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaigns",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_campaign_input_data",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_accounts",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  },
+  {
+    "table": "auto_email_notification_deliveries",
+    "name": "desktop_legacy_access",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true",
+    "origin": "previously RLS disabled"
+  }
+]

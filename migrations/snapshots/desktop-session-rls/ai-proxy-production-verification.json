@@ -1,0 +1,407 @@
+{
+  "checkedAt": "2026-10-27T15:57:03.957200+00:00",
+  "status": "v434-applied-api-deployed",
+  "project": {
+    "id": "cgjbsmqtfhqvttudyjzq",
+    "name": "akachat"
+  },
+  "migration": {
+    "version": "20261027155315",
+    "name": "migration_v434_desktop_ai_proxy_identity"
+  },
+  "targetSignature": "public.aka_agent_desktop_ai_identity(uuid,uuid)",
+  "before": {
+    "policies": "9a3639695602c2be421c1fab22b345ab",
+    "columnAcl": "3b20675800c0d38b75ac314d374d26ec",
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "checksum": "a294e60011edd8d42e90ac2f74ce744c",
+        "signature": "aka_agent_staff_time_allowed(bigint)",
+        "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_staff_time_allowed(p_staff_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT coalesce((SELECT s.is_active AND s.deleted_at IS NULL AND\n    (NOT o.use_staff_expiration OR s.expiration_date IS NULL OR\n      timezone('Asia/Ho_Chi_Minh',s.expiration_date)::date >= timezone('Asia/Ho_Chi_Minh',now())::date)\n    FROM public.org_staff s JOIN public.org_organization o ON o.id=s.organization_id WHERE s.id=p_staff_id),false);\n$function$\n",
+        "volatility": "s",
+        "securityDefiner": true
+      }
+    ],
+    "defaultAcl": [
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+        "type": "f",
+        "owner": "postgres",
+        "schema": "public"
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+        "type": "r",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+        "type": "f",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+        "type": "S",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+        "type": "r",
+        "owner": "postgres",
+        "schema": "public"
+      },
+      {
+        "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+        "type": "S",
+        "owner": "postgres",
+        "schema": "public"
+      }
+    ],
+    "tableAclRls": "50b7fc8fa740f9e6d8d2b95e19c7772b",
+    "existingFunctions": {
+      "count": 1242,
+      "checksum": "cc95b5dcde19e7f506bf99b55a127d9f"
+    },
+    "newSignatureAbsent": true
+  },
+  "after": {
+    "policies": "9a3639695602c2be421c1fab22b345ab",
+    "columnAcl": "3b20675800c0d38b75ac314d374d26ec",
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "checksum": "a294e60011edd8d42e90ac2f74ce744c",
+        "signature": "aka_agent_staff_time_allowed(bigint)",
+        "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_staff_time_allowed(p_staff_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT coalesce((SELECT s.is_active AND s.deleted_at IS NULL AND\n    (NOT o.use_staff_expiration OR s.expiration_date IS NULL OR\n      timezone('Asia/Ho_Chi_Minh',s.expiration_date)::date >= timezone('Asia/Ho_Chi_Minh',now())::date)\n    FROM public.org_staff s JOIN public.org_organization o ON o.id=s.organization_id WHERE s.id=p_staff_id),false);\n$function$\n",
+        "volatility": "s",
+        "securityDefiner": true
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog",
+          "statement_timeout=10s"
+        ],
+        "checksum": "5600c48f72d1343670b3e7cfd31ce491",
+        "signature": "aka_agent_desktop_ai_identity(uuid,uuid)",
+        "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_desktop_ai_identity(p_auth_user_id uuid, p_session_id uuid)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog'\n SET statement_timeout TO '10s'\nAS $function$\n SELECT jsonb_build_object('staffId',s.id,'organizationId',s.organization_id)\n FROM private.aka_agent_desktop_users m\n JOIN auth.users u ON u.id=m.auth_user_id AND u.role='aka_agent_desktop'\n   AND u.raw_app_meta_data->>'aka_agent_desktop'='true'\n JOIN auth.sessions session ON session.user_id=u.id AND session.id=p_session_id\n JOIN public.org_staff s ON s.id=m.staff_id\n WHERE m.auth_user_id=p_auth_user_id AND public.aka_agent_staff_time_allowed(s.id);\n$function$\n",
+        "volatility": "s",
+        "securityDefiner": true
+      }
+    ],
+    "defaultAcl": [
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+        "type": "f",
+        "owner": "postgres",
+        "schema": "public"
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+        "type": "r",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+        "type": "f",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+        "type": "S",
+        "owner": "postgres",
+        "schema": "storage"
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+        "type": "r",
+        "owner": "postgres",
+        "schema": "public"
+      },
+      {
+        "acl": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+        "type": "S",
+        "owner": "postgres",
+        "schema": "public"
+      }
+    ],
+    "tableAclRls": "50b7fc8fa740f9e6d8d2b95e19c7772b",
+    "existingFunctions": {
+      "count": 1242,
+      "checksum": "cc95b5dcde19e7f506bf99b55a127d9f"
+    },
+    "newSignatureAbsent": false
+  },
+  "dryRun": {
+    "acl": "service_role only",
+    "result": "passed",
+    "targetChecksum": "5600c48f72d1343670b3e7cfd31ce491",
+    "validIdentities": 2,
+    "mappedSessionsChecked": 2
+  },
+  "rollbackVerified": true,
+  "postApplySmoke": {
+    "acl": "service_role only",
+    "result": "passed",
+    "targetChecksum": "5600c48f72d1343670b3e7cfd31ce491",
+    "validIdentities": 2,
+    "mappedSessionsChecked": 2
+  },
+  "existingFunctionsAndAclRlsUnchanged": true,
+  "advisorsTargetMention": false,
+  "productionChanges": {
+    "databaseAdditiveRpc": true,
+    "apiDeployed": true,
+    "anonOrKeyReadRevoked": false,
+    "rlsChanged": false,
+    "providerKeysRotated": false,
+    "desktopPackaged": false,
+    "flyIdleTimeoutSeconds": 600,
+    "flyResourcesChangedThisDeploy": false
+  },
+  "deployment": {
+    "machine": "48ee749f357398",
+    "state": "started",
+    "image": "registry.fly.io/aka-agent-web-app:desktop-ai-v434-20261027@sha256:a3727317370d334073ecf38c21955336bf6f4cbee675c0a17cd541ec2afe3c49",
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 2048
+    },
+    "health": [
+      {
+        "name": "servicecheck-00-http-8080",
+        "status": "passing",
+        "output": "ok",
+        "updated_at": "2026-10-27T15:55:51.495Z"
+      }
+    ],
+    "configMatchesPlanned": true,
+    "changedRuntimeFiles": [
+      "apps/api/dist/server.js"
+    ],
+    "apiSha256": "bef4d7884a763fd89fae68e2aa9cba53df11ec4cfeaf1631c368055e84276251",
+    "unchangedRuntimeFiles": 206,
+    "rpc": [
+      {
+        "case": "valid identity",
+        "status": 200,
+        "matched": true
+      },
+      {
+        "case": "missing identity",
+        "status": 200,
+        "matched": true
+      },
+      {
+        "case": "wrong session",
+        "status": 200,
+        "matched": true
+      }
+    ],
+    "node": "v22.23.4",
+    "updatedAt": "2026-10-27T15:55:46Z"
+  },
+  "httpSmoke": {
+    "checkedAt": "2026-10-27T15:56:19.934Z",
+    "passed": 27,
+    "checks": [
+      {
+        "name": "health",
+        "route": "/healthz",
+        "status": 200
+      },
+      {
+        "name": "API health",
+        "route": "/api/health",
+        "status": 200
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/apple-touch-icon.png",
+        "status": 200,
+        "sha256": "aede0509c04ddbc2a16844bddd24728b02d82a0503a0aec442887ce072eef3f9"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/PublicApiDocsPage-B6sECQRP.css",
+        "status": 200,
+        "sha256": "d133a347dee2c9d2a66dffeae83a506288bb5b86fcd9fb02a79911bbced97c03"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/PublicApiDocsPage-CNNSSmFB.js",
+        "status": 200,
+        "sha256": "384a76daca05b8af948178b6b416fd09161427a1ca3079a2df1723fcce6f6ba0"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/StaffManagementPage-D_-rScfs.css",
+        "status": 200,
+        "sha256": "18f3ce611cc4068dcdfc636ebddce990df76fbe631a8a2e6d5c3ad3579be991e"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/StaffManagementPage-ZxMmDhWR.js",
+        "status": 200,
+        "sha256": "3acda60781cbaed98aaf0219a3324a932491d228a054ec0d2294c86594b751d3"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/index-B18uyOup.css",
+        "status": 200,
+        "sha256": "ed94cbefbe429e2fb7ed9d6009126356813fdd6eee76f33e253566adaa6caf74"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/index-DHlJiFJX.js",
+        "status": 200,
+        "sha256": "7fb9ef472ef6288880b640277a8752d543b450134ca1eeb3c0d475a445f6753d"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/assets/spreadsheet-BBWTpfDg.js",
+        "status": 200,
+        "sha256": "ffc8e29501816eaf483c2b44adc85dbfd15ecb9178db6179baafdd588d2d03c1"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/index.html",
+        "status": 200,
+        "sha256": "ff09da26fe9d87bbac35ade5b0ea70f11dbb258910d0dc9374daf68dba398504"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/manifest.webmanifest",
+        "status": 200,
+        "sha256": "9eaa92adf9272cd4dda6f738f20e3663e2637f4662c58f816e2231a32054dae3"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/pwa-192x192.png",
+        "status": 200,
+        "sha256": "b78bf04d176093f666e644c93f0cb1deac6b57fbbc1fd18c5d9ed65d77b3b580"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/pwa-512x512.png",
+        "status": 200,
+        "sha256": "f4f89029b8c9e984590f9000b6dc6614af4ede85658e5f86157efa9385623a2f"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/sw.js",
+        "status": 200,
+        "sha256": "7e455093209e74468bc8b1a9cdf4ac4469994e392878258b26e66f9eaa0c35ea"
+      },
+      {
+        "name": "unchanged Web asset",
+        "route": "/workbox-9c191d2f.js",
+        "status": 200,
+        "sha256": "04b086f1b2f4215ee4b659a7bc9c76162894abdb43fa876247bc7c0bd6fd1c37"
+      },
+      {
+        "name": "existing auth guard",
+        "route": "/api/aka-agent/control/v1/me",
+        "status": 401
+      },
+      {
+        "name": "existing auth guard",
+        "route": "/api/aka-agent/control/v1/actions",
+        "status": 401
+      },
+      {
+        "name": "existing auth guard",
+        "route": "/api/aka-agent/control/v1/accounts",
+        "status": 401
+      },
+      {
+        "name": "existing auth guard",
+        "route": "/api/aka-agent/control/v1/sessions",
+        "status": 401
+      },
+      {
+        "name": "existing auth guard",
+        "route": "/api/aka-agent/control/v1/dashboard/summary",
+        "status": 401
+      },
+      {
+        "name": "no JWT",
+        "route": "/api/aka-agent/desktop/v1/ai",
+        "status": 401,
+        "genericError": true,
+        "noStore": true,
+        "noProviderMarker": true
+      },
+      {
+        "name": "Auth before body parsing",
+        "route": "/api/aka-agent/desktop/v1/ai",
+        "status": 401,
+        "genericError": true,
+        "noStore": true,
+        "noProviderMarker": true
+      },
+      {
+        "name": "wrong auth scheme",
+        "route": "/api/aka-agent/desktop/v1/ai",
+        "status": 401,
+        "genericError": true,
+        "noStore": true,
+        "noProviderMarker": true
+      },
+      {
+        "name": "invalid JWT",
+        "route": "/api/aka-agent/desktop/v1/ai",
+        "status": 401,
+        "genericError": true,
+        "noStore": true,
+        "noProviderMarker": true
+      },
+      {
+        "name": "forged Desktop JWT",
+        "route": "/api/aka-agent/desktop/v1/ai",
+        "status": 401,
+        "genericError": true,
+        "noStore": true,
+        "noProviderMarker": true
+      },
+      {
+        "name": "health after probes",
+        "route": "/healthz",
+        "status": 200
+      }
+    ],
+    "authenticatedAiProviderCanary": false
+  },
+  "source": {
+    "base": "9f3d4ee363e0e7e9e6420f33c7a7fda019485e0e",
+    "overlaySha256": {
+      "apps/api/src/app.ts": "a42acd330c45e1017a7bfd93af249f35bc000b5d416e2935fd5e489168c4b699",
+      "fly.toml": "6c186121b29d2e2bda6365c084418aba7a25bc6f9b93b51d24391090223eb024",
+      "apps/api/src/modules/desktop-ai/desktop-ai.routes.ts": "9f19d5cf22cdae9a64376bb0dc5088cf5c5c0028e528db9dd0217a632d61fb27",
+      "apps/api/src/modules/desktop-ai/desktop-ai.auth.test.ts": "a7541c65ca7e5b7c77a2f36ef806a6453289d892dc729d84882fef61a47762d1",
+      "apps/api/src/modules/desktop-ai/desktop-ai.admission.ts": "61538839d71242495fa1f80514e22f730c0cf88cdbe5297bc0ff44f1968d5fc5",
+      "apps/api/src/modules/desktop-ai/desktop-ai.admission.test.ts": "abb5752a45e7c639d149623571ac2eb4b68a6489a89f165fdf42280efaf451d6",
+      "apps/api/src/modules/desktop-ai/desktop-ai.routes.test.ts": "318ee57535fe547fd198c5dc61729b46c9340c4f94d0c994bf3a3a29d497e4f0"
+    }
+  },
+  "privateEvidence": "/Users/lequangnhut/.codex/deployments/desktop-ai-20261027-7uw1pcjk",
+  "limits": "Authenticated Desktop-to-provider canary and installer validation were not run; no real AI provider request or customer content was used.",
+  "rollbackImage": "registry.fly.io/aka-agent-web-app:web-uid-9f3d4ee-20261026@sha256:ab946df2cf1923faf04b86f91374187e64bbd70a40927f7e7d3546dfaab52a41",
+  "migrationSourceSha256": "8a14b9cab673c56925a9e814d0c491756a09a09202fb266d8b03b8931c3f4420"
+}

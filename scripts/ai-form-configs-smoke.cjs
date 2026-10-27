@@ -22,7 +22,7 @@ global.__formDb = { from(table) {
     select() { return query }, eq(k, v) { filters.push(r => r[k] === v); return query },
     not(k, _op, v) { filters.push(r => r[k] !== v); return query },
     abortSignal(s) { signal = s; return query }, maybeSingle() { single = true; return query },
-    single() { single = true; return query }, insert(row) { insert = row; return query },
+    single() { single = true; return query }, returns() { return query }, insert(row) { insert = row; return query },
     then(ok, fail) { return Promise.resolve().then(() => {
       signal?.throwIfAborted()
       if (insert) { logs.push(insert); return { data: { id: logs.length }, error: null } }
@@ -51,7 +51,7 @@ async function main() {
     export * from './src/shared/campaignFormAiConfig'
   `, resolveDir: root }, outfile: path.join(tmp, 'entry.cjs'), bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent',
     plugins: [{ name: 'fixture-dependencies', setup(b) {
-      b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const getSupabaseClient = () => globalThis.__formDb', loader: 'ts' }))
+      b.onLoad({ filter: /\/supabaseClient\.ts$/ }, () => ({ contents: 'export const isTrustedServerSupabaseConfigured = () => true; export const desktopSession = { token: async () => null }; export const getSupabaseClient = () => globalThis.__formDb', loader: 'ts' }))
       b.onLoad({ filter: /\/currentUser\.ts$/ }, () => ({ contents: 'export const getCurrentUser = () => ({organizationId:9}); export const requireCurrentUser = getCurrentUser;', loader: 'ts' }))
       b.onLoad({ filter: /\/runtimeClockRepository\.ts$/ }, () => ({ contents: "export const peekDatabaseRuntimeClock = () => ({dbNow:Date.parse('2026-10-20T03:00:00Z')})", loader: 'ts' }))
     } }]

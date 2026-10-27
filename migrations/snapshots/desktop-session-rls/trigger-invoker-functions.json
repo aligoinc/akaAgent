@@ -1,0 +1,420 @@
+[
+  {
+    "signature": "aka_agent_campaign_engagement_revision()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "cf7e83d7ec5562bbe4f6ec4d09abe4f6",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_campaign_engagement_revision()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n -- Every write changes the generation, even false -> false, including admin CAS writes.\n IF NEW.key='zalo.campaign_engagement.enabled' THEN\n   NEW.updated_at := greatest(clock_timestamp(), COALESCE(OLD.updated_at, '-infinity') + interval '1 microsecond');\n END IF;\n RETURN NEW;\nEND\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_clear_campaign_runtime_claim_metadata()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "dacc6362ba94f2f62c9e4cb43f965510",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_clear_campaign_runtime_claim_metadata()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF NEW.status IS DISTINCT FROM OLD.status THEN\n    IF OLD.status = 'đang chạy'\n      AND NEW.status = 'tạm dừng'\n      AND OLD.runtime_claim_target = 'server'\n    THEN\n      -- Server run control is DB-first. A pause can commit after the executor's\n      -- top-level claim committed but before that response reached the caller.\n      -- Preserve the exact ownership tuple so the caller can recover the lost\n      -- response, observe the paused status, and release the account only from\n      -- its normal safe cleanup boundary.\n      NEW.runtime_claim_token := OLD.runtime_claim_token;\n      NEW.runtime_claim_target := OLD.runtime_claim_target;\n      NEW.runtime_claim_vietnam_date := OLD.runtime_claim_vietnam_date;\n      NEW.runtime_claimed_at := OLD.runtime_claimed_at;\n    ELSE\n      NEW.runtime_claim_token := NULL;\n      NEW.runtime_claim_target := NULL;\n      NEW.runtime_claim_vietnam_date := NULL;\n      NEW.runtime_claimed_at := NULL;\n    END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_control_web_device_policy_changed()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "b170a3043de5a6a5366d645f11f885b9",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_policy_changed()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_limit integer;\nBEGIN\n  IF (TG_OP<>'INSERT' AND OLD.key='web.auth.max_devices_per_staff')\n    OR (TG_OP<>'DELETE' AND NEW.key='web.auth.max_devices_per_staff') THEN\n    SELECT public.aka_agent_control_web_device_limit(value,is_active,is_secret) INTO v_limit\n    FROM public.auto_system_settings WHERE key='web.auth.max_devices_per_staff';\n    UPDATE public.auto_control_web_device_policy SET max_devices=coalesce(v_limit,3),revision=gen_random_uuid()\n    WHERE singleton AND max_devices IS DISTINCT FROM coalesce(v_limit,3);\n  END IF;\n  RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_enqueue_campaign_completed_email()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "0523c07b0878e3aaa53efb0bc97a74b8",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_enqueue_campaign_completed_email()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_inserted integer := 0;\nBEGIN\n  IF NEW.status = 'hoàn thành'\n    AND OLD.status IS DISTINCT FROM NEW.status\n    AND NEW.staff_id IS NOT NULL\n  THEN\n    INSERT INTO public.auto_email_notification_deliveries (\n      staff_id,\n      type,\n      dedupe_key,\n      payload\n    )\n    SELECT\n      NEW.staff_id,\n      'campaign_completed',\n      'completion:' || NEW.id::text || ':' || COALESCE(NEW.completed_at, now())::text,\n      jsonb_build_object(\n        'campaignId', NEW.id,\n        'completedAt', COALESCE(NEW.completed_at, now()),\n        'staffId', NEW.staff_id\n      )\n    FROM public.auto_email_notification_settings s\n    WHERE s.staff_id = NEW.staff_id\n      AND s.is_delete = false\n      AND s.is_enabled = true\n      AND s.notify_campaign_completed = true\n      AND array_length(s.recipient_emails, 1) > 0\n    ON CONFLICT (dedupe_key) DO NOTHING;\n\n    GET DIAGNOSTICS v_inserted = ROW_COUNT;\n    IF v_inserted > 0 THEN\n      PERFORM public.aka_agent_call_email_notification_worker('process', 'campaign-completed');\n    END IF;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_guard_automation_destination_update()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "439bd2335015b2d4e8e0eb6b7e5fb915",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_automation_destination_update()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF TG_OP = 'UPDATE'\n    AND NEW.target_campaign_id IS NULL\n    AND NEW.target_data_group_id IS NULL\n    AND COALESCE(NEW.is_delete, false) = false\n  THEN\n    NEW.is_active := false;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_guard_campaign_creation_bundle_identity()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "e45e210e4d7c348f4afefe104dab281c",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_campaign_creation_bundle_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF NEW.data_group_id IS DISTINCT FROM OLD.data_group_id\n    AND OLD.data_group_id IS NOT NULL\n    AND EXISTS (\n      SELECT 1\n      FROM public.auto_campaign_data_group_sources AS source\n      WHERE source.bundle_id = OLD.id\n    )\n  THEN\n    RAISE EXCEPTION 'campaign_creation_bundle_group_immutable';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_guard_campaign_data_group_identity()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "e568cbb810ac056428c131162dfb80de",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_campaign_data_group_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF (NEW.data_target_source_mode IS DISTINCT FROM OLD.data_target_source_mode\n      OR NEW.data_group_id IS DISTINCT FROM OLD.data_group_id)\n    AND EXISTS (\n      SELECT 1 FROM public.auto_campaign_input_data AS input_data\n      WHERE input_data.campaign_id = OLD.id\n        AND input_data.canonical_target_key IS NOT NULL\n        AND COALESCE(input_data.is_delete, false) = false\n    ) THEN\n    RAISE EXCEPTION 'campaign_data_group_identity_immutable_after_intake';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_guard_campaign_data_group_source_identity()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "b60c36d18e9efbd3da46bee902eead64",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_campaign_data_group_source_identity()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF NEW.campaign_id IS DISTINCT FROM OLD.campaign_id THEN\n    RAISE EXCEPTION 'campaign_data_group_source_identity_immutable';\n  END IF;\n  IF NEW.group_id IS DISTINCT FROM OLD.group_id AND EXISTS (\n    SELECT 1 FROM public.auto_campaign_input_data AS input_data\n    WHERE input_data.campaign_id = OLD.campaign_id\n      AND input_data.canonical_target_key IS NOT NULL\n      AND COALESCE(input_data.is_delete, false) = false\n  ) THEN\n    RAISE EXCEPTION 'campaign_data_group_source_immutable_after_intake';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_guard_canonical_campaign_input_payload()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "6c656e83c8b38ccea75bcc8f7d81ffed",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_guard_canonical_campaign_input_payload()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_action text;\n  v_has_phone boolean;\n  v_target_changed boolean;\nBEGIN\n  IF OLD.canonical_target_key IS NULL THEN\n    RETURN NEW;\n  END IF;\n\n  -- Information is editable in both direct and data_group campaigns; the\n  -- delivery target and ledger references are not. No alias cleanup is needed.\n  IF NEW.campaign_id IS DISTINCT FROM OLD.campaign_id\n    OR NEW.input_id IS DISTINCT FROM OLD.input_id\n    OR NEW.canonical_target_key IS DISTINCT FROM OLD.canonical_target_key\n    OR NEW.auto_automation_detail_id IS DISTINCT FROM OLD.auto_automation_detail_id\n    OR NEW.is_delete IS DISTINCT FROM OLD.is_delete\n  THEN\n    RAISE EXCEPTION 'canonical_campaign_input_payload_immutable';\n  END IF;\n\n  -- Status, name, notes, carrier, info1..5, content and scheduling changes\n  -- require no campaign lookup. Only possible target changes need the action.\n  IF NEW.phone IS NOT DISTINCT FROM OLD.phone\n    AND NEW.uid IS NOT DISTINCT FROM OLD.uid\n    AND NEW.email IS NOT DISTINCT FROM OLD.email\n  THEN\n    RETURN NEW;\n  END IF;\n\n  SELECT campaign.action_id INTO v_action\n  FROM public.auto_campaigns AS campaign WHERE campaign.id = OLD.campaign_id;\n\n  IF v_action IN ('zalo_message_phone', 'sms_send', 'voice_call', 'zalo_add_group_member') THEN\n    v_has_phone := COALESCE(public.normalize_phone(OLD.phone) ~ '^0[35789][0-9]{8}$', false);\n    IF v_action = 'zalo_add_group_member' AND NOT v_has_phone THEN\n      -- Adding a valid phone would switch this UID-based row to another route.\n      v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid\n        OR COALESCE(public.normalize_phone(NEW.phone) ~ '^0[35789][0-9]{8}$', false);\n    ELSE\n      v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n        OR (NOT v_has_phone AND NEW.uid IS DISTINCT FROM OLD.uid)\n        OR (v_action = 'zalo_add_group_member' AND NULLIF(btrim(OLD.uid), '') IS NOT NULL\n          AND NEW.uid IS DISTINCT FROM OLD.uid);\n    END IF;\n  ELSIF v_action = 'email_send' THEN\n    v_target_changed := NEW.email IS DISTINCT FROM OLD.email;\n  ELSIF v_action LIKE 'facebook_%' OR v_action LIKE 'zalo_%' THEN\n    v_target_changed := NEW.uid IS DISTINCT FROM OLD.uid;\n  ELSE\n    -- Unknown/legacy actions keep all potential target fields protected.\n    v_target_changed := NEW.phone IS DISTINCT FROM OLD.phone\n      OR NEW.uid IS DISTINCT FROM OLD.uid OR NEW.email IS DISTINCT FROM OLD.email;\n  END IF;\n\n  IF v_target_changed THEN\n    RAISE EXCEPTION 'canonical_campaign_input_target_immutable';\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_project_linked_email_status_v366()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "6535346b9292f2c69031bb801f5a5f68",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_project_linked_email_status_v366()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  -- Linking holds the tracking row lock. Callbacks take that same lock before\n  -- touching the detail, so neither ordering can lose an early observation.\n  IF NEW.is_delete OR NEW.campaign_detail_id IS NULL OR (NEW.open_count <= 0 AND NEW.click_count <= 0) THEN RETURN NEW; END IF;\n  UPDATE public.auto_campaign_details d SET sub_status_id=s.id\n  FROM public.auto_status s\n  WHERE d.id=NEW.campaign_detail_id AND d.campaign_id=NEW.campaign_id\n    AND d.account_id IS NOT DISTINCT FROM NEW.account_id\n    AND d.input_data_id IS NOT DISTINCT FROM NEW.input_data_id\n    AND d.action_code='email_send' AND d.status_id IS NOT NULL\n    AND d.policy_snapshot->>'operationState'='committed' AND NOT d.is_delete\n    AND s.code=CASE WHEN NEW.click_count>0 THEN 'campaign_detail_clicked' ELSE 'campaign_detail_viewed' END\n    AND s.component_type='campaign_detail'\n    AND d.sub_status_id IS DISTINCT FROM s.id\n    AND (NEW.click_count>0 OR NOT EXISTS (\n      SELECT 1 FROM public.auto_status prior WHERE prior.id=d.sub_status_id AND prior.code='campaign_detail_clicked'));\n  RETURN NEW;\nEND\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_resolve_automation_canonical_input()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "87b748cc9df96c2a9feca9a95bd0140c",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_resolve_automation_canonical_input()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_input_id bigint;\nBEGIN\n  IF NEW.status = 'đã thêm' AND OLD.status IS DISTINCT FROM 'đã thêm' THEN\n    SELECT origin.input_data_id INTO v_input_id\n    FROM public.auto_campaign_input_origins AS origin\n    WHERE origin.origin_kind = 'automation'\n      AND origin.automation_detail_id = NEW.id\n    ORDER BY origin.created_at DESC, origin.id DESC\n    LIMIT 1;\n    IF v_input_id IS NOT NULL THEN NEW.target_input_data_id := v_input_id; END IF;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_set_campaign_completed_at()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "1b346c7a6b25dfb7057ee0c5a32adde7",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_set_campaign_completed_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF NEW.status = 'hoàn thành' AND OLD.status IS DISTINCT FROM NEW.status THEN\n    NEW.completed_at = now();\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_set_group_only_sync_terminal()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "checksum": "a9c5dbbda9ed536d140529c94294d7e8",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_set_group_only_sync_terminal()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF NEW.target_campaign_id IS NULL\n    AND NEW.target_data_group_id IS NOT NULL\n    AND NEW.status IN ('bỏ qua', 'lỗi')\n  THEN\n    NEW.target_data_group_sync_status := 'skipped';\n    NEW.target_data_group_sync_error := COALESCE(\n      NEW.target_data_group_sync_error,\n      NEW.last_error,\n      CASE WHEN NEW.status = 'lỗi' THEN 'automation_failed' ELSE 'automation_skipped' END\n    );\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_snapshot_automation_data_group()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "acbc270882f9692c794b7b2274da3f99",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_snapshot_automation_data_group()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF TG_OP = 'INSERT' THEN\n    SELECT automation.target_data_group_id INTO NEW.target_data_group_id\n    FROM public.auto_automation AS automation\n    WHERE automation.id = NEW.automation_id;\n    NEW.target_data_group_sync_status := CASE\n      WHEN NEW.target_data_group_id IS NULL THEN NULL ELSE 'pending' END;\n    NEW.config_snapshot := COALESCE(NEW.config_snapshot, '{}'::jsonb)\n      || jsonb_build_object('target_data_group_id', NEW.target_data_group_id);\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_touch_campaign_last_run_at()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "a84b67ca4037edeb5b77364dd4dc8dab",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_touch_campaign_last_run_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_detail_at timestamptz := COALESCE(NEW.created_at, now());\nBEGIN\n  IF NEW.campaign_id IS NULL OR COALESCE(NEW.is_delete, false) THEN\n    RETURN NEW;\n  END IF;\n\n  UPDATE public.auto_campaigns\n  SET last_run_at = v_detail_at,\n      updated_at = now()\n  WHERE id = NEW.campaign_id\n    AND is_delete = false\n    AND (last_run_at IS NULL OR last_run_at < v_detail_at);\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "chat_zalo_record_conversation_created_event()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "bf93facdf4494919932fdb43a96a0dcf",
+    "definition": "CREATE OR REPLACE FUNCTION public.chat_zalo_record_conversation_created_event()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  INSERT INTO public.chat_zalo_conversation_event (\n    organization_id,\n    chat_zalo_conversation_id,\n    event_type,\n    event_data,\n    occurred_at\n  ) VALUES (\n    NEW.organization_id,\n    NEW.id,\n    'conversation_created',\n    jsonb_strip_nulls(jsonb_build_object('sourceType', NEW.source_type)),\n    NEW.opened_at\n  );\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "chat_zalo_touch_updated_at()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "f6adb152c251306884727a56aa18f1df",
+    "definition": "CREATE OR REPLACE FUNCTION public.chat_zalo_touch_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  NEW.updated_at := clock_timestamp();\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "guard_auto_account_runtime_operation_claim_token()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "aa29df91b50cd6bc11e24bd912545c40",
+    "definition": "CREATE OR REPLACE FUNCTION public.guard_auto_account_runtime_operation_claim_token()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  IF NEW.status IS DISTINCT FROM 'đang chạy' THEN\n    NEW.runtime_operation_claim_token := NULL;\n  ELSIF OLD.status IS DISTINCT FROM 'đang chạy'\n    AND NEW.runtime_operation_claim_token IS NOT DISTINCT FROM OLD.runtime_operation_claim_token\n  THEN\n    -- A different runtime (for example claim_campaign_runtime or an older app)\n    -- entered running state without supplying an account-operation token.\n    NEW.runtime_operation_claim_token := NULL;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "guard_facebook_login_claim_generation()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "2f6e2f7b901d816cd7a5c29deb8c43e4",
+    "definition": "CREATE OR REPLACE FUNCTION public.guard_facebook_login_claim_generation()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  -- Runs AFTER the existing BEFORE trigger which clears tokens on pause/reset.\n  -- A legacy cleanup or lifecycle recovery must invalidate old FB requests too.\n  IF lower(btrim(coalesce(OLD.flatform_type,'')))='facebook'\n    AND NEW.runtime_operation_claim_token IS DISTINCT FROM OLD.runtime_operation_claim_token THEN\n    NEW.facebook_login_claim_generation:=OLD.facebook_login_claim_generation+1;\n  END IF;\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "normalize_legacy_zalo_account_server_owner()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "44b3b4efb3dd7032aedef8197674f869",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_legacy_zalo_account_server_owner()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_organization_id bigint;\n  v_legacy_is_zalo_server boolean := false;\nBEGIN\n  -- Explicit true/false is a new-client subtype decision. Only omitted/NULL\n  -- values use the legacy v218 organization-wide owner.\n  IF NEW.is_zalo_server IS NOT NULL THEN\n    RETURN NEW;\n  END IF;\n\n  IF lower(btrim(COALESCE(NEW.flatform_type, ''))) <> 'zalo'\n    OR COALESCE(NEW.is_zalo_show_web, false)\n  THEN\n    NEW.is_zalo_server := false;\n    RETURN NEW;\n  END IF;\n\n  v_organization_id := NEW.organization_id;\n  IF v_organization_id IS NULL AND NEW.staff_id IS NOT NULL THEN\n    SELECT staff.organization_id\n    INTO v_organization_id\n    FROM public.aka_agent_staff_runtime_profile AS staff\n    WHERE staff.id = NEW.staff_id;\n  END IF;\n\n  IF v_organization_id IS NOT NULL THEN\n    SELECT COALESCE(mode.is_zalo_server, false)\n    INTO v_legacy_is_zalo_server\n    FROM public.resolve_organization_zalo_runtime_mode(v_organization_id) AS mode;\n  END IF;\n\n  NEW.is_zalo_server := COALESCE(v_legacy_is_zalo_server, false);\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "prevent_delete_account_group_with_accounts()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "4dd5757454210bf9903fe31eea27c585",
+    "definition": "CREATE OR REPLACE FUNCTION public.prevent_delete_account_group_with_accounts()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.is_delete = false AND NEW.is_delete = true) THEN\n    IF EXISTS (\n      SELECT 1\n      FROM public.auto_accounts a\n      WHERE a.account_group_id = OLD.id\n        AND a.is_delete = false\n    ) THEN\n      RAISE EXCEPTION 'Không thể xoá nhóm account khi còn tài khoản đang dùng nhóm này';\n    END IF;\n  END IF;\n\n  IF TG_OP = 'DELETE' THEN\n    RETURN OLD;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "prevent_delete_proxy_with_accounts()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "f8a52908ed059b22e9f692b608f10a2e",
+    "definition": "CREATE OR REPLACE FUNCTION public.prevent_delete_proxy_with_accounts()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'DELETE' OR (TG_OP = 'UPDATE' AND OLD.is_delete = false AND NEW.is_delete = true) THEN\n    IF EXISTS (\n      SELECT 1\n      FROM public.auto_accounts a\n      WHERE a.proxy_id = OLD.id\n        AND a.is_delete = false\n    ) THEN\n      RAISE EXCEPTION 'Không thể xoá proxy khi còn tài khoản đang dùng proxy này';\n    END IF;\n  END IF;\n\n  IF TG_OP = 'DELETE' THEN\n    RETURN OLD;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "protect_zalo_chat_referral_ai_log_v1()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=\"\""
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "6444bd6ae0989cad73371cd3a1a38ab2",
+    "definition": "CREATE OR REPLACE FUNCTION public.protect_zalo_chat_referral_ai_log_v1()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\ndeclare\n  v_old_reserved boolean := false;\n  v_new_reserved boolean := false;\nbegin\n  if tg_op in ('INSERT', 'UPDATE') then\n    v_new_reserved := coalesce(new.using_code, '') = 'zalo_chat_referral_verify_v1'\n      or coalesce(new.block_name, '') = 'zalo-chat-referral-precreate-v1';\n  end if;\n  if tg_op in ('UPDATE', 'DELETE') then\n    v_old_reserved := coalesce(old.using_code, '') = 'zalo_chat_referral_verify_v1'\n      or coalesce(old.block_name, '') = 'zalo-chat-referral-precreate-v1';\n  end if;\n\n  if current_user not in ('postgres', 'service_role') and (v_old_reserved or v_new_reserved) then\n    raise exception using errcode = '42501', message = 'zalo_referral_ai_log_backend_only';\n  end if;\n\n  if tg_op = 'DELETE' then return old; end if;\n  return new;\nend;\n$function$\n"
+  },
+  {
+    "signature": "serialize_zalo_runtime_entitlement_change()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "e6ab9abbf577fcd1cf8bfd8457aae772",
+    "definition": "CREATE OR REPLACE FUNCTION public.serialize_zalo_runtime_entitlement_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nBEGIN\n  PERFORM pg_advisory_xact_lock(\n    hashtextextended('aka-agent-zalo-runtime-entitlement-mutation', 0)\n  );\n  RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "set_org_organization_product_updated_at()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "9fc96916531eb0d9c0ba1aa3a50cdc62",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_org_organization_product_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    NEW.updated_at := now();\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "set_staff_defaults()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": [
+      "search_path=public"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "140b74c234a2a71e9ae0455a888dc672",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_staff_defaults()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\r\nBEGIN\r\n  IF NEW.username IS NULL OR NEW.username = '' THEN\r\n    NEW.username := NEW.organization_id::TEXT || '.' || NEW.phone;\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$function$\n"
+  },
+  {
+    "signature": "set_updated_at()",
+    "arguments": "",
+    "result": "trigger",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "v",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "1bf17ec634322caf57a53f691695eab6",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  NEW.updated_at = now();\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_control_web_device_limit(text,boolean,boolean)",
+    "arguments": "p_value text, p_active boolean, p_secret boolean",
+    "result": "integer",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "i",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "checksum": "67e5e3b04c7c661a1f008615cfd84766",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_control_web_device_limit(p_value text, p_active boolean, p_secret boolean)\n RETURNS integer\n LANGUAGE plpgsql\n IMMUTABLE\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n  IF p_active IS TRUE AND p_secret IS FALSE AND btrim(p_value) ~ '^[0-9]{1,10}$'\n    AND btrim(p_value)::numeric BETWEEN 1 AND 2147483647 THEN\n    RETURN btrim(p_value)::integer;\n  END IF;\n  RETURN 3;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "aka_agent_call_email_notification_worker(text,text)",
+    "arguments": "p_mode text DEFAULT 'process'::text, p_reason text DEFAULT 'manual'::text",
+    "result": "bigint",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "v",
+    "config": [
+      "search_path=public, extensions, net"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "checksum": "72d1bb7e28f12847d2d12936f76aeef5",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_call_email_notification_worker(p_mode text DEFAULT 'process'::text, p_reason text DEFAULT 'manual'::text)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'extensions', 'net'\nAS $function$\nDECLARE\n  v_url text := public.aka_agent_get_vault_secret('AKA_AGENT_EMAIL_NOTIFICATION_WORKER_URL');\n  v_token text := public.aka_agent_get_vault_secret('INTERNAL_EDGE_FUNCTION_TOKEN');\n  v_request_id bigint;\nBEGIN\n  IF v_url IS NULL OR btrim(v_url) = '' OR v_token IS NULL OR btrim(v_token) = '' THEN\n    RAISE NOTICE 'Email notification worker URL/token is not configured in Supabase Vault.';\n    RETURN NULL;\n  END IF;\n\n  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN\n    RAISE NOTICE 'pg_net extension is not installed; email notification worker was not invoked.';\n    RETURN NULL;\n  END IF;\n\n  SELECT net.http_post(\n    url := v_url,\n    headers := jsonb_build_object(\n      'Content-Type', 'application/json',\n      'x-internal-token', v_token\n    ),\n    body := jsonb_build_object(\n      'mode', COALESCE(NULLIF(p_mode, ''), 'process'),\n      'reason', COALESCE(NULLIF(p_reason, ''), 'manual')\n    )\n  )\n  INTO v_request_id;\n\n  RETURN v_request_id;\nEND;\n$function$\n"
+  },
+  {
+    "signature": "normalize_phone(text)",
+    "arguments": "p text",
+    "result": "text",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "i",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "f6ccb574895043480e6523193f7be007",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_phone(p text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE PARALLEL SAFE\n SET search_path TO 'pg_catalog'\nAS $function$\ndeclare\n  d text;\nbegin\n  if p is null then\n    return null;\n  end if;\n  d := regexp_replace(p, '[^0-9]', '', 'g');\n  if d = '' then\n    return '';\n  end if;\n  if d like '0084%' and length(d) >= 13 then\n    d := '0' || substr(d, 5);\n  elsif d like '84%' and length(d) >= 11 then\n    d := '0' || substr(d, 3);\n  end if;\n  if length(d) = 9 and left(d, 1) in ('3','5','7','8','9') then\n    d := '0' || d;\n  end if;\n  if length(d) = 11 and left(d, 1) = '0' then\n    d := case left(d, 4)\n      when '0162' then '032' when '0163' then '033' when '0164' then '034' when '0165' then '035'\n      when '0166' then '036' when '0167' then '037' when '0168' then '038' when '0169' then '039'\n      when '0120' then '070' when '0121' then '079' when '0122' then '077' when '0126' then '076'\n      when '0128' then '078' when '0123' then '083' when '0124' then '084' when '0125' then '085'\n      when '0127' then '081' when '0129' then '082' when '0186' then '056' when '0188' then '058'\n      when '0199' then '059'\n      else left(d, 4)\n    end || substr(d, 5);\n  end if;\n  return d;\nend;\n$function$\n"
+  },
+  {
+    "signature": "resolve_organization_zalo_runtime_mode(bigint)",
+    "arguments": "p_organization_id bigint",
+    "result": "TABLE(entitlement_id bigint, product_id bigint, product_name text, package_name text, package_type text, expiration_date timestamp with time zone, max_sends_per_day integer, max_accounts integer, created_at timestamp with time zone, qr_enabled boolean, web_enabled boolean, is_zalo_server boolean, mode_revision text)",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "s",
+    "config": [
+      "search_path=pg_catalog, public, private"
+    ],
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "c15ec4ea32942accbc1dc62fff39f09d",
+    "definition": "CREATE OR REPLACE FUNCTION public.resolve_organization_zalo_runtime_mode(p_organization_id bigint)\n RETURNS TABLE(entitlement_id bigint, product_id bigint, product_name text, package_name text, package_type text, expiration_date timestamp with time zone, max_sends_per_day integer, max_accounts integer, created_at timestamp with time zone, qr_enabled boolean, web_enabled boolean, is_zalo_server boolean, mode_revision text)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public', 'private'\nAS $function$\n  WITH pools AS MATERIALIZED (\n    SELECT *\n    FROM private.resolve_organization_zalo_entitlement_pools(p_organization_id)\n  ),\n  flags AS (\n    SELECT\n      COALESCE(\n        bool_or(entitlement_id IS NOT NULL)\n          FILTER (WHERE account_subtype = 'qr'),\n        false\n      ) AS qr_enabled\n    FROM pools\n  ),\n  primary_pool AS (\n    SELECT *\n    FROM pools\n    WHERE entitlement_id IS NOT NULL\n    ORDER BY CASE account_subtype\n      WHEN 'web' THEN 1\n      WHEN 'server' THEN 2\n      ELSE 3\n    END\n    LIMIT 1\n  )\n  SELECT\n    primary_pool.entitlement_id,\n    primary_pool.product_id,\n    primary_pool.product_name,\n    primary_pool.package_name,\n    primary_pool.package_type,\n    primary_pool.expiration_date,\n    primary_pool.max_sends_per_day,\n    primary_pool.max_accounts,\n    primary_pool.created_at,\n    flags.qr_enabled,\n    COALESCE(primary_pool.account_subtype = 'web', false) AS web_enabled,\n    COALESCE(primary_pool.account_subtype = 'server', false) AS is_zalo_server,\n    COALESCE(\n      primary_pool.pool_revision,\n      'none:' || COALESCE(p_organization_id::text, 'null')\n    ) AS mode_revision\n  FROM flags\n  LEFT JOIN primary_pool ON true;\n$function$\n"
+  }
+]

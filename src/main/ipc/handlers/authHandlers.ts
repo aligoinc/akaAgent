@@ -92,6 +92,9 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         setCurrentUser(null)
         throw error
       }
+    } catch (error) {
+      if (!getCurrentUser()) setCurrentUser(null)
+      throw error
     } finally { loginRunning = false }
   }
   ipcMain.handle(IPC_EVENTS.AUTH_BOOTSTRAP, () => {

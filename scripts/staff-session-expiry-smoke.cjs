@@ -7,9 +7,10 @@ async function main(){
  for(const scenario of ['active','locked','expired','network']){
   let productChecks=0
   const exports={}
-  runInNewContext(auth+'\nexports.check=ensureStaffSubscriptionActive;', {exports,require:(name)=>{
+  runInNewContext(auth+'\nexports.check=ensureStaffSubscriptionActive;', {exports,AbortSignal,require:(name)=>{
    if(name.endsWith('staffManagementRepository'))return {readStaffAccess:async()=>{if(scenario==='network')throw Error('network');return {isActive:scenario!=='locked',timeAllowed:scenario!=='expired'}}}
-   if(name.endsWith('entitlementRepository'))return {ensureAkaAgentSubscriptionActive:async()=>{productChecks++}}
+   if(name.endsWith('entitlementRepository'))return {ensureLoginProductsActive:()=>{productChecks++}}
+   if(name.endsWith('supabaseClient'))return {callDesktopSessionEndpoint:async()=>({staffId:1,organizationId:2,products:[]})}
    return {}
   }})
   const attempt=exports.check({id:1,organization_id:2,username:'fixture',password:'fixture'})

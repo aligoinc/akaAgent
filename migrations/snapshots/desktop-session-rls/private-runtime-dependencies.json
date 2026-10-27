@@ -1,0 +1,134 @@
+[
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public, private"
+    ],
+    "checksum": "f4524e751fbca68adc364272885e07ae",
+    "signature": "private.resolve_organization_zalo_entitlement_pools(bigint)",
+    "definition": "CREATE OR REPLACE FUNCTION private.resolve_organization_zalo_entitlement_pools(p_organization_id bigint)\n RETURNS TABLE(account_subtype text, entitlement_id bigint, product_id bigint, product_name text, package_name text, package_type text, expiration_date timestamp with time zone, max_sends_per_day integer, max_accounts integer, created_at timestamp with time zone, pool_revision text)\n LANGUAGE sql\n STABLE\n SET search_path TO 'pg_catalog', 'public', 'private'\nAS $function$\n  WITH active_entitlements AS MATERIALIZED (\n    SELECT\n      entitlement.id,\n      entitlement.product_id,\n      entitlement.product_name,\n      entitlement.package_name,\n      entitlement.package_type,\n      entitlement.expiration_date,\n      entitlement.max_accounts,\n      entitlement.created_at,\n      entitlement.xmin::text AS entitlement_xmin,\n      COALESCE(entitlement.is_zalo_show_web, false) AS grants_web,\n      COALESCE(entitlement.is_zalo_server, false) AS grants_server,\n      CASE\n        WHEN entitlement.max_sends_per_day > 0 THEN entitlement.max_sends_per_day\n        WHEN lower(btrim(COALESCE(entitlement.package_type, ''))) = 'demo' THEN 30\n        ELSE NULL\n      END AS resolved_daily_limit\n    FROM public.org_organization_product AS entitlement\n    WHERE entitlement.organization_id = p_organization_id\n      AND entitlement.product_id IN (16, 18)\n      AND entitlement.is_deleted = false\n      AND entitlement.expiration_date IS NOT NULL\n      AND entitlement.expiration_date >= (\n        date_trunc('day', timezone('Asia/Ho_Chi_Minh', now()))\n          AT TIME ZONE 'Asia/Ho_Chi_Minh'\n      )\n  ),\n  representative AS (\n    SELECT entitlement.*\n    FROM active_entitlements AS entitlement\n    ORDER BY\n      entitlement.expiration_date DESC,\n      entitlement.created_at DESC NULLS LAST,\n      entitlement.id DESC\n    LIMIT 1\n  ),\n  merged AS (\n    SELECT\n      count(*) AS entitlement_count,\n      count(*) > 0 AS qr_enabled,\n      COALESCE(bool_or(entitlement.grants_web), false) AS web_enabled,\n      COALESCE(bool_or(entitlement.grants_server), false) AS server_enabled,\n      CASE\n        WHEN count(*) = 0\n          OR bool_or(entitlement.resolved_daily_limit IS NULL)\n          THEN NULL\n        ELSE max(entitlement.resolved_daily_limit)\n      END AS max_sends_per_day,\n      CASE\n        WHEN count(*) = 0\n          OR bool_or(\n            entitlement.max_accounts IS NULL\n              OR entitlement.max_accounts <= 0\n          )\n          THEN NULL\n        ELSE max(entitlement.max_accounts)\n      END AS max_accounts,\n      md5(COALESCE(\n        string_agg(\n          entitlement.id::text || ':' || entitlement.entitlement_xmin,\n          ',' ORDER BY entitlement.id\n        ),\n        ''\n      )) AS aggregate_revision\n    FROM active_entitlements AS entitlement\n  ),\n  slots(account_subtype, sort_order) AS (\n    VALUES\n      ('qr'::text, 1),\n      ('web'::text, 2),\n      ('server'::text, 3)\n  )\n  SELECT\n    slot.account_subtype,\n    CASE WHEN grant_state.enabled THEN representative.id END,\n    CASE WHEN grant_state.enabled THEN representative.product_id END,\n    CASE WHEN grant_state.enabled THEN representative.product_name END,\n    CASE WHEN grant_state.enabled THEN representative.package_name END,\n    CASE WHEN grant_state.enabled THEN representative.package_type END,\n    CASE WHEN grant_state.enabled THEN representative.expiration_date END,\n    CASE WHEN grant_state.enabled THEN merged.max_sends_per_day END,\n    CASE WHEN grant_state.enabled THEN merged.max_accounts END,\n    CASE WHEN grant_state.enabled THEN representative.created_at END,\n    CASE\n      WHEN grant_state.enabled AND merged.entitlement_count = 1 THEN\n        representative.id::text || ':' || representative.entitlement_xmin\n      WHEN grant_state.enabled THEN\n        representative.id::text || ':' || merged.aggregate_revision\n      ELSE\n        'none:'\n          || COALESCE(p_organization_id::text, 'null')\n          || ':'\n          || slot.account_subtype\n    END AS pool_revision\n  FROM slots AS slot\n  CROSS JOIN merged\n  LEFT JOIN representative ON true\n  CROSS JOIN LATERAL (\n    SELECT CASE slot.account_subtype\n      WHEN 'qr' THEN merged.qr_enabled\n      WHEN 'web' THEN merged.web_enabled\n      WHEN 'server' THEN merged.server_enabled\n      ELSE false\n    END AS enabled\n  ) AS grant_state\n  ORDER BY slot.sort_order;\n$function$\n",
+    "volatility": "s",
+    "security_definer": false
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "39c1403afa099c706b38f2850adf52ec",
+    "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_unit_gate(p_campaign bigint, p_account bigint, p_claim uuid, p_count integer)\n RETURNS text\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE t jsonb; enabled boolean;\nBEGIN\n SELECT a.facebook_random_run_enabled INTO enabled FROM public.auto_accounts a WHERE a.id=p_account AND a.flatform_type='facebook';\n IF NOT FOUND THEN RETURN NULL; END IF;\n SELECT x INTO t FROM public.auto_account_random_run_days d, jsonb_array_elements(d.state->'turns') x\n WHERE d.account_id=p_account AND d.status='open' AND x->>'claimToken'=p_claim::text AND (x->>'campaignId')::bigint=p_campaign AND x->>'status'='running';\n IF enabled AND t IS NULL OR NOT enabled AND t IS NOT NULL THEN RETURN 'random_mode_changed'; END IF;\n IF t IS NULL THEN RETURN NULL; END IF;\n IF (t->>'unit'='data' AND (t->>'processed')::int+p_count>(t->>'quantity')::int)\n   OR (t->>'unit'<>'data' AND (t->>'processed')::int>=1) THEN RETURN 'random_budget_exhausted'; END IF;\n RETURN NULL;\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "62ffac318d74ac671a5a1b9e51630c4a",
+    "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_unit_started(p_campaign bigint, p_account bigint, p_unit uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE c record;\nBEGIN\n SELECT runtime_claim_token, runtime_unit_claimed_at, runtime_unit_vietnam_date INTO c\n FROM public.auto_campaigns WHERE id=p_campaign AND account_id=p_account AND runtime_unit_token=p_unit;\n IF NOT FOUND THEN RETURN; END IF;\n UPDATE public.auto_account_random_run_days d SET state=jsonb_set(d.state,'{turns}',(\n   SELECT jsonb_agg(CASE WHEN x->>'claimToken'=c.runtime_claim_token::text AND x->>'status'='running'\n     THEN x||jsonb_build_object('unitToken',p_unit,'unitStartedAt',c.runtime_unit_claimed_at) ELSE x END ORDER BY n)\n   FROM jsonb_array_elements(d.state->'turns') WITH ORDINALITY AS a(x,n))), updated_at=clock_timestamp()\n WHERE d.account_id=p_account AND d.run_date=c.runtime_unit_vietnam_date\n AND EXISTS(SELECT 1 FROM jsonb_array_elements(d.state->'turns') x WHERE x->>'claimToken'=c.runtime_claim_token::text AND x->>'status'='running');\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "e204dc76d6ca7fe8806d135b53201902",
+    "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_claim_allowed(p_campaign bigint, p_account bigint, p_turn text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT EXISTS (\n   SELECT 1 FROM public.auto_account_random_run_days d\n   JOIN public.auto_accounts a ON a.id=d.account_id,\n   LATERAL (SELECT x FROM jsonb_array_elements(d.state->'turns') WITH ORDINALITY q(x,n)\n     WHERE x->>'status' IN ('planned','running') ORDER BY n LIMIT 1) next_turn\n   WHERE d.account_id=p_account AND d.run_date=timezone('Asia/Ho_Chi_Minh',clock_timestamp())::date\n     AND d.status='open' AND next_turn.x->>'status'='planned'\n     AND next_turn.x->>'id'=p_turn AND (next_turn.x->>'campaignId')::bigint=p_campaign\n     AND (next_turn.x->>'revision')::int=(a.facebook_random_run_config->>'revision')::int\n );\n$function$\n",
+    "volatility": "s",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "checksum": "e5789c4bc40cd46f6dc0417097bd2723",
+    "signature": "private.campaign_dispatch_schedule_allowed(timestamp with time zone,text,timestamp with time zone,time without time zone,timestamp with time zone,boolean)",
+    "definition": "CREATE OR REPLACE FUNCTION private.campaign_dispatch_schedule_allowed(p_schedule timestamp with time zone, p_source_mode text, p_schedule_end_date timestamp with time zone, p_daily_stop_time time without time zone, p_now timestamp with time zone, p_legacy_cutoff boolean)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog'\nAS $function$\n  SELECT p_schedule IS NOT NULL AND p_schedule <= p_now\n    AND (p_source_mode IS DISTINCT FROM 'data_group'\n      OR p_schedule_end_date IS NULL OR p_schedule_end_date > p_now)\n    AND CASE WHEN p_legacy_cutoff THEN\n      -- Preserve the checked/legacy RPC's strict cutoff and nullable stop time.\n      -- The v2 wrapper still enforces its inclusive 23:59/day boundary itself.\n      p_daily_stop_time IS NULL OR timezone('Asia/Ho_Chi_Minh', p_now)::time <= p_daily_stop_time\n    ELSE\n      timezone('Asia/Ho_Chi_Minh', p_now)::time < least(coalesce(p_daily_stop_time, time '23:59'), time '23:59')\n    END\n$function$\n",
+    "volatility": "i",
+    "security_definer": false
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "172635824af6f7a3a0cae242c0d1d978",
+    "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_pause_requested(p_campaign bigint, p_account bigint, p_claim uuid)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT EXISTS(\n   SELECT 1 FROM public.auto_campaigns c JOIN public.auto_account_random_run_days d ON d.account_id=c.account_id AND d.staff_id=c.staff_id,\n     jsonb_array_elements(d.state->'turns') x\n   WHERE c.id=p_campaign AND c.account_id=p_account AND c.runtime_claim_token=p_claim AND c.note='Đang chờ tạm dừng'\n     AND d.status='open' AND x->>'campaignId'=p_campaign::text AND x->>'claimToken'=p_claim::text AND x->>'status'='running'\n )\n$function$\n",
+    "volatility": "s",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "865b74966309d70fbb81f9e76dd491a0",
+    "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_unit_settled(p_campaign bigint, p_account bigint, p_unit uuid, p_cancelled boolean)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE c record; done integer; seconds integer;\nBEGIN\n SELECT runtime_unit_input_data_ids ids, runtime_unit_vietnam_date AS unit_day, runtime_unit_claimed_at started\n INTO c FROM public.auto_campaigns WHERE id=p_campaign AND account_id=p_account AND runtime_unit_token=p_unit;\n IF NOT FOUND THEN RETURN; END IF;\n SELECT count(*)::int INTO done FROM public.auto_campaign_input_data i WHERE i.campaign_id=p_campaign AND i.id=ANY(c.ids)\n AND i.status NOT IN ('chờ xử lý','đang chạy');\n seconds:=greatest(0,floor(extract(epoch FROM clock_timestamp()-c.started))::int);\n UPDATE public.auto_account_random_run_days d SET state=jsonb_set(d.state,'{turns}',(\n   SELECT jsonb_agg(CASE WHEN x->>'unitToken'=p_unit::text AND x->>'status'='running'\n     THEN (x-'unitToken'-'unitStartedAt')||jsonb_build_object(\n       'processed',(x->>'processed')::int+CASE WHEN x->>'unit'='data' THEN done WHEN p_cancelled THEN 0 ELSE 1 END,\n       'elapsedSeconds',CASE WHEN x->>'unit'='minute' AND NOT p_cancelled THEN least((x->>'quantity')::bigint*60,seconds) ELSE coalesce((x->>'elapsedSeconds')::int,0) END,\n       'lastUnitToken',p_unit) ELSE x END ORDER BY n)\n   FROM jsonb_array_elements(d.state->'turns') WITH ORDINALITY a(x,n))),updated_at=clock_timestamp()\n WHERE d.account_id=p_account AND d.run_date=c.unit_day AND EXISTS(\n   SELECT 1 FROM jsonb_array_elements(d.state->'turns') x WHERE x->>'unitToken'=p_unit::text AND x->>'status'='running');\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "0aea61ae267927a82b4f3e921ba468cf",
+    "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_unit_recover(p_campaign bigint, p_account bigint, p_unit uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE c record;t jsonb;\nBEGIN\n SELECT runtime_unit_input_data_ids ids,runtime_claim_token claim INTO c FROM public.auto_campaigns WHERE id=p_campaign AND account_id=p_account AND runtime_unit_token=p_unit;\n IF NOT FOUND THEN RETURN; END IF;\n SELECT x INTO t FROM public.auto_account_random_run_days d,jsonb_array_elements(d.state->'turns') x\n WHERE d.account_id=p_account AND d.status='open' AND x->>'unitToken'=p_unit::text AND x->>'status'='running';\n IF t IS NULL THEN RETURN; END IF;\n PERFORM private.facebook_random_unit_settled(p_campaign,p_account,p_unit,true);\n UPDATE public.auto_campaign_input_data SET status='hoàn thành',note='Lượt ngẫu nhiên bị gián đoạn; kết quả chưa rõ, không tự thực hiện lại'\n WHERE campaign_id=p_campaign AND id=ANY(c.ids) AND status IN ('đang chạy','chờ xử lý');\n IF t->>'unit'<>'data' THEN\n   UPDATE public.auto_campaigns SET status='tạm dừng',note='Lượt ngẫu nhiên bị gián đoạn; kiểm tra kết quả trước khi chạy lại' WHERE id=p_campaign;\n END IF;\n PERFORM private.facebook_random_finalize_turn(p_campaign,p_account,c.claim,p_unit,true);\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "ea0c365929e5731b4e6436bfc1c58883",
+    "signature": "private.facebook_random_orphan_turns(bigint,bigint)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_orphan_turns(p_staff bigint, p_org bigint)\n RETURNS TABLE(id bigint, account_id bigint, claim text, unit text)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT DISTINCT c.id,c.account_id,x->>'claimToken',x->>'lastUnitToken'\n FROM public.auto_account_random_run_days d CROSS JOIN LATERAL jsonb_array_elements(d.state->'turns') x\n JOIN public.auto_campaigns c ON c.id=(x->>'campaignId')::bigint AND c.account_id=d.account_id AND c.staff_id=d.staff_id\n JOIN public.auto_accounts a ON a.id=c.account_id AND a.staff_id=c.staff_id\n JOIN public.org_staff s ON s.id=c.staff_id AND s.organization_id=p_org\n WHERE d.staff_id=p_staff AND d.organization_id=p_org AND d.status='open' AND x->>'status'='running'\n   AND a.flatform_type='facebook' AND (c.organization_id IS NULL OR c.organization_id=p_org) AND (a.organization_id IS NULL OR a.organization_id=p_org)\n   AND c.runtime_claim_token IS NULL AND c.runtime_unit_token IS NULL AND c.status<>'đang chạy'\n$function$\n",
+    "volatility": "s",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "687fc3efe8378dd175f88f852bc47a51",
+    "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_finalize_turn(p_campaign bigint, p_account bigint, p_claim uuid, p_unit uuid, p_recovered boolean DEFAULT false)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE c public.auto_campaigns%ROWTYPE; d public.auto_account_random_run_days%ROWTYPE; turns jsonb; reason text;\n today date:=timezone('Asia/Ho_Chi_Minh',clock_timestamp())::date;\nBEGIN\n SELECT * INTO c FROM public.auto_campaigns WHERE id=p_campaign AND account_id=p_account;\n IF NOT FOUND OR (p_claim IS NULL AND p_unit IS NULL) THEN RETURN; END IF;\n IF NOT p_recovered AND (c.runtime_claim_token IS NOT NULL OR c.runtime_unit_token IS NOT NULL) THEN RETURN; END IF;\n IF p_recovered AND ((c.runtime_unit_token IS NOT NULL AND c.runtime_unit_token IS DISTINCT FROM p_unit)\n   OR (c.runtime_claim_token IS NOT NULL AND c.runtime_claim_token IS DISTINCT FROM p_claim)) THEN RETURN; END IF;\n reason:=CASE WHEN p_recovered THEN 'Lượt chạy đã gián đoạn; không tự phát lại thao tác chưa rõ kết quả'\n   WHEN c.is_delete THEN 'Chiến dịch đã bị xóa'\n   WHEN c.status='tạm dừng' THEN coalesce(nullif(c.note,''),'Chiến dịch đã tạm dừng')\n   ELSE nullif(c.note,'') END;\n FOR d IN SELECT * FROM public.auto_account_random_run_days dd WHERE dd.account_id=p_account AND dd.staff_id=c.staff_id AND dd.status='open'\n   AND EXISTS(SELECT 1 FROM jsonb_array_elements(dd.state->'turns') x WHERE x->>'status'='running' AND (x->>'campaignId')::bigint=p_campaign\n     AND ((p_claim IS NOT NULL AND x->>'claimToken'=p_claim::text) OR (p_unit IS NOT NULL AND (x->>'unitToken'=p_unit::text OR x->>'lastUnitToken'=p_unit::text)))) FOR UPDATE LOOP\n   SELECT jsonb_agg(CASE WHEN x->>'status'='running' AND (x->>'campaignId')::bigint=p_campaign\n     AND ((p_claim IS NOT NULL AND x->>'claimToken'=p_claim::text) OR (p_unit IS NOT NULL AND (x->>'unitToken'=p_unit::text OR x->>'lastUnitToken'=p_unit::text)))\n     THEN (x-'unitToken'-'unitStartedAt')||jsonb_build_object('status',CASE WHEN reason IS NOT NULL OR (x->>'processed')::int=0 THEN 'stopped' ELSE 'completed' END,\n       'reason',coalesce(reason,CASE WHEN (x->>'processed')::int=0 THEN 'Đợt chưa thực hiện được đối tượng nào' END),'endedAt',clock_timestamp())\n     WHEN x->>'status'='planned' AND d.run_date<today THEN x||jsonb_build_object('status','expired','reason','Hết ngày','endedAt',clock_timestamp())\n     ELSE x END ORDER BY n) INTO turns FROM jsonb_array_elements(d.state->'turns') WITH ORDINALITY q(x,n);\n   UPDATE public.auto_account_random_run_days SET state=jsonb_set(state,'{turns}',turns),updated_at=clock_timestamp(),\n     status=CASE WHEN run_date<today AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(turns) x WHERE x->>'status'='running') THEN 'closed' ELSE status END WHERE id=d.id;\n END LOOP;\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": true
+  },
+  {
+    "acl": "{postgres=X/postgres}",
+    "owner": "postgres",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "checksum": "3c2bbb2182f0b293361b02c5efcbfd2a",
+    "signature": "private.facebook_random_finalize_on_release()",
+    "definition": "CREATE OR REPLACE FUNCTION private.facebook_random_finalize_on_release()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nBEGIN\n -- Only this staff's startup reset defers finalization. The reset restores the\n -- previous transaction-local setting immediately after its campaign update.\n IF current_setting('aka_agent.facebook_random_reset_staff', true) = NEW.staff_id::text THEN\n   RETURN NEW;\n END IF;\n PERFORM private.facebook_random_finalize_turn(NEW.id,NEW.account_id,OLD.runtime_claim_token,OLD.runtime_unit_token);\n RETURN NEW;\nEND $function$\n",
+    "volatility": "v",
+    "security_definer": false
+  }
+]

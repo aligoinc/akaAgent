@@ -1,0 +1,863 @@
+[
+  {
+    "relation": "ai_form_configs",
+    "name": "ai_form_configs_validate",
+    "definition": "CREATE TRIGGER ai_form_configs_validate BEFORE INSERT OR UPDATE ON public.ai_form_configs FOR EACH ROW EXECUTE FUNCTION private.validate_ai_form_config()",
+    "signature": "private.private.validate_ai_form_config()",
+    "security_definer": false
+  },
+  {
+    "relation": "ai_log",
+    "name": "trg_00_protect_birthday_ai_log_namespace_v1",
+    "definition": "CREATE TRIGGER trg_00_protect_birthday_ai_log_namespace_v1 BEFORE INSERT OR DELETE OR UPDATE ON public.ai_log FOR EACH ROW EXECUTE FUNCTION private.protect_birthday_ai_log_namespace_v1()",
+    "signature": "private.private.protect_birthday_ai_log_namespace_v1()",
+    "security_definer": false
+  },
+  {
+    "relation": "ai_log",
+    "name": "trg_protect_zalo_chat_referral_ai_log_v1",
+    "definition": "CREATE TRIGGER trg_protect_zalo_chat_referral_ai_log_v1 BEFORE INSERT OR DELETE OR UPDATE ON public.ai_log FOR EACH ROW EXECUTE FUNCTION protect_zalo_chat_referral_ai_log_v1()",
+    "signature": "public.protect_zalo_chat_referral_ai_log_v1()",
+    "security_definer": false
+  },
+  {
+    "relation": "aka_crm_status",
+    "name": "trg_aka_crm_status_updated_at",
+    "definition": "CREATE TRIGGER trg_aka_crm_status_updated_at BEFORE UPDATE ON public.aka_crm_status FOR EACH ROW EXECUTE FUNCTION set_updated_at()",
+    "signature": "public.set_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_account_action_status_policies",
+    "name": "auto_aasp_component_guard",
+    "definition": "CREATE TRIGGER auto_aasp_component_guard BEFORE INSERT OR UPDATE OF status_id ON public.auto_account_action_status_policies FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_catalog_v361()",
+    "signature": "public.aka_agent_guard_result_catalog_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_action_status_policies",
+    "name": "auto_aasp_identity_guard",
+    "definition": "CREATE TRIGGER auto_aasp_identity_guard BEFORE UPDATE OF action_code, status_id ON public.auto_account_action_status_policies FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_policy_identity_v363()",
+    "signature": "public.aka_agent_guard_result_policy_identity_v363()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_dynamic_filter_queue",
+    "name": "trg_aka_agent_dynamic_filter_stamp_queue_event",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_stamp_queue_event BEFORE INSERT OR UPDATE ON public.auto_account_contact_dynamic_filter_queue FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_stamp_queue_event()",
+    "signature": "public.aka_agent_dynamic_filter_stamp_queue_event()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_deferred_repair_data_group_primary_from_origin",
+    "definition": "CREATE CONSTRAINT TRIGGER trg_aka_agent_deferred_repair_data_group_primary_from_origin AFTER DELETE OR UPDATE ON public.auto_account_contact_group_member_origins DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION aka_agent_repair_data_group_primary_from_origin()",
+    "signature": "public.aka_agent_repair_data_group_primary_from_origin()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_guard_data_group_bound_origin",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_bound_origin BEFORE INSERT OR UPDATE OF membership_id, source_account_id, is_current ON public.auto_account_contact_group_member_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_data_group_bound_member()",
+    "signature": "public.aka_agent_guard_data_group_bound_member()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_refresh_data_group_primary_from_origin",
+    "definition": "CREATE TRIGGER trg_aka_agent_refresh_data_group_primary_from_origin AFTER INSERT OR UPDATE OF membership_id, kind, source_category_item_id, is_current ON public.auto_account_contact_group_member_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_refresh_data_group_primary_from_origin()",
+    "signature": "public.aka_agent_refresh_data_group_primary_from_origin()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_stamp_data_group_relationship_kind",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_data_group_relationship_kind BEFORE INSERT OR UPDATE OF membership_id, source_account_id, dataset_id, relationship_kind ON public.auto_account_contact_group_member_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_data_group_relationship_kind()",
+    "signature": "public.aka_agent_stamp_data_group_relationship_kind()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_stamp_data_group_source_category",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_data_group_source_category BEFORE INSERT OR UPDATE OF membership_id, kind, source_category_item_id ON public.auto_account_contact_group_member_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_data_group_source_category()",
+    "signature": "public.aka_agent_stamp_data_group_source_category()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_member_origins",
+    "name": "trg_aka_agent_stamp_origin_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_origin_semantic_type BEFORE INSERT OR UPDATE OF membership_id, dataset_id, automation_detail_id, batch_id, data_type_category_item_id, is_current ON public.auto_account_contact_group_member_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_origin_semantic_type()",
+    "signature": "public.aka_agent_stamp_origin_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_members",
+    "name": "trg_aka_agent_guard_data_group_bound_member",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_bound_member BEFORE INSERT OR UPDATE OF group_id, contact_id, is_delete ON public.auto_account_contact_group_members FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_data_group_bound_member()",
+    "signature": "public.aka_agent_guard_data_group_bound_member()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_members",
+    "name": "trg_aka_agent_guard_data_group_member_primary_origin",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_member_primary_origin BEFORE INSERT OR UPDATE OF primary_origin_id, is_delete ON public.auto_account_contact_group_members FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_data_group_member_primary_origin()",
+    "signature": "public.aka_agent_guard_data_group_member_primary_origin()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_group_members",
+    "name": "trg_aka_agent_refresh_data_group_primary_from_member",
+    "definition": "CREATE TRIGGER trg_aka_agent_refresh_data_group_primary_from_member AFTER UPDATE OF is_delete ON public.auto_account_contact_group_members FOR EACH ROW EXECUTE FUNCTION aka_agent_refresh_data_group_primary_from_member()",
+    "signature": "public.aka_agent_refresh_data_group_primary_from_member()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_groups",
+    "name": "trg_aka_agent_deactivate_group_only_automations",
+    "definition": "CREATE TRIGGER trg_aka_agent_deactivate_group_only_automations BEFORE DELETE OR UPDATE OF is_delete ON public.auto_account_contact_groups FOR EACH ROW WHEN ((old.purpose = 'data_group'::text)) EXECUTE FUNCTION aka_agent_deactivate_group_only_automations()",
+    "signature": "public.aka_agent_deactivate_group_only_automations()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_groups",
+    "name": "trg_aka_agent_guard_data_group_bound_account",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_bound_account BEFORE INSERT OR UPDATE OF bound_zalo_account_id, data_type_category_item_id, staff_id, organization_id ON public.auto_account_contact_groups FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_data_group_bound_account()",
+    "signature": "public.aka_agent_guard_data_group_bound_account()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contact_groups",
+    "name": "trg_aka_agent_guard_data_group_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_data_group_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id ON public.auto_account_contact_groups FOR EACH ROW WHEN ((new.purpose = 'data_group'::text)) EXECUTE FUNCTION aka_agent_guard_data_group_semantic_type()",
+    "signature": "public.aka_agent_guard_data_group_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts",
+    "name": "trg_aka_agent_dynamic_filter_enqueue_contact",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_enqueue_contact AFTER INSERT OR UPDATE ON public.auto_account_contacts FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_enqueue_contact()",
+    "signature": "public.aka_agent_dynamic_filter_enqueue_contact()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts",
+    "name": "trg_aka_agent_guard_bound_data_group_contact",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_bound_data_group_contact BEFORE UPDATE OF account_id, staff_id, organization_id ON public.auto_account_contacts FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_bound_data_group_source()",
+    "signature": "public.aka_agent_guard_bound_data_group_source()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts",
+    "name": "trg_aka_agent_stamp_account_contact_platform",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_account_contact_platform BEFORE INSERT OR UPDATE OF account_id, contact_type, flatform_type, staff_id, organization_id ON public.auto_account_contacts FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_account_contact_platform()",
+    "signature": "public.aka_agent_stamp_account_contact_platform()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts",
+    "name": "trg_aka_agent_sync_contact_chat_tag_delta",
+    "definition": "CREATE TRIGGER trg_aka_agent_sync_contact_chat_tag_delta AFTER INSERT OR UPDATE OF akabiz_tag_ids ON public.auto_account_contacts FOR EACH ROW EXECUTE FUNCTION aka_agent_sync_contact_chat_tag_delta()",
+    "signature": "public.aka_agent_sync_contact_chat_tag_delta()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts_dataset",
+    "name": "trg_aka_agent_cleanup_deleted_dataset_auto_data_group",
+    "definition": "CREATE TRIGGER trg_aka_agent_cleanup_deleted_dataset_auto_data_group BEFORE DELETE ON public.auto_account_contacts_dataset FOR EACH ROW EXECUTE FUNCTION aka_agent_cleanup_deleted_dataset_auto_data_group()",
+    "signature": "public.aka_agent_cleanup_deleted_dataset_auto_data_group()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts_dataset",
+    "name": "trg_aka_agent_ensure_dataset_auto_data_group",
+    "definition": "CREATE TRIGGER trg_aka_agent_ensure_dataset_auto_data_group AFTER INSERT OR UPDATE OF name, last_scan_status, is_delete, group_id, source, account_id, flatform_type, contact_type, scan_type, source_key, data_type_category_item_id ON public.auto_account_contacts_dataset FOR EACH ROW EXECUTE FUNCTION aka_agent_ensure_dataset_auto_data_group()",
+    "signature": "public.aka_agent_ensure_dataset_auto_data_group()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts_dataset",
+    "name": "trg_aka_agent_stamp_dataset_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_dataset_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id, group_id, source, flatform_type, contact_type, scan_type, extra_data ON public.auto_account_contacts_dataset FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_dataset_semantic_type()",
+    "signature": "public.aka_agent_stamp_dataset_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts_dataset_members",
+    "name": "trg_aka_agent_sync_dataset_auto_data_group_member",
+    "definition": "CREATE TRIGGER trg_aka_agent_sync_dataset_auto_data_group_member AFTER INSERT OR DELETE OR UPDATE ON public.auto_account_contacts_dataset_members FOR EACH ROW EXECUTE FUNCTION aka_agent_sync_dataset_auto_data_group_member()",
+    "signature": "public.aka_agent_sync_dataset_auto_data_group_member()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_contacts_dataset_members",
+    "name": "trg_aka_agent_sync_scan_dataset_group_origins",
+    "definition": "CREATE TRIGGER trg_aka_agent_sync_scan_dataset_group_origins AFTER INSERT OR DELETE OR UPDATE ON public.auto_account_contacts_dataset_members FOR EACH ROW EXECUTE FUNCTION aka_agent_sync_scan_dataset_group_origins()",
+    "signature": "public.aka_agent_sync_scan_dataset_group_origins()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_account_groups",
+    "name": "trg_prevent_delete_account_group_with_accounts",
+    "definition": "CREATE TRIGGER trg_prevent_delete_account_group_with_accounts BEFORE DELETE OR UPDATE OF is_delete ON public.auto_account_groups FOR EACH ROW EXECUTE FUNCTION prevent_delete_account_group_with_accounts()",
+    "signature": "public.prevent_delete_account_group_with_accounts()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_auto_accounts_runtime_operation_claim_token",
+    "definition": "CREATE TRIGGER trg_auto_accounts_runtime_operation_claim_token BEFORE UPDATE OF status, runtime_operation_claim_token ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION guard_auto_account_runtime_operation_claim_token()",
+    "signature": "public.guard_auto_account_runtime_operation_claim_token()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_facebook_account_cleanup",
+    "definition": "CREATE TRIGGER trg_facebook_account_cleanup BEFORE UPDATE OF is_delete, flatform_type, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION aka_agent_facebook_account_cleanup()",
+    "signature": "public.aka_agent_facebook_account_cleanup()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_lock_auto_account_control_resources",
+    "definition": "CREATE TRIGGER trg_lock_auto_account_control_resources BEFORE INSERT OR UPDATE OF account_group_id, proxy_id, flatform_type, is_zalo_show_web, is_zalo_server, is_delete, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION lock_auto_account_control_resources()",
+    "signature": "public.lock_auto_account_control_resources()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_normalize_legacy_zalo_account_server_owner",
+    "definition": "CREATE TRIGGER trg_normalize_legacy_zalo_account_server_owner BEFORE INSERT ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION normalize_legacy_zalo_account_server_owner()",
+    "signature": "public.normalize_legacy_zalo_account_server_owner()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_validate_zalo_account_capability_and_quota",
+    "definition": "CREATE TRIGGER trg_validate_zalo_account_capability_and_quota BEFORE INSERT OR UPDATE OF flatform_type, is_zalo_show_web, is_zalo_server, is_delete, staff_id, organization_id ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION enforce_zalo_account_capability_and_quota()",
+    "signature": "public.enforce_zalo_account_capability_and_quota()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_accounts",
+    "name": "trg_zz_facebook_login_claim_generation",
+    "definition": "CREATE TRIGGER trg_zz_facebook_login_claim_generation BEFORE UPDATE OF status, runtime_operation_claim_token ON public.auto_accounts FOR EACH ROW EXECUTE FUNCTION guard_facebook_login_claim_generation()",
+    "signature": "public.guard_facebook_login_claim_generation()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_automation",
+    "name": "trg_aka_agent_guard_automation_destination_update",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_automation_destination_update BEFORE INSERT OR UPDATE OF target_campaign_id, target_data_group_id, is_active, is_delete ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_automation_destination_update()",
+    "signature": "public.aka_agent_guard_automation_destination_update()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_automation",
+    "name": "trg_aka_agent_guard_automation_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_automation_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id, data_type_code, source_campaign_id, target_campaign_id, target_data_group_id, is_active ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_automation_semantic_type()",
+    "signature": "public.aka_agent_guard_automation_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_automation",
+    "name": "trg_aka_agent_guard_bound_data_group_automation",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_bound_data_group_automation BEFORE INSERT OR UPDATE OF target_data_group_id, source_campaign_id, is_active, is_delete ON public.auto_automation FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_bound_data_group_source()",
+    "signature": "public.aka_agent_guard_bound_data_group_source()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_automation_detail",
+    "name": "trg_aka_agent_prepare_automation_detail_schedule",
+    "definition": "CREATE TRIGGER trg_aka_agent_prepare_automation_detail_schedule BEFORE INSERT ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_prepare_automation_detail_schedule()",
+    "signature": "public.aka_agent_prepare_automation_detail_schedule()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_automation_detail",
+    "name": "trg_aka_agent_resolve_automation_canonical_input",
+    "definition": "CREATE TRIGGER trg_aka_agent_resolve_automation_canonical_input BEFORE UPDATE OF status, target_input_data_id ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_resolve_automation_canonical_input()",
+    "signature": "public.aka_agent_resolve_automation_canonical_input()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_automation_detail",
+    "name": "trg_aka_agent_snapshot_automation_data_group",
+    "definition": "CREATE TRIGGER trg_aka_agent_snapshot_automation_data_group BEFORE INSERT ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_snapshot_automation_data_group()",
+    "signature": "public.aka_agent_snapshot_automation_data_group()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_automation_detail",
+    "name": "trg_aka_agent_stamp_automation_detail_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_automation_detail_semantic_type BEFORE INSERT OR UPDATE OF automation_id, source_campaign_input_data_id, data_type_category_item_id ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_automation_detail_semantic_type()",
+    "signature": "public.aka_agent_stamp_automation_detail_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_automation_detail",
+    "name": "trg_zz_aka_agent_set_group_only_sync_terminal",
+    "definition": "CREATE TRIGGER trg_zz_aka_agent_set_group_only_sync_terminal BEFORE INSERT OR UPDATE OF status, target_campaign_id, target_data_group_id, last_error ON public.auto_automation_detail FOR EACH ROW EXECUTE FUNCTION aka_agent_set_group_only_sync_terminal()",
+    "signature": "public.aka_agent_set_group_only_sync_terminal()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_automation_trigger_statuses",
+    "name": "auto_automation_sub_status_guard",
+    "definition": "CREATE TRIGGER auto_automation_sub_status_guard BEFORE INSERT OR UPDATE OF sub_status_ids ON public.auto_automation_trigger_statuses FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_catalog_v361()",
+    "signature": "public.aka_agent_guard_result_catalog_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_automation_trigger_statuses",
+    "name": "trg_aka_agent_guard_automation_trigger_status_scope",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_automation_trigger_status_scope BEFORE INSERT OR UPDATE OF automation_id, status_mapping_id, action_code, status_value ON public.auto_automation_trigger_statuses FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_automation_trigger_status_scope()",
+    "signature": "public.aka_agent_guard_automation_trigger_status_scope()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_action_data_types",
+    "name": "trg_aka_agent_guard_action_semantic_mapping",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_action_semantic_mapping BEFORE INSERT OR UPDATE OF data_type_category_item_id, is_active, is_delete ON public.auto_campaign_action_data_types FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_action_semantic_mapping()",
+    "signature": "public.aka_agent_guard_action_semantic_mapping()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_creation_bundles",
+    "name": "trg_aka_agent_guard_campaign_creation_bundle_identity",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_creation_bundle_identity BEFORE UPDATE OF data_group_id ON public.auto_campaign_creation_bundles FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_creation_bundle_identity()",
+    "signature": "public.aka_agent_guard_campaign_creation_bundle_identity()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaign_data_group_sources",
+    "name": "trg_aka_agent_guard_campaign_creation_bundle_group",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_creation_bundle_group BEFORE INSERT OR UPDATE OF campaign_id, group_id, bundle_id, staff_id, organization_id ON public.auto_campaign_data_group_sources FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_creation_bundle_group()",
+    "signature": "public.aka_agent_guard_campaign_creation_bundle_group()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_data_group_sources",
+    "name": "trg_aka_agent_guard_campaign_data_group_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_data_group_semantic_type BEFORE INSERT OR UPDATE OF campaign_id, group_id ON public.auto_campaign_data_group_sources FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_data_group_semantic_type()",
+    "signature": "public.aka_agent_guard_campaign_data_group_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_data_group_sources",
+    "name": "trg_aka_agent_guard_campaign_data_group_source_identity",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_data_group_source_identity BEFORE UPDATE OF campaign_id, group_id ON public.auto_campaign_data_group_sources FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_data_group_source_identity()",
+    "signature": "public.aka_agent_guard_campaign_data_group_source_identity()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "auto_detail_action_identity_guard",
+    "definition": "CREATE TRIGGER auto_detail_action_identity_guard BEFORE UPDATE OF action_code ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_detail_result_v361()",
+    "signature": "public.aka_agent_guard_detail_result_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "auto_detail_result_guard",
+    "definition": "CREATE TRIGGER auto_detail_result_guard BEFORE INSERT OR UPDATE OF status_id, sub_status_id, action_status_policy_id ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_detail_result_v361()",
+    "signature": "public.aka_agent_guard_detail_result_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "trg_aka_agent_enqueue_campaign_detail_automations",
+    "definition": "CREATE TRIGGER trg_aka_agent_enqueue_campaign_detail_automations AFTER INSERT OR UPDATE OF status, action_code, is_delete, sub_status_id ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_enqueue_campaign_detail_automations()",
+    "signature": "public.aka_agent_enqueue_campaign_detail_automations()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "trg_aka_agent_enqueue_group_only_automations",
+    "definition": "CREATE TRIGGER trg_aka_agent_enqueue_group_only_automations AFTER INSERT OR UPDATE OF status, action_code, is_delete, sub_status_id ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_enqueue_group_only_automations()",
+    "signature": "public.aka_agent_enqueue_group_only_automations()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "trg_aka_agent_inherit_automation_detail_trace",
+    "definition": "CREATE TRIGGER trg_aka_agent_inherit_automation_detail_trace BEFORE INSERT ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_inherit_automation_detail_trace()",
+    "signature": "public.aka_agent_inherit_automation_detail_trace()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "trg_aka_agent_touch_campaign_last_run_at",
+    "definition": "CREATE TRIGGER trg_aka_agent_touch_campaign_last_run_at AFTER INSERT OR UPDATE ON public.auto_campaign_details FOR EACH ROW EXECUTE FUNCTION aka_agent_touch_campaign_last_run_at()",
+    "signature": "public.aka_agent_touch_campaign_last_run_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaign_details",
+    "name": "trg_capture_message_opt_out_source",
+    "definition": "CREATE TRIGGER trg_capture_message_opt_out_source AFTER INSERT ON public.auto_campaign_details FOR EACH ROW WHEN (((new.status = 'thành công'::text) AND (new.action_code = ANY (ARRAY['zalo_message_friend'::text, 'zalo_message_stranger'::text])) AND (new.data ? 'messageOptOutSource'::text))) EXECUTE FUNCTION auto_capture_message_opt_out_source()",
+    "signature": "public.auto_capture_message_opt_out_source()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_input_data",
+    "name": "trg_aka_agent_guard_canonical_campaign_input_payload",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_canonical_campaign_input_payload BEFORE UPDATE ON public.auto_campaign_input_data FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_canonical_campaign_input_payload()",
+    "signature": "public.aka_agent_guard_canonical_campaign_input_payload()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaign_input_data",
+    "name": "trg_aka_agent_reserve_automation_data_group_input",
+    "definition": "CREATE TRIGGER trg_aka_agent_reserve_automation_data_group_input AFTER INSERT ON public.auto_campaign_input_data FOR EACH ROW WHEN ((new.auto_automation_detail_id IS NOT NULL)) EXECUTE FUNCTION aka_agent_reserve_automation_data_group_input()",
+    "signature": "public.aka_agent_reserve_automation_data_group_input()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_input_data",
+    "name": "trg_aka_agent_stamp_campaign_input_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_stamp_campaign_input_semantic_type BEFORE INSERT OR UPDATE OF data_type_category_item_id, campaign_id ON public.auto_campaign_input_data FOR EACH ROW EXECUTE FUNCTION aka_agent_stamp_campaign_input_semantic_type()",
+    "signature": "public.aka_agent_stamp_campaign_input_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaign_input_origins",
+    "name": "trg_aka_agent_propagate_campaign_origin_semantic_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_propagate_campaign_origin_semantic_type AFTER INSERT OR UPDATE OF input_data_id, group_id, membership_id, automation_detail_id ON public.auto_campaign_input_origins FOR EACH ROW EXECUTE FUNCTION aka_agent_propagate_campaign_origin_semantic_type()",
+    "signature": "public.aka_agent_propagate_campaign_origin_semantic_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "aka_agent_clear_campaign_runtime_claim_metadata",
+    "definition": "CREATE TRIGGER aka_agent_clear_campaign_runtime_claim_metadata BEFORE UPDATE OF status ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_clear_campaign_runtime_claim_metadata()",
+    "signature": "public.aka_agent_clear_campaign_runtime_claim_metadata()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "auto_validate_campaign_send_exclusion",
+    "definition": "CREATE TRIGGER auto_validate_campaign_send_exclusion BEFORE INSERT OR UPDATE OF extra_settings, account_id, staff_id, organization_id ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION auto_validate_campaign_send_exclusion()",
+    "signature": "public.auto_validate_campaign_send_exclusion()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "facebook_random_finalize_on_release",
+    "definition": "CREATE TRIGGER facebook_random_finalize_on_release AFTER UPDATE OF status, runtime_claim_token, runtime_unit_token ON public.auto_campaigns FOR EACH ROW WHEN (((new.runtime_claim_token IS NULL) AND (new.runtime_unit_token IS NULL) AND ((old.runtime_claim_token IS NOT NULL) OR (old.runtime_unit_token IS NOT NULL)))) EXECUTE FUNCTION private.facebook_random_finalize_on_release()",
+    "signature": "private.private.facebook_random_finalize_on_release()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "trg_aka_agent_close_terminal_campaign_data_group_source",
+    "definition": "CREATE TRIGGER trg_aka_agent_close_terminal_campaign_data_group_source AFTER UPDATE OF is_delete, status, schedule_end_date ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_close_terminal_campaign_data_group_source()",
+    "signature": "public.aka_agent_close_terminal_campaign_data_group_source()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "trg_aka_agent_enqueue_campaign_completed_email",
+    "definition": "CREATE TRIGGER trg_aka_agent_enqueue_campaign_completed_email AFTER UPDATE OF status ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_enqueue_campaign_completed_email()",
+    "signature": "public.aka_agent_enqueue_campaign_completed_email()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "trg_aka_agent_guard_campaign_data_group_identity",
+    "definition": "CREATE TRIGGER trg_aka_agent_guard_campaign_data_group_identity BEFORE UPDATE OF data_target_source_mode, data_group_id ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_campaign_data_group_identity()",
+    "signature": "public.aka_agent_guard_campaign_data_group_identity()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "trg_aka_agent_set_campaign_completed_at",
+    "definition": "CREATE TRIGGER trg_aka_agent_set_campaign_completed_at BEFORE UPDATE OF status ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION aka_agent_set_campaign_completed_at()",
+    "signature": "public.aka_agent_set_campaign_completed_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_campaigns",
+    "name": "trg_auto_table_log",
+    "definition": "CREATE TRIGGER trg_auto_table_log AFTER INSERT OR UPDATE ON public.auto_campaigns FOR EACH ROW EXECUTE FUNCTION private.aka_agent_capture_table_change('campaign_config_v1', 'id')",
+    "signature": "private.private.aka_agent_capture_table_change()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_content_groups",
+    "name": "trg_detach_deleted_auto_content_secondary_group",
+    "definition": "CREATE TRIGGER trg_detach_deleted_auto_content_secondary_group AFTER UPDATE OF is_delete ON public.auto_content_groups FOR EACH ROW WHEN (((new.is_delete IS TRUE) AND (old.is_delete IS DISTINCT FROM true))) EXECUTE FUNCTION private.detach_deleted_auto_content_secondary_group()",
+    "signature": "private.private.detach_deleted_auto_content_secondary_group()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_content_templates",
+    "name": "trg_validate_auto_content_template_secondary_groups",
+    "definition": "CREATE TRIGGER trg_validate_auto_content_template_secondary_groups BEFORE INSERT OR UPDATE OF secondary_group_ids, group_id, organization_id ON public.auto_content_templates FOR EACH ROW EXECUTE FUNCTION private.validate_auto_content_template_secondary_groups()",
+    "signature": "private.private.validate_auto_content_template_secondary_groups()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_email_message_trackings",
+    "name": "trg_aka_agent_project_linked_email_status_v366",
+    "definition": "CREATE TRIGGER trg_aka_agent_project_linked_email_status_v366 AFTER INSERT OR UPDATE OF campaign_detail_id ON public.auto_email_message_trackings FOR EACH ROW EXECUTE FUNCTION aka_agent_project_linked_email_status_v366()",
+    "signature": "public.aka_agent_project_linked_email_status_v366()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_error",
+    "name": "auto_error_result_component_guard",
+    "definition": "CREATE TRIGGER auto_error_result_component_guard BEFORE INSERT OR UPDATE OF detail_status_id ON public.auto_error FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_catalog_v361()",
+    "signature": "public.aka_agent_guard_result_catalog_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_error",
+    "name": "trg_auto_table_log",
+    "definition": "CREATE TRIGGER trg_auto_table_log AFTER INSERT OR UPDATE ON public.auto_error FOR EACH ROW EXECUTE FUNCTION private.aka_agent_capture_table_change('error_config_v1', 'id')",
+    "signature": "private.private.aka_agent_capture_table_change()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_facebook_login_sessions",
+    "name": "trg_facebook_secret_cleanup",
+    "definition": "CREATE TRIGGER trg_facebook_secret_cleanup AFTER DELETE ON public.auto_facebook_login_sessions FOR EACH ROW EXECUTE FUNCTION aka_agent_facebook_secret_cleanup()",
+    "signature": "public.aka_agent_facebook_secret_cleanup()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_filter_field_operators",
+    "name": "auto_guard_send_exclusion_definition",
+    "definition": "CREATE TRIGGER auto_guard_send_exclusion_definition BEFORE UPDATE ON public.auto_filter_field_operators FOR EACH ROW EXECUTE FUNCTION auto_guard_send_exclusion_definition()",
+    "signature": "public.auto_guard_send_exclusion_definition()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_filter_field_options",
+    "name": "auto_guard_send_exclusion_definition",
+    "definition": "CREATE TRIGGER auto_guard_send_exclusion_definition BEFORE UPDATE ON public.auto_filter_field_options FOR EACH ROW EXECUTE FUNCTION auto_guard_send_exclusion_definition()",
+    "signature": "public.auto_guard_send_exclusion_definition()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_filter_fields",
+    "name": "auto_guard_send_exclusion_definition",
+    "definition": "CREATE TRIGGER auto_guard_send_exclusion_definition BEFORE UPDATE ON public.auto_filter_fields FOR EACH ROW EXECUTE FUNCTION auto_guard_send_exclusion_definition()",
+    "signature": "public.auto_guard_send_exclusion_definition()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_filter_operators",
+    "name": "auto_guard_send_exclusion_definition",
+    "definition": "CREATE TRIGGER auto_guard_send_exclusion_definition BEFORE UPDATE ON public.auto_filter_operators FOR EACH ROW EXECUTE FUNCTION auto_guard_send_exclusion_definition()",
+    "signature": "public.auto_guard_send_exclusion_definition()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_proxies",
+    "name": "trg_prevent_delete_proxy_with_accounts",
+    "definition": "CREATE TRIGGER trg_prevent_delete_proxy_with_accounts BEFORE DELETE OR UPDATE OF is_delete ON public.auto_proxies FOR EACH ROW EXECUTE FUNCTION prevent_delete_proxy_with_accounts()",
+    "signature": "public.prevent_delete_proxy_with_accounts()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_status",
+    "name": "auto_status_result_component_guard",
+    "definition": "CREATE TRIGGER auto_status_result_component_guard BEFORE UPDATE OF component_type ON public.auto_status FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_result_status_v361()",
+    "signature": "public.aka_agent_guard_result_status_v361()",
+    "security_definer": true
+  },
+  {
+    "relation": "auto_system_settings",
+    "name": "auto_campaign_engagement_revision",
+    "definition": "CREATE TRIGGER auto_campaign_engagement_revision BEFORE UPDATE ON public.auto_system_settings FOR EACH ROW WHEN ((new.key = 'zalo.campaign_engagement.enabled'::text)) EXECUTE FUNCTION aka_agent_campaign_engagement_revision()",
+    "signature": "public.aka_agent_campaign_engagement_revision()",
+    "security_definer": false
+  },
+  {
+    "relation": "auto_system_settings",
+    "name": "auto_control_web_device_policy_changed",
+    "definition": "CREATE TRIGGER auto_control_web_device_policy_changed AFTER INSERT OR DELETE OR UPDATE ON public.auto_system_settings FOR EACH ROW EXECUTE FUNCTION aka_agent_control_web_device_policy_changed()",
+    "signature": "public.aka_agent_control_web_device_policy_changed()",
+    "security_definer": false
+  },
+  {
+    "relation": "category_item",
+    "name": "trg_aka_agent_refresh_data_group_primary_from_category_item",
+    "definition": "CREATE TRIGGER trg_aka_agent_refresh_data_group_primary_from_category_item AFTER UPDATE OF category_type_id, code, managed_by, is_active ON public.category_item FOR EACH ROW WHEN (((old.category_type_id IS DISTINCT FROM new.category_type_id) OR (old.code IS DISTINCT FROM new.code) OR (old.managed_by IS DISTINCT FROM new.managed_by) OR (old.is_active IS DISTINCT FROM new.is_active))) EXECUTE FUNCTION aka_agent_refresh_data_group_primary_from_category_item()",
+    "signature": "public.aka_agent_refresh_data_group_primary_from_category_item()",
+    "security_definer": true
+  },
+  {
+    "relation": "category_item",
+    "name": "trg_touch_category_item_updated_at",
+    "definition": "CREATE TRIGGER trg_touch_category_item_updated_at BEFORE UPDATE ON public.category_item FOR EACH ROW EXECUTE FUNCTION touch_category_catalog_updated_at()",
+    "signature": "public.touch_category_catalog_updated_at()",
+    "security_definer": true
+  },
+  {
+    "relation": "category_type",
+    "name": "trg_aka_agent_refresh_data_group_primary_from_category_type",
+    "definition": "CREATE TRIGGER trg_aka_agent_refresh_data_group_primary_from_category_type AFTER UPDATE OF namespace, code, managed_by, is_active ON public.category_type FOR EACH ROW WHEN (((old.namespace IS DISTINCT FROM new.namespace) OR (old.code IS DISTINCT FROM new.code) OR (old.managed_by IS DISTINCT FROM new.managed_by) OR (old.is_active IS DISTINCT FROM new.is_active))) EXECUTE FUNCTION aka_agent_refresh_data_group_primary_from_category_type()",
+    "signature": "public.aka_agent_refresh_data_group_primary_from_category_type()",
+    "security_definer": true
+  },
+  {
+    "relation": "category_type",
+    "name": "trg_touch_category_type_updated_at",
+    "definition": "CREATE TRIGGER trg_touch_category_type_updated_at BEFORE UPDATE ON public.category_type FOR EACH ROW EXECUTE FUNCTION touch_category_catalog_updated_at()",
+    "signature": "public.touch_category_catalog_updated_at()",
+    "security_definer": true
+  },
+  {
+    "relation": "chat_zalo_account",
+    "name": "trg_chat_zalo_account_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_account_touch_updated_at BEFORE UPDATE ON public.chat_zalo_account FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_account_conversation",
+    "name": "trg_chat_zalo_account_conversation_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_account_conversation_touch_updated_at BEFORE UPDATE ON public.chat_zalo_account_conversation FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_account_conversation_tag",
+    "name": "trg_aka_agent_dynamic_filter_sync_chat_contact",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_sync_chat_contact AFTER INSERT OR DELETE OR UPDATE ON public.chat_zalo_account_conversation_tag FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_sync_chat_contact()",
+    "signature": "public.aka_agent_dynamic_filter_sync_chat_contact()",
+    "security_definer": true
+  },
+  {
+    "relation": "chat_zalo_account_organization",
+    "name": "trg_chat_zalo_account_organization_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_account_organization_touch_updated_at BEFORE UPDATE ON public.chat_zalo_account_organization FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_account_tag",
+    "name": "trg_chat_zalo_account_tag_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_account_tag_touch_updated_at BEFORE UPDATE ON public.chat_zalo_account_tag FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_account_user",
+    "name": "trg_aka_agent_dynamic_filter_chat_friend",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_chat_friend AFTER INSERT OR UPDATE OF friendship_status_category_item_id ON public.chat_zalo_account_user FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_chat_event()",
+    "signature": "public.aka_agent_dynamic_filter_chat_event()",
+    "security_definer": true
+  },
+  {
+    "relation": "chat_zalo_account_user",
+    "name": "trg_chat_zalo_account_user_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_account_user_touch_updated_at BEFORE UPDATE ON public.chat_zalo_account_user FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_conversation",
+    "name": "trg_chat_zalo_conversation_record_created_event",
+    "definition": "CREATE TRIGGER trg_chat_zalo_conversation_record_created_event AFTER INSERT ON public.chat_zalo_conversation FOR EACH ROW EXECUTE FUNCTION chat_zalo_record_conversation_created_event()",
+    "signature": "public.chat_zalo_record_conversation_created_event()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_conversation",
+    "name": "trg_chat_zalo_conversation_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_conversation_touch_updated_at BEFORE UPDATE ON public.chat_zalo_conversation FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "chat_zalo_conversation_system_tag",
+    "name": "trg_aka_agent_dynamic_filter_chat_system_tag",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_chat_system_tag AFTER INSERT OR DELETE OR UPDATE ON public.chat_zalo_conversation_system_tag FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_chat_event()",
+    "signature": "public.aka_agent_dynamic_filter_chat_event()",
+    "security_definer": true
+  },
+  {
+    "relation": "chat_zalo_runtime_event",
+    "name": "trg_chat_zalo_runtime_event_touch_updated_at",
+    "definition": "CREATE TRIGGER trg_chat_zalo_runtime_event_touch_updated_at BEFORE UPDATE ON public.chat_zalo_runtime_event FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()",
+    "signature": "public.chat_zalo_touch_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_lock_organization_aka_order_sync",
+    "definition": "CREATE TRIGGER trg_lock_organization_aka_order_sync BEFORE UPDATE ON public.org_organization FOR EACH ROW EXECUTE FUNCTION private.trg_lock_organization_aka_order_sync()",
+    "signature": "private.private.trg_lock_organization_aka_order_sync()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_loyalty_from_org_customer_link",
+    "definition": "CREATE TRIGGER trg_loyalty_from_org_customer_link AFTER UPDATE OF customer_id ON public.org_organization FOR EACH ROW EXECUTE FUNCTION private.trg_loyalty_from_org_customer_link()",
+    "signature": "private.private.trg_loyalty_from_org_customer_link()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_protect_org_lifecycle_attribution",
+    "definition": "CREATE TRIGGER trg_protect_org_lifecycle_attribution BEFORE INSERT OR UPDATE ON public.org_organization FOR EACH ROW EXECUTE FUNCTION private.protect_org_lifecycle_attribution()",
+    "signature": "private.private.protect_org_lifecycle_attribution()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_reassign_org_customer_lifecycle",
+    "definition": "CREATE TRIGGER trg_reassign_org_customer_lifecycle AFTER UPDATE OF customer_id ON public.org_organization FOR EACH ROW WHEN ((old.customer_id IS DISTINCT FROM new.customer_id)) EXECUTE FUNCTION private.trg_reassign_org_customer_lifecycle()",
+    "signature": "private.private.trg_reassign_org_customer_lifecycle()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_sync_organization_orders",
+    "definition": "CREATE TRIGGER trg_sync_organization_orders AFTER UPDATE ON public.org_organization FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION private.trg_sync_organization_orders()",
+    "signature": "private.private.trg_sync_organization_orders()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization",
+    "name": "trg_use_new_zalo_runtime_on_insert",
+    "definition": "CREATE TRIGGER trg_use_new_zalo_runtime_on_insert BEFORE INSERT ON public.org_organization FOR EACH ROW EXECUTE FUNCTION private.aka_agent_org_default_new_zalo_runtime()",
+    "signature": "private.private.aka_agent_org_default_new_zalo_runtime()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_00_track_org_product_lifecycle_attribution",
+    "definition": "CREATE TRIGGER trg_00_track_org_product_lifecycle_attribution BEFORE INSERT OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.track_org_product_lifecycle_attribution()",
+    "signature": "private.private.track_org_product_lifecycle_attribution()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_audit_org_organization_product_changes",
+    "definition": "CREATE TRIGGER trg_audit_org_organization_product_changes AFTER INSERT OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.capture_org_organization_product_history()",
+    "signature": "private.private.capture_org_organization_product_history()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_derive_org_product_zalo_server_flag",
+    "definition": "CREATE TRIGGER trg_derive_org_product_zalo_server_flag BEFORE INSERT OR UPDATE OF product_package_id, is_zalo_server ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION derive_org_product_zalo_server_flag()",
+    "signature": "public.derive_org_product_zalo_server_flag()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_lock_org_product_aka_order_sync",
+    "definition": "CREATE TRIGGER trg_lock_org_product_aka_order_sync BEFORE INSERT OR DELETE OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.trg_lock_org_product_aka_order_sync()",
+    "signature": "private.private.trg_lock_org_product_aka_order_sync()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_loyalty_from_org_product",
+    "definition": "CREATE TRIGGER trg_loyalty_from_org_product AFTER INSERT OR DELETE OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.trg_loyalty_from_org_product()",
+    "signature": "private.private.trg_loyalty_from_org_product()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_org_organization_product_set_updated_at",
+    "definition": "CREATE TRIGGER trg_org_organization_product_set_updated_at BEFORE UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION set_org_organization_product_updated_at()",
+    "signature": "public.set_org_organization_product_updated_at()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_serialize_zalo_runtime_entitlement_change",
+    "definition": "CREATE TRIGGER trg_serialize_zalo_runtime_entitlement_change BEFORE INSERT OR DELETE OR UPDATE ON public.org_organization_product FOR EACH STATEMENT EXECUTE FUNCTION serialize_zalo_runtime_entitlement_change()",
+    "signature": "public.serialize_zalo_runtime_entitlement_change()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_sync_org_product_customer_lifecycle",
+    "definition": "CREATE TRIGGER trg_sync_org_product_customer_lifecycle AFTER INSERT OR DELETE OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.trg_sync_org_product_customer_lifecycle()",
+    "signature": "private.private.trg_sync_org_product_customer_lifecycle()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_sync_org_product_delete_from_aka_order",
+    "definition": "CREATE TRIGGER trg_sync_org_product_delete_from_aka_order BEFORE DELETE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.trg_sync_org_product_to_aka_order()",
+    "signature": "private.private.trg_sync_org_product_to_aka_order()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_sync_org_product_to_aka_order",
+    "definition": "CREATE TRIGGER trg_sync_org_product_to_aka_order AFTER INSERT OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.trg_sync_org_product_to_aka_order()",
+    "signature": "private.private.trg_sync_org_product_to_aka_order()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_trial_care_entitlement_event",
+    "definition": "CREATE TRIGGER trg_trial_care_entitlement_event AFTER INSERT OR UPDATE OF is_paid, purchase_date, product_id ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.enqueue_crm_trial_care_change_v1()",
+    "signature": "private.private.enqueue_crm_trial_care_change_v1()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_organization_product",
+    "name": "trg_zz_propagate_org_product_lifecycle_attribution",
+    "definition": "CREATE TRIGGER trg_zz_propagate_org_product_lifecycle_attribution AFTER INSERT OR UPDATE ON public.org_organization_product FOR EACH ROW EXECUTE FUNCTION private.propagate_org_product_lifecycle_attribution()",
+    "signature": "private.private.propagate_org_product_lifecycle_attribution()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_staff",
+    "name": "aka_agent_invalidate_staff_recovery",
+    "definition": "CREATE TRIGGER aka_agent_invalidate_staff_recovery AFTER UPDATE OF organization_id, username, password, aka_agent_device_fingerprint_hash ON public.org_staff FOR EACH ROW EXECUTE FUNCTION private.aka_agent_invalidate_staff_recovery()",
+    "signature": "private.private.aka_agent_invalidate_staff_recovery()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_staff",
+    "name": "aka_agent_track_device_binding",
+    "definition": "CREATE TRIGGER aka_agent_track_device_binding BEFORE UPDATE ON public.org_staff FOR EACH ROW EXECUTE FUNCTION private.aka_agent_track_device_binding()",
+    "signature": "private.private.aka_agent_track_device_binding()",
+    "security_definer": false
+  },
+  {
+    "relation": "org_staff",
+    "name": "group_sharing_staff_scope_changed",
+    "definition": "CREATE TRIGGER group_sharing_staff_scope_changed AFTER UPDATE OF organization_id, deleted_at, is_active ON public.org_staff FOR EACH ROW EXECUTE FUNCTION private.stop_invalid_staff_group_sources()",
+    "signature": "private.private.stop_invalid_staff_group_sources()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_staff",
+    "name": "trg_ensure_sms_auto_account_on_staff_insert",
+    "definition": "CREATE TRIGGER trg_ensure_sms_auto_account_on_staff_insert AFTER INSERT ON public.org_staff FOR EACH ROW EXECUTE FUNCTION trg_ensure_sms_auto_account_for_staff()",
+    "signature": "public.trg_ensure_sms_auto_account_for_staff()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_staff",
+    "name": "trg_remap_customer_lifecycle_staff_links",
+    "definition": "CREATE TRIGGER trg_remap_customer_lifecycle_staff_links AFTER INSERT OR UPDATE OF sql_staff_id, chat_staff_id ON public.org_staff FOR EACH ROW EXECUTE FUNCTION private.trg_remap_customer_lifecycle_staff_links()",
+    "signature": "private.private.trg_remap_customer_lifecycle_staff_links()",
+    "security_definer": true
+  },
+  {
+    "relation": "org_staff",
+    "name": "trg_set_staff_defaults",
+    "definition": "CREATE TRIGGER trg_set_staff_defaults BEFORE INSERT ON public.org_staff FOR EACH ROW EXECUTE FUNCTION set_staff_defaults()",
+    "signature": "public.set_staff_defaults()",
+    "security_definer": false
+  },
+  {
+    "relation": "zalo_group_members",
+    "name": "trg_aka_agent_dynamic_filter_enqueue_group_member",
+    "definition": "CREATE TRIGGER trg_aka_agent_dynamic_filter_enqueue_group_member AFTER INSERT OR DELETE OR UPDATE ON public.zalo_group_members FOR EACH ROW EXECUTE FUNCTION aka_agent_dynamic_filter_enqueue_group_member()",
+    "signature": "public.aka_agent_dynamic_filter_enqueue_group_member()",
+    "security_definer": true
+  }
+]

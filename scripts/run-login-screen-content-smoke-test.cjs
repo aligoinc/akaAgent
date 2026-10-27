@@ -19,7 +19,9 @@ async function main() {
           plugin.onLoad({ filter: /.*/, namespace: 'login-smoke' }, args => ({
             contents: args.path === 'electron'
               ? 'export const ipcMain = { handle: (key, handler) => globalThis.loginSmokeHandlers.set(key, handler) }'
-              : 'export const getSupabaseClient = () => globalThis.loginSmokeClient',
+              : `export const getSupabaseClient = () => globalThis.loginSmokeClient;
+                 export const desktopSession = { clear() {}, matches() { return true } };
+                 export const isTrustedServerSupabaseConfigured = () => false;`,
             loader: 'js'
           }))
         }

@@ -1,0 +1,244 @@
+{
+  "project": {
+    "id": "cgjbsmqtfhqvttudyjzq",
+    "name": "akachat"
+  },
+  "deployment": {
+    "id": "aa364f24-20c0-437e-8e9d-ac0841650e8d",
+    "slug": "aka-agent-desktop-session",
+    "name": "aka-agent-desktop-session",
+    "status": "ACTIVE",
+    "version": 1,
+    "created_at": 1793108607098,
+    "updated_at": 1793108607098,
+    "verify_jwt": false,
+    "import_map": false,
+    "entrypoint_path": "/tmp/user_fn_cgjbsmqtfhqvttudyjzq_aa364f24-20c0-437e-8e9d-ac0841650e8d_1/source/index.ts",
+    "ezbr_sha256": "1fb0cb641e3bca84b149176c8d8fcec40b9c8100bc4444b3fb7adcb63925b786"
+  },
+  "deployedAt": "2026-10-27T13:43:27.098Z",
+  "deployedAtVietnam": "2026-10-27 20:43:27 +07:00",
+  "source": {
+    "files": [
+      {
+        "path": "supabase/functions/aka-agent-desktop-session/index.ts",
+        "sha256": "a985b8d54070d16436cd14101c55ffeafbd0510480d63eff87bfea91dd7ace64"
+      },
+      {
+        "path": "supabase/functions/aka-agent-desktop-session/handler.ts",
+        "sha256": "452618ab0ac755766c03ca726da8ae489ecbaf3d8c54d8810043d3ccfdc3965c"
+      }
+    ],
+    "deployedContentsMatchLocal": true,
+    "strictHandlerTypecheck": "passed",
+    "sdkVersion": "2.99.1"
+  },
+  "dbPrePostIdentical": true,
+  "dbState": {
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres}",
+        "md5": "9d830c679bf2136baafb16e73100840d",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "definer": true,
+        "signature": "aka_agent_desktop_login_content()"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "md5": "941d90c3c9b753281108c1e82f56e81d",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog",
+          "statement_timeout=12s",
+          "lock_timeout=3s"
+        ],
+        "definer": true,
+        "signature": "aka_agent_desktop_session_admin(text,jsonb)"
+      },
+      {
+        "acl": "{postgres=X/postgres,anon=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres}",
+        "md5": "e008096e646f8adc561105d8581ce63c",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "definer": true,
+        "signature": "aka_agent_desktop_startup_policy()"
+      }
+    ],
+    "migration_a": [
+      {
+        "name": "desktop_session_identity",
+        "version": "20261027133417"
+      }
+    ],
+    "desktop_role": {
+      "name": "aka_agent_desktop",
+      "login": false,
+      "config": [
+        "statement_timeout=3s",
+        "lock_timeout=8s"
+      ],
+      "bypassrls": false
+    },
+    "business_access": [
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,aka_agent_desktop=arwdDxtm/postgres}",
+        "rls": false,
+        "name": "auto_accounts",
+        "anon_select": true,
+        "anon_update": true
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=rw/postgres,aka_agent_desktop=arwdDxtm/postgres}",
+        "rls": false,
+        "name": "auto_campaigns",
+        "anon_select": true,
+        "anon_update": true
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,anon=r/postgres,authenticated=r/postgres,crm_interest_worker=r/postgres,aka_agent_desktop=r/postgres}",
+        "rls": true,
+        "name": "org_organization",
+        "anon_select": true,
+        "anon_update": false
+      },
+      {
+        "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,crm_interest_worker=r/postgres,aka_agent_desktop=arwdDxtm/postgres}",
+        "rls": false,
+        "name": "org_staff",
+        "anon_select": true,
+        "anon_update": true
+      }
+    ],
+    "migration_b_count": 0,
+    "desktop_identities": 0
+  },
+  "http": {
+    "checkedAt": "2026-10-27T13:44:08.071Z",
+    "base": "https://cgjbsmqtfhqvttudyjzq.supabase.co",
+    "endpoint": "https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/aka-agent-desktop-session",
+    "checks": 16,
+    "passed": true,
+    "results": [
+      {
+        "name": "method validation",
+        "status": 405,
+        "elapsedMs": 2903,
+        "passed": true
+      },
+      {
+        "name": "malformed JSON",
+        "status": 400,
+        "elapsedMs": 2491,
+        "passed": true
+      },
+      {
+        "name": "unknown action",
+        "status": 400,
+        "elapsedMs": 142,
+        "passed": true
+      },
+      {
+        "name": "unexpected field",
+        "status": 400,
+        "elapsedMs": 141,
+        "passed": true
+      },
+      {
+        "name": "oversized body",
+        "status": 413,
+        "elapsedMs": 232,
+        "passed": true
+      },
+      {
+        "name": "check rejects nonexistent staff through live RPC",
+        "status": 401,
+        "elapsedMs": 407,
+        "passed": true
+      },
+      {
+        "name": "login rejects nonexistent staff without Auth identity",
+        "status": 401,
+        "elapsedMs": 293,
+        "passed": true
+      },
+      {
+        "name": "register rejects invalid Auth token",
+        "status": 401,
+        "elapsedMs": 251,
+        "passed": true
+      },
+      {
+        "name": "logout rejects invalid Auth token",
+        "status": 401,
+        "elapsedMs": 390,
+        "passed": true
+      },
+      {
+        "name": "public login content RPC",
+        "status": 200,
+        "elapsedMs": 130,
+        "passed": true
+      },
+      {
+        "name": "public startup RPC",
+        "status": 200,
+        "elapsedMs": 165,
+        "passed": true
+      },
+      {
+        "name": "legacy anon still reads org_staff",
+        "status": 200,
+        "elapsedMs": 322,
+        "passed": true
+      },
+      {
+        "name": "legacy anon still reads org_organization",
+        "status": 200,
+        "elapsedMs": 144,
+        "passed": true
+      },
+      {
+        "name": "legacy anon still reads auto_accounts",
+        "status": 200,
+        "elapsedMs": 191,
+        "passed": true
+      },
+      {
+        "name": "legacy anon still reads auto_campaigns",
+        "status": 200,
+        "elapsedMs": 157,
+        "passed": true
+      },
+      {
+        "name": "issuer RPC still denies public caller",
+        "status": 401,
+        "elapsedMs": 140,
+        "passed": true
+      }
+    ],
+    "realStaffLoginTested": false
+  },
+  "scope": {
+    "migrationApplied": false,
+    "stageBApplied": false,
+    "legacyStaffPhaseCApplied": false,
+    "legacyAnonRevoked": false,
+    "customerDataWrittenBySmoke": false,
+    "desktopInstallerBuiltOrReleased": false
+  },
+  "limitations": [
+    "Production positive login/refresh with a real staff account has not been exercised.",
+    "Valid issue/verify/custom-role/refresh/logout flows were previously tested against real Supabase Auth v2.197.0 locally."
+  ],
+  "rollback": "Disable only this Edge Function if necessary; do not run DB Stage B or its rollback as part of endpoint rollback.",
+  "documentation": [
+    "https://supabase.com/docs/guides/functions/secrets",
+    "https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys",
+    "https://supabase.com/changelog/cbc-tls-ciphers-deprecated"
+  ]
+}

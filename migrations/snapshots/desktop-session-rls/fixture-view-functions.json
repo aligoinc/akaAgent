@@ -1,0 +1,26 @@
+[
+  {
+    "signature": "fn_opp_today_vn()",
+    "arguments": "",
+    "result": "date",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "s",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "90e82550997cfff3c4a9468cbccb8f6d",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_opp_today_vn()\n RETURNS date\n LANGUAGE sql\n STABLE\nAS $function$\n  select (now() at time zone 'Asia/Ho_Chi_Minh')::date $function$\n"
+  },
+  {
+    "signature": "fn_trang_thai_mua(bigint)",
+    "arguments": "p_customer_id bigint",
+    "result": "text",
+    "owner": "postgres",
+    "security_definer": false,
+    "volatility": "s",
+    "config": null,
+    "acl": "{=X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "checksum": "619c0031485a78942dd6ce6b33eab93f",
+    "definition": "CREATE OR REPLACE FUNCTION public.fn_trang_thai_mua(p_customer_id bigint)\n RETURNS text\n LANGUAGE sql\n STABLE\nAS $function$\n  SELECT CASE\n    WHEN EXISTS (SELECT 1 FROM public.aka_order o\n                  WHERE o.customer_id = p_customer_id\n                    AND COALESCE(o.is_demo,false) = false\n                    AND lower(COALESCE(o.package,'')) <> 'demo'\n                    AND o.date_expiration >= now())\n      OR EXISTS (SELECT 1 FROM public.org_organization_product q\n                   JOIN public.org_organization g ON g.id = q.organization_id\n                  WHERE g.customer_id = p_customer_id\n                    AND COALESCE(q.is_deleted,false) = false\n                    AND q.is_paid\n                    AND COALESCE(q.is_lock,false) = false\n                    AND q.expiration_date >= now())\n    THEN 'dang_dung'\n    WHEN EXISTS (SELECT 1 FROM public.aka_order o\n                  WHERE o.customer_id = p_customer_id\n                    AND COALESCE(o.is_demo,false) = false\n                    AND lower(COALESCE(o.package,'')) <> 'demo')\n      OR EXISTS (SELECT 1 FROM public.org_organization_product q\n                   JOIN public.org_organization g ON g.id = q.organization_id\n                  WHERE g.customer_id = p_customer_id\n                    AND COALESCE(q.is_deleted,false) = false\n                    AND q.is_paid)\n    THEN 'het_han'\n    ELSE 'chua_mua'\n  END;\n$function$\n"
+  }
+]

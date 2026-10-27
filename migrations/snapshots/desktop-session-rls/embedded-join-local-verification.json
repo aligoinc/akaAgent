@@ -1,0 +1,9 @@
+{
+  "canonical": "supabase/migrations/20261027144727_desktop_embedded_join_permissions.sql",
+  "sha256": "63d24abadc30db6022b65a7f1b3b17b36285d230af9e1897b28488d037e593f3",
+  "previous_applied_migrations_unchanged": true,
+  "postgres_sdk_smoke": "PASS ACL/function drift rejects the candidate before mutations\nPASS real catalog repository/SDK reproduces missing join permission, restores ordered results, and remains read-only\nPASS complete Proxy builder payload works for create and update\nPASS account/campaign writes, runtime profile, AI model read, staff RPC and gateway hook remain compatible\nPASS Desktop cannot read/write staff, read Vault, hard-delete accounts/campaigns, truncate, or edit unused catalog columns\nPASS legacy anon reads and old Vault access remain unchanged as explicitly requested\nPASS effective table/column/function/sequence rights of every other role remain identical\nPASS all function bodies/config/owners and all RLS/policies remain unchanged\nPASS 837 required table/column privileges are available\nPASS 268 unused application functions are not callable by Desktop, including PUBLIC paths\nPASS legacy cutover and rollback cannot restore excess Desktop grants, even with their old approval flags\n{\"checks\":11,\"stubbedUnrelatedFunctions\":149,\"status\":\"passed\"}\n",
+  "selects_audited": 313,
+  "selects_with_embedded_relations": 60,
+  "unresolved_selects": 0
+}
