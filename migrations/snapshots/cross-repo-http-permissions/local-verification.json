@@ -1,0 +1,32 @@
+{
+  "status": "candidate-local-only",
+  "date": "2026-10-28",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "20261027173856_cross_repo_http_permissions.sql",
+  "migrationSha256": "d6ff712dd644fbda5ad881e5f2a30006d7adf101d16624928acc0dfcd9f99a76",
+  "checks": [
+    "candidate transaction rolls back",
+    "dependency drift rejected",
+    "all existing function bodies, ACLs, config, security modes and owners unchanged",
+    "repeat apply rejected",
+    "new functions backend-only, original DB timeout budgets retained",
+    "settings filters, nulls and microsecond timestamp parity",
+    "120 denied IP/route/header cases, allowed neighbors and request context restoration",
+    "20 forged identities denied, missing credentials denied, Map create/list/ingest/datasets and replay parity",
+    "rollback requires explicit stopped-caller gate",
+    "rollback rejects newer function metadata",
+    "guarded rollback rehearsal preserves installed functions",
+    "rollback restores exact original function metadata without opening anon"
+  ],
+  "fixture": "Disposable PostgreSQL 17 over Unix socket; captured metadata and synthetic rows. No production writes.",
+  "productionApplied": false,
+  "reviewFixes": {
+    "deniedIpCases": 120,
+    "chatFocusedTests": 50,
+    "mapFocusedTests": 12,
+    "chatTypecheck": "passed",
+    "mapHandlerTypecheck": "passed",
+    "liveIpHookChecksum": "ecfc014981c5058f9cd84e0e8e504bed",
+    "applied": false
+  }
+}

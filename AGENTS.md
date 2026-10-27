@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Ngày 28/10/2026 đã apply `20261027181400 / cross_repo_http_permissions` trên akachat: bảy RPC/helper mới service-only, 1.246 hàm cũ/quyền bảng-cột/RLS giữ nguyên; không apply lại. Chat API/worker, ChatWeb, WebApp và Edge akaMap đã deploy, chỉ đổi image trên machine cũ và thêm backend secret Chat; không mở anon hoặc tăng pool/replica. akaMap 3.0.7 Mac ARM64/Windows build local trong `google-map/release-3.0.7`, chưa upload; [audit/rollback](docs/CROSS_REPO_RLS_DEPLOY_20261028.md).
+
 V435 đã apply akachat lúc 23:53:25 ngày 27/10/2026 (`20261027165325 / migration_v435_desktop_permission_cutover`): thu hồi anon/authenticated trên 113 bảng/view, 87 sequence và 596 RPC dữ liệu; bật RLS thêm 47 bảng (109 bảng trong phạm vi đều bật). Giữ quyền Desktop/backend, bootstrap và ngoại lệ một dòng cấu hình cập nhật app cũ; Desktop không còn đọc `ai_model.api_key`. 8 nhóm local, production rollback trial, 20 HTTP và hậu kiểm 1.245 hàm không đổi đạt; feed ba nền tảng 9.1.0. Không apply lại B/C cũ; rollback mở lại quyền legacy phải có chỉ thị riêng. [Audit và rollback](docs/DESKTOP_PERMISSION_CUTOVER_V435.md).
 
 Ngày 27/10/2026 đã đóng gói local **9.1.0** từ `dev_3` tại `c9fd49fc`: Desktop Windows x64, macOS ARM64/Intel và App Server Windows x64 nội bộ có sẵn backend credential; hai typecheck + tám nhóm smoke, payload/version/native/checksum, SQLite hai Mac (Intel qua Rosetta), 998 input và khôi phục native host đều đạt. Desktop không chứa backend credential/anon key cũ; Server chỉ dùng trên máy chủ quản lý, Mac ký ad-hoc, chưa thử Windows thật, chưa upload/phát hành hoặc thu hồi anon/đổi RLS; [receipt](docs/audits/akaagent-9.1.0-20261027/build-receipt.json), log/output cũ ở `dist/build-9.1.0/`, Bộ cài Server ở `dist-server/akaAgent-Zalo-Server-Internal-Setup-9.1.0.exe`, bản kiểm chứng giữ tại `dist-server/private/2026-10-27T16-33-47-301Z/`.
@@ -767,6 +769,8 @@ PR target branch là `dev_3` (replaces `dev_2` như memory `default_branch.md`).
 Trước khi bắt đầu task mới trong repo này, sync code từ remote về `dev_3` (`git fetch origin` rồi fast-forward/rebase phù hợp) để làm trên nền mới nhất.
 
 ## Common pitfalls
+
+- **Một backend có thể dùng nhiều role**: sau thu hồi anon phải rà cả HTTP phụ, không chỉ pool SQL/service role. Năm luồng Chat API/ChatWeb/akaMap đã sửa ngày 28/10; `20261027181400 / cross_repo_http_permissions` đã apply và các backend đã deploy, thêm bảy hàm service-only, giữ timeout/caller identity. Không apply lại. Không mở lại anon, không bỏ kiểm tra Map vì helper cũ tin service_role. Map Edge gắn metadata IP riêng và SQL gọi hook IP live trong cùng lượt; không nhận context từ body client, không nhân bản deny-list. [Audit và thứ tự triển khai](docs/DESKTOP_PERMISSION_CUTOVER_V435.md#sửa-năm-luồng-http--candidate-28102026).
 
 - **Token khi mất mạng/sleep**: lỗi gia hạn tạm thời hoặc access token hết hạn đang chờ retry dùng đường `fetch failed` cũ; giữ phiên, không thêm thông báo đăng nhập/kết nối. [Hợp đồng và smoke](docs/DESKTOP_SESSION_RLS.md#vòng-đời-token).
 - **Thu hồi anon**: đưa cả helper `SECURITY DEFINER` đọc Vault vào inventory/preflight/rollback dù không nhắc bảng nghiệp vụ. Candidate B đã bao gồm helper Vault, chưa apply; xem [audit](docs/DESKTOP_SESSION_RLS.md).

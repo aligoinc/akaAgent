@@ -1,0 +1,176 @@
+[
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_dynamic_filter_queue",
+    "indexname": "auto_account_contact_dynamic_filter_queue_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_dynamic_filter_queue_pkey ON public.auto_account_contact_dynamic_filter_queue USING btree (contact_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_dynamic_filter_rules",
+    "indexname": "auto_account_contact_group_dynamic_filter_rules_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_group_dynamic_filter_rules_pkey ON public.auto_account_contact_group_dynamic_filter_rules USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_dynamic_filters",
+    "indexname": "auto_account_contact_group_dynamic_filters_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_group_dynamic_filters_pkey ON public.auto_account_contact_group_dynamic_filters USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_dynamic_filters",
+    "indexname": "uq_data_group_dynamic_filter_group",
+    "indexdef": "CREATE UNIQUE INDEX uq_data_group_dynamic_filter_group ON public.auto_account_contact_group_dynamic_filters USING btree (group_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_member_origins",
+    "indexname": "auto_account_contact_group_member_origins_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_group_member_origins_pkey ON public.auto_account_contact_group_member_origins USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_member_origins",
+    "indexname": "uq_auto_account_contact_group_member_origins_identity",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_account_contact_group_member_origins_identity ON public.auto_account_contact_group_member_origins USING btree (membership_id, kind, COALESCE(dataset_id, (0)::bigint), COALESCE(batch_id, (0)::bigint), COALESCE(source_account_id, (0)::bigint), COALESCE(automation_detail_id, (0)::bigint), COALESCE(source_name_snapshot, ''::text), COALESCE(relationship_kind, ''::text))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_member_origins",
+    "indexname": "uq_data_group_member_origin_dynamic_filter",
+    "indexdef": "CREATE UNIQUE INDEX uq_data_group_member_origin_dynamic_filter ON public.auto_account_contact_group_member_origins USING btree (membership_id, dynamic_filter_id) WHERE (dynamic_filter_id IS NOT NULL)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_members",
+    "indexname": "auto_account_contact_group_members_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_group_members_pkey ON public.auto_account_contact_group_members USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_group_members",
+    "indexname": "idx_auto_account_contact_group_members_unique",
+    "indexdef": "CREATE UNIQUE INDEX idx_auto_account_contact_group_members_unique ON public.auto_account_contact_group_members USING btree (group_id, contact_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_groups",
+    "indexname": "auto_account_contact_groups_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contact_groups_pkey ON public.auto_account_contact_groups USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_groups",
+    "indexname": "uq_auto_account_contact_groups_blocklist_name",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_account_contact_groups_blocklist_name ON public.auto_account_contact_groups USING btree (staff_id, account_id, contact_type, purpose, lower(name)) WHERE ((is_delete = false) AND (purpose = 'zalo_friend_blocklist'::text))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contact_groups",
+    "indexname": "uq_auto_data_groups_active_dataset_sync_key",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_data_groups_active_dataset_sync_key ON public.auto_account_contact_groups USING btree (staff_id, organization_id, dataset_sync_key) WHERE ((purpose = 'data_group'::text) AND (dataset_sync_mode = 'dataset_auto'::text) AND (dataset_sync_key IS NOT NULL) AND (is_delete = false))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts",
+    "indexname": "auto_account_contacts_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contacts_pkey ON public.auto_account_contacts USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts",
+    "indexname": "uq_auto_account_contacts_account_type_uid",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_account_contacts_account_type_uid ON public.auto_account_contacts USING btree (account_id, contact_type, uid)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts_dataset",
+    "indexname": "auto_account_contacts_dataset_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contacts_dataset_pkey ON public.auto_account_contacts_dataset USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts_dataset",
+    "indexname": "uq_account_contact_datasets_active_group_upload",
+    "indexdef": "CREATE UNIQUE INDEX uq_account_contact_datasets_active_group_upload ON public.auto_account_contacts_dataset USING btree (staff_id, organization_id, group_id, COALESCE(account_id, (0)::bigint), flatform_type, contact_type, scan_type, lower(btrim(source_key))) WHERE ((is_delete = false) AND (source = 'upload'::text) AND (group_id IS NOT NULL))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts_dataset",
+    "indexname": "uq_account_contact_datasets_active_legacy_identity",
+    "indexdef": "CREATE UNIQUE INDEX uq_account_contact_datasets_active_legacy_identity ON public.auto_account_contacts_dataset USING btree (staff_id, account_id, scan_type, contact_type, source_key) WHERE ((is_delete = false) AND (group_id IS NULL))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_account_contacts_dataset_members",
+    "indexname": "auto_account_contacts_dataset_members_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_account_contacts_dataset_members_pkey ON public.auto_account_contacts_dataset_members USING btree (dataset_id, contact_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_campaign_data_group_sources",
+    "indexname": "auto_campaign_data_group_sources_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_campaign_data_group_sources_pkey ON public.auto_campaign_data_group_sources USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_campaign_data_group_sources",
+    "indexname": "uq_auto_campaign_data_group_sources_campaign",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_campaign_data_group_sources_campaign ON public.auto_campaign_data_group_sources USING btree (campaign_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_external_sync_runs",
+    "indexname": "auto_data_group_external_sync_runs_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_external_sync_runs_pkey ON public.auto_data_group_external_sync_runs USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_external_sync_runs",
+    "indexname": "auto_data_group_external_sync_runs_token_key",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_external_sync_runs_token_key ON public.auto_data_group_external_sync_runs USING btree (token)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_external_sync_seen",
+    "indexname": "auto_data_group_external_sync_seen_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_external_sync_seen_pkey ON public.auto_data_group_external_sync_seen USING btree (group_id, data_type_code, account_scope, identity_key)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_external_sync_sources",
+    "indexname": "auto_data_group_external_sync_sources_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_external_sync_sources_pkey ON public.auto_data_group_external_sync_sources USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_external_sync_sources",
+    "indexname": "auto_data_group_external_sync_staff_id_organization_id_crea_key",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_external_sync_staff_id_organization_id_crea_key ON public.auto_data_group_external_sync_sources USING btree (staff_id, organization_id, create_request_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_recipients",
+    "indexname": "auto_data_group_recipients_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_recipients_pkey ON public.auto_data_group_recipients USING btree (group_id, staff_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_group_sheet_worker_state",
+    "indexname": "auto_data_group_sheet_worker_state_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_group_sheet_worker_state_pkey ON public.auto_data_group_sheet_worker_state USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_ingest_batches",
+    "indexname": "auto_data_ingest_batches_pkey",
+    "indexdef": "CREATE UNIQUE INDEX auto_data_ingest_batches_pkey ON public.auto_data_ingest_batches USING btree (id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "auto_data_ingest_batches",
+    "indexname": "uq_auto_data_ingest_batches_request",
+    "indexdef": "CREATE UNIQUE INDEX uq_auto_data_ingest_batches_request ON public.auto_data_ingest_batches USING btree (staff_id, organization_id, request_id)"
+  }
+]
