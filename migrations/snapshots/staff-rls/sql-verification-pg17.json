@@ -1,0 +1,9 @@
+{
+  "serverVersion": "17.11 (Homebrew)",
+  "checks": 129,
+  "productionChanged": false,
+  "productionDefaultAclFixture": true,
+  "viewAcl": "{postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=r/postgres}",
+  "viewGuardDriftCases": 14,
+  "checkedViewGuards": 2
+}

@@ -1,0 +1,8 @@
+{
+  "checksum": "ede238aba1a0de0cebd9fa33ff183f4a",
+  "owner": "postgres",
+  "options": [
+    "security_barrier=true"
+  ],
+  "acl": "{postgres=arwdDxt/postgres,anon=r/postgres,authenticated=r/postgres,service_role=r/postgres}"
+}

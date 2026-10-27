@@ -181,6 +181,7 @@ async function migrationGate(): Promise<void> {
     const exports: any = {}
     runInNewContext(code, { exports, console, require: (name: string) => {
       if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => client }
+      if (name.endsWith('staffDeviceRecovery')) return { legacyStaffRecoveryAllowed: async () => true, recoverStaffDeviceCredentials: async () => null, registerStaffDeviceRecovery: async () => {} }
       if (name.endsWith('deviceIdentity')) return { getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new' }), getLegacyDeviceIdentity: async () => { oldIdentityReads++; return { fingerprintHash: 'legacy' } } }
       if (name.endsWith('staffManagementRepository')) return { readStaffAccess: async () => ({ isActive: true, timeAllowed: true, isAdmin: false }) }
       if (name.endsWith('entitlementRepository')) return { ensureAkaAgentSubscriptionActive: async () => {} }
@@ -224,6 +225,7 @@ async function recoveryGate(): Promise<void> {
     const exports: any = {}
     runInNewContext(code, { exports, console: { error: () => {} }, require: (name: string) => {
       if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => client }
+      if (name.endsWith('staffDeviceRecovery')) return { legacyStaffRecoveryAllowed: async () => true, recoverStaffDeviceCredentials: async () => null, registerStaffDeviceRecovery: async () => {} }
       if (name.endsWith('deviceIdentity')) return {
         getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new' }),
         getLegacyDeviceIdentity: async () => { throw new Error('Explicit recovery must not fall back to legacy fingerprint') }
@@ -471,34 +473,28 @@ async function handlers(root: string): Promise<void> {
 async function bindingConfirmation(): Promise<void> {
   const source = await readFile('src/main/data/repositories/authRepository.ts', 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
-  for (const scenario of ['matching', 'different', 'claim', 'lost-response', 'other-winner', 'read-failure', 'write-failure', 'matching-rebound', 'matching-unbound', 'matching-read-failure']) {
-    let writes = 0
-    let reads = 0
-    const client = { from: () => {
-      let writing = false
-      const builder = {
-        update: () => { writing = true; writes++; return builder },
-        eq: () => builder, is: () => builder, select: () => builder,
-        maybeSingle: async () => {
-          if (writing) return scenario === 'claim' ? { data: { aka_agent_device_fingerprint_hash: 'new' }, error: null }
-            : { data: null, error: scenario === 'lost-response' || scenario === 'write-failure' ? { message: 'network failure' } : null }
-          reads++
-          return { data: { aka_agent_device_fingerprint_hash: ['lost-response', 'matching'].includes(scenario) ? 'new' : ['write-failure', 'matching-unbound'].includes(scenario) ? null : 'other' },
-            error: ['read-failure', 'matching-read-failure'].includes(scenario) ? { message: 'network failure' } : null }
-        }
-      }; return builder
-    } }
+  for (const scenario of ['matching', 'claim', 'rebound', 'lost-response', 'registration-failure', 'moved-org']) {
+    let calls = 0, registrations = 0
     const exports: any = {}
-    runInNewContext(code + '\nexports.checkBinding = ensureStaffDeviceLock;', { exports, console: { error: () => {} }, require: (name: string) => {
-      if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => client }
+    runInNewContext(code + '\nexports.checkBinding = ensureStaffDeviceLock;', { exports, console: { warn: () => {} }, require: (name: string) => {
+      if (name.endsWith('supabaseClient')) return { getSupabaseClient: () => { throw new Error('No direct table access') } }
       if (name.endsWith('deviceIdentity')) return { getCurrentDeviceIdentity: async () => ({ fingerprintHash: 'new', label: 'test', platform: 'win' }) }
+      if (name.endsWith('staffClientRepository')) return { callStaffClient: async (auth: any, action: string, data: any) => {
+        calls++; assert.deepEqual(JSON.parse(JSON.stringify(auth)), credentials)
+        assert.equal(action, 'bind_device'); assert.equal(data.staffId, 1); assert.equal(data.fingerprintHash, 'new')
+        if (['rebound', 'lost-response'].includes(scenario)) throw new Error('Binding unconfirmed')
+        return { organization_id: scenario === 'moved-org' ? 20 : 10 }
+      } }
+      if (name.endsWith('staffDeviceRecovery')) return { registerStaffDeviceRecovery: async () => {
+        registrations++; if (scenario === 'registration-failure') throw new Error('disk')
+      } }
       return {}
     } })
-    const attempt = exports.checkBinding({ id: 1, aka_agent_device_fingerprint_hash: scenario.startsWith('matching') ? 'new' : scenario === 'different' ? 'other' : null })
-    if (['matching', 'claim', 'lost-response'].includes(scenario)) assert.equal((await attempt).aka_agent_device_fingerprint_hash, 'new')
+    const attempt = exports.checkBinding({ id: 1, organization_id: 10, ...credentials, aka_agent_device_fingerprint_hash: scenario === 'claim' ? null : 'new' })
+    if (['matching', 'claim', 'registration-failure'].includes(scenario)) assert.equal((await attempt).aka_agent_device_fingerprint_hash, 'new')
     else await assert.rejects(attempt)
-    assert.equal(writes, scenario.startsWith('matching') || scenario === 'different' ? 0 : 1)
-    if (scenario.startsWith('matching')) assert.equal(reads, 1, 'matching login must confirm the current DB binding')
+    assert.equal(calls, 1, 'always verify live binding; no blind retry after lost response')
+    assert.equal(registrations, ['rebound', 'lost-response', 'moved-org'].includes(scenario) ? 0 : 1)
     checks++
   }
 }

@@ -2,6 +2,7 @@ const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync }
 const { tmpdir } = require('os')
 const { dirname, join, resolve } = require('path')
 const { spawnSync } = require('child_process')
+const { preparePrivateServerPackage, resourceName } = require('./server-private-package.cjs')
 
 const projectRoot = resolve(__dirname, '..')
 const betterSqliteDir = join(projectRoot, 'node_modules', 'better-sqlite3')
@@ -9,7 +10,11 @@ const betterSqliteNativePath = join(betterSqliteDir, 'build', 'Release', 'better
 const nativeBackupDir = mkdtempSync(join(tmpdir(), 'aka-zalo-server-win-native-'))
 const betterSqliteBackupPath = join(nativeBackupDir, 'better_sqlite3.node')
 let nativePreparationStarted = false
-const serverDistDir = join(projectRoot, 'dist-server')
+const privateBuild = process.argv.includes('--private')
+// Never overwrite the existing Server release when building a private installer.
+const serverDistDir = privateBuild
+  ? join(projectRoot, 'dist-server', 'private', new Date().toISOString().replace(/[:.]/g, '-'))
+  : join(projectRoot, 'dist-server')
 const serverMainPath = join(projectRoot, 'out-server', 'main', 'index.js')
 const packagedNativePath = join(
   serverDistDir,
@@ -136,29 +141,41 @@ function assertServerBuildOutput() {
   }
 }
 
-try {
-  cleanServerWindowsDist()
-  run(process.execPath, [join(projectRoot, 'scripts', 'verify-windows-installer-contract.cjs')])
-  run(command('npm'), ['run', 'build:server'])
-  assertServerBuildOutput()
-  prepareWindowsNativeModules()
-  run(command('npx'), [
-    'electron-builder',
-    '--win',
-    '--x64',
-    '--config',
-    'electron-builder.server.yml',
-    '--publish',
-    'never'
-  ])
-  assertWindowsNativeModule(packagedNativePath)
-  run(process.execPath, [
-    join(projectRoot, 'scripts', 'verify-win-native-modules.cjs'),
-    join('dist-server', 'win-unpacked'),
-    'akaAgent Zalo Server.exe',
-    'server'
-  ])
-  console.log('Verified packaged better-sqlite3 Windows x64 native module for akaAgent Zalo Server.')
-} finally {
-  restoreHostNativeModules()
+async function main() {
+  let privatePackage
+  try {
+    if (privateBuild) privatePackage = await preparePrivateServerPackage(projectRoot, serverDistDir)
+    else cleanServerWindowsDist()
+    run(process.execPath, [join(projectRoot, 'scripts', 'verify-windows-installer-contract.cjs')])
+    run(command('npm'), ['run', 'build:server'])
+    assertServerBuildOutput()
+    prepareWindowsNativeModules()
+    run(command('npx'), [
+      'electron-builder',
+      '--win',
+      '--x64',
+      '--config',
+      privatePackage?.configPath || 'electron-builder.server.yml',
+      '--publish',
+      'never'
+    ])
+    assertWindowsNativeModule(packagedNativePath)
+    run(process.execPath, [
+      join(projectRoot, 'scripts', 'verify-win-native-modules.cjs'),
+      join(serverDistDir, 'win-unpacked'),
+      'akaAgent Zalo Server.exe',
+      'server'
+    ])
+    if (privatePackage) {
+      const installedKey = readFileSync(join(serverDistDir, 'win-unpacked', 'resources', 'server-private', resourceName))
+      if (!installedKey.equals(readFileSync(privatePackage.keyFile))) throw new Error('Private Server credential resource mismatch.')
+      console.log(`Private installer verified. Keep this directory confidential: ${serverDistDir}`)
+    }
+    console.log('Verified packaged better-sqlite3 Windows x64 native module for akaAgent Zalo Server.')
+  } finally {
+    try { restoreHostNativeModules() }
+    finally { privatePackage?.cleanup() }
+  }
 }
+
+main().catch(error => { console.error(error instanceof Error ? error.message : 'Server build failed.'); process.exitCode = 1 })

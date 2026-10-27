@@ -1,0 +1,12 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "staff_acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,crm_interest_worker=r/postgres}",
+  "staff_rls": false,
+  "checked_at": "2026-10-27T05:05:18.639588+00:00",
+  "source_drift": [],
+  "new_rpc_absent": true,
+  "staff_policies": 0,
+  "organization_acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,anon=r/postgres,authenticated=r/postgres,crm_interest_worker=r/postgres}",
+  "organization_rls": true,
+  "new_objects_absent": true
+}

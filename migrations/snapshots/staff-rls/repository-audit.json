@@ -1,0 +1,597 @@
+[
+  {
+    "signature": "aka_agent_advance_zalo_server_multi_daily_slot(bigint,bigint,bigint,timestamp with time zone)",
+    "sourceChecksum": "74d42a41077050f99e82b33ae75d76f3",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_check_campaign_daily_boundary(bigint,bigint,bigint,text,date)",
+    "sourceChecksum": "8ea465944efda08fb2e89da9589e065a",
+    "mentions": [
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_check_daily_maintenance_barrier(bigint,text,date)",
+    "sourceChecksum": "087a04ad6f98cc2cff5267dabcead7cd",
+    "mentions": [
+      "migrations/migration_v247_preserve_daily_schedule_without_next_day_delay.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/tests/migration_v247_preserve_daily_schedule_without_next_day_delay_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+    "matchingBodyFile": "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)",
+    "sourceChecksum": "b721f2bf997eef62f72eaf5e2728fb8c",
+    "mentions": [
+      "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v283_account_operation_cleanup.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v319_facebook_login_smoke.sql",
+      "migrations/tests/migration_v320_facebook_existing_account_login_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_claim_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,date,uuid,bigint[])",
+    "sourceChecksum": "bc35534b174333a0012c3bf84ca81ef2",
+    "mentions": [
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v268_campaign_failure_cleanup.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/tests/migration_v387_facebook_random_run_rollback.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v391_revert_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v389_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v387_facebook_random_run.sql",
+    "matchingBodyFile": "migrations/migration_v387_facebook_random_run.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)",
+    "sourceChecksum": "dc5d650ca0f8e63c00ce97c4606ef245",
+    "mentions": [
+      "migrations/migration_v340_browser_run_limits.sql",
+      "migrations/migration_v397_campaign_shared_schedule.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/tests/migration_v387_facebook_random_run_rollback.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v391_revert_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v389_facebook_random_run_lifecycle_rollback.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v397_campaign_shared_schedule.sql",
+    "matchingBodyFile": "migrations/migration_v397_campaign_shared_schedule.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_claim_zalo_server_run_unit(bigint,bigint,bigint,bigint[])",
+    "sourceChecksum": "1d2e9fe42c493c523641741389496b5c",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)",
+    "sourceChecksum": "f941b9177b447ca5da721d10dacf55e8",
+    "mentions": [
+      "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+      "migrations/migration_v283_account_operation_cleanup.sql",
+      "migrations/tests/migration_v321_facebook_login_claim_cancellation_smoke.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v319_facebook_login_smoke.sql",
+      "migrations/tests/migration_v320_facebook_existing_account_login_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v283_account_operation_cleanup.sql",
+    "matchingBodyFile": "migrations/migration_v283_account_operation_cleanup.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)",
+    "sourceChecksum": "f506f8695e3e874642e3c845e103e42d",
+    "mentions": [
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v268_campaign_failure_cleanup.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v389_facebook_random_run_lifecycle_rollback.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+    "matchingBodyFile": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_facebook_account_operation(bigint,bigint,text,uuid,bigint,text)",
+    "sourceChecksum": "a5c7a6181fb3af9b1d47eeed8bc912cf",
+    "mentions": [
+      "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+      "migrations/tests/migration_v321_facebook_login_claim_cancellation_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+    "matchingBodyFile": "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_finalize_zalo_server_campaign(bigint,bigint,text,boolean)",
+    "sourceChecksum": "a56637c5ec588f1d6b20622e4096db38",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+    "sourceChecksum": "5b849d4685b10d6446b4922ed70b0219",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)",
+    "sourceChecksum": "048ea7194cd77589ffeb1820353f500c",
+    "mentions": [
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v389_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+    "matchingBodyFile": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_set_desktop_campaign_status_v2(bigint,bigint,bigint,text)",
+    "sourceChecksum": "f8b736faac1c365999f6741054f08680",
+    "mentions": [
+      "supabase/migrations/20261019133105_campaign_orphan_running_pause.sql",
+      "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+      "migrations/migration_v233_allow_logged_out_desktop_campaign_resume.sql",
+      "migrations/migration_v234_queue_desktop_campaign_while_account_running.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/tests/migration_v234_queue_desktop_campaign_while_account_running_smoke.sql",
+      "migrations/tests/campaign_orphan_running_pause_smoke.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v233_allow_logged_out_desktop_campaign_resume_smoke.sql",
+      "migrations/tests/campaign_orphan_pause_smoke.sql"
+    ],
+    "newestDefinitionFile": "supabase/migrations/20261019133105_campaign_orphan_running_pause.sql",
+    "matchingBodyFile": "supabase/migrations/20261019133105_campaign_orphan_running_pause.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_set_zalo_server_account_status(bigint,bigint,text)",
+    "sourceChecksum": "81578dbe29f58ae5736948d34e77f36c",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_set_zalo_server_campaign_status(bigint,bigint,text)",
+    "sourceChecksum": "8811f009a969f2ce8dda19df95a8c614",
+    "mentions": [
+      "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v210_preserve_zalo_server_data_group_waiting_note.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/campaign_orphan_running_pause_smoke.sql",
+      "migrations/tests/control_campaign_busy_account_audit.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v210_preserve_zalo_server_data_group_waiting_note_smoke.sql",
+      "migrations/tests/migration_v288_campaign_data_while_account_running_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/campaign_orphan_pause_smoke.sql"
+    ],
+    "newestDefinitionFile": "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+    "matchingBodyFile": "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)",
+    "sourceChecksum": "5ebb1d085d5a70a1dde3ad85268349f4",
+    "mentions": [
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v268_campaign_failure_cleanup.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/tests/migration_v387_facebook_random_run_rollback.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v391_revert_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v389_facebook_random_run_lifecycle_rollback.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v387_facebook_random_run.sql",
+    "matchingBodyFile": "migrations/migration_v387_facebook_random_run.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "aka_agent_yield_campaign_daily_boundary(bigint,bigint,bigint,text,uuid,date)",
+    "sourceChecksum": "e16a89cf47725bda16696ad5ff7272ea",
+    "mentions": [
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+    "matchingBodyFile": "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "claim_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+    "sourceChecksum": "e590eca5b11f0b258309bcd13b01e6a6",
+    "mentions": [
+      "migrations/migration_v321_facebook_login_claim_cancellation.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v283_account_operation_cleanup.sql",
+      "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v184_atomic_account_runtime_recovery_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,boolean)",
+    "sourceChecksum": "4d23cf3365d335072c4fcb01e7942dd1",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v283_account_operation_cleanup.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v407_zalo_phone_check_daily_limit_smoke.sql",
+      "migrations/tests/migration_v277_zalo_server_contact_dataset_smoke.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v288_campaign_data_while_account_running_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql",
+      "migrations/tests/migration_v287_edit_control_campaign_while_account_running_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+    "sourceChecksum": "2f925040dd0bdc49725e0cebbf07c407",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v283_account_operation_cleanup.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v407_zalo_phone_check_daily_limit_smoke.sql",
+      "migrations/tests/migration_v277_zalo_server_contact_dataset_smoke.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v288_campaign_data_while_account_running_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql",
+      "migrations/tests/migration_v287_edit_control_campaign_while_account_running_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "discover_zalo_server_account_runtime_users(bigint,integer)",
+    "sourceChecksum": "e6c30bd94f312d1e181f936ac41bd026",
+    "mentions": [
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "discover_zalo_server_runtime_users(bigint,integer)",
+    "sourceChecksum": "43b0f0efadb0fadcfbfdec7b16dcd083",
+    "mentions": [
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v182_zalo_account_runtime_type.sql",
+    "matchingBodyFile": "migrations/migration_v182_zalo_account_runtime_type.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "enqueue_campaign_zalo_realtime_group_event(bigint,bigint,bigint,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,jsonb)",
+    "sourceChecksum": "d41280de429610e294cee7a3fe425724",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v132_zalo_realtime_group_campaign.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v172_zalo_server_db_run_control.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "get_staff_zalo_account_capabilities(bigint)",
+    "sourceChecksum": "6354ae2e66d0d7624e090750ac820a2b",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "get_staff_zalo_runtime_mode(bigint)",
+    "sourceChecksum": "cf1fdfe5733240f9a52a0395e2cdefa1",
+    "mentions": [
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v179_zalo_show_web_runtime.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v218_zalo_web_product_16_and_18_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v305_staff_management.sql",
+    "matchingBodyFile": "migrations/migration_v305_staff_management.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "inspect_staff_zalo_running_state(bigint)",
+    "sourceChecksum": "a84efaee5acdf271c6b1a50c4fce1428",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "normalize_legacy_zalo_account_server_owner()",
+    "sourceChecksum": "331a13b1e8fcf0f1cc0eacb60afd756d",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "recover_server_zalo_running_state(bigint,text,boolean)",
+    "sourceChecksum": "d465015c7cd383fbe37f44b9aed404d9",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "release_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+    "sourceChecksum": "8b5a01bc1606fca27eeff6fd5e27e08b",
+    "mentions": [
+      "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v184_atomic_account_runtime_recovery_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+    "matchingBodyFile": "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text)",
+    "sourceChecksum": "c8962dc3218edc9c1a42567bd800ebaa",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v277_zalo_server_contact_dataset_smoke.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+    "sourceChecksum": "b32f324928cef0699697f259b3899c75",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v277_zalo_server_contact_dataset_smoke.sql",
+      "migrations/tests/migration_v283_account_operation_cleanup_smoke.sql",
+      "migrations/tests/migration_v305_staff_management_smoke.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "matchingBodyFile": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "reset_desktop_running_statuses(bigint,boolean,boolean)",
+    "sourceChecksum": "dc304ed20a0b6cab0824f9bbfbcb30c8",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v171_organization_product_zalo_runtime_mode.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+      "migrations/migration_v182_zalo_account_runtime_type.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v182_zalo_account_runtime_type_smoke.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v184_atomic_account_runtime_recovery_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v393_facebook_random_run_boundaries.sql",
+    "matchingBodyFile": "migrations/migration_v393_facebook_random_run_boundaries.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  },
+  {
+    "signature": "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)",
+    "sourceChecksum": "bfda9371f3964c1e3a0d3bccb58167b9",
+    "mentions": [
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v184_atomic_account_runtime_recovery.sql",
+      "migrations/tests/migration_v219_zalo_per_account_server_runtime_smoke.sql",
+      "migrations/tests/migration_v393_facebook_random_run_boundaries_rollback.sql",
+      "migrations/tests/migration_v231_campaign_daily_runtime_boundary_smoke.sql",
+      "migrations/tests/migration_v184_atomic_account_runtime_recovery_smoke.sql"
+    ],
+    "newestDefinitionFile": "migrations/migration_v393_facebook_random_run_boundaries.sql",
+    "matchingBodyFile": "migrations/migration_v393_facebook_random_run_boundaries.sql",
+    "transformation": "Only staff relation and its row lock moved to scoped helper/view; original invoker, predicates, other locks, ACL and configuration retained.",
+    "newestBodyDiffLines": 0
+  }
+]

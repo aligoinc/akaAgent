@@ -1,0 +1,93 @@
+{
+  "view": {
+    "acl": "{postgres=arwdDxtm/postgres,anon=r/postgres,authenticated=r/postgres,service_role=r/postgres}",
+    "owner": "postgres",
+    "options": [
+      "security_barrier=true"
+    ],
+    "checksum": "ede238aba1a0de0cebd9fa33ff183f4a"
+  },
+  "tables": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,anon=r/postgres,authenticated=r/postgres,crm_interest_worker=r/postgres}",
+      "rls": true,
+      "name": "org_organization",
+      "forceRls": false,
+      "policies": [
+        {
+          "name": "org_organization_compat_read_all",
+          "check": null,
+          "roles": [
+            "16480",
+            "16481"
+          ],
+          "using": "true",
+          "command": "r"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,anon=arwdDxtm/postgres,authenticated=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,crm_interest_worker=r/postgres}",
+      "rls": false,
+      "name": "org_staff",
+      "forceRls": false,
+      "policies": null
+    }
+  ],
+  "checked_at": "2026-10-27T05:38:35.185309+00:00",
+  "migrations": [
+    {
+      "name": "staff_rls_client_api",
+      "version": "20261027053735"
+    },
+    {
+      "name": "staff_rls_runtime_compatibility",
+      "version": "20261027053753"
+    }
+  ],
+  "legacy_status": {
+    "legacyRecoveryAllowed": true
+  },
+  "recovery_table": {
+    "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+    "rls": true,
+    "rows": 0,
+    "forceRls": false
+  },
+  "guarded_targets": 41,
+  "unmodified_drift": null,
+  "rollback_smoke_checks": 12,
+  "unmodified_functions_checked": 52,
+  "unmodified_functions_matching": 52,
+  "project_id": "cgjbsmqtfhqvttudyjzq",
+  "project_name": "akachat",
+  "phases_applied": [
+    "A",
+    "B"
+  ],
+  "phase_c_applied": false,
+  "installers_packaged": false,
+  "customer_business_rows_written": false,
+  "source_snapshot": "source.json",
+  "expected_target_snapshot": "local-target.json",
+  "dry_run": "A+B and target guard + read-only smoke executed then ROLLBACK before apply; objects absent afterward.",
+  "post_apply_smoke": "Same 12 read-only checks under anon then ROLLBACK; no customer data returned.",
+  "preserved_patches": [
+    "V397 schedule guard",
+    "V389 lifecycle/cleanup"
+  ],
+  "http_receipt": "production-http-prepare.json",
+  "sha256": {
+    "supabase/migrations/20261027044346_staff_rls_client_api.sql": "9102172db49eeddc23526323c11f2f54c8bf75da53aa847feba105ea3b7fd1f4",
+    "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql": "ef2668f87b1151e1544e29d23aea3e71a5d428af0a35aa1df6db22ce284ec636",
+    "supabase/migrations/20261027044628_staff_rls_activation.sql": "81896fd5e4d85a585769700348b2638daa56965d5794b833932279170e386eed",
+    "scripts/staff-rls/prepare-readonly-smoke.sql": "a756f29e58f72cb7bab9198915f8e8ef6e7691e78b01a688bc0ea108a18c7ad4",
+    "migrations/snapshots/staff-rls/production-http-prepare.json": "d2f2ad29c680b90ed088cce9a02b9f8264f9b0b681b9bd985d4e453a140eb690"
+  },
+  "canonical_migrations": {
+    "A": "supabase/migrations/20261027044346_staff_rls_client_api.sql",
+    "B": "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+    "C_deferred": "supabase/migrations/20261027044628_staff_rls_activation.sql"
+  },
+  "http_checks_passed": 6
+}

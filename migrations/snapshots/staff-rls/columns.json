@@ -1,0 +1,278 @@
+[
+  {
+    "name": "id",
+    "type": "bigint",
+    "not_null": true,
+    "default_expression": null
+  },
+  {
+    "name": "organization_id",
+    "type": "bigint",
+    "not_null": true,
+    "default_expression": null
+  },
+  {
+    "name": "customer_id",
+    "type": "bigint",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "name",
+    "type": "text",
+    "not_null": true,
+    "default_expression": null
+  },
+  {
+    "name": "phone",
+    "type": "text",
+    "not_null": true,
+    "default_expression": null
+  },
+  {
+    "name": "email",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "username",
+    "type": "text",
+    "not_null": true,
+    "default_expression": null
+  },
+  {
+    "name": "password",
+    "type": "text",
+    "not_null": true,
+    "default_expression": "'123456'::text"
+  },
+  {
+    "name": "is_active",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "true"
+  },
+  {
+    "name": "created_at",
+    "type": "timestamp with time zone",
+    "not_null": true,
+    "default_expression": "now()"
+  },
+  {
+    "name": "updated_at",
+    "type": "timestamp with time zone",
+    "not_null": true,
+    "default_expression": "now()"
+  },
+  {
+    "name": "device_fingerprint_hash",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "device_label",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "device_platform",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "device_bound_at",
+    "type": "timestamp with time zone",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "device_last_seen_at",
+    "type": "timestamp with time zone",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_admin",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_created_demo",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "sql_staff_id",
+    "type": "bigint",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "name_akabiz",
+    "type": "character varying",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_update_product_package",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "chat_staff_id",
+    "type": "uuid",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "akabiz_integrations",
+    "type": "jsonb",
+    "not_null": true,
+    "default_expression": "'{}'::jsonb"
+  },
+  {
+    "name": "is_super_admin",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_data_division",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "pancake",
+    "type": "bigint",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_data_division_support",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "pancake_staff_id",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_admin_akabiz",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "false"
+  },
+  {
+    "name": "use_test_workflow",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "false"
+  },
+  {
+    "name": "pancake_staff_name",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_zalo_server",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "false"
+  },
+  {
+    "name": "is_cskh_expired",
+    "type": "boolean",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "kh_hh_chia_toi_da",
+    "type": "integer",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "is_chia_kh_hh_staff_owner",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "false"
+  },
+  {
+    "name": "is_policy_accepted",
+    "type": "boolean",
+    "not_null": true,
+    "default_expression": "false"
+  },
+  {
+    "name": "policy_accepted_at",
+    "type": "timestamp with time zone",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "deleted_at",
+    "type": "timestamp with time zone",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "deleted_by_org_staff_id",
+    "type": "bigint",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "app_notification",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "device_changes_remaining",
+    "type": "integer",
+    "not_null": false,
+    "default_expression": "5"
+  },
+  {
+    "name": "aka_agent_device_fingerprint_hash",
+    "type": "text",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "expiration_date",
+    "type": "timestamp with time zone",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "max_running_zalo_web_accounts",
+    "type": "integer",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "max_running_facebook_accounts",
+    "type": "integer",
+    "not_null": false,
+    "default_expression": null
+  },
+  {
+    "name": "browser_run_limits_revision",
+    "type": "bigint",
+    "not_null": true,
+    "default_expression": "0"
+  }
+]

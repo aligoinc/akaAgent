@@ -1,8 +1,8 @@
 import { AkaBizIntegrationInfo, AkaBizIntegrationKind, AkaBizIntegrations } from '../../../shared/types'
 import { requireCurrentUser } from '../currentUser'
-import { getSupabaseClient } from '../supabaseClient'
+import { callCurrentStaffClient } from './staffClientRepository'
+import { getSupabaseClient, isTrustedServerSupabaseConfigured } from '../supabaseClient'
 
-const client = () => getSupabaseClient()
 
 const EMPTY_INTEGRATIONS: AkaBizIntegrations = {}
 
@@ -38,49 +38,28 @@ export async function getAkaBizIntegrations(): Promise<AkaBizIntegrations> {
 }
 
 export async function getAkaBizIntegrationsForStaff(staffId: number): Promise<AkaBizIntegrations> {
-  const { data, error } = await client()
-    .from('org_staff')
-    .select('akabiz_integrations')
-    .eq('id', staffId)
-    .maybeSingle()
-
-  if (error) throw new Error(`Không thể tải tích hợp akaBiz: ${error.message}`)
-  return normalizeIntegrations(data?.akabiz_integrations ?? EMPTY_INTEGRATIONS)
+  if (requireCurrentUser().staffId !== staffId) throw new Error('Không có quyền đọc tích hợp của nhân viên khác.')
+  if (isTrustedServerSupabaseConfigured()) {
+    const user = requireCurrentUser()
+    const { data, error } = await getSupabaseClient().from('org_staff').select('akabiz_integrations')
+      .eq('id', staffId).eq('organization_id', user.organizationId).eq('is_active', true)
+      .abortSignal(AbortSignal.timeout(5000)).maybeSingle()
+    if (error || !data) throw new Error('Không thể tải tích hợp akaBiz.')
+    return normalizeIntegrations(data.akabiz_integrations)
+  }
+  const staff = await callCurrentStaffClient('read')
+  return normalizeIntegrations(staff.akabiz_integrations ?? EMPTY_INTEGRATIONS)
 }
 
 export async function saveAkaBizIntegration(
   kind: AkaBizIntegrationKind,
   staff: AkaBizStaffInput
 ): Promise<AkaBizIntegrations> {
-  const user = requireCurrentUser()
-  const current = await getAkaBizIntegrationsForStaff(user.staffId)
-  const now = new Date().toISOString()
-  const nextIntegration: AkaBizIntegrationInfo = {
-    id: staff.staffId,
-    staffId: staff.staffId,
-    username: staff.username.trim(),
-    name: staff.name ?? null,
-    installPath: staff.installPath ?? null,
-    dbPath: staff.dbPath ?? null,
-    integratedAt: now
-  }
-  const next: AkaBizIntegrations = {
-    ...current,
-    [kind]: nextIntegration
-  }
-
-  const { data, error } = await client()
-    .from('org_staff')
-    .update({
-      akabiz_integrations: next,
-      updated_at: now
-    })
-    .eq('id', user.staffId)
-    .select('akabiz_integrations')
-    .maybeSingle()
-
-  if (error) throw new Error(`Không thể lưu tích hợp akaBiz: ${error.message}`)
-  return normalizeIntegrations(data?.akabiz_integrations ?? next)
+  const profile = await callCurrentStaffClient('save_integration', { kind, integration: {
+    staffId: staff.staffId, username: staff.username.trim(), name: staff.name ?? null,
+    installPath: staff.installPath ?? null, dbPath: staff.dbPath ?? null
+  } })
+  return normalizeIntegrations(profile.akabiz_integrations)
 }
 
 export interface AkaBizStaffInput {
