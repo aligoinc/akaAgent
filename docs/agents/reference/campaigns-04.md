@@ -1,0 +1,22 @@
+# Campaign và dữ liệu nghiệp vụ
+
+> Chuyển từ AGENTS.md ngày 28/10/2026, dòng 653–666. Nội dung và ràng buộc được giữ; chỉ sửa đường dẫn Markdown.
+> Trạng thái “đã/chưa apply/deploy/phát hành” bên dưới là lịch sử. Đối chiếu [CURRENT_STATE](../CURRENT_STATE.md), audit mới nhất và live trước mọi thao tác. Không coi ghi chú quyền cũ là cho phép mở lại quyền.
+
+<!-- BEGIN PRESERVED SOURCE -->
+
+**Control campaign creation**: từ [migration_v282](../../../migrations/migration_v282_queue_control_campaign_while_account_running.sql), tạo mới/tạo từ nháp qua `create_control_campaign[_v2]` không kiểm tra `account.status`; không thêm danh sách trạng thái được phép tại bước tạo và không đổi status/claim của account hoặc campaign hiện hữu. `claim_campaign_runtime` chỉ cho thực thi khi account rảnh; giữ owner/subtype/active/deleted guards và timeout 60s ở cả hai RPC tạo. Smoke rollback: [v282](../../../migrations/tests/migration_v282_queue_control_campaign_while_account_running_smoke.sql).
+
+**Rate limit** ([campaignRepository.ts:getAccountRateLimitStatus](../../../src/main/data/repositories/campaignRepository.ts)) dùng `action_code`:
+- Daily limit so với `auto_account_action_status.count_action_in_day` (reset 00:00 Asia/Saigon).
+- Hourly/window limit query `auto_campaign_details` theo `(account_id, action_code, created_at)` và đếm `counts_toward_limit=true` hoặc `counts_toward_limit IS NULL AND status IN ('thành công','thất bại')`; đừng default cột này thành `true` vì sẽ đổi nghĩa legacy/Facebook.
+- Scheduler phải peek quota/disable read-only trước claim để campaign đang bị giới hạn không chuyển sang `'đang chạy'`; peek không được tạo/reset/lock row quota. Nếu DB vẫn blocked và campaign đã có đúng note preflight hiện tại thì bỏ qua mọi write/claim; note mới hoặc thay đổi được ghi bằng CAS chỉ khi campaign vẫn `'chờ xử lý'`, đúng `updated_at` đã đọc và chưa có runtime claim/unit token, tuyệt đối không claim account chỉ để ghi note. CAS thua phải reload/broadcast row thắng mà không ghi đè hoặc release owner mới. `claim_campaign_runtime` xóa note khi claim thành công, còn kiểm tra quota authoritative sau claim/per-target vẫn phải giữ để xử lý race.
+- ActionManagerModal stores candidate quota checks in `auto_campaign_actions.limit_check_action_codes`; Campaign form auto-saves visible quota checks to `extra_settings.actionLimits.enabledActionCodes` for scheduler compatibility. `enabledActionCodes` only controls daily/window quota checks; scheduler must still enforce `auto_account_action_status.is_disable` for every executable action even when that action code is absent from `enabledActionCodes`.
+- Campaign form stores thresholds in `extra_settings.actionLimits.byActionCode[action_code]`; `rateLimitMinutes` is copied from `auto_accounts.rate_limit_minutes` per account when saving, fallback `65`; scheduler also filters out checks for campaign actions disabled by toggles such as `enableAddFriend=false`.
+- `extra_settings.actionLimits.continueWhenActionLimitReached=true` means hourly/daily quota hits can skip only that action and keep running remaining quota actions; missing/false keeps fail-fast behavior. This does not apply to action disable/error policy (`is_disable`), which always stops. Scheduler maps skipped `fb_comment`/`fb_like_post`/message/add-friend quota to workflow vars (`enableComment=false`, `enablePostLike=false`, `enableMessage=false`, `enableAddFriend=false`). For `zalo_message_phone`, `zalo_find_phone_user` is a dependency, not a continuable business action; if both selected `zalo_message_stranger` and `zalo_add_friend` are quota-limited, campaign waits even when find-phone quota remains.
+- Limit notes/logs must include the exact action name; `auto_error` messages may use `[a]`/`[action]` and `[action_code]` placeholders.
+- Khi hit limit/disable action: campaign về `'chờ xử lý'`, ghi `note`; KHÔNG đổi schedule.
+- `facebook_group_invite` runs targets as one dialog batch and only decrements `fb_group_invite` quota after checked targets submit successfully; already invited/already member/not found statuses are skipped outcomes, not bad-target errors. Form-open/runtime errors pause the campaign because they likely mean Facebook DOM changed. Submit errors pause the campaign, keep already-invited/already-member/not-found details, and reset checked targets to `chờ xử lý` without creating error details.
+
+
+<!-- END PRESERVED SOURCE -->
