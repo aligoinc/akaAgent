@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-28T09:36:15.766Z",
+  "status": "passed",
+  "checks": [
+    "baseline reproduces cross-staff raw reads and unrestricted settings write; captures sharing JSON",
+    "preflight rejects function/ACL/RLS drift; transactional rehearsal restores all metadata",
+    "all existing function bodies/config/ACL and all other relation ACL/RLS remain byte-exact",
+    "private cross-staff reads/writes denied; selected and organization sharing/export/panel JSON stay identical",
+    "real SECURITY DEFINER content/data copy remains usable and creates only recipient-owned snapshots",
+    "saving selected sharing and revoking recipient campaign sources preserve the latest live fix",
+    "owner/org/reference/tag/member manipulation and definer bypass blocked; malformed/unmapped claims fail closed",
+    "owned edits, tag synchronization, secondary-group cleanup and unchanged legacy org values remain usable",
+    "unchanged direct payloads can create all owned libraries and upsert contacts/media memberships/elements",
+    "runtime XPath reads and legitimate element/admin settings edits preserved; ordinary global edits and AI keys denied",
+    "organization/product scope and backend bypass preserved",
+    "100k contact count and first-page workload completes within unchanged 2s test budget",
+    "explicit rollback refuses drift and restores all original metadata exactly"
+  ],
+  "loadRows": 100000,
+  "loadMs": 55,
+  "writeRows": 10000,
+  "writeMs": 714,
+  "migrationSha256": "4d43a597f97e7e0f25d5facc2a2f6b8016147767c8b5b2469b54f01c9cfdb598",
+  "productionWrites": 0
+}

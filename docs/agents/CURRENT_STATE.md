@@ -1,4 +1,4 @@
-# Trạng thái đã xác nhận — cập nhật 28/10/2026, 13:42 VN
+# Trạng thái đã xác nhận — cập nhật 28/10/2026, 16:39 VN
 
 Đây là chỉ mục dựa trên receipt/audit đã có, không phải lệnh triển khai.
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
@@ -14,6 +14,7 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 | Staff privacy | `20261027180248` đã apply: staff chỉ đọc/khóa hồ sơ runtime của mình; chặn RPC quản trị từ Desktop | [staff self access](../DESKTOP_STAFF_SELF_ACCESS.md) |
 | Danh sách chia sẻ | `20261027181132` đã apply: giữ ID+tên staff hoạt động/cùng org để chọn người nhận; không trả profile/credentials người khác | [directory](../DESKTOP_STAFF_SELF_ACCESS.md) |
 | Account/campaign ownership | `20261027185059` đã apply: scope theo staff token, 19 restrictive policy, guard RPC/trigger; giữ backend và chia sẻ nhóm | [ownership](../DESKTOP_ACCOUNT_CAMPAIGN_OWNERSHIP.md) |
+| Thư viện dữ liệu/settings/element/org — V436 | `20261028093922` đã apply: dữ liệu riêng theo staff, giữ chia sẻ qua nhóm/RPC; settings chỉ admin, element chỉ admin hoặc own nonbuiltin; org/gói thu hẹp. 23 restrictive policy, 11 guard, không đổi app/timeout/anon. Secret upload/proxy còn giữ do client hiện tại cần | [phạm vi và kiểm chứng](../DESKTOP_DATA_PRIVACY_V436.md), [receipt](../../migrations/snapshots/desktop-data-privacy-v436/apply-receipt.json) |
 | Thu hồi chia sẻ | `20261028064138` đã apply 13:41:38 VN: sửa khóa nội bộ để chủ nhóm dừng source của người mất quyền, giữ direct cross-staff denial | [audit](../GROUP_SHARING_REVOKE_OWNERSHIP.md), [receipt](../../migrations/snapshots/group-sharing-revoke-ownership/apply-receipt.json) |
 | DeepSeek setting | `20261027182912` đã apply: Desktop không đọc/ghi/đổi tên dòng `ai.deepseek.api_key`; backend và settings khác giữ nguyên | [DeepSeek block](../DESKTOP_DEEPSEEK_SETTING_BLOCK.md) |
 | Block/workflow definitions | `20261027191229` đã apply: Desktop kể cả admin mất quyền ghi `auto_blocks`/`auto_workflows`, giữ SELECT/backend; không suy rộng sang element/XPath/legacy | [receipt](../../migrations/snapshots/desktop-block-workflow-readonly/apply-receipt.json) |

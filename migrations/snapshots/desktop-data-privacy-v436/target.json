@@ -1,0 +1,1286 @@
+{
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definer": true,
+      "signature": "private.private.aka_agent_desktop_data_context()",
+      "definition": "1c661248ef952acb98ee2a2082cf8bf8",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definer": true,
+      "signature": "private.private.aka_agent_desktop_shared_content_groups()",
+      "definition": "ce9391404723fb4355bd113d84a7159d",
+      "volatility": "s"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "definer": true,
+      "signature": "private.private.aka_agent_guard_desktop_data_write()",
+      "definition": "df137ce894beaf837f8862138d385734",
+      "volatility": "v"
+    }
+  ],
+  "relations": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_account_contact_group_members",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "group_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "contact_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "change_revision",
+          null
+        ],
+        [
+          "primary_origin_id",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_account_contact_groups",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "account_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "contact_type",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "purpose",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "color",
+          null
+        ],
+        [
+          "sort_order",
+          null
+        ],
+        [
+          "revision",
+          null
+        ],
+        [
+          "dataset_sync_mode",
+          null
+        ],
+        [
+          "dataset_sync_key",
+          null
+        ],
+        [
+          "data_type_category_item_id",
+          null
+        ],
+        [
+          "note",
+          null
+        ],
+        [
+          "bound_zalo_account_id",
+          null
+        ],
+        [
+          "sharing_scope",
+          null
+        ],
+        [
+          "sharing_revision",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_account_contacts",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "account_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "contact_type",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "uid",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "url",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "extra_data",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "requires_post_approval",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_joined",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_friend",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "zalo_user_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "zalo_group_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "akabiz_tag_ids",
+          null
+        ],
+        [
+          "flatform_type",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "phone",
+          null
+        ],
+        [
+          "email",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_contact_tags",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=w/postgres}"
+        ],
+        [
+          "auto_account_id",
+          null
+        ],
+        [
+          "color",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_content_groups",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "description",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "stt",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_active",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=w/postgres}"
+        ],
+        [
+          "crm_type_ids",
+          null
+        ],
+        [
+          "product_ids",
+          null
+        ],
+        [
+          "action_ids",
+          null
+        ],
+        [
+          "industry_ids",
+          null
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "sharing_scope",
+          null
+        ],
+        [
+          "sharing_revision",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_content_templates",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "content",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=w/postgres}"
+        ],
+        [
+          "group_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "content_type_id",
+          null
+        ],
+        [
+          "image_urls",
+          null
+        ],
+        [
+          "channels",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "base_content_html",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "channel_image_urls",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "crm_type_ids",
+          null
+        ],
+        [
+          "product_ids",
+          null
+        ],
+        [
+          "action_ids",
+          null
+        ],
+        [
+          "industry_ids",
+          null
+        ],
+        [
+          "secondary_group_ids",
+          "{aka_agent_desktop=w/postgres}"
+        ],
+        [
+          "youtube_title",
+          null
+        ],
+        [
+          "youtube_description",
+          null
+        ],
+        [
+          "youtube_url",
+          null
+        ],
+        [
+          "youtube_created_at",
+          null
+        ],
+        [
+          "youtube_video_id",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=rd/postgres}",
+      "rls": true,
+      "name": "auto_elements",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "xpath",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "description",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "category",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_builtin",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=rw/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_media_files",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "provider",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "original_name",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "local_path",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "cloud_url",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "object_key",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "mime_type",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "size_bytes",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=w/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=w/postgres}"
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=ard/postgres,aka_agent_desktop=rd/postgres}",
+      "rls": true,
+      "name": "auto_media_group_items",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "group_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "media_file_id",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "sort_order",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "created_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=arw/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_media_groups",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_delete",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "staff_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "organization_id",
+          "{aka_agent_desktop=a/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=w/postgres}"
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_system_settings",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "key",
+          "{aka_agent_desktop=aw/postgres,anon=r/postgres}"
+        ],
+        [
+          "value",
+          "{aka_agent_desktop=aw/postgres,anon=r/postgres}"
+        ],
+        [
+          "description",
+          "{aka_agent_desktop=aw/postgres}"
+        ],
+        [
+          "is_secret",
+          "{aka_agent_desktop=aw/postgres,anon=r/postgres}"
+        ],
+        [
+          "is_active",
+          "{aka_agent_desktop=aw/postgres,anon=r/postgres}"
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          "{aka_agent_desktop=aw/postgres}"
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,crm_interest_worker=r/postgres}",
+      "rls": true,
+      "name": "org_organization",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          "{aka_agent_desktop=r/postgres}"
+        ],
+        [
+          "customer_id",
+          null
+        ],
+        [
+          "name",
+          "{aka_agent_desktop=r/postgres}"
+        ],
+        [
+          "phone",
+          null
+        ],
+        [
+          "email",
+          null
+        ],
+        [
+          "sql_account_id",
+          null
+        ],
+        [
+          "staff_admin_id",
+          "{aka_agent_desktop=r/postgres}"
+        ],
+        [
+          "max_staff",
+          null
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "updated_at",
+          null
+        ],
+        [
+          "is_admin_akabiz",
+          "{aka_agent_desktop=r/postgres}"
+        ],
+        [
+          "staff_id_created",
+          null
+        ],
+        [
+          "staff_id_owner",
+          null
+        ],
+        [
+          "demo_created_by",
+          null
+        ],
+        [
+          "first_sale_by",
+          null
+        ],
+        [
+          "demo_created_at",
+          null
+        ],
+        [
+          "first_sale_at",
+          null
+        ],
+        [
+          "staff_duration_days",
+          null
+        ],
+        [
+          "use_staff_expiration",
+          null
+        ],
+        [
+          "use_new_zalo_runtime",
+          null
+        ]
+      ],
+      "options": null
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,crm_interest_worker=r/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "org_organization_product",
+      "force": false,
+      "schema": "public",
+      "columns": [
+        [
+          "id",
+          null
+        ],
+        [
+          "organization_id",
+          null
+        ],
+        [
+          "product_package_id",
+          null
+        ],
+        [
+          "organization_phone",
+          null
+        ],
+        [
+          "organization_email",
+          null
+        ],
+        [
+          "product_id",
+          null
+        ],
+        [
+          "product_name",
+          null
+        ],
+        [
+          "package_name",
+          null
+        ],
+        [
+          "package_type",
+          null
+        ],
+        [
+          "max_accounts",
+          null
+        ],
+        [
+          "max_staff",
+          null
+        ],
+        [
+          "duration_days",
+          null
+        ],
+        [
+          "purchase_date",
+          null
+        ],
+        [
+          "trial_start_date",
+          null
+        ],
+        [
+          "expiration_date",
+          null
+        ],
+        [
+          "created_at",
+          null
+        ],
+        [
+          "is_deleted",
+          null
+        ],
+        [
+          "updated_at",
+          null
+        ],
+        [
+          "created_by",
+          null
+        ],
+        [
+          "updated_by",
+          null
+        ],
+        [
+          "is_paid",
+          null
+        ],
+        [
+          "is_lock",
+          null
+        ],
+        [
+          "max_sends_per_day",
+          null
+        ],
+        [
+          "is_zalo_server",
+          null
+        ],
+        [
+          "is_zalo_show_web",
+          null
+        ],
+        [
+          "is_chat_sync",
+          null
+        ],
+        [
+          "demo_created_by",
+          null
+        ],
+        [
+          "first_sale_by",
+          null
+        ],
+        [
+          "demo_created_at",
+          null
+        ],
+        [
+          "first_sale_at",
+          null
+        ]
+      ],
+      "options": null
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "ALL",
+      "qual": "(EXISTS ( SELECT 1\n   FROM auto_account_contact_groups g\n  WHERE ((g.id = auto_account_contact_group_members.group_id) AND (g.staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)))))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_account_contact_group_members",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM auto_account_contact_groups g\n  WHERE ((g.id = auto_account_contact_group_members.group_id) AND (g.staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)))))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_account_contact_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_account_contacts",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_contact_tags",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_delete",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_insert",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) OR (id IN ( SELECT unnest(private.aka_agent_desktop_shared_content_groups()) AS unnest)))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_select",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_update",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_templates",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_delete",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_templates",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_insert",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) OR (EXISTS ( SELECT 1\n   FROM auto_content_groups g\n  WHERE ((g.id = auto_content_templates.group_id) AND (g.id IN ( SELECT unnest(private.aka_agent_desktop_shared_content_groups()) AS unnest)) AND (g.staff_id = auto_content_templates.staff_id) AND (g.organization_id = auto_content_templates.organization_id) AND g.is_active AND (NOT auto_content_templates.is_delete)))))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_templates",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_select",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_content_templates",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_update",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "(COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false) OR ((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) AND (NOT COALESCE(is_builtin, false))))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_elements",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_owner_delete",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_elements",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_owner_insert",
+      "schemaname": "public",
+      "with_check": "(COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false) OR ((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) AND (NOT COALESCE(is_builtin, false))))"
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "(COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false) OR ((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) AND (NOT COALESCE(is_builtin, false))))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_elements",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_owner_update",
+      "schemaname": "public",
+      "with_check": "(COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false) OR ((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) AND (NOT COALESCE(is_builtin, false))))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_media_files",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(EXISTS ( SELECT 1\n   FROM auto_media_groups g\n  WHERE ((g.id = auto_media_group_items.group_id) AND (g.staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)))))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_media_group_items",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM auto_media_groups g\n  WHERE ((g.id = auto_media_group_items.group_id) AND (g.staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)))))"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_media_groups",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_all",
+      "schemaname": "public",
+      "with_check": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))"
+    },
+    {
+      "cmd": "DELETE",
+      "qual": "COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false)",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_system_settings",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_admin_delete",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "qual": null,
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_system_settings",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_admin_insert",
+      "schemaname": "public",
+      "with_check": "COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false)"
+    },
+    {
+      "cmd": "UPDATE",
+      "qual": "COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false)",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "auto_system_settings",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_admin_update",
+      "schemaname": "public",
+      "with_check": "COALESCE(( SELECT aka_agent_desktop_data_context.system_admin\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)), false)"
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "((id = ( SELECT aka_agent_desktop_data_context.organization_id\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin))) OR (is_admin_akabiz IS TRUE))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "org_organization",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_select",
+      "schemaname": "public",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "qual": "(organization_id = ( SELECT aka_agent_desktop_data_context.organization_id\n   FROM private.aka_agent_desktop_data_context() aka_agent_desktop_data_context(staff_id, organization_id, system_admin)))",
+      "roles": [
+        "aka_agent_desktop"
+      ],
+      "tablename": "org_organization_product",
+      "permissive": "RESTRICTIVE",
+      "policyname": "v436_scope_select",
+      "schemaname": "public",
+      "with_check": null
+    }
+  ],
+  "triggers": [
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_account_contact_group_members",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_account_contact_group_members FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_account_contact_groups",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_account_contact_groups FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_account_contacts",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_account_contacts FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_contact_tags",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_contact_tags FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_content_groups",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_content_groups FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_content_templates",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_content_templates FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_elements",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_elements FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_media_files",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_media_files FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_media_group_items",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_media_group_items FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_media_groups",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_media_groups FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    },
+    {
+      "name": "aaa_v436_desktop_data_owner",
+      "table": "auto_system_settings",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER aaa_v436_desktop_data_owner BEFORE INSERT OR DELETE OR UPDATE ON public.auto_system_settings FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_desktop_data_write()"
+    }
+  ]
+}
