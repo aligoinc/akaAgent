@@ -1,0 +1,747 @@
+{
+  "indexes": [
+    {
+      "indexdef": "CREATE INDEX ai_log_form_config_idx ON public.ai_log USING btree (form_config_id) WHERE (form_config_id IS NOT NULL)",
+      "indexname": "ai_log_form_config_idx",
+      "tablename": "ai_log",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX ai_log_pkey ON public.ai_log USING btree (id)",
+      "indexname": "ai_log_pkey",
+      "tablename": "ai_log",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_ai_log_campaign ON public.ai_log USING btree (campaign_id, created_at DESC) WHERE (campaign_id IS NOT NULL)",
+      "indexname": "idx_ai_log_campaign",
+      "tablename": "ai_log",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_ai_log_created_at ON public.ai_log USING btree (created_at DESC)",
+      "indexname": "idx_ai_log_created_at",
+      "tablename": "ai_log",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_ai_log_zalo_referral_lookup ON public.ai_log USING btree (using_code, block_name, node_id, created_at DESC, id DESC) WHERE (using_code = 'zalo_chat_referral_verify_v1'::text)",
+      "indexname": "idx_ai_log_zalo_referral_lookup",
+      "tablename": "ai_log",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_action_status_pkey ON public.auto_account_action_status USING btree (id)",
+      "indexname": "auto_account_action_status_pkey",
+      "tablename": "auto_account_action_status",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_action_status_unique ON public.auto_account_action_status USING btree (account_id, action_code)",
+      "indexname": "auto_account_action_status_unique",
+      "tablename": "auto_account_action_status",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_action_status_account ON public.auto_account_action_status USING btree (account_id)",
+      "indexname": "idx_auto_account_action_status_account",
+      "tablename": "auto_account_action_status",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_action_status_disable ON public.auto_account_action_status USING btree (is_disable, date_enable) WHERE (is_disable = true)",
+      "indexname": "idx_auto_account_action_status_disable",
+      "tablename": "auto_account_action_status",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_action_status_disabled_error ON public.auto_account_action_status USING btree (disabled_error_code) WHERE (disabled_error_code IS NOT NULL)",
+      "indexname": "idx_auto_account_action_status_disabled_error",
+      "tablename": "auto_account_action_status",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_error_state_pkey ON public.auto_account_error_state USING btree (id)",
+      "indexname": "auto_account_error_state_pkey",
+      "tablename": "auto_account_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_error_state_unique ON public.auto_account_error_state USING btree (account_id, action_code, error_code)",
+      "indexname": "auto_account_error_state_unique",
+      "tablename": "auto_account_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_error_state_account ON public.auto_account_error_state USING btree (account_id)",
+      "indexname": "idx_auto_account_error_state_account",
+      "tablename": "auto_account_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_groups_pkey ON public.auto_account_groups USING btree (id)",
+      "indexname": "auto_account_groups_pkey",
+      "tablename": "auto_account_groups",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_groups_staff_platform_name_unique ON public.auto_account_groups USING btree (staff_id, flatform_type, lower(name)) WHERE (is_delete = false)",
+      "indexname": "auto_account_groups_staff_platform_name_unique",
+      "tablename": "auto_account_groups",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_groups_staff_platform ON public.auto_account_groups USING btree (staff_id, flatform_type) WHERE (is_delete = false)",
+      "indexname": "idx_auto_account_groups_staff_platform",
+      "tablename": "auto_account_groups",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_account_logs_pkey ON public.auto_account_logs USING btree (id)",
+      "indexname": "auto_account_logs_pkey",
+      "tablename": "auto_account_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_account_logs_account_time ON public.auto_account_logs USING btree (account_id, created_at DESC)",
+      "indexname": "idx_auto_account_logs_account_time",
+      "tablename": "auto_account_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_accounts_pkey ON public.auto_accounts USING btree (id)",
+      "indexname": "auto_accounts_pkey",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_accounts_staff_id_idx ON public.auto_accounts USING btree (staff_id)",
+      "indexname": "auto_accounts_staff_id_idx",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_account_group_id ON public.auto_accounts USING btree (account_group_id) WHERE (is_delete = false)",
+      "indexname": "idx_auto_accounts_account_group_id",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_facebook_uid ON public.auto_accounts USING btree (staff_id, facebook_uid) WHERE ((flatform_type = 'facebook'::text) AND (is_delete = false))",
+      "indexname": "idx_auto_accounts_facebook_uid",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_proxy_id ON public.auto_accounts USING btree (proxy_id) WHERE (is_delete = false)",
+      "indexname": "idx_auto_accounts_proxy_id",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_zalo_account_id ON public.auto_accounts USING btree (zalo_account_id)",
+      "indexname": "idx_auto_accounts_zalo_account_id",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_zalo_runtime_owner ON public.auto_accounts USING btree (staff_id, is_zalo_server, is_zalo_show_web, id) WHERE ((lower(btrim(COALESCE(flatform_type, ''::text))) = 'zalo'::text) AND (COALESCE(is_delete, false) = false))",
+      "indexname": "idx_auto_accounts_zalo_runtime_owner",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_accounts_zalo_runtime_type ON public.auto_accounts USING btree (staff_id, is_zalo_show_web, id) WHERE ((lower(btrim(COALESCE(flatform_type, ''::text))) = 'zalo'::text) AND (COALESCE(is_delete, false) = false))",
+      "indexname": "idx_auto_accounts_zalo_runtime_type",
+      "tablename": "auto_accounts",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_details_pkey ON public.auto_campaign_details USING btree (id)",
+      "indexname": "auto_campaign_details_pkey",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_campaign_engagement_operation ON public.auto_campaign_details USING btree (campaign_id, account_id, ((data #>> '{zaloEngagementSource,operationId}'::text[]))) WHERE ((data #>> '{zaloEngagementSource,operationId}'::text[]) IS NOT NULL)",
+      "indexname": "auto_campaign_engagement_operation",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_campaign_engagement_source ON public.auto_campaign_details USING btree (id) WHERE (((data ->> 'zaloEngagementPending'::text) = 'true'::text) AND (is_delete = false))",
+      "indexname": "auto_campaign_engagement_source",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_detail_action_status_policy_id_idx ON public.auto_campaign_details USING btree (action_status_policy_id) WHERE (action_status_policy_id IS NOT NULL)",
+      "indexname": "auto_detail_action_status_policy_id_idx",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_detail_committed_delivery_v367 ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE ((policy_snapshot ->> 'operationState'::text) = 'committed'::text)",
+      "indexname": "auto_detail_committed_delivery_v367",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_detail_result_key_uq ON public.auto_campaign_details USING btree (result_key) WHERE (result_key IS NOT NULL)",
+      "indexname": "auto_detail_result_key_uq",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_detail_status_id_idx ON public.auto_campaign_details USING btree (status_id) WHERE (status_id IS NOT NULL)",
+      "indexname": "auto_detail_status_id_idx",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_detail_sub_status_id_idx ON public.auto_campaign_details USING btree (sub_status_id) WHERE (sub_status_id IS NOT NULL)",
+      "indexname": "auto_detail_sub_status_id_idx",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaign_details_action_rate ON public.auto_campaign_details USING btree (account_id, action_code, created_at) WHERE ((is_delete = false) AND (action_code IS NOT NULL))",
+      "indexname": "idx_auto_campaign_details_action_rate",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaign_details_automation_detail ON public.auto_campaign_details USING btree (auto_automation_detail_id, created_at, id) WHERE (auto_automation_detail_id IS NOT NULL)",
+      "indexname": "idx_auto_campaign_details_automation_detail",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaign_details_automation_status ON public.auto_campaign_details USING btree (campaign_id, status, action_code, created_at DESC) WHERE (is_delete = false)",
+      "indexname": "idx_auto_campaign_details_automation_status",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_account_id ON public.auto_campaign_details USING btree (account_id)",
+      "indexname": "idx_campaign_details_account_id",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_campaign_id ON public.auto_campaign_details USING btree (campaign_id)",
+      "indexname": "idx_campaign_details_campaign_id",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_delivery_cooldown ON public.auto_campaign_details USING btree (account_id, action_code, created_at DESC, input_data_id) WHERE (status = ANY (ARRAY['thành công'::text, 'đã gửi'::text, 'đã nhận'::text, 'đã xem'::text, 'đã click'::text]))",
+      "indexname": "idx_campaign_details_delivery_cooldown",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_input_data_id ON public.auto_campaign_details USING btree (input_data_id)",
+      "indexname": "idx_campaign_details_input_data_id",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_page ON public.auto_campaign_details USING btree (campaign_id, created_at, id) WHERE (is_delete = false)",
+      "indexname": "idx_campaign_details_page",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_details_rate_limit ON public.auto_campaign_details USING btree (account_id, action_name, created_at)",
+      "indexname": "idx_campaign_details_rate_limit",
+      "tablename": "auto_campaign_details",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_error_state_campaign_unique ON public.auto_campaign_error_state USING btree (campaign_id)",
+      "indexname": "auto_campaign_error_state_campaign_unique",
+      "tablename": "auto_campaign_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_error_state_pkey ON public.auto_campaign_error_state USING btree (id)",
+      "indexname": "auto_campaign_error_state_pkey",
+      "tablename": "auto_campaign_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaign_error_state_campaign ON public.auto_campaign_error_state USING btree (campaign_id)",
+      "indexname": "idx_auto_campaign_error_state_campaign",
+      "tablename": "auto_campaign_error_state",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_input_data_pkey ON public.auto_campaign_input_data USING btree (id)",
+      "indexname": "auto_campaign_input_data_pkey",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_input_data_campaign_id ON public.auto_campaign_input_data USING btree (campaign_id)",
+      "indexname": "idx_campaign_input_data_campaign_id",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_input_data_input_id ON public.auto_campaign_input_data USING btree (input_id)",
+      "indexname": "idx_campaign_input_data_input_id",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_input_data_phone_carrier_status_schedule ON public.auto_campaign_input_data USING btree (campaign_id, phone_carrier, status, schedule) WHERE ((is_delete = false) AND (phone_carrier IS NOT NULL))",
+      "indexname": "idx_campaign_input_data_phone_carrier_status_schedule",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_input_data_progress_live ON public.auto_campaign_input_data USING btree (campaign_id, status) WHERE (is_delete = false)",
+      "indexname": "idx_campaign_input_data_progress_live",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_input_data_status ON public.auto_campaign_input_data USING btree (status) WHERE (is_delete = false)",
+      "indexname": "idx_campaign_input_data_status",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_inputs_semantic_type ON public.auto_campaign_input_data USING btree (campaign_id, data_type_category_item_id, id) WHERE (COALESCE(is_delete, false) = false)",
+      "indexname": "idx_campaign_inputs_semantic_type",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_sms_input_data_campaign_status_schedule ON public.auto_campaign_input_data USING btree (campaign_id, status, schedule, created_at, id) WHERE (COALESCE(is_delete, false) = false)",
+      "indexname": "idx_sms_input_data_campaign_status_schedule",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_auto_campaign_input_data_automation_detail ON public.auto_campaign_input_data USING btree (auto_automation_detail_id) WHERE (auto_automation_detail_id IS NOT NULL)",
+      "indexname": "uq_auto_campaign_input_data_automation_detail",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_auto_campaign_input_data_canonical_target ON public.auto_campaign_input_data USING btree (campaign_id, canonical_target_key) WHERE ((canonical_target_key IS NOT NULL) AND (COALESCE(is_delete, false) = false))",
+      "indexname": "uq_auto_campaign_input_data_canonical_target",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_auto_campaign_input_data_control_append ON public.auto_campaign_input_data USING btree (campaign_id, control_append_idempotency_key, control_append_row_index) WHERE (control_append_idempotency_key IS NOT NULL)",
+      "indexname": "uq_auto_campaign_input_data_control_append",
+      "tablename": "auto_campaign_input_data",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_inputs_pkey ON public.auto_campaign_inputs USING btree (id)",
+      "indexname": "auto_campaign_inputs_pkey",
+      "tablename": "auto_campaign_inputs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_inputs_campaign_id ON public.auto_campaign_inputs USING btree (campaign_id)",
+      "indexname": "idx_campaign_inputs_campaign_id",
+      "tablename": "auto_campaign_inputs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_inputs_status ON public.auto_campaign_inputs USING btree (status) WHERE (is_delete = false)",
+      "indexname": "idx_campaign_inputs_status",
+      "tablename": "auto_campaign_inputs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_run_events_pkey ON public.auto_campaign_run_events USING btree (id)",
+      "indexname": "auto_campaign_run_events_pkey",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_campaign_time ON public.auto_campaign_run_events USING btree (campaign_id, created_at, id)",
+      "indexname": "idx_campaign_run_events_campaign_time",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_event_type ON public.auto_campaign_run_events USING btree (event_type)",
+      "indexname": "idx_campaign_run_events_event_type",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_input_data_time ON public.auto_campaign_run_events USING btree (campaign_input_data_id, created_at, id)",
+      "indexname": "idx_campaign_run_events_input_data_time",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_run_sequence ON public.auto_campaign_run_events USING btree (run_id, sequence_no, id)",
+      "indexname": "idx_campaign_run_events_run_sequence",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_target_type ON public.auto_campaign_run_events USING btree (target_type)",
+      "indexname": "idx_campaign_run_events_target_type",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_run_events_user_visible ON public.auto_campaign_run_events USING btree (campaign_id, created_at, id) WHERE (is_user_visible = true)",
+      "indexname": "idx_campaign_run_events_user_visible",
+      "tablename": "auto_campaign_run_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_zalo_realtime_group_ev_campaign_id_target_uid_key ON public.auto_campaign_zalo_realtime_group_events USING btree (campaign_id, target_uid)",
+      "indexname": "auto_campaign_zalo_realtime_group_ev_campaign_id_target_uid_key",
+      "tablename": "auto_campaign_zalo_realtime_group_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaign_zalo_realtime_group_events_pkey ON public.auto_campaign_zalo_realtime_group_events USING btree (id)",
+      "indexname": "auto_campaign_zalo_realtime_group_events_pkey",
+      "tablename": "auto_campaign_zalo_realtime_group_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_zalo_realtime_group_events_account ON public.auto_campaign_zalo_realtime_group_events USING btree (account_id, created_at DESC)",
+      "indexname": "idx_campaign_zalo_realtime_group_events_account",
+      "tablename": "auto_campaign_zalo_realtime_group_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_campaign_zalo_realtime_group_events_campaign ON public.auto_campaign_zalo_realtime_group_events USING btree (campaign_id, created_at DESC)",
+      "indexname": "idx_campaign_zalo_realtime_group_events_campaign",
+      "tablename": "auto_campaign_zalo_realtime_group_events",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_campaigns_pkey ON public.auto_campaigns USING btree (id)",
+      "indexname": "auto_campaigns_pkey",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX auto_campaigns_staff_id_idx ON public.auto_campaigns USING btree (staff_id)",
+      "indexname": "auto_campaigns_staff_id_idx",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaigns_data_group ON public.auto_campaigns USING btree (data_group_id, status, schedule, id) WHERE ((data_target_source_mode = 'data_group'::text) AND (COALESCE(is_delete, false) = false))",
+      "indexname": "idx_auto_campaigns_data_group",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaigns_last_run_at ON public.auto_campaigns USING btree (staff_id, last_run_at) WHERE (is_delete = false)",
+      "indexname": "idx_auto_campaigns_last_run_at",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_campaigns_secondary_account_id ON public.auto_campaigns USING btree (secondary_account_id) WHERE (secondary_account_id IS NOT NULL)",
+      "indexname": "idx_auto_campaigns_secondary_account_id",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_sms_campaigns_account_status_schedule ON public.auto_campaigns USING btree (account_id, action_id, status, schedule, id) WHERE ((COALESCE(is_delete, false) = false) AND (action_id = 'sms_send'::text))",
+      "indexname": "idx_sms_campaigns_account_status_schedule",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_auto_campaigns_control_idempotency ON public.auto_campaigns USING btree (staff_id, control_idempotency_key) WHERE (control_idempotency_key IS NOT NULL)",
+      "indexname": "uq_auto_campaigns_control_idempotency",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX uq_auto_campaigns_creation_bundle_child ON public.auto_campaigns USING btree (creation_bundle_id, creation_bundle_child_index) WHERE ((creation_bundle_id IS NOT NULL) AND (creation_bundle_child_index IS NOT NULL))",
+      "indexname": "uq_auto_campaigns_creation_bundle_child",
+      "tablename": "auto_campaigns",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_email_link_trackings_pkey ON public.auto_email_link_trackings USING btree (id)",
+      "indexname": "auto_email_link_trackings_pkey",
+      "tablename": "auto_email_link_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX idx_auto_email_link_trackings_click_token ON public.auto_email_link_trackings USING btree (click_token)",
+      "indexname": "idx_auto_email_link_trackings_click_token",
+      "tablename": "auto_email_link_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_email_link_trackings_message ON public.auto_email_link_trackings USING btree (message_tracking_id, link_index) WHERE (is_delete = false)",
+      "indexname": "idx_auto_email_link_trackings_message",
+      "tablename": "auto_email_link_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_email_message_trackings_pkey ON public.auto_email_message_trackings USING btree (id)",
+      "indexname": "auto_email_message_trackings_pkey",
+      "tablename": "auto_email_message_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_email_message_trackings_campaign ON public.auto_email_message_trackings USING btree (campaign_id, created_at) WHERE (is_delete = false)",
+      "indexname": "idx_auto_email_message_trackings_campaign",
+      "tablename": "auto_email_message_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_email_message_trackings_detail ON public.auto_email_message_trackings USING btree (campaign_detail_id) WHERE (is_delete = false)",
+      "indexname": "idx_auto_email_message_trackings_detail",
+      "tablename": "auto_email_message_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX idx_auto_email_message_trackings_open_token ON public.auto_email_message_trackings USING btree (open_token)",
+      "indexname": "idx_auto_email_message_trackings_open_token",
+      "tablename": "auto_email_message_trackings",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_proxies_pkey ON public.auto_proxies USING btree (id)",
+      "indexname": "auto_proxies_pkey",
+      "tablename": "auto_proxies",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_proxies_staff_name_unique ON public.auto_proxies USING btree (staff_id, lower(name)) WHERE (is_delete = false)",
+      "indexname": "auto_proxies_staff_name_unique",
+      "tablename": "auto_proxies",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_auto_proxies_staff ON public.auto_proxies USING btree (staff_id) WHERE (is_delete = false)",
+      "indexname": "idx_auto_proxies_staff",
+      "tablename": "auto_proxies",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_run_steps_pkey ON public.auto_run_steps USING btree (id)",
+      "indexname": "auto_run_steps_pkey",
+      "tablename": "auto_run_steps",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_run_steps_block_name ON public.auto_run_steps USING btree (run_id, block_name)",
+      "indexname": "idx_run_steps_block_name",
+      "tablename": "auto_run_steps",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_run_steps_node ON public.auto_run_steps USING btree (run_id, node_id)",
+      "indexname": "idx_run_steps_node",
+      "tablename": "auto_run_steps",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_run_steps_run ON public.auto_run_steps USING btree (run_id)",
+      "indexname": "idx_run_steps_run",
+      "tablename": "auto_run_steps",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_runs_pkey ON public.auto_runs USING btree (id)",
+      "indexname": "auto_runs_pkey",
+      "tablename": "auto_runs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_runs_campaign ON public.auto_runs USING btree (campaign_id)",
+      "indexname": "idx_runs_campaign",
+      "tablename": "auto_runs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_runs_campaign_input_data ON public.auto_runs USING btree (campaign_input_data_id)",
+      "indexname": "idx_runs_campaign_input_data",
+      "tablename": "auto_runs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_runs_status ON public.auto_runs USING btree (status)",
+      "indexname": "idx_runs_status",
+      "tablename": "auto_runs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_runs_workflow ON public.auto_runs USING btree (workflow_id)",
+      "indexname": "idx_runs_workflow",
+      "tablename": "auto_runs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE UNIQUE INDEX auto_zalo_api_error_logs_pkey ON public.auto_zalo_api_error_logs USING btree (id)",
+      "indexname": "auto_zalo_api_error_logs_pkey",
+      "tablename": "auto_zalo_api_error_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_zalo_api_error_logs_account_created ON public.auto_zalo_api_error_logs USING btree (account_id, created_at DESC)",
+      "indexname": "idx_zalo_api_error_logs_account_created",
+      "tablename": "auto_zalo_api_error_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_zalo_api_error_logs_campaign_created ON public.auto_zalo_api_error_logs USING btree (campaign_id, created_at DESC)",
+      "indexname": "idx_zalo_api_error_logs_campaign_created",
+      "tablename": "auto_zalo_api_error_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_zalo_api_error_logs_normalized_code ON public.auto_zalo_api_error_logs USING btree (normalized_error_code)",
+      "indexname": "idx_zalo_api_error_logs_normalized_code",
+      "tablename": "auto_zalo_api_error_logs",
+      "schemaname": "public",
+      "tablespace": null
+    },
+    {
+      "indexdef": "CREATE INDEX idx_zalo_api_error_logs_zalo_code ON public.auto_zalo_api_error_logs USING btree (zalo_error_code)",
+      "indexname": "idx_zalo_api_error_logs_zalo_code",
+      "tablename": "auto_zalo_api_error_logs",
+      "schemaname": "public",
+      "tablespace": null
+    }
+  ],
+  "estimates": [
+    {
+      "rows": 8561,
+      "table": "auto_accounts"
+    },
+    {
+      "rows": 41731,
+      "table": "auto_campaigns"
+    },
+    {
+      "rows": 10147700,
+      "table": "auto_campaign_input_data"
+    },
+    {
+      "rows": 8542570,
+      "table": "auto_campaign_details"
+    },
+    {
+      "rows": 4282610,
+      "table": "auto_runs"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "scope": "rollback-only production trial",
+  "checked_roles": [
+    "aka_agent_desktop",
+    "service_role",
+    "anon",
+    "authenticated"
+  ],
+  "business_writes": 0,
+  "secret_values_returned": false
+}

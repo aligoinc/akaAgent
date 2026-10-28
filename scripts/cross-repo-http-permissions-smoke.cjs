@@ -1,6 +1,8 @@
 // Disposable PostgreSQL17 with captured definitions/ACLs and synthetic rows.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict')
 const {createFixture}=require('./desktop-session-rls/full-fixture.cjs')
+const {privateSecurityAsset}=require('./desktop-session-rls/private-security-assets.cjs')
+const smokeSql=privateSecurityAsset('migrations/tests/cross_repo_http_permissions_smoke.sql')
 const f=createFixture(),{sql,quote:q,root}=f
 const m=JSON.parse(fs.readFileSync(process.env.CROSS_REPO_CAPTURE || (()=>{throw Error('Set CROSS_REPO_CAPTURE to the current metadata-only catalog snapshot')})())),id=s=>'"'+s.replaceAll('"','""')+'"'
 const obj=r=>id(r.schema)+'.'+id(r.name)
@@ -68,7 +70,7 @@ try{
  pass('all existing function bodies, ACLs, config, security modes and owners unchanged');
  try { sql('BEGIN;'+migration+'ROLLBACK;');throw Error('expected repeat rejection'); }
  catch(e){assert.match(e.message,/cross_repo_http_target_already_exists/);pass('repeat apply rejected');}
- console.log(sql(fs.readFileSync(path.join(root,'migrations/tests/cross_repo_http_permissions_smoke.sql'),'utf8')));
+ console.log(sql(fs.readFileSync(smokeSql,'utf8')));
  const rollback=fs.readFileSync(path.join(root,'migrations/rollback_cross_repo_http_permissions.sql'),'utf8');
  try {sql('BEGIN;'+rollback+'ROLLBACK;');throw Error('expected rollback gate');}
  catch(e){assert.match(e.message,/cross_repo_http_rollback_requires_stopped_callers/);pass('rollback requires explicit stopped-caller gate');}

@@ -1,0 +1,151 @@
+{
+  "roles": "4d1bda0db767dd0e41d4ea12777055fa",
+  "blocks": {
+    "count": 142,
+    "checksum": "daf4447ff7c3af89f87f4a1a8ba9aa66"
+  },
+  "policies": "cb544ade92f88c3d5bdca0b034c38345",
+  "triggers": "a33a79c705d2d62488ab4f0f0b716b61",
+  "functions": "bc2e4253c49b6d1f8c7f14cb1a44041f",
+  "relations": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_blocks",
+      "force": false,
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id"
+        },
+        {
+          "acl": null,
+          "name": "name"
+        },
+        {
+          "acl": null,
+          "name": "description"
+        },
+        {
+          "acl": null,
+          "name": "icon"
+        },
+        {
+          "acl": null,
+          "name": "category"
+        },
+        {
+          "acl": null,
+          "name": "kind"
+        },
+        {
+          "acl": null,
+          "name": "system_type"
+        },
+        {
+          "acl": null,
+          "name": "code"
+        },
+        {
+          "acl": null,
+          "name": "config_schema"
+        },
+        {
+          "acl": null,
+          "name": "output_schema"
+        },
+        {
+          "acl": null,
+          "name": "default_config"
+        },
+        {
+          "acl": null,
+          "name": "is_builtin"
+        },
+        {
+          "acl": null,
+          "name": "staff_id"
+        },
+        {
+          "acl": null,
+          "name": "organization_id"
+        },
+        {
+          "acl": null,
+          "name": "created_at"
+        },
+        {
+          "acl": null,
+          "name": "updated_at"
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "name": "auto_workflows",
+      "force": false,
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id"
+        },
+        {
+          "acl": null,
+          "name": "name"
+        },
+        {
+          "acl": null,
+          "name": "description"
+        },
+        {
+          "acl": null,
+          "name": "nodes"
+        },
+        {
+          "acl": null,
+          "name": "edges"
+        },
+        {
+          "acl": null,
+          "name": "variables_schema"
+        },
+        {
+          "acl": null,
+          "name": "default_variables"
+        },
+        {
+          "acl": null,
+          "name": "is_builtin"
+        },
+        {
+          "acl": null,
+          "name": "staff_id"
+        },
+        {
+          "acl": null,
+          "name": "organization_id"
+        },
+        {
+          "acl": null,
+          "name": "created_at"
+        },
+        {
+          "acl": null,
+          "name": "updated_at"
+        }
+      ]
+    }
+  ],
+  "workflows": {
+    "count": 59,
+    "checksum": "b436bc3c60de60ac473ad065067a0664"
+  },
+  "default_acl": "144658ebc4d60130a55390aac4d8abc0",
+  "memberships": "4cd3ab569f5ae9dca471c2ee0bdad54b",
+  "other_relation_permissions": "8367aa108bf9fde07610a9b7bc4bc5fc",
+  "other_role_table_permissions": "11024ec9dec33a97140b0df34e2f6c51",
+  "other_role_column_permissions": "ba3b11e36337c5e96f3bb3eac9c481d4"
+}

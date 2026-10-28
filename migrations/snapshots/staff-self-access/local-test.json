@@ -1,0 +1,6 @@
+{
+  "checks": 12,
+  "status": "passed",
+  "fixture": "PostgreSQL 17; current metadata; synthetic identities and shared groups only",
+  "at": "2026-10-27T19:03:10.984Z"
+}

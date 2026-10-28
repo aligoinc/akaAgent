@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-27T19:12:07.694Z",
+  "checks": [
+    "source preflight refuses unexpected table or column grant state",
+    "runtime reads by ID/name and catalog reads stay identical; loaded block code still executes",
+    "Desktop insert/update/upsert/delete/truncate denied on both tables; backend update and anonymous denials retained",
+    "all other-role grants, rows, policy and runtime metadata unchanged",
+    "guarded rollback rejects drift and restores exact source permissions without data changes",
+    "apply and rollback in one transaction restore the original state",
+    "exact production apply/read/denial/rollback trial passes locally"
+  ],
+  "status": "passed"
+}

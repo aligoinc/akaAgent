@@ -1,0 +1,209 @@
+{
+  "at": "2026-10-27T18:50:23.513Z",
+  "status": "passed",
+  "checks": [
+    "preflight refuses newer live RPC changes",
+    "own/legacy rows, shared content/data, ID+name directory, backend and Chat reads preserved",
+    "direct list/ID read and updates cannot access other-staff or other-org resources",
+    "missing/malformed/unmapped token rejected; second staff sees only their account",
+    "own create/edit succeeds; foreign owner/org/primary/secondary/proxy/group/child references denied; legacy org row stays editable",
+    "privileged RPCs bind token even with valid other-staff credentials; own logging and email summaries still work",
+    "existing-client sharing recipient selection/save remains functional",
+    "every patched callable PL/pgSQL entry rejects foreign identity before privileged work",
+    "own FB/QR/Web claims, quota, phone-check/session and trusted Chat writes work; foreign session/claims/quota denied",
+    "all patched function bodies match planned live-derived checksums",
+    "guarded rollback restores exact live definitions and refuses policy/function drift",
+    "100k-input indexed local workloads retain results and finish within 2 seconds",
+    "exact production transaction/role-emulation/rollback script passes locally"
+  ],
+  "functions": [
+    {
+      "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "checksum": "f50796438b0e90ef184fa25cc4043e98"
+    },
+    {
+      "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)",
+      "checksum": "4fa056905d4fb0c264053748546f5461"
+    },
+    {
+      "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+      "checksum": "a2a5e8b256010056498af554b2ad0bb8"
+    },
+    {
+      "signature": "private.facebook_random_orphan_turns(bigint,bigint)",
+      "checksum": "2f00a8a9d3465e535332f1e97f0946b2"
+    },
+    {
+      "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+      "checksum": "50295fe0c805a2f215613182cec5b576"
+    },
+    {
+      "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+      "checksum": "379ec95f37086654c316847ce7e16ee6"
+    },
+    {
+      "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+      "checksum": "582c96e29079dc70bb706da1f4a08849"
+    },
+    {
+      "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+      "checksum": "c867e990c73a78b5ce5fbdb72634a78c"
+    },
+    {
+      "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "checksum": "462463fb5676836150ff146a5f070d84"
+    },
+    {
+      "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+      "checksum": "c125235098f1d766e97ecc06c64db17b"
+    },
+    {
+      "signature": "aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])",
+      "checksum": "119e338eb2cb3b14ce7b3f5fada89bfb"
+    },
+    {
+      "signature": "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)",
+      "checksum": "ca4ba08f2a0fc853c3cee79ac1190001"
+    },
+    {
+      "signature": "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+      "checksum": "b67d767dab4cb40df36061fbbbff2bb4"
+    },
+    {
+      "signature": "aka_agent_facebook_login(bigint,text,text,text,jsonb)",
+      "checksum": "ea41c2afd849c007d1db16c6e12e0da0"
+    },
+    {
+      "signature": "aka_agent_finalize_expired_zalo_server_data_group_campaigns(bigint,bigint,text,integer)",
+      "checksum": "ad964b8130cc621c91777f3770ff5f4e"
+    },
+    {
+      "signature": "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+      "checksum": "2e8974fb896f4595582d44aa5547b9e8"
+    },
+    {
+      "signature": "aka_agent_finalize_zalo_server_maintenance_campaign(bigint,bigint,text,bigint,text,boolean)",
+      "checksum": "fb5eed8776a1a6f65dc9c4776a1ececd"
+    },
+    {
+      "signature": "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+      "checksum": "e1f0d03b1609d62685dc4e5fafff2e91"
+    },
+    {
+      "signature": "aka_agent_list_contact_datasets(bigint,bigint,bigint,text,text,text,text)",
+      "checksum": "0b53df90ce71e617987faceb6484811d"
+    },
+    {
+      "signature": "aka_agent_list_email_campaign_link_tracking_summaries(bigint)",
+      "checksum": "1697cd911602d53ce773bf8360ceb683"
+    },
+    {
+      "signature": "aka_agent_lock_campaign_input_serialization(bigint)",
+      "checksum": "ca07284b7f0f0a3ab5a6ee7c8e745ab6"
+    },
+    {
+      "signature": "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+      "checksum": "dbb83b82d882feaeed7b6b9db0e8cdce"
+    },
+    {
+      "signature": "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)",
+      "checksum": "23dbd56e263e062b7d2819b8ce8062e7"
+    },
+    {
+      "signature": "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+      "checksum": "a52b46d96fe0791ef1e2f68c02b99e4a"
+    },
+    {
+      "signature": "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)",
+      "checksum": "e5ef8b12614447aeef9357db98f8ea2d"
+    },
+    {
+      "signature": "append_auto_campaign_log(bigint,bigint,text)",
+      "checksum": "d8adb4829fbe382f45065f9b5ba58f27"
+    },
+    {
+      "signature": "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)",
+      "checksum": "62e0316082d120d600ab3a95b4792257"
+    },
+    {
+      "signature": "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)",
+      "checksum": "690666a4fe0bd27a0c0b82a7064a8d6f"
+    },
+    {
+      "signature": "reconcile_auto_automation_enqueue_failures(bigint,bigint,text,integer,text,text)",
+      "checksum": "d45ebf943a37c41f5f1ec8e96111232c"
+    },
+    {
+      "signature": "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint,text,text)",
+      "checksum": "6cb8024f35b85ffe3354b43c6ec8f107"
+    },
+    {
+      "signature": "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+      "checksum": "d6a98a3ebd67c363066dd1e5baea2a42"
+    },
+    {
+      "signature": "aka_agent_desktop_campaign_detail(bigint,bigint,text,text,jsonb,bigint,text,jsonb)",
+      "checksum": "0f591afd90b59c1d4298647713367331"
+    },
+    {
+      "signature": "aka_agent_desktop_campaign_logs(bigint,bigint,text,text,jsonb,bigint,jsonb)",
+      "checksum": "ed9701b430944bd57be5140a98d5ed47"
+    },
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "checksum": "3c2caab8b949a640b4bdc3a61642ef31"
+    },
+    {
+      "signature": "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)",
+      "checksum": "7c71f5cb2733d276ad9bd10cddcf5cac"
+    },
+    {
+      "signature": "aka_agent_finalize_campaign(bigint,bigint,bigint,text,boolean,text,text,text)",
+      "checksum": "8a1898523d8c45a9a9209f3695de9d6f"
+    },
+    {
+      "signature": "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+      "checksum": "869f135a1c97185bb6e2e992897d3bcd"
+    },
+    {
+      "signature": "aka_agent_list_campaign_automation_details(bigint,bigint,bigint,text,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)",
+      "checksum": "ae098d96f96eaffe8379b34498e0dff0"
+    },
+    {
+      "signature": "aka_agent_list_campaign_detail_automation_triggers(bigint,bigint,bigint,bigint[],text,text)",
+      "checksum": "3458739aa8d25f42d2e7ce3cf676b558"
+    },
+    {
+      "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+      "checksum": "da6cd0d362196536d99805382af28d1b"
+    },
+    {
+      "signature": "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text,bigint[])",
+      "checksum": "136d1d76209b9b86c8d2f2fb13725665"
+    },
+    {
+      "signature": "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text)",
+      "checksum": "dbba6b5b77cd6fa3a924fae8e54c5073"
+    },
+    {
+      "signature": "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint,text,text)",
+      "checksum": "d88ecc2b15e3459e72239a0ab76dea25"
+    },
+    {
+      "signature": "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)",
+      "checksum": "9e8f3da3084e112a1c683723e9dbed49"
+    },
+    {
+      "signature": "aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)",
+      "checksum": "f8baf5aae05bf68e0f6af0032e1a5c39"
+    },
+    {
+      "signature": "aka_agent_snapshot_data_group_to_direct_campaign(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+      "checksum": "ae8bc2191337b013232590523a05fb10"
+    },
+    {
+      "signature": "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)",
+      "checksum": "579cf37e8442efe8ce7db23a3673132d"
+    }
+  ]
+}

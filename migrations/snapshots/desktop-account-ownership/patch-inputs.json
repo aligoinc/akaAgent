@@ -1,0 +1,3199 @@
+{
+  "signatures": [
+    "auto_assert_automation_identity(bigint,bigint,text,text)",
+    "private.facebook_random_claim_allowed(bigint,bigint,text)",
+    "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+    "private.facebook_random_orphan_turns(bigint,bigint)",
+    "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+    "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+    "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+    "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+    "private.facebook_random_unit_started(bigint,bigint,uuid)",
+    "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+    "aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])",
+    "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)",
+    "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+    "aka_agent_facebook_login(bigint,text,text,text,jsonb)",
+    "aka_agent_finalize_expired_zalo_server_data_group_campaigns(bigint,bigint,text,integer)",
+    "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+    "aka_agent_finalize_zalo_server_maintenance_campaign(bigint,bigint,text,bigint,text,boolean)",
+    "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+    "aka_agent_list_contact_datasets(bigint,bigint,bigint,text,text,text,text)",
+    "aka_agent_list_email_campaign_link_tracking_summaries(bigint)",
+    "aka_agent_lock_campaign_input_serialization(bigint)",
+    "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+    "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)",
+    "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+    "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)",
+    "append_auto_campaign_log(bigint,bigint,text)",
+    "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)",
+    "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)",
+    "reconcile_auto_automation_enqueue_failures(bigint,bigint,text,integer,text,text)",
+    "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint,text,text)",
+    "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+    "aka_agent_desktop_campaign_detail(bigint,bigint,text,text,jsonb,bigint,text,jsonb)",
+    "aka_agent_desktop_campaign_logs(bigint,bigint,text,text,jsonb,bigint,jsonb)",
+    "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+    "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)",
+    "aka_agent_finalize_campaign(bigint,bigint,bigint,text,boolean,text,text,text)",
+    "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+    "aka_agent_list_campaign_automation_details(bigint,bigint,bigint,text,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)",
+    "aka_agent_list_campaign_detail_automation_triggers(bigint,bigint,bigint,bigint[],text,text)",
+    "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+    "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text,bigint[])",
+    "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text)",
+    "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint,text,text)",
+    "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)",
+    "aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)",
+    "aka_agent_snapshot_data_group_to_direct_campaign(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+    "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)"
+  ],
+  "callGraph": {
+    "private.aka_agent_campaign_type_visibility(bigint,bigint,jsonb,text,text,jsonb,boolean)": [
+      "private.aka_agent_campaign_visibility_actions(jsonb,text)",
+      "private.aka_agent_campaign_visibility_snapshot(bigint,bigint)",
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "private.aka_agent_campaign_visibility_actions(jsonb,text)": [],
+    "private.aka_agent_campaign_visibility_snapshot(bigint,bigint)": [],
+    "private.aka_agent_capture_table_change()": [],
+    "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)": [],
+    "private.aka_agent_device_v3(bigint,text,jsonb)": [
+      "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)"
+    ],
+    "private.aka_agent_invalidate_staff_recovery()": [],
+    "private.aka_agent_org_default_new_zalo_runtime()": [],
+    "private.aka_agent_staff_scope_for_request()": [],
+    "private.aka_agent_track_device_binding()": [],
+    "private.aka_crm_log_crm_delete()": [],
+    "private.aka_crm_log_guard_append_only()": [],
+    "private.aka_loyalty_sql_product_codes(text)": [],
+    "private.aka_order_changed_fields(jsonb,jsonb)": [],
+    "private.aka_order_history_change_categories(text[])": [],
+    "private.aka_order_history_changed_fields(jsonb,jsonb)": [],
+    "private.aka_order_history_entitlement_state(aka_order)": [],
+    "private.aka_order_history_field_changes(jsonb,jsonb,text[])": [],
+    "private.aka_order_history_has_forbidden_keys(jsonb)": [],
+    "private.aka_order_history_material_fields()": [],
+    "private.aka_order_history_order_snapshot(aka_order)": [],
+    "private.aka_order_history_payload_hash(jsonb)": [],
+    "private.aka_order_history_source_envelope(aka_order)": [],
+    "private.aka_order_non_org_is_demo(jsonb,text)": [],
+    "private.aka_order_non_org_is_paid(jsonb,text,numeric)": [
+      "private.aka_order_non_org_is_demo(jsonb,text)"
+    ],
+    "private.aka_order_non_org_package_type(text,text)": [],
+    "private.aka_order_non_org_status(jsonb,boolean,boolean,timestamp with time zone,boolean,boolean,timestamp with time zone)": [],
+    "private.aka_order_org_status(boolean,boolean,timestamp with time zone,text,boolean,timestamp with time zone)": [],
+    "private.aka_order_organization_lock_key(bigint)": [],
+    "private.aka_order_owner_state(aka_order)": [],
+    "private.akamap_assert_data_group_identity(jsonb)": [
+      "aka_agent_block_denied_ip_request()"
+    ],
+    "private.bigint_array_has_unique_elements(bigint[])": [],
+    "private.birthday_greeting_echo_v1(uuid)": [],
+    "private.birthday_offer_allowed_products_v1(jsonb)": [],
+    "private.birthday_offer_allowed_promotions_v1(jsonb,timestamp with time zone)": [],
+    "private.birthday_offer_context_v1(uuid)": [
+      "private.birthday_greeting_echo_v1(uuid)",
+      "private.birthday_offer_allowed_products_v1(jsonb)",
+      "private.birthday_offer_allowed_promotions_v1(jsonb,timestamp with time zone)",
+      "private.classify_birthday_customer_v1(bigint,date)",
+      "private.resolve_birthday_customer_v1(uuid)"
+    ],
+    "private.birthday_offer_transcript_rows_v1(uuid,integer)": [],
+    "private.build_aka_order_safe_source_snapshot(aka_order)": [],
+    "private.campaign_dispatch_schedule_allowed(timestamp with time zone,text,timestamp with time zone,time without time zone,timestamp with time zone,boolean)": [],
+    "private.campaign_log_legacy(bigint)": [],
+    "private.campaign_log_page(bigint,jsonb)": [
+      "private.campaign_log_legacy(bigint)"
+    ],
+    "private.can_read_data_group(bigint,bigint,bigint)": [
+      "private.group_access(text,bigint,bigint,bigint)"
+    ],
+    "private.capture_aka_crm_call_delay_alert()": [],
+    "private.capture_aka_crm_completed_by_org_staff()": [
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)"
+    ],
+    "private.capture_crm_product_transition()": [],
+    "private.capture_org_organization_product_history()": [],
+    "private.classify_birthday_customer_v1(bigint,date)": [],
+    "private.column_filter_fb_url_v1(text,text)": [
+      "private.column_filter_uri_decode_v1(text,boolean)",
+      "private.column_filter_uri_encode_v1(text,boolean)"
+    ],
+    "private.column_filter_phone_v1(text)": [],
+    "private.column_filter_predicate_v1(text,jsonb)": [],
+    "private.column_filter_source_match_v1(jsonb,jsonb)": [
+      "private.column_filter_fb_url_v1(text,text)"
+    ],
+    "private.column_filter_tag_values_v1(jsonb)": [
+      "private.column_filter_text_v1(text[])"
+    ],
+    "private.column_filter_text_v1(text[])": [],
+    "private.column_filter_uri_decode_v1(text,boolean)": [],
+    "private.column_filter_uri_encode_v1(text,boolean)": [],
+    "private.column_filter_zalo_tags_v1(jsonb)": [
+      "private.column_filter_tag_values_v1(jsonb)"
+    ],
+    "private.copy_shared_group(bigint,bigint,text,bigint,jsonb)": [
+      "private.group_access(text,bigint,bigint,bigint)",
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)"
+    ],
+    "private.crm_product_transition_reason(jsonb,bigint,bigint,bigint,date)": [],
+    "private.crm_reconcile_trial_care_page_v1(bigint,integer,bigint)": [
+      "private.crm_trial_care_candidate_v1(jsonb)",
+      "private.crm_trial_care_metadata_v1(jsonb,jsonb)",
+      "crm_trial_care_decision_v1(jsonb)"
+    ],
+    "private.crm_trial_care_candidate_v1(jsonb)": [],
+    "private.crm_trial_care_metadata_v1(jsonb,jsonb)": [],
+    "private.crm_trial_care_product_key_v1(bigint)": [],
+    "private.cskh_type23_guard_decision(bigint,bigint,timestamp with time zone)": [
+      "private.cskh_type23_guard_message_blocker(bigint,timestamp with time zone)"
+    ],
+    "private.cskh_type23_guard_message_blocker(bigint,timestamp with time zone)": [
+      "normalize_phone(text)"
+    ],
+    "private.detach_deleted_auto_content_secondary_group()": [],
+    "private.dt_drive()": [
+      "private.msc(text,integer,integer)"
+    ],
+    "private.enforce_birthday_crm23_v1()": [
+      "private.birthday_greeting_echo_v1(uuid)",
+      "private.classify_birthday_customer_v1(bigint,date)",
+      "private.resolve_birthday_customer_v1(uuid)"
+    ],
+    "private.enforce_cskh_activity_expired_cooldown_v1()": [],
+    "private.enforce_cskh_activity_near_expiry_cooldown()": [
+      "find_cskh_activity_crm_candidate(uuid)"
+    ],
+    "private.enforce_cskh_type23_guard_v1()": [
+      "private.cskh_type23_guard_decision(bigint,bigint,timestamp with time zone)",
+      "find_cskh_activity_crm_candidate(uuid)"
+    ],
+    "private.enforce_unified_web_crm_cooldown_v1()": [],
+    "private.enforce_unified_web_crm_policy()": [
+      "private.find_unified_web_crm_candidate(uuid)",
+      "normalize_phone(text)"
+    ],
+    "private.enqueue_birthday_offer_v1()": [
+      "private.resolve_birthday_customer_v1(uuid)"
+    ],
+    "private.enqueue_crm_trial_care_change_v1()": [
+      "private.crm_trial_care_candidate_v1(jsonb)",
+      "crm_enqueue_trial_care_v1(bigint,text)"
+    ],
+    "private.enqueue_unified_web_crm_job(uuid)": [
+      "private.find_unified_web_crm_candidate(uuid)"
+    ],
+    "private.facebook_random_claim_allowed(bigint,bigint,text)": [],
+    "private.facebook_random_finalize_on_release()": [
+      "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)"
+    ],
+    "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)": [],
+    "private.facebook_random_orphan_turns(bigint,bigint)": [],
+    "private.facebook_random_pause_requested(bigint,bigint,uuid)": [],
+    "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)": [],
+    "private.facebook_random_unit_recover(bigint,bigint,uuid)": [
+      "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+      "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)"
+    ],
+    "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)": [],
+    "private.facebook_random_unit_started(bigint,bigint,uuid)": [],
+    "private.find_unified_web_crm_candidate(uuid)": [
+      "private.classify_birthday_customer_v1(bigint,date)",
+      "normalize_phone(text)"
+    ],
+    "private.get_unified_web_deepseek_key()": [],
+    "private.group_access(text,bigint,bigint,bigint)": [
+      "private.aka_agent_staff_scope_for_request()"
+    ],
+    "private.guard_crm_product_transition()": [
+      "private.crm_product_transition_reason(jsonb,bigint,bigint,bigint,date)"
+    ],
+    "private.guard_crm_trial_care_v1()": [
+      "private.crm_trial_care_candidate_v1(jsonb)",
+      "private.crm_trial_care_metadata_v1(jsonb,jsonb)",
+      "crm_trial_care_decision_v1(jsonb)"
+    ],
+    "private.guard_demo_care_crm_v1()": [
+      "demo_care_should_skip_v1(bigint,bigint,timestamp with time zone,bigint)"
+    ],
+    "private.guard_org_product_history_append_only()": [],
+    "private.invalidate_aka_customer_lifecycle_source(text,bigint)": [],
+    "private.invoke_cskh_type23_guard_worker()": [],
+    "private.lifecycle_package_is_demo(text,text,boolean)": [],
+    "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)": [],
+    "private.list_shared_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean,boolean)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "private.lock_read_data_group(bigint,bigint,bigint)": [
+      "private.can_read_data_group(bigint,bigint,bigint)"
+    ],
+    "private.msb(text,integer)": [],
+    "private.msc(text,integer,integer)": [],
+    "private.msq(text,text,boolean,integer,integer)": [],
+    "private.msr(bigint)": [],
+    "private.preserve_aka_customer_during_lifecycle_projection()": [
+      "private.refresh_aka_customer_lifecycle_projection(bigint)"
+    ],
+    "private.propagate_org_product_lifecycle_attribution()": [],
+    "private.protect_birthday_ai_log_namespace_v1()": [],
+    "private.protect_birthday_crm_namespace_v1()": [],
+    "private.protect_org_lifecycle_attribution()": [],
+    "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)"
+    ],
+    "private.reconcile_aka_order_org_status()": [
+      "private.aka_order_non_org_is_demo(jsonb,text)",
+      "private.aka_order_non_org_is_paid(jsonb,text,numeric)",
+      "private.aka_order_non_org_package_type(text,text)",
+      "private.aka_order_non_org_status(jsonb,boolean,boolean,timestamp with time zone,boolean,boolean,timestamp with time zone)",
+      "private.reconcile_one_aka_order_non_org_status(bigint)",
+      "private.sync_org_product_to_aka_order(bigint,text)"
+    ],
+    "private.reconcile_one_aka_order_non_org_status(bigint)": [
+      "private.aka_order_non_org_is_demo(jsonb,text)",
+      "private.aka_order_non_org_is_paid(jsonb,text,numeric)",
+      "private.aka_order_non_org_package_type(text,text)",
+      "private.aka_order_non_org_status(jsonb,boolean,boolean,timestamp with time zone,boolean,boolean,timestamp with time zone)"
+    ],
+    "private.reconcile_org_product_loyalty(bigint)": [
+      "private.refresh_customer_loyalty_snapshot(bigint)"
+    ],
+    "private.reconcile_sql_account_loyalty(bigint)": [
+      "private.aka_loyalty_sql_product_codes(text)",
+      "private.refresh_customer_loyalty_snapshot(bigint)"
+    ],
+    "private.refresh_aka_customer_lifecycle_projection(bigint)": [],
+    "private.refresh_aka_customer_lifecycle_projections(bigint[])": [
+      "private.refresh_aka_customer_lifecycle_projection(bigint)"
+    ],
+    "private.refresh_aka_customer_order_aggregate(bigint)": [],
+    "private.refresh_customer_loyalty_snapshot(bigint)": [],
+    "private.resolve_birthday_customer_v1(uuid)": [
+      "normalize_phone(text)"
+    ],
+    "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)": [],
+    "private.resolve_organization_zalo_entitlement_pools(bigint)": [],
+    "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": [
+      "private.can_read_data_group(bigint,bigint,bigint)"
+    ],
+    "private.sql_account_aka_owner(bigint,bigint)": [
+      "private.aka_order_owner_state(aka_order)"
+    ],
+    "private.staff_transfer_crm_eligible(aka_crm,timestamp with time zone)": [],
+    "private.staff_transfer_validate(bigint,bigint,bigint)": [],
+    "private.stop_invalid_staff_group_sources()": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "private.sync_aka_crm_customer_lifecycle(aka_crm)": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)",
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)",
+      "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)"
+    ],
+    "private.sync_aka_order_customer_lifecycle(aka_order)": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.lifecycle_package_is_demo(text,text,boolean)",
+      "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)",
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)",
+      "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)"
+    ],
+    "private.sync_aka_order_history_customer_lifecycle(aka_order_history)": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.lifecycle_package_is_demo(text,text,boolean)",
+      "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)",
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)",
+      "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)"
+    ],
+    "private.sync_org_product_customer_lifecycle(org_organization_product)": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.lifecycle_package_is_demo(text,text,boolean)",
+      "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)",
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)",
+      "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)"
+    ],
+    "private.sync_org_product_history_customer_lifecycle(org_organization_product_history)": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.lifecycle_package_is_demo(text,text,boolean)",
+      "private.lifecycle_staff_quality(bigint,bigint,bigint,uuid)",
+      "private.resolve_lifecycle_org_staff_id(bigint,bigint,uuid)",
+      "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)"
+    ],
+    "private.sync_org_product_to_aka_order(bigint,text)": [
+      "private.aka_order_org_status(boolean,boolean,timestamp with time zone,text,boolean,timestamp with time zone)",
+      "private.aka_order_organization_lock_key(bigint)"
+    ],
+    "private.touch_birthday_offer_job_v1()": [],
+    "private.track_org_product_lifecycle_attribution()": [],
+    "private.trg_audit_aka_order_history()": [
+      "private.aka_order_history_change_categories(text[])",
+      "private.aka_order_history_changed_fields(jsonb,jsonb)",
+      "private.aka_order_history_entitlement_state(aka_order)",
+      "private.aka_order_history_field_changes(jsonb,jsonb,text[])",
+      "private.aka_order_history_order_snapshot(aka_order)",
+      "private.aka_order_history_payload_hash(jsonb)",
+      "private.aka_order_history_source_envelope(aka_order)"
+    ],
+    "private.trg_enqueue_unified_web_crm()": [
+      "private.enqueue_unified_web_crm_job(uuid)"
+    ],
+    "private.trg_ensure_aka_order_source_snapshot()": [
+      "private.build_aka_order_safe_source_snapshot(aka_order)"
+    ],
+    "private.trg_lock_org_product_aka_order_sync()": [
+      "private.aka_order_organization_lock_key(bigint)"
+    ],
+    "private.trg_lock_organization_aka_order_sync()": [
+      "private.aka_order_organization_lock_key(bigint)"
+    ],
+    "private.trg_loyalty_from_aka_crm()": [
+      "private.refresh_customer_loyalty_snapshot(bigint)",
+      "private.upsert_customer_loyalty_event(bigint,text,timestamp with time zone,text,text,text,text,text,jsonb)"
+    ],
+    "private.trg_loyalty_from_aka_order_history()": [
+      "private.aka_loyalty_sql_product_codes(text)",
+      "private.reconcile_sql_account_loyalty(bigint)",
+      "private.refresh_customer_loyalty_snapshot(bigint)",
+      "private.upsert_customer_loyalty_event(bigint,text,timestamp with time zone,text,text,text,text,text,jsonb)"
+    ],
+    "private.trg_loyalty_from_org_customer_link()": [
+      "private.reconcile_org_product_loyalty(bigint)"
+    ],
+    "private.trg_loyalty_from_org_product()": [
+      "private.reconcile_org_product_loyalty(bigint)"
+    ],
+    "private.trg_loyalty_from_referral()": [
+      "private.refresh_customer_loyalty_snapshot(bigint)",
+      "private.upsert_customer_loyalty_event(bigint,text,timestamp with time zone,text,text,text,text,text,jsonb)"
+    ],
+    "private.trg_reassign_org_customer_lifecycle()": [
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_aka_order_customer_lifecycle(aka_order)",
+      "private.sync_aka_order_history_customer_lifecycle(aka_order_history)",
+      "private.sync_org_product_customer_lifecycle(org_organization_product)",
+      "private.sync_org_product_history_customer_lifecycle(org_organization_product_history)"
+    ],
+    "private.trg_refresh_aka_customer_order_aggregate()": [
+      "private.refresh_aka_customer_order_aggregate(bigint)"
+    ],
+    "private.trg_reject_aka_order_audit_mutation()": [],
+    "private.trg_remap_customer_lifecycle_staff_links()": [
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_aka_order_customer_lifecycle(aka_order)",
+      "private.sync_aka_order_history_customer_lifecycle(aka_order_history)"
+    ],
+    "private.trg_sync_aka_crm_customer_lifecycle()": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_aka_crm_customer_lifecycle(aka_crm)"
+    ],
+    "private.trg_sync_aka_order_customer_lifecycle()": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_aka_order_customer_lifecycle(aka_order)",
+      "private.sync_aka_order_history_customer_lifecycle(aka_order_history)"
+    ],
+    "private.trg_sync_aka_order_history_customer_lifecycle()": [
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_aka_order_history_customer_lifecycle(aka_order_history)"
+    ],
+    "private.trg_sync_org_product_customer_lifecycle()": [
+      "private.invalidate_aka_customer_lifecycle_source(text,bigint)",
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_org_product_customer_lifecycle(org_organization_product)"
+    ],
+    "private.trg_sync_org_product_history_customer_lifecycle()": [
+      "private.refresh_aka_customer_lifecycle_projections(bigint[])",
+      "private.sync_org_product_history_customer_lifecycle(org_organization_product_history)"
+    ],
+    "private.trg_sync_org_product_to_aka_order()": [
+      "private.aka_order_organization_lock_key(bigint)",
+      "private.sync_org_product_to_aka_order(bigint,text)"
+    ],
+    "private.trg_sync_organization_orders()": [
+      "private.sync_org_product_to_aka_order(bigint,text)"
+    ],
+    "private.trg_touch_aka_salesopportunity()": [],
+    "private.upsert_aka_customer_lifecycle_event(bigint,text,timestamp with time zone,bigint,text,bigint,text,text,text,integer,timestamp with time zone)": [],
+    "private.upsert_customer_loyalty_event(bigint,text,timestamp with time zone,text,text,text,text,text,jsonb)": [
+      "private.refresh_customer_loyalty_snapshot(bigint)"
+    ],
+    "private.validate_ai_form_config()": [],
+    "private.validate_auto_content_template_secondary_groups()": [],
+    "private.validate_demo_care_manager_v1()": [],
+    "private.zalo_card_requeue_v1(uuid,boolean)": [
+      "fn_zalo_contact_card_v2(uuid)"
+    ],
+    "private.zalo_referral_backend_context_v1()": [],
+    "private.zalo_referral_backfill_round_v1(integer,integer,interval,boolean,timestamp with time zone,timestamp with time zone)": [
+      "private.zalo_referral_invoke_v1(jsonb)"
+    ],
+    "private.zalo_referral_due_date_v1(timestamp with time zone)": [],
+    "private.zalo_referral_invoke_v1(jsonb)": [],
+    "_qc_send_20260825(integer,numeric)": [],
+    "_qc_send_827(integer,integer)": [],
+    "activate_renewal_paid_schedule(date)": [
+      "renewal_crm_schedule()"
+    ],
+    "add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamp with time zone,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "add_org_organization_product_accounts(bigint,bigint,integer,bigint,uuid)": [],
+    "adjust_org_organization_product_usage_days(bigint,bigint,integer,bigint)": [],
+    "agent_fix3_assert_completion(uuid,bigint,jsonb,jsonb)": [
+      "agent_fix3_binding(uuid)"
+    ],
+    "agent_fix3_binding(uuid)": [],
+    "agent_fix3_checkpoint(uuid,uuid,bigint,text,jsonb,text,integer,jsonb)": [
+      "agent_fix3_assert_completion(uuid,bigint,jsonb,jsonb)",
+      "agent_fix3_fence(uuid,uuid,bigint)"
+    ],
+    "agent_fix3_claim(uuid)": [],
+    "agent_fix3_completion_guard()": [
+      "agent_fix3_assert_completion(uuid,bigint,jsonb,jsonb)"
+    ],
+    "agent_fix3_control(uuid,text,uuid,text,text,jsonb)": [],
+    "agent_fix3_create(uuid,uuid,text,jsonb,text)": [],
+    "agent_fix3_evidence_put(uuid,uuid,bigint,jsonb)": [
+      "agent_fix3_fence(uuid,uuid,bigint)"
+    ],
+    "agent_fix3_fence(uuid,uuid,bigint)": [],
+    "agent_fix3_heartbeat(uuid,uuid,bigint)": [],
+    "agent_fix3_operation_put(uuid,uuid,bigint,jsonb,jsonb)": [
+      "agent_fix3_fence(uuid,uuid,bigint)"
+    ],
+    "agent_fix3_session_put(uuid,uuid,bigint,jsonb)": [
+      "agent_fix3_fence(uuid,uuid,bigint)"
+    ],
+    "agent_od_checkpoint(uuid,uuid,bigint,text,jsonb,text,integer,jsonb)": [],
+    "agent_od_claim(uuid)": [],
+    "agent_od_control(uuid,uuid,text,text,jsonb)": [],
+    "agent_od_create(uuid,uuid,text,jsonb,jsonb,text)": [],
+    "agent_od_evidence_put(uuid,uuid,bigint,jsonb)": [],
+    "agent_od_heartbeat(uuid,uuid,bigint)": [],
+    "aka_agent_admin_assert_access(bigint,text,text)": [],
+    "aka_agent_admin_cron(bigint,text,text,text,jsonb)": [
+      "aka_agent_admin_assert_access(bigint,text,text)"
+    ],
+    "aka_agent_admin_docs(bigint,text,text,text,jsonb)": [
+      "aka_agent_admin_assert_access(bigint,text,text)"
+    ],
+    "aka_agent_admin_notifications(bigint,text,text,text,jsonb)": [
+      "aka_agent_admin_assert_access(bigint,text,text)"
+    ],
+    "aka_agent_admin_settings(bigint,text,text,text,jsonb)": [
+      "aka_agent_admin_assert_access(bigint,text,text)"
+    ],
+    "aka_agent_admin_triggers(bigint,text,text,text,jsonb)": [
+      "aka_agent_admin_assert_access(bigint,text,text)"
+    ],
+    "aka_agent_advance_zalo_server_multi_daily_slot(bigint,bigint,bigint,timestamp with time zone)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])": [
+      "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)",
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_apply_voice_call_event(bigint,bigint,text,uuid,uuid,integer,text,timestamp with time zone,jsonb)": [
+      "aka_agent_finalize_voice_call_job_internal(bigint,text,text)"
+    ],
+    "aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])": [
+      "aka_agent_internal_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_authenticate_control_session(text)": [
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_authorize_voice_call(bigint,bigint,text,uuid,integer,integer)": [
+      "increment_auto_account_action_count(bigint,text,integer)"
+    ],
+    "aka_agent_begin_voice_call_audio(bigint,bigint,text,uuid)": [
+      "aka_agent_finalize_voice_call_job_internal(bigint,text,text)"
+    ],
+    "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint,text,text)": [
+      "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_internal_route_group_snapshot(bigint,bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_block_denied_ip_request()": [],
+    "aka_agent_browser_run_limits(bigint,bigint,text,text,text,jsonb)": [
+      "aka_agent_staff_time_allowed(bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_call_email_notification_worker(text,text)": [
+      "aka_agent_get_vault_secret(text)"
+    ],
+    "aka_agent_campaign_config_version(auto_campaigns)": [],
+    "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_campaign_engagement_revision()": [],
+    "aka_agent_campaign_input_semantic_json(jsonb)": [
+      "aka_agent_semantic_row_json(jsonb)"
+    ],
+    "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)": [
+      "aka_agent_data_group_zalo_facts(bigint)",
+      "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)",
+      "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)",
+      "aka_agent_internal_send_exclusion_catalog()",
+      "aka_agent_internal_send_exclusion_group(bigint)",
+      "aka_agent_internal_validate_send_exclusion_selection(jsonb,bigint,bigint,bigint)"
+    ],
+    "aka_agent_campaign_type_visibility(bigint,bigint,text,text,jsonb,text,jsonb,boolean)": [
+      "private.aka_agent_campaign_type_visibility(bigint,bigint,jsonb,text,text,jsonb,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_chat_aux_settings(text)": [],
+    "aka_agent_check_campaign_daily_boundary(bigint,bigint,bigint,text,date)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_check_daily_maintenance_barrier(bigint,text,date)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)": [
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "claim_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+      "claim_zalo_account_runtime_operation(bigint,bigint,text,boolean)",
+      "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)"
+    ],
+    "aka_agent_claim_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,date,uuid,bigint[])": [
+      "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+      "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "aka_agent_claim_zalo_server_run_unit(bigint,bigint,bigint,bigint[])",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)": [
+      "private.campaign_dispatch_schedule_allowed(timestamp with time zone,text,timestamp with time zone,time without time zone,timestamp with time zone,boolean)",
+      "private.facebook_random_claim_allowed(bigint,bigint,text)",
+      "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_claim_campaign_runtime_v2(bigint,bigint,bigint,text,uuid)": [
+      "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)"
+    ],
+    "aka_agent_claim_email_notification_deliveries(integer)": [],
+    "aka_agent_claim_voice_call(bigint,text,bigint,integer)": [
+      "aka_agent_finalize_voice_call_job_internal(bigint,text,text)"
+    ],
+    "aka_agent_claim_zalo_server_run_unit(bigint,bigint,bigint,bigint[])": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_cleanup_deleted_dataset_auto_data_group()": [
+      "aka_agent_internal_retire_dataset_auto_data_group(bigint,bigint)"
+    ],
+    "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)": [
+      "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+      "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_clear_campaign_runtime_claim_metadata()": [],
+    "aka_agent_close_terminal_campaign_data_group_source()": [],
+    "aka_agent_confirm_zalo_message_opt_out(uuid)": [],
+    "aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)": [],
+    "aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)": [
+      "private.campaign_log_page(bigint,jsonb)"
+    ],
+    "aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])": [
+      "private.aka_agent_campaign_visibility_snapshot(bigint,bigint)"
+    ],
+    "aka_agent_control_campaign_progress(bigint,bigint,bigint[],text,text)": [
+      "aka_agent_control_campaign_progress(bigint,bigint,bigint[])",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_control_campaign_progress(bigint,bigint,bigint[])": [],
+    "aka_agent_control_campaign_type_visibility(bigint,bigint,text[],text,jsonb,boolean)": [
+      "private.aka_agent_campaign_type_visibility(bigint,bigint,jsonb,text,text,jsonb,boolean)"
+    ],
+    "aka_agent_control_web_device_claim_v2(bigint,bigint,uuid,uuid,text,text,text,timestamp with time zone,text)": [
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_control_web_device_claim(bigint,bigint,uuid,uuid,text,text,text,timestamp with time zone)": [
+      "aka_agent_control_web_device_claim_v2(bigint,bigint,uuid,uuid,text,text,text,timestamp with time zone,text)"
+    ],
+    "aka_agent_control_web_device_limit(text,boolean,boolean)": [],
+    "aka_agent_control_web_device_overview(bigint,bigint,uuid)": [],
+    "aka_agent_control_web_device_policy_changed()": [
+      "aka_agent_control_web_device_limit(text,boolean,boolean)"
+    ],
+    "aka_agent_control_web_device_release(bigint,bigint,uuid)": [],
+    "aka_agent_control_web_device_revoke(bigint,bigint,uuid)": [],
+    "aka_agent_create_campaign_creation_bundle(bigint,bigint,text,integer,text,text)": [
+      "aka_agent_create_campaign_creation_bundle(bigint,bigint,text,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_create_campaign_creation_bundle(bigint,bigint,text,integer)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_create_data_group_v2_internal(bigint,bigint,text,text,text,bigint,bigint)": [
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_create_data_group_v2(bigint,bigint,text,text,text,bigint,bigint,text,text)": [
+      "aka_agent_create_data_group_v2_internal(bigint,bigint,text,text,text,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_create_data_group_v205_auth_internal(bigint,bigint,text,text,text,text,text)": [
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_create_data_group_v205_internal(bigint,bigint,text,text,text)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint,text,text)": [
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)": [
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_create_data_group(bigint,bigint,text,text,text,text,text)": [
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text)"
+    ],
+    "aka_agent_create_data_group(bigint,bigint,text,text,text)": [
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,text,text)"
+    ],
+    "aka_agent_current_data_type_category_item_id()": [],
+    "aka_agent_data_group_account_available(bigint,bigint,bigint)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)"
+    ],
+    "aka_agent_data_group_account_options_internal(auto_account_contact_groups,bigint[])": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_data_group_validate_bound_rule(bigint,bigint,bigint,jsonb)"
+    ],
+    "aka_agent_data_group_background_tick()": [
+      "aka_agent_run_data_group_dynamic_filter_worker(integer,integer)",
+      "aka_agent_sheet_dispatch()"
+    ],
+    "aka_agent_data_group_dynamic_draft_scope_matches(jsonb,bigint,text)": [
+      "aka_agent_data_group_dynamic_values_match(bigint,text,text[])"
+    ],
+    "aka_agent_data_group_dynamic_rule_matches(bigint,bigint)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_data_group_dynamic_values_match(bigint,text,text[])"
+    ],
+    "aka_agent_data_group_dynamic_scope_matches(bigint,bigint,text)": [
+      "aka_agent_data_group_dynamic_rule_matches(bigint,bigint)"
+    ],
+    "aka_agent_data_group_dynamic_values_match(bigint,text,text[])": [
+      "aka_agent_data_group_zalo_facts(bigint)"
+    ],
+    "aka_agent_data_group_external_sync(bigint,bigint,text,text,text,jsonb)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_sheet_classify(bigint,text,jsonb)",
+      "aka_agent_sheet_validate_config(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_data_group_membership_has_valid_phone(bigint,bigint)": [
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_data_group_membership_semantic_compatible(bigint,text,bigint)": [
+      "aka_agent_membership_semantic_type(bigint)"
+    ],
+    "aka_agent_data_group_source_category_item_id(text)": [
+      "aka_agent_data_group_source_code(text)"
+    ],
+    "aka_agent_data_group_source_code(text)": [],
+    "aka_agent_data_group_type_compatible(bigint,text)": [],
+    "aka_agent_data_group_validate_bound_rule(bigint,bigint,bigint,jsonb)": [],
+    "aka_agent_data_group_zalo_facts(bigint)": [],
+    "aka_agent_data_type_category_item_id(text,boolean)": [],
+    "aka_agent_data_type_context_present()": [],
+    "aka_agent_data_type_json(bigint)": [],
+    "aka_agent_deactivate_group_only_automations()": [],
+    "aka_agent_delete_automation(bigint,bigint,bigint,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_delete_data_group_with_options(bigint,bigint,bigint,text,boolean,text,text)": [
+      "aka_agent_delete_data_group(bigint,bigint,bigint,text,text,text)",
+      "aka_agent_delete_data_group(bigint,bigint,bigint,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_delete_data_group(bigint,bigint,bigint,text,text,text)": [
+      "aka_agent_delete_data_group(bigint,bigint,bigint,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_delete_data_group(bigint,bigint,bigint,text)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_derive_data_group_relationship_kind(bigint,bigint,bigint)": [
+      "aka_agent_validate_data_group_relationship_kind(bigint,bigint,bigint,text,jsonb)"
+    ],
+    "aka_agent_derive_dataset_data_type(text,text,text,text,jsonb)": [
+      "aka_agent_data_type_category_item_id(text,boolean)"
+    ],
+    "aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_desktop_ai_identity(uuid,uuid)": [
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_desktop_campaign_config_version(auto_campaigns)": [],
+    "aka_agent_desktop_campaign_detail(bigint,bigint,text,text,jsonb,bigint,text,jsonb)": [
+      "private.campaign_log_legacy(bigint)",
+      "aka_agent_desktop_campaign_config_version(auto_campaigns)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_desktop_campaign_logs(bigint,bigint,text,text,jsonb,bigint,jsonb)": [
+      "private.campaign_log_page(bigint,jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_desktop_campaign_page(bigint,bigint,text,text,jsonb,jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])": [
+      "private.aka_agent_campaign_visibility_snapshot(bigint,bigint)",
+      "aka_agent_desktop_campaign_config_version(auto_campaigns)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_desktop_login_content()": [],
+    "aka_agent_desktop_session_admin(text,jsonb)": [
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_desktop_startup_policy()": [],
+    "aka_agent_device_presence(text,text,uuid,jsonb,boolean)": [],
+    "aka_agent_duplicate_data_group(bigint,bigint,bigint,text,text,text,text)": [
+      "aka_agent_duplicate_data_group(bigint,bigint,bigint,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_duplicate_data_group(bigint,bigint,bigint,text,text)": [
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_sync_copied_data_group_origins(bigint,bigint,boolean)"
+    ],
+    "aka_agent_dynamic_filter_catalog_json(text)": [],
+    "aka_agent_dynamic_filter_chat_event()": [
+      "aka_agent_enqueue_data_group_chat_user(bigint,text,bigint)",
+      "aka_agent_refresh_contact_chat_tags(bigint)"
+    ],
+    "aka_agent_dynamic_filter_enqueue_contact()": [],
+    "aka_agent_dynamic_filter_enqueue_group_member()": [],
+    "aka_agent_dynamic_filter_stamp_queue_event()": [],
+    "aka_agent_dynamic_filter_sync_chat_contact()": [],
+    "aka_agent_enqueue_campaign_completed_email()": [
+      "aka_agent_call_email_notification_worker(text,text)"
+    ],
+    "aka_agent_enqueue_campaign_detail_automations()": [],
+    "aka_agent_enqueue_data_group_chat_user(bigint,text,bigint)": [],
+    "aka_agent_enqueue_group_only_automations()": [],
+    "aka_agent_ensure_dataset_auto_data_group()": [
+      "aka_agent_internal_dataset_auto_group_key(text,bigint,text,text,text,text,bigint)",
+      "aka_agent_internal_dataset_auto_group_key(text,bigint,text,text,text,text)",
+      "aka_agent_internal_retire_dataset_auto_data_group(bigint,bigint)",
+      "aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)"
+    ],
+    "aka_agent_facebook_account_cleanup()": [],
+    "aka_agent_facebook_account_operation(bigint,bigint,text,uuid,bigint,text)": [
+      "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)",
+      "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_facebook_login(bigint,text,text,text,jsonb)": [
+      "aka_agent_staff_access(bigint,text,text)"
+    ],
+    "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)": [
+      "private.campaign_dispatch_schedule_allowed(timestamp with time zone,text,timestamp with time zone,time without time zone,timestamp with time zone,boolean)",
+      "aka_agent_claim_campaign_runtime_v2(bigint,bigint,bigint,text,uuid)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_facebook_secret_cleanup()": [],
+    "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_fail_voice_call_audio(bigint,bigint,text,uuid,text,text)": [
+      "aka_agent_finalize_voice_call_job_internal(bigint,text,text)"
+    ],
+    "aka_agent_finalize_campaign(bigint,bigint,bigint,text,boolean,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_finalize_contact_dataset_v205_internal(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb)": [],
+    "aka_agent_finalize_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,text,text)": [
+      "aka_agent_finalize_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_finalize_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint)": [
+      "aka_agent_derive_dataset_data_type(text,text,text,text,jsonb)",
+      "aka_agent_finalize_contact_dataset_v205_internal(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text,text,text)": [
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text)": [
+      "aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_finalize_expired_data_group_campaigns(bigint,bigint,integer,text,text)": [
+      "aka_agent_finalize_expired_data_group_campaigns(bigint,bigint,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_finalize_expired_data_group_campaigns(bigint,bigint,integer)": [
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text,text,text)",
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_finalize_expired_zalo_server_data_group_campaigns(bigint,bigint,text,integer)": [
+      "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+      "aka_agent_internal_require_zalo_server_data_group_runtime(bigint,bigint,text)"
+    ],
+    "aka_agent_finalize_voice_call_job_internal(bigint,text,text)": [],
+    "aka_agent_finalize_zalo_server_campaign(bigint,bigint,text,boolean)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)": [
+      "aka_agent_data_type_category_item_id(text,boolean)",
+      "aka_agent_finalize_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,text,text)",
+      "aka_agent_finalize_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)": [
+      "aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_finalize_zalo_server_maintenance_campaign(bigint,bigint,text,bigint,text,boolean)": [
+      "aka_agent_internal_finalize_zalo_server_maintenance_guard(bigint,bigint,bigint,text,boolean,text)",
+      "aka_agent_internal_require_zalo_server_runtime(bigint,bigint,text)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_get_account_action_status_today(bigint,text)": [],
+    "aka_agent_get_automation_options(bigint,bigint,text,text)": [
+      "aka_agent_semantic_row_json(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_automation(bigint,bigint,bigint,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint,text,text)": [
+      "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_get_current_voice_call(bigint,text)": [],
+    "aka_agent_get_data_group_account_options(bigint,bigint,bigint,bigint,text,text)": [
+      "aka_agent_data_group_account_options_internal(auto_account_contact_groups,bigint[])",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_data_group_dynamic_filter(bigint,bigint,bigint,text,text)": [
+      "aka_agent_dynamic_filter_catalog_json(text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_data_group_latest_ingest_stats(bigint,bigint,bigint,text,text)": [
+      "aka_agent_get_data_group_latest_ingest_stats(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_data_group_latest_ingest_stats(bigint,bigint,bigint)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_get_data_group_panel(bigint,bigint,bigint,text,text)": [
+      "aka_agent_control_campaign_progress(bigint,bigint,bigint[],text,text)",
+      "aka_agent_control_campaign_progress(bigint,bigint,bigint[])",
+      "aka_agent_get_data_group_latest_ingest_stats(bigint,bigint,bigint,text,text)",
+      "aka_agent_get_data_group_latest_ingest_stats(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_get_next_sms_due_at(bigint,bigint[],text)": [],
+    "aka_agent_get_runtime_clock()": [],
+    "aka_agent_get_vault_secret(text)": [],
+    "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)": [
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)": [
+      "private.aka_agent_staff_scope_for_request()",
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "private.copy_shared_group(bigint,bigint,text,bigint,jsonb)",
+      "private.group_access(text,bigint,bigint,bigint)",
+      "private.list_shared_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean,boolean)",
+      "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_get_data_group_panel(bigint,bigint,bigint,text,text)",
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint,text,text)",
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_guard_action_semantic_mapping()": [
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_guard_automation_destination_update()": [],
+    "aka_agent_guard_automation_semantic_type()": [
+      "aka_agent_current_data_type_category_item_id()",
+      "aka_agent_data_type_context_present()",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_guard_automation_trigger_status_scope()": [],
+    "aka_agent_guard_bound_data_group_source()": [],
+    "aka_agent_guard_campaign_creation_bundle_group()": [],
+    "aka_agent_guard_campaign_creation_bundle_identity()": [],
+    "aka_agent_guard_campaign_data_group_identity()": [],
+    "aka_agent_guard_campaign_data_group_semantic_type()": [
+      "aka_agent_data_group_type_compatible(bigint,text)"
+    ],
+    "aka_agent_guard_campaign_data_group_source_identity()": [],
+    "aka_agent_guard_canonical_campaign_input_payload()": [
+      "normalize_phone(text)"
+    ],
+    "aka_agent_guard_data_group_bound_account()": [
+      "aka_agent_data_group_account_options_internal(auto_account_contact_groups,bigint[])"
+    ],
+    "aka_agent_guard_data_group_bound_member()": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)"
+    ],
+    "aka_agent_guard_data_group_member_primary_origin()": [
+      "aka_agent_data_group_source_code(text)"
+    ],
+    "aka_agent_guard_data_group_semantic_type()": [
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_guard_detail_result_v361()": [],
+    "aka_agent_guard_result_catalog_v361()": [],
+    "aka_agent_guard_result_policy_identity_v363()": [],
+    "aka_agent_guard_result_status_v361()": [],
+    "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint,text,text)": [
+      "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint)": [
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_internal_normalize_phone(text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)",
+      "aka_agent_validate_data_group_relationship_kind(bigint,bigint,bigint,text,jsonb)"
+    ],
+    "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)": [
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)": [
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)": [
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)": [
+      "aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)"
+    ],
+    "aka_agent_inherit_automation_detail_trace()": [],
+    "aka_agent_inspect_zalo_message_opt_out(uuid)": [],
+    "aka_agent_internal_dataset_auto_group_key(text,bigint,text,text,text,text,bigint)": [],
+    "aka_agent_internal_dataset_auto_group_key(text,bigint,text,text,text,text)": [
+      "aka_agent_internal_dataset_auto_group_key(text,bigint,text,text,text,text,bigint)"
+    ],
+    "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)": [
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_internal_finalize_zalo_server_maintenance_guard(bigint,bigint,bigint,text,boolean,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_internal_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text)": [
+      "aka_agent_enqueue_data_group_chat_user(bigint,text,bigint)",
+      "aka_agent_refresh_contact_chat_tags(bigint)"
+    ],
+    "aka_agent_internal_normalize_facebook_identity(text)": [],
+    "aka_agent_internal_normalize_phone(text)": [
+      "normalize_phone(text)"
+    ],
+    "aka_agent_internal_preview_data_group_target_key(bigint,bigint,bigint,bigint,text,bigint)": [
+      "private.shared_data_member_owner(bigint,bigint,bigint,bigint)",
+      "aka_agent_data_group_membership_has_valid_phone(bigint,bigint)",
+      "aka_agent_data_group_membership_semantic_compatible(bigint,text,bigint)",
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_internal_require_staff_tenant(bigint,bigint)": [],
+    "aka_agent_internal_require_zalo_server_data_group_runtime(bigint,bigint,text)": [
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_internal_require_zalo_server_runtime(bigint,bigint,text)": [
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_internal_retire_dataset_auto_data_group(bigint,bigint)": [
+      "aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)"
+    ],
+    "aka_agent_internal_route_data_group_member_v186_internal(bigint,bigint,bigint,bigint)": [
+      "private.shared_data_member_owner(bigint,bigint,bigint,bigint)",
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text,text,text)",
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text)",
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_internal_route_data_group_member_v190_internal(bigint,bigint,bigint,bigint)": [
+      "aka_agent_internal_route_data_group_member_v186_internal(bigint,bigint,bigint,bigint)"
+    ],
+    "aka_agent_internal_route_data_group_member_v205_internal(bigint,bigint,bigint,bigint)": [
+      "aka_agent_internal_route_data_group_member_v190_internal(bigint,bigint,bigint,bigint)"
+    ],
+    "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)": [
+      "private.lock_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_data_group_membership_has_valid_phone(bigint,bigint)",
+      "aka_agent_data_group_membership_semantic_compatible(bigint,text,bigint)",
+      "aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)",
+      "aka_agent_internal_route_data_group_member_v205_internal(bigint,bigint,bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_internal_route_group_snapshot(bigint,bigint,bigint)": [
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)"
+    ],
+    "aka_agent_internal_send_delivery_history(bigint,text[],timestamp with time zone,timestamp with time zone)": [
+      "aka_agent_internal_delivery_cooldown_target_keys(text,text,text,text)"
+    ],
+    "aka_agent_internal_send_exclusion_catalog()": [],
+    "aka_agent_internal_send_exclusion_group(bigint)": [],
+    "aka_agent_internal_send_exclusion_options(bigint,bigint,bigint)": [],
+    "aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)": [
+      "aka_agent_derive_data_group_relationship_kind(bigint,bigint,bigint)",
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)"
+    ],
+    "aka_agent_internal_validate_send_exclusion_rules(jsonb,bigint,bigint,bigint)": [
+      "aka_agent_internal_send_exclusion_options(bigint,bigint,bigint)"
+    ],
+    "aka_agent_internal_validate_send_exclusion_selection(jsonb,bigint,bigint,bigint)": [
+      "aka_agent_internal_send_exclusion_group(bigint)",
+      "aka_agent_internal_validate_send_exclusion_rules(jsonb,bigint,bigint,bigint)"
+    ],
+    "aka_agent_is_data_type_category_item(bigint,boolean)": [],
+    "aka_agent_legacy_action_semantic_type(text,text)": [
+      "aka_agent_data_type_category_item_id(text,boolean)"
+    ],
+    "aka_agent_list_automation_details(bigint,bigint,bigint,text,integer,integer,text,text)": [
+      "aka_agent_semantic_row_json(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_automation_refs_by_detail_ids(bigint,bigint,bigint[],text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_automations(bigint,bigint,text,boolean,text,bigint,bigint,timestamp with time zone,integer,integer,text,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_list_campaign_automation_details(bigint,bigint,bigint,text,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)": [
+      "aka_agent_semantic_row_json(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_data_group_source_summaries(bigint,bigint,bigint[],text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_detail_automation_triggers(bigint,bigint,bigint,bigint[],text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_details_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,bigint[])": [
+      "aka_agent_campaign_input_semantic_json(jsonb)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text,bigint[])": [
+      "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,bigint[])",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text)": [
+      "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text)": [
+      "aka_agent_campaign_input_semantic_json(jsonb)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)": [
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer)",
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text)",
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text)": [
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)",
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer)",
+      "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_campaign_input_data_page(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer)": [
+      "aka_agent_campaign_input_semantic_json(jsonb)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)": [],
+    "aka_agent_list_contact_datasets(bigint,bigint,bigint,text,text,text,text)": [],
+    "aka_agent_list_data_group_datasets_v205_auth_internal(bigint,bigint,bigint,text,text)": [
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint,text,text)",
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_group_datasets_v205_internal(bigint,bigint,bigint)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_data_group_datasets(bigint,bigint,bigint,text,text)": [
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_group_datasets(bigint,bigint,bigint)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_data_group_members_v2(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)"
+    ],
+    "aka_agent_list_data_group_members_v205_auth_internal(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_group_members_v205_internal(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)": [
+      "aka_agent_data_group_source_code(text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_data_group_members_v3(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text,text[])": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)": [
+      "aka_agent_list_data_group_members_v205_internal(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)"
+    ],
+    "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)"
+    ],
+    "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer)": [
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer,text,text)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_list_data_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],integer,integer,text,text)"
+    ],
+    "aka_agent_list_data_groups_v2(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)": [
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)",
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)"
+    ],
+    "aka_agent_list_data_groups_v205_auth_internal(bigint,bigint,text,integer,integer,text,text)": [
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)",
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_data_groups_v205_internal(bigint,bigint,text,integer,integer)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)": [
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)"
+    ],
+    "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)": [
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)"
+    ],
+    "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)": [
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)",
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_email_campaign_link_tracking_summaries(bigint)": [],
+    "aka_agent_list_message_opt_out_customers(bigint,bigint,text,text,text,integer)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_list_sms_due_input_data(bigint,bigint[],text,integer,integer)": [],
+    "aka_agent_lock_campaign_input_serialization(bigint)": [],
+    "aka_agent_lookup_zalo_users(bigint,bigint,text[])": [],
+    "aka_agent_mark_email_click(text,text)": [],
+    "aka_agent_mark_email_open(text,text)": [],
+    "aka_agent_membership_semantic_type(bigint)": [],
+    "aka_agent_merge_sms_voice_device_info(bigint,jsonb,boolean)": [],
+    "aka_agent_move_data_group_members(bigint,bigint,text,bigint,bigint[],bigint,text,text)": [
+      "aka_agent_move_data_group_members(bigint,bigint,text,bigint,bigint[],bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_move_data_group_members(bigint,bigint,text,bigint,bigint[],bigint)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)",
+      "aka_agent_sync_copied_data_group_origins(bigint,bigint,boolean)"
+    ],
+    "aka_agent_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text,text,text)": [
+      "aka_agent_internal_mutate_contact_tags(bigint,bigint,bigint[],bigint[],text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint,text,text)": [
+      "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_prepare_automation_detail_schedule()": [],
+    "aka_agent_prepare_device_change_v2(text)": [],
+    "aka_agent_prepare_device_change(text)": [],
+    "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)": [
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_preview_data_group_campaign_targets(bigint,bigint,bigint,text,bigint[],text,text)": [
+      "aka_agent_preview_data_group_campaign_targets(bigint,bigint,bigint,text,bigint[])",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_preview_data_group_campaign_targets(bigint,bigint,bigint,text,bigint[])": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_data_group_type_compatible(bigint,text)",
+      "aka_agent_internal_preview_data_group_target_key(bigint,bigint,bigint,bigint,text,bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_preview_data_group_dynamic_filter(bigint,bigint,bigint,jsonb,integer,text,text)": [
+      "aka_agent_data_group_dynamic_draft_scope_matches(jsonb,bigint,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_data_group_dynamic_scope_matches(bigint,bigint,text)"
+    ],
+    "aka_agent_process_data_group_dynamic_filters(bigint,bigint,integer,text,text)": [
+      "aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_project_linked_email_status_v366()": [],
+    "aka_agent_propagate_campaign_origin_semantic_type()": [
+      "aka_agent_data_group_type_compatible(bigint,text)",
+      "aka_agent_data_type_category_item_id(text,boolean)",
+      "aka_agent_internal_normalize_phone(text)",
+      "aka_agent_membership_semantic_type(bigint)"
+    ],
+    "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)": [
+      "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_internal_route_group_snapshot(bigint,bigint,bigint)",
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_read_campaign_engagement(bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)"
+    ],
+    "aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)": [
+      "private.column_filter_phone_v1(text)",
+      "private.column_filter_predicate_v1(text,jsonb)",
+      "private.column_filter_source_match_v1(jsonb,jsonb)",
+      "private.column_filter_zalo_tags_v1(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)": [
+      "private.column_filter_predicate_v1(text,jsonb)",
+      "private.group_access(text,bigint,bigint,bigint)",
+      "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+      "aka_agent_data_group_source_code(text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)": [
+      "private.column_filter_phone_v1(text)",
+      "private.column_filter_predicate_v1(text,jsonb)",
+      "private.column_filter_zalo_tags_v1(jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_read_report_page(bigint,bigint,text,text,jsonb)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_record_account_log(jsonb,jsonb)": [],
+    "aka_agent_record_campaign_engagement(bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)"
+    ],
+    "aka_agent_record_sms_message_status(bigint,bigint,text,text,jsonb,text)": [
+      "increment_auto_account_action_count(bigint,text,integer)"
+    ],
+    "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)": [
+      "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+      "private.facebook_random_orphan_turns(bigint,bigint)",
+      "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_recover_staff_credentials(text,text)": [
+      "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)",
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_refresh_contact_chat_tags(bigint)": [],
+    "aka_agent_refresh_data_group_primary_from_category_item()": [
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_refresh_data_group_primary_from_category_type()": [
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_refresh_data_group_primary_from_member()": [
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_refresh_data_group_primary_from_origin()": [
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_register_campaign_engagement(bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)"
+    ],
+    "aka_agent_remove_data_group_members(bigint,bigint,text,bigint,bigint[],text,text)": [
+      "aka_agent_remove_data_group_members(bigint,bigint,text,bigint,bigint[])",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_remove_data_group_members(bigint,bigint,text,bigint,bigint[])": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_repair_data_group_primary_from_origin()": [
+      "aka_agent_data_group_source_code(text)",
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_reserve_automation_data_group_input()": [
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_reset_device_binding_v2(text,text,text,uuid,jsonb,jsonb)": [],
+    "aka_agent_reset_device_binding(text,text,text,uuid,jsonb,jsonb)": [],
+    "aka_agent_resolve_automation_canonical_input()": [],
+    "aka_agent_run_data_group_dynamic_filter_worker(integer,integer)": [
+      "aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)"
+    ],
+    "aka_agent_save_automation_v173_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)",
+      "auto_save_automation_v171_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_save_automation_v201_campaign_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)": [
+      "aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,bigint,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_save_automation_v205_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)": [
+      "aka_agent_save_automation_v201_campaign_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,bigint,text,text,integer,text,time without time zone,time without time zone,boolean)": [
+      "aka_agent_is_data_type_category_item(bigint,boolean)",
+      "aka_agent_save_automation_v205_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_save_automation(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone,time without time zone,boolean)": [
+      "aka_agent_save_automation_v173_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text,integer,text,time without time zone)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_save_data_group_dynamic_filter(bigint,bigint,bigint,boolean,jsonb,text,text)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_data_group_validate_bound_rule(bigint,bigint,bigint,jsonb)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_save_upload_contact_datasets_v205_internal(bigint,bigint,bigint[],text,text,text,text,text,text,text,text,jsonb,jsonb)": [],
+    "aka_agent_save_upload_contact_datasets(bigint,bigint,bigint[],text,text,text,text,text,text,text,text,jsonb,jsonb,bigint,text,text)": [
+      "aka_agent_save_upload_contact_datasets(bigint,bigint,bigint[],text,text,text,text,text,text,text,text,jsonb,jsonb,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_save_upload_contact_datasets(bigint,bigint,bigint[],text,text,text,text,text,text,text,text,jsonb,jsonb,bigint)": [
+      "aka_agent_data_type_category_item_id(text,boolean)",
+      "aka_agent_derive_dataset_data_type(text,text,text,text,jsonb)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)",
+      "aka_agent_save_upload_contact_datasets_v205_internal(bigint,bigint,bigint[],text,text,text,text,text,text,text,text,jsonb,jsonb)"
+    ],
+    "aka_agent_semantic_row_json(jsonb)": [],
+    "aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_internal_send_exclusion_catalog()",
+      "aka_agent_internal_send_exclusion_group(bigint)",
+      "aka_agent_internal_send_exclusion_options(bigint,bigint,bigint)",
+      "aka_agent_internal_validate_send_exclusion_rules(jsonb,bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_set_automation_active_v201_campaign_internal(bigint,bigint,bigint,boolean,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_set_automation_active(bigint,bigint,bigint,boolean,text,text)": [
+      "aka_agent_set_automation_active_v201_campaign_internal(bigint,bigint,bigint,boolean,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)"
+    ],
+    "aka_agent_set_campaign_completed_at()": [],
+    "aka_agent_set_desktop_campaign_status_v2(bigint,bigint,bigint,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_set_group_only_sync_terminal()": [],
+    "aka_agent_set_voice_call_audio(bigint,bigint,text,uuid,text,bigint,integer,text)": [],
+    "aka_agent_set_zalo_server_account_status(bigint,bigint,text)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_set_zalo_server_campaign_status(bigint,bigint,text)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)": [
+      "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_sheet_claim(uuid)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)"
+    ],
+    "aka_agent_sheet_classify(bigint,text,jsonb)": [
+      "aka_agent_sheet_identity(text,jsonb)"
+    ],
+    "aka_agent_sheet_dispatch()": [
+      "aka_agent_get_vault_secret(text)"
+    ],
+    "aka_agent_sheet_finish(uuid,jsonb,integer,integer,text,boolean)": [
+      "aka_agent_data_group_account_available(bigint,bigint,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "aka_agent_sheet_classify(bigint,text,jsonb)"
+    ],
+    "aka_agent_sheet_identity(text,jsonb)": [
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)"
+    ],
+    "aka_agent_sheet_validate_config(jsonb)": [],
+    "aka_agent_snapshot_automation_data_group()": [],
+    "aka_agent_snapshot_data_group_to_direct_campaign_v205_internal(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_data_group_membership_has_valid_phone(bigint,bigint)",
+      "aka_agent_data_group_membership_semantic_compatible(bigint,text,bigint)",
+      "aka_agent_internal_normalize_facebook_identity(text)",
+      "aka_agent_internal_normalize_phone(text)",
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_snapshot_data_group_to_direct_campaign(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)": [
+      "private.can_read_data_group(bigint,bigint,bigint)",
+      "aka_agent_data_group_type_compatible(bigint,text)",
+      "aka_agent_snapshot_data_group_to_direct_campaign_v205_internal(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_staff_access(bigint,text,text)": [
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_staff_client(text,text,text,jsonb)": [
+      "private.aka_agent_device_ambiguous(smallint,text,bigint,boolean)",
+      "private.aka_agent_device_v3(bigint,text,jsonb)",
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "aka_agent_staff_management_row(bigint)": [],
+    "aka_agent_staff_management(bigint,text,text,text,jsonb)": [
+      "aka_agent_staff_management_row(bigint)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "normalize_phone(text)"
+    ],
+    "aka_agent_staff_runtime_scope(bigint,text)": [
+      "private.aka_agent_staff_scope_for_request()"
+    ],
+    "aka_agent_staff_security_status()": [],
+    "aka_agent_staff_time_allowed(bigint)": [
+      "private.aka_agent_staff_scope_for_request()"
+    ],
+    "aka_agent_stamp_account_contact_platform()": [],
+    "aka_agent_stamp_automation_detail_semantic_type()": [
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_stamp_campaign_input_semantic_type()": [
+      "aka_agent_data_type_category_item_id(text,boolean)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_stamp_data_group_relationship_kind()": [
+      "aka_agent_derive_data_group_relationship_kind(bigint,bigint,bigint)"
+    ],
+    "aka_agent_stamp_data_group_source_category()": [
+      "aka_agent_data_group_source_category_item_id(text)"
+    ],
+    "aka_agent_stamp_dataset_semantic_type()": [
+      "aka_agent_current_data_type_category_item_id()",
+      "aka_agent_data_type_category_item_id(text,boolean)",
+      "aka_agent_data_type_context_present()",
+      "aka_agent_derive_dataset_data_type(text,text,text,text,jsonb)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_stamp_origin_semantic_type()": [
+      "aka_agent_current_data_type_category_item_id()",
+      "aka_agent_data_type_context_present()",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)": [
+      "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_sync_contact_chat_tag_delta()": [
+      "aka_agent_refresh_contact_chat_tags(bigint)"
+    ],
+    "aka_agent_sync_copied_data_group_origins(bigint,bigint,boolean)": [
+      "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)"
+    ],
+    "aka_agent_sync_data_group_member_primary_origin(bigint,bigint,boolean)": [
+      "aka_agent_data_group_source_code(text)"
+    ],
+    "aka_agent_sync_dataset_auto_data_group_member()": [
+      "aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)"
+    ],
+    "aka_agent_sync_scan_dataset_group_origins()": [
+      "aka_agent_internal_route_data_group_member(bigint,bigint,bigint,bigint)"
+    ],
+    "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "aka_agent_take_expired_voice_tts_assets(timestamp with time zone,integer)": [],
+    "aka_agent_touch_campaign_last_run_at()": [],
+    "aka_agent_update_data_group_note(bigint,bigint,bigint,text,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_update_data_group_v2(bigint,bigint,bigint,text,text,integer,bigint,boolean,bigint,boolean,text,text)": [
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_update_data_group_v205_auth_internal(bigint,bigint,bigint,text,text,integer,text,text)": [
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean,text,text)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,text,text)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_update_data_group_v205_internal(bigint,bigint,bigint,text,text,integer)": [
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean,text,text)": [
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,text,text)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean)": [
+      "aka_agent_data_type_json(bigint)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)",
+      "aka_agent_is_data_type_category_item(bigint,boolean)"
+    ],
+    "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,text,text)": [
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean,text,text)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer)"
+    ],
+    "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer)": [
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean,text,text)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,bigint,boolean)",
+      "aka_agent_update_data_group(bigint,bigint,bigint,text,text,integer,text,text)"
+    ],
+    "aka_agent_validate_automation_rule_v171_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text,integer,text,time without time zone)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_validate_automation_rule(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,text,text,integer,text,time without time zone,time without time zone,boolean)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "aka_agent_validate_data_group_relationship_kind(bigint,bigint,bigint,text,jsonb)": [],
+    "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "increment_auto_account_action_count(bigint,text,integer)"
+    ],
+    "aka_agent_yield_campaign_daily_boundary(bigint,bigint,bigint,text,uuid,date)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)": [
+      "aka_agent_staff_time_allowed(bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "aka_crm_log_action_counts(date,date,text[])": [],
+    "aka_crm_log_hourly(date,date,text[])": [],
+    "aka_crm_log_page_time(date,date,text[])": [],
+    "aka_crm_log_presence_upsert(jsonb)": [],
+    "aka_crm_log_purge(integer)": [],
+    "aka_crm_log_workday(date,date,text[],integer)": [],
+    "aka_report_messaging_heatmap(timestamp with time zone,timestamp with time zone,text[],text)": [],
+    "aka_report_messaging_important(text[],jsonb,jsonb,text)": [],
+    "aka_report_messaging_overview(text[],jsonb,boolean,text)": [],
+    "aka_report_messaging_proactive_customers(timestamp with time zone,timestamp with time zone,text[],text,integer,integer)": [],
+    "aka_report_messaging_proactive(timestamp with time zone,timestamp with time zone,text[],boolean,text)": [],
+    "aka_report_messaging_recency_customers(text[],text,timestamp with time zone,integer,integer)": [],
+    "aka_report_messaging_recency(text[],timestamp with time zone,text)": [],
+    "aka_report_messaging_reengagement_customers(timestamp with time zone,timestamp with time zone,text[],text,text,integer,integer)": [],
+    "aka_report_messaging_reengagement(timestamp with time zone,timestamp with time zone,text[],boolean,text)": [],
+    "aka_report_messaging_staff_important(timestamp with time zone,timestamp with time zone,text[],jsonb,boolean,text)": [],
+    "aka_report_messaging_staff_overview(timestamp with time zone,timestamp with time zone,text[],boolean,text)": [],
+    "aka_report_messaging_trend(timestamp with time zone,timestamp with time zone,text[],text)": [],
+    "aka_tinh_nang_moi_set_ngay_cap_nhat()": [],
+    "aka_zalo_report_collect_v1(date,text[],bigint[])": [
+      "normalize_phone(text)"
+    ],
+    "aka_zalo_report_coverage_v1(date,date)": [],
+    "aka_zalo_report_detail_v1(date,date,text,text,bigint[],integer)": [],
+    "aka_zalo_report_replace_day_v1(date,jsonb)": [],
+    "aka_zalo_report_summary_v1(jsonb,text,bigint[])": [],
+    "akabiz_import_sql_zalo_web_v1(jsonb)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "create_control_zalo_account_atomic(bigint,bigint,integer,jsonb)"
+    ],
+    "akabiz_migrate_sql_account_v1(jsonb)": [
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "normalize_phone(text)"
+    ],
+    "akabiz_portal_claim_email_outbox(integer,text)": [],
+    "akabiz_portal_consume_rate_limit(jsonb)": [],
+    "akabiz_portal_create_trial_account(jsonb)": [
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "normalize_phone(text)"
+    ],
+    "akachat_apply_message_state_v2(jsonb)": [],
+    "akachat_ingest_messages_v2(jsonb)": [],
+    "akamap_create_data_group(jsonb)": [
+      "private.akamap_assert_data_group_identity(jsonb)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,bigint)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text,text,text)",
+      "aka_agent_create_data_group(bigint,bigint,text,text,text)"
+    ],
+    "akamap_data_group_types(jsonb)": [
+      "private.akamap_assert_data_group_identity(jsonb)"
+    ],
+    "akamap_ingest_data_group(jsonb)": [
+      "private.akamap_assert_data_group_identity(jsonb)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,bigint)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text,text,text)",
+      "aka_agent_ingest_data_group(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)"
+    ],
+    "akamap_list_data_group_datasets(jsonb)": [
+      "private.akamap_assert_data_group_identity(jsonb)",
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint,text,text)",
+      "aka_agent_list_data_group_datasets(bigint,bigint,bigint)"
+    ],
+    "akamap_list_data_groups(jsonb)": [
+      "private.akamap_assert_data_group_identity(jsonb)",
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer,text,text)",
+      "aka_agent_list_data_groups(bigint,bigint,text,integer,integer)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,boolean)",
+      "aka_agent_list_data_groups(bigint,bigint,text,text,bigint,bigint[],integer,integer,text,text,boolean)"
+    ],
+    "akamap_staff_client(text,text,text,jsonb,jsonb)": [],
+    "append_auto_campaign_log(bigint,bigint,text)": [],
+    "append_control_campaign_inputs(bigint,bigint,bigint,text,integer,jsonb)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "apply_renewal_crm_group(jsonb)": [
+      "private.aka_order_owner_state(aka_order)",
+      "private.crm_product_transition_reason(jsonb,bigint,bigint,bigint,date)",
+      "demo_care_should_skip_v1(bigint,bigint,timestamp with time zone,bigint)",
+      "renewal_crm_is_archived(jsonb)",
+      "renewal_crm_schedule_offsets(text)",
+      "renewal_crm_schedule()"
+    ],
+    "apply_sql_account_order_snapshots(jsonb)": [
+      "private.aka_order_non_org_is_demo(jsonb,text)",
+      "private.aka_order_non_org_is_paid(jsonb,text,numeric)",
+      "private.aka_order_non_org_package_type(text,text)",
+      "normalize_phone(text)"
+    ],
+    "archive_renewal_crm_duplicates_v1(jsonb,boolean,jsonb)": [
+      "renewal_crm_duplicate_manifest_v1(jsonb)",
+      "renewal_crm_is_archived(jsonb)"
+    ],
+    "array_to_halfvec(double precision[],integer,boolean)": [],
+    "array_to_halfvec(integer[],integer,boolean)": [],
+    "array_to_halfvec(numeric[],integer,boolean)": [],
+    "array_to_halfvec(real[],integer,boolean)": [],
+    "array_to_sparsevec(double precision[],integer,boolean)": [],
+    "array_to_sparsevec(integer[],integer,boolean)": [],
+    "array_to_sparsevec(numeric[],integer,boolean)": [],
+    "array_to_sparsevec(real[],integer,boolean)": [],
+    "array_to_vector(double precision[],integer,boolean)": [],
+    "array_to_vector(integer[],integer,boolean)": [],
+    "array_to_vector(numeric[],integer,boolean)": [],
+    "array_to_vector(real[],integer,boolean)": [],
+    "auto_assert_automation_identity(bigint,bigint,text,text)": [],
+    "auto_automation_to_json(bigint,bigint,bigint)": [
+      "aka_agent_semantic_row_json(jsonb)"
+    ],
+    "auto_capture_message_opt_out_source()": [],
+    "auto_guard_send_exclusion_definition()": [],
+    "auto_map_staff_id()": [],
+    "auto_pancake_set_updated_at()": [],
+    "auto_retry_automation_enqueue_failure_internal(bigint)": [],
+    "auto_save_automation_v171_internal(bigint,bigint,bigint,text,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,text,boolean,jsonb,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_automation_to_json(bigint,bigint,bigint)",
+      "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)"
+    ],
+    "auto_validate_automation_rule_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone,time without time zone)": [
+      "auto_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)"
+    ],
+    "auto_validate_automation_rule_v171_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean)": [],
+    "auto_validate_automation_rule_v173_internal(bigint,bigint,bigint,bigint,bigint,text,bigint,text,integer,integer,timestamp with time zone,boolean,boolean,integer,text,time without time zone)": [
+      "aka_agent_current_data_type_category_item_id()"
+    ],
+    "auto_validate_campaign_send_exclusion()": [
+      "aka_agent_internal_validate_send_exclusion_selection(jsonb,bigint,bigint,bigint)"
+    ],
+    "backfill_search_text_batch()": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "binary_quantize(halfvec)": [],
+    "binary_quantize(vector)": [],
+    "bulk_update_product_list(jsonb)": [],
+    "capture_aka_crm_pancake_override_audit()": [],
+    "change_organization_subscription(bigint,bigint)": [],
+    "chat_zalo_delete_data_group(bigint,bigint,bigint,text,boolean)": [
+      "aka_agent_delete_data_group(bigint,bigint,bigint,text,text,text)",
+      "aka_agent_delete_data_group(bigint,bigint,bigint,text)",
+      "aka_agent_internal_require_staff_tenant(bigint,bigint)"
+    ],
+    "chat_zalo_extract_conversation_contact_info(text)": [],
+    "chat_zalo_extract_message_contact_info(text,text,text,jsonb,text)": [
+      "chat_zalo_extract_conversation_contact_info(text)"
+    ],
+    "chat_zalo_record_conversation_created_event()": [],
+    "chat_zalo_sync_conversation_contact_info()": [
+      "chat_zalo_extract_message_contact_info(text,text,text,jsonb,text)"
+    ],
+    "chat_zalo_touch_updated_at()": [],
+    "check_auto_zalo_gom_ready()": [
+      "gom_create_with_message(jsonb,uuid,text)"
+    ],
+    "check_cskh_type23_guard(bigint,uuid)": [
+      "private.cskh_type23_guard_decision(bigint,bigint,timestamp with time zone)",
+      "find_cskh_activity_crm_candidate(uuid)"
+    ],
+    "check_gom_processing_ready()": [
+      "gom_apply_message(uuid,uuid,text,timestamp with time zone,text,text)",
+      "gom_create_with_message(jsonb,uuid,text)"
+    ],
+    "check_gom_visible_to_staff(uuid,uuid)": [],
+    "check_rate_limit(text,integer,integer)": [],
+    "check_webhook_inbox_ready()": [],
+    "claim_agent_conversation_turn(uuid,text,uuid,text,text)": [],
+    "claim_auto_automation_details_v205_internal(bigint,bigint,text,integer,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "claim_auto_automation_details(bigint,bigint,text,integer,text,text)": [
+      "claim_auto_automation_details_v205_internal(bigint,bigint,text,integer,text,text)"
+    ],
+    "claim_campaign_runtime(bigint,bigint,bigint,text)": [
+      "aka_agent_claim_campaign_runtime_checked(bigint,bigint,bigint,text)"
+    ],
+    "claim_cskh_type23_guard_jobs(uuid,integer,integer)": [],
+    "claim_message_gom_jobs(integer,text,integer,integer,integer)": [],
+    "claim_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)"
+    ],
+    "claim_webhook_inbox_jobs(integer,text,integer)": [],
+    "claim_zalo_account_runtime_operation(bigint,bigint,text,boolean)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "complete_control_media(bigint,bigint,text,text,text,text,text,bigint)": [],
+    "complete_expired_care_task_v2(bigint,bigint,bigint,bigint[],text,boolean,boolean,bigint)": [
+      "complete_expired_care_task(bigint,bigint,bigint,bigint[],text,boolean,boolean)"
+    ],
+    "complete_expired_care_task_v3(bigint,bigint,bigint,bigint[],text,boolean,boolean,bigint,jsonb)": [
+      "complete_expired_care_task_v2(bigint,bigint,bigint,bigint[],text,boolean,boolean,bigint)",
+      "complete_expired_care_task(bigint,bigint,bigint,bigint[],text,boolean,boolean)",
+      "crm_recent_reply_message_is_genuine(jsonb)"
+    ],
+    "complete_expired_care_task(bigint,bigint,bigint,bigint[],text,boolean,boolean)": [],
+    "complete_type19_data_error_task(bigint,bigint,timestamp with time zone,bigint,text[],timestamp with time zone,timestamp with time zone,text,bigint,bigint,jsonb)": [],
+    "complete_webhook_inbox_job(bigint,uuid,text,jsonb)": [],
+    "contacts_set_search_text()": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "cosine_distance(halfvec,halfvec)": [],
+    "cosine_distance(sparsevec,sparsevec)": [],
+    "cosine_distance(vector,vector)": [],
+    "create_control_campaign_v2(bigint,bigint,text,jsonb,jsonb,text)": [
+      "create_control_campaign(bigint,bigint,text,jsonb,jsonb)"
+    ],
+    "create_control_campaign(bigint,bigint,text,jsonb,jsonb)": [],
+    "create_control_zalo_account_atomic(bigint,bigint,integer,jsonb)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)"
+    ],
+    "create_order_on_cskh_thanhtien()": [],
+    "create_organization(bigint,text,text,text,bigint)": [],
+    "crm_agent_campaign_results(bigint[],bigint[])": [],
+    "crm_desktop_campaign_page(integer[],integer,integer,uuid)": [],
+    "crm_enqueue_trial_care_v1(bigint,text)": [],
+    "crm_process_trial_care_queue_v1(integer)": [
+      "private.crm_reconcile_trial_care_page_v1(bigint,integer,bigint)"
+    ],
+    "crm_product_transition_ready()": [],
+    "crm_recent_reply_media_kind(jsonb)": [],
+    "crm_recent_reply_message_is_genuine(jsonb)": [
+      "crm_recent_reply_media_kind(jsonb)"
+    ],
+    "crm_reconcile_trial_care_v1(bigint,integer)": [
+      "private.crm_reconcile_trial_care_page_v1(bigint,integer,bigint)"
+    ],
+    "crm_trial_campaign_signal_counts(bigint[],bigint[])": [],
+    "crm_trial_care_decision_v1(jsonb)": [
+      "private.crm_trial_care_candidate_v1(jsonb)",
+      "private.crm_trial_care_product_key_v1(bigint)"
+    ],
+    "delete_control_campaign_atomic(bigint,bigint,bigint)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "delete_control_zalo_account_group_atomic(bigint,bigint,bigint)": [],
+    "delete_control_zalo_proxy_atomic(bigint,bigint,bigint)": [],
+    "demo_care_should_skip_v1(bigint,bigint,timestamp with time zone,bigint)": [],
+    "derive_org_product_zalo_server_flag()": [],
+    "discover_zalo_server_account_runtime_users(bigint,integer)": [
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "discover_zalo_server_runtime_users(bigint,integer)": [
+      "resolve_organization_zalo_runtime_mode(bigint)"
+    ],
+    "docs_search(text,integer)": [
+      "docs_unaccent(text)"
+    ],
+    "docs_touch_updated_at()": [],
+    "docs_unaccent(text)": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "dt_report_html(text)": [],
+    "enable_due_auto_account_actions()": [],
+    "enforce_aka_crm_daily_limits()": [],
+    "enforce_zalo_account_capability_and_quota()": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)"
+    ],
+    "enqueue_campaign_zalo_realtime_group_event(bigint,bigint,bigint,text,text,text,text,text,text,timestamp with time zone,timestamp with time zone,jsonb)": [
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "enqueue_cskh_expired_job(text,text)": [
+      "normalize_phone(text)"
+    ],
+    "enqueue_cskh_followups(text,text,text,text,uuid)": [
+      "normalize_phone(text)"
+    ],
+    "enqueue_cskh_reactivation_job(text,text,timestamp with time zone,text)": [
+      "normalize_phone(text)"
+    ],
+    "enqueue_cskh_type23_guard_candidate(uuid)": [
+      "find_cskh_activity_crm_candidate(uuid)"
+    ],
+    "enqueue_message_gom_job()": [],
+    "enqueue_web_visit_cskh_jobs(text,text,text,uuid)": [
+      "enqueue_cskh_expired_job(text,text)",
+      "enqueue_cskh_followups(text,text,text,text,uuid)",
+      "normalize_phone(text)"
+    ],
+    "enqueue_webhook_inbox(text,text,text,text,text,text,text,text,timestamp with time zone,jsonb,text,integer,timestamp with time zone)": [],
+    "enqueue_zalo_chat_referral_v1()": [
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_contact_card_flag_v1(text)"
+    ],
+    "ensure_sms_auto_account_for_staff(bigint)": [],
+    "f_unaccent(text)": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "fail_webhook_inbox_job(bigint,uuid,integer,integer,text)": [],
+    "find_active_demo_cskh_candidate(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_active_product_cskh_candidate(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_active_reactivation_candidate(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_aka_customer_id_by_phone(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_aka_order_id_by_phone(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_cskh_activity_crm_candidate(uuid)": [
+      "normalize_phone(text)"
+    ],
+    "find_dormant_app_candidates(integer)": [],
+    "find_expired_cskh_candidate(text)": [
+      "normalize_phone(text)"
+    ],
+    "find_expired_priority_candidates(integer,bigint)": [
+      "get_expired_priority_candidate_context(bigint[])"
+    ],
+    "find_frequent_login_expired_candidates_v2(integer,integer)": [
+      "normalize_phone(text)"
+    ],
+    "find_frequent_login_expired_candidates(integer,integer)": [],
+    "find_unified_web_crm_candidate(uuid)": [
+      "private.find_unified_web_crm_candidate(uuid)"
+    ],
+    "finish_cskh_type23_guard_job(bigint,uuid,text,bigint,text,text)": [],
+    "fn_agent_qa_callback()": [],
+    "fn_aka_cskh_lark_webhook()": [],
+    "fn_aka_customer_sanitize_ip_address()": [],
+    "fn_aka_lead_match_akacustomer()": [
+      "fn_normalize_phone_vn(text)"
+    ],
+    "fn_aka_lead_normalize_phone()": [
+      "fn_normalize_phone_vn(text)"
+    ],
+    "fn_aka_quiz_hoithoai_result_to_lark()": [],
+    "fn_alert_bug_stuck(numeric)": [
+      "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)"
+    ],
+    "fn_alert_stacked_unanswered(integer,integer)": [
+      "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)"
+    ],
+    "fn_auto_assign_staff_to_contact()": [],
+    "fn_auto_link_customer_on_cskh_insert()": [
+      "fn_upsert_aka_customer_v1(jsonb)"
+    ],
+    "fn_auto_pipeline_stage()": [],
+    "fn_auto_reply_friend_request()": [],
+    "fn_birthday_care_backfill_v2(date,integer)": [
+      "fn_birthday_care_enqueue_v2(uuid,integer)",
+      "fn_birthday_care_is_birthday_v2(text,text,text,text)"
+    ],
+    "fn_birthday_care_classify_v2(bigint,date)": [
+      "fn_birthday_care_product_label_v2(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_birthday_care_clean_name_v2(text)": [],
+    "fn_birthday_care_compose_v2(jsonb)": [
+      "fn_birthday_care_package_label_v2(text,text,boolean,boolean)"
+    ],
+    "fn_birthday_care_enqueue_v2(uuid,integer)": [
+      "fn_birthday_care_is_birthday_v2(text,text,text,text)"
+    ],
+    "fn_birthday_care_finish_v2(bigint,boolean,text,text,bigint,bigint)": [],
+    "fn_birthday_care_is_birthday_v2(text,text,text,text)": [],
+    "fn_birthday_care_package_label_v2(text,text,boolean,boolean)": [],
+    "fn_birthday_care_process_job_v2(bigint,boolean,boolean)": [
+      "private.zalo_referral_due_date_v1(timestamp with time zone)",
+      "fn_birthday_care_classify_v2(bigint,date)",
+      "fn_birthday_care_clean_name_v2(text)",
+      "fn_birthday_care_compose_v2(jsonb)",
+      "fn_birthday_care_finish_v2(bigint,boolean,text,text,bigint,bigint)",
+      "fn_birthday_care_is_birthday_v2(text,text,text,text)",
+      "fn_zalo_chat_referral_pancake_url_v1(uuid)",
+      "normalize_phone(text)"
+    ],
+    "fn_birthday_care_product_label_v2(text)": [],
+    "fn_birthday_care_run_v2(integer)": [
+      "fn_birthday_care_process_job_v2(bigint,boolean,boolean)"
+    ],
+    "fn_birthday_offer_authorize_send_v1(uuid,uuid,bigint,text,bigint,text,text)": [
+      "private.birthday_offer_context_v1(uuid)"
+    ],
+    "fn_birthday_offer_candidate_v1(uuid,uuid,boolean)": [
+      "private.birthday_offer_context_v1(uuid)"
+    ],
+    "fn_birthday_offer_claim_v1(uuid,integer,boolean,text,integer)": [
+      "uuid_generate_v7()"
+    ],
+    "fn_birthday_offer_finish_v1(uuid,uuid,text,jsonb)": [],
+    "fn_birthday_offer_mark_send_uncertain_v1(uuid,uuid,text,jsonb)": [],
+    "fn_birthday_offer_preview_transcript_v1(uuid,integer)": [
+      "private.birthday_offer_transcript_rows_v1(uuid,integer)"
+    ],
+    "fn_birthday_offer_preview_v1(uuid)": [
+      "private.birthday_offer_context_v1(uuid)"
+    ],
+    "fn_birthday_offer_reconcile_v1(uuid,uuid,text)": [],
+    "fn_birthday_offer_retry_v1(uuid,uuid,text,text,integer,jsonb)": [],
+    "fn_birthday_offer_transcript_v1(uuid,uuid,integer)": [
+      "private.birthday_offer_transcript_rows_v1(uuid,integer)"
+    ],
+    "fn_bot_auto_send_tier1()": [],
+    "fn_bot_auto_send_tier2()": [],
+    "fn_bot_classify()": [],
+    "fn_bot_reply_qa_cache()": [],
+    "fn_bot_reply_route()": [],
+    "fn_chat_followup_extract_phone_v1(bigint,uuid,text,uuid)": [
+      "fn_normalize_phone_vn(text)"
+    ],
+    "fn_chat_followup_insert_verified_v2(date,text[])": [
+      "fn_chat_followup_post_ai_filter_v1(date,bigint,uuid,text,uuid,boolean)",
+      "fn_chat_followup_prepare_v2(date,boolean,boolean)"
+    ],
+    "fn_chat_followup_internal_token_valid_v2(text)": [],
+    "fn_chat_followup_post_ai_filter_v1(date,bigint,uuid,text,uuid,boolean)": [
+      "fn_chat_followup_extract_phone_v1(bigint,uuid,text,uuid)",
+      "fn_normalize_phone_vn(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_chat_followup_prepare_v2(date,boolean,boolean)": [
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "normalize_phone(text)"
+    ],
+    "fn_claim_phone_nudge_jobs_v1(integer,integer)": [],
+    "fn_contact_match_aka_customer()": [
+      "fn_upsert_aka_customer_v1(jsonb)"
+    ],
+    "fn_context_bao_loi(bigint,uuid,text)": [
+      "fn_context_che_du_lieu(text)"
+    ],
+    "fn_context_bo_qua(bigint,uuid,text)": [],
+    "fn_context_chay_dem(boolean)": [
+      "fn_context_dong_bo_lien_ket_aka(bigint)",
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_xep_hang(text,text,text)"
+    ],
+    "fn_context_che_du_lieu(text)": [],
+    "fn_context_che_json(jsonb)": [
+      "fn_context_che_du_lieu(text)"
+    ],
+    "fn_context_chuan_hoa(text)": [],
+    "fn_context_doi_contact(uuid,uuid)": [
+      "fn_context_ho_so_chinh(bigint)"
+    ],
+    "fn_context_dong_bo_lien_ket_aka(bigint)": [
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_lien_ket_aka(bigint,bigint,bigint,text)"
+    ],
+    "fn_context_dong_bo_lua_chon(bigint)": [],
+    "fn_context_ghi_ket_qua(bigint,uuid,jsonb,jsonb)": [
+      "fn_context_che_du_lieu(text)",
+      "fn_context_che_json(jsonb)",
+      "fn_context_chuan_hoa(text)",
+      "fn_context_giai_doan_khach(bigint)",
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_ngay(text)",
+      "fn_context_noi_dung_ban_ghi(text,text,text)",
+      "fn_context_so(text)",
+      "fn_context_tim_trich_dan(jsonb,text,text,text)"
+    ],
+    "fn_context_ghi_tong_hop(bigint,uuid,jsonb,jsonb)": [
+      "fn_context_che_du_lieu(text)",
+      "fn_context_che_json(jsonb)",
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_so(text)"
+    ],
+    "fn_context_giai_doan_khach(bigint)": [
+      "fn_context_pipeline_sang_funnel(text)"
+    ],
+    "fn_context_gop_khach(bigint,bigint)": [],
+    "fn_context_ho_so_chinh(bigint)": [],
+    "fn_context_hoi_thoai(bigint,timestamp with time zone,integer,integer)": [
+      "fn_context_che_du_lieu(text)",
+      "fn_context_noi_dung_gom_hoi(text,text)",
+      "fn_context_noi_dung_zalo(text,text,text)"
+    ],
+    "fn_context_khoi_tao_to_chuc(bigint)": [
+      "fn_context_dong_bo_lua_chon(bigint)"
+    ],
+    "fn_context_la_tin_xa_giao(text)": [],
+    "fn_context_lay_dau_vao(bigint,uuid)": [
+      "fn_context_giai_doan_khach(bigint)",
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_hoi_thoai(bigint,timestamp with time zone,integer,integer)",
+      "fn_context_la_tin_xa_giao(text)"
+    ],
+    "fn_context_lay_ho_so(bigint,uuid,bigint,bigint,bigint)": [
+      "fn_context_giai_doan_khach(bigint)",
+      "fn_context_ho_so_chinh(bigint)"
+    ],
+    "fn_context_lien_ket_aka(bigint,bigint,bigint,text)": [
+      "fn_context_gop_khach(bigint,bigint)",
+      "fn_context_ho_so_chinh(bigint)"
+    ],
+    "fn_context_ngay(text)": [],
+    "fn_context_nhan_dien_khach_gom(bigint,uuid)": [
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_lien_ket_aka(bigint,bigint,bigint,text)"
+    ],
+    "fn_context_nhan_dien_khach_zalo(bigint,bigint)": [
+      "fn_context_ho_so_chinh(bigint)",
+      "fn_context_lien_ket_aka(bigint,bigint,bigint,text)",
+      "normalize_phone(text)"
+    ],
+    "fn_context_nhan_viec(integer)": [],
+    "fn_context_noi_dung_ban_ghi(text,text,text)": [
+      "fn_context_che_du_lieu(text)",
+      "fn_context_noi_dung_gom_hoi(text,text)",
+      "fn_context_noi_dung_zalo(text,text,text)"
+    ],
+    "fn_context_noi_dung_gom_hoi(text,text)": [],
+    "fn_context_noi_dung_zalo(text,text,text)": [],
+    "fn_context_pipeline_sang_funnel(text)": [],
+    "fn_context_so(text)": [],
+    "fn_context_tim_trich_dan(jsonb,text,text,text)": [
+      "fn_context_chuan_hoa(text)"
+    ],
+    "fn_context_tra_viec(bigint,uuid)": [],
+    "fn_context_trg_chat_zalo_message()": [
+      "fn_context_xep_hang(text,text,text)"
+    ],
+    "fn_context_trg_che_ten_khach()": [
+      "fn_context_che_du_lieu(text)"
+    ],
+    "fn_context_trg_message_gom()": [
+      "fn_context_doi_contact(uuid,uuid)",
+      "fn_context_xep_hang(text,text,text)"
+    ],
+    "fn_context_trg_tang_phien_ban()": [],
+    "fn_context_xep_hang(text,text,text)": [
+      "fn_context_nhan_dien_khach_gom(bigint,uuid)",
+      "fn_context_nhan_dien_khach_zalo(bigint,bigint)",
+      "fn_context_noi_dung_gom_hoi(text,text)"
+    ],
+    "fn_create_aka_crm_v1(jsonb)": [
+      "private.zalo_referral_due_date_v1(timestamp with time zone)",
+      "demo_care_should_skip_v1(bigint,bigint,timestamp with time zone,bigint)",
+      "normalize_phone(text)"
+    ],
+    "fn_crm_type19_group_invite_claim_next_v1(date)": [
+      "fn_crm_type19_group_invite_conversation_key_v1(text)"
+    ],
+    "fn_crm_type19_group_invite_conversation_key_v1(text)": [],
+    "fn_crm_type19_group_invite_enqueue_v1(date,text)": [],
+    "fn_crm_type19_group_invite_finish_run_v1(bigint,date,text,integer,integer,integer,integer,integer,integer,integer,boolean,text,text)": [
+      "fn_crm_type19_group_invite_enqueue_v1(date,text)"
+    ],
+    "fn_crm_type19_group_invite_finish_v1(bigint,uuid,text,text,text,text,text)": [],
+    "fn_crm_type19_group_invite_preview_v1(date)": [
+      "fn_crm_type19_group_invite_conversation_key_v1(text)"
+    ],
+    "fn_crm_type19_group_invite_start_run_v1(date,text)": [],
+    "fn_cron_catchup_ai_evaluate(integer)": [],
+    "fn_cron_catchup_analyze_relevance(integer)": [],
+    "fn_cskh_on_customer_activity()": [],
+    "fn_digest_unresolved_bugs()": [],
+    "fn_dong_co_hoi_ban_hang(bigint,text,text,bigint,bigint)": [],
+    "fn_embed_qa_question()": [],
+    "fn_enqueue_phone_nudge_v1(bigint,text,integer,boolean,boolean)": [
+      "fn_phone_nudge_is_system_message_v1(text,text)",
+      "fn_phone_nudge_trigger_type_v1(text,text)"
+    ],
+    "fn_escalate_repeat_offenders(integer)": [],
+    "fn_extract_phone_from_message_gom()": [
+      "fn_zalo_contact_card_from_ids_v2(jsonb,text)",
+      "fn_zalo_referral_phone_candidates_v1(text,jsonb,text)",
+      "normalize_phone(text)"
+    ],
+    "fn_finish_phone_nudge_job_v1(bigint,uuid,text,text,jsonb,text,jsonb,text,text,jsonb,jsonb)": [],
+    "fn_generate_birthday_reply()": [],
+    "fn_kcd_admin_decide_v3(uuid,text,bigint,text,timestamp with time zone)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)",
+      "fn_kcd_target_v3(uuid,jsonb)"
+    ],
+    "fn_kcd_apply_v2(uuid)": [
+      "fn_create_aka_crm_v1(jsonb)",
+      "fn_kcd_snapshot_v2(uuid,jsonb)",
+      "fn_upsert_aka_customer_v1(jsonb)"
+    ],
+    "fn_kcd_apply_v3(uuid)": [
+      "fn_create_aka_crm_v1(jsonb)",
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)",
+      "fn_kcd_snapshot_v2(uuid,jsonb)",
+      "fn_kcd_target_v3(uuid,jsonb)",
+      "fn_upsert_aka_customer_v1(jsonb)"
+    ],
+    "fn_kcd_backfill_v3(timestamp with time zone,timestamp with time zone)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)"
+    ],
+    "fn_kcd_claim_v2(text,text)": [],
+    "fn_kcd_claim_v3(text,text)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)"
+    ],
+    "fn_kcd_context_v3(uuid)": [],
+    "fn_kcd_discover_v3(integer)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)"
+    ],
+    "fn_kcd_finish_v2(text,text,jsonb)": [],
+    "fn_kcd_finish_v3(text,text,jsonb)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)"
+    ],
+    "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)": [],
+    "fn_kcd_reject_v2(uuid,bigint,text)": [],
+    "fn_kcd_rerun_v3(uuid,bigint,timestamp with time zone)": [
+      "fn_kcd_context_v3(uuid)",
+      "fn_kcd_log_v3(text,text,text,text,bigint,jsonb)"
+    ],
+    "fn_kcd_seal_v2(jsonb)": [],
+    "fn_kcd_snapshot_v2(uuid,jsonb)": [
+      "fn_kcd_context_v3(uuid)",
+      "normalize_phone(text)"
+    ],
+    "fn_kcd_target_v3(uuid,jsonb)": [
+      "fn_kcd_context_v3(uuid)"
+    ],
+    "fn_kgt_apply_v2(uuid,uuid,text,jsonb)": [
+      "fn_create_aka_crm_v1(jsonb)",
+      "fn_kgt_canonical_customer_v2(bigint)",
+      "fn_kgt_input_v2(uuid)",
+      "fn_kgt_lookup_v2(text,text)",
+      "fn_kgt_result_meta_v2(jsonb)",
+      "fn_kgt_triage_v1(jsonb)",
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "fn_zalo_referral_canonical_uid_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_kgt_backfill_review_v1(bigint,integer)": [
+      "fn_kgt_input_v2(uuid)"
+    ],
+    "fn_kgt_canonical_customer_v2(bigint)": [],
+    "fn_kgt_claim_v2(uuid)": [],
+    "fn_kgt_crm_daily_guard_v2()": [],
+    "fn_kgt_discover_v1(integer)": [
+      "fn_kgt_enqueue_v2(uuid,boolean)",
+      "fn_kgt_input_v2(uuid)"
+    ],
+    "fn_kgt_enqueue_v2(uuid,boolean)": [
+      "fn_kgt_input_v2(uuid)"
+    ],
+    "fn_kgt_finish_v2(uuid,uuid,text,jsonb)": [
+      "fn_kgt_input_v2(uuid)",
+      "fn_kgt_result_meta_v2(jsonb)",
+      "fn_kgt_triage_v1(jsonb)"
+    ],
+    "fn_kgt_input_v2(uuid)": [
+      "fn_kgt_canonical_customer_v2(bigint)",
+      "fn_kgt_message_binding_v1(jsonb,jsonb)",
+      "fn_kgt_message_ids_v2(jsonb)",
+      "fn_kgt_source_uid_v1(text)",
+      "fn_zalo_referral_canonical_uid_v1(text)"
+    ],
+    "fn_kgt_lookup_v2(text,text)": [
+      "fn_kgt_canonical_customer_v2(bigint)",
+      "fn_kgt_phones_v2(text[])",
+      "fn_zalo_referral_canonical_uid_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_kgt_message_binding_v1(jsonb,jsonb)": [
+      "fn_kgt_source_uid_v1(text)"
+    ],
+    "fn_kgt_message_changed_v2()": [
+      "fn_kgt_enqueue_v2(uuid,boolean)",
+      "fn_kgt_message_ids_v2(jsonb)"
+    ],
+    "fn_kgt_message_ids_v2(jsonb)": [],
+    "fn_kgt_phones_v2(text[])": [
+      "normalize_phone(text)"
+    ],
+    "fn_kgt_result_meta_v2(jsonb)": [],
+    "fn_kgt_review_action_v1(uuid,text,bigint,text,timestamp with time zone)": [
+      "fn_kgt_input_v2(uuid)"
+    ],
+    "fn_kgt_source_uid_v1(text)": [],
+    "fn_kgt_triage_v1(jsonb)": [],
+    "fn_khach_da_mua(bigint)": [],
+    "fn_khach_gioi_thieu_enqueue_v1()": [
+      "fn_kgt_enqueue_v2(uuid,boolean)"
+    ],
+    "fn_kt_context_bao_cao(bigint)": [
+      "fn_kt_context_bo_ma(text)"
+    ],
+    "fn_kt_context_bao_loi_cham(bigint,uuid,text)": [],
+    "fn_kt_context_bao_loi(bigint,uuid,text)": [
+      "fn_kt_context_che_du_lieu(text)"
+    ],
+    "fn_kt_context_bo_ma(text)": [],
+    "fn_kt_context_bo_qua(bigint,uuid,text)": [],
+    "fn_kt_context_chay_dem(boolean)": [
+      "fn_kt_context_dong_bo_lien_ket_aka(bigint)",
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_xep_hang(text,text,text)"
+    ],
+    "fn_kt_context_che_du_lieu(text)": [],
+    "fn_kt_context_che_json(jsonb)": [
+      "fn_kt_context_che_du_lieu(text)"
+    ],
+    "fn_kt_context_chon_mau(text,timestamp with time zone,integer,integer,double precision)": [],
+    "fn_kt_context_chuan_hoa(text)": [],
+    "fn_kt_context_doi_contact(uuid,uuid)": [
+      "fn_kt_context_ho_so_chinh(bigint)"
+    ],
+    "fn_kt_context_dong_bo_lien_ket_aka(bigint)": [
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_lien_ket_aka(bigint,bigint,bigint,text)"
+    ],
+    "fn_kt_context_dong_bo_lua_chon(bigint)": [],
+    "fn_kt_context_ghi_cham(bigint,uuid,jsonb,jsonb)": [
+      "fn_context_che_du_lieu(text)",
+      "fn_context_che_json(jsonb)",
+      "fn_context_so(text)"
+    ],
+    "fn_kt_context_ghi_ket_qua(bigint,uuid,jsonb,jsonb)": [
+      "fn_kt_context_che_du_lieu(text)",
+      "fn_kt_context_che_json(jsonb)",
+      "fn_kt_context_chuan_hoa(text)",
+      "fn_kt_context_giai_doan_khach(bigint)",
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_ngay(text)",
+      "fn_kt_context_noi_dung_ban_ghi(text,text,text)",
+      "fn_kt_context_so(text)",
+      "fn_kt_context_tim_trich_dan(jsonb,text,text,text)"
+    ],
+    "fn_kt_context_ghi_tong_hop(bigint,uuid,jsonb,jsonb)": [
+      "fn_kt_context_che_du_lieu(text)",
+      "fn_kt_context_che_json(jsonb)",
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_so(text)"
+    ],
+    "fn_kt_context_giai_doan_khach(bigint)": [
+      "fn_kt_context_pipeline_sang_funnel(text)"
+    ],
+    "fn_kt_context_gop_khach(bigint,bigint)": [],
+    "fn_kt_context_ho_so_chinh(bigint)": [],
+    "fn_kt_context_hoi_thoai(bigint,timestamp with time zone,integer,integer,timestamp with time zone)": [
+      "fn_kt_context_che_du_lieu(text)",
+      "fn_kt_context_noi_dung_gom_hoi(text,text)",
+      "fn_kt_context_noi_dung_zalo(text,text,text)"
+    ],
+    "fn_kt_context_khoi_tao_to_chuc(bigint)": [
+      "fn_kt_context_dong_bo_lua_chon(bigint)"
+    ],
+    "fn_kt_context_la_tin_xa_giao(text)": [],
+    "fn_kt_context_lay_dau_vao_cham(bigint,uuid)": [],
+    "fn_kt_context_lay_dau_vao(bigint,uuid)": [
+      "fn_kt_context_giai_doan_khach(bigint)",
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_hoi_thoai(bigint,timestamp with time zone,integer,integer,timestamp with time zone)",
+      "fn_kt_context_la_tin_xa_giao(text)"
+    ],
+    "fn_kt_context_lay_ho_so(bigint,uuid,bigint,bigint,bigint)": [
+      "fn_kt_context_giai_doan_khach(bigint)",
+      "fn_kt_context_ho_so_chinh(bigint)"
+    ],
+    "fn_kt_context_lien_ket_aka(bigint,bigint,bigint,text)": [
+      "fn_kt_context_gop_khach(bigint,bigint)",
+      "fn_kt_context_ho_so_chinh(bigint)"
+    ],
+    "fn_kt_context_ngay(text)": [],
+    "fn_kt_context_nhan_cham(integer)": [],
+    "fn_kt_context_nhan_dien_khach_gom(bigint,uuid)": [
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_lien_ket_aka(bigint,bigint,bigint,text)"
+    ],
+    "fn_kt_context_nhan_dien_khach_zalo(bigint,bigint)": [
+      "fn_kt_context_ho_so_chinh(bigint)",
+      "fn_kt_context_lien_ket_aka(bigint,bigint,bigint,text)",
+      "normalize_phone(text)"
+    ],
+    "fn_kt_context_nhan_viec(integer)": [],
+    "fn_kt_context_noi_dung_ban_ghi(text,text,text)": [
+      "fn_kt_context_che_du_lieu(text)",
+      "fn_kt_context_noi_dung_gom_hoi(text,text)",
+      "fn_kt_context_noi_dung_zalo(text,text,text)"
+    ],
+    "fn_kt_context_noi_dung_gom_hoi(text,text)": [],
+    "fn_kt_context_noi_dung_zalo(text,text,text)": [],
+    "fn_kt_context_pipeline_sang_funnel(text)": [],
+    "fn_kt_context_so(text)": [],
+    "fn_kt_context_tao_dot(text,text,timestamp with time zone,timestamp with time zone,boolean,text)": [
+      "fn_kt_context_xep_hang(text,text,text)"
+    ],
+    "fn_kt_context_tim_trich_dan(jsonb,text,text,text)": [
+      "fn_kt_context_chuan_hoa(text)"
+    ],
+    "fn_kt_context_tra_viec(bigint,uuid)": [],
+    "fn_kt_context_trg_chat_zalo_message()": [
+      "fn_kt_context_xep_hang(text,text,text)"
+    ],
+    "fn_kt_context_trg_che_ten_khach()": [
+      "fn_kt_context_che_du_lieu(text)"
+    ],
+    "fn_kt_context_trg_message_gom()": [
+      "fn_kt_context_doi_contact(uuid,uuid)",
+      "fn_kt_context_xep_hang(text,text,text)"
+    ],
+    "fn_kt_context_trg_tang_phien_ban()": [],
+    "fn_kt_context_xep_hang_cham(bigint,integer,text)": [],
+    "fn_kt_context_xep_hang(text,text,text)": [
+      "fn_kt_context_nhan_dien_khach_gom(bigint,uuid)",
+      "fn_kt_context_nhan_dien_khach_zalo(bigint,bigint)",
+      "fn_kt_context_noi_dung_gom_hoi(text,text)"
+    ],
+    "fn_kt_context_xep_tong_hop(bigint)": [],
+    "fn_message_gom_sync_auto_message_ids()": [],
+    "fn_normalize_intent(text)": [],
+    "fn_normalize_phone_vn(text)": [
+      "normalize_phone(text)"
+    ],
+    "fn_notify_answer_quality()": [
+      "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)"
+    ],
+    "fn_notify_purchase_to_lark()": [],
+    "fn_notify_sales_unanswered()": [
+      "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)"
+    ],
+    "fn_opp_apply_variants(jsonb,jsonb)": [],
+    "fn_opp_cond(text,aka_salesopportunity,jsonb)": [
+      "fn_trang_thai_mua(bigint)"
+    ],
+    "fn_opp_conds_all(jsonb,aka_salesopportunity,jsonb)": [
+      "fn_opp_cond(text,aka_salesopportunity,jsonb)"
+    ],
+    "fn_opp_conds_any(jsonb,aka_salesopportunity,jsonb)": [
+      "fn_opp_cond(text,aka_salesopportunity,jsonb)"
+    ],
+    "fn_opp_config()": [],
+    "fn_opp_ctx(aka_salesopportunity)": [
+      "fn_opp_config()",
+      "fn_opp_lead_grade(bigint)",
+      "fn_opp_product_context(bigint)",
+      "fn_opp_renewal_score(bigint,date)",
+      "fn_opp_today_vn()",
+      "fn_opp_trial_start(bigint)",
+      "fn_opp_trial_state(bigint)"
+    ],
+    "fn_opp_dong_het_vong_doi()": [
+      "fn_dong_co_hoi_ban_hang(bigint,text,text,bigint,bigint)"
+    ],
+    "fn_opp_ghi_tin_hieu(bigint,bigint)": [],
+    "fn_opp_lead_grade(bigint)": [],
+    "fn_opp_log(text,text,jsonb,integer,integer,integer)": [],
+    "fn_opp_morning(date)": [
+      "fn_opp_config()",
+      "fn_opp_dong_het_vong_doi()",
+      "fn_opp_log(text,text,jsonb,integer,integer,integer)",
+      "fn_opp_sinh_buoc(bigint,date)",
+      "fn_opp_today_vn()"
+    ],
+    "fn_opp_ngay_het_han(bigint)": [],
+    "fn_opp_product_context(bigint)": [],
+    "fn_opp_render(text,jsonb)": [],
+    "fn_opp_renewal_score(bigint,date)": [
+      "fn_opp_product_context(bigint)",
+      "fn_opp_today_vn()"
+    ],
+    "fn_opp_sinh_buoc(bigint,date)": [
+      "fn_dong_co_hoi_ban_hang(bigint,text,text,bigint,bigint)",
+      "fn_opp_apply_variants(jsonb,jsonb)",
+      "fn_opp_cond(text,aka_salesopportunity,jsonb)",
+      "fn_opp_conds_all(jsonb,aka_salesopportunity,jsonb)",
+      "fn_opp_conds_any(jsonb,aka_salesopportunity,jsonb)",
+      "fn_opp_config()",
+      "fn_opp_ctx(aka_salesopportunity)",
+      "fn_opp_render(text,jsonb)",
+      "fn_opp_steps(bigint)",
+      "fn_opp_today_vn()",
+      "fn_trang_thai_mua(bigint)"
+    ],
+    "fn_opp_steps(bigint)": [],
+    "fn_opp_suy_loai(bigint,bigint)": [
+      "fn_opp_ngay_het_han(bigint)",
+      "fn_opp_today_vn()",
+      "fn_trang_thai_mua(bigint)"
+    ],
+    "fn_opp_today_vn()": [],
+    "fn_opp_trial_start(bigint)": [],
+    "fn_opp_trial_state(bigint)": [
+      "fn_opp_trial_start(bigint)"
+    ],
+    "fn_phone_nudge_consult_intents_v1()": [],
+    "fn_phone_nudge_create_crm_v1(bigint,boolean)": [
+      "fn_create_aka_crm_v1(jsonb)",
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "fn_zalo_chat_referral_pancake_url_v1(uuid)",
+      "fn_zalo_referral_canonical_uid_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_phone_nudge_excluded_intents_v1()": [],
+    "fn_phone_nudge_is_system_message_v1(text,text)": [
+      "fn_phone_nudge_excluded_intents_v1()"
+    ],
+    "fn_phone_nudge_sent_last_hour_v1(bigint,text)": [],
+    "fn_phone_nudge_trigger_type_v1(text,text)": [],
+    "fn_process_error_images()": [],
+    "fn_realert_sales_unanswered(integer,integer,integer)": [],
+    "fn_resolve_gom_staff(bigint,uuid,uuid,uuid)": [],
+    "fn_score_web_visit()": [],
+    "fn_send_pancake_on_reply()": [],
+    "fn_set_chat_zalo_cskh_source()": [],
+    "fn_set_shop_id_2()": [],
+    "fn_sync_contacted_channel_name()": [],
+    "fn_sync_content_group_crm_type_ids()": [],
+    "fn_sync_crm_type_channel()": [],
+    "fn_sync_customer_from_gom()": [
+      "normalize_phone(text)"
+    ],
+    "fn_sync_customer_login()": [
+      "normalize_phone(text)"
+    ],
+    "fn_sync_intent_notify_quality()": [],
+    "fn_tao_chuoi_cham_lai_chat(date,boolean)": [
+      "fn_trang_thai_mua(bigint)",
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "normalize_phone(text)"
+    ],
+    "fn_tao_co_hoi_ban_hang(bigint,bigint,text,bigint,bigint,date,bigint,bigint,text,boolean)": [
+      "fn_opp_config()",
+      "fn_opp_ghi_tin_hieu(bigint,bigint)",
+      "fn_opp_log(text,text,jsonb,integer,integer,integer)",
+      "fn_opp_ngay_het_han(bigint)",
+      "fn_opp_sinh_buoc(bigint,date)",
+      "fn_opp_steps(bigint)",
+      "fn_opp_suy_loai(bigint,bigint)",
+      "fn_opp_today_vn()",
+      "fn_opp_trial_start(bigint)"
+    ],
+    "fn_trang_thai_mua(bigint)": [],
+    "fn_trg_birthday_care_enqueue_v2()": [
+      "fn_birthday_care_enqueue_v2(uuid,integer)",
+      "fn_birthday_care_is_birthday_v2(text,text,text,text)"
+    ],
+    "fn_trg_gom_normalize_intent()": [
+      "fn_normalize_intent(text)"
+    ],
+    "fn_trigger_split_and_create_crm()": [],
+    "fn_try_jsonb_v1(text)": [],
+    "fn_upsert_aka_customer_v1(jsonb)": [
+      "private.zalo_referral_backend_context_v1()",
+      "fn_create_aka_crm_v1(jsonb)",
+      "fn_zalo_referral_canonical_uid_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_upsert_contact_on_message_gom()": [],
+    "fn_validate_content_type_ids()": [],
+    "fn_watchdog_gom_silence(integer,integer)": [],
+    "fn_webhook_gom_lark_on_ai_score()": [],
+    "fn_webhook_message_phone_to_lark()": [],
+    "fn_weekly_staff_digest()": [],
+    "fn_zalo_chat_referral_candidates_v1(integer)": [
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_contact_card_flag_v1(text)"
+    ],
+    "fn_zalo_chat_referral_claim_v1(uuid,text)": [
+      "fn_zalo_chat_referral_evidence_v1(uuid)",
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)"
+    ],
+    "fn_zalo_chat_referral_create_crm_v2(uuid,text,text,uuid,text,bigint,boolean,boolean,text)": [
+      "private.zalo_referral_due_date_v1(timestamp with time zone)",
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "fn_zalo_chat_referral_evidence_v1(uuid)",
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_chat_referral_pancake_url_v1(uuid)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_chat_referral_create_crm_v3(uuid,text,text,uuid,text,bigint,boolean,boolean,text)": [
+      "private.zalo_referral_due_date_v1(timestamp with time zone)",
+      "fn_upsert_aka_customer_v1(jsonb)",
+      "fn_zalo_chat_referral_create_crm_v2(uuid,text,text,uuid,text,bigint,boolean,boolean,text)",
+      "fn_zalo_chat_referral_evidence_v1(uuid)",
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_chat_referral_pancake_url_v1(uuid)",
+      "fn_zalo_referral_canonical_uid_v1(text)",
+      "fn_zalo_referral_clean_person_name_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_chat_referral_evidence_v1(uuid)": [
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_contact_card_v2(uuid)",
+      "fn_zalo_referral_phone_candidates_v1(text,jsonb,text)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_chat_referral_finish_v1(uuid,text,uuid,text)": [],
+    "fn_zalo_chat_referral_message_eligible_v1(uuid)": [],
+    "fn_zalo_chat_referral_pancake_url_v1(uuid)": [],
+    "fn_zalo_contact_card_context_v1(uuid)": [],
+    "fn_zalo_contact_card_facts_v1(uuid)": [
+      "fn_zalo_contact_card_v2(uuid)",
+      "normalize_phone(text)",
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "fn_zalo_contact_card_flag_v1(text)": [
+      "fn_try_jsonb_v1(text)"
+    ],
+    "fn_zalo_contact_card_from_ids_v2(jsonb,text)": [
+      "fn_try_jsonb_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_contact_card_self_update_v1(uuid,text,uuid,bigint)": [
+      "fn_zalo_chat_referral_evidence_v1(uuid)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_contact_card_v1(uuid)": [
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)"
+    ],
+    "fn_zalo_contact_card_v2(uuid)": [
+      "fn_zalo_chat_referral_message_eligible_v1(uuid)",
+      "fn_zalo_contact_card_from_ids_v2(jsonb,text)"
+    ],
+    "fn_zalo_customer_phone_capture_v1(boolean,integer,integer)": [
+      "fn_zalo_referral_phone_candidates_v1(text,jsonb,text)",
+      "normalize_phone(text)"
+    ],
+    "fn_zalo_referral_canonical_uid_v1(text)": [],
+    "fn_zalo_referral_clean_person_name_v1(text)": [],
+    "fn_zalo_referral_is_system_line_v1(text)": [],
+    "fn_zalo_referral_phone_candidates_v1(text,jsonb,text)": [
+      "fn_zalo_referral_is_system_line_v1(text)",
+      "normalize_phone(text)"
+    ],
+    "get_aka_salesopportunity_metrics(bigint,boolean,text,text[],text[],text[],bigint,text,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,text,bigint,bigint[])": [],
+    "get_chat_media_settings()": [],
+    "get_crm_purchase_page_with_totals(bigint,text,bigint,bigint[],bigint[],bigint[],timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,timestamp with time zone,bigint,integer)": [
+      "renewal_crm_is_archived(jsonb)"
+    ],
+    "get_existing_customer_ids()": [],
+    "get_expired_priority_candidate_context(bigint[])": [],
+    "get_expired_priority_round_counts(bigint[])": [],
+    "get_managed_staff(bigint)": [],
+    "get_staff_zalo_account_capabilities(bigint)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)",
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "get_staff_zalo_runtime_mode(bigint)": [
+      "aka_agent_staff_time_allowed(bigint)",
+      "resolve_organization_zalo_runtime_mode(bigint)"
+    ],
+    "get_unified_web_deepseek_key()": [
+      "private.get_unified_web_deepseek_key()"
+    ],
+    "get_visible_gom_ids_for_group_list(text,text,integer,text[],timestamp with time zone,timestamp with time zone,text[],text[],text[],text,boolean,integer,integer)": [],
+    "get_visible_gom_ids_for_group_list(uuid,text,bigint,uuid[],uuid[],timestamp with time zone,timestamp with time zone,uuid[],text[],boolean,integer,integer)": [],
+    "get_visible_gom_ids(uuid,character varying,integer,text,integer,integer)": [],
+    "get_visible_gom_ids(uuid,text,bigint,text,integer,integer)": [],
+    "get_visible_gom_stats(uuid,character varying,integer)": [],
+    "get_visible_gom_stats(uuid,text,bigint)": [],
+    "get_webhook_inbox_stats()": [],
+    "gh_report_html(text)": [],
+    "gin_extract_query_trgm(text,internal,smallint,internal,internal,internal,internal)": [],
+    "gin_extract_value_trgm(text,internal)": [],
+    "gin_trgm_consistent(internal,smallint,text,integer,internal,internal,internal,internal)": [],
+    "gin_trgm_triconsistent(internal,smallint,text,integer,internal,internal,internal)": [],
+    "gom_apply_message(uuid,uuid,text,timestamp with time zone,text,text)": [],
+    "gom_create_with_message(jsonb,uuid,text)": [],
+    "gom_set_search_text()": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "gtrgm_compress(internal)": [],
+    "gtrgm_consistent(internal,text,smallint,oid,internal)": [],
+    "gtrgm_decompress(internal)": [],
+    "gtrgm_distance(internal,text,smallint,oid,internal)": [],
+    "gtrgm_in(cstring)": [],
+    "gtrgm_options(internal)": [],
+    "gtrgm_out(gtrgm)": [],
+    "gtrgm_penalty(internal,internal,internal)": [],
+    "gtrgm_picksplit(internal,internal)": [],
+    "gtrgm_same(gtrgm,gtrgm,internal)": [],
+    "gtrgm_union(internal,internal)": [],
+    "guard_aka_crm_message_quality_append_only()": [],
+    "guard_aka_crm_pancake_override_audit_append_only()": [],
+    "guard_auto_account_runtime_operation_claim_token()": [],
+    "guard_crm_payment_customer_allocation()": [],
+    "guard_facebook_login_claim_generation()": [],
+    "guard_renewal_crm_customer_day()": [
+      "renewal_crm_is_archived(jsonb)"
+    ],
+    "guard_renewal_crm_duplicate_archive()": [
+      "renewal_crm_is_archived(jsonb)"
+    ],
+    "guard_renewal_crm_settings_namespace()": [],
+    "guard_single_admin_upgrade_item()": [],
+    "halfvec_accum(double precision[],halfvec)": [],
+    "halfvec_add(halfvec,halfvec)": [],
+    "halfvec_avg(double precision[])": [],
+    "halfvec_cmp(halfvec,halfvec)": [],
+    "halfvec_combine(double precision[],double precision[])": [],
+    "halfvec_concat(halfvec,halfvec)": [],
+    "halfvec_eq(halfvec,halfvec)": [],
+    "halfvec_ge(halfvec,halfvec)": [],
+    "halfvec_gt(halfvec,halfvec)": [],
+    "halfvec_in(cstring,oid,integer)": [],
+    "halfvec_l2_squared_distance(halfvec,halfvec)": [],
+    "halfvec_le(halfvec,halfvec)": [],
+    "halfvec_lt(halfvec,halfvec)": [],
+    "halfvec_mul(halfvec,halfvec)": [],
+    "halfvec_ne(halfvec,halfvec)": [],
+    "halfvec_negative_inner_product(halfvec,halfvec)": [],
+    "halfvec_out(halfvec)": [],
+    "halfvec_recv(internal,oid,integer)": [],
+    "halfvec_send(halfvec)": [],
+    "halfvec_spherical_distance(halfvec,halfvec)": [],
+    "halfvec_sub(halfvec,halfvec)": [],
+    "halfvec_to_float4(halfvec,integer,boolean)": [],
+    "halfvec_to_sparsevec(halfvec,integer,boolean)": [],
+    "halfvec_to_vector(halfvec,integer,boolean)": [],
+    "halfvec_typmod_in(cstring[])": [],
+    "halfvec(halfvec,integer,boolean)": [],
+    "hamming_distance(bit,bit)": [],
+    "handle_updated_at()": [],
+    "handoff_expired_care_to_manager_v2(bigint,bigint,text,text)": [
+      "handoff_expired_care_to_manager(bigint,bigint,text,text)"
+    ],
+    "handoff_expired_care_to_manager(bigint,bigint,text,text)": [],
+    "heartbeat_webhook_inbox_job(bigint,uuid,integer)": [],
+    "hnsw_bit_support(internal)": [],
+    "hnsw_halfvec_support(internal)": [],
+    "hnsw_sparsevec_support(internal)": [],
+    "hnswhandler(internal)": [],
+    "increment_agent_cache_hit(uuid)": [],
+    "increment_auto_account_action_count(bigint,text,integer)": [],
+    "increment_customer_score(bigint,integer)": [],
+    "inner_product(halfvec,halfvec)": [],
+    "inner_product(sparsevec,sparsevec)": [],
+    "inner_product(vector,vector)": [],
+    "inspect_staff_zalo_running_state(bigint)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "ivfflat_bit_support(internal)": [],
+    "ivfflat_halfvec_support(internal)": [],
+    "ivfflathandler(internal)": [],
+    "jaccard_distance(bit,bit)": [],
+    "l1_distance(halfvec,halfvec)": [],
+    "l1_distance(sparsevec,sparsevec)": [],
+    "l1_distance(vector,vector)": [],
+    "l2_distance(halfvec,halfvec)": [],
+    "l2_distance(sparsevec,sparsevec)": [],
+    "l2_distance(vector,vector)": [],
+    "l2_norm(halfvec)": [],
+    "l2_norm(sparsevec)": [],
+    "l2_normalize(halfvec)": [],
+    "l2_normalize(sparsevec)": [],
+    "l2_normalize(vector)": [],
+    "lock_auto_account_control_resources()": [],
+    "mark_renewal_ledger_crm_deleted()": [],
+    "mark_zalo_chat_referral_v1()": [
+      "fn_zalo_contact_card_flag_v1(text)"
+    ],
+    "materialize_auto_automation_detail_v171_internal(bigint,bigint,bigint,text,jsonb,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "materialize_auto_automation_detail_v188_serialized_internal(bigint,bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint,text,text)",
+      "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "materialize_auto_automation_detail_v201_campaign_internal(bigint,bigint,bigint,text,jsonb,text,text)"
+    ],
+    "materialize_auto_automation_detail_v201_campaign_internal(bigint,bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text,text,text)",
+      "aka_agent_finalize_data_group_campaign(bigint,bigint,bigint,text)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "materialize_auto_automation_detail_v171_internal(bigint,bigint,bigint,text,jsonb,text,text)"
+    ],
+    "materialize_auto_automation_detail(bigint,bigint,bigint,text,jsonb,text,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "materialize_auto_automation_detail_v188_serialized_internal(bigint,bigint,bigint,text,jsonb,text,text)"
+    ],
+    "normalize_legacy_zalo_account_server_owner()": [
+      "resolve_organization_zalo_runtime_mode(bigint)"
+    ],
+    "normalize_phone(text)": [],
+    "notify_cskh_change()": [],
+    "notify_new_customer()": [],
+    "populate_crm_expiration_snapshot()": [],
+    "prevent_delete_account_group_with_accounts()": [],
+    "prevent_delete_proxy_with_accounts()": [],
+    "protect_chat_followup_v2_namespace()": [],
+    "protect_zalo_chat_referral_ai_log_v1()": [],
+    "protect_zalo_chat_referral_namespace_v1()": [],
+    "protect_zalo_referral_customer_identity_v1()": [
+      "private.zalo_referral_backend_context_v1()"
+    ],
+    "protect_zalo_referral_message_fields_v1()": [
+      "private.zalo_referral_backend_context_v1()"
+    ],
+    "prune_webhook_inbox_payloads(integer,integer,integer)": [],
+    "prune_webhook_inbox_payloads(integer,integer)": [
+      "prune_webhook_inbox_payloads(integer,integer,integer)"
+    ],
+    "reassign_org_staff_chat_staff(bigint,uuid)": [],
+    "recalculate_all_customer_scores()": [
+      "recalculate_customer_score(bigint)"
+    ],
+    "recalculate_customer_score(bigint)": [],
+    "reconcile_auto_automation_enqueue_failures_v185_internal(bigint,bigint,text,integer,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)",
+      "auto_retry_automation_enqueue_failure_internal(bigint)"
+    ],
+    "reconcile_auto_automation_enqueue_failures(bigint,bigint,text,integer,text,text)": [
+      "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint,text,text)",
+      "aka_agent_ingest_automation_data_group_result(bigint,bigint,bigint)",
+      "reconcile_auto_automation_enqueue_failures_v185_internal(bigint,bigint,text,integer,text,text)"
+    ],
+    "reconcile_renewal_crm_pending(jsonb)": [
+      "private.aka_order_owner_state(aka_order)"
+    ],
+    "record_aka_order_history_access(jsonb)": [
+      "private.aka_order_history_has_forbidden_keys(jsonb)"
+    ],
+    "record_aka_order_history_event(jsonb)": [
+      "private.aka_order_history_entitlement_state(aka_order)",
+      "private.aka_order_history_has_forbidden_keys(jsonb)",
+      "private.aka_order_history_material_fields()",
+      "private.aka_order_history_order_snapshot(aka_order)",
+      "private.aka_order_history_payload_hash(jsonb)"
+    ],
+    "recover_expired_webhook_inbox_jobs(integer)": [],
+    "recover_server_zalo_running_state(bigint,text,boolean)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "resolve_organization_zalo_account_capabilities(bigint)"
+    ],
+    "recover_stale_auto_automation_details(bigint,bigint,integer,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "recover_stale_message_gom_jobs(timestamp with time zone,integer,integer,integer)": [],
+    "refresh_expired_priority_queue(integer)": [
+      "find_expired_priority_candidates(integer,bigint)"
+    ],
+    "release_non_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "release_webhook_inbox_job(bigint,uuid,integer,text)": [],
+    "release_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "release_zalo_account_runtime_operation(bigint,bigint,text,text)": [
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "renewal_crm_allowed_offsets()": [
+      "renewal_crm_schedule_offsets(text)"
+    ],
+    "renewal_crm_duplicate_manifest_v1(jsonb)": [],
+    "renewal_crm_is_archived(jsonb)": [],
+    "renewal_crm_schedule_offsets(text)": [
+      "renewal_crm_schedule()"
+    ],
+    "renewal_crm_schedule()": [],
+    "report_activity_heatmap(text,timestamp with time zone,timestamp with time zone,text)": [],
+    "report_chatbot_delivery(text,timestamp with time zone,timestamp with time zone)": [],
+    "report_conversation_volume(text,timestamp with time zone,timestamp with time zone,text)": [],
+    "report_overview(text,timestamp with time zone,timestamp with time zone)": [],
+    "report_staff_leaderboard(text,integer,timestamp with time zone,timestamp with time zone)": [],
+    "report_unresolved_conversations(text,integer)": [],
+    "reset_auto_account_action_status_daily()": [],
+    "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)",
+      "reset_desktop_running_statuses(bigint,boolean,boolean)"
+    ],
+    "reset_desktop_running_statuses(bigint,boolean,boolean)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)",
+      "aka_agent_staff_runtime_scope(bigint,text)"
+    ],
+    "resolve_organization_zalo_account_capabilities(bigint)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)"
+    ],
+    "resolve_organization_zalo_runtime_mode(bigint)": [
+      "private.resolve_organization_zalo_entitlement_pools(bigint)"
+    ],
+    "retry_auto_automation_detail(bigint,bigint,bigint,text,text,integer,boolean,boolean,boolean,text,text)": [
+      "auto_assert_automation_identity(bigint,bigint,text,text)"
+    ],
+    "rollback_renewal_crm_duplicate_archive_v1(jsonb)": [
+      "renewal_crm_duplicate_manifest_v1(jsonb)"
+    ],
+    "run_attitude_alerts()": [],
+    "run_attitude_backfill(integer,text)": [],
+    "search_agent_qa_cache(character varying,vector,double precision,integer,integer)": [],
+    "search_agent_qa_cache(character varying,vector,double precision,integer)": [],
+    "search_contacts_full(text[],text[],text[],text,integer)": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "search_gom_full(text[],text,integer,text[],text[],text,integer)": [
+      "unaccent(regdictionary,text)",
+      "unaccent(text)"
+    ],
+    "search_gom_history_v2(vector,double precision,double precision,uuid,integer)": [],
+    "search_gom_history(vector,double precision,double precision,uuid,integer)": [],
+    "search_qa_cache_v2(text,vector,double precision,integer,integer)": [],
+    "send_next_lark_batch(integer)": [],
+    "serialize_zalo_runtime_entitlement_change()": [],
+    "set_limit(real)": [],
+    "set_message_gom_account_id()": [],
+    "set_org_organization_product_updated_at()": [],
+    "set_staff_defaults()": [],
+    "set_updated_at()": [],
+    "show_limit()": [],
+    "show_trgm(text)": [],
+    "similarity_dist(text,text)": [],
+    "similarity_op(text,text)": [],
+    "similarity(text,text)": [],
+    "sparsevec_cmp(sparsevec,sparsevec)": [],
+    "sparsevec_eq(sparsevec,sparsevec)": [],
+    "sparsevec_ge(sparsevec,sparsevec)": [],
+    "sparsevec_gt(sparsevec,sparsevec)": [],
+    "sparsevec_in(cstring,oid,integer)": [],
+    "sparsevec_l2_squared_distance(sparsevec,sparsevec)": [],
+    "sparsevec_le(sparsevec,sparsevec)": [],
+    "sparsevec_lt(sparsevec,sparsevec)": [],
+    "sparsevec_ne(sparsevec,sparsevec)": [],
+    "sparsevec_negative_inner_product(sparsevec,sparsevec)": [],
+    "sparsevec_out(sparsevec)": [],
+    "sparsevec_recv(internal,oid,integer)": [],
+    "sparsevec_send(sparsevec)": [],
+    "sparsevec_to_halfvec(sparsevec,integer,boolean)": [],
+    "sparsevec_to_vector(sparsevec,integer,boolean)": [],
+    "sparsevec_typmod_in(cstring[])": [],
+    "sparsevec(sparsevec,integer,boolean)": [],
+    "staff_transfer_batch(bigint,bigint,bigint,timestamp with time zone,jsonb)": [
+      "private.aka_order_owner_state(aka_order)",
+      "private.staff_transfer_crm_eligible(aka_crm,timestamp with time zone)",
+      "private.staff_transfer_validate(bigint,bigint,bigint)"
+    ],
+    "staff_transfer_order_owners(bigint[])": [
+      "private.aka_order_owner_state(aka_order)"
+    ],
+    "staff_transfer_order_stats()": [
+      "private.aka_order_owner_state(aka_order)"
+    ],
+    "staff_transfer_orders(bigint[])": [
+      "private.aka_order_owner_state(aka_order)"
+    ],
+    "staff_transfer_preview(bigint,bigint,bigint,text,boolean)": [
+      "private.aka_order_owner_state(aka_order)",
+      "private.staff_transfer_crm_eligible(aka_crm,timestamp with time zone)",
+      "private.staff_transfer_validate(bigint,bigint,bigint)"
+    ],
+    "staff_transfer_snapshot(bigint,bigint,bigint,text,boolean,date)": [
+      "private.aka_order_owner_state(aka_order)",
+      "private.staff_transfer_crm_eligible(aka_crm,timestamp with time zone)",
+      "staff_transfer_validate_request(bigint,bigint,bigint,date,jsonb)"
+    ],
+    "staff_transfer_sql_owners(jsonb)": [
+      "private.sql_account_aka_owner(bigint,bigint)"
+    ],
+    "staff_transfer_validate_request(bigint,bigint,bigint,date,jsonb)": [
+      "private.staff_transfer_validate(bigint,bigint,bigint)"
+    ],
+    "strict_word_similarity_commutator_op(text,text)": [],
+    "strict_word_similarity_dist_commutator_op(text,text)": [],
+    "strict_word_similarity_dist_op(text,text)": [],
+    "strict_word_similarity_op(text,text)": [],
+    "strict_word_similarity(text,text)": [],
+    "subvector(halfvec,integer,integer)": [],
+    "subvector(vector,integer,integer)": [],
+    "support_desktop_campaign_page(integer,text,integer,integer[],integer,integer)": [],
+    "sync_aka_customer_referral(bigint,boolean,bigint,text,text,bigint)": [],
+    "sync_crm_call_requirement_policy()": [],
+    "sync_crm_sale_order_items_if_owner(bigint,bigint,timestamp with time zone,text,bigint,bigint,timestamp with time zone,jsonb)": [],
+    "sync_linked_crm_sale_order_from_edit(bigint,bigint,timestamp with time zone,uuid,bigint,bigint,jsonb)": [],
+    "touch_agent_conversation()": [],
+    "touch_category_catalog_updated_at()": [],
+    "touch_message_gom_queue_updated_at()": [],
+    "touch_webhook_inbox_updated_at()": [],
+    "trg_aka_crm_sales_opportunity()": [
+      "fn_dong_co_hoi_ban_hang(bigint,text,text,bigint,bigint)",
+      "fn_opp_config()",
+      "fn_opp_log(text,text,jsonb,integer,integer,integer)",
+      "fn_tao_co_hoi_ban_hang(bigint,bigint,text,bigint,bigint,date,bigint,bigint,text,boolean)"
+    ],
+    "trg_aka_sale_order_sales_opportunity()": [
+      "fn_dong_co_hoi_ban_hang(bigint,text,text,bigint,bigint)",
+      "fn_opp_config()",
+      "fn_opp_log(text,text,jsonb,integer,integer,integer)"
+    ],
+    "trg_aka_salesopportunity_fill()": [
+      "fn_opp_trial_start(bigint)"
+    ],
+    "trg_app_login_cskh()": [
+      "enqueue_cskh_reactivation_job(text,text,timestamp with time zone,text)"
+    ],
+    "trg_ensure_sms_auto_account_for_staff()": [
+      "ensure_sms_auto_account_for_staff(bigint)"
+    ],
+    "trg_tracking_app_cskh_followups()": [
+      "enqueue_cskh_followups(text,text,text,text,uuid)",
+      "normalize_phone(text)"
+    ],
+    "trg_web_visit_cskh()": [
+      "enqueue_web_visit_cskh_jobs(text,text,text,uuid)",
+      "normalize_phone(text)"
+    ],
+    "trigger_ai_evaluate_question()": [],
+    "trigger_analyze_relevance()": [],
+    "trigger_match_akacustomer()": [
+      "normalize_phone(text)"
+    ],
+    "unaccent_init(internal)": [],
+    "unaccent_lexize(internal,internal,internal,internal)": [],
+    "unaccent(regdictionary,text)": [],
+    "unaccent(text)": [],
+    "update_agent_timestamp()": [],
+    "update_aka_crm_customer_phone(bigint,text,bigint,bigint)": [
+      "crm_enqueue_trial_care_v1(bigint,text)",
+      "normalize_phone(text)"
+    ],
+    "update_aka_crm_customer_phone(bigint,text,bigint)": [
+      "update_aka_crm_customer_phone(bigint,text,bigint,bigint)"
+    ],
+    "update_control_campaign_atomic(bigint,bigint,bigint,timestamp with time zone,jsonb,jsonb,boolean,text,integer,jsonb)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "update_control_campaign_by_config_version_atomic(bigint,bigint,bigint,timestamp with time zone,jsonb,jsonb,boolean,text,integer,jsonb)": [
+      "aka_agent_campaign_config_version(auto_campaigns)",
+      "update_control_campaign_atomic(bigint,bigint,bigint,timestamp with time zone,jsonb,jsonb,boolean,text,integer,jsonb)"
+    ],
+    "update_control_campaign_input_statuses_atomic(bigint,bigint,bigint,bigint[],text,text)": [
+      "aka_agent_lock_campaign_input_serialization(bigint)"
+    ],
+    "update_control_zalo_account_group_atomic(bigint,bigint,bigint,timestamp with time zone,jsonb)": [],
+    "update_control_zalo_proxy_atomic(bigint,bigint,bigint,timestamp with time zone,jsonb)": [],
+    "update_cskh_completed_at()": [],
+    "update_updated_at_column()": [],
+    "update_updated_at()": [],
+    "uuid_generate_v7()": [],
+    "validate_aka_crm_message_quality_message_ids(text[])": [],
+    "validate_control_session(uuid,bigint,bigint)": [],
+    "vector_accum(double precision[],vector)": [],
+    "vector_add(vector,vector)": [],
+    "vector_avg(double precision[])": [],
+    "vector_cmp(vector,vector)": [],
+    "vector_combine(double precision[],double precision[])": [],
+    "vector_concat(vector,vector)": [],
+    "vector_dims(halfvec)": [],
+    "vector_dims(vector)": [],
+    "vector_eq(vector,vector)": [],
+    "vector_ge(vector,vector)": [],
+    "vector_gt(vector,vector)": [],
+    "vector_in(cstring,oid,integer)": [],
+    "vector_l2_squared_distance(vector,vector)": [],
+    "vector_le(vector,vector)": [],
+    "vector_lt(vector,vector)": [],
+    "vector_mul(vector,vector)": [],
+    "vector_ne(vector,vector)": [],
+    "vector_negative_inner_product(vector,vector)": [],
+    "vector_norm(vector)": [],
+    "vector_out(vector)": [],
+    "vector_recv(internal,oid,integer)": [],
+    "vector_send(vector)": [],
+    "vector_spherical_distance(vector,vector)": [],
+    "vector_sub(vector,vector)": [],
+    "vector_to_float4(vector,integer,boolean)": [],
+    "vector_to_halfvec(vector,integer,boolean)": [],
+    "vector_to_sparsevec(vector,integer,boolean)": [],
+    "vector_typmod_in(cstring[])": [],
+    "vector(vector,integer,boolean)": [],
+    "word_similarity_commutator_op(text,text)": [],
+    "word_similarity_dist_commutator_op(text,text)": [],
+    "word_similarity_dist_op(text,text)": [],
+    "word_similarity_op(text,text)": [],
+    "word_similarity(text,text)": []
+  }
+}

@@ -4,6 +4,8 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict')
 const {createFixture}=require('./full-fixture.cjs')
 const {readCatalog}=require('./embedded-join-regression.cjs')
+const {privateSecurityAsset}=require('./private-security-assets.cjs')
+const hookCapture=privateSecurityAsset('migrations/snapshots/desktop-session-rls/pre-request-preflight.json')
 const f=createFixture(),{sql,quote:q,root}=f
 const dir=path.join(root,'migrations/snapshots/desktop-session-rls')
 const read=name=>JSON.parse(fs.readFileSync(path.join(dir,name)))
@@ -24,7 +26,7 @@ function permissionHashes(){return JSON.parse(sql(`SELECT jsonb_object_agg(r.rol
  )) FROM pg_roles r WHERE r.rolname<> 'aka_agent_desktop'`))}
 async function main(){try{
  sql(f.localActivation(fs.readFileSync(path.join(root,'supabase/migrations/20261027095004_desktop_session_identity.sql'),'utf8')))
- const hook=read('pre-request-preflight.json').function
+ const hook=JSON.parse(fs.readFileSync(hookCapture,'utf8')).function
  sql(hook.definition+'; GRANT EXECUTE ON FUNCTION public.aka_agent_block_denied_ip_request() TO aka_agent_desktop;')
  const existing=new Set(JSON.parse(sql('SELECT jsonb_agg(rolname) FROM pg_roles')))
  for(const r of live.roles)if(!existing.has(r.name))sql(`CREATE ROLE ${id(r.name)};`)

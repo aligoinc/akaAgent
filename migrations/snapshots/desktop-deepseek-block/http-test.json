@@ -1,0 +1,66 @@
+{
+  "at": "2026-10-27T18:29:46.637Z",
+  "status": "passed",
+  "checks": 12,
+  "results": [
+    {
+      "label": "legacy-anon DeepSeek hidden",
+      "status": 200,
+      "rows": 0
+    },
+    {
+      "label": "legacy-anon old updater",
+      "status": 200,
+      "rows": 1
+    },
+    {
+      "label": "legacy-anon startup RPC",
+      "status": 200,
+      "rows": null
+    },
+    {
+      "label": "legacy-anon login content",
+      "status": 200,
+      "rows": 5
+    },
+    {
+      "label": "publishable DeepSeek hidden",
+      "status": 200,
+      "rows": 0
+    },
+    {
+      "label": "publishable old updater",
+      "status": 200,
+      "rows": 1
+    },
+    {
+      "label": "publishable startup RPC",
+      "status": 200,
+      "rows": null
+    },
+    {
+      "label": "publishable login content",
+      "status": 200,
+      "rows": 5
+    },
+    {
+      "label": "version_win",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "version_mac",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "version_mac_intel",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "backend health",
+      "status": 200
+    }
+  ]
+}

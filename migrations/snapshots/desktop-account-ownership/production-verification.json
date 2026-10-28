@@ -1,0 +1,27 @@
+{
+  "failures": [],
+  "sourceFunctions": 1253,
+  "changedFunctions": 47,
+  "unchangedFunctions": 1206,
+  "added": [
+    {
+      "signature": "private.aka_agent_assert_request_ownership(bigint,bigint,bigint)",
+      "checksum": "31494192d0a18efeafa4fb0296008230",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}"
+    },
+    {
+      "signature": "private.aka_agent_guard_parent_ownership()",
+      "checksum": "1e72bdc906b4d905f555c3f6d4114dda",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}"
+    }
+  ],
+  "newPolicies": 19,
+  "newTriggers": 2,
+  "targetMetadataMismatch": [],
+  "advisorsUnchanged": true,
+  "migration": {
+    "version": "20261027185059",
+    "name": "desktop_account_campaign_ownership",
+    "project": "cgjbsmqtfhqvttudyjzq"
+  }
+}

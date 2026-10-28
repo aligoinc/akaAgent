@@ -1,0 +1,10 @@
+[
+  {
+    "evidence": {
+      "at": "2026-10-27T18:11:38.070377+00:00",
+      "kind": "directory production post-check",
+      "status": "passed",
+      "business_rows_written": 0
+    }
+  }
+]

@@ -1,0 +1,17 @@
+-- Revoke definition writes only; runtime SELECT and all other roles are preserved.
+-- PostgreSQL REVOKE at table level also removes corresponding column grants.
+SET LOCAL lock_timeout='5s';
+SET LOCAL statement_timeout='30s';
+DO $guard$ BEGIN IF (SELECT jsonb_agg(jsonb_build_object('name',c.relname,'owner',pg_get_userbyid(c.relowner),'acl',c.relacl::text,'rls',c.relrowsecurity,'force',c.relforcerowsecurity,'columns',(SELECT jsonb_agg(jsonb_build_object('name',a.attname,'acl',a.attacl::text) ORDER BY a.attnum) FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped)) ORDER BY c.relname) FROM pg_class c WHERE c.oid IN ('public.auto_blocks'::regclass,'public.auto_workflows'::regclass)) IS DISTINCT FROM '[{"name":"auto_blocks","owner":"postgres","acl":"{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=rd/postgres}","rls":true,"force":false,"columns":[{"name":"id","acl":null},{"name":"name","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"description","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"icon","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"category","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"kind","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"system_type","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"code","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"config_schema","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"output_schema","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"default_config","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"is_builtin","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"staff_id","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"organization_id","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"created_at","acl":null},{"name":"updated_at","acl":"{aka_agent_desktop=aw/postgres}"}]},{"name":"auto_workflows","owner":"postgres","acl":"{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=rd/postgres}","rls":true,"force":false,"columns":[{"name":"id","acl":null},{"name":"name","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"description","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"nodes","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"edges","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"variables_schema","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"default_variables","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"is_builtin","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"staff_id","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"organization_id","acl":"{aka_agent_desktop=aw/postgres}"},{"name":"created_at","acl":null},{"name":"updated_at","acl":"{aka_agent_desktop=aw/postgres}"}]}]'::jsonb THEN RAISE EXCEPTION 'block/workflow ACL source drift'; END IF; END $guard$;
+REVOKE INSERT,UPDATE,DELETE,TRUNCATE ON TABLE public."auto_blocks",public."auto_workflows" FROM aka_agent_desktop;
+DO $check$ DECLARE t regclass; BEGIN
+ FOREACH t IN ARRAY ARRAY['public.auto_blocks'::regclass,'public.auto_workflows'::regclass] LOOP
+  IF NOT has_table_privilege('aka_agent_desktop',t,'SELECT')
+   OR has_any_column_privilege('aka_agent_desktop',t,'INSERT')
+   OR has_any_column_privilege('aka_agent_desktop',t,'UPDATE')
+   OR has_table_privilege('aka_agent_desktop',t,'DELETE')
+   OR has_table_privilege('aka_agent_desktop',t,'TRUNCATE') THEN
+   RAISE EXCEPTION 'Desktop must retain read-only block/workflow access'; END IF;
+ END LOOP;
+END $check$;
+NOTIFY pgrst,'reload schema';

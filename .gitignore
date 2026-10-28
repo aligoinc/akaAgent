@@ -21,3 +21,21 @@ electron.vite.config.*.mjs
 
 # Codex local runtime config may contain private MCP credentials.
 .codex/config.toml
+
+# Operational IP policy/source and captures live in the external security archive.
+supabase/functions/aka-agent-desktop-session/*.ts
+supabase/migrations/*_block_incident_ip_*.sql
+scripts/desktop-session-rls/incident-ip-block-smoke.cjs
+scripts/desktop-session-rls/pre-request-smoke.cjs
+migrations/snapshots/desktop-session-rls/pre-request-*.json
+migrations/tests/cross_repo_http_permissions_smoke.sql
+docs/audits/incident-*/ip-block-*
+
+# Incident evidence and full production captures are also private operational assets.
+docs/audits/incident-*/
+docs/audits/security-actor-review-*.json
+docs/audits/sensitive-exposure-*.json
+migrations/snapshots/staff-self-access/before.json
+migrations/snapshots/staff-self-access/full-before.json
+migrations/snapshots/staff-self-access/full-after.json
+migrations/snapshots/desktop-account-ownership/before.json

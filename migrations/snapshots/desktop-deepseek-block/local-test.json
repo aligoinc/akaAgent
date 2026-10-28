@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-27T18:28:40.635Z",
+  "status": "passed",
+  "checks": [
+    "migration rejects unexpected source policy changes",
+    "exact-key and unfiltered SELECT cannot expose DeepSeek row",
+    "all other settings, backend values and legacy updater remain identical",
+    "targeted and blind UPDATE cannot rename the secret to bypass SELECT",
+    "protected-key writes denied while unrelated setting writes remain functional",
+    "guarded rollback restores only the original policies"
+  ]
+}

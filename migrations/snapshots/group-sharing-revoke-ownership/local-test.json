@@ -1,0 +1,18 @@
+{
+  "at": "2026-10-28T04:36:08.532Z",
+  "status": "passed",
+  "checks": [
+    "reproduces private and selected-recipient revocation failure with unchanged live definitions",
+    "source/dependency/ACL drift fails closed; migration rollback leaves exact original metadata",
+    "only sharing body changes; all helpers, ACLs, timeouts, policies and triggers remain exact",
+    "private scope stops active/baselining recipients only; own source, other groups, terminal sources, campaigns and inputs remain unchanged",
+    "selected/organization transitions keep retained recipients; regrant never reactivates stopped sources",
+    "nonowners, foreign credentials, invalid recipients/revisions and unmapped claims cannot revoke sharing",
+    "direct cross-staff locks/reads/writes/logs and anon stay denied; backend and content-sharing contracts unchanged",
+    "same public campaign lock serializes revocation; lock failure atomically rolls back earlier source and sharing writes",
+    "explicit guarded rollback restores original body and reproduced bug without metadata drift"
+  ],
+  "sourceChecksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+  "targetChecksum": "0e17dec0570937cfea8a1ae035e2af4d",
+  "productionWrites": 0
+}
