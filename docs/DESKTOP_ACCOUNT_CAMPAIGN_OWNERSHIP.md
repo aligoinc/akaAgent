@@ -1,6 +1,6 @@
 # Giới hạn tài khoản và chiến dịch theo token Desktop — 28/10/2026
 
-**Sửa review, chưa apply:** [migration mới cho thu hồi chia sẻ nhóm data](GROUP_SHARING_REVOKE_OWNERSHIP.md) khắc phục việc guard campaign chặn thao tác nội bộ dừng nguồn của người nhận. Giữ nguyên các guard ownership hiện tại; không apply lại migration dưới đây.
+**Sửa review đã apply lúc 13:41:38 VN ngày 28/10/2026:** [migration thu hồi chia sẻ nhóm data](GROUP_SHARING_REVOKE_OWNERSHIP.md) (`20261028064138`) khắc phục việc guard campaign chặn thao tác nội bộ dừng nguồn của người nhận. Giữ nguyên các guard ownership hiện tại; không apply lại migration dưới đây hoặc bản sửa.
 
 Bản chụp đầy đủ `migrations/snapshots/desktop-account-ownership/before.json` đã chuyển khỏi repo ngày 28/10/2026, sang kho `AKA_AGENT_PRIVATE_SECURITY_DIR` (mặc định `$HOME/.codex/incident-recovery/akaAgent-ip-block`). Generator và fixture đã dùng đường dẫn ngoài repo; migration, rollback, plan và các bằng chứng kiểm thử còn lại giữ nguyên.
 
