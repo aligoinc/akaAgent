@@ -1,0 +1,120 @@
+{
+  "at": "2026-10-27T18:02:57.559Z",
+  "results": [
+    {
+      "label": "legacy-anon denies org_staff",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "legacy-anon denies org_organization",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "legacy-anon denies auto_accounts",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "legacy-anon denies auto_campaigns",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "legacy-anon denies ai_model",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "legacy-anon old startup query",
+      "status": 200,
+      "code": null,
+      "rows": 1
+    },
+    {
+      "label": "legacy-anon settings row filter",
+      "status": 200,
+      "code": null,
+      "rows": 1
+    },
+    {
+      "label": "legacy-anon new startup RPC",
+      "status": 200,
+      "code": null,
+      "rows": null
+    },
+    {
+      "label": "publishable denies org_staff",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "publishable denies org_organization",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "publishable denies auto_accounts",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "publishable denies auto_campaigns",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "publishable denies ai_model",
+      "status": 401,
+      "code": "42501",
+      "rows": null
+    },
+    {
+      "label": "publishable old startup query",
+      "status": 200,
+      "code": null,
+      "rows": 1
+    },
+    {
+      "label": "publishable settings row filter",
+      "status": 200,
+      "code": null,
+      "rows": 1
+    },
+    {
+      "label": "publishable new startup RPC",
+      "status": 200,
+      "code": null,
+      "rows": null
+    },
+    {
+      "label": "version_win",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "version_mac",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "version_mac_intel",
+      "status": 200,
+      "version": "9.1.0"
+    },
+    {
+      "label": "backend health",
+      "status": 200
+    }
+  ]
+}

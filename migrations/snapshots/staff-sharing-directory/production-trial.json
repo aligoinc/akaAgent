@@ -1,0 +1,10 @@
+[
+  {
+    "evidence": {
+      "at": "2026-10-27T18:11:27.622995+00:00",
+      "kind": "directory production rollback trial",
+      "status": "passed",
+      "business_rows_written": 0
+    }
+  }
+]

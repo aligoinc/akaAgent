@@ -1,0 +1,144 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261027180248",
+    "name": "desktop_staff_self_access",
+    "applied_at_vn": "2026-10-28 01:02:48 +07"
+  },
+  "local_groups": 11,
+  "production_mapped_users_tested": 6,
+  "http_checks": 20,
+  "business_rows_written": 0,
+  "fnDiff": [
+    {
+      "signature": "private.aka_agent_staff_scope_for_request()",
+      "added": true
+    },
+    {
+      "signature": "private.group_access(text,bigint,bigint,bigint)",
+      "changed": [
+        "checksum",
+        "definition"
+      ]
+    },
+    {
+      "signature": "aka_agent_admin_cron(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_admin_docs(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_admin_notifications(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_admin_settings(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_admin_triggers(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "changed": [
+        "checksum",
+        "definition"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_management(bigint,text,text,text,jsonb)",
+      "changed": [
+        "acl",
+        "desktop_execute"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_runtime_scope(bigint,text)",
+      "changed": [
+        "checksum",
+        "definition"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_time_allowed(bigint)",
+      "changed": [
+        "checksum",
+        "definition"
+      ]
+    }
+  ],
+  "relationDiff": [
+    {
+      "relation": "public.aka_agent_staff_runtime_profile",
+      "changed": [
+        "view"
+      ]
+    }
+  ],
+  "functions_before": 1245,
+  "functions_after": 1246,
+  "unchanged_existing_definitions": 1241,
+  "policies_unchanged": true,
+  "triggers_unchanged": true,
+  "roles_unchanged": true,
+  "default_acls_unchanged": true,
+  "constraints_unchanged": true,
+  "source_checksums": [
+    {
+      "signature": "private.group_access(text,bigint,bigint,bigint)",
+      "checksum": "251162422553d81d432151554b5ea16a"
+    },
+    {
+      "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "checksum": "d6bbdca20f780005a411e8a6be6ae8e5"
+    },
+    {
+      "signature": "aka_agent_staff_runtime_scope(bigint,text)",
+      "checksum": "41d7a8af8bb781e59157a5b919621492"
+    },
+    {
+      "signature": "aka_agent_staff_time_allowed(bigint)",
+      "checksum": "a294e60011edd8d42e90ac2f74ce744c"
+    }
+  ],
+  "target_checksums": [
+    {
+      "signature": "private.aka_agent_staff_scope_for_request()",
+      "checksum": "d417807fa9dc08cfecbd6cd0aab7df3e"
+    },
+    {
+      "signature": "private.group_access(text,bigint,bigint,bigint)",
+      "checksum": "d173eaf22b0b6b6958a6f8f40cdaa82d"
+    },
+    {
+      "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "checksum": "5bb87b66104f2dad716797e28cd6cccc"
+    },
+    {
+      "signature": "aka_agent_staff_runtime_scope(bigint,text)",
+      "checksum": "b24e654e7f7d3e840db80611affdaa43"
+    },
+    {
+      "signature": "aka_agent_staff_time_allowed(bigint)",
+      "checksum": "7569f2b3816985cac48c114c891b5672"
+    }
+  ]
+}

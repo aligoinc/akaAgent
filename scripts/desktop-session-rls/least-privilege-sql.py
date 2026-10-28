@@ -4,7 +4,7 @@ SECURITY DEFINER is a privilege boundary: its body runs as its owner, so callers
 do not need table grants or EXECUTE on its internal helpers. Invoker bodies and
 triggers do need those privileges. Unknown dynamic SQL fails the audit.
 """
-import json, re
+import json, os, re
 from collections import defaultdict
 from pathlib import Path
 from pglast.parser import parse_plpgsql_json, parse_sql_json
@@ -29,7 +29,12 @@ for name in ['fixture-public-functions.json', 'dependency-functions.json', 'entr
 for f in read('fixture-schema.json')['private_functions']:
     sig = canonical(f['signature'])
     functions[sig] = dict(f, signature=sig)
-functions['public.aka_agent_block_denied_ip_request()'] = read('pre-request-preflight.json').get('function', {})
+private_security_dir = Path(os.environ.get('AKA_AGENT_PRIVATE_SECURITY_DIR') or
+                            Path.home() / '.codex/incident-recovery/akaAgent-ip-block').resolve()
+private_hook = private_security_dir / 'migrations/snapshots/desktop-session-rls/pre-request-preflight.json'
+if not private_hook.is_file():
+    raise FileNotFoundError('Set AKA_AGENT_PRIVATE_SECURITY_DIR to the external security archive: ' + str(private_hook))
+functions['public.aka_agent_block_denied_ip_request()'] = json.loads(private_hook.read_text()).get('function', {})
 live_functions = {f['signature']:f for f in live['functions']}
 relations = {t['schema']+'.'+t['name']:t for t in live['relations'] if t['kind'] != 'S'}
 by_name = defaultdict(list)

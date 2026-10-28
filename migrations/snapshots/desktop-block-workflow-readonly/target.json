@@ -1,0 +1,132 @@
+[
+  {
+    "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+    "rls": true,
+    "name": "auto_blocks",
+    "force": false,
+    "owner": "postgres",
+    "columns": [
+      {
+        "acl": null,
+        "name": "id"
+      },
+      {
+        "acl": null,
+        "name": "name"
+      },
+      {
+        "acl": null,
+        "name": "description"
+      },
+      {
+        "acl": null,
+        "name": "icon"
+      },
+      {
+        "acl": null,
+        "name": "category"
+      },
+      {
+        "acl": null,
+        "name": "kind"
+      },
+      {
+        "acl": null,
+        "name": "system_type"
+      },
+      {
+        "acl": null,
+        "name": "code"
+      },
+      {
+        "acl": null,
+        "name": "config_schema"
+      },
+      {
+        "acl": null,
+        "name": "output_schema"
+      },
+      {
+        "acl": null,
+        "name": "default_config"
+      },
+      {
+        "acl": null,
+        "name": "is_builtin"
+      },
+      {
+        "acl": null,
+        "name": "staff_id"
+      },
+      {
+        "acl": null,
+        "name": "organization_id"
+      },
+      {
+        "acl": null,
+        "name": "created_at"
+      },
+      {
+        "acl": null,
+        "name": "updated_at"
+      }
+    ]
+  },
+  {
+    "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+    "rls": true,
+    "name": "auto_workflows",
+    "force": false,
+    "owner": "postgres",
+    "columns": [
+      {
+        "acl": null,
+        "name": "id"
+      },
+      {
+        "acl": null,
+        "name": "name"
+      },
+      {
+        "acl": null,
+        "name": "description"
+      },
+      {
+        "acl": null,
+        "name": "nodes"
+      },
+      {
+        "acl": null,
+        "name": "edges"
+      },
+      {
+        "acl": null,
+        "name": "variables_schema"
+      },
+      {
+        "acl": null,
+        "name": "default_variables"
+      },
+      {
+        "acl": null,
+        "name": "is_builtin"
+      },
+      {
+        "acl": null,
+        "name": "staff_id"
+      },
+      {
+        "acl": null,
+        "name": "organization_id"
+      },
+      {
+        "acl": null,
+        "name": "created_at"
+      },
+      {
+        "acl": null,
+        "name": "updated_at"
+      }
+    ]
+  }
+]

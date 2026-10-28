@@ -1,0 +1,68 @@
+{
+  "at": "2026-10-27T19:13:16.583Z",
+  "localDate": "2026-10-28",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "project": "akachat",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261027191229",
+    "name": "desktop_block_workflow_readonly"
+  },
+  "source": "supabase/migrations/20261027190936_desktop_block_workflow_readonly.sql",
+  "scope": "Revoke Desktop INSERT/UPDATE/DELETE/TRUNCATE including column INSERT/UPDATE grants on auto_blocks and auto_workflows only",
+  "desktopPermissions": [
+    {
+      "table": "auto_blocks",
+      "delete": false,
+      "insert": false,
+      "select": true,
+      "update": false,
+      "truncate": false
+    },
+    {
+      "table": "auto_workflows",
+      "delete": false,
+      "insert": false,
+      "select": true,
+      "update": false,
+      "truncate": false
+    }
+  ],
+  "desktopReadsMatch": true,
+  "data": {
+    "blocks": {
+      "count": 142,
+      "checksum": "daf4447ff7c3af89f87f4a1a8ba9aa66"
+    },
+    "workflows": {
+      "count": 59,
+      "checksum": "b436bc3c60de60ac473ad065067a0664"
+    }
+  },
+  "otherMetadataAndPermissionsUnchanged": true,
+  "newSecurityAdvisorFindings": false,
+  "verification": {
+    "localGroups": 7,
+    "productionApplyRollbackTrial": true,
+    "postApplyMetadata": true,
+    "syntheticLocalWritesDenied": [
+      "INSERT",
+      "UPDATE",
+      "UPSERT",
+      "DELETE",
+      "TRUNCATE"
+    ],
+    "trustedBackendWritesPreserved": true
+  },
+  "noClientUpdateRequired": true,
+  "editorImpact": "All Desktop users including admins can no longer add/save/delete persisted block or workflow definitions. Existing workflow/campaign execution retains SELECT. Backend can still maintain definitions.",
+  "notChanged": [
+    "auto_elements/XPath",
+    "global system settings including media/proxy settings",
+    "legacy tables",
+    "staff data isolation beyond previous scope",
+    "token lifetime/password-change revocation"
+  ],
+  "rollback": "migrations/rollback_desktop_block_workflow_readonly.sql requires a separate instruction before restoring Desktop write access",
+  "reference": "https://www.postgresql.org/docs/17/sql-revoke.html"
+}

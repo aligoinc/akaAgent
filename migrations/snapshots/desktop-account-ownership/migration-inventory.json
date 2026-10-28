@@ -1,0 +1,1354 @@
+[
+  {
+    "signature": "auto_assert_automation_identity(bigint,bigint,text,text)",
+    "sourceChecksum": "5a9a503db72b965eb644739f5f60905d",
+    "targetChecksum": "f50796438b0e90ef184fa25cc4043e98",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027173856_cross_repo_http_permissions.sql",
+      "supabase/migrations/20261027175514_desktop_staff_self_access.sql",
+      "supabase/migrations/20261027180909_staff_sharing_directory.sql",
+      "supabase/migrations/20261015230729_report_read_timeout.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v273_direct_campaign_input_mutability.sql",
+      "migrations/migration_v372_detail_status_query.sql",
+      "migrations/migration_v189_campaign_input_origin_filter.sql",
+      "migrations/migration_v295_message_opt_out_customers.sql",
+      "migrations/migration_v362_action_status_readers.sql",
+      "migrations/migration_v240_data_group_info_panel.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v316_campaign_details_page.sql",
+      "migrations/migration_v225_data_group_campaign_target_preview.sql",
+      "migrations/migration_v330_campaign_send_exclusions.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v341_zalo_engagement_chat_registration.sql",
+      "migrations/migration_v274_campaign_input_information_updates.sql",
+      "migrations/migration_v174_campaign_detail_automation.sql",
+      "migrations/migration_v187_campaign_automation_execution_paging.sql",
+      "migrations/migration_v297_data_group_google_sheet_sync.sql",
+      "migrations/migration_v314_campaign_input_selection.sql",
+      "migrations/migration_v201_category_data_group_primary_source.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v414_shared_group_source_account_name.sql",
+      "migrations/migration_v214_campaign_finalize_pending_guard.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v238_campaign_progress_aggregate.sql",
+      "migrations/migration_v369_selective_revert_automation_status_catalog.sql",
+      "migrations/migration_v209_campaign_data_group_source_summaries.sql",
+      "migrations/migration_v408_campaign_logs.sql",
+      "migrations/migration_v252_forward_only_dynamic_filters.sql",
+      "migrations/migration_v367_action_status_compatibility.sql",
+      "migrations/migration_v270_campaign_drafts.sql",
+      "migrations/migration_v177_automation_delay_exact_time_and_status_scope.sql",
+      "migrations/migration_v208_secure_dataset_writers_and_legacy_semantic_automation.sql",
+      "migrations/migration_v421_data_column_filters.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v352_zalo_server_campaign_tags.sql",
+      "migrations/migration_v188_data_group_automation_source_guard.sql",
+      "migrations/migration_v423_campaign_type_visibility.sql",
+      "migrations/migration_v328_desktop_ui_read_deltas.sql",
+      "migrations/migration_v286_data_group_zalo_account_chat_facts.sql",
+      "migrations/migration_v221_zalo_server_campaign_input_read.sql",
+      "migrations/migration_v407_zalo_phone_check_daily_limit.sql",
+      "migrations/migration_v176_automation_target_data_schedule.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v396_facebook_random_run_schedule.sql",
+      "migrations/migration_v397_campaign_shared_schedule.sql",
+      "migrations/migration_v206_semantic_data_types.sql",
+      "migrations/migration_v195_direct_campaign_data_group_snapshot.sql",
+      "migrations/migration_v401_web_enrichment_defaults.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v289_data_group_chat_tag_consistency.sql",
+      "migrations/migration_v339_zalo_campaign_engagement.sql",
+      "migrations/migration_v202_optional_automation_destinations.sql",
+      "migrations/migration_v175_automation_claim_conflict_hotfix.sql",
+      "migrations/migration_v191_data_group_delete_options.sql",
+      "migrations/migration_v390_campaign_diagnostics.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v327_desktop_ui_reads.sql",
+      "migrations/migration_v250_data_group_dynamic_filters.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v340_browser_run_limits.sql",
+      "migrations/migration_v313_campaign_data_sort.sql",
+      "migrations/migration_v290_data_group_query_optimization.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v193_data_group_bundle_security_relationship.sql",
+      "migrations/migration_v398_facebook_web_enrichment.sql",
+      "migrations/migration_v291_data_group_account_options.sql",
+      "migrations/migration_v271_simplify_campaign_drafts.sql",
+      "migrations/migration_v253_database_dynamic_filter_worker.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql",
+      "migrations/migration_v386_automation_wildcard_cleanup.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v174_campaign_detail_automation.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "54a541b737aa5dd864763658a0dc7861"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)",
+    "sourceChecksum": "e204dc76d6ca7fe8806d135b53201902",
+    "targetChecksum": "4fa056905d4fb0c264053748546f5461",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v397_campaign_shared_schedule.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "75edd820d13687d17da215c71a34b005"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+    "sourceChecksum": "687fc3efe8378dd175f88f852bc47a51",
+    "targetChecksum": "a2a5e8b256010056498af554b2ad0bb8",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "303374986d6ad27d75abf3c1586188db"
+      },
+      {
+        "file": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "303374986d6ad27d75abf3c1586188db"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_orphan_turns(bigint,bigint)",
+    "sourceChecksum": "ea0c365929e5731b4e6436bfc1c58883",
+    "targetChecksum": "2f00a8a9d3465e535332f1e97f0946b2",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "c6db167a5854f3b21851add71ba3bef5"
+      },
+      {
+        "file": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "c6db167a5854f3b21851add71ba3bef5"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+    "sourceChecksum": "172635824af6f7a3a0cae242c0d1d978",
+    "targetChecksum": "50295fe0c805a2f215613182cec5b576",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4b62cb0329703312335f53278c38f66d"
+      },
+      {
+        "file": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4b62cb0329703312335f53278c38f66d"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+    "sourceChecksum": "39c1403afa099c706b38f2850adf52ec",
+    "targetChecksum": "379ec95f37086654c316847ce7e16ee6",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "74458569ea5d3cc1decce2af51e16f1a"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+    "sourceChecksum": "0aea61ae267927a82b4f3e921ba468cf",
+    "targetChecksum": "582c96e29079dc70bb706da1f4a08849",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "d1c9d9b8df15603513a3f5a646ee5c28"
+      },
+      {
+        "file": "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "003db3654831e7a3fe99c9902d002c92"
+      },
+      {
+        "file": "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "d1c9d9b8df15603513a3f5a646ee5c28"
+      },
+      {
+        "file": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "003db3654831e7a3fe99c9902d002c92"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+    "sourceChecksum": "865b74966309d70fbb81f9e76dd491a0",
+    "targetChecksum": "c867e990c73a78b5ce5fbdb72634a78c",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "dbf0cfc1095c23d48ae735833a47b439"
+      }
+    ]
+  },
+  {
+    "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+    "sourceChecksum": "62ffac318d74ac671a5a1b9e51630c4a",
+    "targetChecksum": "462463fb5676836150ff146a5f070d84",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "43456b8068bd39aed914ca97b95bf449"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+    "sourceChecksum": "07630b82e68cba560a8c7538b24702d5",
+    "targetChecksum": "c125235098f1d766e97ecc06c64db17b",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v330_campaign_send_exclusions.sql",
+      "migrations/migration_v246_campaign_delivery_cooldown.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v424_staff_delivery_cooldown.sql",
+      "migrations/migration_v431_cooldown_history_lookup.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v330_campaign_send_exclusions.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "23af75ba7af11bf064a7e487eec48449"
+      },
+      {
+        "file": "migrations/migration_v246_campaign_delivery_cooldown.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "f7c99ad8e94ee9597396e7d56f422efd"
+      },
+      {
+        "file": "migrations/migration_v424_staff_delivery_cooldown.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "18ddcf51f2f5c155e6116b683513f5af"
+      },
+      {
+        "file": "migrations/migration_v431_cooldown_history_lookup.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "eda8ae2e6c3684d840268bee53f8dcc3"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_apply_zalo_server_campaign_tags(bigint,bigint,bigint,bigint,uuid,uuid,bigint,text,text,bigint[])",
+    "sourceChecksum": "65cd07b8ae16017794e56977c2f76aff",
+    "targetChecksum": "119e338eb2cb3b14ce7b3f5fada89bfb",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v352_zalo_server_campaign_tags.sql",
+      "migrations/migration_v353_zalo_server_campaign_tag_limits.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v354_zalo_server_deleted_tags.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v352_zalo_server_campaign_tags.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "5ae5f9f342cd0df10c4e1495a906ec0e"
+      },
+      {
+        "file": "migrations/migration_v353_zalo_server_campaign_tag_limits.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "8cbba82c01193e838f68e078e6e055cb"
+      },
+      {
+        "file": "migrations/migration_v354_zalo_server_deleted_tags.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "9a2677f0daeb12bbba612e95eddeee20"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)",
+    "sourceChecksum": "841a8fc8da0bca527508e71dcdc6b8fa",
+    "targetChecksum": "ca4ba08f2a0fc853c3cee79ac1190001",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v330_campaign_send_exclusions.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v330_campaign_send_exclusions.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "90cfe2a3cf80f6008b649f669296b7f2"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_check_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "92b00c0827a801e9ffece28d14805f84",
+    "targetChecksum": "b67d767dab4cb40df36061fbbbff2bb4",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20260903100510_zalo_message_opt_out.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v295_message_opt_out_customers.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "supabase/migrations/20260903100510_zalo_message_opt_out.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "af524889b91b91c16e35ff90f298c8cb"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_facebook_login(bigint,text,text,text,jsonb)",
+    "sourceChecksum": "4ab7e726d3bc9c9e17c35b61f186ed55",
+    "targetChecksum": "ea41c2afd849c007d1db16c6e12e0da0",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v320_facebook_existing_account_login.sql",
+      "migrations/migration_v319_facebook_login_sessions.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v320_facebook_existing_account_login.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "9d9de660a7ac494bf6b013ff7a3c1db4"
+      },
+      {
+        "file": "migrations/migration_v319_facebook_login_sessions.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "57905d383b5e35a05941d05a0e472766"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_finalize_expired_zalo_server_data_group_campaigns(bigint,bigint,text,integer)",
+    "sourceChecksum": "01a16672ec57fac76a9afe140a242f11",
+    "targetChecksum": "ad964b8130cc621c91777f3770ff5f4e",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v196_data_group_server_expiry_sweep.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v196_data_group_server_expiry_sweep.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "76e1bc96b10e5d4c20e0496c2d1e62e1"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "122fca65e8a3568a65d68f8ce8edf137"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_finalize_zalo_server_data_group_campaign(bigint,bigint,text,bigint,text)",
+    "sourceChecksum": "d6ea4c72508274a8c3fc8c827e52276d",
+    "targetChecksum": "2e8974fb896f4595582d44aa5547b9e8",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v220_claim_campaign_runtime_rpc_permissions.sql",
+      "migrations/migration_v196_data_group_server_expiry_sweep.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v397_campaign_shared_schedule.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v340_browser_run_limits.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v196_data_group_server_expiry_sweep.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "478edf60f6e1671e5afd0842ce45a0ae"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4c84afac3885a2d1337e84cf89d110af"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_finalize_zalo_server_maintenance_campaign(bigint,bigint,text,bigint,text,boolean)",
+    "sourceChecksum": "0cf1c121dc19713c46305bbf41dec680",
+    "targetChecksum": "fb5eed8776a1a6f65dc9c4776a1ececd",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v216_zalo_server_schedule_maintenance_finalize.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4e4186db95e7c42ee8f51fc036cf7145"
+      },
+      {
+        "file": "migrations/migration_v216_zalo_server_schedule_maintenance_finalize.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "b7eff3d6c919af5445a0fc9b77758c5c"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_contact_dataset_member_ids(bigint,bigint,bigint,bigint,text)",
+    "sourceChecksum": "a726cda368e948073c609d963912e637",
+    "targetChecksum": "e1f0d03b1609d62685dc4e5fafff2e91",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v421_data_column_filters.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v170_account_contact_datasets.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v170_account_contact_datasets.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "d8a5287cf3d671cbe47d1a2b529f28fd"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_contact_datasets(bigint,bigint,bigint,text,text,text,text)",
+    "sourceChecksum": "e0a575612eb1ce7a72dbe47e65daf62a",
+    "targetChecksum": "0b53df90ce71e617987faceb6484811d",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v170_account_contact_datasets.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v170_account_contact_datasets.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "5e115c9f6244575c6e60e1d7a5d309c3"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_email_campaign_link_tracking_summaries(bigint)",
+    "sourceChecksum": "be12f4fe693b615e984d660116d5267d",
+    "targetChecksum": "1697cd911602d53ce773bf8360ceb683",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v144_email_tracking_link_summary_rpc.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v144_email_tracking_link_summary_rpc.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "517193849c098b668f5898c61ef971d8"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_lock_campaign_input_serialization(bigint)",
+    "sourceChecksum": "74c082aacb1de27a8cedff2e824f219f",
+    "targetChecksum": "ca07284b7f0f0a3ab5a6ee7c8e745ab6",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261019133105_campaign_orphan_running_pause.sql",
+      "supabase/migrations/20261027175514_desktop_staff_self_access.sql",
+      "supabase/migrations/20261027180909_staff_sharing_directory.sql",
+      "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v350_campaign_content_rotation.sql",
+      "migrations/migration_v273_direct_campaign_input_mutability.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v274_campaign_input_information_updates.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v414_shared_group_source_account_name.sql",
+      "migrations/migration_v243_zalo_server_direct_data_group_snapshot.sql",
+      "migrations/migration_v305_staff_management.sql",
+      "migrations/migration_v352_zalo_server_campaign_tags.sql",
+      "migrations/migration_v353_zalo_server_campaign_tag_limits.sql",
+      "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+      "migrations/migration_v269_control_campaign_input_rerun.sql",
+      "migrations/migration_v393_facebook_random_run_boundaries.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v354_zalo_server_deleted_tags.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v268_campaign_failure_cleanup.sql",
+      "migrations/migration_v366_action_status_runtime_fixes.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v234_queue_desktop_campaign_while_account_running.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v228_zalo_phone_data_group_targets_portable.sql",
+      "migrations/migration_v233_allow_logged_out_desktop_campaign_resume.sql",
+      "migrations/templates/action-status-writer-v363.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "1b9647d13673472e4d528b66ff0103b9"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_prepare_zalo_message_opt_out(bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "0217c031e0d6aaef63c2589cbe1f7b94",
+    "targetChecksum": "dbb83b82d882feaeed7b6b9db0e8cdce",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20260903100510_zalo_message_opt_out.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v295_message_opt_out_customers.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "supabase/migrations/20260903100510_zalo_message_opt_out.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4a49958560e8f8809d1af0e521cc5d1b"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_settle_action_results_v1(bigint,bigint,bigint,uuid,uuid,bigint,bigint[],jsonb,text)",
+    "sourceChecksum": "a46368117d2815b67442383cd753089b",
+    "targetChecksum": "23dbd56e263e062b7d2819b8ce8062e7",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/migration_v366_action_status_runtime_fixes.sql",
+      "migrations/templates/action-status-writer-v363.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v363_action_status_writer.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "58d496254ce31bece6d10efd6746cd55"
+      },
+      {
+        "file": "migrations/migration_v366_action_status_runtime_fixes.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "d63d1c2d44893cce9d4ac363870828b0"
+      },
+      {
+        "file": "migrations/templates/action-status-writer-v363.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "58d496254ce31bece6d10efd6746cd55"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_take_campaign_content_index(bigint,bigint,bigint,text,uuid,uuid,bigint,text,integer)",
+    "sourceChecksum": "006a6da075ede4e9c6b07194422f65c9",
+    "targetChecksum": "a52b46d96fe0791ef1e2f68c02b99e4a",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v350_campaign_content_rotation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v351_campaign_content_blocks.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v350_campaign_content_rotation.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "4b2c9b9e40604edb615ccd75b73acee7"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_write_action_result_v1(bigint,bigint,bigint,uuid,uuid,text,jsonb)",
+    "sourceChecksum": "b4be76b63cd90ef5f4d7bdd93a22b288",
+    "targetChecksum": "e5ef8b12614447aeef9357db98f8ea2d",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v363_action_status_writer.sql",
+      "migrations/templates/action-status-writer-v363.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v363_action_status_writer.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "963aeaaae39331f55cbaa889104a98aa"
+      },
+      {
+        "file": "migrations/templates/action-status-writer-v363.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "963aeaaae39331f55cbaa889104a98aa"
+      }
+    ]
+  },
+  {
+    "signature": "append_auto_campaign_log(bigint,bigint,text)",
+    "sourceChecksum": "230e219f5b854a2d2154ee0dc6c867a2",
+    "targetChecksum": "d8adb4829fbe382f45065f9b5ba58f27",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+      "migrations/migration_v408_campaign_logs.sql",
+      "migrations/migration_v237_bound_campaign_log_tail.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v163_server_zalo_recovery_and_atomic_campaign_log.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "1c45be1a2287e832db030ecf56f10c70"
+      },
+      {
+        "file": "migrations/migration_v408_campaign_logs.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "fd5995b1d0200e6265a323039dc06858"
+      },
+      {
+        "file": "migrations/migration_v237_bound_campaign_log_tail.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "7576a08a081471a9a3335952bf4f2175"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_zalo_phone_check_usage(bigint,bigint,bigint,text,uuid,boolean,text,text)",
+    "sourceChecksum": "91fb0001b629cb058a41454068b439d2",
+    "targetChecksum": "62e0316082d120d600ab3a95b4792257",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v407_zalo_phone_check_daily_limit.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v407_zalo_phone_check_daily_limit.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "086fa753b9ea79092975fa74cce7e37e"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_finalize_zalo_server_contact_dataset(bigint,bigint,bigint,text,text,text,text,text,text,text,text[],jsonb,bigint,uuid)",
+    "sourceChecksum": "c97300fa762faa37e7b931761a9b2abb",
+    "targetChecksum": "690666a4fe0bd27a0c0b82a7064a8d6f",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v277_zalo_server_contact_dataset.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v277_zalo_server_contact_dataset.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "5272dc5c95c0587b55633fb00e70d0d4"
+      }
+    ]
+  },
+  {
+    "signature": "reconcile_auto_automation_enqueue_failures(bigint,bigint,text,integer,text,text)",
+    "sourceChecksum": "8cb7ed969e34334dc874f2ffea08a93d",
+    "targetChecksum": "d45ebf943a37c41f5f1ec8e96111232c",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v174_campaign_detail_automation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v174_campaign_detail_automation.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "a35771231b98635eac2ec06fd387f27c"
+      },
+      {
+        "file": "migrations/migration_v186_data_groups_direct_campaign_inputs.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "d8ecfb83aaea8bc8ae387c0095395bbb"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "869d902d319748ea1ce3376b3526df3d",
+    "targetChecksum": "6cb8024f35b85ffe3354b43c6ec8f107",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v193_data_group_bundle_security_relationship.sql",
+      "migrations/migration_v288_campaign_data_while_account_running.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "ab50f259e046d435270a65f77b6b2275"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "ab7d0a59d427e65e605f00c6a602a5bd"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_campaign_diagnostics_evidence(bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "9391f47e1be976e0d7e595325d3c2f31",
+    "targetChecksum": "d6a98a3ebd67c363066dd1e5baea2a42",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v408_campaign_logs.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v390_campaign_diagnostics.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v408_campaign_logs.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "2e5273a5f5eeb48649b2514fc6a73aef"
+      },
+      {
+        "file": "migrations/migration_v390_campaign_diagnostics.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "d0fdd328a6c731c96d09a08faf0ab392"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_desktop_campaign_detail(bigint,bigint,text,text,jsonb,bigint,text,jsonb)",
+    "sourceChecksum": "8cd5def0920f178d5efed9fb73ddefab",
+    "targetChecksum": "0f591afd90b59c1d4298647713367331",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v408_campaign_logs.sql",
+      "migrations/migration_v328_desktop_ui_read_deltas.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v408_campaign_logs.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "afeb23a28e147b1a075e3ce39b1296fb"
+      },
+      {
+        "file": "migrations/migration_v328_desktop_ui_read_deltas.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "1c7c27d98f61657985da8db5fa9e2d0a"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_desktop_campaign_logs(bigint,bigint,text,text,jsonb,bigint,jsonb)",
+    "sourceChecksum": "61f1ce6860cfc474d998cc70005717a1",
+    "targetChecksum": "ed9701b430944bd57be5140a98d5ed47",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v408_campaign_logs.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v408_campaign_logs.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "c1dae7b986f630e8ea8b8b2966c859a2"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+    "sourceChecksum": "2c7b2243ebe72dbd544a270dd56310fc",
+    "targetChecksum": "3c2caab8b949a640b4bdc3a61642ef31",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v387_facebook_random_run.sql",
+      "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v396_facebook_random_run_schedule.sql",
+      "migrations/migration_v397_campaign_shared_schedule.sql",
+      "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+      "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v387_facebook_random_run.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "4ef18a4a3e38d068e263f9c003b6b989"
+      },
+      {
+        "file": "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "79ec2b4d594aa7b5858f451de47c5313"
+      },
+      {
+        "file": "migrations/migration_v396_facebook_random_run_schedule.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "aac98a56eea9d8b1b503706bdc9ea5a2"
+      },
+      {
+        "file": "migrations/migration_v397_campaign_shared_schedule.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "5a5ccf14fa4f5f52003ecfdd02bcb371"
+      },
+      {
+        "file": "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "4ef18a4a3e38d068e263f9c003b6b989"
+      },
+      {
+        "file": "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "79ec2b4d594aa7b5858f451de47c5313"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_facebook_web_enrichment_settings(bigint,bigint,text,text,bigint,text,jsonb)",
+    "sourceChecksum": "df426447a1fd533e052437699bb8dd5d",
+    "targetChecksum": "7c71f5cb2733d276ad9bd10cddcf5cac",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v401_web_enrichment_defaults.sql",
+      "migrations/migration_v398_facebook_web_enrichment.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v401_web_enrichment_defaults.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "d9cd15e4efe54a3855b98d1ce3bcf7cd"
+      },
+      {
+        "file": "migrations/migration_v398_facebook_web_enrichment.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "a0ea269c7102bcc766ff408a645e8b0c"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_finalize_campaign(bigint,bigint,bigint,text,boolean,text,text,text)",
+    "sourceChecksum": "475e69ab388df822777e035d1dd03cb4",
+    "targetChecksum": "8a1898523d8c45a9a9209f3695de9d6f",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v214_campaign_finalize_pending_guard.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v214_campaign_finalize_pending_guard.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "41aaa77787c7dce4d4e1ae963f15e318"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_get_campaign_data_group_source(bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "d225647b4faec110607f9bfb1d574511",
+    "targetChecksum": "869f135a1c97185bb6e2e992897d3bcd",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "9af6e29769479338785e04d017381925"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "07481bfe9bd3926b961d804989b44958"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_automation_details(bigint,bigint,bigint,text,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text)",
+    "sourceChecksum": "ecad3867d725b6fbb27148366f90b6ce",
+    "targetChecksum": "ae098d96f96eaffe8379b34498e0dff0",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v187_campaign_automation_execution_paging.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v206_semantic_data_types.sql",
+      "migrations/migration_v202_optional_automation_destinations.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v187_campaign_automation_execution_paging.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "5857dfb774959a590998a10dc3805f5e"
+      },
+      {
+        "file": "migrations/migration_v202_optional_automation_destinations.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "b0f1110c454907212e7dfccbb55594ab"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_detail_automation_triggers(bigint,bigint,bigint,bigint[],text,text)",
+    "sourceChecksum": "56822434723347452c8944484764daea",
+    "targetChecksum": "3458739aa8d25f42d2e7ce3cf676b558",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v316_campaign_details_page.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v195_direct_campaign_data_group_snapshot.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v195_direct_campaign_data_group_snapshot.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "b17678b1dbbc6b611c939a7067b9bf63"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+    "sourceChecksum": "10fc44b5eb273974bb44aa3aaf757630",
+    "targetChecksum": "da6cd0d362196536d99805382af28d1b",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v372_detail_status_query.sql",
+      "migrations/migration_v362_action_status_readers.sql",
+      "migrations/migration_v367_action_status_compatibility.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v339_zalo_campaign_engagement.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v372_detail_status_query.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "b207c095961d350153707a7f8bca9fa8"
+      },
+      {
+        "file": "migrations/migration_v362_action_status_readers.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "73190e3c73eaffa802e1cd30f3ebda7d"
+      },
+      {
+        "file": "migrations/migration_v367_action_status_compatibility.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "c7e792d6d45d1c3eeaf1174b0110045a"
+      },
+      {
+        "file": "migrations/migration_v339_zalo_campaign_engagement.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "105e934be4683c567b52a73d4c33e9e2"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_input_data_page_by_ids(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text,bigint[])",
+    "sourceChecksum": "6faf48dceae54faacb69b6c3aa3b5ca6",
+    "targetChecksum": "136d1d76209b9b86c8d2f2fb13725665",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v314_campaign_input_selection.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v314_campaign_input_selection.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "3297063311bb9623d2b0cdf5ab99b9e2"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_list_campaign_input_data_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,text,integer,integer,text,text,text)",
+    "sourceChecksum": "440e2c6163518d4c0563c275d33e8474",
+    "targetChecksum": "dbba6b5b77cd6fa3a924fae8e54c5073",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v314_campaign_input_selection.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v313_campaign_data_sort.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v313_campaign_data_sort.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "b4597122d8afbe0462c2a9418a3bf897"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_preflight_campaign_data_group_change(bigint,bigint,bigint,bigint,text,text)",
+    "sourceChecksum": "967d28f6e9df5472bfefeffa6746ffb7",
+    "targetChecksum": "d88ecc2b15e3459e72239a0ab76dea25",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v288_campaign_data_while_account_running.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "0a9bbb060267bbad38eaf8c012708d90"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "d31bdb91f8a5d18b2a1da4a0b85a2086"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)",
+    "sourceChecksum": "56c07dc3ce73ba9bb5e0660bf15ab34e",
+    "targetChecksum": "9e8f3da3084e112a1c683723e9dbed49",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v288_campaign_data_while_account_running.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "ca1bbeadd5727ec3bea8435d1a55860b"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "5778ecf8660f522eaef5e277e585321b"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)",
+    "sourceChecksum": "7f163f902b82a72f8f850e432050a7e6",
+    "targetChecksum": "f8baf5aae05bf68e0f6af0032e1a5c39",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v330_campaign_send_exclusions.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v330_campaign_send_exclusions.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "650f427f4ea7b886ae3010b124811eae"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_snapshot_data_group_to_direct_campaign(bigint,bigint,text,bigint,bigint,timestamp with time zone,text,text,text)",
+    "sourceChecksum": "aa9006241ecdb9a8bb4fccd4a868dc67",
+    "targetChecksum": "ae8bc2191337b013232590523a05fb10",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20260904051350_set_heavy_rpc_timeouts_60s.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v273_direct_campaign_input_mutability.sql",
+      "migrations/migration_v227_facebook_data_group_uid_url_only.sql",
+      "migrations/migration_v274_campaign_input_information_updates.sql",
+      "migrations/migration_v226_facebook_data_group_targets_portable.sql",
+      "migrations/migration_v243_zalo_server_direct_data_group_snapshot.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v245_zalo_group_member_account_uid_only.sql",
+      "migrations/migration_v206_semantic_data_types.sql",
+      "migrations/migration_v197_zalo_remarketing_account_only_routing.sql",
+      "migrations/migration_v195_direct_campaign_data_group_snapshot.sql",
+      "migrations/migration_v409_group_sharing.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v228_zalo_phone_data_group_targets_portable.sql",
+      "migrations/migration_v199_direct_snapshot_legacy_input_dedupe.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v206_semantic_data_types.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "b5c88556c5feb3f48e3fde5307d11083"
+      },
+      {
+        "file": "migrations/migration_v195_direct_campaign_data_group_snapshot.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "1d0d84dcb752d75ac5cede2cb95334fc"
+      },
+      {
+        "file": "migrations/migration_v409_group_sharing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "a9ae08c496877fb033151864d7618839"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "f57f793d80eaec1d4d1706100acf0af6"
+      }
+    ]
+  },
+  {
+    "signature": "aka_agent_stop_campaign_data_group_source(bigint,bigint,bigint,text,text,text,text)",
+    "sourceChecksum": "9cc36d9836b829660a9d5f29f2db281d",
+    "targetChecksum": "579cf37e8442efe8ce7db23a3673132d",
+    "unrelatedBodyPreserved": true,
+    "mentions": [
+      "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+      "supabase/migrations/20261027095004_desktop_session_identity.sql",
+      "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+      "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+      "migrations/migration_v435_desktop_permission_cutover.sql",
+      "migrations/migration_v192_data_group_source_stop_lock.sql",
+      "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+      "migrations/migration_v186_data_groups_direct_campaign_inputs.sql"
+    ],
+    "definitions": [
+      {
+        "file": "migrations/migration_v224_zalo_server_data_group_tenant_routing.sql",
+        "bodyMatchesLive": true,
+        "bodyChecksum": "409c6f6b6b1683b77435135680f86c87"
+      },
+      {
+        "file": "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "bodyMatchesLive": false,
+        "bodyChecksum": "cef9956cc374181d389a089ce85544be"
+      }
+    ]
+  }
+]

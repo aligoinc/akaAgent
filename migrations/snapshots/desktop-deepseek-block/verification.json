@@ -1,0 +1,27 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "desktop_block_deepseek_setting",
+    "version": "20261027182912"
+  },
+  "verified_at": "2026-10-27T18:29:21.849134+00:00",
+  "status": "passed",
+  "changed_objects": [
+    "policy public.auto_system_settings.desktop_block_deepseek_setting"
+  ],
+  "unchanged_functions": 1253,
+  "all_function_metadata_unchanged": true,
+  "settings_relation_acl_columns_rls_unchanged": true,
+  "existing_policies_unchanged": true,
+  "local_groups": 6,
+  "http_checks": 12,
+  "production_business_writes": 0,
+  "secret_values_returned": false,
+  "advisors": {
+    "at": "2026-10-27T18:29:45.600Z",
+    "before_count": 9,
+    "after_count": 9,
+    "unchanged": true,
+    "new_lints": []
+  }
+}

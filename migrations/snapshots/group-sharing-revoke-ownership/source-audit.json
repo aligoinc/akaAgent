@@ -1,0 +1,67 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-10-28T04:25:52.551659+00:00",
+  "migrationPath": "supabase/migrations/20261028042624_group_sharing_revoke_ownership_compat.sql",
+  "sourceChecksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+  "targetChecksum": "0e17dec0570937cfea8a1ae035e2af4d",
+  "sourceMatchesLatestRepositoryDefinition": true,
+  "unrelatedBodyPreserved": true,
+  "copiedLockBlock": "  IF p_campaign_id IS NULL OR p_campaign_id <= 0 THEN\n    RAISE EXCEPTION 'campaign_input_serialization_id_invalid';\n  END IF;\n  PERFORM pg_advisory_xact_lock(hashtextextended(\n    'aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0\n  ));",
+  "mentions": [
+    {
+      "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+      "sourceChecksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+      "files": [
+        "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+        "supabase/migrations/20261027095004_desktop_session_identity.sql",
+        "supabase/migrations/20261027175514_desktop_staff_self_access.sql",
+        "supabase/migrations/20261027180909_staff_sharing_directory.sql",
+        "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+        "migrations/migration_v409_group_sharing.sql",
+        "migrations/migration_v414_shared_group_source_account_name.sql",
+        "migrations/migration_v435_desktop_permission_cutover.sql",
+        "migrations/migration_v421_data_column_filters.sql"
+      ]
+    },
+    {
+      "signature": "public.aka_agent_lock_campaign_input_serialization(bigint)",
+      "sourceChecksum": "ca07284b7f0f0a3ab5a6ee7c8e745ab6",
+      "files": [
+        "supabase/migrations/20261027141754_desktop_token_least_privilege.sql",
+        "supabase/migrations/20261027044627_staff_rls_runtime_compatibility.sql",
+        "supabase/migrations/20261027095004_desktop_session_identity.sql",
+        "supabase/migrations/20261019133105_campaign_orphan_running_pause.sql",
+        "supabase/migrations/20261027175514_desktop_staff_self_access.sql",
+        "supabase/migrations/20261027180909_staff_sharing_directory.sql",
+        "supabase/migrations/20261027183537_desktop_account_campaign_ownership.sql",
+        "supabase/migrations/20261019130317_campaign_orphan_pause.sql",
+        "supabase/migrations/20261027100931_desktop_data_rls_activation.sql",
+        "migrations/migration_v233_allow_logged_out_desktop_campaign_resume.sql",
+        "migrations/migration_v350_campaign_content_rotation.sql",
+        "migrations/migration_v273_direct_campaign_input_mutability.sql",
+        "migrations/migration_v274_campaign_input_information_updates.sql",
+        "migrations/migration_v392_restore_facebook_random_run_lifecycle.sql",
+        "migrations/migration_v228_zalo_phone_data_group_targets_portable.sql",
+        "migrations/migration_v409_group_sharing.sql",
+        "migrations/migration_v219_zalo_per_account_server_runtime.sql",
+        "migrations/migration_v234_queue_desktop_campaign_while_account_running.sql",
+        "migrations/migration_v387_facebook_random_run.sql",
+        "migrations/migration_v414_shared_group_source_account_name.sql",
+        "migrations/migration_v389_facebook_random_run_lifecycle.sql",
+        "migrations/migration_v354_zalo_server_deleted_tags.sql",
+        "migrations/migration_v243_zalo_server_direct_data_group_snapshot.sql",
+        "migrations/migration_v269_control_campaign_input_rerun.sql",
+        "migrations/migration_v305_staff_management.sql",
+        "migrations/migration_v352_zalo_server_campaign_tags.sql",
+        "migrations/migration_v353_zalo_server_campaign_tag_limits.sql",
+        "migrations/migration_v231_campaign_daily_runtime_boundary.sql",
+        "migrations/migration_v391_revert_facebook_random_run_lifecycle.sql",
+        "migrations/migration_v268_campaign_failure_cleanup.sql",
+        "migrations/migration_v393_facebook_random_run_boundaries.sql",
+        "migrations/migration_v366_action_status_runtime_fixes.sql",
+        "migrations/migration_v363_action_status_writer.sql",
+        "migrations/templates/action-status-writer-v363.sql"
+      ]
+    }
+  ]
+}

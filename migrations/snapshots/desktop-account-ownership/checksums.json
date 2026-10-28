@@ -1,0 +1,23 @@
+{
+  "supabase/migrations/20261027183537_desktop_account_campaign_ownership.sql": "87cb364e3e58c9538fd7d80b2af2b9e61dd257fce3bdc6bb3d312048f72f89ad",
+  "migrations/rollback_desktop_account_campaign_ownership.sql": "f7a43438286e8e31617a21c9a870329875835cd8391d6123094d67911e704266",
+  "migrations/snapshots/desktop-account-ownership/apply-result.json": "5ec9e6a0ce0b96e161f07551da8f1bbeb018126662aa02019835691dcee6a386",
+  "migrations/snapshots/desktop-account-ownership/before.json": "675d3f877db7058d70d216a57e23148f8a7baaea123e23a0b838978d03c78ddc",
+  "migrations/snapshots/desktop-account-ownership/http-test.json": "ddac0991f2909e8489596e925836c076407ff5b3463e7da6854683931a1965cd",
+  "migrations/snapshots/desktop-account-ownership/indexes.json": "3a58af09e02caf39a77a85a8f9bffd59e0241579460147807ec75cd762193af8",
+  "migrations/snapshots/desktop-account-ownership/local-performance.json": "b7258db76ac7a9dcac77aa5d77bac759750d366306e3f2d1cb7f8f1bab833a75",
+  "migrations/snapshots/desktop-account-ownership/local-test.json": "bb4ae06accc7daaf3601778d01dd5289ea6ef83b3353009934cae75e527ddca2",
+  "migrations/snapshots/desktop-account-ownership/migration-inventory.json": "fd69676aabc8681a4f1873a2ec968d4312923d2e198a5e37d92f09ed96eaa011",
+  "migrations/snapshots/desktop-account-ownership/patch-inputs.json": "8305a53f3033987b5e56aa2be71b2cefd1fc37001c3fd38e07205d5b3bd364ff",
+  "migrations/snapshots/desktop-account-ownership/plan.json": "b0d2e4bc404d9226f2970875ec597cf589390512a057764f07b99ec4e09ffe44",
+  "migrations/snapshots/desktop-account-ownership/production-metadata.json": "b7d6e8a257f06ed0ea60391e836cf90e7ca6c5060a6aff31f8c397e4f47360a3",
+  "migrations/snapshots/desktop-account-ownership/production-performance.json": "434dcb58a5f694449b54797f5a6b5ff5b776e6eadf7f2115c87d52735ce28633",
+  "migrations/snapshots/desktop-account-ownership/production-postcheck-result.json": "b01456002ee7a272386c57fcffc92d64f6c38eddab6e312a69c75545f765745d",
+  "migrations/snapshots/desktop-account-ownership/production-readonly-check.sql": "c822728399cb32e415348a2d72c4c0d8c9d599e317ef73ae63f541b2334ece0b",
+  "migrations/snapshots/desktop-account-ownership/production-trial-result.json": "aec5393872b2dde033dc3d0756a226dc9dba27a94684fd33359d79fa34e3af3e",
+  "migrations/snapshots/desktop-account-ownership/production-trial.sql": "91b3c374071fe49fc36c24264d78f1e7cb76debe1826c90ffee5ac2cbd3adf48",
+  "migrations/snapshots/desktop-account-ownership/production-verification.json": "787aee7a59d897ef4bbf7b541397ca6f127687f75f3cb6fa88ca13897523a76c",
+  "migrations/snapshots/desktop-account-ownership/reference-compatibility.json": "d60887550ca9d793b6abac7e3836634f669982b69a3d93e9899b1a07ebabafe9",
+  "migrations/snapshots/desktop-account-ownership/security-advisors.json": "ae58750419627860aad45e183175cb8d8151cd7304db6333459fb78030358413",
+  "migrations/snapshots/desktop-account-ownership/target-meta.json": "6fee6dae33202b82baa0e71211bda6d8a0f74f78cf0985519a19d3a5d550af1a"
+}

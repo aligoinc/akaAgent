@@ -1,0 +1,50 @@
+{
+  "at": "2026-10-28T04:34:03.461Z",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "status": "source_still_live_candidate_not_applied",
+  "productionWrites": 0,
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "31494192d0a18efeafa4fb0296008230",
+      "owner": "postgres",
+      "signature": "private.aka_agent_assert_request_ownership(bigint,bigint,bigint)"
+    },
+    {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "d417807fa9dc08cfecbd6cd0aab7df3e",
+      "owner": "postgres",
+      "signature": "private.aka_agent_staff_scope_for_request()"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "checksum": "c47165554f49d3099d1f95e7d136eae5",
+      "owner": "postgres",
+      "signature": "private.can_read_data_group(bigint,bigint,bigint)"
+    },
+    {
+      "acl": "{postgres=X/postgres}",
+      "checksum": "d173eaf22b0b6b6958a6f8f40cdaa82d",
+      "owner": "postgres",
+      "signature": "private.group_access(text,bigint,bigint,bigint)"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "checksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+      "owner": "postgres",
+      "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)"
+    },
+    {
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "checksum": "ca07284b7f0f0a3ab5a6ee7c8e745ab6",
+      "owner": "postgres",
+      "signature": "public.aka_agent_lock_campaign_input_serialization(bigint)"
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "f50796438b0e90ef184fa25cc4043e98",
+      "owner": "postgres",
+      "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)"
+    }
+  ]
+}

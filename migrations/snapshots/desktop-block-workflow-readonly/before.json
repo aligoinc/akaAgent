@@ -1,0 +1,714 @@
+{
+  "roles": [
+    {
+      "name": "aka_agent_chat_api",
+      "super": false,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "aka_agent_desktop",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "aka_message_ingest_owner",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "anon",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "authenticated",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "authenticator",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "cli_login_postgres",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "crm_interest_worker",
+      "super": false,
+      "bypass": true,
+      "inherit": false
+    },
+    {
+      "name": "dashboard_user",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_checkpoint",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_create_subscription",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_database_owner",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_execute_server_program",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_maintain",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_monitor",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_read_all_data",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_read_all_settings",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_read_all_stats",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_read_server_files",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_signal_backend",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_stat_scan_tables",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_use_reserved_connections",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_write_all_data",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pg_write_server_files",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "pgbouncer",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "postgres",
+      "super": false,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "service_role",
+      "super": false,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "supabase_admin",
+      "super": true,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "supabase_auth_admin",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "supabase_etl_admin",
+      "super": false,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "supabase_functions_admin",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "supabase_privileged_role",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "supabase_read_only_user",
+      "super": false,
+      "bypass": true,
+      "inherit": true
+    },
+    {
+      "name": "supabase_realtime_admin",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    },
+    {
+      "name": "supabase_replication_admin",
+      "super": false,
+      "bypass": false,
+      "inherit": true
+    },
+    {
+      "name": "supabase_storage_admin",
+      "super": false,
+      "bypass": false,
+      "inherit": false
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "ALL",
+      "qual": "true",
+      "roles": [
+        "aka_agent_desktop",
+        "aka_message_ingest_owner",
+        "authenticator",
+        "cli_login_postgres",
+        "dashboard_user",
+        "pg_checkpoint",
+        "pg_create_subscription",
+        "pg_database_owner",
+        "pg_execute_server_program",
+        "pg_maintain",
+        "pg_monitor",
+        "pg_read_all_data",
+        "pg_read_all_settings",
+        "pg_read_all_stats",
+        "pg_read_server_files",
+        "pg_signal_backend",
+        "pg_stat_scan_tables",
+        "pg_use_reserved_connections",
+        "pg_write_all_data",
+        "pg_write_server_files",
+        "pgbouncer",
+        "supabase_auth_admin",
+        "supabase_functions_admin",
+        "supabase_privileged_role",
+        "supabase_realtime_admin",
+        "supabase_replication_admin",
+        "supabase_storage_admin"
+      ],
+      "tablename": "auto_blocks",
+      "permissive": "PERMISSIVE",
+      "policyname": "v435_existing_role_access",
+      "schemaname": "public",
+      "with_check": "true"
+    },
+    {
+      "cmd": "ALL",
+      "qual": "true",
+      "roles": [
+        "aka_agent_desktop",
+        "aka_message_ingest_owner",
+        "authenticator",
+        "cli_login_postgres",
+        "dashboard_user",
+        "pg_checkpoint",
+        "pg_create_subscription",
+        "pg_database_owner",
+        "pg_execute_server_program",
+        "pg_maintain",
+        "pg_monitor",
+        "pg_read_all_data",
+        "pg_read_all_settings",
+        "pg_read_all_stats",
+        "pg_read_server_files",
+        "pg_signal_backend",
+        "pg_stat_scan_tables",
+        "pg_use_reserved_connections",
+        "pg_write_all_data",
+        "pg_write_server_files",
+        "pgbouncer",
+        "supabase_auth_admin",
+        "supabase_functions_admin",
+        "supabase_privileged_role",
+        "supabase_realtime_admin",
+        "supabase_replication_admin",
+        "supabase_storage_admin"
+      ],
+      "tablename": "auto_workflows",
+      "permissive": "PERMISSIVE",
+      "policyname": "v435_existing_role_access",
+      "schemaname": "public",
+      "with_check": "true"
+    }
+  ],
+  "triggers": [],
+  "relations": [
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=rd/postgres}",
+      "rls": true,
+      "name": "auto_blocks",
+      "force": false,
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "bigint",
+          "default": "nextval('auto_blocks_id_seq'::regclass)",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "description",
+          "type": "text",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "icon",
+          "type": "text",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "category",
+          "type": "text",
+          "default": null,
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "kind",
+          "type": "text",
+          "default": "'js'::text",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "system_type",
+          "type": "text",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "code",
+          "type": "text",
+          "default": "''::text",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "config_schema",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "output_schema",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "default_config",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "is_builtin",
+          "type": "boolean",
+          "default": "false",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "staff_id",
+          "type": "bigint",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "organization_id",
+          "type": "bigint",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notnull": false
+        }
+      ]
+    },
+    {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=rd/postgres}",
+      "rls": true,
+      "name": "auto_workflows",
+      "force": false,
+      "owner": "postgres",
+      "columns": [
+        {
+          "acl": null,
+          "name": "id",
+          "type": "bigint",
+          "default": "nextval('auto_workflows_id_seq'::regclass)",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "name",
+          "type": "text",
+          "default": null,
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "description",
+          "type": "text",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "nodes",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "edges",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "variables_schema",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "default_variables",
+          "type": "jsonb",
+          "default": "'{}'::jsonb",
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "is_builtin",
+          "type": "boolean",
+          "default": "false",
+          "notnull": true
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "staff_id",
+          "type": "bigint",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "organization_id",
+          "type": "bigint",
+          "default": null,
+          "notnull": false
+        },
+        {
+          "acl": null,
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notnull": false
+        },
+        {
+          "acl": "{aka_agent_desktop=aw/postgres}",
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()",
+          "notnull": false
+        }
+      ]
+    }
+  ],
+  "memberships": [
+    {
+      "set": true,
+      "role": "pg_read_all_settings",
+      "admin": false,
+      "member": "pg_monitor",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_stats",
+      "admin": false,
+      "member": "pg_monitor",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_stat_scan_tables",
+      "admin": false,
+      "member": "pg_monitor",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_data",
+      "admin": false,
+      "member": "supabase_etl_admin",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_data",
+      "admin": false,
+      "member": "supabase_read_only_user",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "anon",
+      "admin": false,
+      "member": "authenticator",
+      "inherit": false
+    },
+    {
+      "set": true,
+      "role": "authenticated",
+      "admin": false,
+      "member": "authenticator",
+      "inherit": false
+    },
+    {
+      "set": true,
+      "role": "service_role",
+      "admin": false,
+      "member": "authenticator",
+      "inherit": false
+    },
+    {
+      "set": false,
+      "role": "crm_interest_worker",
+      "admin": true,
+      "member": "postgres",
+      "inherit": false
+    },
+    {
+      "set": false,
+      "role": "aka_agent_desktop",
+      "admin": true,
+      "member": "postgres",
+      "inherit": false
+    },
+    {
+      "set": true,
+      "role": "aka_agent_desktop",
+      "admin": false,
+      "member": "authenticator",
+      "inherit": false
+    },
+    {
+      "set": true,
+      "role": "authenticator",
+      "admin": false,
+      "member": "supabase_storage_admin",
+      "inherit": false
+    },
+    {
+      "set": true,
+      "role": "anon",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "authenticated",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "service_role",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "authenticator",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_monitor",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_read_all_data",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_signal_backend",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_monitor",
+      "admin": false,
+      "member": "supabase_etl_admin",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_monitor",
+      "admin": false,
+      "member": "supabase_read_only_user",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "pg_create_subscription",
+      "admin": true,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "supabase_functions_admin",
+      "admin": false,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "supabase_privileged_role",
+      "admin": false,
+      "member": "postgres",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "supabase_privileged_role",
+      "admin": false,
+      "member": "supabase_etl_admin",
+      "inherit": true
+    },
+    {
+      "set": true,
+      "role": "postgres",
+      "admin": false,
+      "member": "cli_login_postgres",
+      "inherit": false
+    },
+    {
+      "set": false,
+      "role": "aka_agent_chat_api",
+      "admin": true,
+      "member": "postgres",
+      "inherit": false
+    },
+    {
+      "set": false,
+      "role": "aka_message_ingest_owner",
+      "admin": true,
+      "member": "postgres",
+      "inherit": false
+    }
+  ],
+  "exposed_definers": []
+}

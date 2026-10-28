@@ -1,0 +1,16 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "20261027181132 / staff_sharing_directory",
+  "applied_at_vn": "2026-10-28 01:11:32 +07",
+  "signature": "aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+  "source_checksum": "5bb87b66104f2dad716797e28cd6cccc",
+  "target_checksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+  "local_test_groups": 7,
+  "production_trial": "passed",
+  "production_post_check": "passed",
+  "anonymous_http_checks": 2,
+  "unchanged_other_functions": 1245,
+  "runtime_view_unchanged": true,
+  "business_rows_written": 0,
+  "client_update_required": false
+}

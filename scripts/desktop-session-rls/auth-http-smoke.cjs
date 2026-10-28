@@ -4,14 +4,16 @@
 // SHA256 3fb7998e7061e2c14f3f9555b1d94d447358c965395728e0d81eac82e0e5868b.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),crypto=require('node:crypto'),http=require('node:http'),assert=require('node:assert/strict'),{spawn,spawnSync}=require('node:child_process'),ts=require('typescript')
 const {createClient}=require('@supabase/supabase-js'),{createFixture}=require('./full-fixture.cjs')
+const {privateSecurityAsset}=require('./private-security-assets.cjs')
+const sessionHandlerPath=privateSecurityAsset('supabase/functions/aka-agent-desktop-session/handler.ts')
 const authDir=process.env.DESKTOP_TEST_AUTH_DIR||'/tmp/aka-agent-session-auth-20261027'
 assert(fs.existsSync(path.join(authDir,'auth')),'Set DESKTOP_TEST_AUTH_DIR to the verified official Auth distribution')
 const f=createFixture(),{sql,quote:q}=f,root=f.root,port=55519,authUrl=`http://127.0.0.1:${port}`
 const secret=crypto.randomBytes(48).toString('hex'),key=(()=>{const head=Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'),body=Buffer.from(JSON.stringify({role:'service_role',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url');return head+'.'+body+'.'+crypto.createHmac('sha256',secret).update(head+'.'+body).digest('base64url')})()
-function load(relative,modules={}){const exports={};const compiled=ts.transpileModule(fs.readFileSync(path.join(root,relative),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(compiled,{exports,require:n=>modules[n]||require(n),Buffer,fetch,Request,Response,Headers,AbortSignal,AbortController,TextDecoder,crypto:globalThis.crypto,atob,setTimeout,clearTimeout,Date,Error,Promise,Number,JSON});return exports}
+function load(relative,modules={}){const exports={};const compiled=ts.transpileModule(fs.readFileSync(path.isAbsolute(relative)?relative:path.join(root,relative),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;vm.runInNewContext(compiled,{exports,require:n=>modules[n]||require(n),Buffer,fetch,Request,Response,Headers,AbortSignal,AbortController,TextDecoder,crypto:globalThis.crypto,atob,setTimeout,clearTimeout,Date,Error,Promise,Number,JSON});return exports}
 const sessionModule=load('src/main/data/desktopSession.ts')
 const {createDesktopSessionTransport}=load('src/main/data/desktopSessionTransport.ts',{'./desktopSession':sessionModule})
-const {createSessionHandler}=load('supabase/functions/aka-agent-desktop-session/handler.ts')
+const {createSessionHandler}=load(sessionHandlerPath)
 let auth,server,log='',checks=0,tokenRequests=0
 const pass=s=>{checks++;console.log('PASS',s)}
 const read=async req=>{const chunks=[];for await(const c of req)chunks.push(c);return Buffer.concat(chunks)}
