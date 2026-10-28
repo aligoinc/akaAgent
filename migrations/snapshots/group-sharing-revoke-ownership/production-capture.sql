@@ -1,0 +1,25 @@
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL statement_timeout='60s';
+SELECT clock_timestamp() AS captured_at,'cgjbsmqtfhqvttudyjzq' AS project,
+ (SELECT jsonb_agg(jsonb_build_object('signature',w.signature,'definition',pg_get_functiondef(p.oid),'checksum',md5(pg_get_functiondef(p.oid)),'owner',pg_get_userbyid(p.proowner),'acl',p.proacl::text,'security_definer',p.prosecdef,'volatility',p.provolatile,'config',p.proconfig) ORDER BY w.signature)
+  FROM (VALUES ('public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)'),('public.aka_agent_lock_campaign_input_serialization(bigint)'),('public.auto_assert_automation_identity(bigint,bigint,text,text)'),('private.aka_agent_assert_request_ownership(bigint,bigint,bigint)'),('private.aka_agent_staff_scope_for_request()'),('private.can_read_data_group(bigint,bigint,bigint)'),('private.group_access(text,bigint,bigint,bigint)')) w(signature) LEFT JOIN pg_proc p ON p.oid=to_regprocedure(w.signature)) AS functions,
+ (SELECT md5(jsonb_build_object(
+ 'functions',(SELECT jsonb_agg(jsonb_build_array(p.oid,md5(pg_get_functiondef(p.oid)),p.proacl,p.proowner,p.proconfig,p.prosecdef,p.provolatile) ORDER BY p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND p.prokind='f'),
+ 'relations',(SELECT jsonb_agg(jsonb_build_array(c.oid,c.relacl,c.relowner,c.relrowsecurity,c.relforcerowsecurity,c.reloptions,CASE WHEN c.relkind IN ('v','m') THEN pg_get_viewdef(c.oid,true) END) ORDER BY c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal')),
+ 'columns',(SELECT jsonb_agg(jsonb_build_array(a.attrelid,a.attnum,a.attacl) ORDER BY a.attrelid,a.attnum) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND a.attnum>0 AND NOT a.attisdropped),
+ 'policies',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.oid) FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal')),
+ 'triggers',(SELECT jsonb_agg(jsonb_build_array(t.oid,pg_get_triggerdef(t.oid),t.tgenabled) ORDER BY t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND NOT t.tgisinternal)
+ )::text)) AS full_fingerprint,(SELECT md5(jsonb_build_object(
+ 'functions',(SELECT jsonb_agg(jsonb_build_array(p.oid,CASE WHEN p.oid='public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)'::regprocedure THEN NULL ELSE md5(pg_get_functiondef(p.oid)) END,p.proacl,p.proowner,p.proconfig,p.prosecdef,p.provolatile) ORDER BY p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND p.prokind='f'),
+ 'relations',(SELECT jsonb_agg(jsonb_build_array(c.oid,c.relacl,c.relowner,c.relrowsecurity,c.relforcerowsecurity,c.reloptions,CASE WHEN c.relkind IN ('v','m') THEN pg_get_viewdef(c.oid,true) END) ORDER BY c.oid) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal')),
+ 'columns',(SELECT jsonb_agg(jsonb_build_array(a.attrelid,a.attnum,a.attacl) ORDER BY a.attrelid,a.attnum) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND a.attnum>0 AND NOT a.attisdropped),
+ 'policies',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.oid) FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal')),
+ 'triggers',(SELECT jsonb_agg(jsonb_build_array(t.oid,pg_get_triggerdef(t.oid),t.tgenabled) ORDER BY t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND NOT t.tgisinternal)
+ )::text)) AS unchanged_fingerprint,
+ (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','private','aka_agent_desktop_internal') AND p.prokind='f') AS function_count,
+ (SELECT count(*) FROM (SELECT m.staff_id,m.auth_user_id,s.organization_id,s.username,s.password
+ FROM private.aka_agent_desktop_users m JOIN public.org_staff s ON s.id=m.staff_id
+ WHERE s.is_active AND s.deleted_at IS NULL AND public.aka_agent_staff_time_allowed(s.id)
+ ORDER BY m.staff_id LIMIT 6) u) AS eligible_mappings,
+ (SELECT coalesce(jsonb_agg(jsonb_build_object('version',version,'name',name) ORDER BY version),'[]'::jsonb) FROM supabase_migrations.schema_migrations WHERE name='group_sharing_revoke_ownership_compat') AS migrations;
+ROLLBACK;
