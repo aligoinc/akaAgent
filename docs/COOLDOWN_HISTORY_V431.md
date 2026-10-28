@@ -1,4 +1,74 @@
-# Tối ưu đọc lịch sử cooldown — V431
+# Tối ưu đọc lịch sử chống gửi trùng
+
+## Tra người nhận trước lịch sử ngày 28 tháng 10
+
+Đã apply trên **akachat `cgjbsmqtfhqvttudyjzq` lúc 12:10:45 VN ngày 28/10/2026**:
+`20261028045419 / cooldown_recipient_indexes` và
+`20261028051045 / cooldown_recipient_query`. Không apply lại.
+Desktop, App Server và Chat dùng nguyên giao diện RPC, nhận tối ưu ở lần gọi tiếp theo;
+không cần build, deploy hoặc restart client.
+
+RPC `aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])`
+tìm input lịch sử theo UID/SĐT chuẩn hóa trước, rồi dùng index `input_data_id`
+hiện có để đọc detail thuộc tài khoản, hành động và khoảng thời gian cho phép.
+Đường mới áp dụng Zalo person/group và SMS; Facebook/Email giữ đường V431.
+Hai index mới dùng MD5 của UID/SĐT chuẩn hóa để không giới hạn chiều dài dữ liệu nhập;
+query luôn kiểm tra lại giá trị chuẩn hóa đầy đủ để tránh khớp sai do hash collision.
+Không thêm filter xóa mềm vào lịch sử.
+
+Nguồn live khớp body của migration ownership ngày 28/10, gồm guard token Desktop;
+ACL V435 vẫn thu hồi anon/authenticated. Source checksum
+`c125235098f1d766e97ecc06c64db17b` → target
+`018db8850de2f967b13240e6cd36158c`.
+Owner/security/volatility/config/ACL không đổi; **1.254 hàm khác** và ACL/RLS
+của bốn bảng liên quan giữ nguyên. Không tăng timeout RPC, role hoặc pool.
+
+### Kiểm chứng và giới hạn số đo
+
+- PostgreSQL 17 local: 66 ca tính đúng/metadata/quyền/rollback, gồm mọi loại chiến dịch
+  đang hỗ trợ, UID hoặc SĐT, chuẩn hóa đầu số cũ/quốc tế, lịch sử đã xóa, ngày VN,
+  lô 500, input không pending, dữ liệu dài 12.000 ký tự, INSERT dưới ba role và
+  hai connection tranh cùng input. Lượt khóa sau trả `not_pending`, giữ status/note.
+- Benchmark riêng 300.000 lịch sử/80 tài khoản, custom và generic plan: bản cũ
+  khoảng 2,4 giây / 1,65 triệu block, bản mới khoảng 0,5–2,3 ms / 63–84 block.
+  Đây là dữ liệu giả lập, không phải cam kết p95 production.
+- Production, cùng một người nhận/90 ngày/toàn staff: SELECT phần đọc cũ timeout
+  ở 5 giây; SELECT mới 15,739 ms / 85 block, planning riêng 36,919 ms.
+  Đây là phần đọc lịch sử, không phải toàn bộ HTTP request.
+- Diễn tập candidate trong transaction rollback và smoke sau apply đạt 12 điều kiện,
+  gồm chặn token Desktop chéo staff; fixture đều rollback, không gửi tin.
+- 7,5 phút đầu sau apply: 1.060 HTTP 200, không HTTP lỗi của RPC này.
+  Mẫu thống kê tiếp theo 117 giây: 283 lượt, trung bình 12,62 ms SQL/lượt.
+  Tám chiến dịch của staff gặp timeout đã tự tiếp tục; không thao tác resume thủ công.
+- CPU mẫu 71,6 giây sau apply khoảng 64,9% thực thi, iowait 2,8%.
+  Không quy toàn bộ chênh lệch CPU cho bản sửa vì tải request chưa được giữ cố định.
+
+### Index và vận hành
+
+`idx_campaign_input_cooldown_uid` (~213 MiB) và
+`idx_campaign_input_cooldown_phone` (~161 MiB) tạo concurrent từng index.
+Index SĐT lần đầu hết timeout khi chờ snapshot của pg_net; đã xác nhận trạng thái
+invalid và rebuild riêng bằng `REINDEX INDEX CONCURRENTLY`. Cả hai valid/ready,
+không còn index trung gian. Đã ANALYZE bảng input.
+
+Không dùng bulk migration push cho file index concurrent. Script
+`scripts/apply-cooldown-recipient-indexes.cjs` chạy từng phase qua Management API,
+xác nhận project và definition/ACL trước khi chạy. API credential hiện có chỉ ở RAM.
+Không tự retry/drop khi kết quả chưa rõ; `repair-phone` chỉ dành cho index đã xác nhận
+invalid, đúng definition và không có lượt build đang chạy.
+Phải rebuild index SĐT và kiểm tra lại tính đúng nếu thay đổi `normalize_phone(text)`;
+CREATE OR REPLACE helper không tự cập nhật các khóa đã lưu trong index.
+
+Snapshot/checksum, số đo, receipt và rollback guard nằm ngoài Git tại
+`$HOME/.codex/audits/akaAgent/cooldown-recipient-20261028/`.
+Rollback RPC chỉ chấp nhận target checksum và khôi phục đúng source live, giữ hai index.
+Không dùng rollback V431 cũ vì có thể mất guard ownership/ACL mới.
+SQL smoke: `migrations/tests/cooldown_recipient_lookup_smoke.sql`.
+Local: `CHAT_REPO=/path/to/akaAgentChatApi node scripts/run-cooldown-recipient-sql-smoke.cjs`;
+thêm `COOLDOWN_BENCHMARK=1` để đo 300k. `COOLDOWN_AUDIT_DIR` trỏ kho snapshot
+ngoài repo; `PG17_BIN` chọn PostgreSQL 17 local.
+
+## Lịch sử V431
 
 V431 đã apply **akachat `cgjbsmqtfhqvttudyjzq` ngày 26/10/2026**, migration
 `20261026075350 / migration_v431_cooldown_history_lookup`. Không apply lại.
