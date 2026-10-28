@@ -1,0 +1,291 @@
+{
+  "date": "2026-10-28",
+  "source": "AGENTS.md before reorganization (includes uncommitted apply receipt note)",
+  "archive": "docs/agents/archive/AGENTS-2026-10-28.txt",
+  "source_sha256": "3750842deac2ea6233f2c62dfd0edce988c600ba05b45a4bdf0bdb7c619740f5",
+  "source_bytes": 361701,
+  "source_lines": 1050,
+  "transform": "Only Markdown link destinations are rebased by ../../../ inside PRESERVED SOURCE; archive is byte-exact. All source lines assigned exactly once. Current corrections are outside preserved markers; section bytes include headers and current annotations.",
+  "sections": [
+    {
+      "path": "docs/agents/history/rollouts-01.md",
+      "first_line": 1,
+      "last_line": 68,
+      "source_sha256": "4d0ec83c9dad7caf8df3f8916a9b81264cfb140bd1872d0b87c8cd2f67ffc276",
+      "rebased_sha256": "4ea31b0c426152b2c612c9a885d1416acfbf898e074229a7089641e7fce3d3a0",
+      "bytes": 23810
+    },
+    {
+      "path": "docs/agents/history/rollouts-02.md",
+      "first_line": 69,
+      "last_line": 142,
+      "source_sha256": "5dfc8d018af99bc54e2538d56f599764c6ac8b026341f9e7c54227a80bc0697a",
+      "rebased_sha256": "2d34284ef553b8864e4c3fd092ffe70625fab8164a2d1f672f507d0334361d2c",
+      "bytes": 23596
+    },
+    {
+      "path": "docs/agents/history/rollouts-03.md",
+      "first_line": 143,
+      "last_line": 214,
+      "source_sha256": "54debe43174888c1db24b63638aa17f165e69293995e1bd80f85ef72dcaf4d1f",
+      "rebased_sha256": "218dbd022f64fee8a7dde1a049851cf9ce7c0cb1450738afc2ef618f8f99b580",
+      "bytes": 23200
+    },
+    {
+      "path": "docs/agents/history/rollouts-04.md",
+      "first_line": 215,
+      "last_line": 273,
+      "source_sha256": "88a181bd8f28e1a4af6ebbb3cf70a8478b81abf1e79493ea99a39904b8ecada2",
+      "rebased_sha256": "b6beffb1efe93ccb0395101c18d85ded36eea3fc8fc8988ae6757a7ffa384ba2",
+      "bytes": 17897
+    },
+    {
+      "path": "docs/agents/reference/database-01.md",
+      "first_line": 274,
+      "last_line": 289,
+      "source_sha256": "d48e348b2d4adcfb8db0855a7949e5147ba22fd2df8a5a71e81762d2c8978297",
+      "rebased_sha256": "2400c34f2a9bbee643624c95664b354a83d4e27759e6065924d4b957bc5bff00",
+      "bytes": 5037
+    },
+    {
+      "path": "docs/agents/reference/integrations-01.md",
+      "first_line": 290,
+      "last_line": 297,
+      "source_sha256": "5fb6631a4c5594d05c5d7b06201f22cc2d3ea22707e1991552c14c2c7358be0e",
+      "rebased_sha256": "d41d388778ab98b94bdff1e3bde9657db2b7435aa62de463521da88843123052",
+      "bytes": 2407
+    },
+    {
+      "path": "docs/agents/reference/database-02.md",
+      "first_line": 298,
+      "last_line": 323,
+      "source_sha256": "928ed3f29078f8b4ec74003b51b4e3416eb7cac110eb07601ab75260da8f9941",
+      "rebased_sha256": "aa853e923d26a36a26bf9084f0f93af85946bf24fbf37157b72e281ce72a3522",
+      "bytes": 7338
+    },
+    {
+      "path": "docs/agents/reference/build-01.md",
+      "first_line": 324,
+      "last_line": 344,
+      "source_sha256": "fab310f70760b77063dfdb26c3a8c00ed8bbc5c03a05c2e807f281512507e4be",
+      "rebased_sha256": "fab310f70760b77063dfdb26c3a8c00ed8bbc5c03a05c2e807f281512507e4be",
+      "bytes": 2172
+    },
+    {
+      "path": "docs/agents/reference/architecture-01.md",
+      "first_line": 345,
+      "last_line": 366,
+      "source_sha256": "5f86eb3d6824cb86a51fff6b1380c2d1dece98465d1ebbc4aca11851d86467c2",
+      "rebased_sha256": "aa40fb8dd3a5c11d660fabe035c8cba776f58d6f89e7e5b09aa9e4361e654856",
+      "bytes": 3455
+    },
+    {
+      "path": "docs/agents/reference/integrations-02.md",
+      "first_line": 367,
+      "last_line": 409,
+      "source_sha256": "bd6547e7f7dd48fd5951a313c53948f6983c3b248809423b9ea164bc5ad8cd86",
+      "rebased_sha256": "8251abe589ce758ff161167870f25a07aab6204aad798556c7f88d65bca637db",
+      "bytes": 9142
+    },
+    {
+      "path": "docs/agents/reference/build-02.md",
+      "first_line": 410,
+      "last_line": 415,
+      "source_sha256": "6a61056515d8a81913badc0039bf4d19dfd013d89e0057a698e5bff4ec10bb37",
+      "rebased_sha256": "92e54f0f29c64db492d36ef73fbfaf26f2135f1241dafa45980c31f95b07ff04",
+      "bytes": 3285
+    },
+    {
+      "path": "docs/agents/reference/browser-01.md",
+      "first_line": 416,
+      "last_line": 438,
+      "source_sha256": "4a16496e867c512e1615946a6d1637fe3663109ac784e8075e1064ec1c0b951f",
+      "rebased_sha256": "ab87134f8d0505241b511e758a09e807fb10c0e804113471d15ba37c736dd098",
+      "bytes": 6937
+    },
+    {
+      "path": "docs/agents/reference/browser-02.md",
+      "first_line": 439,
+      "last_line": 451,
+      "source_sha256": "ddf971998d4f82ebd77de761476855251c1eaa11b6ac971e3d7a8fa6d2b32d6f",
+      "rebased_sha256": "1b3b7997f97ae7cbecef677587336c7a8d815862401154dda5249937ad64ee9e",
+      "bytes": 13247
+    },
+    {
+      "path": "docs/agents/reference/browser-04.md",
+      "first_line": 452,
+      "last_line": 466,
+      "source_sha256": "a5068f7fbdc40ff518ba4c413424184c9109e9bf1088cba2f462ee5f838072ac",
+      "rebased_sha256": "75bd2adf6157ccd819df8517dd2cb6b2e64afe2e7914a9406af29dcd3678d1d4",
+      "bytes": 17441
+    },
+    {
+      "path": "docs/agents/reference/browser-05.md",
+      "first_line": 467,
+      "last_line": 480,
+      "source_sha256": "e565f7a1073bbed66df1a5b5711996dc2168fccd2261481f9202e8a0dd984a2d",
+      "rebased_sha256": "3d48054604b7d55a6d9c6b9942182c97b167ac6d69dcca271064ac126c1eedbb",
+      "bytes": 14462
+    },
+    {
+      "path": "docs/agents/reference/browser-03.md",
+      "first_line": 481,
+      "last_line": 512,
+      "source_sha256": "6f618d95317d640f2d4905e6aab6c9a20da8e73b74e5870525cc6b4c64924266",
+      "rebased_sha256": "194a7c8a4791e913a18ffe2d00dd5457142fa7b6054f71c37e41d82fd9dcd72c",
+      "bytes": 14385
+    },
+    {
+      "path": "docs/agents/reference/workflow-01.md",
+      "first_line": 513,
+      "last_line": 530,
+      "source_sha256": "7ca50f7e467a26ab3e505220c5aa332199e09ffb1436ffccc070b39194a123d6",
+      "rebased_sha256": "4400630f3540751824a601a9469967b9b518cecd50bc03afcf0d4707cbeabbac",
+      "bytes": 5465
+    },
+    {
+      "path": "docs/agents/reference/campaigns-01.md",
+      "first_line": 531,
+      "last_line": 571,
+      "source_sha256": "c82124d29524f434bd1c9ebaa16ca9494c7a36799a10c689cb01a4bb3eff09ae",
+      "rebased_sha256": "0c7b3a447d8cabf1719b1813ca383d82cb061802759d7b3eb45a5022842714a2",
+      "bytes": 22280
+    },
+    {
+      "path": "docs/agents/reference/campaigns-02.md",
+      "first_line": 572,
+      "last_line": 620,
+      "source_sha256": "471b0c9a0b02729164d9a06d532f217e258635f65e5d79e30fa3954d5ad888d8",
+      "rebased_sha256": "7dfb9910ef0eda220f56262af8989724bf8dccf400f1609750accb2b7573c646",
+      "bytes": 23438
+    },
+    {
+      "path": "docs/agents/reference/campaigns-03.md",
+      "first_line": 621,
+      "last_line": 652,
+      "source_sha256": "9bb1eba60fe1f2ccf823cd2ad31c61de6117cf0847b3dd9d2ed240d33244935c",
+      "rebased_sha256": "aeaec3310e5f280d1de5766f403ceb1aef553a238bd0d3c820d3b78e17b988be",
+      "bytes": 23599
+    },
+    {
+      "path": "docs/agents/reference/campaigns-04.md",
+      "first_line": 653,
+      "last_line": 666,
+      "source_sha256": "345ef70f3fe4a10ddc78251007d418d8373f0e323fb5d5dcfcf1cafebc694061",
+      "rebased_sha256": "ad74a673a9c4e2742e4cfcac38a28be68fdba7396e8663699f07fc35de37fd08",
+      "bytes": 4715
+    },
+    {
+      "path": "docs/agents/reference/data-auth-ai-01.md",
+      "first_line": 667,
+      "last_line": 708,
+      "source_sha256": "fca19e1fe8a152a42f1c7e9a97ef62c9e674094864750c4935045367720e2de0",
+      "rebased_sha256": "88a3936420e8c52743772742b534e16196f3912eb006599d544279f7c95ab53e",
+      "bytes": 19274
+    },
+    {
+      "path": "docs/agents/reference/ui-logs-01.md",
+      "first_line": 709,
+      "last_line": 735,
+      "source_sha256": "f98da6ff33ed3670d7d5aaba9838084256c85807161d65e5940b1206ca62ecd3",
+      "rebased_sha256": "4c1d1a640b342a4ef278d7b75fb9ad1bef19de9d9c1dae7f3e7b8de67fe8ca41",
+      "bytes": 5587
+    },
+    {
+      "path": "docs/agents/reference/architecture-02.md",
+      "first_line": 736,
+      "last_line": 753,
+      "source_sha256": "d0476d907f2c3c1f2fd4a1e926ff235186fe551c501699920833d9f6585e4903",
+      "rebased_sha256": "a352b9bc530da839632fac4efb9721a527c37b0eacf69b156dd818b76c5776a6",
+      "bytes": 4058
+    },
+    {
+      "path": "docs/agents/reference/build-03.md",
+      "first_line": 754,
+      "last_line": 757,
+      "source_sha256": "88836b06a52ba398158621d3c16c4c81c6245f9f7360ca72d5ec03dd0b945b9f",
+      "rebased_sha256": "c254b8057032419e4e8d84b246a75c9038b914ac015d75ada36462b373625057",
+      "bytes": 933
+    },
+    {
+      "path": "docs/agents/reference/architecture-03.md",
+      "first_line": 758,
+      "last_line": 780,
+      "source_sha256": "35af2057fc90e104dcba49600059441b192eb8ac3b992bb32120bc2e201b4bc4",
+      "rebased_sha256": "e4318d00aec7a9e66ee2f74047e601dd76a852887ea82dbb18d23b1556779e62",
+      "bytes": 2434
+    },
+    {
+      "path": "docs/agents/reference/maintenance-01.md",
+      "first_line": 781,
+      "last_line": 785,
+      "source_sha256": "9deac69baf5526a75ea998e90f23bb9b752a5940d30af45ed95204c881c2786d",
+      "rebased_sha256": "9deac69baf5526a75ea998e90f23bb9b752a5940d30af45ed95204c881c2786d",
+      "bytes": 872
+    },
+    {
+      "path": "docs/agents/reference/pitfalls-01.md",
+      "first_line": 786,
+      "last_line": 876,
+      "source_sha256": "9356b2123b88853687cc097d9d0cc9cdc9a5b15bc55ea98073d31c2209c72a04",
+      "rebased_sha256": "077c2029edb2637af737bf71550b1eb0ae3ea24c0840212c086168f57358e4bf",
+      "bytes": 23342
+    },
+    {
+      "path": "docs/agents/reference/pitfalls-02.md",
+      "first_line": 877,
+      "last_line": 934,
+      "source_sha256": "2b2cf6c60777ddb516d9e0df744dac19903884ecf14064a964b30413ce485244",
+      "rebased_sha256": "fcb3f35c565ace13da50618611b695f1945b2cc76e042dc0864af10b4b9e0c0b",
+      "bytes": 23678
+    },
+    {
+      "path": "docs/agents/reference/pitfalls-03.md",
+      "first_line": 935,
+      "last_line": 975,
+      "source_sha256": "24f930fb883ec81cfd453962551e1480429fce2ea2b433f80488a423c0ef3618",
+      "rebased_sha256": "eeee43143a4098fdba2ea7bafe10020ed3a8fd51385e9a52eb85b05f66d06f08",
+      "bytes": 23571
+    },
+    {
+      "path": "docs/agents/reference/pitfalls-04.md",
+      "first_line": 976,
+      "last_line": 981,
+      "source_sha256": "1211adb03b6eb7334fa3b6ced439cf6860171c65a77654a6fdb5abf9ac620e84",
+      "rebased_sha256": "dea5150dd6319451be3a510b38d5561315adb15086fa0e11c1b88ed92de8e174",
+      "bytes": 2829
+    },
+    {
+      "path": "docs/agents/reference/media-01.md",
+      "first_line": 982,
+      "last_line": 1005,
+      "source_sha256": "893873ce06a94b679017ee4f0536448cceb883fb9a7833f77ea0c68502545c4b",
+      "rebased_sha256": "8107dab43659e6eacac8c6a1bd566837ab15641fad7b23f37e8a327b8ba3a0c1",
+      "bytes": 2541
+    },
+    {
+      "path": "docs/agents/reference/maintenance-02.md",
+      "first_line": 1006,
+      "last_line": 1023,
+      "source_sha256": "b63b5312edc41f216fe780b87412f231c2e7ff8b5197b5d416c37a9973829b48",
+      "rebased_sha256": "b63b5312edc41f216fe780b87412f231c2e7ff8b5197b5d416c37a9973829b48",
+      "bytes": 1954
+    },
+    {
+      "path": "docs/agents/reference/action-results-01.md",
+      "first_line": 1024,
+      "last_line": 1039,
+      "source_sha256": "5a6ab23be482badd2807be9d68f365806dbace65a081a89e5dd0eae8cbc16dbd",
+      "rebased_sha256": "c8eaf1302fa30d45c5f78a7b7dc1157c132c70a17bdbb916e83857e2d6960967",
+      "bytes": 3959
+    },
+    {
+      "path": "docs/agents/reference/reports-01.md",
+      "first_line": 1040,
+      "last_line": 1050,
+      "source_sha256": "f91f20b28625be04f77b8003f3f4064f2d6eb76061ba7de3e284c55b42f5c922",
+      "rebased_sha256": "0276289dbb0c763ae09f2f69a689160bc6635e284c2aefdf5b6c4b6b89b4f13f",
+      "bytes": 3396
+    }
+  ]
+}

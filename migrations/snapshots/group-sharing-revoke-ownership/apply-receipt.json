@@ -1,0 +1,21 @@
+{
+  "status": "applied_and_verified",
+  "at": "2026-10-28 06:42:23.69948+00",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "group_sharing_revoke_ownership_compat",
+    "version": "20261028064138"
+  },
+  "migrationSha256": "8bd5c09449dd714df9a133003537c70bb79a45c6ec35a262aa180f8759f00570",
+  "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+  "sourceChecksum": "af95bdbae9bfc75343ddd96eda51dcc7",
+  "targetChecksum": "0e17dec0570937cfea8a1ae035e2af4d",
+  "otherFunctionsUnchanged": 1254,
+  "aclRlsPolicyTriggerConfigUnchanged": true,
+  "productionMappingsChecked": 6,
+  "localRegressionGroups": 9,
+  "productionScriptLocalChecks": 2,
+  "productionRollbackTrial": "passed",
+  "productionPostcheck": "passed",
+  "businessRowsWritten": 0
+}

@@ -1,0 +1,14 @@
+# Cập nhật tự động
+
+> Chuyển từ AGENTS.md ngày 28/10/2026, dòng 410–415. Nội dung và ràng buộc được giữ; chỉ sửa đường dẫn Markdown.
+> Trạng thái “đã/chưa apply/deploy/phát hành” bên dưới là lịch sử. Đối chiếu [CURRENT_STATE](../CURRENT_STATE.md), audit mới nhất và live trước mọi thao tác. Không coi ghi chú quyền cũ là cho phép mở lại quyền.
+
+<!-- BEGIN PRESERVED SOURCE -->
+### Auto-update
+
+Renderer kiểm tra phiên bản khi mở app và mỗi 60 phút. Startup có bản mới thì main đọc key public `desktop.updates.startup_prompt_max_version` trong `auto_system_settings`: SQL NULL/để trống mở modal cho mọi phiên bản, `x.y.z` mở khi local **<=** ngưỡng (so đủ major/minor/patch); đóng modal rồi mới auth bootstrap. Thiếu/tắt/secret/sai cấu hình hoặc lỗi đọc chỉ hiện nút cập nhật; periodic vẫn không tự mở modal và không đọc setting. Xem [cấu hình và kiểm chứng](../../../docs/DESKTOP_STARTUP_UPDATE_PROMPT.md).
+
+Windows installer từ v6.7.0 là NSIS assisted per-machine, cài mới mặc định vào `C:\Program Files\akaAgent` với `akaAgent.exe` nhưng phải giữ nguyên package `name='aka-biz-auto'` và `appId='com.akabiz.auto'` để tiếp tục dùng đúng Electron `userData`/registry upgrade identity. Installer cho chọn thư mục và fixed-to-fixed update phải dùng lại chính xác `InstallLocation`; tuyệt đối không thêm lại `customInit` xóa `$INSTDIR`, registry install key hoặc `Delete /REBOOTOK`. Updater tải ra `akaAgent-Setup.exe`, mở ngay bằng đúng một lệnh PowerShell ẩn `Start-Process -Verb RunAs` với `--updated --aka-source-pid=<main PID>`, rồi bắt đầu graceful quit ngay khi Setup đã mở; không dùng `spawn(installerPath)`, helper đợi PID, `.cmd`/`.vbs`, WMI hoặc Windows Terminal. Với fixed-to-fixed update, installer chỉ `OpenProcess`/`WaitForSingleObject` đúng source PID đã truyền, xác minh PID đó mang image `akaAgent.exe`, tuyệt đối không gọi `taskkill` theo tên `akaAgent.exe`; chờ tối đa 10 giây rồi mới hiện Retry/Cancel. Client legacy không truyền được PID và còn tải chính Setup ra tên `%TEMP%\akaAgent.exe`: installer bắt buộc đọc image/path của PID hiện tại và bỏ qua guard `akaAgent.exe` khi image hiện tại trùng `${APP_EXECUTABLE_FILENAME}`, nếu không sẽ tự terminate; nhánh `akaBizAuto.exe` riêng vẫn được phép dùng hành động OK chuẩn bằng `$SYSDIR\taskkill.exe /IM akaBizAuto.exe` không `/F`. Manual Setup có tên khác mới dùng prompt chuẩn cho akaAgent đang chạy. Không dùng `nsProcess::KillProcess`. Running-app guard phải ghi chẩn đoán vào `%TEMP%\akaAgent-installer.log`. Sau đó chỉ dọn shortcut cũ khi cài thành công và để Electron Builder gỡ program files cũ theo registry. Trước mọi Windows package, `npm run build:win` bắt buộc chạy contract [verify-windows-installer-contract.cjs](../../../scripts/verify-windows-installer-contract.cjs), và installer không được đụng tới dữ liệu dưới `app.getPath('userData')`.
+
+
+<!-- END PRESERVED SOURCE -->
