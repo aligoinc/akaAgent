@@ -1,0 +1,65 @@
+{
+  "at": "2026-10-30T08:11:57.258Z",
+  "environment": "disposable PostgreSQL 17; synthetic only; two existing local pool connections",
+  "migrationSha256": "87d2d56b596285996bd4533cafc5c7a3112afc76840d148f90cbc3926c1f2979",
+  "sourceTrigger": "21da2094428e85bfb7ce8cfbf0b57750",
+  "targetTrigger": "8c7c490bc897f189910b9f8d2f8bdbfa",
+  "checks": [
+    "migration/idempotent replay preserve exact bodies, owner, ACL, security, volatility and search_path of both functions",
+    "all eight backend-role INSERT cases passed; outer rollback restored trigger and every Context row",
+    "disabled-trigger, definition-drift and ACL-drift guards fail closed without overwriting changes",
+    "explicit rollback restores exact original trigger and can itself be rolled back",
+    "history INSERT completes while another existing local pool client owns the pending Context job lock"
+  ],
+  "samples": [
+    {
+      "label": "old personal",
+      "calls": 0,
+      "inserted": 20,
+      "executionMs": 2.608
+    },
+    {
+      "label": "old group",
+      "calls": 0,
+      "inserted": 20,
+      "executionMs": 1.039
+    },
+    {
+      "label": "old new customer",
+      "calls": 0,
+      "inserted": 20,
+      "executionMs": 0.995
+    },
+    {
+      "label": "live incoming",
+      "calls": 20,
+      "inserted": 20,
+      "executionMs": 8.564
+    },
+    {
+      "label": "api incoming",
+      "calls": 20,
+      "inserted": 20,
+      "executionMs": 4.646
+    },
+    {
+      "label": "live outgoing",
+      "calls": 0,
+      "inserted": 20,
+      "executionMs": 1.058
+    },
+    {
+      "label": "live empty",
+      "calls": 0,
+      "inserted": 20,
+      "executionMs": 0.991
+    },
+    {
+      "label": "live group",
+      "calls": 20,
+      "inserted": 20,
+      "executionMs": 1.714
+    }
+  ],
+  "productionWrites": false
+}
