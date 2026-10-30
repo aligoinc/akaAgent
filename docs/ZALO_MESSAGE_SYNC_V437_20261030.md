@@ -1,5 +1,15 @@
 # Đồng bộ lịch sử Zalo Server — V437, 30/10/2026
 
+**Context, 15:13 ngày 30/10/2026:** [V439 đã apply](CONTEXT_ZALO_HISTORY_TRIGGER_V439_20261030.md),
+trigger Context bỏ qua nguồn `old`; không tự xếp job từ tin đồng bộ hoặc thêm
+job bù sau đồng bộ. Tin realtime và các job hiện có giữ nguyên. Không deploy
+ứng dụng/runtime trong lượt này.
+
+**Hiện hành 11:39 ngày 30/10/2026 (Việt Nam):** V438 đã apply và API/system-worker/
+ChatWeb đã deploy từ repo chính sau merge PR107/API, PR68/Web. Zalo runtime không
+deploy/restart. Xem mục cuối để biết receipt và giới hạn kiểm chứng. Các mục
+phía trước giữ lịch sử, không thay cho trạng thái hiện hành này.
+
 **Cập nhật 07:01 ngày 30/10/2026 (Việt Nam):** sáu bản sửa review nêu dưới đã
 deploy riêng Chat API. Những câu “chưa deploy” là lịch sử tại thời điểm kiểm thử;
 trạng thái hiện hành và receipt ở mục cuối tài liệu.
@@ -157,3 +167,62 @@ nhóm khác nhau có chung người gửi vẫn có thể deadlock; Web có th�
 lượt mới hơn ở tab khác là phản hồi cho Start chưa được backend tiếp nhận.
 Chi tiết canonical: repo API `docs/ZALO_MESSAGE_SYNC_REVIEW_FIXES_20261030.md`.
 PR giữ dạng draft chờ xử lý các lỗi này; tạo PR không deploy hoặc apply lại V437.
+
+## V438 và triển khai từ repo chính — 11:31–11:39 VN, 30/10/2026
+
+Hai finding trên và ba finding tiếp theo đã được sửa, kiểm chứng và merge qua
+PR107/API, PR68/Web. Theo yêu cầu người dùng, build/deploy trực tiếp từ checkout
+chính API `dev` commit `dfd7a7fa9fcc390f14b9c7e737d668b7890ba5b0` và Web `dev`
+commit `2b2626d38fc294924766bcfe0cc8430e3fdc9204`, giữ toàn bộ source đã merge.
+
+V438 `migration_v438_chat_zalo_message_sync_request` đã apply trên
+**akachat / cgjbsmqtfhqvttudyjzq**, ledger `20261030043145`. Bảng mới lưu receipt
+UUID/requester/range → sync job; RLS bật, backend SELECT/INSERT, client không có
+quyền. Schema, constraints, index và ledger body khớp source. Canonical SQL chỉ
+ở repo API; không apply lại V437/V438, không đổi RPC hoặc reload thủ công.
+
+API `7845747fe073e8` và system-worker `784574da214578` dùng image
+`phone-history-requests-main-20261030`, digest
+`174a9e466cf592091849bd58eee4b7f69651060378ea39f12579845b5b8ae9b4`;
+Web `7847d95cd4ddd8` cùng tag, digest
+`a3ed5a8c03427942349f24a4deafbcfb6eb1b74992e951fc0ddd6aca117becfe`.
+Worker cũ được xác nhận stopped trước khi khởi động image mới trên cùng máy.
+Chỉ image của ba máy thay đổi; CPU/RAM/volume, pool và replica giữ nguyên.
+
+Zalo runtime `7817d7daee2d58` giữ nguyên image/config/instance/updated_at, không
+deploy hoặc restart. Control socket kết nối lại lúc 11:33:36 VN sau API restart;
+không coi đây là bằng chứng hoàn toàn không gián đoạn socket. Server heartbeat
+mới, 213 account; campaign realtime listener connected.
+
+API/Web health HTTP 200, accounts chưa login trả 307. API receipt lookup qua
+pool/role thật trả 200. Source/compiled modules API và worker khớp repo chính;
+public JS Web khớp image và có receipt, chuyển lượt, spinner Dừng/org 1 gate.
+Worker phút 11:37–11:38 VN normalize 579/579, project 540/540 không lỗi trong
+cửa sổ này; phút trước có một normalization failure, không khẳng định toàn bộ
+pipeline không lỗi. Không tự gửi tin hoặc yêu cầu sync; pilot bản mới chờ user.
+
+Biên bản canonical repo API: `docs/ZALO_MESSAGE_SYNC_REQUEST_LOCK_FIXES_20261030.md`;
+receipt có image trước/sau và hậu kiểm:
+`docs/audits/phone-history-requests-main-20261030/deployment-receipt.json`.
+Nếu rollback source, giữ bảng/receipt V438 và runtime hiện hành; không tự repull.
+Raw config/log riêng ở ngoài Git. Root akaAgent chỉ cập nhật tài liệu.
+
+## Nhập trích dẫn theo lô — worker 15:26 VN, 30/10/2026
+
+Sau merge PR110, đã build/deploy riêng system-worker từ repo chính Chat API
+`dev`, commit `09fe12a2906dfc3bb1c6f5f35c369b5919baae80`. Image
+`phone-history-quotes-main-20261030`, digest
+`a370e217ad7b1414c8362ed25043a8cc6da708e736e04cb9c9085be1ba9e5261`.
+Giữ lô tối đa 20 tin, unique dedupe và semantics old; lookup/nối quote theo lô
+chỉ cập nhật reply vừa insert, không ghi đè quote của tin realtime hoặc tin trùng.
+
+Chỉ đổi image worker `784574da214578`, xác nhận worker cũ stopped sau SIGTERM
+trước khi cập nhật/start cùng máy. API/runtime giữ image/config/instance;
+ChatWeb không deploy, không tăng CPU/RAM/volume/pool/replica. V437/V438/V439
+đều đã live, hậu kiểm trigger Context V439 đạt; không apply lại DB trong lượt này.
+
+Typecheck/build, 1.731 test và 13 ca PostgreSQL đạt; module live khớp source.
+Health HTTP 200; phút đầu project 1.363/1.363 sự kiện không lỗi, backlog
+project=0. Chưa pilot tốc độ nhập lịch sử sau bản mới, không tự gửi tin/pull.
+Biên bản/rollback canonical ở Chat API `docs/ZALO_MESSAGE_SYNC_QUOTES_20261030.md`,
+receipt `docs/audits/phone-history-quotes-deploy-20261030/deployment-receipt.json`.
