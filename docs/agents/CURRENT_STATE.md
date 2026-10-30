@@ -1,4 +1,4 @@
-# Trạng thái đã xác nhận — cập nhật 28/10/2026, 16:39 VN
+# Trạng thái đã xác nhận — cập nhật 30/10/2026
 
 Đây là chỉ mục dựa trên receipt/audit đã có, không phải lệnh triển khai.
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
@@ -20,6 +20,7 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 | Block/workflow definitions | `20261027191229` đã apply: Desktop kể cả admin mất quyền ghi `auto_blocks`/`auto_workflows`, giữ SELECT/backend; không suy rộng sang element/XPath/legacy | [receipt](../../migrations/snapshots/desktop-block-workflow-readonly/apply-receipt.json) |
 | AI Desktop | V434/API proxy đã deploy và canary Desktop thật đã đạt; provider key không đưa về Desktop | [AI proxy](../DESKTOP_AI_PROXY.md) |
 | Chat API/worker, ChatWeb, WebApp, akaMap | HTTP compatibility `20261027181400` đã apply; các backend và Edge akaMap đã deploy. Không mở lại anon hoặc tăng pool/replica | [cross-repo audit](../CROSS_REPO_RLS_DEPLOY_20261028.md) |
+| Đồng bộ lịch sử Zalo Server — V437 | `20261029180830` đã apply; API/runtime ACK/UI fixes đã deploy 07:18–07:21 ngày 30/10/2026. Pilot sau đó nhập 2.436 tin, 464 trùng, 0 lỗi nhập rồi cancelled. Tối ưu DB batch 20 tin và Web loading khi dừng/UI org 1 đã deploy worker/Web lúc 07:59–08:00; API/runtime giữ image, instance và kết nối. Health đạt, worker project 697/697 phút đầu; pilot nhập lô mới chờ user test. Không migration/resource/pool/replica mới | [phạm vi, nguồn canonical và audit liên repo](../ZALO_MESSAGE_SYNC_V437_20261030.md) |
 | Device identity v3 | `20261027085744` đã apply; credential/CAS/receipt, giữ recovery proof/journal. Ghi chú “chưa bật C” là trước V435 | [device v3](../DEVICE_IDENTITY_V3.md), [V435](../DESKTOP_PERMISSION_CUTOVER_V435.md) |
 | Source chặn IP | Source Edge/migration IP/hồ sơ/full capture riêng đã chuyển ngoài Git; production giữ quy tắc đang triển khai | [README source riêng](../../supabase/functions/aka-agent-desktop-session/README.md) |
 
