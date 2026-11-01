@@ -103,6 +103,13 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
   X=7–10: 0/41; 6–10 phút cũng 0 ở mọi X, kể cả khi người trước đã nhận ≥4 tin. Quy tắc cài đặt
   vì vậy là hàm bậc thang theo X (số ảnh, cộng 1 tin chữ): X ≤ 2 ⇒ "Nghỉ giữa 2 lần" tuỳ ý;
   X ≥ 3 ⇒ ≥330–360 giây. Không có công thức tỷ lệ theo X.
+- Mốc của cửa sổ là người lạ gần nhất **thật sự nhận được tin**: lượt trước bị `122` (<5 phút) nhưng
+  người lạ nhận tin gần nhất đã ≥5 phút ⇒ 127 chỉ 0,01% (10.696); lượt trước nhận OK <5 phút ⇒ 6,63%.
+  Ví dụ campaign 41031 ngày 31/10: 08:20:03 khách nhận tin; 08:21 và 08:22 hai khách `122`;
+  08:23:14 album 3 ảnh tới, 08:23:15 chữ `127` (cách người nhận tin gần nhất 3 phút 11 giây).
+  Trong cửa sổ, việc bị chặn là xác suất: các khách lúc 08:17:55 và 08:20:02 (cách 2 phút) vẫn qua.
+- Xen tin bạn bè/nhóm/chat tay giữa hai người lạ cách nhau <5 phút: 0/18 (so 2,14% khi không xen) —
+  quá ít mẫu, **chưa kết luận** được việc xen tin có "xoá" cửa sổ hay không.
 - Tin gửi bạn bè/nhóm/chat tay trong 5 phút trước, khi người lạ gần nhất đã ≥5 phút: 0/27 và 0/16
   (ít mẫu); không gửi gì 0,01%; vừa nhắn người lạ khác <5 phút 2,34% (112.406).
 
