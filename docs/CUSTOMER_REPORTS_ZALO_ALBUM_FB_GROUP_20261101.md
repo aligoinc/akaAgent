@@ -143,14 +143,56 @@ do danh sách SĐT có người đã là bạn bè nên đếm thừa). Mẫu đ
 08:00–09:00 vẫn bị, ~10:00 qua (tài khoản 40: 16:58 ngày 15/09 → 07:42, 08:43 vẫn 120 → 09:44 OK).
 Bạn bè/nhóm 0% bị 120; nhắn bạn bè trong lúc bị cấm chỉ có 1 mẫu (OK).
 
-**802** `Zalo: Bạn đang bị chặn nhắn tin với người lạ.` (64 lần, 6 org, xuất hiện từ 08/10; `auto_error`
-id 44 khoá 48 giờ): cấm nhiều ngày — mỗi lần thử lại sau 2 ngày vẫn 802, gửi lại được sau 4–9 ngày
-(tài khoản 301/304/305 bị 18/10 09:00, thử lại 20, 22, 24/10 vẫn bị, qua 26/10 15:10). Nhiều tài
-khoản cùng org bị cùng phút (org 564: 3/5 tài khoản; org 1239: 4/5), không dùng proxy. Nguyên nhân
-**chưa xác định**: có tài khoản bị khi vừa chạm ~100 người lạ/24 giờ (org 1239), có tài khoản bị khi
-mới 22–33 người. Mã khác khi gửi: 119 `Xin lỗi! Hiện tại tôi không muốn nhận tin nhắn.` (302 lần
-người lạ, 7 lần bạn bè — phía người nhận, chưa nghiên cứu); 126 `Không thể nhận tin nhắn từ bạn.` gặp
-cả bạn bè (67) nên không riêng người lạ; 114 tham số; 161 nhóm không tồn tại.
+Mã khác khi gửi: 119 `Xin lỗi! Hiện tại tôi không muốn nhận tin nhắn.` (302 lần người lạ, 7 lần
+bạn bè — phía người nhận, chưa nghiên cứu); 126 `Không thể nhận tin nhắn từ bạn.` gặp cả bạn bè (67)
+nên không riêng người lạ; 114 tham số; 161 nhóm không tồn tại.
+
+### Mã 802 (đo 01/11/2026, mọi runtime, 01–31/10)
+
+`Zalo: Bạn đang bị chặn nhắn tin với người lạ.` — Zalo khoá **nhắn người lạ** (và thêm người lạ vào
+nhóm, `auto_error` id 45) của cả tài khoản. Trong 48 giờ sau 802 các thao tác khác vẫn chạy: tra SĐT
+1.809 OK, đổi tên 1.703, kết bạn 210 OK / 5 lỗi, nhắn nhóm 97 OK.
+
+- **Mã mới của Zalo**: chat-sync 0 lần suốt 08–09/2026 (cùng lúc mỗi tuần vài trăm tới ~5.800 lỗi
+  122/127); lần đầu 02/10 (App Server), 08/10 (chat-sync). Cùng tuần 05/10, `221` (giới hạn tra SĐT)
+  72 → 623/tuần.
+- Nguồn đếm: `chat_zalo_action.error_code='802'`, note input `Zalo hạn chế nhắn người lạ (mã 802)…`
+  và `auto_account_action_status.disabled_error_code`. App Server/desktop **không ghi detail** cho 802
+  (id 44 `detail_status=NULL`); note bị ghi đè khi data chạy lại ⇒ số lần là cận dưới. Tổng **97 tài
+  khoản** tới 01/11 15:35; không chiến dịch 802 nào có `secondary_account_id`, nên quy về
+  `auto_campaigns.account_id` là đúng.
+
+Rủi ro theo ngày có gửi người lạ OK (sự kiện = ngày hoạt động cuối trước lần 802 đầu, cách ≤10 ngày):
+
+| Loại tài khoản | Ngày-tài khoản | 802 | Mỗi ngày | Tin/ngày | Chạy đều 30 ngày |
+| --- | --- | --- | --- | --- | --- |
+| Zalo Server | 15.590 | 81 | 0,52% | 50 | ~14,5% |
+| Zalo QR (desktop) | 6.939 | 4 | 0,06% | 44 | ~1,7% |
+| Zalo Web | 2.493 | 3 | 0,12% | 38 | ~3,5% |
+
+- Server gấp ~9 lần QR theo ngày, ~8 lần theo tin. App Server 71/1.260 tài khoản, chat-sync 14/211 —
+  như nhau. 1.468/1.471 tài khoản Server không có proxy; QR có proxy 0/126.
+- **Không tăng theo số tin/ngày**: Server <20 tin 0,45%, 20–59 0,56%, ≥60 0,48% ⇒ bớt tin/ngày không né
+  được 802 (khác 120/127). Tuần đầu của tài khoản Server 0,81%/ngày, sau đó 0,35–0,45%.
+- **Số tài khoản Server của cùng org**: 1 → 0/155; 2–3 → 3,8%; 4–6 → 6,5%; ≥7 → 10,5% tài khoản (36%
+  org dính). QR cùng quy mô: 0/93; 1,4%; 1,7%; 0,9%. Trong org thường nhiều tài khoản bị cách nhau 1–3
+  ngày (org 1263: 5 tài khoản 10–12/10; org 1239: 4 tài khoản cùng 18/10).
+- Org có cả Server lẫn QR chỉ 13 (Server 3/93, QR 0/18) — chưa đủ tách môi trường Server khỏi kiểu
+  dùng của khách (nhiều nick, cùng nội dung/list). **Chưa xác minh**: IP máy chủ dùng chung, phiên
+  24/7, nội dung, báo spam từ người nhận, số lần tra SĐT/ngày (mẫu 14 tài khoản cũ gợi ý ≥120 lần/ngày
+  rủi ro cao hơn, chưa kiểm ở quy mô toàn hệ thống).
+
+Thời điểm lộ ra (97 tài khoản): 75 ở tin đầu tiên sau khi nghỉ ≥3 giờ (34 qua đêm 3–20 giờ, 41 sau
+>20 giờ — 16 đúng 09:45 lúc hết khoá cũ), 4 sau nghỉ 15 phút–3 giờ, 13 giữa phiên (TB 24 tin OK trong 3
+giờ trước), 5 bị sẵn trước tin OK đầu tiên ⇒ Zalo chủ yếu áp lệnh lúc tài khoản đang nghỉ.
+
+Thời gian và tái phát: một đợt ~1 tuần — App Server mở lại sau 7–9 ngày (kiểm lại mỗi 48 giờ nên
+thực tế ~6–8 ngày; 1 ca 3 ngày). 8/8 tài khoản App Server được mở lại rồi chạy tiếp đều bị 802 lại,
+thường trong 1–2 ngày (5899 sau 7 tin; 5078 sau 18 ngày 5–10 tin/ngày). 23 tài khoản dính 802 trên
+≥5 ngày khác nhau, trải TB 15 ngày, tối đa 29. Ngược lại 13 tài khoản vẫn gửi người lạ OK ngay sau
+802 (5752: phút thứ 8, 216 tin trong 48 giờ) ⇒ không phải 802 nào cũng là khoá dài, và khoá 48 giờ của
+mình không chặn các tài khoản này — **chưa xác minh** vì sao. Khoá 48 giờ ngắn hơn đợt cấm: mỗi 2 ngày
+tốn 1 lần tra SĐT + 1 lần gửi lỗi rồi khoá tiếp (21/97 lần đầu ghi nhận rơi đúng 09:45–10:00).
 
 ## B. Comment sau đăng nhóm gãy toàn fleet từ 30/10
 
