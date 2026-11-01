@@ -116,6 +116,33 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
 Hệ quả: album ≥3 ảnh + chữ khiến chữ thành tin thứ 4+, đúng vùng bị chặn. Giữ tổng ≤3 tin cho
 mỗi người lạ (vd 1 ảnh + caption, hoặc ≤2 ảnh + chữ) hoặc đưa chữ lên tin đầu.
 
+### Mã 122 và 120 (đo 01/11/2026, `chat_zalo_action` từ 20/08)
+
+`uid` của người nhận khác nhau theo từng tài khoản gửi (18.836/18.836 SĐT), `globalId` thì giống
+nhau — theo dõi một người qua nhiều tài khoản phải dùng SĐT hoặc `globalId`.
+
+**122** `Bạn chưa thể gửi tin nhắn đến người này vì người này chặn không nhận tin nhắn từ người lạ.`
+(45.313 lần, 39 org; `auto_error` id 10: thất bại, không tính hạn mức). Là cài đặt của người nhận:
+cùng SĐT gửi lại sau ~7–14 ngày, lần trước 122 ⇒ lần sau 97,3–97,6% vẫn 122 dù cùng tài khoản,
+tài khoản khác hay org khác; lần trước OK ⇒ lần sau chỉ 0,4–0,8% bị 122. Theo nguồn data:
+`zalo_message_phone` 23,3%, `zalo_message_group_member` 8,9%, bạn bè/nhóm 0%. Hoá giải duy nhất đo
+được là kết bạn: `send_friend_request` (có trường `message` — lời nhắn) tới người đã 122 gửi được
+98,3% (OK: 94,2%); trong 10.565 người 122 đã nhận lời mời, trạng thái hiện tại `friend` 566 (5,4%),
+`request_sent` 8.091, `stranger` 1.846; sau khi thành bạn nhắn qua 33/39 (còn chưa thành bạn: 10/560
+và 1/123). `get_friend_request_status` chạy ngay sau khi mời nên không dùng đo tỷ lệ đồng ý.
+
+**120** `Zalo: Bạn đang bị cấm nhắn tin cho người lạ.` (420 lần, 13 org; `auto_error` id 42 khoá nhắn
+người lạ tới 09:45 hôm sau). Là **hạn mức số người lạ nhận tin trong 24 giờ cuốn chiếu**, thường ~100
+mỗi tài khoản: lúc bắt đầu bị cấm, số người lạ đã nhận tin trong 24 giờ trước — tài khoản 84: 35 đợt
+trung vị 100; 40: 31 đợt trung vị 100; 38: 25 đợt trung vị 101; vài tài khoản ổn định ở mức khác
+(46 ~59, 149 ~130, 260 ~140). Gộp 149 đợt/10 tài khoản mức ~100: đếm người lạ nhận được tin trong
+24 giờ cuốn chiếu TB 104, lệch chuẩn 11, 106/149 trong 95–105; đếm cả người bị 122 TB 148, 0/149 trong
+95–105 ⇒ 122 không tính; đếm từ 0 giờ hôm nay lệch chuẩn 40 (không giải thích được các lần bị cấm buổi
+sáng). Lúc gửi lại được, trung vị 86,5 người trong 24 giờ trước (108/148 dưới 100; phần còn lại nghi
+do danh sách SĐT có người đã là bạn bè nên đếm thừa). Mẫu điển hình: bị cấm buổi chiều, sáng sau
+08:00–09:00 vẫn bị, ~10:00 qua (tài khoản 40: 16:58 ngày 15/09 → 07:42, 08:43 vẫn 120 → 09:44 OK).
+Bạn bè/nhóm 0% bị 120; nhắn bạn bè trong lúc bị cấm chỉ có 1 mẫu (OK).
+
 ## B. Comment sau đăng nhóm gãy toàn fleet từ 30/10
 
 Block `fb_comment_at_position` (id 34) chờ element `fb_comment_box_at_n` (id 13)
