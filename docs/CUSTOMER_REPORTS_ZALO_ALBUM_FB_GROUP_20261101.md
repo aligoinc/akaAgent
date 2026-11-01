@@ -177,6 +177,13 @@ Rủi ro theo ngày có gửi người lạ OK (sự kiện = ngày hoạt độ
 - **Số tài khoản Server của cùng org**: 1 → 0/155; 2–3 → 3,8%; 4–6 → 6,5%; ≥7 → 10,5% tài khoản (36%
   org dính). QR cùng quy mô: 0/93; 1,4%; 1,7%; 0,9%. Trong org thường nhiều tài khoản bị cách nhau 1–3
   ngày (org 1263: 5 tài khoản 10–12/10; org 1239: 4 tài khoản cùng 18/10).
+- **Chỉ nhắn người lạ không phải yếu tố mạnh** (2.463 tài khoản có tin OK trong tháng 10, chia theo tỷ lệ
+  tin người lạ / tin người lạ + bạn bè + nhóm trước 802): 100% người lạ 2.264 tài khoản, 87 bị, 3,49/1.000
+  ngày có nhắn người lạ; có thêm bạn bè/nhóm 104 tài khoản, 3 bị, 2,96/1.000 (RR 0,85, CI 0,17–2,57);
+  riêng <50% người lạ 56 tài khoản, 1 bị (4970, org 990: 118 tin người lạ / 340 tin nhóm). Trong Server
+  cả hai cùng 5,06/1.000 (RR 1,00, CI 0,20–3,03), trong khi Server/QR là 8,8 lần. Tỷ lệ theo tài khoản
+  (1,8% so với 3,8%) thấp hơn chỉ vì nhóm đa dạng nhắn người lạ ít ngày hơn (5,9 so với 11,0 ngày/tháng).
+  Chat tay ở chat-sync cũng không thấy che chắn: có chat tay 2/16 bị, không chat tay 11/196.
 - Org có cả Server lẫn QR chỉ 13 (Server 3/93, QR 0/18) — chưa đủ tách môi trường Server khỏi kiểu
   dùng của khách (nhiều nick, cùng nội dung/list). **Chưa xác minh**: IP máy chủ dùng chung, phiên
   24/7, nội dung, báo spam từ người nhận, số lần tra SĐT/ngày (mẫu 14 tài khoản cũ gợi ý ≥120 lần/ngày
