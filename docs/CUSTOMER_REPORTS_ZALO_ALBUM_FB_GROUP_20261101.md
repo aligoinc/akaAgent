@@ -59,6 +59,32 @@ Index cần dùng khi đo lại: `chat_zalo_action` không có index theo
 `idx_chat_zalo_action_socket_match` với `chat_zalo_conversation_id IS NULL` (lệnh
 campaign không gắn conversation).
 
+### Bản chất mã 127 (đo 01/11/2026, 14 ngày `chat_zalo_action` campaign)
+
+Zalo không công bố nghĩa mã 127; `zca-js` không có bảng mã, server chỉ trả đúng một câu
+`Không thể nhận tin nhắn từ bạn.` (từ 24/08: 7.178 `send_text` + 1.726 media campaign +
+64 chat tay). Mô tả "gửi nhanh hoặc trùng nội dung" của `auto_error` id 60/61 do đội tự
+đặt ngày 01/10. Dữ liệu cho thấy 127 là **cơ chế chống spam khi nhắn người lạ, phía Zalo,
+gắn với tài khoản gửi và tạm thời** — khác `122` (người nhận tắt nhận tin người lạ, cố định):
+
+- Chỉ người lạ: bạn bè 0/4.609 lượt, nhóm 0/2.728, kể cả album 10 ảnh.
+- Theo số tin đã lọt tới cùng người lạ trong lượt gửi (ảnh tính từng tin): tin 1 = 1,25%
+  (chữ) / 1,92% (media); tin 2 = 0,02% (6.430); tin 3 = 0,08% (2.380); **tin 4 = 11,8%**;
+  tin 5–7 = 14,7–26%. Bước nhảy ở tin thứ 4.
+- Theo trạng thái tài khoản: người lạ đầu tiên sau khi tài khoản nghỉ ≥20 phút gần như không
+  bị (tin 1: 1/3.879; tin 4+: 0/2.097); người lạ kế tiếp ~1 phút sau: 11,2% / 36,4%. Sau một
+  lần 127 + 30 phút nghỉ (policy id 61), lượt kế tiếp 0/3.097.
+- Không phải chặn vĩnh viễn: 64 ca chat tay (48 hội thoại, 56 ca người nhận chưa từng nhắn) —
+  người nhận nhắn lại là gửi được ngay (vd 127 lúc 14:12:34 → khách nhắn 14:13:31 → gửi OK
+  14:13:49).
+- Khác nhau theo tài khoản dù cùng nhịp ~1 phút/người: org 607/1708/1722 gửi 5–10 tin/người
+  vẫn 0%; org 990/458/205 ~9–11% người nhận bị. Tương quan một phần với gửi một nội dung y hệt
+  hàng loạt (458: 1 nội dung cho 2.648 tin; 607: 918 nội dung khác nhau/922 tin) nhưng chưa tách
+  bạch (1708 lặp 3,8 lần/nội dung vẫn 0%) — **chưa xác minh** yếu tố riêng của tài khoản.
+
+Hệ quả: album ≥3 ảnh + chữ khiến chữ thành tin thứ 4+, đúng vùng bị chặn. Giữ tổng ≤3 tin cho
+mỗi người lạ (vd 1 ảnh + caption, hoặc ≤2 ảnh + chữ) hoặc đưa chữ lên tin đầu.
+
 ## B. Comment sau đăng nhóm gãy toàn fleet từ 30/10
 
 Block `fb_comment_at_position` (id 34) chờ element `fb_comment_box_at_n` (id 13)
