@@ -82,6 +82,17 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
   hàng loạt (458: 1 nội dung cho 2.648 tin; 607: 918 nội dung khác nhau/922 tin) nhưng chưa tách
   bạch (1708 lặp 3,8 lần/nội dung vẫn 0%) — **chưa xác minh** yếu tố riêng của tài khoản.
 
+- **Cửa sổ ~5 phút giữa hai người lạ** (từ 20/08, người trước gửi OK): người lạ kế tiếp
+  trong <5 phút bị 127 ở 4–14% số người (tin đầu 1,3–4,9%); từ 5–7 phút trở đi 0,04% → 0,01%.
+  Riêng các tài khoản hay bị (org 990/458/205/1731), tin thứ 4+ bị chặn 19,8% (<2 phút), 16,1%
+  (2–5 phút), **0/2.392** khi cách người trước ≥5 phút. Tức là "giới hạn 3 tin/người" chỉ bật
+  khi tài khoản vừa nhắn người lạ khác trong 5 phút; số tin của người trước không làm tăng rủi ro.
+- Nghỉ sau một lần 127: <2 phút còn bị 68%, 2–5 phút 86%, 30–35 phút 1/5.474. Khoảng 5–30 phút
+  chỉ có 24 mẫu (0 bị) — **chưa đủ** để khẳng định 10 phút là đủ. Nếu nghỉ xong vẫn gửi dồn
+  ~1 phút/người thì rủi ro quay lại (21,7% người nhận trong 30–60 phút sau lần 127).
+- Campaign 41031 đặt `sleepBetweenActions=60`, 15 tin/65 phút ⇒ gửi dồn 15 người trong ~15 phút
+  rồi chờ ~50 phút; giãn ≥300 giây/người giữ gần nguyên thông lượng giờ.
+
 Hệ quả: album ≥3 ảnh + chữ khiến chữ thành tin thứ 4+, đúng vùng bị chặn. Giữ tổng ≤3 tin cho
 mỗi người lạ (vd 1 ảnh + caption, hoặc ≤2 ảnh + chữ) hoặc đưa chữ lên tin đầu.
 
