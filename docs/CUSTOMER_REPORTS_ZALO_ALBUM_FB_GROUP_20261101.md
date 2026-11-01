@@ -99,6 +99,10 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
   (7–10 ảnh + chữ: 0/458). Album không kèm chữ 4–6 ảnh 0/339 dù <5 phút: `zca-js` gửi các ảnh
   của album song song (`Promise.all` trong `send`), tin chữ đi sau nên mới chạm ngưỡng tin thứ 4.
   "Chữ trước album" khớp cơ chế nhưng **chưa có dữ liệu** (code chưa có nhánh này cho ≥2 tệp).
+- Ngưỡng không phụ thuộc số ảnh: cách người trước 5–6 phút, X=0–2: 0/2.140, X=3–6: 0/628,
+  X=7–10: 0/41; 6–10 phút cũng 0 ở mọi X, kể cả khi người trước đã nhận ≥4 tin. Quy tắc cài đặt
+  vì vậy là hàm bậc thang theo X (số ảnh, cộng 1 tin chữ): X ≤ 2 ⇒ "Nghỉ giữa 2 lần" tuỳ ý;
+  X ≥ 3 ⇒ ≥330–360 giây. Không có công thức tỷ lệ theo X.
 - Tin gửi bạn bè/nhóm/chat tay trong 5 phút trước, khi người lạ gần nhất đã ≥5 phút: 0/27 và 0/16
   (ít mẫu); không gửi gì 0,01%; vừa nhắn người lạ khác <5 phút 2,34% (112.406).
 
