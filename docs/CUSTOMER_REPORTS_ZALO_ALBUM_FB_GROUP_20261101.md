@@ -143,6 +143,15 @@ do danh sách SĐT có người đã là bạn bè nên đếm thừa). Mẫu đ
 08:00–09:00 vẫn bị, ~10:00 qua (tài khoản 40: 16:58 ngày 15/09 → 07:42, 08:43 vẫn 120 → 09:44 OK).
 Bạn bè/nhóm 0% bị 120; nhắn bạn bè trong lúc bị cấm chỉ có 1 mẫu (OK).
 
+**802** `Zalo: Bạn đang bị chặn nhắn tin với người lạ.` (64 lần, 6 org, xuất hiện từ 08/10; `auto_error`
+id 44 khoá 48 giờ): cấm nhiều ngày — mỗi lần thử lại sau 2 ngày vẫn 802, gửi lại được sau 4–9 ngày
+(tài khoản 301/304/305 bị 18/10 09:00, thử lại 20, 22, 24/10 vẫn bị, qua 26/10 15:10). Nhiều tài
+khoản cùng org bị cùng phút (org 564: 3/5 tài khoản; org 1239: 4/5), không dùng proxy. Nguyên nhân
+**chưa xác định**: có tài khoản bị khi vừa chạm ~100 người lạ/24 giờ (org 1239), có tài khoản bị khi
+mới 22–33 người. Mã khác khi gửi: 119 `Xin lỗi! Hiện tại tôi không muốn nhận tin nhắn.` (302 lần
+người lạ, 7 lần bạn bè — phía người nhận, chưa nghiên cứu); 126 `Không thể nhận tin nhắn từ bạn.` gặp
+cả bạn bè (67) nên không riêng người lạ; 114 tham số; 161 nhóm không tồn tại.
+
 ## B. Comment sau đăng nhóm gãy toàn fleet từ 30/10
 
 Block `fb_comment_at_position` (id 34) chờ element `fb_comment_box_at_n` (id 13)
