@@ -92,6 +92,15 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
   ~1 phút/người thì rủi ro quay lại (21,7% người nhận trong 30–60 phút sau lần 127).
 - Campaign 41031 đặt `sleepBetweenActions=60`, 15 tin/65 phút ⇒ gửi dồn 15 người trong ~15 phút
   rồi chờ ~50 phút; giãn ≥300 giây/người giữ gần nguyên thông lượng giờ.
+- Ngưỡng cứng 300 giây (bucket 15 giây): 285–300 giây 14,4% người nhận bị; 300–315 giây 0,11%;
+  từ 315 giây 0%. Khuyến nghị "Nghỉ giữa 2 lần" 330–360 giây để có biên.
+- Theo số ảnh (30 ngày): khi cách người trước <5 phút — chỉ chữ 2,75%, 1 ảnh + chữ 0/11.923,
+  2 ảnh + chữ 0,81%, 3 ảnh + chữ 13,1%, 4–6 ảnh 18,9%, 7–10 ảnh 20,3%; khi ≥5 phút mọi cỡ đều 0
+  (7–10 ảnh + chữ: 0/458). Album không kèm chữ 4–6 ảnh 0/339 dù <5 phút: `zca-js` gửi các ảnh
+  của album song song (`Promise.all` trong `send`), tin chữ đi sau nên mới chạm ngưỡng tin thứ 4.
+  "Chữ trước album" khớp cơ chế nhưng **chưa có dữ liệu** (code chưa có nhánh này cho ≥2 tệp).
+- Tin gửi bạn bè/nhóm/chat tay trong 5 phút trước, khi người lạ gần nhất đã ≥5 phút: 0/27 và 0/16
+  (ít mẫu); không gửi gì 0,01%; vừa nhắn người lạ khác <5 phút 2,34% (112.406).
 
 Hệ quả: album ≥3 ảnh + chữ khiến chữ thành tin thứ 4+, đúng vùng bị chặn. Giữ tổng ≤3 tin cho
 mỗi người lạ (vd 1 ảnh + caption, hoặc ≤2 ảnh + chữ) hoặc đưa chữ lên tin đầu.
