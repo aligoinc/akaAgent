@@ -51,7 +51,8 @@ BEGIN
 ), candidate AS NOT MATERIALIZED (
  SELECT d.id,d.created_at,($3->>'accountId')::bigint account_id,CASE WHEN u.is_fr=1 OR c.is_friend IS TRUE THEN true WHEN (u.zalo_uid IS NOT NULL AND COALESCE(u.is_fr,0)=0) OR c.is_friend IS FALSE THEN false END is_friend,c.akabiz_tag_ids,
  COALESCE(c.extra_data,'{}'::jsonb)||jsonb_build_object('source','zalo_remarketing_customers','latestCampaignId',campaign.id,'latestCampaignName',campaign.name,'latestCampaignActionId',campaign.action_id,'latestCampaignActionName',COALESCE(NULLIF(action.name,''),campaign.action_id),'latestErrorCode',d.error_code,'originalName',COALESCE(NULLIF(btrim(u.zalo_name),''),NULLIF(btrim(u.display_name),''),NULLIF(btrim(r.original_name),'')),'gender',u.gender) extra_data,
- COALESCE(NULLIF(btrim(c.name),''),NULLIF(btrim(u.display_name),''),NULLIF(btrim(u.zalo_name),''),NULLIF(btrim(r.fallback_name),''),NULLIF(btrim(r.uid),'')) AS "f_name",
+ NULLIF(btrim(u.zalo_name),'') AS "f_zaloOriginalName",
+COALESCE(NULLIF(btrim(c.name),''),NULLIF(btrim(u.display_name),''),NULLIF(btrim(u.zalo_name),''),NULLIF(btrim(r.fallback_name),''),NULLIF(btrim(r.uid),'')) AS "f_name",
 r.uid AS "f_uid",
 COALESCE(private.column_filter_phone_v1(COALESCE(NULLIF(btrim(u.phone_number),''),NULLIF(btrim(u.raw_payload->>'phoneNumber'),''),NULLIF(btrim(u.raw_payload->>'phone_number'),''),NULLIF(btrim(u.raw_payload->>'phone'),''))),private.column_filter_phone_v1(COALESCE(NULLIF(btrim(c.extra_data->>'phone'),''),NULLIF(btrim(c.extra_data->>'phoneNumber'),''),NULLIF(btrim(c.extra_data->>'phone_number'),''),NULLIF(btrim(c.extra_data->>'mobilePhone'),''),NULLIF(btrim(c.extra_data->>'mobile_phone'),''))),r.fallback_phone) AS "f_phone",
 g.name AS "f_groupName",
@@ -78,7 +79,7 @@ c.akabiz_tag_ids::text[] AS "f_akaBizTags"
  AND ((COALESCE(jsonb_array_length($3->'akaBizTagIds'),0)=0 AND NOT COALESCE(($3->>'akaBizNoTag')::boolean,false)) OR COALESCE(akabiz_tag_ids,'{}'::bigint[]) && ARRAY(SELECT jsonb_array_elements_text($3->'akaBizTagIds')::bigint) OR (COALESCE(($3->>'akaBizNoTag')::boolean,false) AND COALESCE(cardinality(akabiz_tag_ids),0)=0))
  ), matched AS %4$s (SELECT id,created_at FROM filtered),
  page AS MATERIALIZED (SELECT * FROM matched WHERE %2$s ORDER BY created_at DESC,id DESC OFFSET $5 LIMIT $6)
- SELECT jsonb_build_object('version',1,'total',%3$s,'rows',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',c.id,'account_id',c.account_id,'contact_type','person','name',c.f_name,'uid',c.f_uid,'url','','is_delete',false,'is_friend',c.is_friend,'akabiz_tag_ids',c.akabiz_tag_ids,
+ SELECT jsonb_build_object('version',1,'total',%3$s,'rows',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',c.id,'account_id',c.account_id,'contact_type','person','name',c.f_name,'zalo_original_name',c."f_zaloOriginalName",'uid',c.f_uid,'url','','is_delete',false,'is_friend',c.is_friend,'akabiz_tag_ids',c.akabiz_tag_ids,
  'extra_data',c.extra_data||jsonb_build_object('phone',c.f_phone,'groupName',c."f_groupName",'sentCount',c."f_sentCount",'latestSentAt',c."f_latestSentAt",'latestSentDate',to_char(c."f_latestSentAt" AT TIME ZONE 'Asia/Ho_Chi_Minh','DD/MM/YYYY'),'daysSinceLatest',c."f_daysSinceLatest",'latestStatus',c."f_latestStatus",'latestLog',c."f_latestLog",'recipientStatus',c."f_recipientStatus")) ORDER BY p.created_at DESC,p.id DESC) FROM page p JOIN filtered c ON c.id=p.id),'[]'::jsonb),
  'after',(SELECT jsonb_build_object('createdAt',created_at,'id',id::text) FROM page ORDER BY created_at,id LIMIT 1),'hasMore',(SELECT count(*) FROM page)=$6)
  $query$;

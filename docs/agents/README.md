@@ -20,7 +20,7 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Đồng bộ lịch sử Zalo Server, V437–V438 | [trạng thái và nguồn canonical ở Chat API/Web](../ZALO_MESSAGE_SYNC_V437_20261030.md); giữ phone-only date filter, disk admission và worker receipt |
 | Mốc ngày/cờ hiển thị đồng bộ theo tổ chức, V440 | [UI rollout V440](../ZALO_MESSAGE_SYNC_UI_V440_20261030.md); đã apply/deploy API/Web, không đổi backend range/runtime |
 | Trigger Context khi nhập lịch sử Zalo, V439 | [bỏ qua nguồn old và receipt](../CONTEXT_ZALO_HISTORY_TRIGGER_V439_20261030.md); giữ realtime, job hiện có và các luồng thu thập độc lập |
-| Repository, Data Group, quét data, lọc/chọn/xuất | [data layer](reference/data-auth-ai-01.md); `campaigns-*`, `browser-*`, `pitfalls-*` theo feature; [bộ lọc cột](../DATA_COLUMN_FILTERS.md) |
+| Repository, Data Group, quét data, lọc/chọn/xuất | [data layer](reference/data-auth-ai-01.md); `campaigns-*`, `browser-*`, `pitfalls-*` theo feature; [bộ lọc cột](../DATA_COLUMN_FILTERS.md); [Tên/Tên gốc Zalo V441](../ZALO_SCAN_NAMES_V441.md) |
 | UI/form/log/status/content | [UI và log](reference/ui-logs-01.md); [IPC](reference/architecture-02.md); `campaigns-*`, `pitfalls-*` theo feature |
 | Nhóm mẫu nội dung, picker/preview, `CampaignFormModal`, snapshot | [luồng chọn nhóm hiện tại](CLIENT_CONTRACTS.md#content-group-selection); [campaign/content](reference/campaigns-01.md); [pitfall và đính chính](reference/pitfalls-02.md) |
 | Report/Automation/action status | [báo cáo](reference/reports-01.md); [kết quả hành động](reference/action-results-01.md); [hợp đồng report](../ACTION_STATUS_REPORTS.md) |

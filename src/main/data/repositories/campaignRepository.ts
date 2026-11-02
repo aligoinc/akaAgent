@@ -4349,6 +4349,7 @@ function normalizeAkaBizTagIds(value: unknown): number[] {
 
 interface ZaloRemarketingLookup {
   nameByUid: Map<string, string>
+  zaloOriginalNameByUid: Map<string, string>
   originalNameByUid: Map<string, string>
   phoneByUid: Map<string, string>
   groupNameByUid: Map<string, string>
@@ -4369,6 +4370,7 @@ async function loadZaloRemarketingLookup(
   ))
   const empty: ZaloRemarketingLookup = {
     nameByUid: new Map<string, string>(),
+    zaloOriginalNameByUid: new Map<string, string>(),
     originalNameByUid: new Map<string, string>(),
     phoneByUid: new Map<string, string>(),
     groupNameByUid: new Map<string, string>(),
@@ -4381,6 +4383,7 @@ async function loadZaloRemarketingLookup(
   if (normalizedUids.length === 0) return empty
 
   const nameByUid = new Map<string, string>()
+  const zaloOriginalNameByUid = new Map<string, string>()
   const originalNameByUid = new Map<string, string>()
   const phoneByUid = new Map<string, string>()
   const contactGroupIdByUid = new Map<string, string>()
@@ -4407,11 +4410,13 @@ async function loadZaloRemarketingLookup(
       const uid = textValue(record.zalo_uid)
       const rawPayload = normalizeRecord(record.raw_payload) || {}
       const name = firstText(record.display_name, record.zalo_name)
+      const zaloOriginalName = textValue(record.zalo_name)
       const originalName = firstText(record.zalo_name, record.display_name)
       const phone = normalizeVietnamMobilePhone(firstText(record.phone_number, rawPayload.phoneNumber, rawPayload.phone_number, rawPayload.phone))
       const isFr = Number(record.is_fr)
       const gender = record.gender
       if (uid && name && !nameByUid.has(uid)) nameByUid.set(uid, name)
+      if (uid && zaloOriginalName) zaloOriginalNameByUid.set(uid, zaloOriginalName)
       if (uid && originalName && !originalNameByUid.has(uid)) originalNameByUid.set(uid, originalName)
       if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
       if (uid && Number.isFinite(isFr)) {
@@ -4494,6 +4499,7 @@ async function loadZaloRemarketingLookup(
   const groupIds = Array.from(new Set(Array.from(groupIdByUid.values()).filter(Boolean)))
   if (groupIds.length === 0) return {
     nameByUid,
+    zaloOriginalNameByUid,
     originalNameByUid,
     phoneByUid,
     groupNameByUid: new Map(),
@@ -4529,6 +4535,7 @@ async function loadZaloRemarketingLookup(
   }
   return {
     nameByUid,
+    zaloOriginalNameByUid,
     originalNameByUid,
     phoneByUid,
     groupNameByUid,
@@ -4865,6 +4872,7 @@ async function buildZaloRemarketingCustomers(
       accountId: normalizedAccountId,
       contactType: 'person',
       name,
+      zaloOriginalName: lookup.zaloOriginalNameByUid.get(uid) || null,
       uid,
       url: '',
       extraData: {

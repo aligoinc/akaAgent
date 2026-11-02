@@ -2,7 +2,7 @@ const fs=require('node:fs'),path=require('node:path'),ts=require('typescript'),a
 const root=path.resolve(__dirname,'../..'),cache=new Map();let calls=[],provider,authorization=0
 function load(relative){const filename=path.resolve(root,relative);if(cache.has(filename))return cache.get(filename).exports;const m={exports:{}};cache.set(filename,m)
  const requireLocal=id=>{
-  if(id.endsWith('/supabaseClient'))return {getSupabaseClient:()=>({rpc:(name,args)=>({abortSignal:signal=>({then:fn=>Promise.resolve().then(()=>{calls.push({name,args,signal});return provider(name,args,signal)}).then(fn)})})})}
+  if(id.endsWith('/supabaseClient'))return {isTrustedServerSupabaseConfigured:()=>true,getSupabaseClient:()=>({rpc:(name,args)=>({abortSignal:signal=>({then:fn=>Promise.resolve().then(()=>{calls.push({name,args,signal});return provider(name,args,signal)}).then(fn)})})})}
   if(id.endsWith('/repositories/dataGroupRepository'))return {mapDataGroupMember:row=>({id:row.id,contactId:row.contact_id,name:row.name})}
   if(id.endsWith('/repositories/localAccountContactRepository'))return {listFilteredPageInboxContacts:async()=>({contacts:[],total:0})}
   if(!id.startsWith('.'))return require(id)
@@ -19,8 +19,9 @@ const response=(rows,total=rows.length,after=null,hasMore=false)=>({data:{versio
 const allow=async()=>{authorization++}
 ;(async()=>{
  let checks=0
- provider=async()=>response([row(1)],1)
+ provider=async()=>response([{...row(1),zalo_original_name:' Nguyễn An '}],1)
  let result=await service.executeColumnRead('window1',request(),allow);assert.equal(result.contacts[0].uid,'001');assert.equal(authorization,1);assert.equal(calls[0].args.p_staff_id,10);checks++
+ assert.equal(result.contacts[0].zaloOriginalName,'Nguyễn An');checks++
  calls=[];await assert.rejects(service.executeColumnRead('window1',request(),async()=>{throw new Error('no capability')}),/no capability/);assert.equal(calls.length,0);checks++
  await assert.rejects(service.executeColumnRead('window1',request({query:{columnFilters:{version:1,filters:[{field:'password',op:'eq',value:'x'}]}}}),allow),/hợp lệ/);assert.equal(calls.length,0);checks++
  provider=async(_,args)=>{let q=args.p_query;return q.after?response([row(501)],null,{rank:0,name:'Row501',time:'2026-01-01',id:'501'}):response(Array.from({length:500},(_,i)=>row(i+1)),501,{rank:0,name:'Row500',time:'2026-01-01',id:'500'},true)}

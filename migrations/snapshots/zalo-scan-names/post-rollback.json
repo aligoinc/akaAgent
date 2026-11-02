@@ -1,0 +1,40 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "functions": [
+    {
+      "signature": "private.column_filter_predicate_v1(text,jsonb)",
+      "checksum": "069845e69f67531eddb64e543cf57b4f",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "i",
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)",
+      "checksum": "788154e11ff9c302ed14cabd866fa1da",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)",
+      "checksum": "6f5c7a310643cf7d63782974ffcdc933",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    }
+  ]
+}

@@ -993,8 +993,8 @@ export async function saveUploadDataset(
   return { success: true, count: contacts.length, datasets, rows: normalizedRows }
 }
 
-// Fetch the linked profile in the same request so existing scans expose gender.
-const CONTACT_LIST_SELECT = '*, zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender)'
+// Fetch the linked profile in the same request for gender and the original Zalo name.
+const CONTACT_LIST_SELECT = '*, zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender,zalo_name)'
 const CONTACT_LIST_DEFAULT_LIMIT = 100
 const CONTACT_LIST_MAX_LIMIT = 20000
 const CONTACT_LIST_FETCH_CHUNK = 1000
