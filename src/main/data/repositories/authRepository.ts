@@ -24,6 +24,7 @@ import {
 } from './entitlementRepository'
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
+import { loadAppAccessForStaff } from './appAccessRepository'
 
 const client = () => getSupabaseClient()
 
@@ -87,6 +88,7 @@ async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organ
   const access = await readStaffAccess(staff.id, staff.username, staff.password)
   if (!access.isActive) throw new Error('Tài khoản đã bị khoá.')
   if (!access.timeAllowed) throw new Error('Tài khoản nhân viên đã hết hạn sử dụng.')
+  if (access.appAccessSeparate && !access.akaAgentAllowed && !access.appAccessStopping) throw new Error('Nhân viên chưa được cấp quyền dùng akaAgent.')
   const result = await callDesktopSessionEndpoint<{ staffId: number; organizationId: number; products: unknown[] }>({
     action: 'check', username: staff.username, password: staff.password, fingerprintHash
   }, AbortSignal.timeout(15_000))
@@ -119,6 +121,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     loadStaffZaloServerModeSnapshot(staffRow.id)
   ])
   const { entitlements, zaloAccountCapabilities, chatSyncEnabled } = entitlementAccess
+  const appAccess = await loadAppAccessForStaff(staffRow.id, staffRow.username, staffRow.password)
 
   return {
     staffId: staffRow.id,
@@ -135,7 +138,8 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     zaloAccountCapabilities,
     entitlements,
     accountProducts,
-    isChatSync: chatSyncEnabled,
+    isChatSync: appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled,
+    appAccess,
     chatSyncProducts,
     deviceLabel: deviceRecord.device_label || null,
     devicePlatform: deviceRecord.device_platform || null,

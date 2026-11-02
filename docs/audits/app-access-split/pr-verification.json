@@ -1,0 +1,263 @@
+{
+  "recordedAt": "2026-11-02T22:24:03.141337+00:00",
+  "scope": "Pre-push verification for the four app-access PRs; repository commits/PR URLs are the subsequent handoff.",
+  "bases": {
+    "akaAgent": {
+      "path": "/Users/lequangnhut/.codex/worktrees/app-access-akaagent/akaAgent",
+      "branch": "codex/app-access-split",
+      "target": "dev_3",
+      "baseHead": "9080a12dfd62c48ddee8e067d7d99aa44cfd8920"
+    },
+    "akaAgentChatApi": {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "branch": "codex/app-access-split",
+      "target": "dev",
+      "baseHead": "112cbb2dc434fa40f7b1a5dc4a16fe2720790faf"
+    },
+    "akaAgentChatWeb": {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatWeb",
+      "branch": "codex/app-access-split",
+      "target": "dev",
+      "baseHead": "1f017128ecf8fbd6b4f80789c0a98010aa75aa3e"
+    },
+    "akaAgentWebApp": {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "branch": "codex/app-access-split",
+      "target": "dev",
+      "baseHead": "303a1ccd9a8ca04740d25657761da630e101cbd8"
+    }
+  },
+  "checks": {
+    "agent": {
+      "repo": "agent",
+      "root": "/Users/lequangnhut/.codex/worktrees/app-access-akaagent/akaAgent",
+      "recordedAt": "2026-11-02T22:15:05.967180+00:00",
+      "results": [
+        {
+          "label": "typecheck-node",
+          "command": [
+            "npx",
+            "tsc",
+            "--noEmit",
+            "-p",
+            "tsconfig.node.json"
+          ],
+          "exit": 0,
+          "seconds": 7.55,
+          "log": "/tmp/app-access-pr-20261103/agent-typecheck-node.log",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "label": "typecheck-web",
+          "command": [
+            "npx",
+            "tsc",
+            "--noEmit",
+            "-p",
+            "tsconfig.web.json"
+          ],
+          "exit": 0,
+          "seconds": 7.95,
+          "log": "/tmp/app-access-pr-20261103/agent-typecheck-web.log",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "label": "build",
+          "command": [
+            "npm",
+            "run",
+            "build"
+          ],
+          "exit": 0,
+          "seconds": 112.57,
+          "log": "/tmp/app-access-pr-20261103/agent-build.log",
+          "logSha256": "2343d86d68ac1d45cb98ebaabde968bef77b5eb448e3069011f78a97eb606ee5"
+        }
+      ]
+    },
+    "api": {
+      "repo": "api",
+      "recordedAt": "2026-11-02T22:23:55.654350+00:00",
+      "results": [
+        {
+          "label": "typecheck",
+          "command": [
+            "npm",
+            "run",
+            "typecheck"
+          ],
+          "exit": 0,
+          "seconds": 0.62,
+          "log": "/tmp/app-access-pr-20261103/api-typecheck.log",
+          "logSha256": "16c69be4e3e9446152f20ccfa569f349436f7f9abced003e8f0ebb638815861e"
+        },
+        {
+          "label": "tests-serial",
+          "command": [
+            "npm",
+            "test",
+            "--",
+            "--maxWorkers=1"
+          ],
+          "exit": 0,
+          "seconds": 338.71,
+          "log": "/tmp/app-access-pr-20261103/api-tests-serial.log",
+          "logSha256": "60c1abe525e9e3fb23bad9ffaf56d93b6c5ef7b65e37e54c56d0eeb98459c38c"
+        },
+        {
+          "label": "build",
+          "command": [
+            "npm",
+            "run",
+            "build"
+          ],
+          "exit": 0,
+          "seconds": 0.23,
+          "log": "/tmp/app-access-pr-20261103/api-build.log",
+          "logSha256": "9bfd257180bb2996d9280c2a7ef429903952ba65bd0e6707ab3c2e21e2fda068"
+        }
+      ]
+    },
+    "chat": {
+      "repo": "chat",
+      "recordedAt": "2026-11-02T22:19:25.535831+00:00",
+      "results": [
+        {
+          "label": "build-tests-final",
+          "command": [
+            "npm",
+            "test"
+          ],
+          "exit": 0,
+          "seconds": 13.96,
+          "log": "/tmp/app-access-pr-20261103/chat-build-tests-final.log",
+          "logSha256": "5d6669b5cb60fbeea7ab66e23ffe52989dae0a20f1a3227cbf577297af31afb4"
+        },
+        {
+          "label": "lint-final",
+          "command": [
+            "npm",
+            "run",
+            "lint",
+            "--",
+            "--ignore-pattern",
+            ".vinext/**",
+            "--ignore-pattern",
+            ".wrangler/**"
+          ],
+          "exit": 0,
+          "seconds": 53.78,
+          "log": "/tmp/app-access-pr-20261103/chat-lint-final.log",
+          "logSha256": "f4938a96865999b15ee578f5799c2fdbde36db67a2bfa8a6376f13f8770008d9"
+        }
+      ]
+    },
+    "web": {
+      "repo": "web",
+      "root": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "recordedAt": "2026-11-02T22:18:12.782848+00:00",
+      "results": [
+        {
+          "label": "typecheck",
+          "command": [
+            "npm",
+            "run",
+            "typecheck"
+          ],
+          "exit": 0,
+          "seconds": 110.83,
+          "log": "/tmp/app-access-pr-20261103/web-typecheck.log",
+          "logSha256": "5e804c87cf811b505c0596355da5cf9caf95100ad15c3606bf577ccd01365f5b"
+        },
+        {
+          "label": "tests",
+          "command": [
+            "npm",
+            "test"
+          ],
+          "exit": 0,
+          "seconds": 172.23,
+          "log": "/tmp/app-access-pr-20261103/web-tests.log",
+          "logSha256": "4919465c4f87c79c94892c4cdb16c9d0857f6882fddae1fe601871e7bcb799f0"
+        },
+        {
+          "label": "build",
+          "command": [
+            "npm",
+            "run",
+            "build"
+          ],
+          "exit": 0,
+          "seconds": 24.28,
+          "log": "/tmp/app-access-pr-20261103/web-build.log",
+          "logSha256": "4f9bbccc14d3acdf73b67a14fde45f7a62eee2d6be836b1fef84c7f583bb44ad"
+        }
+      ]
+    }
+  },
+  "counts": {
+    "chatApiFiles": 119,
+    "chatApiTests": 1752,
+    "chatWebTests": 200,
+    "webAppTests": 2810
+  },
+  "chatToggleSmoke": {
+    "passed": 4,
+    "cases": [
+      "busy mutex",
+      "target switch drops stale response",
+      "retry keeps request ID",
+      "unmount drops stale response"
+    ],
+    "environment": "React StrictMode + JSDOM, mocked HTTP, no provider calls",
+    "harness": "/tmp/app-access-pr-20261103/chat-toggle-smoke.cjs",
+    "harnessSha256": "8cdcae271efe85bfc92527f2e9d815438e07f04717dfce48edb1ef90b0aa1f51",
+    "logSha256": "78a88b13115ef008910b8f4ccddc5f57471299e195143a91ddd7ff4578619a2f"
+  },
+  "priorVerification": {
+    "sqlCases": 98,
+    "targetFunctions": 42,
+    "privateAuthFunctions": 2,
+    "runtimeDependencies": 11,
+    "sqlUnchangedSinceApply": true,
+    "productionApplyReceiptSha256": "80a5ab912cf2169c621df74c7d205fe2bfe622c45bceeea5cdac5bb0c2848ff5",
+    "webChromiumE2e": 2,
+    "source": "verification.json reviewFix4Verification and apply-receipt.json"
+  },
+  "retryNotes": [
+    "Initial Chat API suite ran alongside builds, hit short test timeouts, and was terminated. Full suite rerun with --maxWorkers=1 passed without timeout/source changes.",
+    "Initial Chat Web lint traversed ignored build output and was stopped. Source lint excludes .vinext/.wrangler in addition to existing ignored paths. It found a setState-in-effect error in the new toggle; fixed with a keyed child and captured cleanup generation, then rebuilt/retested/linted."
+  ],
+  "decisions": {
+    "deferredDbFindingsUnchanged": true,
+    "desktopOldVersionsNeedNotSupportProduct5": true,
+    "activationRequiresCompatibleBackendRuntimeAndNewDesktopRelease": true,
+    "waitForEveryDesktopUpgrade": false
+  },
+  "production": {
+    "appliedPreviously": [
+      "V445",
+      "V446",
+      "private IP pre-request",
+      "private desktop-admin"
+    ],
+    "v447Applied": false,
+    "policyEnabled": false,
+    "dbChangesInPrTask": false,
+    "deploy": false,
+    "installerRelease": false,
+    "crmSourceChanges": false,
+    "crmDeployment": false
+  },
+  "preservation": {
+    "agentBaseSyncBackup": "82843b144c4ab20e211c9b8474eeab0c81098126",
+    "chatApiLabsExcluded": true,
+    "privateAuthBodiesOutsideGit": true,
+    "sourceSecretPatternScan": "no matches"
+  },
+  "limitations": [
+    "No Windows/macOS installer or production HTTP/provider/device QA.",
+    "No real messages or campaigns sent.",
+    "Git merge and deployment are outside this request."
+  ]
+}

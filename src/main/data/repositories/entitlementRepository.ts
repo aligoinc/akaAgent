@@ -18,7 +18,7 @@ import {
   getAuthProductById
 } from '../../../shared/authProductCatalog'
 import { getVietnamDayStart } from '../../../shared/vietnamTime'
-import { requireCurrentUser } from '../currentUser'
+import { getCurrentUser, requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
 const client = () => getSupabaseClient()
@@ -569,10 +569,11 @@ export function canUseZaloAccountWithCapabilities(
 }
 
 export function canUseAccountWithEntitlementsAndCapabilities(
-  account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb' | 'isZaloServer'>,
+  account: Pick<AutoAccount, 'flatformType' | 'isZaloShowWeb' | 'isZaloServer' | 'isAkaAgentEnabled'>,
   entitlements: Partial<AuthEntitlements> | null | undefined,
   zaloAccountCapabilities: Partial<ZaloAccountCapabilities> | null | undefined
 ): boolean {
+  if (getCurrentUser()?.appAccess?.separateAccess && account.isAkaAgentEnabled === false) return false
   if (!canUseAccountPlatformWithEntitlements(account.flatformType, entitlements)) return false
   return String(account.flatformType || '').trim().toLowerCase() !== 'zalo'
     || canUseZaloAccountWithCapabilities(account, zaloAccountCapabilities)

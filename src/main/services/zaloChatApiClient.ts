@@ -274,6 +274,7 @@ export class ZaloChatApiClient {
   }
 
   public canUseLocalRuntime(): boolean {
+    if (this.user?.appAccess?.separateAccess) return this.user.appAccess.usesChatRuntime && this.user.appAccess.staff.akaAgentAllowed
     return this.user?.isChatSync === true &&
       this.user.entitlements.zalo === true &&
       this.user.zaloAccountCapabilities?.qr === true
@@ -284,7 +285,7 @@ export class ZaloChatApiClient {
       username: String(username || '').trim(),
       password: String(password || '')
     }
-    const enabled = user.isChatSync === true &&
+    const enabled = user.appAccess?.separateAccess ? user.appAccess.usesChatRuntime && user.appAccess.staff.akaAgentAllowed : user.isChatSync === true &&
       user.entitlements.zalo === true &&
       (user.zaloAccountCapabilities?.server === true ||
         user.zaloAccountCapabilities?.qr === true)

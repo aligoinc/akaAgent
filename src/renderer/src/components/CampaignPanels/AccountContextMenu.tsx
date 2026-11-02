@@ -1,3 +1,6 @@
+import { AppAccessToggle } from '../AppAccessToggle'
+import { useAuthStore } from '../../stores/authStore'
+import { useCampaignStore } from '../../stores/campaignStore'
 import { useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import {
   Globe, RefreshCw, Shield, Play, Pause,
@@ -68,6 +71,7 @@ export default function AccountContextMenu({
   onFilterCampaigns, onRandomToggle, onRandomConfig, onRandomPlan, onWebEnrichment
 }: AccountContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const access = useAuthStore(state => state.user?.appAccess)
 
   // Close on click outside
   useEffect(() => {
@@ -134,7 +138,10 @@ export default function AccountContextMenu({
       style={{ left: position.x, top: position.y }}
     >
       <div className="context-menu-group">
-        <button
+        {access?.separateAccess && account.flatformType === 'zalo' && !account.isZaloShowWeb && <AppAccessToggle
+        targetType="account" targetId={account.id} app="akaChat" enabled={account.isAkachatEnabled === true}
+        quota={access.accountQuotas.akaChat} button onChanged={async () => { await useCampaignStore.getState().loadAccounts(); onClose() }} />}
+      <button
           className="context-menu-item"
           onClick={() => handleAction(() => onViewInfo(account))}
         >

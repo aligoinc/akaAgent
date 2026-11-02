@@ -1,3 +1,4 @@
+import { AppAccessToggle } from '../components/AppAccessToggle'
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Check, ChevronLeft, ChevronRight, Clock3, FolderTree, Info, LockKeyhole, Monitor, Pencil, Plus, RefreshCw, Search, ShieldCheck, UserRound, X } from 'lucide-react'
 import { canManageStaff, staffErrorMessage, type ManagedStaff, type StaffDevice, type StaffGroup, type StaffPage, type StaffQuery } from '../../../shared/staffManagement'
@@ -120,7 +121,7 @@ function StaffEditor({ editor, data, onClose, onSaved }: { editor: Editor; data:
   newExpiry.setUTCDate(newExpiry.getUTCDate() + data.organization.staffDurationDays + 1)
   const existingStaff = editor.kind === 'staff' ? editor.row : undefined
   const otherManagers = (data.groups.find(row => row.id === Number(group))?.managers || []).filter(manager => manager.id !== existingStaff?.id)
-  const freeSeats = Math.max(0, data.organization.maxStaff - data.organization.staffCount)
+  const freeSeats = data.organization.appAccessSeparate ? data.organization.appAccessQuotas?.akaAgent.remaining ?? 0 : Math.max(0, data.organization.maxStaff - data.organization.staffCount)
   const expiryNote = !data.organization.useStaffExpiration
     ? `Đang dùng hạn tổ chức: ${date(data.organization.expirationDate)}.`
     : existingStaff && !existingStaff.expirationDate
@@ -288,7 +289,7 @@ export default function StaffManagementPage() {
   const focusedRow = rows.find(row => row.id === focusedId) || rows[0]
   const actionRows = selectedRows.length ? selectedRows : focusedRow ? [focusedRow] : []
   const selectedGroup = data?.groups.find(row => row.id === query.groupId)
-  const quotaFull = !!data && data.organization.staffCount >= data.organization.maxStaff
+  const quotaFull = !!data && (data.organization.appAccessSeparate ? data.organization.appAccessQuotas?.akaAgent.remaining === 0 : data.organization.staffCount >= data.organization.maxStaff)
   const editRow = actionRows.length === 1 ? actionRows[0] : undefined
   const pickGroup = (id: number) => { if (!loading) changeQuery({ groupId: id }) }
   return <main className="staff-management" aria-label="Quản lý nhân viên">
@@ -298,9 +299,14 @@ export default function StaffManagementPage() {
         <p>{data ? `${data.organization.name} · id tổ chức ${data.organization.id} · số ngày sử dụng mặc định ${data.organization.staffDurationDays}` : 'Đang tải thông tin tổ chức…'}</p>
       </div>
       {data && <>
-        <div className="sm-summary-card"><span>Nhân viên</span><strong>{data.organization.staffCount} / {data.organization.maxStaff}</strong><i /><span className={`sm-badge ${quotaFull ? 'sm-badge-red' : 'sm-badge-green'}`}>{quotaFull ? 'Đã đầy' : `Còn ${data.organization.maxStaff - data.organization.staffCount} chỗ`}</span></div>
+        {!data.organization.appAccessSeparate && <div className="sm-summary-card"><span>Nhân viên</span><strong>{data.organization.staffCount} / {data.organization.maxStaff}</strong><i /><span className={`sm-badge ${quotaFull ? 'sm-badge-red' : 'sm-badge-green'}`}>{quotaFull ? 'Đã đầy' : `Còn ${data.organization.maxStaff - data.organization.staffCount} chỗ`}</span></div>}
         <div className="sm-summary-card"><span>Hạn dùng tính theo</span><strong className="sm-mode-badge">{!data.organization.useStaffExpiration ? `Hạn của tổ chức · ${date(data.organization.expirationDate)}` : 'Hạn của nhân viên'}</strong></div>
       </>}
+      {data?.organization.appAccessSeparate && data.organization.appAccessQuotas && <div className="sm-summary-card">
+        {(['akaAgent', 'akaChat'] as const).map(app => { const quota = data.organization.appAccessQuotas![app]; return <span key={app}>
+          {app}: {quota.used} / {quota.limit ?? 'Không giới hạn'}{quota.overLimit ? ' · Vượt mức' : ''}
+        </span> })}
+      </div>}
       <button className="sm-reload" aria-label="Tải lại" title="Tải lại" disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw size={16} /></button>
     </div>
     {error && <div className="sm-error" role="alert">{error}<button onClick={() => setRevision(value => value + 1)}>Thử lại</button></div>}
@@ -360,7 +366,7 @@ export default function StaffManagementPage() {
           <caption className="sm-sr-only">Danh sách nhân viên. Chọn dòng để sửa, đổi máy hoặc đổi trạng thái; đánh dấu để thao tác nhiều người.</caption>
           <thead><tr>
             <th className="sm-check-cell" scope="col"><input ref={selectAll} aria-label="Chọn tất cả nhân viên trên trang" type="checkbox" disabled={loading || !rows.length} checked={rows.length > 0 && selected.size === rows.length} onChange={event => setSelected(new Set(event.target.checked ? rows.map(row => row.id) : []))} /></th>
-            {['STT', 'Trạng thái', 'Tên', 'SĐT', 'Username', 'Mật khẩu', 'Ngày tạo', 'Hạn sử dụng', 'Còn lại', 'Phòng ban'].map(label => <th key={label} scope="col">{label}</th>)}
+            {['STT', 'Trạng thái', 'Tên', ...(data?.organization.appAccessSeparate ? ['Ứng dụng'] : []), 'SĐT', 'Username', 'Mật khẩu', 'Ngày tạo', 'Hạn sử dụng', 'Còn lại', 'Phòng ban'].map(label => <th key={label} scope="col">{label}</th>)}
           </tr></thead>
           <tbody>
             {!loading && rows.map((row, index) => <tr key={row.id} tabIndex={0} aria-selected={focusedRow?.id === row.id || selected.has(row.id)} className={`sm-pick-row ${focusedRow?.id === row.id || selected.has(row.id) ? 'sm-selected-row' : ''}`} onClick={() => setFocusedId(row.id)} onKeyDown={event => {
@@ -370,6 +376,11 @@ export default function StaffManagementPage() {
               <td className="sm-muted">{(query.page || 0) * 100 + index + 1}</td>
               <td><span className={`sm-status sm-status-${row.status}`}><i className="sm-status-dot" />{statusLabels[row.status]}</span></td>
               <td><span className="sm-name">{row.name}{row.isAdmin && <ShieldCheck size={13} aria-label="Admin" />}</span></td>
+              {data?.organization.appAccessSeparate && <td><AppAccessToggle targetType="staff" targetId={row.id} app="akaAgent"
+                enabled={row.appAccess?.isAkaAgentEnabled === true} stopping={row.appAccess?.stopping} quota={data.organization.appAccessQuotas?.akaAgent}
+                onChanged={() => setRevision(value => value + 1)} /><AppAccessToggle targetType="staff" targetId={row.id} app="akaChat"
+                enabled={row.appAccess?.isAkachatEnabled === true} quota={data.organization.appAccessQuotas?.akaChat}
+                onChanged={() => setRevision(value => value + 1)} /></td>}
               <td className="sm-mono">{row.phone}</td><td className="sm-mono">{row.username}</td>
               <td><div className="sm-password"><span>{secrets[row.id] !== undefined ? secrets[row.id] : '••••••'}</span><button className="sm-text-button" aria-label={`${secrets[row.id] !== undefined || revealing.has(row.id) ? 'Ẩn' : 'Hiện'} mật khẩu ${row.name}`} onClick={event => { event.stopPropagation(); void reveal(row) }}>{secrets[row.id] !== undefined || revealing.has(row.id) ? 'Ẩn' : 'Hiện'}</button></div></td>
               <td className="sm-muted">{date(row.createdAt)}</td>
@@ -379,7 +390,7 @@ export default function StaffManagementPage() {
                 {row.managerGroupIds?.includes(row.groupIds[groupIndex]) && <UserRound size={13} aria-label="Trưởng phòng" />}<span>{name}</span>
               </span>) : '—'}</span></td>
             </tr>)}
-            {(loading || !rows.length) && <tr><td colSpan={11} className="sm-empty" role="status">{loading ? 'Đang tải nhân viên…' : 'Không có nhân viên phù hợp.'}</td></tr>}
+            {(loading || !rows.length) && <tr><td colSpan={data?.organization.appAccessSeparate ? 12 : 11} className="sm-empty" role="status">{loading ? 'Đang tải nhân viên…' : 'Không có nhân viên phù hợp.'}</td></tr>}
           </tbody>
         </table>
       </div>

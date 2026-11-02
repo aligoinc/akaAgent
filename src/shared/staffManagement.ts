@@ -10,12 +10,15 @@ export interface StaffGroup {
   managers: { id: number; name: string }[]
 }
 export interface ManagedStaff {
+  appAccess?: import('./appAccess').AppAccessFlags
   id: number; name: string; phone: string; username: string; isAdmin: boolean; isActive: boolean
   createdAt: string; expirationDate: string | null; effectiveExpirationDate: string | null
   expirySource: 'staff' | 'organization'; status: StaffStatus; daysRemaining: number | null
   groupIds: number[]; groupNames: string[]; managerGroupIds: number[]; version: string
 }
 export interface StaffOrganization {
+  appAccessSeparate?: boolean
+  appAccessQuotas?: Record<import('./appAccess').AppAccessApp, import('./appAccess').AppAccessQuota>
   id: number; name: string; maxStaff: number; staffCount: number; staffDurationDays: number
   useStaffExpiration: boolean; expirationDate: string | null; today: string
 }
@@ -44,6 +47,7 @@ export interface StaffManagementApi {
 }
 export type StaffManagementAction = keyof StaffManagementApi
 export interface StaffAccess {
+  appAccessStopping?: boolean; appAccessSeparate?: boolean; akaAgentAllowed?: boolean; akachatAllowed?: boolean
   isAdmin: boolean; isActive: boolean; timeAllowed: boolean
   expirationDate: string | null; useStaffExpiration: boolean
 }

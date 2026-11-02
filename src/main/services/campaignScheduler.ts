@@ -2856,11 +2856,14 @@ export class CampaignScheduler {
       if (!isDailyBoundaryDue) {
         this.boundaryStoppedAccountQueues.add(account.id)
         if (
+          result.reason === 'app_access_denied' ||
           result.reason === 'account_logged_out' ||
           result.reason === 'account_inactive' ||
           result.reason === 'account_deleted'
         ) {
-          const reason = result.reason === 'account_logged_out'
+          const reason = result.reason === 'app_access_denied'
+          ? 'Quyền chạy chiến dịch của tài khoản đã bị thu hồi'
+          : result.reason === 'account_logged_out'
             ? 'Tài khoản bị đăng xuất'
             : result.reason === 'account_inactive'
               ? 'Tài khoản đã ngừng hoạt động'
@@ -3029,11 +3032,14 @@ export class CampaignScheduler {
       if (currentCampaign) this.broadcastCampaignUpdate(currentCampaign)
 
       if (
-        result.reason === 'account_logged_out' ||
+        result.reason === 'app_access_denied' ||
+          result.reason === 'account_logged_out' ||
         result.reason === 'account_inactive' ||
         result.reason === 'account_deleted'
       ) {
-        const reason = result.reason === 'account_logged_out'
+        const reason = result.reason === 'app_access_denied'
+          ? 'Quyền chạy chiến dịch của tài khoản đã bị thu hồi'
+          : result.reason === 'account_logged_out'
           ? 'Tài khoản bị đăng xuất'
           : result.reason === 'account_inactive'
             ? 'Tài khoản đã ngừng hoạt động'
@@ -9033,6 +9039,7 @@ export class CampaignScheduler {
   }
 
   private getServerZaloHardStopMessage(reason: string): string {
+    if (reason === 'app_access_denied') return 'Quyền chạy chiến dịch của tài khoản đã bị thu hồi'
     if (reason === 'account_logged_out') return 'Tài khoản bị đăng xuất'
     if (reason === 'account_inactive') return 'Tài khoản đã bị tắt'
     if (reason === 'account_deleted') return 'Tài khoản đã bị xoá'
@@ -9251,11 +9258,14 @@ export class CampaignScheduler {
     }
 
     if (
-      claim.reason === 'account_logged_out' ||
+      claim.reason === 'app_access_denied' ||
+          claim.reason === 'account_logged_out' ||
       claim.reason === 'account_inactive' ||
       claim.reason === 'account_deleted'
     ) {
-      const reason = claim.reason === 'account_logged_out'
+      const reason = claim.reason === 'app_access_denied'
+          ? 'Quyền chạy chiến dịch của tài khoản đã bị thu hồi'
+          : claim.reason === 'account_logged_out'
         ? 'Tài khoản bị đăng xuất'
         : claim.reason === 'account_inactive'
           ? 'Tài khoản đã ngừng hoạt động'

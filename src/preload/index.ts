@@ -27,6 +27,7 @@ import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimit
 import { CAMPAIGN_TYPE_VISIBILITY_IPC, type CampaignTypeVisibilityResult, type CampaignVisibilityChange } from '../shared/campaignTypeVisibility'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
+import { appAccessAPI } from './appAccessBridge'
 import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
@@ -72,6 +73,7 @@ const electronAPI = {
   listMessageOptOutCustomers: (query?: MessageOptOutCustomerQuery): Promise<MessageOptOutCustomerPage> => ipcRenderer.invoke(MESSAGE_OPT_OUT_CUSTOMERS_IPC, query),
   admin: adminAPI,
   staffManagement: staffManagementAPI,
+  appAccess: appAccessAPI,
   dataGroupExternalSync: dataGroupExternalSyncAPI,
   groupSharing: groupSharingAPI,
   listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),

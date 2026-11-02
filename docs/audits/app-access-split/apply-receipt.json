@@ -1,0 +1,395 @@
+{
+  "recordedAt": "2026-11-02T22:04:00.040527+00:00",
+  "productionProject": "cgjbsmqtfhqvttudyjzq",
+  "projectName": "akachat",
+  "authorization": {
+    "apply": "User requested apply migration; deferred the two remaining review findings.",
+    "activation": "User confirmed backend/runtime/UI/Desktop not deployed; keep V447 inactive."
+  },
+  "status": {
+    "applyDb": true,
+    "activationApplied": false,
+    "policyEnabled": false,
+    "deploy": false,
+    "releaseInstaller": false,
+    "crmSourceChanges": false,
+    "crmDeployment": false,
+    "committed": false,
+    "pushed": false,
+    "sqlConnectionBudgetIncrease": false
+  },
+  "stages": [
+    {
+      "name": "migration_v445_app_access_schema",
+      "canonicalSha256": "cad1240e2533809a668e6bade367b7a0a43c37920d5d267962ea12450c0eec26",
+      "wrappedSha256": "994659bd185c09b36cbd811e2dbbc1dc106bfe7261d7aeacb754b6b8eacb37fb",
+      "expectedFunctions": 29,
+      "ledgerVersion": "20261102215958",
+      "appliedAtUtc": "2026-11-02T21:59:58+00:00",
+      "appliedAtVietnam": "2026-11-03T04:59:58+07:00",
+      "status": "applied",
+      "canonicalFile": "migrations/migration_v445_app_access_schema.sql",
+      "method": "Supabase MCP apply_migration; guarded wrapper with transactional postflight"
+    },
+    {
+      "name": "migration_v446_app_access_callers",
+      "canonicalSha256": "41c49ed5d97fa454c76715e55711591422ee2079c668bb353d5fa9dda7e2e544",
+      "wrappedSha256": "06edaf907042d216cd8f354449dd65fbe784cfb2133b4623fb962ad0c7c05991",
+      "expectedFunctions": 42,
+      "ledgerVersion": "20261102220006",
+      "appliedAtUtc": "2026-11-02T22:00:06+00:00",
+      "appliedAtVietnam": "2026-11-03T05:00:06+07:00",
+      "status": "applied",
+      "canonicalFile": "migrations/migration_v446_app_access_callers.sql",
+      "method": "Supabase MCP apply_migration; guarded wrapper with transactional postflight"
+    },
+    {
+      "name": "app_access_ip_pre_request",
+      "canonicalSha256": "838a6d9bcfd58c779ca7e713a4ee73b794154f879c3072eb6156575651528b99",
+      "wrappedSha256": "04b3d9a8a07506bef46b53bb1bdad997cb9d89b34f91754e37e75de858b33e38",
+      "expectedFunctions": 1,
+      "ledger": [
+        {
+          "name": "app_access_ip_pre_request",
+          "version": "20261102220027"
+        }
+      ],
+      "recordedApplySha256": "485d69929ba544839dbd2b47a185d063fe3ede5c41b98ea950e46241441a135d",
+      "elapsedSeconds": 1.89,
+      "ledgerVersion": "20261102220027",
+      "appliedAtUtc": "2026-11-02T22:00:27+00:00",
+      "appliedAtVietnam": "2026-11-03T05:00:27+07:00",
+      "status": "applied",
+      "canonicalPrivateFile": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/ip-pre-request-candidate.sql",
+      "method": "Existing linked CLI Management API; guarded wrapper and ledger INSERT in same transaction"
+    },
+    {
+      "name": "app_access_desktop_admin",
+      "canonicalSha256": "0acd8325553fef27188ef08d8b88101f429711f2e95479d067c7147cddcbde90",
+      "wrappedSha256": "e096864f2b3b27cf05617989b4993226bede7f7965c1876701ef2c7a905555ae",
+      "expectedFunctions": 1,
+      "ledger": [
+        {
+          "name": "app_access_desktop_admin",
+          "version": "20261102220028"
+        }
+      ],
+      "recordedApplySha256": "23a6238d6bd9c5fb1e7f93fb204e8e70ccba6f4a25e8b58e8db0a8035025260f",
+      "elapsedSeconds": 1.68,
+      "ledgerVersion": "20261102220028",
+      "appliedAtUtc": "2026-11-02T22:00:28+00:00",
+      "appliedAtVietnam": "2026-11-03T05:00:28+07:00",
+      "status": "applied",
+      "canonicalPrivateFile": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/desktop-admin-candidate.sql",
+      "method": "Existing linked CLI Management API; guarded wrapper and ledger INSERT in same transaction"
+    }
+  ],
+  "preflight": {
+    "functionCount": 44,
+    "exactMetadataMatched": true,
+    "fields": [
+      "checksum",
+      "owner",
+      "acl",
+      "security_definer",
+      "volatility",
+      "config"
+    ],
+    "viewAndPoliciesMatched": true,
+    "previousLedgerHead": {
+      "name": "migration_v444_facebook_random_ai",
+      "version": "20261102152721"
+    },
+    "privateEvidenceDirectory": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/apply-20261102T215821Z"
+  },
+  "productionTrial": {
+    "transaction": "ROLLBACK",
+    "elapsedSeconds": 3.96,
+    "result": [
+      {
+        "account_count": 9192,
+        "initialization_receipts": 4,
+        "policy_enabled": false,
+        "staff_count": 1854,
+        "trial": "passed"
+      }
+    ],
+    "allPreexistingStaffAndAccountFieldsPreserved": true,
+    "comparison": "MD5 over rows excluding only the four newly added columns, compared under table writer locks inside the same trial transaction"
+  },
+  "postflight": {
+    "metadata": [
+      {
+        "metadata_checks": "passed",
+        "policy_enabled": false
+      }
+    ],
+    "targetFunctionCount": 42,
+    "privateAuthFunctionCount": 2,
+    "unchangedRuntimeDependencyCount": 11,
+    "sourceManifest": "migrations/snapshots/app-access/verified-candidate.json",
+    "sourceManifestSha256": "e6e2fd9fe299d4bea37fd325c2a6abd4dba73c8d2eafec330876faf457f4e803",
+    "summary": {
+      "account_count": 9192,
+      "checked_at": "2026-11-02T22:02:11.572574+00:00",
+      "columns": [
+        {
+          "column": "is_aka_agent_enabled",
+          "default": "true",
+          "nullable": "NO",
+          "table": "auto_accounts",
+          "type": "boolean"
+        },
+        {
+          "column": "is_akachat_enabled",
+          "default": "false",
+          "nullable": "NO",
+          "table": "auto_accounts",
+          "type": "boolean"
+        },
+        {
+          "column": "is_aka_agent_enabled",
+          "default": "true",
+          "nullable": "NO",
+          "table": "org_staff",
+          "type": "boolean"
+        },
+        {
+          "column": "is_akachat_enabled",
+          "default": "false",
+          "nullable": "NO",
+          "table": "org_staff",
+          "type": "boolean"
+        }
+      ],
+      "ledger": [
+        {
+          "name": "migration_v445_app_access_schema",
+          "version": "20261102215958"
+        },
+        {
+          "name": "migration_v446_app_access_callers",
+          "version": "20261102220006"
+        },
+        {
+          "name": "app_access_ip_pre_request",
+          "version": "20261102220027"
+        },
+        {
+          "name": "app_access_desktop_admin",
+          "version": "20261102220028"
+        }
+      ],
+      "null_account_flags": 0,
+      "null_staff_flags": 0,
+      "policy_enabled": false,
+      "receipt_acl": {
+        "acl": "{postgres=arwdDxtm/postgres}",
+        "owner": "postgres",
+        "rls": true
+      },
+      "receipt_client_privileges": [
+        {
+          "delete": false,
+          "insert": false,
+          "role": "anon",
+          "select": false,
+          "update": false
+        },
+        {
+          "delete": false,
+          "insert": false,
+          "role": "authenticated",
+          "select": false,
+          "update": false
+        },
+        {
+          "delete": false,
+          "insert": false,
+          "role": "aka_agent_desktop",
+          "select": false,
+          "update": false
+        },
+        {
+          "delete": false,
+          "insert": false,
+          "role": "aka_agent_chat_api",
+          "select": false,
+          "update": false
+        }
+      ],
+      "receipt_statuses": [
+        {
+          "count": 4,
+          "status": "completed",
+          "target_type": "initialize"
+        }
+      ],
+      "staff_count": 1854
+    },
+    "legacyHelperSmoke": [
+      {
+        "legacy_role_smoke": "passed",
+        "organization_count": 1786,
+        "policy_enabled": false,
+        "roles": 2,
+        "sampled_accounts": 50,
+        "sampled_staff": 50
+      }
+    ]
+  },
+  "knownDeferredFindings": [
+    {
+      "priority": "P2",
+      "finding": "First-product-5 legacy duplicate identity can block QR relogin on the canonical binding.",
+      "reproduced": "local",
+      "fixed": false
+    },
+    {
+      "priority": "P2",
+      "finding": "Concurrent Chat re-enable and Server status projection can deadlock on reversed account/binding lock order.",
+      "reproduced": "local SQLSTATE 40P01",
+      "fixed": false
+    }
+  ],
+  "verificationLimits": [
+    "Management API cannot SET ROLE aka_agent_chat_api (42501); direct role smoke covered service_role and aka_agent_desktop. Chat API role ACL and helper metadata were verified; production application-session execution was not tested.",
+    "One MCP postflight read failed before receiving upstream headers. Retried read-only through the existing linked CLI successfully.",
+    "No HTTP/UI/provider production test, service deployment, real campaign/message, or installer release. Prior local source tests/builds were not rerun for this DB apply and documentation-only update."
+  ],
+  "privateEvidence": [
+    {
+      "file": "app_access_desktop_admin-apply.sql",
+      "sha256": "e096864f2b3b27cf05617989b4993226bede7f7965c1876701ef2c7a905555ae"
+    },
+    {
+      "file": "app_access_desktop_admin-recorded-apply.sql",
+      "sha256": "23a6238d6bd9c5fb1e7f93fb204e8e70ccba6f4a25e8b58e8db0a8035025260f"
+    },
+    {
+      "file": "app_access_desktop_admin-result.json",
+      "sha256": "11265b152eff54896d60deb9399c116d2c58585a94ff1b43d5fe70eacb508aa8"
+    },
+    {
+      "file": "app_access_desktop_admin-result.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "app_access_ip_pre_request-apply.sql",
+      "sha256": "04b3d9a8a07506bef46b53bb1bdad997cb9d89b34f91754e37e75de858b33e38"
+    },
+    {
+      "file": "app_access_ip_pre_request-recorded-apply.sql",
+      "sha256": "485d69929ba544839dbd2b47a185d063fe3ede5c41b98ea950e46241441a135d"
+    },
+    {
+      "file": "app_access_ip_pre_request-result.json",
+      "sha256": "8c7928a55d4d5659d587f75babbb00ba8676bb6255cef70f507de5840a84911c"
+    },
+    {
+      "file": "app_access_ip_pre_request-result.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "capture-functions.json",
+      "sha256": "07718c77070f771a7123986756bb77c5d403348f88afbbb0a32f65490b937f88"
+    },
+    {
+      "file": "capture-functions.sql",
+      "sha256": "6e8cc0311a52f638a5ed199540b062477a915b1f5437c858ad3594264426a215"
+    },
+    {
+      "file": "capture-functions.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "capture-rights.json",
+      "sha256": "6b9fddbc8933d1655ccbe467e747deca16ca8f6f3d2efb12575591b0bcb6c1b6"
+    },
+    {
+      "file": "capture-rights.sql",
+      "sha256": "2f5061554f48f6aa1785f358eea69f16da300a620e4b0b02e31a99602ec2e71d"
+    },
+    {
+      "file": "capture-rights.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "expected-source.json",
+      "sha256": "298615c5e5c8d5bfda154d1e18ff6fde391f29ea600c99e959ecac1c5e333b7f"
+    },
+    {
+      "file": "final-postcheck-result.json",
+      "sha256": "a075aa518e26b45e9bf3d59ee43799871281ec7ba2df2b215cb51ae3c0b93a35"
+    },
+    {
+      "file": "final-postcheck-result.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "final-postcheck.sql",
+      "sha256": "8cf51d678559734a12867ea6a3b42a760874f21a1685a1b146d97aed06209616"
+    },
+    {
+      "file": "legacy-role-smoke-three-role-attempt.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "legacy-role-smoke-three-role-attempt.sql",
+      "sha256": "a21e12750d687050d3c49e7ceaee4cd05d4c0ee6cd88cb813054030cba1d862c"
+    },
+    {
+      "file": "legacy-role-smoke-three-role-attempt.stderr",
+      "sha256": "c0281bc94f8ac3505225cc654dd1d9248fa6b1e9b6e16bf56f4e87af152b56fa"
+    },
+    {
+      "file": "legacy-role-smoke.json",
+      "sha256": "871f9192e8ae5d5a4824cc3c1ed03900ccfdd91dadbc5ed6dc0e6fdf927be8b7"
+    },
+    {
+      "file": "legacy-role-smoke.sql",
+      "sha256": "e907abe61761f51bf71579a8516d824cbc0c80d2dad1df13494abf07b8b90329"
+    },
+    {
+      "file": "legacy-role-smoke.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "migration_v445_app_access_schema-apply.sql",
+      "sha256": "994659bd185c09b36cbd811e2dbbc1dc106bfe7261d7aeacb754b6b8eacb37fb"
+    },
+    {
+      "file": "migration_v446_app_access_callers-apply.sql",
+      "sha256": "06edaf907042d216cd8f354449dd65fbe784cfb2133b4623fb962ad0c7c05991"
+    },
+    {
+      "file": "post-apply-summary.json",
+      "sha256": "a0da2e6fcf96a80e30ba9236ffd1f729268ca6bf7d5645f941dc7bbb70dd5e86"
+    },
+    {
+      "file": "post-apply-summary.sql",
+      "sha256": "7ca055e210fb3e565e9fc989e194702dd491b678f01021d4547c576e431a7ae6"
+    },
+    {
+      "file": "post-apply-summary.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "stages.json",
+      "sha256": "9cee7486d9b709740da6015b36de6640edb883873a124d098be4642534fb1874"
+    },
+    {
+      "file": "trial.json",
+      "sha256": "02209b5a9c3b6d48a434415548824e1b03f2a2d07b9708179b3c57fd3d1141ea"
+    },
+    {
+      "file": "trial.sql",
+      "sha256": "33d5d0d07b2afe86d039a080fa9ae35645bdc5d1b21d17a3fba7b7a527aa8777"
+    },
+    {
+      "file": "trial.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    }
+  ],
+  "nextStep": "Deploy compatible backend/runtime/worker and UI/Desktop, verify instances, then consider V447 under a separate rollout instruction. Do not reapply the four completed stages."
+}

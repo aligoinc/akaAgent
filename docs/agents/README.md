@@ -8,6 +8,7 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 
 | Phạm vi task / đường dẫn | Tài liệu cần đọc |
 | --- | --- |
+| Tách quyền akaAgent/akaChat, product 5, quota riêng, local reader, app_access | [Hợp đồng V445–V447](../APP_ACCESS_SPLIT.md); [audit: V445/V446 + auth đã apply, V447 tắt, chưa deploy](../audits/app-access-split/README.md) |
 | DB, RPC, RLS, auth, quyền hoặc rollout | [CURRENT_STATE](CURRENT_STATE.md); [connection](reference/database-01.md); [RPC/migration](reference/database-02.md); skill RPC trong AGENTS.md |
 | Token, staff, device recovery, AI key, credentials | [CURRENT_STATE](CURRENT_STATE.md); [phạm vi credential và ngoại lệ SMS](CLIENT_CONTRACTS.md#sms-credentials); [data/auth/AI](reference/data-auth-ai-01.md); [Desktop token](../DESKTOP_SESSION_RLS.md); [device v3](../DEVICE_IDENTITY_V3.md); [AI proxy](../DESKTOP_AI_PROXY.md) |
 | Quyền account/campaign hoặc chia sẻ nhóm | [ownership](../DESKTOP_ACCOUNT_CAMPAIGN_OWNERSHIP.md); [staff privacy](../DESKTOP_STAFF_SELF_ACCESS.md); [sharing revoke](../GROUP_SHARING_REVOKE_OWNERSHIP.md); [Data Group sharing](../GROUP_SHARING_V409.md) |
