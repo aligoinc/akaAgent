@@ -3486,6 +3486,43 @@ export async function getPendingCampaigns(accountId: number, dbNow: string): Pro
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
+/** Complete AI candidate inventory; the manual scheduler's existing read stays unchanged. */
+export async function getPendingCampaignsForRandomAi(accountId: number, dbNow: string): Promise<Array<Campaign & {
+  randomRunInput: { any: boolean; due: boolean }
+}>> {
+  const u = requireCurrentUser(), now = parseDatabaseNow(dbNow)
+  const currentVietnamTime = formatVietnamTimeForQuery(now)
+  if (currentVietnamTime >= '23:59:00') return []
+  const campaigns: Array<Campaign & { randomRunInput: { any: boolean; due: boolean } }> = []
+  let afterId = 0
+  for (;;) {
+    // Left embeds keep campaigns with no data (newsfeed/timeline/suggested friends).
+    // Each embed returns at most one ID, regardless of the campaign's data size.
+    const { data, error } = await client().from('auto_campaigns').select(`
+      id,name,account_id,staff_id,organization_id,action_id,status,is_delete,schedule,
+      daily_stop_time,schedule_end_date,data_target_source_mode,extra_settings,
+      random_any_input:auto_campaign_input_data!auto_campaign_input_data_campaign_id_fkey(id),
+      random_due_input:auto_campaign_input_data!auto_campaign_input_data_campaign_id_fkey(id)
+    `)
+      .eq('account_id', accountId).eq('staff_id', u.staffId).eq('organization_id', u.organizationId)
+      .eq('status', 'chờ xử lý').eq('is_delete', false).eq('provisioning_state', 'ready')
+      .like('action_id', 'facebook_%').lte('schedule', now.toISOString())
+      .or(`daily_stop_time.is.null,daily_stop_time.gt.${currentVietnamTime}`)
+      .eq('random_any_input.is_delete', false).limit(1, { referencedTable: 'random_any_input' })
+      .eq('random_due_input.is_delete', false).eq('random_due_input.status', 'chờ xử lý')
+      .or(`schedule.is.null,schedule.lte.${now.toISOString()}`, { referencedTable: 'random_due_input' })
+      .limit(1, { referencedTable: 'random_due_input' })
+      .gt('id', afterId).order('id').limit(500)
+    if (error) throw new Error('Không tải được đầy đủ chiến dịch chạy ngẫu nhiên.')
+    if (!data?.length) break
+    campaigns.push(...data.map(row => ({ ...mapCampaignFromDB(row), randomRunInput: {
+      any: row.random_any_input.length > 0, due: row.random_due_input.length > 0
+    } })))
+    afterId = Number(data[data.length - 1].id)
+  }
+  return campaigns
+}
+
 export async function getDueMobileManagedCampaignsForLimitCheck(
   accountId: number,
   dbNow: string

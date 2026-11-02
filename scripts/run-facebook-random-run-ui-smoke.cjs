@@ -82,7 +82,7 @@ async function main(){
   assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1)),{version:1,revision:9,rules:[
     {campaignActionId:'facebook_timeline_post',quantity:1,unit:'run'},{campaignActionId:'facebook_newsfeed_interaction',quantity:5,unit:'minute'}]})
 
-  for(const broken of [{version:1,rules:[]},{version:1,revision:-1,rules:[]},{version:1,revision:'7',rules:[]},{version:2,revision:7,rules:[]},[],false]){
+  for(const broken of [{version:1,rules:[]},{version:1,revision:-1,rules:[]},{version:1,revision:'7',rules:[]},{version:3,revision:7,rules:[]},[],false]){
     await openConfig(broken);await page.getByRole('alert').waitFor();assert.equal(await saveConfig().isDisabled(),true)
     assert.equal(await page.locator('tbody tr').count(),0);await closeConfig()
   }
@@ -98,6 +98,82 @@ async function main(){
   await page.evaluate(()=>window.randomUi.state.badSaveResponse=false);await closeConfig()
   assert.deepEqual(await page.evaluate(()=>window.randomUi.state.toggles),[])
   console.log('PASS malformed rules/null rows repair, valid order and duplicates retained, original revision/CAS, unsupported revisions blocked, bad reload/save responses safe; no automatic save/toggle')
+
+  // Advanced mode hides manual controls and restores exactly the same draft.
+  await openConfig({version:1,revision:12,rules:[{campaignActionId:'facebook_group_post',quantity:7,unit:'data'}]})
+  await page.getByLabel('Chạy ngẫu nhiên nâng cao (dùng AI)',{exact:true}).check()
+  assert.equal(await page.getByLabel('Chỉ tiêu dòng 1').count(),0)
+  await page.getByLabel('Chạy ngẫu nhiên nâng cao (dùng AI)',{exact:true}).uncheck()
+  assert.equal(await page.getByLabel('Chỉ tiêu dòng 1').inputValue(),'7')
+  await page.getByLabel('Chạy ngẫu nhiên nâng cao (dùng AI)',{exact:true}).check()
+  await page.screenshot({path:join(screenshots,'ai-configuration.png')})
+  await saveConfig().click();await page.getByRole('dialog').waitFor({state:'detached'})
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1)),{version:2,mode:'ai',revision:12,rules:[{campaignActionId:'facebook_group_post',quantity:7,unit:'data'}]})
+  await openConfig(null);await page.getByLabel('Chạy ngẫu nhiên nâng cao (dùng AI)',{exact:true}).check()
+  await saveConfig().click();await page.getByRole('dialog').waitFor({state:'detached'})
+  assert.deepEqual(await page.evaluate(()=>window.randomUi.state.saves.at(-1).rules),[])
+
+  // A save that is still refreshing accounts must not close a newly opened draft.
+  await openConfig({version:2,mode:'ai',revision:13,rules:[]})
+  await page.evaluate(()=>window.randomUi.state.holdAccounts=true)
+  await saveConfig().click()
+  await page.waitForFunction(()=>window.randomUi.state.pendingAccounts?.length===1)
+  await closeConfig()
+  await openConfig({version:1,revision:14,rules:[{campaignActionId:'facebook_group_post',quantity:9,unit:'data'}]})
+  await page.getByLabel('Chỉ tiêu dòng 1').fill('11')
+  await page.evaluate(()=>{window.randomUi.state.holdAccounts=false;window.randomUi.state.pendingAccounts.splice(0).forEach(resolve=>resolve())})
+  await page.waitForTimeout(50)
+  assert.equal(await page.getByRole('dialog').count(),1,'stale save must not close the reopened modal')
+  assert.equal(await page.getByLabel('Chỉ tiêu dòng 1').inputValue(),'11')
+  await closeConfig()
+
+  // Changing the view while a history page loads must release its busy state.
+  await page.evaluate(()=>{
+    window.randomUi.state.datesOverride=Array.from({length:100},(_,i)=>new Date(Date.UTC(2026,9,30-i)).toISOString().slice(0,10))
+    window.randomUi.state.holdDates=true;window.randomUi.show('plan')
+  })
+  await page.getByRole('button',{name:'Làm mới',exact:true}).click()
+  await page.getByRole('button',{name:'Ngày cũ hơn',exact:true}).click()
+  await page.waitForFunction(()=>window.randomUi.state.pendingDates?.length===1)
+  await page.getByLabel('Ngày có lịch sử').selectOption('2026-10-29')
+  await page.waitForFunction(()=>window.randomUi.state.reads.at(-1).date==='2026-10-29')
+  await page.evaluate(()=>{window.randomUi.state.holdDates=false;window.randomUi.state.pendingDates.splice(0).forEach(resolve=>resolve())})
+  await page.waitForTimeout(50)
+  assert.equal(await page.getByRole('button',{name:'Ngày cũ hơn',exact:true}).isEnabled(),true)
+  assert.equal(await page.getByLabel('Ngày có lịch sử').locator('option[value="2025-01-01"]').count(),0,'stale history page must be discarded')
+  await page.getByRole('button',{name:'Ngày cũ hơn',exact:true}).click()
+  await page.getByLabel('Ngày có lịch sử').locator('option[value="2025-01-01"]').waitFor({state:'attached'})
+  await page.evaluate(()=>{delete window.randomUi.state.datesOverride;window.randomUi.show('config')})
+  await page.getByRole('dialog').waitFor();await closeConfig()
+  console.log('PASS pending save and history-page responses cannot close a fresh draft or leave history stuck')
+  await page.evaluate(()=>{
+    window.randomUi.show('plan')
+    const actions=[['facebook_message_uid','Nhắn tin','data',2],['facebook_group_post','Đăng nhóm','data',3],['facebook_newsfeed_interaction','Newsfeed','minute',0],['facebook_timeline_post','Trang cá nhân','run',0]].map(([campaignActionId,name,unit,waitingCount])=>({campaignActionId,name,unit,waitingCount,pausedCount:0}))
+    const rules=[[0,5],[1,3],[1,5],[0,7],[1,2],[2,10],[3,1]].map(([i,quantity])=>({campaignActionId:actions[i].campaignActionId,quantity,unit:actions[i].unit}))
+    window.randomUi.state.aiOverride={aiMode:true,canRetryAi:false,ai:{status:'ready',requestId:'plan',attempts:1,context:{actions},rules},allocation:{cursor:2,cycle:1,coverageRound:3,servedCount:2,availableActionIds:['facebook_message_uid','facebook_group_post']},activeTurn:{aiPlanId:'plan',ruleIndex:1,planCycle:1}}
+    window.randomUi.tick()
+  })
+  const aiPanel=page.getByRole('region',{name:'Kế hoạch AI',exact:true})
+  await aiPanel.getByText('Vòng phân lượt 3',{exact:false}).waitFor()
+  assert.equal(await aiPanel.locator('tbody tr').count(),7)
+  assert.deepEqual(await aiPanel.locator('tbody tr td:nth-child(3)').allTextContents(),['5 data','3 data','5 data','7 data','2 data','10 phút','1 lượt'])
+  assert.equal(await aiPanel.locator('[aria-current="step"]').count(),1)
+  assert.equal(await aiPanel.getByText('Bỏ qua ngay khi không có chiến dịch đủ điều kiện',{exact:true}).count(),2)
+  await page.screenshot({path:join(screenshots,'ai-plan.png')})
+  await page.evaluate(()=>{window.randomUi.state.aiOverride.ai.status='failed';window.randomUi.state.aiOverride.ai.error='Ngày chạy đã kết thúc, chưa có kế hoạch AI.';window.randomUi.tick()})
+  await aiPanel.getByText('Ngày chạy đã kết thúc, chưa có kế hoạch AI.',{exact:true}).waitFor()
+  assert.equal(await page.getByRole('button',{name:'Thử lại AI',exact:true}).count(),0)
+  assert.equal(await aiPanel.getByText(/Bấm Thử lại AI/).count(),0,'history/disabled mode must not advertise an unavailable retry')
+  await page.evaluate(()=>{window.randomUi.state.aiOverride.ai.error='Yêu cầu AI đã hết thời gian chờ.';window.randomUi.state.aiOverride.canRetryAi=true;window.randomUi.tick()})
+  await page.getByRole('button',{name:'Thử lại AI',exact:true}).waitFor()
+  await page.getByRole('button',{name:'Làm mới',exact:true}).click()
+  assert.equal(await page.evaluate(()=>window.randomUi.state.retries||0),0)
+  await page.getByRole('button',{name:'Thử lại AI',exact:true}).dblclick()
+  await aiPanel.getByText(/Thử lại khi đến lượt scheduler/).waitFor()
+  assert.equal(await page.evaluate(()=>window.randomUi.state.retries),1)
+  await page.evaluate(()=>{delete window.randomUi.state.aiOverride;delete window.randomUi.state.configOverride;window.randomUi.tick()})
+  await aiPanel.waitFor({state:'detached'})
+  console.log('PASS AI UI: manual draft restoration, empty manual config, repeated rows with distinct quantities, active row, reserve skip, retry only by explicit button')
 
   // Exercise the actual account-plan request path in CampaignPanel, without Facebook or DB I/O.
   await page.evaluate(()=>window.randomUi.show('integration'))

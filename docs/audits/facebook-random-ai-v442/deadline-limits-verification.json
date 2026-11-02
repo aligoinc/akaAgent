@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-11-02T14:42:18.290Z",
+  "branch": "codex/facebook-random-ai",
+  "base": "37e68ef5013f4dce9f7e68e88ed0b0694cee48d2",
+  "scope": "Fix AI planning deadline and legacy campaign limit summaries",
+  "production": {
+    "reads": 0,
+    "mutations": 0,
+    "applied": false,
+    "providerCalls": 0,
+    "facebookOperations": 0
+  },
+  "migration": {
+    "changedInThisFix": false,
+    "sha256": "29af898e57ed0a98de8b5789646b902d187db48bef63b27f3401a8ff8f014bb2",
+    "reference": "../../../migrations/snapshots/facebook-random-ai/overall-review-verification.json"
+  },
+  "local": {
+    "resilience": "pass",
+    "limitsParityCases": 8,
+    "deadlineCancellationCases": 11,
+    "pausedAndPrivacy": "pass",
+    "lateResultsRejected": "pass",
+    "localControllerReleased": "pass",
+    "clock": "controlled 120000 ms; real service/runtime/deadline with stubbed I/O",
+    "aiRuntimeChecks": 36,
+    "aiPreflight": "pass",
+    "manualRuntimeChecks": 30,
+    "sqlChecks": 110,
+    "sqlRollbackTrial": "pass",
+    "nodeTypecheck": "pass",
+    "webTypecheck": "pass",
+    "productionBuild": "pass",
+    "buildSeconds": {
+      "main": 1.51,
+      "preload": 0.057,
+      "renderer": 22.22
+    },
+    "buildWarnings": "existing static/dynamic import warnings",
+    "ui": "unchanged; prior UI smoke retained separately"
+  },
+  "files": {
+    "src/main/services/facebookRandomAiService.ts": "fbd770664b1bd3dc84f8ede111f0f0cb31035a4bf7b907734eb2854136039853",
+    "src/main/services/requestDeadline.ts": "83e8a0f3487e5bbbabb61c97a8f0b963f9f0bff74ee53c7e731ddfd87a49d521",
+    "src/main/services/aiRuntimeService.ts": "ea5a0df0f22efc468f07b791a275921e12886a506b45a5243ec255d36761dbbb",
+    "scripts/facebook-random-ai-runtime-smoke.cjs": "4550e2784a622d6aa9c8c3e46573463aa8d3edbc6927061dad08eb07f31ec2b7",
+    "scripts/facebook-random-ai-resilience-smoke.cjs": "10084c592efa31b749a7a4ec3fcdb320e1fea564749cf8aa56a7837c65c23f23"
+  },
+  "limits": [
+    "No real provider/Facebook calls",
+    "No production HTTP or multi-Desktop canary",
+    "No installer packaging, upload or release"
+  ]
+}

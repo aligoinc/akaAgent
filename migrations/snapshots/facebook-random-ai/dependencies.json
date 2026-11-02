@@ -1,0 +1,26 @@
+[
+  {
+    "signature": "private.aka_agent_assert_request_ownership(p_staff_id bigint, p_account_id bigint, p_campaign_id bigint)",
+    "definition": "CREATE OR REPLACE FUNCTION private.aka_agent_assert_request_ownership(p_staff_id bigint DEFAULT NULL::bigint, p_account_id bigint DEFAULT NULL::bigint, p_campaign_id bigint DEFAULT NULL::bigint)\n RETURNS boolean\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE v_staff bigint := private.aka_agent_staff_scope_for_request();\nBEGIN\n IF v_staff IS NULL THEN RETURN true; END IF;\n IF v_staff <= 0 OR (p_staff_id IS NOT NULL AND p_staff_id IS DISTINCT FROM v_staff) THEN\n   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_staff_scope_denied';\n END IF;\n -- Preserve each caller's existing not-found/cleanup semantics.\n IF p_account_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_accounts WHERE id=p_account_id AND staff_id IS DISTINCT FROM v_staff) THEN\n   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_account_scope_denied'; END IF;\n IF p_campaign_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_campaigns WHERE id=p_campaign_id AND staff_id IS DISTINCT FROM v_staff) THEN\n   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_campaign_scope_denied'; END IF;\n RETURN true;\nEND;\n$function$\n",
+    "checksum": "31494192d0a18efeafa4fb0296008230",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "security_definer": true,
+    "volatility": "s"
+  },
+  {
+    "signature": "private.campaign_dispatch_schedule_allowed(p_schedule timestamp with time zone, p_source_mode text, p_schedule_end_date timestamp with time zone, p_daily_stop_time time without time zone, p_now timestamp with time zone, p_legacy_cutoff boolean)",
+    "definition": "CREATE OR REPLACE FUNCTION private.campaign_dispatch_schedule_allowed(p_schedule timestamp with time zone, p_source_mode text, p_schedule_end_date timestamp with time zone, p_daily_stop_time time without time zone, p_now timestamp with time zone, p_legacy_cutoff boolean)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\n SET search_path TO 'pg_catalog'\nAS $function$\n  SELECT p_schedule IS NOT NULL AND p_schedule <= p_now\n    AND (p_source_mode IS DISTINCT FROM 'data_group'\n      OR p_schedule_end_date IS NULL OR p_schedule_end_date > p_now)\n    AND CASE WHEN p_legacy_cutoff THEN\n      -- Preserve the checked/legacy RPC's strict cutoff and nullable stop time.\n      -- The v2 wrapper still enforces its inclusive 23:59/day boundary itself.\n      p_daily_stop_time IS NULL OR timezone('Asia/Ho_Chi_Minh', p_now)::time <= p_daily_stop_time\n    ELSE\n      timezone('Asia/Ho_Chi_Minh', p_now)::time < least(coalesce(p_daily_stop_time, time '23:59'), time '23:59')\n    END\n$function$\n",
+    "checksum": "e5789c4bc40cd46f6dc0417097bd2723",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "security_definer": false,
+    "volatility": "i"
+  }
+]

@@ -555,6 +555,7 @@ const electronAPI = {
     }
   },
   facebookRandomRun: {
+    retryAi: (accountId: number): Promise<void> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'retryAi', accountId),
     get: (accountId: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'get', accountId),
     save: (accountId: number, config: FacebookRandomConfig): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'save', accountId, config),
     toggle: (accountId: number, enabled: boolean, revision: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'toggle', accountId, { enabled, revision }),

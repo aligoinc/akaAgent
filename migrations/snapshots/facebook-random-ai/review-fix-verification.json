@@ -1,0 +1,98 @@
+{
+  "checkedAt": "2026-11-02T12:24:17.596Z",
+  "branch": "codex/facebook-random-ai",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migrationSha256": "298bb561f2507d3bdca94c2b75c607dc6876ebbdccecfaf9a535a16ae9fb53d1",
+  "supersedesTargetChecksumsIn": "verification.json",
+  "production": {
+    "mutations": 0,
+    "liveFunctionsRechecked": 10,
+    "exactSourceAndMetadataUnchanged": true,
+    "applied": false
+  },
+  "local": {
+    "nodeTypecheck": "pass",
+    "webTypecheck": "pass",
+    "productionBuild": "pass",
+    "sql": "pass",
+    "sqlChecks": 75,
+    "rollbackTrial": true,
+    "postcheck": true,
+    "guardedRollback": true,
+    "runtime": "pass",
+    "runtimeChecks": 36,
+    "preflightTransport": "local HTTP adapter; pass",
+    "candidatePaging": 1202,
+    "pendingInputAfterCompletedRows": 10000,
+    "preUnitStopRotation": "planned and release-finalized; pass",
+    "lateQuotaAndCatalog": "pass",
+    "manualRuntimeChecks": 30,
+    "stopReasonCases": 4,
+    "diagnostics": "pass",
+    "zaloPolicyDaysAtTime": "pass",
+    "preflightReadComparison": {
+      "campaigns": 20,
+      "turns": 20,
+      "fullInputReads": {
+        "before": 420,
+        "after": 20
+      },
+      "actionReads": {
+        "before": 420,
+        "after": 40
+      }
+    },
+    "buildSeconds": {
+      "main": 1.67,
+      "preload": 0.054,
+      "renderer": 22.31
+    }
+  },
+  "functions": [
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "sourceMd5": "3c2caab8b949a640b4bdc3a61642ef31",
+      "targetMd5": "8f45af2dc0018c9ef8a87644dcd22a89",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ]
+    },
+    {
+      "signature": "private.facebook_random_ai_rules_valid(jsonb,jsonb)",
+      "sourceMd5": null,
+      "targetMd5": "795238d7689ad9efae3515cf156bdcb7",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "securityDefiner": false,
+      "volatility": "i",
+      "config": [
+        "search_path=pg_catalog"
+      ]
+    },
+    {
+      "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "sourceMd5": "462463fb5676836150ff146a5f070d84",
+      "targetMd5": "1213d2bf20c62cd52226e32da4d80887",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    }
+  ],
+  "limitations": [
+    "PGlite sequential transactions, not two real Desktop instances",
+    "HTTP transport adapter does not exercise production PostgREST",
+    "No real provider or Facebook call",
+    "No UI changes in this fix; initial UI smoke retained separately",
+    "No installer packaging, upload or release"
+  ]
+}

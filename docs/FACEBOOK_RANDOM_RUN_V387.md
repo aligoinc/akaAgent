@@ -6,6 +6,8 @@ V387 đã apply trên **akachat** (`cgjbsmqtfhqvttudyjzq`) lúc 15:20 ngày 14/1
 
 ## Sử dụng
 
+Bổ sung: [chế độ AI V444](FACEBOOK_RANDOM_AI_V442.md), giữ cấu hình và hành vi thủ công bên dưới. V444 đã apply production ngày 02/11/2026; app dev đã mở để test, chưa đóng gói/phát hành. Xem receipt và giới hạn kiểm chứng trong audit riêng; không apply lại.
+
 Menu tài khoản Facebook có **Chạy ngẫu nhiên / Dừng chạy ngẫu nhiên**, **Cài đặt chạy ngẫu nhiên**, **Xem tiến trình chạy ngẫu nhiên**. Bật thành công hiện nhãn **Chạy ngẫu nhiên**; nhãn thể hiện chế độ, kể cả khi đang chờ lịch/data. Bật không tự đăng nhập hoặc tiếp tục tài khoản tạm dừng. Chưa có cấu hình thì mở form và lưu trước khi bật.
 
 Form chọn **loại chiến dịch**, không chọn chiến dịch cụ thể. Người dùng chỉ sửa bằng bảng, dùng nút **Thêm loại chiến dịch**, xóa/đổi thứ tự và lặp loại. Không có tab hoặc trình sửa JSON; chỉ tiêu đầu vào hiển thị đơn vị **data**. Danh mục lấy từ catalog Facebook đang hoạt động, đã lọc quyền sản phẩm. Từ 1 đến 100 dòng; số lượng/phút nguyên dương (tối đa số nguyên PostgreSQL). Revision được quản lý nội bộ: DB tăng sau khi lưu, request giữ revision cũ để chống ghi đè thay đổi từ máy khác; vẫn có nút **Tải lại** khi xung đột.

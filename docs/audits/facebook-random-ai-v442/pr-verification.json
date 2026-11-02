@@ -1,0 +1,177 @@
+{
+  "verifiedAtUtc": "2026-11-02T16:25:42.660Z",
+  "branch": "codex/facebook-random-ai",
+  "base": "dev_3",
+  "baseHead": "37e68ef5013f4dce9f7e68e88ed0b0694cee48d2",
+  "typecheck": {
+    "node": "PASS",
+    "web": "PASS"
+  },
+  "build": {
+    "result": "PASS",
+    "log": "/tmp/facebook-random-ai-pr-build.log",
+    "mainSeconds": 2.04,
+    "preloadSeconds": 0.06,
+    "rendererSeconds": 23.25,
+    "outputBytes": {
+      "main": 3178073,
+      "preload": 66734,
+      "renderer": 35592876
+    },
+    "installerCreated": false
+  },
+  "smoke": {
+    "aiRuntimeChecks": 36,
+    "aiInventory": "PASS: 1201/1202 pagination and transport/input quota rechecks",
+    "aiLimitParityCases": 8,
+    "aiDeadlineCancellationCases": 11,
+    "aiSqlChecks": 110,
+    "ordinaryLifecycleParityCases": 6,
+    "matchingManualAiCases": 2,
+    "manualRuntimeChecks": 30,
+    "campaignDiagnostics": "PASS",
+    "ui": "PASS: actual Electron renderer fixture; no network; screenshots /tmp/facebook-random-ai-pr-ui",
+    "productionBusinessWrites": 0,
+    "providerOrFacebookCalls": 0
+  },
+  "liveReadOnlyVerification": {
+    "checkedAt": "2026-11-02T16:23:03.422Z",
+    "projectRef": "cgjbsmqtfhqvttudyjzq",
+    "functions": [
+      {
+        "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+        "md5": "4f9873daff8efc4d85e36b9c683d1e6f",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=30s"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_ai_rules_valid(jsonb,jsonb)",
+        "md5": "795238d7689ad9efae3515cf156bdcb7",
+        "owner": "postgres",
+        "prosecdef": false,
+        "provolatile": "i",
+        "proconfig": [
+          "search_path=pg_catalog"
+        ],
+        "proacl": "{postgres=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)",
+        "md5": "4fa056905d4fb0c264053748546f5461",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "s",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_finalize_on_release()",
+        "md5": "3c2bbb2182f0b293361b02c5efcbfd2a",
+        "owner": "postgres",
+        "prosecdef": false,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+        "md5": "a2a5e8b256010056498af554b2ad0bb8",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_orphan_turns(bigint,bigint)",
+        "md5": "2f00a8a9d3465e535332f1e97f0946b2",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "s",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+        "md5": "50295fe0c805a2f215613182cec5b576",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "s",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+        "md5": "379ec95f37086654c316847ce7e16ee6",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+        "md5": "582c96e29079dc70bb706da1f4a08849",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+        "md5": "c867e990c73a78b5ce5fbdb72634a78c",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      },
+      {
+        "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+        "md5": "4e2a6f8bd7ddddb0b60448b281c6f04f",
+        "owner": "postgres",
+        "prosecdef": true,
+        "provolatile": "v",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+      }
+    ],
+    "mismatches": []
+  },
+  "docs": {
+    "links": "PASS",
+    "diffWhitespace": "PASS with one documented exception: migration_v444_facebook_random_ai.sql contains one terminal blank line after COMMIT. Keep exact deployed bytes and apply SHA256; all other whitespace checks pass.",
+    "jsonParsing": "PASS",
+    "appliedSqlSha256": "4564db54b777551d1ee95723ed31d71b11bd5c987d34c94874883f9e77478bf9",
+    "historicalReceiptsPreserved": true
+  },
+  "limitations": [
+    "Production RPCs were read and compared only; V444 was not reapplied.",
+    "No installer release, real AI/Facebook canary, or production CPU benchmark in PR preparation."
+  ]
+}
