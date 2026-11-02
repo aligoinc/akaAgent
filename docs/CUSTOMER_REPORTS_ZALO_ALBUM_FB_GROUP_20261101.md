@@ -1,7 +1,11 @@
 # Điều tra khiếu nại 01/11/2026: Zalo "chỉ có ảnh", đăng nhóm Facebook "chập chờn"
 
-Chỉ là điều tra: đọc production **akachat — `cgjbsmqtfhqvttudyjzq`** và code, không
-sửa DB/code/element. Mọi số liệu là truy vấn chỉ đọc ngày 01/11/2026 (giờ VN).
+Phần điều tra ban đầu chỉ đọc production **akachat — `cgjbsmqtfhqvttudyjzq`** và code.
+Ngày 01–02/11/2026 đã cập nhật XPath của năm element 13/1489/1692/1691/1132
+theo yêu cầu người dùng; ba element mở bình luận có lần bổ sung nhãn tiếng Việt
+ngày 02/11. Chi tiết trước/sau và receipt ở mục B. Số liệu điều tra là truy vấn
+chỉ đọc, ghi rõ thời điểm chốt theo giờ VN tại từng lần kiểm tra. SQL trong audit
+ghi lại các thay đổi đã áp dụng; không chạy lại khi merge tài liệu này.
 Hai khiếu nại là **ba lỗi khác nhau**:
 
 | # | Khách | Lỗi | Phạm vi | Mới/cũ |
@@ -224,9 +228,265 @@ Block `fb_comment_at_position` (id 34) chờ element `fb_comment_box_at_n` (id 1
 chỉ mất comment (thường chứa SĐT). Detail comment là `thất bại` nên vẫn tính quota
 action Comment theo hợp đồng rate limit.
 
-**Hướng xử lý:** sửa XPath `auto_elements` id 13 (và 14) — DB-only, mọi client nhận ở
-lượt chạy sau. **Selector mới chưa xác minh**: phải đo DOM trên tài khoản Facebook
-thật (Test block), capture row live trước khi sửa theo AGENTS.md; không đoán selector.
+**Cập nhật 01/11/2026, 13:14:37 VN:** người dùng cung cấp XPath và yêu cầu sửa riêng
+element 13 `fb_comment_box_at_n`. Đã thêm đúng `or contains(@aria-label,'Comment')`
+vào điều kiện của nhánh `//div`; giữ nguyên mọi phần khác, kể cả `${n}`. Element 14
+và 1517, toàn bộ block/workflow giữ nguyên checksum. Thay đổi này thay thế đề xuất
+ban đầu sửa cả 13/14. [Receipt và phạm vi hậu kiểm](audits/facebook-comment-box-xpath-20261101/receipt.json),
+[capture trước](audits/facebook-comment-box-xpath-20261101/before.json),
+[capture sau](audits/facebook-comment-box-xpath-20261101/after.json),
+[SQL có checksum guard](audits/facebook-comment-box-xpath-20261101/apply.sql),
+[rollback thủ công có guard](audits/facebook-comment-box-xpath-20261101/rollback.sql).
+
+Đã thử transaction kết thúc ROLLBACK, xác nhận catalog trở về bản trước, rồi apply
+và đọc lại XPath khớp chính xác yêu cầu. Không sửa RPC/schema/quyền, không reload
+PostgREST, không build/deploy app và chưa chạy comment thật để xác nhận hiệu quả.
+
+**Đính chính cache:** cập nhật DB không tự làm process đang mở nạp lại element ở
+lượt chạy kế tiếp. Cần thoát hẳn app rồi mở lại hoặc invalidation qua
+`elementV2Repository`. Element 1517 vẫn có 133 lượt comment trực tiếp bài post
+thành công trong kiểm tra đến 12:55; timeout tại element này không chứng minh XPath
+sai nếu chưa xác nhận dialog đã mở. Giữ nguyên element 1517 theo quyết định người dùng.
+
+**Cập nhật tiếp 01/11/2026, 13:31:54 VN:** đã cập nhật thêm hai element theo đúng
+XPath người dùng cung cấp, trong cùng một transaction:
+
+- 1692 `fb_newsfeed_comment_button`:
+  `.//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]`.
+- 1489 `fb_comment_in_post_btn`:
+  `.//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment'))]`.
+
+Mẫu tương thích được người dùng chỉ định là giữ điều kiện cũ và bổ sung nhận diện
+`aria-label` chứa `Comment`, khi text hiển thị hoặc nhãn chính xác cũ không khớp.
+Giữ nguyên XPath tương đối `.//`, `role='button'`, parent/root của từng luồng,
+block/workflow, element 13 đã sửa trước đó và các ô nhập 1517/1694. Không áp dụng
+thay thế hàng loạt cho selector khác từ suy luận này.
+
+Rà soát trước sửa: 1692 được block 2707/2708 dùng trong workflow newsfeed 238/254;
+log hôm nay có 165 bước mở comment trả `Không tìm thấy nút Bình luận` trên 28
+chiến dịch. Element 1489 được block 2603/2719 dùng trong luồng quét comment
+group/search. Element 14 giữ XPath cũ nhưng không thấy tham chiếu trong block,
+workflow hoặc source hiện tại. Parent newsfeed là bài đang đánh dấu trong DOM;
+parent group dùng element 1485, search dùng element 1708 (có fallback hiện hữu).
+
+[Receipt](audits/facebook-comment-buttons-xpath-20261101/receipt.json),
+[capture trước](audits/facebook-comment-buttons-xpath-20261101/before.json),
+[capture sau](audits/facebook-comment-buttons-xpath-20261101/after.json),
+[SQL có checksum guard](audits/facebook-comment-buttons-xpath-20261101/apply.sql),
+[rollback thủ công có guard](audits/facebook-comment-buttons-xpath-20261101/rollback.sql).
+Trial ROLLBACK, kiểm tra phục hồi và hậu kiểm XPath chính xác đều đạt; checksum
+các element còn lại, block và workflow giữ nguyên. Chưa chạy Facebook thật;
+vẫn cần khởi động lại app đang mở để nạp cache. Không reload PostgREST/build/deploy.
+
+**Rà soát tiếp sau cập nhật (chỉ đọc, 01/11/2026):** đã rà 138 element Facebook,
+code block, config workflow và log liên quan hôm nay; [bằng chứng và phạm vi](audits/facebook-comment-buttons-xpath-20261101/followup-review.json).
+Element 1691 `fb_newsfeed_like_button` còn dùng
+`.//*[@role='button' and .='Thích']`: 462 bước không tìm thấy nút trên 28 chiến dịch,
+13 bước báo `liked=true`; ưu tiên kiểm tra DOM/root và nhãn thực tế trước sửa.
+Không suy ra XPath Like/Share mới chỉ từ thay đổi nhãn Comment.
+
+Block 2717/2719 có nhánh dự phòng nhận diện khung bài qua `innerText/textContent`
+chứa Bình luận/Comment/Chia sẻ/Share, nên cần xem lại nếu giao diện chỉ còn nhãn
+aria. Nhánh này chỉ chạy khi selector khung bài chính không tìm được; chưa có lượt
+chạy của hai block trong cửa sổ hôm nay đã truy vấn. Fallback nút của 2719 còn so
+chữ tuyệt đối, nhưng nhánh chính đã dùng element 1489 mới. Chưa sửa thêm block.
+
+Element 1517/1693/1694 đã dùng `contains(@aria-label,...)`, giữ nguyên. Không thấy
+consumer hiện tại cho 14/1456/1496/1695. Riêng tên 1695 trùng `blockName` trong
+workflow, không phải tham chiếu element: block 2710 gửi bằng Enter. Không sửa
+element không được sử dụng chỉ vì tên hoặc XPath trông tương tự.
+
+**Cập nhật Like 01/11/2026, 13:49:07 VN:** sau khi người dùng kiểm tra, đã thêm
+đúng điều kiện `or contains(@aria-label,'Bày tỏ cảm xúc Thích')` cho hai element:
+
+- 1691 `fb_newsfeed_like_button`:
+  `.//*[@role='button' and (.='Thích' or contains(@aria-label,'Bày tỏ cảm xúc Thích'))]`.
+- 1132 `fb_like_button`:
+  `.//*[@role='button' and (@aria-label='Thích' or @aria-label='Like' or contains(@aria-label,'Bày tỏ cảm xúc Thích'))]`.
+
+Giữ điều kiện cũ, XPath tương đối và parent: 1691 tìm trong bài newsfeed hiện tại
+được app đánh dấu; 1132 tìm trong dialog đầu tiên do element 1492 xác định.
+Người dùng xác nhận nút Chia sẻ không lỗi; element 257 và mọi element khác giữ nguyên.
+Trial ROLLBACK, xác nhận phục hồi và đọc lại DB sau COMMIT đều đạt; checksum
+block/workflow và catalog element ngoài hai ID không đổi. Không sửa schema/RPC,
+không reload PostgREST/build/deploy. Chưa chạy Like thật; app đang mở cần thoát hẳn
+rồi mở lại để nạp cache.
+
+[Receipt](audits/facebook-like-buttons-xpath-20261101/receipt.json),
+[capture trước](audits/facebook-like-buttons-xpath-20261101/before.json),
+[capture sau](audits/facebook-like-buttons-xpath-20261101/after.json),
+[SQL có checksum guard](audits/facebook-like-buttons-xpath-20261101/apply.sql),
+[rollback thủ công có guard](audits/facebook-like-buttons-xpath-20261101/rollback.sql).
+
+**Hậu kiểm log sau sửa, chốt 01/11/2026 13:57:13 VN (chỉ đọc):**
+[receipt và các campaign/bước liên quan](audits/facebook-like-buttons-xpath-20261101/post-edit-check.json).
+Từ từng mốc cập nhật đến giờ chốt, block 34 có 18 timeout trên 7 campaign
+(34811, 37293, 39049, 40443, 41786, 44976, 45527), tất cả thông báo chứa XPath
+element 13 cũ, chưa có `contains(@aria-label,'Comment')`. Điều này xác nhận
+các bước đó dùng selector cũ; phù hợp cache process chưa nạp lại, không phải
+bằng chứng selector mới thất bại. Có 2 comment thành công ở campaign 46340,
+nhưng không có telemetry selector của các bước thành công để xác nhận phiên bản.
+87 output `commented=false` ở campaign 45900 là bỏ qua khi text/ảnh trống,
+không tính là lỗi XPath.
+
+Luồng comment trực tiếp bài post có 20 thành công và 1 timeout element 1517:
+campaign 45621, run 4830018, bước bắt đầu 13:43:20 VN. Navigation và main đã qua,
+nhưng log không xác nhận dialog đã mở nên chưa kết luận XPath ô nhập sai.
+Không có bước chạy sau mốc sửa cho 1489/1692 hoặc hai nút Like 1691/1132 trong
+cửa sổ đã đọc; chưa đủ dữ liệu kết luận hiệu quả các chỉnh sửa này.
+Hậu kiểm không sửa DB hoặc kích hoạt comment/Like; các máy dùng selector cũ
+cần thoát hẳn app rồi mở lại theo hợp đồng cache hiện hành.
+
+**Hậu kiểm tiếp, chốt 01/11/2026 16:01:04 VN (chỉ đọc):**
+[receipt cập nhật](audits/facebook-like-buttons-xpath-20261101/post-edit-check-1601.json).
+Từ lần chốt 13:57 có thêm 7 comment thành công qua element 13 (6 sau đăng nhóm,
+1 seeding), 21 timeout XPath 13 cũ và **2 timeout XPath 13 mới**. Hai lỗi mới thuộc
+campaign 46363 `thuê đất Linh Sơn 1/11/2026`, run 4843523: vị trí 1 lúc
+15:53:30 và vị trí 3 lúc 15:54:13; vị trí 2 giữa hai lỗi comment thành công.
+Run trước đó cùng campaign có ba vị trí comment thành công. Bước đăng/đóng form
+đã qua và `isPending=false`; không có DOM snapshot/count/screenshot để xác định
+nguyên nhân hai lần không tìm thấy selector. Không quy hai lỗi này cho cache cũ.
+
+21 lỗi cũ mới phát sinh thuộc campaign 34811/40443/45527/45430, lần lượt
+12/4/4/1 lỗi. Lũy kế từ mốc sửa: element 13 có 9 comment thành công,
+39 timeout bản cũ và 2 timeout bản mới. 147 bước bỏ qua nội dung/ảnh trống
+không tính là lỗi XPath. Element 1517 có thêm 68 thành công và 6 timeout ở
+campaign 41943 (15:44–15:48), lũy kế 88 thành công/7 timeout; vẫn chưa có
+bằng chứng dialog đã mở tại các lượt timeout. Chưa có bước chạy sau sửa cho
+1691/1132/1692/1489. Không sửa DB hoặc kích hoạt thao tác Facebook trong hậu kiểm.
+
+**Hậu kiểm tiếp, chốt 01/11/2026 22:13:29 VN (chỉ đọc):**
+[receipt cập nhật](audits/facebook-like-buttons-xpath-20261101/post-edit-check-2213.json).
+Từ lần chốt 16:01 có thêm 47 comment thành công qua block 34,
+230 lỗi tìm element 13 bằng XPath mới trên 14 campaign và 57 timeout XPath cũ.
+Campaign 46363 có thêm 2 thành công/4 lỗi bản mới (lỗi cuối 17:04:57).
+Năm campaign lỗi bản mới nhiều nhất: 37702=57, 43257=30, 43258=30,
+43259=27, 43260=22. Nhiều lỗi ở chỉ số vị trí lớn, kể cả 50–130 trong
+seeding; chưa có DOM/count để kết luận nguyên nhân không tìm thấy vị trí.
+
+Like newsfeed 1691 đã có 178 `liked=true` và 4 lần không tìm thấy nút;
+Like dialog 1132 có 4 `liked=true, alreadyLiked=false`, không thấy lỗi.
+Comment newsfeed 1692 có 20 mở thành công, cả 20 focus/gửi thành công;
+11 không tìm thấy nút mở ở campaign 46439/46440. Không tính 11 output
+focus/gửi false phía sau thành lỗi ô nhập/gửi độc lập. Log lỗi newsfeed
+không ghi selector đã resolve nên chưa phân biệt cache XPath cũ/mới.
+1489 chưa có lượt chạy sau sửa. Có một bước mở newsfeed và một bước
+comment seeding còn `running`, không tính là thành công/thất bại.
+
+Comment trực tiếp 1517 có thêm 244 thành công/46 timeout; block 34 có
+thêm 6 timeout 1517. Timeout không chứng minh dialog đã mở hoặc selector
+ô nhập sai toàn bộ. Năm element vẫn đúng XPath và timestamp đã apply.
+Không sửa DB hoặc kích hoạt thao tác Facebook trong hậu kiểm.
+
+**Truy nguồn vị trí `n` và scroll của element 13 (01/11/2026, chỉ đọc):**
+[capture block live, cấu hình workflow và bằng chứng các run](audits/facebook-comment-box-xpath-20261101/position-trace/receipt.json).
+Block 34 lấy `Number(input.position || vars.loopItem.position || 1)` rồi
+thay vào `fb_comment_box_at_n`. Workflow 157/test 245 lấy item từ output
+`commentIterations` của block 2554. Khâu chuẩn bị đọc các khung bài bằng
+element 1485, gán `position=i+1` trước khi lọc keyword/AI, giữ nguyên position
+và postUrl của bài được chọn. Số bài yêu cầu là 30 không giới hạn position ở 30.
+
+Log campaign 42111/run 4851034: quét 113, 20 vòng cuộn, chọn
+`[52,62,79,95]`. Run 4853195: quét 148, 20 vòng cuộn, lần đọc cuối có
+131 khung bài, chọn 17 bài gồm vị trí 130. Campaign 42109/run 4853204:
+quét 119, lần cuối 118 khung, chọn `[78,79,88]`. Cả ba bật lọc keyword,
+yêu cầu 30 và dừng do `max_scroll_cycles`; không được suy rằng chưa từng
+tải tới bài 130 từ timeout nút thứ 130.
+
+Block 2554 có cuộn từng khung bài khi đọc, chờ 300ms; vòng ngoài cuộn
+1500px/chờ 2000ms, tối đa 20 vòng, ba vòng không có bài mới hoặc
+`max(30,N*10)` bài đã quét. Sau chọn xong mới comment. Điểm chưa được
+bảo đảm: position của danh sách **khung bài 1485** được dùng làm chỉ số
+toàn trang của **nút/khung comment 13**, không đối chiếu ánh xạ 1:1,
+không dùng lại postUrl để tìm đúng bài. DOM có thể thay đổi giữa hai giai đoạn.
+
+Source PageController hiện tại có fallback scroll trong waitForSelector:
+mỗi ba poll thất bại cuộn window `max(600,85% chiều cao)`, chờ 500ms,
+trong ngân sách 8000ms do block 34 truyền vào; không xác nhận đủ n nút.
+Resolver lọc phần tử có kích thước/không bị ẩn rồi mới lấy chỉ số cuối,
+khác XPath thuần trong trình duyệt. Log DB không xác nhận phiên bản hay
+từng lần fallback scroll trên từng máy khách.
+
+Workflow đăng nhóm 1/test252 không chạy block 2554. Scheduler tạo
+own=`[1]`, all=`[1..commentCount]`, others=`[2..commentCount+1]`;
+block 2627 giảm vị trí đi 1 khi bài pending và chọn others. Snapshot các
+campaign 43257–43260/37702 đặt commentCount=30/others nên có dải 1–30
+hoặc 2–31; đây là nguồn các chỉ số lớn ở luồng đăng nhóm. Chưa sửa
+block/workflow/element hay runtime trong lần truy nguồn này.
+
+**Hậu kiểm ngày 02/11/2026, chốt 09:12:26 VN (chỉ đọc):**
+[receipt và số liệu theo chiến dịch](audits/facebook-like-buttons-xpath-20261101/post-edit-check-20261102-0912.json).
+Từ 00:00 hôm nay: comment sau đăng nhóm 34 thành công/267 lỗi
+(204 tìm element 13 mới, 61 bản cũ, 2 timeout ô nhập 1517);
+seeding group/page/profile 9 thành công/18 lỗi element 13 mới;
+comment trực tiếp 80 thành công/15 timeout 1517;
+newsfeed 113 gửi thành công/47 lỗi nút mở. 36 lượt bỏ qua nội dung trống
+và 1 bước mở newsfeed còn running không tính vào thành công/thất bại.
+47 output focus/gửi false sau lỗi mở không tính thêm lần nữa.
+
+Chưa ổn: lỗi element 13 mới còn phát sinh lúc 09:11:37. Riêng một giờ
+gần nhất comment sau đăng nhóm có 21 thành công, 51 lỗi bản mới,
+18 bản cũ và 2 timeout ô nhập. Campaign 46363 hôm nay có 3 thành công/
+9 lỗi bản mới ở vị trí 1–3; không chỉ các chỉ số lớn mới bị lỗi.
+Element 13 và checksum block 34/2554 giữ nguyên; chưa sửa ánh xạ vị trí/root.
+Hậu kiểm không sửa DB hoặc kích hoạt comment.
+
+**Đối chiếu 3 thành công/9 lỗi campaign 46363 sáng 02/11 (chỉ đọc):**
+[receipt 12 bước và bốn lượt chạy](audits/facebook-comment-box-xpath-20261101/comparison-46363-20261102.json).
+Cả bốn lượt dùng account 9757, workflow 1, block 34, vị trí 1/2/3,
+commentType/commentGroupMode đều all và cùng ba mẫu nội dung (đối chiếu hash).
+Run 4876305 tại nhóm 2431016557194787 thành công cả ba (09:07–09:08);
+4869093 tại 229402304828760, 4869258 tại 684374321091543 và 4876993 tại
+611687073318146 lỗi cả ba. Cả chín lỗi dùng XPath 13 mới và dừng sau
+khoảng 8,7–9,3 giây, trước bước textbox/đính ảnh; imageCount=0 không chứng
+minh lỗi ảnh. Hai lượt lỗi có postUrl pending_posts; lượt lỗi 4869258 và
+lượt thành công đều pending_content_empty/isPending=false. Thời gian từ
+verify đóng form tới comment của hai lượt không pending gần bằng nhau:
+8,819 giây lỗi và 8,750 giây thành công. Vì vậy pending hoặc chỉ số n lớn
+không giải thích toàn bộ lỗi.
+
+Không có run event/ảnh chụp cho bốn run này. Source hiện tại kiểm tra
+my_pending_content trên page phụ, không chuyển main page tới đó; block
+comment tìm nút toàn trang, không mở postUrl. Chưa có DOM/URL/count/visibility
+đúng thời điểm lỗi để phân biệt nút chưa tải, bị ẩn hoặc thuộc tính khác
+selector. Chưa thể kết luận XPath sai hay khẳng định một nguyên nhân DOM cụ
+thể; không sửa DB/workflow/runtime hoặc kích hoạt comment trong lần đối chiếu.
+
+**Bổ sung nhãn tiếng Việt vào element 13 ngày 02/11/2026, 09:27:03 VN:**
+Người dùng đã vào trình duyệt kiểm tra và xác định cần thêm
+`or contains(@aria-label,'Bình luận về')`. Đã thêm đúng điều kiện này vào
+nhánh `//div[...]` của XPath 13, giữ toàn bộ điều kiện trước đó và chỉ số
+`[${n}]`. Đây là bằng chứng mới từ người dùng bổ sung cho giới hạn log
+trong lần đối chiếu 12 bước phía trên; chưa có xác nhận campaign sau sửa.
+
+[Capture trước/sau, SQL có checksum guard và rollback](audits/facebook-comment-box-xpath-20261101/vietnamese-label-20261102/receipt.json).
+Trial kết thúc ROLLBACK đạt, commit và đọc lại độc lập đạt; chỉ đổi
+xpath/updated_at của row 13. Checksum tất cả element còn lại, block và workflow
+giữ nguyên. Process đang mở cần thoát hẳn app rồi mở lại để nạp cache element.
+Không sửa runtime, quyền/schema/RPC; không reload PostgREST, build, deploy
+hoặc kích hoạt hành động Facebook.
+
+**Rà và bổ sung các nút cùng chức năng ngày 02/11/2026, 09:29:38 VN:**
+Theo yêu cầu người dùng, đã rà các element liên quan comment và nơi sử dụng
+trong block/workflow/source. Thêm riêng `or contains(@aria-label,'Bình luận về')`
+vào 1489 `fb_comment_in_post_btn` (quét comment group/search) và
+1692 `fb_newsfeed_comment_button` (mở/focus bình luận newsfeed).
+Giữ XPath tương đối, role button và mọi nhánh có sẵn.
+
+1517/1693/1694 đã chứa `contains(@aria-label,'Bình luận')` nên bao phủ nhãn
+mới; 13 đã sửa ở bước trước. 14 là alias cũ không thấy consumer trong block,
+workflow hoặc source hiện tại nên không sửa. 1695 là nút gửi, các menu sắp xếp,
+xem thêm, nội dung và permalink có chức năng khác nên giữ nguyên.
+[Inventory, references, trước/sau và receipt](audits/facebook-comment-buttons-xpath-20261101/vietnamese-label-20261102/receipt.json).
+Trial ROLLBACK, commit có checksum guard và đọc lại độc lập đạt; checksum
+tất cả element ngoài 1489/1692, block và workflow không đổi. Chưa test Facebook
+thật sau sửa; app đang mở cần khởi động lại để nhận cache mới. Không đổi
+schema/RPC/quyền/source, không reload PostgREST/build/deploy.
+
+**Kiểm chứng chuẩn bị PR ngày 02/11/2026:** hai typecheck và build production
+đạt; build local mất 25,144 giây, không tạo/phát hành bộ cài hoặc deploy.
+JSON, liên kết và phạm vi SQL có guard đã kiểm tra; không chạy lại SQL hay
+kích hoạt Facebook. [Receipt kiểm chứng](audits/facebook-comment-box-xpath-20261101/pr-verification-20261102.json).
 
 ## C. "Không tìm thấy ô đăng bài": lỗi cũ, nay mới hiện
 

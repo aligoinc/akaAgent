@@ -1,0 +1,882 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "campaign_id": 46363,
+  "read_only": true,
+  "period": {
+    "from": "2026-11-02T00:00:00+07:00",
+    "to": "2026-11-02T09:12:26.487562+07:00"
+  },
+  "summary": [
+    {
+      "run_id": 4869093,
+      "group": "Group Nhà Đất Hà Trung",
+      "group_url": "https://www.facebook.com/groups/229402304828760",
+      "account_id": 9757,
+      "workflow_id": 1,
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "pending": true,
+      "pending_source": "post_url",
+      "first_comment_vn": "2026-11-02T08:00:56.499+07:00",
+      "seconds_from_form_closed_to_comment": 6.05,
+      "comment_positions": [
+        1,
+        2,
+        3
+      ],
+      "successes": 0,
+      "failures": 3,
+      "durations_ms": [
+        8673,
+        8712,
+        8803
+      ],
+      "text_hashes": [
+        "14cd1760f115466bcecfcea60d340d95",
+        "802f4d839a24056b70bedeb6ef1d1479",
+        "81176a3a118ca61f8f62b005483f181d"
+      ]
+    },
+    {
+      "run_id": 4869258,
+      "group": "Mua Bán Bất Động Sản _ HÀ TRUNG _NGA Sơn",
+      "group_url": "https://www.facebook.com/groups/684374321091543",
+      "account_id": 9757,
+      "workflow_id": 1,
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "pending": false,
+      "pending_source": "pending_content_empty",
+      "first_comment_vn": "2026-11-02T08:02:44.488+07:00",
+      "seconds_from_form_closed_to_comment": 8.819,
+      "comment_positions": [
+        1,
+        2,
+        3
+      ],
+      "successes": 0,
+      "failures": 3,
+      "durations_ms": [
+        9114,
+        9068,
+        9259
+      ],
+      "text_hashes": [
+        "14cd1760f115466bcecfcea60d340d95",
+        "802f4d839a24056b70bedeb6ef1d1479",
+        "81176a3a118ca61f8f62b005483f181d"
+      ]
+    },
+    {
+      "run_id": 4876305,
+      "group": "Mua bán nhà đất Bỉm Sơn - Hà Trung",
+      "group_url": "https://www.facebook.com/groups/2431016557194787",
+      "account_id": 9757,
+      "workflow_id": 1,
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "pending": false,
+      "pending_source": "pending_content_empty",
+      "first_comment_vn": "2026-11-02T09:07:35.293+07:00",
+      "seconds_from_form_closed_to_comment": 8.75,
+      "comment_positions": [
+        1,
+        2,
+        3
+      ],
+      "successes": 3,
+      "failures": 0,
+      "durations_ms": [
+        26353,
+        26330,
+        26376
+      ],
+      "text_hashes": [
+        "14cd1760f115466bcecfcea60d340d95",
+        "802f4d839a24056b70bedeb6ef1d1479",
+        "81176a3a118ca61f8f62b005483f181d"
+      ]
+    },
+    {
+      "run_id": 4876993,
+      "group": "Quê Nhà Hà Trung",
+      "group_url": "https://www.facebook.com/groups/611687073318146",
+      "account_id": 9757,
+      "workflow_id": 1,
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "pending": true,
+      "pending_source": "post_url",
+      "first_comment_vn": "2026-11-02T09:11:18.578+07:00",
+      "seconds_from_form_closed_to_comment": 6.685,
+      "comment_positions": [
+        1,
+        2,
+        3
+      ],
+      "successes": 0,
+      "failures": 3,
+      "durations_ms": [
+        9008,
+        9083,
+        9029
+      ],
+      "text_hashes": [
+        "14cd1760f115466bcecfcea60d340d95",
+        "802f4d839a24056b70bedeb6ef1d1479",
+        "81176a3a118ca61f8f62b005483f181d"
+      ]
+    }
+  ],
+  "comment_steps": [
+    {
+      "id": 52061552,
+      "run_id": 4869093,
+      "started_at": "2026-11-02 01:00:56.499+00",
+      "completed_at": "2026-11-02 01:01:05.308+00",
+      "duration_ms": 8673,
+      "position": 1,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 813,
+      "text_md5": "14cd1760f115466bcecfcea60d340d95",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[1]",
+      "comment_url": null
+    },
+    {
+      "id": 52061602,
+      "run_id": 4869093,
+      "started_at": "2026-11-02 01:01:05.457+00",
+      "completed_at": "2026-11-02 01:01:14.286+00",
+      "duration_ms": 8712,
+      "position": 2,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 722,
+      "text_md5": "802f4d839a24056b70bedeb6ef1d1479",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[2]",
+      "comment_url": null
+    },
+    {
+      "id": 52061730,
+      "run_id": 4869093,
+      "started_at": "2026-11-02 01:01:14.433+00",
+      "completed_at": "2026-11-02 01:01:23.371+00",
+      "duration_ms": 8803,
+      "position": 3,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 601,
+      "text_md5": "81176a3a118ca61f8f62b005483f181d",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[3]",
+      "comment_url": null
+    },
+    {
+      "id": 52062666,
+      "run_id": 4869258,
+      "started_at": "2026-11-02 01:02:44.488+00",
+      "completed_at": "2026-11-02 01:02:53.719+00",
+      "duration_ms": 9114,
+      "position": 1,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 722,
+      "text_md5": "802f4d839a24056b70bedeb6ef1d1479",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[1]",
+      "comment_url": null
+    },
+    {
+      "id": 52062735,
+      "run_id": 4869258,
+      "started_at": "2026-11-02 01:02:53.837+00",
+      "completed_at": "2026-11-02 01:03:03.023+00",
+      "duration_ms": 9068,
+      "position": 2,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 601,
+      "text_md5": "81176a3a118ca61f8f62b005483f181d",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[2]",
+      "comment_url": null
+    },
+    {
+      "id": 52062839,
+      "run_id": 4869258,
+      "started_at": "2026-11-02 01:03:03.319+00",
+      "completed_at": "2026-11-02 01:03:12.819+00",
+      "duration_ms": 9259,
+      "position": 3,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 813,
+      "text_md5": "14cd1760f115466bcecfcea60d340d95",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[3]",
+      "comment_url": null
+    },
+    {
+      "id": 52120195,
+      "run_id": 4876305,
+      "started_at": "2026-11-02 02:07:35.293+00",
+      "completed_at": "2026-11-02 02:08:01.752+00",
+      "duration_ms": 26353,
+      "position": 1,
+      "commented": true,
+      "comment_failed": null,
+      "image_count": 1,
+      "text_length": 601,
+      "text_md5": "81176a3a118ca61f8f62b005483f181d",
+      "error": null,
+      "comment_url": "https://www.facebook.com/groups/2431016557194787/posts/4027670440862716/?comment_id=4027675164195577"
+    },
+    {
+      "id": 52120765,
+      "run_id": 4876305,
+      "started_at": "2026-11-02 02:08:01.864+00",
+      "completed_at": "2026-11-02 02:08:28.449+00",
+      "duration_ms": 26330,
+      "position": 2,
+      "commented": true,
+      "comment_failed": null,
+      "image_count": 1,
+      "text_length": 813,
+      "text_md5": "14cd1760f115466bcecfcea60d340d95",
+      "error": null,
+      "comment_url": "https://www.facebook.com/groups/2431016557194787/posts/4021565678139859/?comment_id=4027632287533198"
+    },
+    {
+      "id": 52121350,
+      "run_id": 4876305,
+      "started_at": "2026-11-02 02:08:28.584+00",
+      "completed_at": "2026-11-02 02:08:55.083+00",
+      "duration_ms": 26376,
+      "position": 3,
+      "commented": true,
+      "comment_failed": null,
+      "image_count": 1,
+      "text_length": 722,
+      "text_md5": "802f4d839a24056b70bedeb6ef1d1479",
+      "error": null,
+      "comment_url": "https://www.facebook.com/groups/2431016557194787/posts/4027099147586512/?comment_id=4027604370869323"
+    },
+    {
+      "id": 52125420,
+      "run_id": 4876993,
+      "started_at": "2026-11-02 02:11:18.578+00",
+      "completed_at": "2026-11-02 02:11:27.862+00",
+      "duration_ms": 9008,
+      "position": 1,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 813,
+      "text_md5": "14cd1760f115466bcecfcea60d340d95",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[1]",
+      "comment_url": null
+    },
+    {
+      "id": 52125571,
+      "run_id": 4876993,
+      "started_at": "2026-11-02 02:11:27.981+00",
+      "completed_at": "2026-11-02 02:11:37.189+00",
+      "duration_ms": 9083,
+      "position": 2,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 722,
+      "text_md5": "802f4d839a24056b70bedeb6ef1d1479",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[2]",
+      "comment_url": null
+    },
+    {
+      "id": 52125811,
+      "run_id": 4876993,
+      "started_at": "2026-11-02 02:11:37.324+00",
+      "completed_at": "2026-11-02 02:11:46.475+00",
+      "duration_ms": 9029,
+      "position": 3,
+      "commented": false,
+      "comment_failed": true,
+      "image_count": 0,
+      "text_length": 601,
+      "text_md5": "81176a3a118ca61f8f62b005483f181d",
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[3]",
+      "comment_url": null
+    }
+  ],
+  "navigation_and_publish": [
+    {
+      "run_id": 4869093,
+      "node_id": "nav",
+      "started_at": "2026-11-02 01:00:23.044+00",
+      "completed_at": "2026-11-02 01:00:23.812+00",
+      "duration_ms": 599,
+      "input": {
+        "uid": "229402304828760",
+        "url": "https://www.facebook.com/groups/229402304828760"
+      },
+      "output": {
+        "currentUrl": "https://www.facebook.com/groups/229402304828760"
+      }
+    },
+    {
+      "run_id": 4869093,
+      "node_id": "dismiss_after_nav",
+      "started_at": "2026-11-02 01:00:24.209+00",
+      "completed_at": "2026-11-02 01:00:24.841+00",
+      "duration_ms": 520,
+      "input": {
+        "mode": "any",
+        "currentUrl": "https://www.facebook.com/groups/229402304828760"
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4869093,
+      "node_id": "verify_submit",
+      "started_at": "2026-11-02 01:00:46.781+00",
+      "completed_at": "2026-11-02 01:00:50.449+00",
+      "duration_ms": 3566,
+      "input": {
+        "posted": true
+      },
+      "output": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      }
+    },
+    {
+      "run_id": 4869093,
+      "node_id": "dismiss_after_submit",
+      "started_at": "2026-11-02 01:00:50.6+00",
+      "completed_at": "2026-11-02 01:00:50.705+00",
+      "duration_ms": 4,
+      "input": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4869093,
+      "node_id": "get_post_link",
+      "started_at": "2026-11-02 01:00:54.424+00",
+      "completed_at": "2026-11-02 01:00:55.301+00",
+      "duration_ms": 754,
+      "input": {},
+      "output": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/229402304828760/pending_posts/1754308895671419/",
+        "postUrl": "https://www.facebook.com/groups/229402304828760/pending_posts/1754308895671419/",
+        "rawPostLink": "https://www.facebook.com/groups/229402304828760"
+      }
+    },
+    {
+      "run_id": 4869093,
+      "node_id": "detect_pending",
+      "started_at": "2026-11-02 01:00:55.665+00",
+      "completed_at": "2026-11-02 01:00:55.776+00",
+      "duration_ms": 1,
+      "input": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/229402304828760/pending_posts/1754308895671419/",
+        "mode": "any",
+        "postUrl": "https://www.facebook.com/groups/229402304828760/pending_posts/1754308895671419/",
+        "rawPostLink": "https://www.facebook.com/groups/229402304828760"
+      },
+      "output": {
+        "source": "post_url",
+        "postUrl": "https://www.facebook.com/groups/229402304828760/pending_posts/1754308895671419/",
+        "isPending": true,
+        "pendingCheckConclusive": true
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "nav",
+      "started_at": "2026-11-02 01:02:08.75+00",
+      "completed_at": "2026-11-02 01:02:09.326+00",
+      "duration_ms": 462,
+      "input": {
+        "uid": "684374321091543",
+        "url": "https://www.facebook.com/groups/684374321091543"
+      },
+      "output": {
+        "currentUrl": "https://www.facebook.com/groups/684374321091543"
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "dismiss_after_nav",
+      "started_at": "2026-11-02 01:02:09.685+00",
+      "completed_at": "2026-11-02 01:02:10.644+00",
+      "duration_ms": 843,
+      "input": {
+        "mode": "any",
+        "currentUrl": "https://www.facebook.com/groups/684374321091543"
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "verify_submit",
+      "started_at": "2026-11-02 01:02:32.477+00",
+      "completed_at": "2026-11-02 01:02:35.669+00",
+      "duration_ms": 3063,
+      "input": {
+        "posted": true
+      },
+      "output": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "dismiss_after_submit",
+      "started_at": "2026-11-02 01:02:35.8+00",
+      "completed_at": "2026-11-02 01:02:35.923+00",
+      "duration_ms": 3,
+      "input": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "get_post_link",
+      "started_at": "2026-11-02 01:02:39.529+00",
+      "completed_at": "2026-11-02 01:02:40.359+00",
+      "duration_ms": 716,
+      "input": {},
+      "output": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/684374321091543/posts/1111382931724011/",
+        "postUrl": "https://www.facebook.com/groups/684374321091543/posts/1111382931724011/",
+        "rawPostLink": "https://www.facebook.com/groups/684374321091543"
+      }
+    },
+    {
+      "run_id": 4869258,
+      "node_id": "detect_pending",
+      "started_at": "2026-11-02 01:02:40.729+00",
+      "completed_at": "2026-11-02 01:02:43.727+00",
+      "duration_ms": 2887,
+      "input": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/684374321091543/posts/1111382931724011/",
+        "mode": "any",
+        "postUrl": "https://www.facebook.com/groups/684374321091543/posts/1111382931724011/",
+        "rawPostLink": "https://www.facebook.com/groups/684374321091543"
+      },
+      "output": {
+        "source": "pending_content_empty",
+        "postUrl": "https://www.facebook.com/groups/684374321091543/posts/1111382931724011/",
+        "isPending": false,
+        "pendingContentUrl": "https://www.facebook.com/groups/684374321091543/my_pending_content",
+        "pendingContentLinks": [],
+        "pendingCheckConclusive": true
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "nav",
+      "started_at": "2026-11-02 02:06:58.728+00",
+      "completed_at": "2026-11-02 02:06:59.309+00",
+      "duration_ms": 440,
+      "input": {
+        "uid": "2431016557194787",
+        "url": "https://www.facebook.com/groups/2431016557194787"
+      },
+      "output": {
+        "currentUrl": "https://www.facebook.com/groups/2431016557194787"
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "dismiss_after_nav",
+      "started_at": "2026-11-02 02:06:59.663+00",
+      "completed_at": "2026-11-02 02:07:00.538+00",
+      "duration_ms": 745,
+      "input": {
+        "mode": "any",
+        "currentUrl": "https://www.facebook.com/groups/2431016557194787"
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "verify_submit",
+      "started_at": "2026-11-02 02:07:22.713+00",
+      "completed_at": "2026-11-02 02:07:26.543+00",
+      "duration_ms": 3573,
+      "input": {
+        "posted": true
+      },
+      "output": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "dismiss_after_submit",
+      "started_at": "2026-11-02 02:07:26.654+00",
+      "completed_at": "2026-11-02 02:07:26.78+00",
+      "duration_ms": 2,
+      "input": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "get_post_link",
+      "started_at": "2026-11-02 02:07:30.517+00",
+      "completed_at": "2026-11-02 02:07:31.365+00",
+      "duration_ms": 721,
+      "input": {},
+      "output": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/2431016557194787/posts/4027715280858232/",
+        "postUrl": "https://www.facebook.com/groups/2431016557194787/posts/4027715280858232/",
+        "rawPostLink": "https://www.facebook.com/groups/2431016557194787"
+      }
+    },
+    {
+      "run_id": 4876305,
+      "node_id": "detect_pending",
+      "started_at": "2026-11-02 02:07:31.727+00",
+      "completed_at": "2026-11-02 02:07:34.516+00",
+      "duration_ms": 2662,
+      "input": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/2431016557194787/posts/4027715280858232/",
+        "mode": "any",
+        "postUrl": "https://www.facebook.com/groups/2431016557194787/posts/4027715280858232/",
+        "rawPostLink": "https://www.facebook.com/groups/2431016557194787"
+      },
+      "output": {
+        "source": "pending_content_empty",
+        "postUrl": "https://www.facebook.com/groups/2431016557194787/posts/4027715280858232/",
+        "isPending": false,
+        "pendingContentUrl": "https://www.facebook.com/groups/2431016557194787/my_pending_content",
+        "pendingContentLinks": [],
+        "pendingCheckConclusive": true
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "nav",
+      "started_at": "2026-11-02 02:10:44.256+00",
+      "completed_at": "2026-11-02 02:10:44.825+00",
+      "duration_ms": 431,
+      "input": {
+        "uid": "611687073318146",
+        "url": "https://www.facebook.com/groups/611687073318146"
+      },
+      "output": {
+        "currentUrl": "https://www.facebook.com/groups/611687073318146"
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "dismiss_after_nav",
+      "started_at": "2026-11-02 02:10:45.293+00",
+      "completed_at": "2026-11-02 02:10:46.079+00",
+      "duration_ms": 643,
+      "input": {
+        "mode": "any",
+        "currentUrl": "https://www.facebook.com/groups/611687073318146"
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "verify_submit",
+      "started_at": "2026-11-02 02:11:08.223+00",
+      "completed_at": "2026-11-02 02:11:11.893+00",
+      "duration_ms": 3561,
+      "input": {
+        "posted": true
+      },
+      "output": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "dismiss_after_submit",
+      "started_at": "2026-11-02 02:11:12.021+00",
+      "completed_at": "2026-11-02 02:11:12.143+00",
+      "duration_ms": 3,
+      "input": {
+        "ok": true,
+        "posted": true,
+        "message": "Form đăng bài đã đóng",
+        "submitClosed": true,
+        "publishTimeoutMs": 60000
+      },
+      "output": {
+        "label": "",
+        "clicked": false
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "get_post_link",
+      "started_at": "2026-11-02 02:11:15.911+00",
+      "completed_at": "2026-11-02 02:11:16.831+00",
+      "duration_ms": 789,
+      "input": {},
+      "output": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/611687073318146/pending_posts/1834165504403624/",
+        "postUrl": "https://www.facebook.com/groups/611687073318146/pending_posts/1834165504403624/",
+        "rawPostLink": "https://www.facebook.com/groups/611687073318146"
+      }
+    },
+    {
+      "run_id": 4876993,
+      "node_id": "detect_pending",
+      "started_at": "2026-11-02 02:11:17.208+00",
+      "completed_at": "2026-11-02 02:11:17.373+00",
+      "duration_ms": 4,
+      "input": {
+        "ok": true,
+        "link": "https://www.facebook.com/groups/611687073318146/pending_posts/1834165504403624/",
+        "mode": "any",
+        "postUrl": "https://www.facebook.com/groups/611687073318146/pending_posts/1834165504403624/",
+        "rawPostLink": "https://www.facebook.com/groups/611687073318146"
+      },
+      "output": {
+        "source": "post_url",
+        "postUrl": "https://www.facebook.com/groups/611687073318146/pending_posts/1834165504403624/",
+        "isPending": true,
+        "pendingCheckConclusive": true
+      }
+    }
+  ],
+  "configuration_comparison": [
+    {
+      "id": 4869093,
+      "target_name": "Group Nhà Đất Hà Trung",
+      "input_data_name": "Group Nhà Đất Hà Trung",
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "enable_comment": "true",
+      "iterations": [
+        {
+          "position": 1,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 2,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 3,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        }
+      ],
+      "comment_variants_md5": "e6f1964e0ca10ec018511c076db2a5d7",
+      "comment_images_md5": "d751713988987e9331980363e24189ce",
+      "comment_batches_md5": "12c938e66de7972718bad1927d597103",
+      "comment_image_option": "none"
+    },
+    {
+      "id": 4869258,
+      "target_name": "Mua Bán Bất Động Sản _ HÀ TRUNG _NGA Sơn",
+      "input_data_name": "Mua Bán Bất Động Sản _ HÀ TRUNG _NGA Sơn",
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "enable_comment": "true",
+      "iterations": [
+        {
+          "position": 1,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 2,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 3,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        }
+      ],
+      "comment_variants_md5": "e6f1964e0ca10ec018511c076db2a5d7",
+      "comment_images_md5": "d751713988987e9331980363e24189ce",
+      "comment_batches_md5": "12c938e66de7972718bad1927d597103",
+      "comment_image_option": "none"
+    },
+    {
+      "id": 4876305,
+      "target_name": "Mua bán nhà đất Bỉm Sơn - Hà Trung",
+      "input_data_name": "Mua bán nhà đất Bỉm Sơn - Hà Trung",
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "enable_comment": "true",
+      "iterations": [
+        {
+          "position": 1,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 2,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 3,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        }
+      ],
+      "comment_variants_md5": "e6f1964e0ca10ec018511c076db2a5d7",
+      "comment_images_md5": "d751713988987e9331980363e24189ce",
+      "comment_batches_md5": "12c938e66de7972718bad1927d597103",
+      "comment_image_option": "none"
+    },
+    {
+      "id": 4876993,
+      "target_name": "Quê Nhà Hà Trung",
+      "input_data_name": "Quê Nhà Hà Trung",
+      "comment_type": "all",
+      "comment_group_mode": "all",
+      "enable_comment": "true",
+      "iterations": [
+        {
+          "position": 1,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 2,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        },
+        {
+          "position": 3,
+          "text_md5": "d41d8cd98f00b204e9800998ecf8427e",
+          "image_count": 0
+        }
+      ],
+      "comment_variants_md5": "e6f1964e0ca10ec018511c076db2a5d7",
+      "comment_images_md5": "d751713988987e9331980363e24189ce",
+      "comment_batches_md5": "12c938e66de7972718bad1927d597103",
+      "comment_image_option": "none"
+    }
+  ],
+  "live_blocks": [
+    {
+      "id": 31,
+      "name": "fb_detect_pending_post",
+      "code_md5": "eec629d6f10f6d6dcdf0ccd14a0cd1a9",
+      "updated_at": "2026-07-06 10:53:49.826+00"
+    },
+    {
+      "id": 2625,
+      "name": "fb_click_group_post_prompt_if_present",
+      "code_md5": "f140852a8cea1eb236e8e4cd61176a09",
+      "updated_at": "2026-05-18 07:27:39.438454+00"
+    },
+    {
+      "id": 2626,
+      "name": "fb_get_first_group_post_link",
+      "code_md5": "cc85473ba26554663972e4422fc62a41",
+      "updated_at": "2026-05-18 07:27:39.438454+00"
+    },
+    {
+      "id": 2627,
+      "name": "fb_adjust_group_post_comments_after_pending",
+      "code_md5": "ffeb17c8967ab564098da8f641650674",
+      "updated_at": "2026-05-18 08:55:38.385057+00"
+    }
+  ],
+  "run_events_for_compared_runs": [],
+  "findings": {
+    "confirmed": [
+      "Four runs on four different groups, one account 9757, workflow 1, block 34, positions 1/2/3, commentType=all and commentGroupMode=all.",
+      "Three complete successful comment steps in run 4876305; nine commentFailed=true steps on three other runs. Step status alone is success even for handled comment failures.",
+      "All nine failure errors contain the updated element 13 XPath with contains(@aria-label,'Comment'); each fails in about 8.7-9.3 seconds.",
+      "Two failed runs report pending post URLs. One failed run and the successful run both report pending_content_empty and isPending=false.",
+      "The nonpending failed run starts comment 8.819 seconds after form-close verification; the successful one starts after 8.750 seconds.",
+      "The three comment text hashes match across all four runs; configured comment iterations and comment media configuration hashes also match.",
+      "Failure imageCount=0 is downstream of failure before upload; successful steps report imageCount=1.",
+      "No run events or screenshots are stored for the four compared run IDs."
+    ],
+    "source_findings": [
+      "Live block 34 waits 8000ms for element13 before click, then waits for dialog textbox1517. It does not navigate to the postUrl.",
+      "Live block2627 preserves positions1..3 for pending posts with commentType=all and commentGroupMode=all; this is intended current semantics.",
+      "Current pageController filters style/size visibility before applying the trailing numeric XPath index and scrolls the window every three unsuccessful polls within the existing timeout.",
+      "Current scheduler checks my_pending_content in a temporary page and destroys it; the main comment page is not navigated there.",
+      "Current commentUrl extraction reads the first comment permalink and is not an identity proof of the newly submitted comment."
+    ],
+    "not_proven": [
+      "Exact DOM, active URL, dialog state, matching node count and visibility at each failed lookup were not captured.",
+      "Cannot distinguish unloaded DOM, hidden matching nodes, group-specific selector attributes or another transient page state using these stored logs.",
+      "No per-run client version or cached successful selector is captured; all nine errors demonstrably use the new selector, and live block/element definitions are unchanged.",
+      "Pending status alone and high n do not explain all nine failures."
+    ]
+  },
+  "changes": "No production data, selector, block, workflow or runtime source was modified; no Facebook action was triggered."
+}
