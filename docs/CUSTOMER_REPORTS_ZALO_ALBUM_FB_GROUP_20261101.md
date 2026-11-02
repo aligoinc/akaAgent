@@ -557,6 +557,41 @@ không xuất hiện trong 15 s); step vẫn `success` nên đếm lỗi phải 
 
 **Hướng xử lý:** rà danh sách nhóm theo từng tài khoản (bỏ/tham gia lại cặp luôn lỗi).
 
+## D. Rà soát logic chạy chiến dịch: lãng phí và cập nhật sai (02/11/2026 tối)
+
+Dữ liệu `auto_campaign_details` 02/11 tới ~20:40 VN (id ≥ 10.225.316), chính sách `auto_error`
+và code tại `5a0f560`. Chưa sửa gì; mọi mục dưới đây cần quyết định trước khi đổi code/DB.
+
+1. **Không nhớ mục tiêu đã hỏng cố định.** Cooldown gửi lặp
+   (`aka_agent_apply_campaign_delivery_cooldown`) chỉ xét dòng `thành công`. Chỉ nhìn lại ~2 ngày
+   (id ≥ 10.000.000, từ 31/10 18:03): 2.915/15.063 lượt 122 hôm nay (19%) gửi tới số đã 122 trước đó,
+   và gửi lại thì 1.883/1.900 (99,1%) vẫn 122; 3.503/21.394 lượt tra số (16%) là số đã "không tồn
+   tại", tra lại 2.315/2.322 (99,7%) vẫn không tồn tại. Nguồn lần trước: ~80% tổ chức khác, ~19% tài
+   khoản khác cùng tổ chức, <2% cùng tài khoản (tra lại cùng tài khoản – cùng số chỉ 127/86.274).
+   QR 12–16%, Web 14%, App Server 18–21%; chat-sync không đo được từ details (thiếu SĐT trong
+   `data`). Mỗi mục tiêu như vậy tốn một lượt tra số và trọn khoảng nghỉ.
+2. **Nhóm Zalo từ chối cố định bị gửi lại cả ngày.** App Server, chia sẻ tin vào nhóm: tài khoản
+   9709/9701 (org 1835) và 4011 có 56 nhóm trả mã **112** ở mọi lượt trong ngày (không nhóm nào lúc
+   được lúc không); 4.665 lượt hôm nay, 112 của ba tài khoản 4,7–5,2 nghìn lượt/ngày từ 31/10. Chiến dịch 45928/45930 đặt 133 khung giờ (5 phút/lần), nạp
+   lại toàn bộ nhóm mỗi khung. 112 chưa có dòng `auto_error` nên rơi vào
+   `err_zalo_api_business_failed` và bị tính vào hạn mức. Nhóm không tồn tại (161) cùng kiểu: 67
+   lượt, tài khoản 4011 lặp qua ~24 chiến dịch.
+3. **Lỗi tạm thời đốt mục tiêu.** Mục tiêu chỉ được trả về hàng đợi khi chính sách không có
+   `detail_status` ([campaignScheduler.ts:14553](../src/main/services/campaignScheduler.ts:14553));
+   `err_zalo_api_business_failed` có `thất bại` nên mục tiêu thành `hoàn thành`. Hôm nay: upload ảnh
+   lỗi mạng 252, lỗi mạng tới DB của chính mình (`Failed to get account: fetch failed`…) 57, `net::`
+   16 ⇒ 325 mục tiêu chưa gửi gì mà 0 lần gửi lại; `fetch failed` 242 (phần lớn có tệp, chưa có
+   phản hồi gửi ảnh). Đối chứng: `Listener Zalo chưa sẵn sàng` được trả về hàng đợi (82/97, 40 gửi
+   lại OK). Media quá giờ chờ (423) cố ý không gửi lại vì không rõ đã tới chưa.
+4. **127 đốt mục tiêu.** 1.138 mục tiêu bị 127 hôm nay đều `hoàn thành`, 0 gửi lại: 389 là album đã
+   tới, chữ bị chặn (không gửi lại là đúng); ~749 chưa nhận được gì. 127 còn tính vào hạn mức.
+5. **Nhóm lỗi chung che nguyên nhân.** `err_zalo_api_business_failed` (id 18) có 6.331 dòng hôm
+   nay: mã 112 (4.820), lỗi mạng, lỗi DB của mình, media quá giờ chờ, nhóm không tồn tại. Khách chỉ
+   thấy "Chia sẻ tin nhắn Zalo thất bại"/"fetch failed"; tất cả (trừ đổi tên gợi nhớ) tính vào hạn
+   mức. Chỉ `err_undefined` (ngưỡng 4) mới tự tạm dừng chiến dịch; id 18 không có ngưỡng.
+6. Facebook cùng kiểu mục 1–2: "Không tìm thấy ô đăng bài" nằm 98,5% ở cặp tài khoản–nhóm chưa từng
+   mở được (mục C), hôm nay 1.143 dòng `lỗi`; chưa có cơ chế bỏ qua cặp luôn lỗi.
+
 ## Phát hiện phụ
 
 2.352 dòng nhóm `auto_account_contacts` (476 tài khoản, 234 org, từ 23/04 đến nay) có
