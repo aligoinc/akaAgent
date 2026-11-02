@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-11-02 10:45:57 UTC",
+  "branch": "codex/facebook-random-ai",
+  "base": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migrationSha256": "9b932cca606ff2982817e7069b4389d0dd6ce13e7a90f7a6a9f6863a0b8c2462",
+  "production": {
+    "mutations": 0,
+    "liveFunctionsRechecked": 10,
+    "sourceAndMetadataUnchanged": true,
+    "applied": false
+  },
+  "local": {
+    "nodeTypecheck": "pass",
+    "webTypecheck": "pass",
+    "productionBuild": "pass",
+    "sql": "pass",
+    "sqlChecks": 60,
+    "rollbackTrial": true,
+    "postcheck": true,
+    "guardedRollback": true,
+    "runtime": "pass",
+    "runtimeChecks": 36,
+    "summaryCampaigns": 1201,
+    "pagedCandidateRows": 1202,
+    "ui": "pass",
+    "manualRuntimeChecks": 30,
+    "lifecycleChecks": 48,
+    "scheduleParity": "pass",
+    "boundaries": "pass",
+    "stopReason": "pass",
+    "diagnostics": "pass",
+    "proxyHttpCases": 16,
+    "docsLinks": "pass",
+    "diffCheck": "pass"
+  },
+  "limitations": [
+    "PGlite serial transactions, not two live Desktop instances",
+    "AI provider and Facebook execution mocked",
+    "No production HTTP canary",
+    "No Windows/device validation",
+    "No installer packaging/upload/release"
+  ],
+  "targetFunctions": [
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "md5": "2694fc1e5cf6c15023461831073e3848"
+    },
+    {
+      "signature": "private.facebook_random_ai_rules_valid(jsonb,jsonb)",
+      "md5": "795238d7689ad9efae3515cf156bdcb7"
+    },
+    {
+      "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "md5": "1213d2bf20c62cd52226e32da4d80887"
+    }
+  ]
+}

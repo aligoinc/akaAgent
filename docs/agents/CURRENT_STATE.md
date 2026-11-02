@@ -6,6 +6,8 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Bảo mật và tương thích hiện hành
 
+[Facebook random AI V444](../FACEBOOK_RANDOM_AI_V442.md) **đã apply lúc 22:27:21 Việt Nam ngày 02/11/2026**, ledger `20261102152721 / migration_v444_facebook_random_ai`; đổi số candidate từ V442 vì ledger đã có migration khác dùng V442/V443. Trial `ROLLBACK`, hậu kiểm 11 hàm/metadata/quyền và smoke AI/luồng chạy thường đạt. App dev đã mở để người dùng test; **chưa đóng gói/phát hành, chưa kiểm canary AI/Facebook thật của tính năng**. [Audit](../audits/facebook-random-ai-v442/README.md), [receipt apply](../audits/facebook-random-ai-v442/apply-receipt.json). Không apply lại.
+
 | Phần | Trạng thái đã xác nhận | Nguồn để thao tác/review |
 | --- | --- | --- |
 | Production | `akachat`, ref `cgjbsmqtfhqvttudyjzq`; project legacy bị cấm theo AGENTS.md | `supabase/.temp/project-ref`, [quy tắc gốc](../../AGENTS.md) |

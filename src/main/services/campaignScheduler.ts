@@ -2,7 +2,9 @@ import {
   isNativeGroupPostShare, validateGroupPostShareLinks, GROUP_POST_SHARE_WORKFLOW_VERSION
 } from '../../shared/facebookGroupPostShare'
 import * as randomRuns from '../data/repositories/facebookRandomRunRepository'
-import { chooseRandomRound, randomRemaining, type FacebookRandomTurn } from '../../shared/facebookRandomRun'
+import { chooseRandomRound, isAiRandomConfig, randomRemaining, type FacebookRandomTurn } from '../../shared/facebookRandomRun'
+import { cancelFacebookRandomAi, ensureFacebookRandomAiPlan } from './facebookRandomAiService'
+import { getPendingCampaignsForRandomAi } from '../data/repositories/campaignRepository'
 import { actionResultSignature, parseActionResultOutput } from '../../shared/actionResultSession'
 import { beginActionResultRun, beginActionResultUnit, endActionResultRun, withActionResultRunContext, managedTargetEffects, managesActionResult, finishActionResultUnit, ActionResultBoundary } from './actionResultRuntime'
 import { ResultContractError } from '../../shared/actionStatusPolicy'
@@ -400,6 +402,15 @@ interface ActionLimitContinuationResult {
   runnableActionDescriptors: CampaignActionDescriptor[]
   skippedActionDescriptors: CampaignActionDescriptor[]
   skippedLimitStatuses: AccountActionLimitStatus[]
+}
+
+// Read-only, scoped to one inventory pass. Never reused for claim/unit checks.
+type RandomLimitReads = Map<string, Promise<AccountActionLimitStatus>>
+interface RandomInventoryReads {
+  dbNow: string
+  actions: Map<string, Promise<CampaignAction | null>>
+  limits: RandomLimitReads
+  input: { any: boolean; due: boolean }
 }
 
 interface ZaloShareMessageTarget {
@@ -990,6 +1001,7 @@ export class CampaignScheduler {
   }
 
   stop(): void {
+    cancelFacebookRandomAi()
     this.webEnrichment?.stop()
     this.requestZaloRuntimeStop('shutdown')
     this.cancelFailureCleanups()
@@ -1727,19 +1739,37 @@ export class CampaignScheduler {
       && !this.isAtOrAfterCampaignDispatchCutoff(now, campaign.dailyStopTime)
   }
 
-  private async randomCampaignBlockedReason(account: AutoAccount, campaign: Campaign): Promise<string | null> {
-    const clock = await this.getReadyRuntimeClock()
+  private async randomCampaignBlockedReason(account: AutoAccount, campaign: Campaign, ai = false, inventory?: RandomInventoryReads): Promise<string | null> {
+    const clock = inventory ?? await this.getReadyRuntimeClock()
     const businessNow = new Date(clock.dbNow)
     if (campaign.isDelete || campaign.status !== 'chờ xử lý') return 'Chiến dịch không còn chờ xử lý'
     if (!this.isWithinCampaignDispatchSchedule(campaign, businessNow)) return 'Ngoài lịch chạy'
     if (this.isDataGroupCampaignHardEnded(campaign, businessNow)) return 'Chiến dịch đã hết hạn'
     try { await ensureCurrentUserCanUseCampaignAction(campaign.actionId) } catch (error) { return getErrorMessage(error) }
-    const action = await this.supabase.getCampaignAction(campaign.actionId)
+    let actionRead = inventory?.actions.get(campaign.actionId)
+    if (!actionRead) {
+      actionRead = this.supabase.getCampaignAction(campaign.actionId)
+      inventory?.actions.set(campaign.actionId, actionRead)
+    }
+    const action = await actionRead
     if (!action || !action.isActive || action.isDelete) return 'Loại chiến dịch không còn hoạt động'
     if (!this.resolveCampaignWorkflow(action).workflowId) return 'Chưa có workflow phù hợp'
-    const blocked = await this.getCampaignPreclaimLimitStatus(account, campaign, action)
+    if (ai) {
+      const extra = campaign.extraSettings || {}
+      const background = !isNativeGroupPostShare(campaign.actionId, extra) && !this.isFormattedContentCampaign(campaign)
+        && extra.postWithBackground === true && (campaign.actionId === 'facebook_timeline_post'
+          || campaign.actionId === GROUP_POST_ACTION_ID || campaign.actionId === PAGE_POST_ACTION_ID && (extra.pagePostMode || 'api') === 'ui')
+      const configurationError = this.getAdvancedContentConfigError(campaign, !background)
+      if (configurationError) return configurationError
+      if (campaign.actionId === 'facebook_group_invite' && !this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)) {
+        return 'Vui lòng chọn group nhận lời mời trước khi chạy chiến dịch'
+      }
+    }
+    const blocked = await this.getCampaignPreclaimLimitStatus(account, campaign, action, inventory?.limits)
     if (blocked) return this.buildLimitPreflightNote(blocked)
     if (!['facebook_timeline_post', NEWSFEED_INTERACTION_ACTION_ID].includes(campaign.actionId)) {
+      if (inventory) return inventory.input.due || (!inventory.input.any && this.shouldUseSuggestedFriends(campaign))
+        ? null : 'Chưa có data đến lịch chạy'
       const data = await this.supabase.listCampaignInputData(campaign.id)
       if (!data.some(row => !row.isDelete && row.status === 'chờ xử lý'
         && (!row.schedule || new Date(row.schedule).getTime() <= new Date(clock.dbNow).getTime()))
@@ -1759,16 +1789,32 @@ export class CampaignScheduler {
       const clock = await this.getReadyRuntimeClock()
       const candidates: Campaign[] = []
       if (settings.enabled) {
+        const ai = isAiRandomConfig(settings.config)
         const types = new Set(settings.config.rules.map(rule => rule.campaignActionId))
-        for (const candidate of await this.supabase.getPendingCampaigns(account.id, clock.dbNow)) {
-          if (!this.running) return
-          if (types.has(candidate.actionId) && !await this.randomCampaignBlockedReason(currentAccount, candidate)) candidates.push(candidate)
+        if (ai) {
+          const actions: RandomInventoryReads['actions'] = new Map(), limits: RandomLimitReads = new Map()
+          for (const candidate of await getPendingCampaignsForRandomAi(account.id, clock.dbNow)) {
+            if (!this.running) return
+            if (!await this.randomCampaignBlockedReason(currentAccount, candidate, true, {
+              dbNow: clock.dbNow, actions, limits, input: candidate.randomRunInput
+            })) candidates.push(candidate)
+          }
+        } else {
+          for (const candidate of await this.supabase.getPendingCampaigns(account.id, clock.dbNow)) {
+            if (!this.running) return
+            if (types.has(candidate.actionId) && !await this.randomCampaignBlockedReason(currentAccount, candidate)) candidates.push(candidate)
+          }
         }
       }
-      const plan = await randomRuns.planRandomRound(account.id, settings.config, chooseRandomRound(settings.config.rules, candidates))
+      const ai = isAiRandomConfig(settings.config)
+      if (ai && settings.enabled && candidates.length && !await ensureFacebookRandomAiPlan(currentAccount, settings.config.revision, clock.dbNow)) return
+      if (!this.running) return
+      const plan = ai
+        ? await randomRuns.planAiRandomTurn(account.id, settings.config.revision, candidates.map(c => c.id))
+        : await randomRuns.planRandomRound(account.id, settings.config, chooseRandomRound(settings.config.rules, candidates))
       if (!plan.enabled) return
       if (!plan.turns.length) {
-        if (settings.enabled && plan.config?.revision === settings.config.revision) {
+        if (!ai && settings.enabled && plan.config?.revision === settings.config.revision) {
           await this.browseAfterEmptyRandomPlan(currentAccount, settings.config.revision)
         }
         return
@@ -1783,7 +1829,7 @@ export class CampaignScheduler {
         const fresh = await randomRuns.getRandomSettings(account.id)
         if (!fresh.enabled || fresh.config?.revision !== planned.revision) break
         const campaign = await this.supabase.getCampaign(planned.campaignId)
-        const reason = campaign ? await this.randomCampaignBlockedReason(currentAccount, campaign) : 'Chiến dịch đã bị xóa'
+        const reason = campaign ? await this.randomCampaignBlockedReason(liveAccount, campaign, ai) : 'Chiến dịch đã bị xóa'
         if (reason || !campaign) {
           await randomRuns.finishRandomTurn(account.id, planned, reason ?? 'Không còn chiến dịch')
           continue
@@ -3212,14 +3258,15 @@ export class CampaignScheduler {
   private async getCampaignPreclaimLimitStatus(
     account: AutoAccount,
     campaign: Campaign,
-    action: CampaignAction
+    action: CampaignAction,
+    reads?: RandomLimitReads
   ): Promise<AccountActionLimitStatus | null> {
     const {
       executable: preflightExecutableActionDescriptors,
       quota: preflightQuotaActionDescriptors
     } = this.getCampaignPreflightActionDescriptors(campaign, action)
 
-    const disabledStatus = await this.checkActionDisabled(account, preflightExecutableActionDescriptors, true)
+    const disabledStatus = await this.checkActionDisabled(account, preflightExecutableActionDescriptors, true, reads)
     if (disabledStatus && !disabledStatus.ok) return disabledStatus
 
     const limitResult = await this.checkActionLimitsForContinuation(
@@ -3227,7 +3274,8 @@ export class CampaignScheduler {
       campaign,
       preflightQuotaActionDescriptors,
       campaign.extraSettings?.actionLimits,
-      true
+      true,
+      reads
     )
     return limitResult.limitStatus
   }
@@ -8570,11 +8618,13 @@ export class CampaignScheduler {
   private async checkActionDisabled(
     account: AutoAccount,
     actionDescriptors: CampaignActionDescriptor[],
-    readOnly = false
+    readOnly = false,
+    reads?: RandomLimitReads
   ): Promise<AccountActionLimitStatus | null> {
     for (const action of actionDescriptors) {
       const disabledStatus = readOnly
-        ? await this.supabase.peekAccountActionDisabledStatus(account.id, action.code, action.name)
+        ? await this.readRandomPreflightLimit(reads, ['disabled', account.id, action.code, action.name],
+          () => this.supabase.peekAccountActionDisabledStatus(account.id, action.code, action.name))
         : await this.supabase.getAccountActionDisabledStatus(account.id, action.code, action.name)
       if (!disabledStatus.ok) return disabledStatus
     }
@@ -8586,18 +8636,28 @@ export class CampaignScheduler {
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
     limitConfig?: CampaignActionLimitSettings,
-    readOnly = false
+    readOnly = false,
+    reads?: RandomLimitReads
   ): Promise<AccountActionLimitStatus | null> {
     void campaign
     const entitlements = await loadCurrentUserEffectiveEntitlements()
     for (const action of actionDescriptors) {
       const actionLimitConfig = this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
       const limitStatus = readOnly
-        ? await this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
+        ? await this.readRandomPreflightLimit(reads, ['quota', account.id, action.code, action.name, actionLimitConfig],
+          () => this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig))
         : await this.supabase.getAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
       if (!limitStatus.ok) return limitStatus
     }
     return null
+  }
+
+  private readRandomPreflightLimit(reads: RandomLimitReads | undefined, key: unknown[], read: () => Promise<AccountActionLimitStatus>): Promise<AccountActionLimitStatus> {
+    if (!reads) return read()
+    const cacheKey = JSON.stringify(key)
+    let pending = reads.get(cacheKey)
+    if (!pending) { pending = read(); reads.set(cacheKey, pending) }
+    return pending
   }
 
   private async buildRuntimeLimitDetail(
@@ -8758,10 +8818,11 @@ export class CampaignScheduler {
     campaign: Campaign,
     actionDescriptors: CampaignActionDescriptor[],
     limitConfig?: CampaignActionLimitSettings,
-    readOnly = false
+    readOnly = false,
+    reads?: RandomLimitReads
   ): Promise<ActionLimitContinuationResult> {
     if (!this.shouldContinueWhenActionLimitReached(limitConfig)) {
-      const limitStatus = await this.checkActionLimits(account, campaign, actionDescriptors, limitConfig, readOnly)
+      const limitStatus = await this.checkActionLimits(account, campaign, actionDescriptors, limitConfig, readOnly, reads)
       return {
         limitStatus,
         runnableActionDescriptors: actionDescriptors,
@@ -8778,7 +8839,8 @@ export class CampaignScheduler {
     for (const action of actionDescriptors) {
       const actionLimitConfig = this.getActionLimitConfig(action.code, limitConfig, account, entitlements)
       const limitStatus = readOnly
-        ? await this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
+        ? await this.readRandomPreflightLimit(reads, ['quota', account.id, action.code, action.name, actionLimitConfig],
+          () => this.supabase.peekAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig))
         : await this.supabase.getAccountRateLimitStatus(account.id, action.code, action.name, actionLimitConfig)
       if (limitStatus.ok) {
         runnableActionDescriptors.push(action)

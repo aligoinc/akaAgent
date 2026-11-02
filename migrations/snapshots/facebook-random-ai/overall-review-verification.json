@@ -1,0 +1,92 @@
+{
+  "checkedAt": "2026-11-02T12:45:42.324Z",
+  "branch": "codex/facebook-random-ai",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migrationSha256": "29af898e57ed0a98de8b5789646b902d187db48bef63b27f3401a8ff8f014bb2",
+  "supersedesTargetChecksumsIn": "review-fix-verification.json",
+  "production": {
+    "mutations": 0,
+    "liveFunctionsRechecked": 10,
+    "exactSourceAndMetadataUnchanged": true,
+    "applied": false
+  },
+  "fixes": [
+    "stale save response closes reopened configuration",
+    "history paging busy state survives a changed view",
+    "expired AI lease stays generating without eligible campaigns"
+  ],
+  "local": {
+    "nodeTypecheck": "pass",
+    "webTypecheck": "pass",
+    "productionBuild": "pass",
+    "sql": "pass",
+    "sqlChecks": 110,
+    "rollbackTrial": true,
+    "postcheck": true,
+    "guardedRollback": true,
+    "readOnlyLeaseProjection": "pass; attempts 1/2/3, retry, historical day, no stored-state mutation",
+    "aiPublicClaimUnitSettleRelease": "pass; parent claim does not mark served, unit retry idempotent, active ownership blocks planner/finish",
+    "ui": "pass; Electron + Playwright, stale save/history, failed history message, full manual/AI regression",
+    "uiVisualReview": "ai-plan.png in /tmp/facebook-random-ai-overall-ui inspected",
+    "runtimeChecks": 36,
+    "preflightTransport": "local HTTP adapter; pass",
+    "manualRuntimeChecks": 30,
+    "lifecycleChecks": 48,
+    "stopReasonCases": 4,
+    "boundaries": "pass; 7 pause scenarios and 12 SQL cases",
+    "diagnostics": "pass",
+    "buildSeconds": {
+      "main": 3.63,
+      "preload": 0.103,
+      "renderer": 29.42
+    },
+    "buildWarnings": "existing chunk/dynamic import warnings"
+  },
+  "functions": [
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "sourceMd5": "3c2caab8b949a640b4bdc3a61642ef31",
+      "targetMd5": "4f9873daff8efc4d85e36b9c683d1e6f",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ]
+    },
+    {
+      "signature": "private.facebook_random_ai_rules_valid(jsonb,jsonb)",
+      "sourceMd5": null,
+      "targetMd5": "795238d7689ad9efae3515cf156bdcb7",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "securityDefiner": false,
+      "volatility": "i",
+      "config": [
+        "search_path=pg_catalog"
+      ]
+    },
+    {
+      "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "sourceMd5": "462463fb5676836150ff146a5f070d84",
+      "targetMd5": "1213d2bf20c62cd52226e32da4d80887",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    }
+  ],
+  "limitations": [
+    "PGlite sequential transactions, not two real Desktop instances",
+    "Admission/lifecycle dependencies in fixture include historical definitions",
+    "Local HTTP adapter does not exercise production PostgREST",
+    "No real AI provider or Facebook call",
+    "No installer packaging, upload or release"
+  ]
+}

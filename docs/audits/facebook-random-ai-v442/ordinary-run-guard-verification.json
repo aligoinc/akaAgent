@@ -1,0 +1,189 @@
+{
+  "verifiedAtUtc": "2026-11-02 15:17:18 UTC",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "applied": false,
+  "productionWrites": 0,
+  "liveCapturedAtUtc": "2026-11-02 15:12:15 UTC",
+  "liveSourceDefinitionsAndMetadataMatch": true,
+  "sourceCapture": "../../../migrations/snapshots/facebook-random-ai/source.json",
+  "liveSource": [
+    {
+      "signature": "aka_agent_facebook_random_run(bigint,bigint,text,text,bigint,text,jsonb)",
+      "md5": "3c2caab8b949a640b4bdc3a61642ef31",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=30s"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_claim_allowed(bigint,bigint,text)",
+      "md5": "4fa056905d4fb0c264053748546f5461",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_finalize_on_release()",
+      "md5": "3c2bbb2182f0b293361b02c5efcbfd2a",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_finalize_turn(bigint,bigint,uuid,uuid,boolean)",
+      "md5": "a2a5e8b256010056498af554b2ad0bb8",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_orphan_turns(bigint,bigint)",
+      "md5": "2f00a8a9d3465e535332f1e97f0946b2",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_pause_requested(bigint,bigint,uuid)",
+      "md5": "50295fe0c805a2f215613182cec5b576",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_unit_gate(bigint,bigint,uuid,integer)",
+      "md5": "379ec95f37086654c316847ce7e16ee6",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_unit_recover(bigint,bigint,uuid)",
+      "md5": "582c96e29079dc70bb706da1f4a08849",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_unit_settled(bigint,bigint,uuid,boolean)",
+      "md5": "c867e990c73a78b5ce5fbdb72634a78c",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+      "md5": "462463fb5676836150ff146a5f070d84",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "v",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+    }
+  ],
+  "changedSignature": "private.facebook_random_unit_started(bigint,bigint,uuid)",
+  "sourceMd5": "462463fb5676836150ff146a5f070d84",
+  "previousCandidateMd5": "1213d2bf20c62cd52226e32da4d80887",
+  "targetMd5": "4e2a6f8bd7ddddb0b60448b281c6f04f",
+  "migrationSha256": "190f1070f9e7c475f0b71d65a566098bf6df160a7cbee915ee4dde3ffb00596b",
+  "scope": "Return after the original unit metadata UPDATE finds no matching running random turn. No settings-flag guard; admitted matching manual/AI turns retain bookkeeping.",
+  "preserved": [
+    "Ownership guard",
+    "Exact signature",
+    "Owner/ACL/security/volatility/search_path",
+    "Public RPC statement_timeout=30s",
+    "Public RPC and validator definitions",
+    "AI prompt/model seed",
+    "Ordinary admission query and lock footprint"
+  ],
+  "tests": {
+    "beforeFix": {
+      "command": "AKA_AGENT_CHAT_API_REPO=/path/to/akaAgentChatApi node scripts/facebook-random-ai-ordinary-sql-smoke.cjs",
+      "expectedFailure": "Ordinary admission changed history tuple xmax from 0 to transaction ID without changing state"
+    },
+    "ordinarySqlSmoke": {
+      "status": "PASS",
+      "ordinaryLifecycleParityCases": 6,
+      "matchingManualAndAiTurns": 2,
+      "unitRetryIdempotent": true,
+      "historyRowLockAbsent": true,
+      "allBusinessCasesRollback": true
+    },
+    "aiSqlSmoke": {
+      "status": "PASS",
+      "checks": 110,
+      "sourceChecksums": 10,
+      "transactionRollbackTrial": true,
+      "postcheck": true,
+      "guardedRollback": true,
+      "aclPreserved": true
+    },
+    "aiRuntimeSmoke": {
+      "status": "PASS",
+      "checks": 36
+    },
+    "manualRuntimeSmoke": {
+      "status": "PASS",
+      "checks": 30
+    },
+    "ordinaryRuntimeProbe": {
+      "status": "PASS",
+      "temporaryScript": "/tmp/facebook-random-off-parity.cjs",
+      "unchangedCoreMethods": 9,
+      "quotaDecisionAndDbTraceParityCases": 288,
+      "ordinaryQueueCases": 18,
+      "randomCallsWithFlagOff": 0
+    },
+    "typecheckNode": "PASS",
+    "typecheckWeb": "PASS",
+    "productionBuild": {
+      "status": "PASS",
+      "installerCreated": false,
+      "log": "/tmp/facebook-random-ai-ordinary-guard-build.log"
+    }
+  },
+  "limitations": [
+    "PGlite local fixture includes historical admission/lifecycle dependencies; not production HTTP canary",
+    "Tuple xmax comparison proves the avoided local row lock; no two-Desktop contention test",
+    "No real AI provider or Facebook execution",
+    "No installer packaging, upload, DB apply, service deploy or release"
+  ]
+}

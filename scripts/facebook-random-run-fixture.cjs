@@ -1,5 +1,5 @@
 const fs = require('node:fs'), path = require('node:path')
-const { PGlite } = require('../../akaAgentChatApi/node_modules/@electric-sql/pglite')
+const { PGlite } = require(path.join(process.env.AKA_AGENT_CHAT_API_REPO || path.resolve(__dirname, '../../akaAgentChatApi'), 'node_modules/@electric-sql/pglite'))
 const root = path.resolve(__dirname, '..')
 const dir = path.join(root, 'migrations/snapshots/facebook-random-run-v387')
 async function fixture({ lifecycle = false, restoredLifecycle = false, boundaries = false } = {}) {

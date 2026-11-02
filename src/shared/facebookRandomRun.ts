@@ -1,18 +1,38 @@
 export const FACEBOOK_RANDOM_RUN_IPC = 'facebook-random-run:request'
 export type RandomRunUnit = 'data' | 'run' | 'minute'
 export interface FacebookRandomRule { campaignActionId: string; quantity: number; unit: RandomRunUnit }
-export interface FacebookRandomConfig { version: 1; revision: number; rules: FacebookRandomRule[] }
+export interface FacebookRandomConfig { version: 1 | 2; revision: number; rules: FacebookRandomRule[]; mode?: 'manual' | 'ai' }
+export const isAiRandomConfig = (config: FacebookRandomConfig | null | undefined): boolean => config?.version === 2 && config.mode === 'ai'
+export interface FacebookRandomAiAction {
+  campaignActionId: string; name: string; unit: RandomRunUnit; waitingCount: number; pausedCount: number
+  limits?: unknown
+}
+export interface FacebookRandomAiContext {
+  date: string; actions: FacebookRandomAiAction[]; accountLimits?: unknown
+}
+export interface FacebookRandomAiState {
+  status: 'generating' | 'retry_wait' | 'failed' | 'ready'
+  requestId: string; attempts: number; generatedAt?: string; nextAttemptAt?: string | null
+  error?: string | null; rules?: FacebookRandomRule[]; context: FacebookRandomAiContext
+}
+export interface FacebookRandomAllocation {
+  cursor: number; cycle: number; coverageRound: number; servedCount?: number
+  availableActionIds?: string[]; pendingActionIds?: string[]
+}
 export type RandomTurnStatus = 'planned' | 'running' | 'completed' | 'stopped' | 'skipped' | 'expired'
 export interface FacebookRandomTurn extends FacebookRandomRule {
   id: string; order: number; round: number; ruleIndex: number; revision: number
   campaignId: number; campaignName: string; processed: number; elapsedSeconds: number
   status: RandomTurnStatus; reason?: string | null; claimToken?: string | null
   startedAt?: string | null; endedAt?: string | null
+  aiPlanId?: string; coverageRound?: number; planCycle?: number
 }
 export interface FacebookRandomSettings { enabled: boolean; config: FacebookRandomConfig | null }
 export interface FacebookRandomDay {
   date: string; accountId: number; status: 'open' | 'closed'; turns: FacebookRandomTurn[]
   total: number; page: number
+  ai?: FacebookRandomAiState | null; allocation?: FacebookRandomAllocation | null
+  aiMode?: boolean; canRetryAi?: boolean; activeTurn?: FacebookRandomTurn | null
 }
 export interface FacebookRandomPlan extends FacebookRandomSettings {
   date: string; turns: FacebookRandomTurn[]
@@ -27,14 +47,22 @@ export function randomRuleUnit(actionId: string): RandomRunUnit {
 }
 export function validateFacebookRandomConfig(value: unknown, actionIds: readonly string[]): FacebookRandomConfig {
   const config = value as FacebookRandomConfig | null
-  if (!config || typeof config !== 'object' || Array.isArray(config) || config.version !== 1
+  if (!config || typeof config !== 'object' || Array.isArray(config) || ![1, 2].includes(config.version)
+    || (config.version === 2 && !['manual', 'ai'].includes(config.mode || ''))
     || !Number.isSafeInteger(config.revision) || config.revision < 0
-    || !Array.isArray(config.rules) || config.rules.length < 1 || config.rules.length > 100) {
-    throw new Error('Cấu hình phải có version = 1, revision và từ 1 đến 100 quy tắc.')
+    || !Array.isArray(config.rules) || config.rules.length < (isAiRandomConfig(config) ? 0 : 1) || config.rules.length > 100) {
+    throw new Error('Cấu hình chạy ngẫu nhiên không hợp lệ; chế độ thủ công cần từ 1 đến 100 quy tắc.')
   }
+  // AI mode keeps the manual draft intact, including actions no longer in the catalog.
+  const ids = isAiRandomConfig(config) ? config.rules.map(rule => rule?.campaignActionId) : actionIds
+  const rules = validateRandomRules(config.rules, ids, isAiRandomConfig(config))
+  return { version: config.version, revision: config.revision, rules, ...(config.version === 2 ? { mode: config.mode } : {}) }
+}
+export function validateRandomRules(value: unknown, actionIds: readonly string[], allowEmpty = false): FacebookRandomRule[] {
+  if (!Array.isArray(value) || value.length < (allowEmpty ? 0 : 1) || value.length > 100) throw new Error('Kế hoạch phải có từ 1 đến 100 dòng.')
   const allowed = new Set(actionIds)
-  const rules = config.rules.map((rule, index) => {
-    if (!rule || typeof rule !== 'object' || !allowed.has(rule.campaignActionId)
+  return value.map((rule, index) => {
+    if (!rule || typeof rule !== 'object' || typeof rule.campaignActionId !== 'string' || !allowed.has(rule.campaignActionId)
       || !rule.campaignActionId.startsWith('facebook_')) throw new Error(`Dòng ${index + 1}: loại chiến dịch không được phép sử dụng.`)
     if (rule.unit !== randomRuleUnit(rule.campaignActionId) || !Number.isSafeInteger(rule.quantity)
       || rule.quantity <= 0 || rule.quantity > 2147483647 || (rule.unit === 'run' && rule.quantity !== 1)) {
@@ -42,7 +70,25 @@ export function validateFacebookRandomConfig(value: unknown, actionIds: readonly
     }
     return { campaignActionId: rule.campaignActionId, quantity: rule.quantity, unit: rule.unit }
   })
-  return { version: 1, revision: config.revision, rules }
+}
+export function parseFacebookRandomAiRules(content: string, context: FacebookRandomAiContext): FacebookRandomRule[] {
+  if (content.length > 64_000) throw new Error('Kế hoạch AI quá dài.')
+  const value = JSON.parse(content)
+  if (!value || Object.keys(value).length !== 1 || !Array.isArray(value.rules)) throw new Error('Kế hoạch AI không đúng định dạng.')
+  const rules = validateRandomRules(value.rules, context.actions.map(a => a.campaignActionId))
+  const seen = new Map<string, number>(), reserve = new Set(context.actions.filter(a => a.waitingCount === 0).map(a => a.campaignActionId))
+  let inReserve = false
+  for (const rule of rules) {
+    seen.set(rule.campaignActionId, (seen.get(rule.campaignActionId) || 0) + 1)
+    if (reserve.has(rule.campaignActionId)) inReserve = true
+    else if (inReserve) throw new Error('Các dòng dự phòng phải ở cuối kế hoạch.')
+  }
+  for (const action of context.actions) {
+    if (!seen.has(action.campaignActionId) || (reserve.has(action.campaignActionId) && seen.get(action.campaignActionId) !== 1)) {
+      throw new Error('Kế hoạch AI thiếu hành động hoặc lặp dòng dự phòng.')
+    }
+  }
+  return rules
 }
 /** Uniform selection, preserving the configured order and duplicate rule rows. */
 export function chooseRandomRound<T extends { id: number; actionId: string }>(
