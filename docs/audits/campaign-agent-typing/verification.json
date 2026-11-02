@@ -1,0 +1,33 @@
+{
+  "base": "3ccf39da350974466d110ebd8bfca1a5b3537d1d",
+  "branch": "codex/campaign-agent-typing-performance",
+  "platform": "Darwin arm64",
+  "scope": "Local Electron renderer with fixture IPC/store/provider; HTTP blocked; no DB changes, no release",
+  "checks": {
+    "typecheck_node": "PASS",
+    "typecheck_web": "PASS",
+    "production_build": "PASS",
+    "typing_development": "PASS",
+    "typing_production": "PASS",
+    "save_immediately_and_reopen": "PASS",
+    "edit_data_page_1_and_2": "PASS",
+    "latest_prompt_send_and_metadata_only_data": "PASS",
+    "chat_keeps_undo_and_manual_edit_restore_invalidates_undo": "PASS",
+    "full_agent_ui_smoke": "PASS",
+    "local_documentation_links": "PASS",
+    "git_diff_check": "PASS",
+    "original_campaign_form_main_preload_shared_migrations_unchanged": "PASS"
+  },
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "2c651602aa1d13fd4e0eed9766599e25afcba56e1699a5703301b0a5a0317f42",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "6465fe51c8a00bdd78cae9a3bedd66943c0eb0c9e92a97f961a9ab22dadb5797",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "c03f0e34203440bbad3909e2b64a17b10360721381af0db4a977252285652ed3",
+    "scripts/run-campaign-agent-typing-smoke.cjs": "8db8cca10a2f47f1f8c8e0a5114624335467ee80d5cce9640c87cd73d656b140"
+  },
+  "limits": [
+    "Timing includes Playwright overhead and varies with machine load",
+    "No manual test on user device or Windows",
+    "No provider live test",
+    "No PR/push/sync of this fix"
+  ]
+}

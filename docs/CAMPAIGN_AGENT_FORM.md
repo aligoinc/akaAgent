@@ -4,7 +4,7 @@ Trạng thái 02/11/2026: source và kiểm thử local hoàn tất; V442 **đã
 
 Cập nhật 03/11/2026: nhập text/Excel/CSV/TXT/ảnh data qua xử lý local và cửa sổ Upload; AI chỉ điều phối nơi nhập. Mục dưới thay thế hợp đồng gửi toàn bộ data/OCR/ảnh tới AI trước đây. Xem [audit import local](audits/campaign-agent-v442/README.md#nhập-data-local-ai-chỉ-chọn-nơi-nhập--03112026). Không đổi hoặc apply lại V442.
 
-Bản sửa sau PR #576: ô nhập chung gọn, nút Chọn file và kéo thả vào chat; xem [audit composer](audits/campaign-agent-composer/README.md). Đã kiểm local, chưa merge vào repo chính hoặc phát hành.
+Bản sửa sau PR #576: ô nhập chung gọn, nút Chọn file và kéo thả vào chat; xem [audit composer](audits/campaign-agent-composer/README.md). PR #577 đã merge và sync repo chính tại `3ccf39da`; chưa phát hành Desktop.
 
 ## Luồng mở form
 
@@ -18,6 +18,8 @@ Bản sửa sau PR #576: ô nhập chung gọn, nút Chọn file và kéo thả 
 Bố cục mục lục, form và chat; chat mặc định mở, có thu gọn, hội thoại mới, gợi ý, Hỏi Agent theo section. Cửa sổ hẹp dùng panel chồng bên phải; ẩn/hiện chat không unmount form. CSS giới hạn trong form Agent, dùng token và control của app. HTML thiết kế chỉ làm nguồn tham khảo bố cục/tương tác, không nhúng prototype/iframe.
 
 Form Agent rộng 90% cửa sổ, không giới hạn max-width; chiều cao giữ theo form gốc. Chat nằm cạnh form trên cửa sổ lớn hơn 1150px và dùng chiều rộng `clamp(300px, 24vw, 360px)`, giảm từ mức cũ 320–420px để nhường thêm chỗ cho nội dung. Từ 1150px trở xuống, chat dùng panel chồng mở/đóng rộng tối đa 360px. Padding nội dung 24px, giảm còn 18px khi cửa sổ không quá 1450px. Theo yêu cầu mới nhất, bỏ cách ép vùng nhập liệu rộng bằng form thường và breakpoint 1800px. Panel mục lục trái dùng chung chiều rộng 260px của form thường, không có mức thu nhỏ riêng ở desktop; dưới 760px vẫn chuyển sang mục lục ngang. Chat dùng `--bg-accent-subtle`, `--text-primary`, `--border-default` của app để giữ tương phản cả hai theme; gợi ý xuống dòng trong panel. Lỗi lượt gửi xuất hiện một lần trong hội thoại, lỗi nhập/đính kèm vẫn hiển thị ở composer.
+
+Hiệu năng nhập liệu: composer có store theo phiên, chỉ chat đăng ký thay đổi chữ; mỗi lần gõ cập nhật metadata nháp đồng bộ, không debounce và không render lại toàn form. Lưu/Gửi ngay sau khi gõ, thu gọn/mở chat và mở lại nháp phải giữ đủ chữ. Theo dõi revision dựa trên state React bất biến: chỉ so sánh sâu trường có reference thay đổi; không clone/serialize danh sách người nhận ở mỗi render. Snapshot tách rời vẫn giữ tại đầu/cuối lượt, rollback và Hoàn tác; sửa tay rồi sửa lại giá trị cũ vẫn vô hiệu hóa Hoàn tác cũ. Cache JSX các dòng data theo trang, dữ liệu, loại control và callback để gõ nội dung không dựng lại bảng. Reset trạng thái popover Nội dung khi đã idle không tạo render dư. Không áp dụng các thay đổi này vào form thường. Xem [đo tốc độ và hồi quy](audits/campaign-agent-typing/README.md).
 
 Khi chưa chọn hành động, snapshot chỉ công bố section General; không đính kèm Nội dung/Giới hạn/Lịch của một action rỗng. Router chọn action trước, renderer chờ form ổn định rồi tạo snapshot đầy đủ cho lượt tiếp nối. Không nới validator main; snapshot theo section có action không hợp lệ vẫn bị chặn. Smoke Electron đưa request thật của renderer qua validator main để kiểm tra hợp đồng này.
 

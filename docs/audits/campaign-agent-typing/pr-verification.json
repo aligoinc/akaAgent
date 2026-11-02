@@ -1,0 +1,26 @@
+{
+  "base": "3ccf39da350974466d110ebd8bfca1a5b3537d1d",
+  "branch": "codex/campaign-agent-typing-performance",
+  "typecheckNode": "PASS",
+  "typecheckWeb": "PASS",
+  "build": {
+    "exitCode": 0,
+    "durationSeconds": 26.66,
+    "outputBytes": 40008726
+  },
+  "smoke": "Existing passing Electron suites and review checks; source SHA-256 matches verification.json",
+  "docLinks": 183,
+  "diffCheck": "PASS",
+  "preservation": "Original form, main/preload/shared, migration, AGENTS/archive/reference unchanged",
+  "credentialPatternScan": "PASS",
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "2c651602aa1d13fd4e0eed9766599e25afcba56e1699a5703301b0a5a0317f42",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "6465fe51c8a00bdd78cae9a3bedd66943c0eb0c9e92a97f961a9ab22dadb5797",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "c03f0e34203440bbad3909e2b64a17b10360721381af0db4a977252285652ed3",
+    "scripts/run-campaign-agent-typing-smoke.cjs": "8db8cca10a2f47f1f8c8e0a5114624335467ee80d5cce9640c87cd73d656b140"
+  },
+  "limits": [
+    "No Windows or provider live test",
+    "No DB apply or release"
+  ]
+}
