@@ -1,0 +1,144 @@
+{
+  "verifiedAt": "2026-11-03T04:27:11.207439+07:00",
+  "branch": "codex/campaign-agent-form",
+  "base": "dev_3",
+  "baseCommit": "ee8dca6112bb4cbbd34a1dbb270ffbd1caab75a0",
+  "platform": "macOS arm64 / Electron 33.4.11",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0,
+      "log": "pr-node.txt"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0,
+      "log": "pr-web.txt"
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "log": "pr-build.txt"
+    },
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-main.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-ui.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-data-smoke.cjs --asar",
+      "exitCode": 0,
+      "log": "pr-ocr.txt"
+    },
+    {
+      "command": "node scripts/campaign-schedule-ai-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-ipc.txt"
+    },
+    {
+      "command": "AKA_AGENT_WEB_REPO=/Users/lequangnhut/Repos/akaAgentWebApp node scripts/desktop-ai-proxy-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-proxy.txt"
+    },
+    {
+      "command": "node scripts/campaign-content-ai-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-content.txt"
+    },
+    {
+      "command": "node scripts/ai-form-configs-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-configs.txt"
+    },
+    {
+      "command": "node scripts/campaign-import-ui-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-legacy-import.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-images-smoke.cjs",
+      "exitCode": 0,
+      "log": "pr-images.txt"
+    }
+  ],
+  "build": {
+    "outputBytes": {
+      "out/main": 3243169,
+      "out/preload": 74583,
+      "out/renderer": 36685724
+    },
+    "vitePhaseSeconds": [
+      2.03,
+      0.092,
+      25.99
+    ]
+  },
+  "scopeChecks": [
+    "Original campaign form matches dev_3 byte for byte",
+    "Document links and git diff --check pass",
+    "AGENTS.md/archive/preserved reference content unchanged",
+    "Applied V442 SQL and baseline snapshot match recorded SHA-256",
+    "New source/audit text scan found no provider key, GitHub token, private key or JWT literals"
+  ],
+  "limitations": [
+    "Renderer smoke uses fixture IPC/stores/provider and synthetic clipboard events, not production side effects",
+    "OCR and ASAR worker ran locally; no Windows installer verification",
+    "HTTP proxy ran against a local bridge and fake provider; no live-model quality canary",
+    "No DB apply, service deployment, desktop installer or release in PR preparation"
+  ],
+  "migration": {
+    "version": "20261102093125",
+    "status": "Previously applied; preserve SQL and do not reapply on merge",
+    "receipt": "../../../migrations/snapshots/campaign-agent-v442/apply-receipt.json"
+  },
+  "logNormalization": "Removed ANSI escapes/NUL padding and trailing whitespace from the PR build log; removed reporter trailing whitespace in readable-limits-build.txt.",
+  "sha256": {
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "migrations/snapshots/campaign-agent-v442/apply-receipt.json": "1c600154fca44f5b98fcee88bf4cc675cf298f91927562399177417c57bbdb60",
+    "migrations/snapshots/campaign-agent-v442/existing-configs.json": "59353eb1dd268115c3f334e1dcc9172b0252b5486a47e713db6d62d4106b4147",
+    "migrations/snapshots/campaign-agent-v442/new-configs.json": "45ff0c2f823a9cd47d755e95cb6a0c0ea90b1ee9234f600f7c433f46727bfc3f",
+    "migrations/snapshots/campaign-agent-v442/rollback.sql": "13d10e4ac273ebc08bf249c00022bac48b58ab6c5c9f608c83908bab47c822e1",
+    "package-lock.json": "48f6f7149d9a36b63d49fb7bcb4980dbc824887184e2f52a30a4357036f441a9",
+    "package.json": "9c567d19821fb2bbf109f8189f695e0f178a29e5c8abe8b36519c347d5c3d168",
+    "scripts/build-campaign-agent-migration.cjs": "da840407e09ee1cef4c36cbec49e1c401d07573c0c02c3ea6333297c5bc96d99",
+    "scripts/campaign-agent-data-smoke.ts": "05f58ae6f32fc7b28b8a7cafa4862a96c01adb4194d82bf5122edb336f26633c",
+    "scripts/campaign-agent-images-smoke.ts": "ba19bc0f483aeee5dbd3c6b0a1fbfd5b6bf884e23da886b8c0a4ca8744ffcfd0",
+    "scripts/campaign-agent-local-data-ui.cjs": "2e2112b522f89b827a8ae5c60b8d4b3d656d1ffa03ac67757ff5a349623c3213",
+    "scripts/campaign-agent-smoke.cjs": "555b4fd70c5b508ca4a73b043de75b45b81a5f1065cf9217f189297d65cb8259",
+    "scripts/campaign-agent-ui-smoke.tsx": "f702062028725ee7eae6ac335ac992d694f77948d9c90a01371b7436fcd3cdfa",
+    "scripts/campaign-schedule-ai-smoke.cjs": "91a4273677cf8e9e464291de596b605cd2be51ab21412b985e982a1229e37b08",
+    "scripts/desktop-ai-proxy-smoke.cjs": "6af40a02f52dd705463e3b3c497d0ad0590b909b93be6e9b74ddb502c895f66d",
+    "scripts/run-campaign-agent-data-smoke.cjs": "4f01f9866dd25ba6a63c4967f4416b60cb9dc13aca6a96436755afeb710fc2cb",
+    "scripts/run-campaign-agent-images-smoke.cjs": "b2a1dfa40a4a5329c2131aec54b59ad3005b325ea435b54a94104d8ca9e3f2c3",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "4e80b86151e9f33bc3b1142f948db77cf2200ce032138363fa52f4f5e330ef6a",
+    "src/main/ipc/handlers/campaignFormAiHandlers.ts": "6098c2b2ecf4abb38c67f115bd22629b564ed094a85e7b23e0761b95fb38d4b5",
+    "src/main/services/aiRuntimeService.ts": "fa969ca24120ecddc460f8c9b0520053de2c8a8bc1c0e4293e42ab27b73e66a4",
+    "src/main/services/campaignAgentData.ts": "3c07ae2b74866fb002e8ab7c38a7d374d71ca4ca886aecb73f726bc79ddca457",
+    "src/main/services/campaignAgentImages.ts": "813ce9e9ef7be52d2e4ee2fab161cd848116dae5e895a131581be0811c85758d",
+    "src/main/services/campaignAgentOcr.ts": "5186f6945e6cecc6f80bf672ecef9ec462e482b67282c01cc74c5517f68bb98f",
+    "src/main/services/campaignAgentService.ts": "2b716bdd12003644915ab5dfcb365ad0368cc38ee3fa1884221d39c7967ed349",
+    "src/main/services/formAiSchema.ts": "86c96e77dbc15a467e0c2cc3dea4a8e8268ba98d59219e86f2b02ec1680e202f",
+    "src/preload/index.ts": "82a22edc76ae687a1132d7bb35f2fad31cf90c346b1fa86cbca2718b89cfe4cd",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "40cee8d3643b88620e786eefcabbf94b80c8c7243b1ccc9a8ded7b310f9967db",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentDataImportModal.tsx": "6b775f68fae3efc524c17dba2d7c8fbb20cd2ee3625dbda58c47b7e1c9bb69cc",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "0df55aaaac9605a2cb803e6fb182181b85e0297c8b87353407c75d67c5a675a0",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentSendExclusions.tsx": "84431def9316687f52506324f50d30ebcdb2456d8a62de51c6bfe60b0b347dcc",
+    "src/renderer/src/components/CampaignPanels/CampaignDataUploadModal.tsx": "c017e169618c819ddb5ff9ef4fbaa5e7a5c3954bf839aa002bf4984bb8433224",
+    "src/renderer/src/components/CampaignPanels/CampaignPanel.tsx": "b1965fab1e5ecd531061083f44d27265f164a705a1d6e6db24c1a395d35d7cf2",
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "edb690cd1ffb52db2265abbe0b7c6e2d52fe2ecc7bff763608e6ed61bb9aadba",
+    "src/renderer/src/components/CampaignPanels/campaignAgentPresentation.ts": "7a19fa7c901eb298a468e6020ad0b64e96e6a395552c08a2670ba6903755de01",
+    "src/renderer/src/components/CampaignPanels/useAgentDraftField.ts": "9bcb4a09a903d7ad869558116a8c52c9c20478cb99650349992dd256c19a3420",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "2596c68fff373859ecdbd991df83c0bd3d030c3b3c585ddf0bb73535982487eb",
+    "src/shared/campaignAgent.ts": "df439be8273c00bfba5093612c4bf92d0e11a7308eeeea3abfa1b60b0ee6016e",
+    "src/shared/campaignAgentData.ts": "db7d09392902aa40d5c52c869476a130ea6db0d3d0182e1a647b88a43693cf9d",
+    "src/shared/campaignContentAi.ts": "603b02bb52a492b5c580cbf1ff9d6c0a6ec5cb92b4f1680fe340009c490a710e",
+    "src/shared/campaignFormAiConfig.ts": "876cc5cffde71b3ed27283c7c50821cc890be9d2cea65dc0d15190b15d2d51b5",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3"
+  },
+  "postCheckFormatting": "Removed only the extra blank line at EOF in campaignAgentPresentation.ts after checks; no executable tokens changed."
+}

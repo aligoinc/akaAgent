@@ -1,0 +1,19 @@
+AssertionError [ERR_ASSERTION]: quoted TSV records stay intact
++ actual - expected
+
+  {
++   data: 'Tên\tSĐT\tInfo1\nAn\t0901234567\t"Ghi chú\nBình\t0987654321\tOK',
++   description: 'khách VIP"'
+-   data: 'Tên\tSĐT\tInfo1\nAn\t0901234567\t"Ghi chú\nkhách VIP"\nBình\t0987654321\tOK',
+-   description: ''
+  }
+
+    at main (/Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/scripts/campaign-agent-smoke.cjs:82:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [Object],
+  expected: [Object],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}

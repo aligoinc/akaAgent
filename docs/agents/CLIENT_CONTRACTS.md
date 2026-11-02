@@ -79,3 +79,10 @@ Nguồn: [chuyển chế độ](../../src/renderer/src/components/CampaignPanels
 [control trên form](../../src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx:13757),
 [modal và xác nhận](../../src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx:15412),
 [chuẩn bị snapshot khi lưu](../../src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx:5899).
+
+<a id="campaign-agent-form"></a>
+## Form chiến dịch bằng Agent
+
+Nút thêm bằng Agent và nháp có metadata Agent hợp lệ mở `CampaignAgentFormModal` riêng. Thêm thường, sửa và nhân bản chiến dịch đã lưu tiếp tục mở `CampaignFormModal`, không phụ thuộc nguồn tạo. Chat chỉ điền và soạn nháp; Lưu chiến dịch/Lưu nháp/Lưu nhóm vẫn do user quyết định. Không sửa payload runtime hoặc revision/CAS để nhận diện form. Xem [hợp đồng đầy đủ](../CAMPAIGN_AGENT_FORM.md) và [audit local/apply](../audits/campaign-agent-v442/README.md); V442 **đã apply** (`20261102093125`), app mở local để test, **chưa phát hành Desktop**.
+
+Data đính kèm ở form Agent được đọc/import trên máy (Excel/CSV/TXT/text, ảnh OCR local), AI chỉ nhận mô tả và metadata để chọn nơi nhập. Upload giữ chọn cột/kiểm tra/xác nhận chèn; chat không tự chèn danh sách hay gửi toàn bộ data tới model. File gốc lưu theo org/staff/nháp tại máy, metadata nháp giữ ref và CAS cũ. Đây là cập nhật source 03/11/2026, không apply/deploy thêm.

@@ -1,0 +1,75 @@
+{
+  "recordedAt": "2026-11-02T08:25:00.243787+00:00",
+  "branch": "codex/campaign-agent-form",
+  "base": "686af0b638b8b45b7ff236477b47a1b0125da1e9",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-agent-images-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-schedule-ai-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-content-ai-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-exclusion-ai-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-facebook-ai-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/campaign-facebook-ai-service-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/ai-form-configs-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-schedule-ai-ui-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "oldFormSha256": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+  "migrationCandidateSha256": "7ae95bcbe2f0171604a240b31664b284a4bfff6c47b8d767e6eaff40500d1634",
+  "dbAccess": "read-only metadata/config capture on cgjbsmqtfhqvttudyjzq",
+  "dbApplied": false,
+  "dbTransactionTrial": false,
+  "providerLiveTest": false,
+  "published": false,
+  "notes": [
+    "Electron UI uses isolated IPC/store fixtures; native image storage tested with Electron 33.4.11.",
+    "Actual form save entrypoint exercised through mocked createCampaign; no campaign was created in production.",
+    "Build warnings concern existing mixed static/dynamic imports."
+  ]
+}

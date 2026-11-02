@@ -1,0 +1,36 @@
+{
+  "checked_at_utc": "2026-11-02T09:50:30.718615+00:00",
+  "branch": "codex/campaign-agent-form",
+  "base_commit": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "reproduction_before_fix": "Real Electron empty-action request rejected by validateLimitsAiRequest via validateAgentRequest before any provider call.",
+  "checks": {
+    "agent_service_smoke": "passed",
+    "agent_electron_ui_smoke": "passed; actual renderer requests validated by real main validator, including initial empty action and subsequent selected action",
+    "typecheck_node": "passed",
+    "typecheck_web": "passed",
+    "production_build": "passed",
+    "chat_ui": "dark/light message contrast >=4.5; visible separator; wrapped suggestions; full viewport width at 900/1500/2200 px; no duplicate clarification",
+    "original_form": "unchanged",
+    "v442_sql": "unchanged; already applied; not reapplied"
+  },
+  "live_canary": {
+    "environment": "running Desktop dev app, existing login, production AI proxy",
+    "result": "Empty form prompt for Zalo messaging/friend requests reached live AI and returned account clarification",
+    "campaign_saved_or_started": false,
+    "scope_limit": "One clarification flow only, not all provider behavior or Windows; no customer identifiers/screenshots persisted in this receipt"
+  },
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "d51b55dc335e0a645e2686957c4cd15ec5b1672081b34a309da236659dc41414",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "22612a9985cbb023f2b031b29a5abf2335f86b3ed67d2bc16650d5689a48ef15",
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "28b06a426d06f34bd72a6243a0d2760d0887e98f15a86ce2ab6d90c488a43bbb",
+    "scripts/campaign-agent-smoke.cjs": "2be3178d32819774bc32b5cbc8c2d4fb86ecbf01968db0c62838167ea6f16f98",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "8b2b5f894ee594b6faa44823aa894ddbfea3379d72e4524d061eb1adf5e17414",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "not_performed": [
+    "DB changes or migration reapply",
+    "API deployment",
+    "Desktop packaging or release"
+  ]
+}

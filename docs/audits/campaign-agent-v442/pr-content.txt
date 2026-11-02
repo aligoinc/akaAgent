@@ -1,0 +1,1 @@
+PASS content AI: native Claude payload/options precedence, JSON/indices/capabilities, token/variant roundtrip, media preservation, no-op, email, scope/model/schema, log, incomplete output, abort

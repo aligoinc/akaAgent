@@ -1,0 +1,1 @@
+PASS local data: private file refs, source preservation, staff/draft boundaries, invalid inputs, real Vietnamese/English OCR worker, cancellation cleanup

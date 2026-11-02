@@ -1,0 +1,327 @@
+{
+  "migration": "migration_v442_campaign_agent_form",
+  "project": {
+    "id": "cgjbsmqtfhqvttudyjzq",
+    "name": "akachat"
+  },
+  "branch": "codex/campaign-agent-form",
+  "base_commit": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "status": "applied",
+  "ledger": {
+    "name": "migration_v442_campaign_agent_form",
+    "version": "20261102093125",
+    "statement_md5": "a24f6d78d81b7f26ece178bc19fd0395",
+    "statement_count": 1
+  },
+  "applied_at_utc": "2026-11-02T09:31:25Z",
+  "applied_at_vietnam": "2026-11-02T16:31:25+07:00",
+  "migration_sha256": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+  "baseline_snapshot_sha256": "59353eb1dd268115c3f334e1dcc9172b0252b5486a47e713db6d62d4106b4147",
+  "original_form_sha256": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+  "execution": {
+    "tool": "Supabase execute_sql",
+    "reason": "DML-only: reuse existing migration ledger without auxiliary migration-schema DDL or PostgREST reload.",
+    "transaction": "BEGIN; local lock_timeout 5s / statement_timeout 60s; canonical guarded migration; exact new-payload assertion; duplicate-ledger guard; INSERT existing schema_migrations with canonical SQL; COMMIT",
+    "connection_budget_changed": false,
+    "rpc_acl_changed": false,
+    "postgrest_reload_requested": false
+  },
+  "preflight": {
+    "model": {
+      "id": 21,
+      "is_active": true,
+      "organization_id": null
+    },
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "is_active",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "tablename": "ai_form_configs",
+        "permissive": "PERMISSIVE",
+        "policyname": "ai_form_configs_active_read",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "is_active",
+        "roles": [
+          "aka_agent_desktop"
+        ],
+        "tablename": "ai_form_configs",
+        "permissive": "PERMISSIVE",
+        "policyname": "desktop_legacy_0",
+        "schemaname": "public",
+        "with_check": null
+      }
+    ],
+    "triggers": [
+      "CREATE TRIGGER ai_form_configs_validate BEFORE INSERT OR UPDATE ON public.ai_form_configs FOR EACH ROW EXECUTE FUNCTION private.validate_ai_form_config()"
+    ],
+    "checked_at": "2026-11-02T09:29:13.212779+00:00",
+    "table_meta": {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "owner": "postgres",
+      "force_rls": false
+    },
+    "ledger_columns": [
+      {
+        "type": "text",
+        "column": "version",
+        "default": null,
+        "nullable": "NO"
+      },
+      {
+        "type": "ARRAY",
+        "column": "statements",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "column": "name",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "column": "created_by",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "column": "idempotency_key",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "ARRAY",
+        "column": "rollback",
+        "default": null,
+        "nullable": "YES"
+      }
+    ],
+    "ledger_matches": []
+  },
+  "transaction_trial": {
+    "result": "passed_then_rolled_back",
+    "checks": [
+      "guarded insert of two configs",
+      "exact normalized new config payloads and total count 12",
+      "aka_agent_desktop can SELECT both active configs",
+      "guarded rollback disables exactly two new configs"
+    ],
+    "after_rollback": {
+      "configs": [
+        {
+          "code": "app_campaign_action_limits",
+          "row_md5": "243aa41a6f4111f6ffaa69392be2dbb4"
+        },
+        {
+          "code": "app_campaign_content",
+          "row_md5": "6dd75fc8e4cd95821602d3088397fb43"
+        },
+        {
+          "code": "app_campaign_schedule",
+          "row_md5": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6"
+        },
+        {
+          "code": "app_campaign_send_exclusions",
+          "row_md5": "cf5c07d8f50596be2db9c26b193bec63"
+        },
+        {
+          "code": "app_facebook_form_general",
+          "row_md5": "91042773d872554c93c525e6f7d3e4b7"
+        },
+        {
+          "code": "app_facebook_form_group_comment",
+          "row_md5": "5be8ba543be6121731767a5f53e2a09e"
+        },
+        {
+          "code": "app_facebook_form_keywords",
+          "row_md5": "3589337606a59059c223df258af256e1"
+        },
+        {
+          "code": "app_facebook_form_newsfeed",
+          "row_md5": "e8f5332d01bbe3d09d40830e4cd46845"
+        },
+        {
+          "code": "app_facebook_form_post_search",
+          "row_md5": "cfa02a5f8b22aed40ce62a74978f66d1"
+        },
+        {
+          "code": "app_facebook_form_search",
+          "row_md5": "38c9e8fc97b4073e650b48a84e727ba6"
+        }
+      ],
+      "checked_at": "2026-11-02T09:30:40.043019+00:00",
+      "agent_count": 0,
+      "config_count": 10,
+      "ledger_matches": [],
+      "proposed_version": "20261102093040"
+    }
+  },
+  "postflight": {
+    "checked_at": "2026-11-02T09:34:35.858968+00:00",
+    "checks": {
+      "old_config_checksums_preserved": true,
+      "exact_new_payloads": true,
+      "security_preserved": true,
+      "policies_preserved": true,
+      "triggers_preserved": true,
+      "ledger_statement_matches_local_md5": true
+    },
+    "config_count": 12,
+    "configs": [
+      {
+        "id": 1,
+        "code": "app_campaign_action_limits",
+        "row_md5": "243aa41a6f4111f6ffaa69392be2dbb4",
+        "is_active": true
+      },
+      {
+        "id": 22,
+        "code": "app_campaign_agent_router",
+        "row_md5": "b6544257701a376ec018687bc0761059",
+        "is_active": true
+      },
+      {
+        "id": 23,
+        "code": "app_campaign_agent_section",
+        "row_md5": "1caf4b6ce97e32ca09fa2bfd56b1a400",
+        "is_active": true
+      },
+      {
+        "id": 5,
+        "code": "app_campaign_content",
+        "row_md5": "6dd75fc8e4cd95821602d3088397fb43",
+        "is_active": true
+      },
+      {
+        "id": 2,
+        "code": "app_campaign_schedule",
+        "row_md5": "8d5756e1b68cf0ad5aad3c5c3a2fa7e6",
+        "is_active": true
+      },
+      {
+        "id": 7,
+        "code": "app_campaign_send_exclusions",
+        "row_md5": "cf5c07d8f50596be2db9c26b193bec63",
+        "is_active": true
+      },
+      {
+        "id": 14,
+        "code": "app_facebook_form_general",
+        "row_md5": "91042773d872554c93c525e6f7d3e4b7",
+        "is_active": true
+      },
+      {
+        "id": 19,
+        "code": "app_facebook_form_group_comment",
+        "row_md5": "5be8ba543be6121731767a5f53e2a09e",
+        "is_active": true
+      },
+      {
+        "id": 16,
+        "code": "app_facebook_form_keywords",
+        "row_md5": "3589337606a59059c223df258af256e1",
+        "is_active": true
+      },
+      {
+        "id": 18,
+        "code": "app_facebook_form_newsfeed",
+        "row_md5": "e8f5332d01bbe3d09d40830e4cd46845",
+        "is_active": true
+      },
+      {
+        "id": 17,
+        "code": "app_facebook_form_post_search",
+        "row_md5": "cfa02a5f8b22aed40ce62a74978f66d1",
+        "is_active": true
+      },
+      {
+        "id": 15,
+        "code": "app_facebook_form_search",
+        "row_md5": "38c9e8fc97b4073e650b48a84e727ba6",
+        "is_active": true
+      }
+    ],
+    "table_security": {
+      "acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_desktop=r/postgres}",
+      "rls": true,
+      "owner": "postgres",
+      "force_rls": false
+    },
+    "policies": [
+      {
+        "cmd": "SELECT",
+        "qual": "is_active",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "tablename": "ai_form_configs",
+        "permissive": "PERMISSIVE",
+        "policyname": "ai_form_configs_active_read",
+        "schemaname": "public",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "qual": "is_active",
+        "roles": [
+          "aka_agent_desktop"
+        ],
+        "tablename": "ai_form_configs",
+        "permissive": "PERMISSIVE",
+        "policyname": "desktop_legacy_0",
+        "schemaname": "public",
+        "with_check": null
+      }
+    ],
+    "triggers": [
+      "CREATE TRIGGER ai_form_configs_validate BEFORE INSERT OR UPDATE ON public.ai_form_configs FOR EACH ROW EXECUTE FUNCTION private.validate_ai_form_config()"
+    ],
+    "desktop_role_read": [
+      {
+        "code": "app_campaign_agent_router",
+        "desktop_section_id": "campaign.agent.router",
+        "is_active": true,
+        "model_id": 21,
+        "timeout_ms": 120000
+      },
+      {
+        "code": "app_campaign_agent_section",
+        "desktop_section_id": "campaign.agent.section",
+        "is_active": true,
+        "model_id": 21,
+        "timeout_ms": 120000
+      }
+    ]
+  },
+  "local_app": {
+    "command": "npm run dev",
+    "worktree": "/Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent",
+    "renderer_url": "http://localhost:5173/",
+    "startup": "main/preload builds succeeded; Electron window opened",
+    "visual_verification": "CUA confirmed app window, adjacent Thêm chiến dịch/Thêm bằng Agent buttons, Agent modal and chat rendered with existing authenticated session",
+    "left_running_for_user_testing": true,
+    "note": "macOS login-item registration emitted Operation not permitted; app window and form opened successfully."
+  },
+  "not_verified": [
+    "Live AI provider quality and end-to-end Agent turn after apply (left to user testing)",
+    "Windows runtime"
+  ],
+  "not_performed": [
+    "Create/run production campaign",
+    "Service deployment",
+    "Desktop packaging/upload/release"
+  ],
+  "canonical_sql_note": "Keep applied SQL bytes and ledger statement unchanged. Candidate/NOT APPLIED comment in generated SQL records preparation time; this receipt and current-state docs supersede rollout status."
+}

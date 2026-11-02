@@ -1,0 +1,74 @@
+{
+  "verifiedAt": "2026-11-02T10:14:17.247Z",
+  "scope": "Fix three Agent review findings: five-image transport, OCR clarification context, attachment deletion while saving",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "AKA_AGENT_WEB_REPO=/Users/lequangnhut/Repos/akaAgentWebApp node scripts/desktop-ai-proxy-smoke.cjs",
+      "status": "passed",
+      "cases": {
+        "legacyHttpParity": 16,
+        "fiveImageHttp": 8
+      },
+      "providers": [
+        "OpenAI Responses",
+        "Chat Completions",
+        "custom",
+        "native Claude"
+      ],
+      "logMasking": true
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "attachment removal/new chat blocked during pending draft save",
+        "reopen saved composer image",
+        "OCR clarification -> save/reopen -> follow-up without new images",
+        "image removal enabled outside save"
+      ]
+    },
+    {
+      "command": "node scripts/ai-form-configs-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "log": "image-review-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "sha256": {
+    "src/main/services/aiRuntimeService.ts": "fa969ca24120ecddc460f8c9b0520053de2c8a8bc1c0e4293e42ab27b73e66a4",
+    "src/main/services/campaignAgentService.ts": "a24b766e75ff3744434ded3560c4e655fc86dbc702badb77907e111c02f2caab",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "16a136e4b8a4f9bb528790cfbc3d990842f124f590910fb105595c4eece28b6c",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "5d10fc38438f384aaae0e72116ec497f8a8b2491c4e87b7f6e0ce0880bebd4d3",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Electron uses actual renderer components with IPC fixtures.",
+    "HTTP uses local actual proxy route and fake provider; no production OCR quality assertion."
+  ]
+}

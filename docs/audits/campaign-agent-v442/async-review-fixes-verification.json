@@ -1,0 +1,53 @@
+{
+  "recordedAt": "2026-11-02T09:04:52.806081+00:00",
+  "branch": "codex/campaign-agent-form",
+  "base": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "923720eb8058314608c425a25b5888f8f622b1fe5c75ead4fda8dd378402d97f",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "062d8c538bd9f5c0711870f86d9ac02eace2083254080ee274e36d7f1f0fa546",
+    "scripts/campaign-agent-ui-smoke.tsx": "88c5ff5572d1116e6d55d4ad790aca35339716626927637649dc29f7dfe41237",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "d4b35f27845066774dc851643e40aedc8cc07f0b59e2d2e33a4544356ac531f0",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "migrations/snapshots/campaign-agent-v442/existing-configs.json": "59353eb1dd268115c3f334e1dcc9172b0252b5486a47e713db6d62d4106b4147",
+    "docs/audits/campaign-agent-v442/async-review-build.txt": "d9bcfafa6507f73ffd4d88e7f8a404a446c0b11711e899b214434ff896eb1024"
+  },
+  "oldFormSha256": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+  "dbAccessThisTurn": false,
+  "dbApplied": false,
+  "providerLiveTest": false,
+  "published": false,
+  "notes": [
+    "Real Electron renderer with isolated IPC/store fixtures and HTTP blocked; no production side effects.",
+    "Final stabilization timer cancellation before IPC sends no request; cancellation/timeout after patch restores name and schedule with no success/undo history.",
+    "Cancellation after action selection restores the previous action and prevents the second IPC round.",
+    "Late label responses preserve Agent replacement, undo eligibility and draft data; previous-account catalog cannot clear new-account tags.",
+    "Existing form, migration candidate and AI configuration capture checksums are unchanged.",
+    "Production build passed; existing mixed dynamic/static import warnings remain."
+  ]
+}

@@ -1,0 +1,1 @@
+PASS Agent local data Electron: metadata-only requests, text/Excel/image preview, cancel/append/replace, 120 rows, file queue, draft reopen, missing files

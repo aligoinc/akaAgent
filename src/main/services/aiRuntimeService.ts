@@ -8,6 +8,7 @@ const DEFAULT_AI_TIMEOUT_MS = 120_000
 
 type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 type AiChatMessage = { role: 'system' | 'user' | 'assistant'; content: unknown }
+type ImageInputOptions = { maxImages: 3 | 5 }
 
 interface PreparedRequest {
   systemPrompt: string
@@ -131,7 +132,7 @@ function sanitizeText(value: string, maxLength = 6000): string {
   return masked.length > maxLength ? `${masked.slice(0, maxLength)}...` : masked
 }
 
-function getImageDataUrls(payload: Record<string, unknown>): string[] {
+function getImageDataUrls(payload: Record<string, unknown>, maxImages = MAX_IMAGE_DATA_URLS): string[] {
   const values: unknown[] = []
   if (typeof payload.imageDataUrl === 'string') values.push(payload.imageDataUrl)
   if (Array.isArray(payload.imageDataUrls)) values.push(...payload.imageDataUrls)
@@ -139,18 +140,17 @@ function getImageDataUrls(payload: Record<string, unknown>): string[] {
   return values
     .map(value => typeof value === 'string' ? value.trim() : '')
     .filter(value => /^data:image\/[a-z0-9.+-]+;base64,/i.test(value))
-    .slice(0, MAX_IMAGE_DATA_URLS)
+    .slice(0, maxImages)
 }
 
-function buildOpenAiInputContent(text: string, payload: Record<string, unknown>): Record<string, unknown>[] {
+function buildOpenAiInputContent(text: string, imageUrls: string[]): Record<string, unknown>[] {
   return [
     { type: 'input_text', text },
-    ...getImageDataUrls(payload).map(imageUrl => ({ type: 'input_image', image_url: imageUrl }))
+    ...imageUrls.map(imageUrl => ({ type: 'input_image', image_url: imageUrl }))
   ]
 }
 
-function buildChatUserContent(text: string, payload: Record<string, unknown>): unknown {
-  const imageUrls = getImageDataUrls(payload)
+function buildChatUserContent(text: string, imageUrls: string[]): unknown {
   if (imageUrls.length === 0) return text
   return [
     { type: 'text', text },
@@ -189,7 +189,7 @@ function preparePrompts(config: AiUsingConfig, payload: Record<string, unknown>)
   return { systemPrompt, userPrompt, messages }
 }
 
-function buildOpenAiResponsesBody(config: AiUsingConfig, prepared: PreparedRequest, payload: Record<string, unknown>): Record<string, unknown> {
+function buildOpenAiResponsesBody(config: AiUsingConfig, prepared: PreparedRequest, payload: Record<string, unknown>, imageUrls: string[]): Record<string, unknown> {
   const bodyOverrides = toRecord(payload.bodyOverrides)
   const body: Record<string, unknown> = {
     ...config.model.defaultBody,
@@ -209,20 +209,20 @@ function buildOpenAiResponsesBody(config: AiUsingConfig, prepared: PreparedReque
     body.input = nonSystemMessages.map((message, index) => ({
       role: message.role === 'assistant' ? 'assistant' : 'user',
       content: message.role !== 'assistant' && index === lastUserIndex
-        ? buildOpenAiInputContent(message.content, payload)
+        ? buildOpenAiInputContent(message.content, imageUrls)
         : [{ type: 'input_text', text: message.content }]
     }))
   } else {
     body.input = [{
       role: 'user',
-      content: buildOpenAiInputContent(prepared.userPrompt, payload)
+      content: buildOpenAiInputContent(prepared.userPrompt, imageUrls)
     }]
   }
 
   return body
 }
 
-function buildChatCompletionsBody(config: AiUsingConfig, prepared: PreparedRequest, payload: Record<string, unknown>): Record<string, unknown> {
+function buildChatCompletionsBody(config: AiUsingConfig, prepared: PreparedRequest, payload: Record<string, unknown>, imageUrls: string[]): Record<string, unknown> {
   const bodyOverrides = toRecord(payload.bodyOverrides)
   const messages: AiChatMessage[] = []
   const explicitSystemMessages = prepared.messages.filter(message => message.role === 'system')
@@ -237,11 +237,11 @@ function buildChatCompletionsBody(config: AiUsingConfig, prepared: PreparedReque
     messages.push(...nonSystemMessages.map((message, index) => ({
       role: message.role,
       content: message.role !== 'assistant' && index === lastUserIndex
-        ? buildChatUserContent(message.content, payload)
+        ? buildChatUserContent(message.content, imageUrls)
         : message.content
     })))
   } else {
-    messages.push({ role: 'user', content: buildChatUserContent(prepared.userPrompt, payload) })
+    messages.push({ role: 'user', content: buildChatUserContent(prepared.userPrompt, imageUrls) })
   }
 
   return {
@@ -254,7 +254,7 @@ function buildChatCompletionsBody(config: AiUsingConfig, prepared: PreparedReque
   }
 }
 
-function buildRequest(config: AiUsingConfig, payload: Record<string, unknown>): PreparedRequest {
+function buildRequest(config: AiUsingConfig, payload: Record<string, unknown>, imageInput?: ImageInputOptions): PreparedRequest {
   const prompts = preparePrompts(config, payload)
   const provider = config.model.provider.toLowerCase()
   const endpoint = config.model.endpoint.toLowerCase()
@@ -265,12 +265,24 @@ function buildRequest(config: AiUsingConfig, payload: Record<string, unknown>): 
   }
 
   const temporaryPrepared = { ...preparedBase, body: {} }
+  const imageUrls = getImageDataUrls(payload, imageInput?.maxImages)
   const body = config.formConfigId && isFormAiClaude(provider)
     ? formAiClaudeBody(config.model.model, prompts.systemPrompt, prompts.userPrompt, config.model.defaultBody,
       mergeFormAiClaudeOptions(config.using.requestOptions, toRecord(payload.bodyOverrides)))
     : provider === 'openai' && endpoint.includes('/responses')
-    ? buildOpenAiResponsesBody(config, temporaryPrepared, payload)
-    : buildChatCompletionsBody(config, temporaryPrepared, payload)
+    ? buildOpenAiResponsesBody(config, temporaryPrepared, payload, imageUrls)
+    : buildChatCompletionsBody(config, temporaryPrepared, payload, imageUrls)
+
+  // Explicit opt-in keeps existing callers' request bodies unchanged.
+  if (imageInput && imageUrls.length && config.formConfigId && isFormAiClaude(provider)) {
+    body.messages = [{ role: 'user', content: [
+      ...imageUrls.map(url => {
+        const separator = url.indexOf(',')
+        return { type: 'image', source: { type: 'base64', media_type: url.slice(5, url.indexOf(';')), data: url.slice(separator + 1) } }
+      }),
+      { type: 'text', text: prompts.userPrompt }
+    ] }]
+  }
 
   return { ...preparedBase, body }
 }
@@ -296,6 +308,8 @@ export async function callAiUsing(
     expectedModel?: string
     /** Main-process only: the IPC validators never accept configuration from renderer. */
     formConfig?: AiUsingConfig
+    /** Main-process only; caller validates image type, size and count before opting in. */
+    imageInput?: ImageInputOptions
     validateContent?: (content: string) => boolean
   } = {}
 ): Promise<AiCallResult> {
@@ -346,7 +360,7 @@ export async function callAiUsing(
   const model = config.model.model
   const endpoint = config.model.endpoint
   const startedAt = Date.now()
-  const request = buildRequest(config, payload)
+  const request = buildRequest(config, payload, options.imageInput)
   const timeoutMs = Math.max(1000, Number(config.using.timeoutMs || DEFAULT_AI_TIMEOUT_MS))
 
   if (isTrustedServerSupabaseConfigured() && !config.model.apiKey) {

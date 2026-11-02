@@ -13,6 +13,7 @@ import {
 import { createImportExportWorkbook, importWorkbookTables, readImportWorkbook } from '../../../../shared/campaignImportWorkbook'
 import { useUiStore } from '../../stores/uiStore'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
+import type { AgentDataSource } from '../../../../shared/campaignAgentData'
 
 type ImportTab = ImportSourceKind
 type TableTab = 'excel' | 'akabizTemplate' | 'sheet' | 'textbox'
@@ -67,6 +68,8 @@ interface CampaignDataUploadModalProps {
   showDatasetName?: boolean
   layout?: 'default' | 'data-group'
   submitLabel?: string
+  initialSource?: AgentDataSource
+  readImageText?: (dataUrl: string, name: string) => Promise<string>
 }
 
 const loadImageFromDataUrl = (dataUrl: string) => new Promise<HTMLImageElement>((resolve, reject) => {
@@ -185,7 +188,7 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
 export default function CampaignDataUploadModal({
   platform, actionId, actionName, accountIds, onClose, onInsert, onSubmitRows, contextSlot,
   title = 'Upload dữ liệu', datasetNameLabel = 'Tên nhóm dữ liệu', showDatasetName = true,
-  layout = 'default', submitLabel = 'Chèn xuống chi tiết'
+  layout = 'default', submitLabel = 'Chèn xuống chi tiết', initialSource, readImageText
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
   const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
@@ -333,6 +336,18 @@ export default function CampaignDataUploadModal({
       if (revision === sourceRevisionRef.current && operation === asyncOperationRef.current) showAlert(error instanceof Error ? error.message : 'Không thể đọc link sheet.', 'error')
     } finally { if (operation === asyncOperationRef.current) setLoading(false) }
   }
+
+  useEffect(() => {
+    if (!initialSource) return
+    if (initialSource.kind === 'text') {
+      setActiveTab('textbox'); setTxtFileName(initialSource.name); updateText(initialSource.text)
+    } else {
+      const bytes = Uint8Array.from(atob(initialSource.dataBase64), char => char.charCodeAt(0))
+      const file = new File([bytes], initialSource.name, { type: initialSource.mimeType })
+      if (/\.txt$/i.test(file.name)) { setActiveTab('textbox'); void readTextFile(file) }
+      else { setActiveTab('excel'); void readExcelFile('excel', file) }
+    }
+  }, [initialSource, platform, actionId])
   const rowsFromTable = (kind: TableTab): ImportSourceRow[] => {
     const table = selectedTable(kind), config = configs[kind]
     if (!table || !config) throw new Error(kind === 'sheet' ? 'Vui lòng đọc dữ liệu từ link sheet trước.' : 'Vui lòng tải file hoặc dán bảng dữ liệu.')
@@ -355,9 +370,18 @@ export default function CampaignDataUploadModal({
         if (!imageDataUrl) throw new Error('Vui lòng tải hoặc dán ảnh.')
         const qr = isZaloJoinGroupLinkAction(actionId) ? normalizeZaloGroupInviteLink(await decodeQrDataFromDataUrl(imageDataUrl).catch(() => '')) : ''
         if (revision !== sourceRevisionRef.current || operation !== asyncOperationRef.current) return
+        if (!qr && readImageText) {
+          const text = await readImageText(imageDataUrl, sourceName(kind))
+          if (revision !== sourceRevisionRef.current || operation !== asyncOperationRef.current) return
+          // Keep every OCR column editable; the user maps columns in the same
+          // textbox/table UI as pasted data before verifying and inserting.
+          setActiveTab('textbox'); setTxtFileName(`${sourceName(kind)} (OCR)`); updateText(text)
+          showAlert('Đã đọc chữ trên máy. Hãy kiểm tra nội dung và chọn cột trước khi chèn.', 'success')
+          return
+        }
         rows = qr ? [{ data: { uid: qr }, location: { source: sourceName(kind), sheet: '', row: 1, item: 1 } }]
           : (await window.electronAPI.extractCampaignDataFromImage({ imageDataUrl, platform, actionId, responseMode: 'source' })).rows
-        rows = rows.map(row => ({ ...row, location: { ...row.location, source: `${sourceName(kind)} (AI/QR)` } }))
+        rows = rows.map(row => ({ ...row, location: { ...row.location, source: `${sourceName(kind)} (${readImageText ? 'OCR local/QR' : 'AI/QR'})` } }))
       }
       const next = verify(rows, kind)
       if (revision !== sourceRevisionRef.current || operation !== asyncOperationRef.current) return
@@ -536,11 +560,12 @@ export default function CampaignDataUploadModal({
   const layoutClass = layout === 'data-group' ? ' is-data-group' : ''
   const templateFile = files.akabizTemplate
   const busy = loading || saving
+  const closeDisabled = saving || loading && !readImageText
 
   return createPortal(<div className={`modal-overlay campaign-import-modal-overlay${layoutClass}`} onMouseDown={event => {
-    if (event.target === event.currentTarget && !busy) onClose()
+    if (event.target === event.currentTarget && !closeDisabled) onClose()
   }}><div className={`modal campaign-import-modal${layoutClass}`} onMouseDown={event => event.stopPropagation()}>
-    <div className="modal-header"><div className="modal-title">{title}</div><button className="btn-icon" onClick={onClose} title="Đóng" disabled={busy}><X size={18} /></button></div>
+    <div className="modal-header"><div className="modal-title">{title}</div><button className="btn-icon" onClick={onClose} title="Đóng" disabled={closeDisabled}><X size={18} /></button></div>
     <div className="modal-body campaign-import-body">
       {showDatasetName && <div className="stepper-form-group campaign-import-dataset-name"><label htmlFor="campaign-import-dataset-name">{datasetNameLabel}<span className="required">*</span></label>
         <input id="campaign-import-dataset-name" className="stepper-input" value={datasetName} onChange={event => setDatasetName(event.target.value)} maxLength={255} disabled={saving} required autoFocus />
@@ -570,7 +595,7 @@ export default function CampaignDataUploadModal({
             if (item) { event.preventDefault(); readImageFile(item.getAsFile()) }
           }}>{imageDataUrl ? <img src={imageDataUrl} alt="Ảnh nguồn nhập" /> : <div className="campaign-import-empty-media"><ImageIcon size={24} /><span>Dán ảnh ở đây (Ctrl+V)</span></div>}</div>
           <label className="btn btn-secondary campaign-import-file-button"><Upload size={14} /> Tải ảnh<input type="file" accept="image/*" hidden disabled={busy} onChange={event => { readImageFile(event.target.files?.[0]); event.currentTarget.value = '' }} /></label>
-          <div className="campaign-import-hint">Kết quả kiểm tra chỉ bao gồm dữ liệu AI/QR đọc được từ ảnh. Hãy đối chiếu lại với ảnh gốc.</div>
+          <div className="campaign-import-hint">{readImageText ? 'Ảnh được đọc trên máy. Bạn có thể sửa chữ và chọn cột sau khi đọc.' : 'Kết quả kiểm tra chỉ bao gồm dữ liệu AI/QR đọc được từ ảnh.'} Hãy đối chiếu lại với ảnh gốc.</div>
         </>}
         {activeTab === 'sheet' && <>
           <label className="campaign-import-label" htmlFor="campaign-import-sheet-link">Link sheet</label>
@@ -649,7 +674,7 @@ export default function CampaignDataUploadModal({
       </div></div>}
     </div>
     <div className="modal-footer"><span className="campaign-import-submit-hint">{!report ? 'Kiểm tra dữ liệu để xem kết quả trước khi chèn.' : report.limitExceeded ? 'Dữ liệu vượt giới hạn. Vui lòng chia nhỏ trước khi chèn.' : !report.valid.length ? 'Không có dữ liệu hợp lệ để chèn. Bạn vẫn có thể tải kết quả bị loại.' : `Sẽ chèn ${report.valid.length.toLocaleString('vi-VN')} dữ liệu hợp lệ.`}</span>
-      <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Hủy</button><button className="btn btn-primary" onClick={() => void handleInsert()} disabled={busy || !report?.valid.length || report.limitExceeded || !formattedImportSource}>
+      <button className="btn btn-ghost" onClick={onClose} disabled={closeDisabled}>Hủy</button><button className="btn btn-primary" onClick={() => void handleInsert()} disabled={busy || !report?.valid.length || report.limitExceeded || !formattedImportSource}>
         {saving ? <><RefreshCw size={14} className="spin" /> Đang chèn...</> : submitLabel}
       </button></div>
   </div></div>, document.body)

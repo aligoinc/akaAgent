@@ -1,0 +1,66 @@
+{
+  "verifiedAt": "2026-11-02T12:10:26.098223+00:00",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "scope": "Keep dormant direct group sources visible to Agent validation and prevent reactivation during a switch from group mode to direct",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "group-mode snapshot retains pending group count in router/Data context",
+        "replace, append rows and directSource are blocked when they reactivate dormant groups",
+        "blocked multi-section response preserves OCR and returns no partial patch",
+        "all three transitions work without dormant groups; switching between running groups remains allowed"
+      ]
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "manual direct-to-group switch retains pending count",
+        "renderer blocks replace, append and directSource responses atomically",
+        "save/reopen after each blocked transition preserves name, rows, dormant groups and group mode",
+        "removing dormant groups via existing direct-source controls allows replacement",
+        "undo restores group mode without restoring removed groups; save/reopen preserves only new recipient"
+      ],
+      "runnerNote": "Initial attempt clicked a source label behind the narrow chat overlay; runner now collapses/reopens chat through existing controls, then the full suite passes."
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "log": "hidden-group-source-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "sha256": {
+    "src/shared/campaignAgent.ts": "f91d8e44195e9d918c1be95a3a97592aff559dbd6478773e0e312a27a1900d19",
+    "src/main/services/campaignAgentService.ts": "2acd21b9d402aaee621fbc9352f992560a0cc372a333c61a2d10653a07caa6c3",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "d3000bf3ac447a1147c7b542b167ef9aefa28859daa7c8e6869f556f544a1140",
+    "scripts/campaign-agent-smoke.cjs": "da15c4e73fd5c7b86554a81fb9c252b5d62365ba49bb3c8d69a62a7173e4a1ce",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "e6fba382dfcc6834a015055fb5dc157e365c1fc3e6039d985874413e552605c0",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "AI/DB fixtures in service smoke; real Electron renderer with fixture IPC/stores in UI smoke.",
+    "No production campaign was created or run.",
+    "Retained groups are removed manually through existing form controls; Agent never deletes them automatically."
+  ]
+}

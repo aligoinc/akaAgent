@@ -1,0 +1,1 @@
+PASS V416: both schemas unchanged; exact legacy/new provider payload parity; metadata, scope, model switching, logs, invalid output and abort

@@ -1,0 +1,30 @@
+{
+  "checked_at_utc": "2026-11-02T09:55:01.813953+00:00",
+  "branch": "codex/campaign-agent-form",
+  "changes": [
+    "Agent width 90% replaces previous 100% request",
+    "Desktop sidebar inherits regular campaign form width 260px"
+  ],
+  "checks": {
+    "electron_smoke": "passed; Unicode description/history, width90/sidebar260 at 900/1500/2200px and existing regression cases",
+    "typecheck_node": "passed",
+    "typecheck_web": "passed",
+    "production_build": "passed",
+    "git_diff_check": "passed"
+  },
+  "live_canary": {
+    "input": "tôi muốn nhắn tin và kết bạn đến danh sách số điện thoại vào 8h tối nay",
+    "input_method": "clipboard paste; verified full Unicode in UI before send",
+    "result": "AI returned account clarification in Vietnamese",
+    "saved_or_started_campaign": false,
+    "limitation": "Single live clarification turn, not complete multi-section/provider/platform coverage"
+  },
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "ec3f55fa3e376da15e383b687b9d95ae3c11a0029fcf951d48c76a3422579da7",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "596de8bf34f204b7b97c115b595368c5dc86bce9a938426bfd93f8c626bcb7e6",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "db_changes": false,
+  "released": false
+}

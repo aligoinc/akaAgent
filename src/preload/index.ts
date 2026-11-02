@@ -1,4 +1,7 @@
 import { FACEBOOK_AI_IPC, type FacebookAiRequest, type FacebookAiResult } from '../shared/campaignFacebookAi'
+import { AGENT_IPC, type AgentRequest, type AgentResult, type AgentImage } from '../shared/campaignAgent'
+import { AGENT_DATA_IPC, type AgentDataFile, type AgentDataUpload, type AgentDataSource } from '../shared/campaignAgentData'
+import type { CampaignSupportImage } from '../shared/campaignSupport'
 import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
@@ -329,6 +332,14 @@ const electronAPI = {
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
   generateCampaignFacebookAi: (request: FacebookAiRequest): Promise<FacebookAiResult> => ipcRenderer.invoke(FACEBOOK_AI_IPC.generate, request),
+  generateCampaignAgent: (request: AgentRequest): Promise<AgentResult> => ipcRenderer.invoke(AGENT_IPC.generate, request),
+  storeCampaignAgentData: (draftId: string, files: AgentDataUpload[]): Promise<AgentDataFile[]> => ipcRenderer.invoke(AGENT_DATA_IPC.store, { draftId, files }),
+  readCampaignAgentData: (requestId: string, draftId: string, file: AgentDataFile): Promise<import('../shared/campaignFormAi').CampaignFormAiResult<AgentDataSource>> => ipcRenderer.invoke(AGENT_DATA_IPC.read, { requestId, draftId, file }),
+  cancelCampaignAgentData: (requestId: string): Promise<void> => ipcRenderer.invoke(AGENT_DATA_IPC.cancel, requestId),
+  cancelCampaignAgent: (requestId: string): Promise<void> => ipcRenderer.invoke(AGENT_IPC.cancel, requestId),
+  storeCampaignAgentImages: (draftId: string, images: CampaignSupportImage[]): Promise<AgentImage[]> => ipcRenderer.invoke(AGENT_IPC.images, { draftId, images }),
+  readCampaignAgentImage: (draftId: string, id: string): Promise<string | null> => ipcRenderer.invoke(AGENT_IPC.image, { draftId, id }),
+  removeCampaignAgentImage: (draftId: string, id: string): Promise<void> => ipcRenderer.invoke(AGENT_IPC.removeImage, { draftId, id }),
   cancelCampaignFacebookAi: (requestId: string): Promise<void> => ipcRenderer.invoke(FACEBOOK_AI_IPC.cancel, requestId),
   generateCampaignContentAi: (request: ContentAiRequest): Promise<ContentAiResult> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.generate, request),
   cancelCampaignContentAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.cancel, requestId),

@@ -1,0 +1,92 @@
+[
+  {
+    "viewport": 2200,
+    "modal": 1980,
+    "form": 1618,
+    "chat": 360,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "dark"
+  },
+  {
+    "viewport": 2200,
+    "modal": 1980,
+    "form": 1618,
+    "chat": 360,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "light"
+  },
+  {
+    "viewport": 1500,
+    "modal": 1350,
+    "form": 988,
+    "chat": 360,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "dark"
+  },
+  {
+    "viewport": 1500,
+    "modal": 1350,
+    "form": 988,
+    "chat": 360,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "light"
+  },
+  {
+    "viewport": 1151,
+    "modal": 1035.8984375,
+    "form": 733.8984375,
+    "chat": 300,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "dark"
+  },
+  {
+    "viewport": 1151,
+    "modal": 1035.8984375,
+    "form": 733.8984375,
+    "chat": 300,
+    "mode": "static",
+    "overflow": 0,
+    "theme": "light"
+  },
+  {
+    "viewport": 1150,
+    "modal": 1035,
+    "form": 1033,
+    "chat": 360,
+    "mode": "absolute",
+    "overflow": 0,
+    "theme": "dark"
+  },
+  {
+    "viewport": 1150,
+    "modal": 1035,
+    "form": 1033,
+    "chat": 360,
+    "mode": "absolute",
+    "overflow": 0,
+    "theme": "light"
+  },
+  {
+    "viewport": 900,
+    "modal": 810,
+    "form": 808,
+    "chat": 360,
+    "mode": "absolute",
+    "overflow": 0,
+    "theme": "dark"
+  },
+  {
+    "viewport": 900,
+    "modal": 810,
+    "form": 808,
+    "chat": 360,
+    "mode": "absolute",
+    "overflow": 0,
+    "theme": "light"
+  }
+]

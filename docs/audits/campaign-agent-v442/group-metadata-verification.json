@@ -1,0 +1,52 @@
+{
+  "recordedAt": "2026-11-02T09:23:46.188281+00:00",
+  "branch": "codex/campaign-agent-form",
+  "base": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "e9503d9901bfc6d60a6445055044a95ae5fc9fbbb6a4de563fd7966b50d69ae0",
+    "scripts/campaign-agent-ui-smoke.tsx": "97d06a72904dfeaf6f99ba08c8b8b46258318459b8569422d4946faef21c2327",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "cb7a66ae39b59226e64922fa1a054e3737a0ea70ee49e81df88b30230fbbd39a",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "migrations/snapshots/campaign-agent-v442/existing-configs.json": "59353eb1dd268115c3f334e1dcc9172b0252b5486a47e713db6d62d4106b4147",
+    "docs/audits/campaign-agent-v442/group-metadata-build.txt": "cf106dff9151d78c63fe7967a37ee8eca259a7de40f4bbe227832f41e0f7be15"
+  },
+  "oldFormSha256": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+  "dbAccessThisTurn": false,
+  "dbApplied": false,
+  "providerLiveTest": false,
+  "published": false,
+  "notes": [
+    "Real Electron renderer with isolated IPC/store fixtures and HTTP blocked; no production side effects.",
+    "After undo B to A, hold both group requests unresolved: UI shows A and the next Agent snapshot references A while draft save remains available.",
+    "Cancel after applying B and save the draft before metadata requests resolve: displayed name and saved id/name remain A/101.",
+    "Existing late response and clear source regression cases continue to pass.",
+    "Existing form, queries, migration candidate and AI configuration capture remain unchanged; no new requests or connections.",
+    "Production build passed with existing mixed dynamic/static import warnings."
+  ]
+}

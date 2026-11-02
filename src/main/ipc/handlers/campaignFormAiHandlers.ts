@@ -17,6 +17,12 @@ import { generateCampaignLimits } from '../../services/campaignLimitsAiService'
 import { CAMPAIGN_FORM_AI_TIMEOUT, type CampaignFormAiResult } from '../../../shared/campaignFormAi'
 import { FORM_AI_AVAILABILITY_IPC } from '../../../shared/campaignFormAiConfig'
 import { listFormAiAvailability } from '../../data/repositories/aiRepository'
+import { AGENT_IPC } from '../../../shared/campaignAgent'
+import { validateAgentRequest, generateCampaignAgent, AGENT_MESSAGES } from '../../services/campaignAgentService'
+import { storeAgentImages, readAgentImage, removeAgentImage } from '../../services/campaignAgentImages'
+import { AGENT_DATA_IPC, validAgentDataFiles } from '../../../shared/campaignAgentData'
+import { agentUuid, isAgentRecord } from '../../../shared/campaignAgent'
+import { storeAgentData, readAgentData } from '../../services/campaignAgentData'
 
 export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: () => void } {
   let flight: { id: string; channel: string; credentials: object; controller: AbortController } | undefined
@@ -70,5 +76,28 @@ export function registerCampaignFormAiHandlers(window: BrowserWindow): { stop: (
   register(CAMPAIGN_CONTENT_AI_IPC, validateContentAiRequest, generateCampaignContent, CONTENT_AI_MESSAGES)
   register(CAMPAIGN_EXCLUSION_AI_IPC, validateExclusionAiRequest, generateCampaignExclusion, EXCLUSION_AI_MESSAGES)
   register(FACEBOOK_AI_IPC, validateFacebookAiRequest, generateCampaignFacebook, FACEBOOK_AI_MESSAGES)
+  register(AGENT_IPC, validateAgentRequest, generateCampaignAgent, AGENT_MESSAGES)
+  register({ generate: AGENT_DATA_IPC.read, cancel: AGENT_DATA_IPC.cancel }, input => {
+    if (!isAgentRecord(input) || !agentUuid(input.requestId) || !agentUuid(input.draftId) || !validAgentDataFiles([input.file])) throw new Error(AGENT_MESSAGES.invalid)
+    return { requestId: input.requestId, draftId: input.draftId, file: input.file }
+  }, async (request, signal) => {
+    try { return { ok: true, patch: await readAgentData(request, signal) } }
+    catch { return { ok: false, code: signal.aborted ? 'cancelled' : 'invalid', message: 'Không thể đọc file hoặc ảnh trên thiết bị này. Hãy kiểm tra file gốc và thử lại.' } }
+  }, AGENT_MESSAGES)
+  for (const [channel, handle] of [
+    [AGENT_IPC.images, storeAgentImages], [AGENT_IPC.image, readAgentImage], [AGENT_IPC.removeImage, removeAgentImage], [AGENT_DATA_IPC.store, storeAgentData]
+  ] as const) {
+    ipcMain.handle(channel, async (event, input: unknown) => {
+      assertFrame(event)
+      const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
+      try {
+        const result = await runWithCurrentUser(user, () => handle(input))
+        if (getCurrentUserCredentials() !== credentials || window.isDestroyed()) throw new Error(AGENT_MESSAGES.unavailable)
+        return result
+      } catch { throw new Error(channel === AGENT_DATA_IPC.store
+        ? 'Không thể lưu dữ liệu. Vui lòng chọn lại file hợp lệ.'
+        : 'Không thể đọc hoặc lưu ảnh. Vui lòng chọn lại ảnh hợp lệ.') }
+    })
+  }
   return { stop }
 }
