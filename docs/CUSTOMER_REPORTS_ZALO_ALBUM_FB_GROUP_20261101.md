@@ -120,6 +120,33 @@ gắn với tài khoản gửi và tạm thời** — khác `122` (người nh�
 Hệ quả: album ≥3 ảnh + chữ khiến chữ thành tin thứ 4+, đúng vùng bị chặn. Giữ tổng ≤3 tin cho
 mỗi người lạ (vd 1 ảnh + caption, hoặc ≤2 ảnh + chữ) hoặc đưa chữ lên tin đầu.
 
+### Lỗi 127 trong ngày 02/11/2026 (mọi runtime, `auto_campaign_details` tới 19:35)
+
+1.086 lần 127 trên 292 tài khoản (~26% tài khoản đang nhắn người lạ); 371 lần là album đã tới, chữ
+bị chặn. Cả 1.086 mục tiêu bị đánh `hoàn thành`, không gửi lại. Tỷ lệ trên tin OK cùng khung giờ:
+
+| Ngày | Server | QR + Web |
+| --- | --- | --- |
+| 29/10 (T5) | 2,5% (891/35.130) | 0,9% (158/16.932) |
+| 30/10 (T6) | 3,1% (1.075/35.175) | 1,2% (192/15.761) |
+| 31/10 (T7) | 5,1% (1.555/30.492) | 2,9% (313/10.688) |
+| 01/11 (CN) | 7,4% (1.777/23.988) | 2,8% (218/7.849) |
+| 02/11 (T2) | 2,6% (901/34.188) | 1,0% (176/17.616) |
+
+- Khoảng cách tới tin người lạ gửi OK gần nhất của cùng tài khoản: <2 phút 3,37% bị 127 (22.587
+  lượt), 2–<5 phút 2,01% (16.043), 5–<6 phút 0,04% (2.683), 6–<10 phút 0/3.363, ≥10 phút 1/7.205, tin
+  đầu ngày 0/1.120 ⇒ 1.084/1.086 ca nằm trong cửa sổ 5 phút; 73% lượt gửi hôm nay cách <5 phút.
+- Theo "Nghỉ giữa 2 lần" của chiến dịch: <60 giây 3,90% (410 chiến dịch), 60–119 giây 1,57% (496),
+  120–299 giây 0,78% (180), ≥300 giây **0** (190 chiến dịch, 4.647 tin OK). Nhóm bị nhiều nhất đặt
+  30–61 giây với 15–30 tin/65 phút (staff 479, 1177, 1044, 1350).
+- Khoá 30 phút (id 61) có chạy: 0 lần 127 lặp lại trong 30 phút, nhưng trung vị giữa hai lần 127 của
+  cùng tài khoản là 36 phút ⇒ hết khoá là gửi dồn lại và dính tiếp; 116 tài khoản bị ≥4 lần, 20 bị ≥10.
+- **Đánh đổi thông lượng**: chiến dịch chạy ≥2 giờ, ≥10 tin OK: <60 giây 10,3 tin OK/giờ, 60–119
+  giây 11,6, 120–299 giây 8,6, ≥300 giây chỉ **3,4** — vì khoảng nghỉ áp cho MỌI mục tiêu (cả tra số
+  không tồn tại và 122, vốn không tính vào cửa sổ) và nhóm này thường đặt hạn mức thấp. Cách giữ cả
+  hai: chỉ chờ ≥300–330 giây sau tin người lạ gửi OK, không chờ sau mục tiêu thất bại — **chưa có
+  trong code**, cần sửa scheduler cả ba runtime.
+
 ### Mã 122 và 120 (đo 01/11/2026, `chat_zalo_action` từ 20/08)
 
 `uid` của người nhận khác nhau theo từng tài khoản gửi (18.836/18.836 SĐT), `globalId` thì giống
