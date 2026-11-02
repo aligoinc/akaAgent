@@ -46,7 +46,7 @@ async function main() {
       return XLSX.read(result.bytes, { type: 'base64' })
     }
     const rows = (book, name) => XLSX.utils.sheet_to_json(book.Sheets[name], { header: 1, defval: '' })
-    const groupHeader = ['Tên', 'UID', 'Số thành viên', 'Số bài', 'Đơn vị bài', 'Privacy', 'Loại nhóm AI']
+    const groupHeader = ['Tên', 'UID', 'Số thành viên', 'Số bài', 'Đơn vị bài', 'Privacy']
     const legacyHeader = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
     let book = await exportBook()
     assert.deepEqual(book.SheetNames, ['Sheet1', 'Group Facebook'])
@@ -55,16 +55,16 @@ async function main() {
       ['', '12345678901234567890', '', '', '', '', '', '', '']])
     const groupRows = rows(book, 'Group Facebook')
     assert.deepEqual(groupRows, [groupHeader,
-      ['Hải Minh - Hải Hậu', 'https://www.facebook.com/groups/12345678901234567890/', 651, 2, 'ngày', 'Riêng tư', 'Không biết'],
-      ['=Tên nhóm', 'https://www.facebook.com/groups/missing', '', '', '', '', 'Không biết'],
-      ['Số không', 'https://www.facebook.com/groups/zero', 0, '', '', 'Riêng tư', 'Không biết'],
-      ['Số không dạng chuỗi', 'https://www.facebook.com/groups/zero-string', '', '', '', '', 'Không biết'],
-      ['Bổ sung số liệu', 'https://www.facebook.com/groups/filled', 1200, 5, 'ngày', 'Công khai', 'Không biết']])
+      ['Hải Minh - Hải Hậu', 'https://www.facebook.com/groups/12345678901234567890/', 651, 2, 'ngày', 'Riêng tư'],
+      ['=Tên nhóm', 'https://www.facebook.com/groups/missing', '', '', '', ''],
+      ['Số không', 'https://www.facebook.com/groups/zero', 0, '', '', 'Riêng tư'],
+      ['Số không dạng chuỗi', 'https://www.facebook.com/groups/zero-string', '', '', '', ''],
+      ['Bổ sung số liệu', 'https://www.facebook.com/groups/filled', 1200, 5, 'ngày', 'Công khai']])
     assert.equal(book.Sheets['Group Facebook'].A3.t, 's')
     assert.equal(book.Sheets['Group Facebook'].A3.f, undefined)
     assert.equal(book.Sheets['Group Facebook'].C2.t, 'n')
-    assert.equal(book.Sheets['Group Facebook']['!autofilter'].ref, 'A1:G6')
-    console.log('PASS real panel export + XLSX round trip: 7 columns, preserve metadata when filling names, fill missing metrics, unknown activity blank, Unicode, text IDs')
+    assert.equal(book.Sheets['Group Facebook']['!autofilter'].ref, 'A1:F6')
+    console.log('PASS real panel export + XLSX round trip: 6 columns, preserve metadata when filling names, fill missing metrics, unknown activity blank, Unicode, text IDs')
     const options = page.locator('.find-data-export-options')
     for (const label of ['SĐT', 'Link group Zalo', 'UID', 'Link bài post']) {
       await options.getByLabel(label, { exact: true }).uncheck()

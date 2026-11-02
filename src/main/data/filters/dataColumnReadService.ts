@@ -28,6 +28,7 @@ export async function executeColumnRead(
   if (source !== 'data_group' && (!Number.isSafeInteger(request.accountId) || Number(request.accountId) <= 0)) throw new Error('Tài khoản không hợp lệ.')
   if (source === 'data_group' && (!Number.isSafeInteger((request.query as DataGroupMemberListQuery).groupId) || (request.query as DataGroupMemberListQuery).groupId <= 0)) throw new Error('Nhóm data không hợp lệ.')
   const query: Record<string, unknown> = Object.fromEntries(Object.entries(request.query).filter(([,value]) => value != null))
+  if (source === 'data_group') query.includeFacebookGroupMetadata = mode === 'export'
   for (const key of ['dateFrom', 'dateTo', 'campaignActionId']) {
     if (typeof query[key] === 'string' && !(query[key] as string).trim()) delete query[key]
   }
@@ -115,6 +116,10 @@ export async function executeColumnRead(
         const page = response.data
         if (!page || page.version !== 1 || !Array.isArray(page.rows) || page.rows.length > pageLimit
           || typeof page.hasMore !== 'boolean' || (!fetched && (!Number.isSafeInteger(page.total) || page.total < 0))) throw new Error('Phản hồi bộ lọc không hợp lệ.')
+        if (source === 'data_group' && mode === 'export'
+          && page.rows.some((row: Record<string, unknown>) => !Object.hasOwn(row, 'facebook_group_metadata'))) {
+          throw new Error('Backend xuất thông tin nhóm Facebook chưa được cập nhật.')
+        }
         acceptRows(page.rows)
         if (!fetched) result.total = page.total
         if (mode === 'ids') result.ids.push(...page.rows.map((row: Record<string,unknown>) => Number(row.id)))

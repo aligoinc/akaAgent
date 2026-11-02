@@ -1,4 +1,5 @@
 import { validateContentGroupSelection } from './groupSharingRepository'
+import { resolveCampaignGroupMetadata } from '../../../shared/facebookGroupExport'
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { getCampaignEditVersion } from '../campaignEditVersion'
@@ -6210,6 +6211,28 @@ export async function listCampaignDetailsPage(
     organizationId,
     campaignId
   )
+  if (query.includeFacebookGroupMetadata === true && items.length > 0) {
+    const { data: metadata, error: metadataError } = await client().rpc('aka_agent_get_campaign_group_export_metadata', {
+      p_staff_id: staffId, p_organization_id: organizationId, p_campaign_id: campaignId,
+      p_detail_ids: items.map(item => item.id), p_auth_username: auth.username, p_auth_password: auth.password
+    })
+    if (getCurrentUserCredentials() !== auth) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng xuất lại.')
+    if (metadataError) throw new Error('Không thể đọc thông tin nhóm Facebook để xuất. Vui lòng kiểm tra backend và thử lại.')
+    if (!metadata || metadata.version !== 1 || typeof metadata.eligible !== 'boolean' || !Array.isArray(metadata.rows)) {
+      throw new Error('Thông tin nhóm Facebook để xuất không hợp lệ.')
+    }
+    if (metadata.eligible) {
+      const expected = new Set(items.map(item => item.id))
+      const byId = new Map<number, ReturnType<typeof resolveCampaignGroupMetadata>>()
+      for (const row of metadata.rows) {
+        const id = Number(row?.detail_id)
+        if (!expected.has(id) || byId.has(id)) throw new Error('Dữ liệu xuất đã thay đổi. Vui lòng xuất lại.')
+        byId.set(id, resolveCampaignGroupMetadata(row))
+      }
+      if (byId.size !== items.length) throw new Error('Dữ liệu xuất đã thay đổi. Vui lòng xuất lại.')
+      return { items: items.map(item => ({ ...item, facebookGroupMetadata: byId.get(item.id) })), total: Number(data.total) }
+    }
+  }
   return { items, total: Number(data.total) }
 }
 

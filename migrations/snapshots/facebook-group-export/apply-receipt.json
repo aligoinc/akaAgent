@@ -1,0 +1,391 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "name": "migration_v443_facebook_group_export",
+  "version": "20261102101104",
+  "appliedAtVietnam": "2026-11-02 17:11:04 +07:00",
+  "migrationSha256": "a7bb0b1c8e7468020a4b1629f44bf811fb9776ea6bbf4c827a9ce3b63045cee6",
+  "status": "APPLIED",
+  "renumberedFrom": 442,
+  "renumberReason": "V442 was already applied by another task as migration_v442_campaign_agent_form; no source function drift.",
+  "preflightCapture": "pre-apply-live.json",
+  "preApplyRehearsal": {
+    "mode": "candidate + SQL fixture + guarded rollback inside outer ROLLBACK",
+    "passed": true,
+    "after": {
+      "at": "2026-11-02T10:11:04.050548+00:00",
+      "functions": [
+        {
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "owner": "postgres",
+          "checksum": "0e17dec0570937cfea8a1ae035e2af4d",
+          "proconfig": [
+            "search_path=pg_catalog, public",
+            "statement_timeout=60s"
+          ],
+          "prosecdef": true,
+          "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+          "provolatile": "v"
+        },
+        {
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "owner": "postgres",
+          "checksum": "17ffadd05bb48b245a4382789c6d59ea",
+          "proconfig": [
+            "search_path=pg_catalog, public",
+            "statement_timeout=60s"
+          ],
+          "prosecdef": true,
+          "signature": "public.aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)",
+          "provolatile": "s"
+        },
+        {
+          "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+          "owner": "postgres",
+          "checksum": "31494192d0a18efeafa4fb0296008230",
+          "proconfig": [
+            "search_path=pg_catalog, public"
+          ],
+          "prosecdef": true,
+          "signature": "private.aka_agent_assert_request_ownership(bigint,bigint,bigint)",
+          "provolatile": "s"
+        },
+        {
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "owner": "postgres",
+          "checksum": "da6cd0d362196536d99805382af28d1b",
+          "proconfig": [
+            "search_path=pg_catalog, public",
+            "statement_timeout=60s"
+          ],
+          "prosecdef": true,
+          "signature": "public.aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+          "provolatile": "s"
+        },
+        {
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "owner": "postgres",
+          "checksum": "f50796438b0e90ef184fa25cc4043e98",
+          "proconfig": [
+            "search_path=pg_catalog, public"
+          ],
+          "prosecdef": true,
+          "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)",
+          "provolatile": "s"
+        },
+        {
+          "acl": "{postgres=X/postgres}",
+          "owner": "postgres",
+          "checksum": "c47165554f49d3099d1f95e7d136eae5",
+          "proconfig": [
+            "search_path=pg_catalog, public"
+          ],
+          "prosecdef": true,
+          "signature": "private.can_read_data_group(bigint,bigint,bigint)",
+          "provolatile": "s"
+        },
+        {
+          "acl": "{postgres=X/postgres}",
+          "owner": "postgres",
+          "checksum": "bcae895d24daf017a1e52a83e834f1a9",
+          "proconfig": [
+            "search_path=pg_catalog, public",
+            "statement_timeout=60s"
+          ],
+          "prosecdef": true,
+          "signature": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+          "provolatile": "s"
+        }
+      ],
+      "v443Absent": true,
+      "newRpcAbsent": true,
+      "fixtureAuthAbsent": true,
+      "fixtureStaffAbsent": true
+    },
+    "campaignFixtureMs": 7.42,
+    "campaign500FixtureMs": 17.152
+  },
+  "postApplyVerification": {
+    "at": "2026-11-02T10:11:49.384563+00:00",
+    "ledger": [
+      {
+        "name": "migration_v443_facebook_group_export",
+        "version": "20261102101104"
+      }
+    ],
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "1d683e7bd73dcd86276b44b27f91901f",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+        "provolatile": "v"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "f4c329181aa3a2e1a3c1f41a6d89f237",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "3b9d5d422593121d936effa8b225b496",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_get_campaign_group_export_metadata(bigint,bigint,bigint,bigint[],text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+        "owner": "postgres",
+        "checksum": "31494192d0a18efeafa4fb0296008230",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.aka_agent_assert_request_ownership(bigint,bigint,bigint)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "da6cd0d362196536d99805382af28d1b",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "owner": "postgres",
+        "checksum": "f50796438b0e90ef184fa25cc4043e98",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "checksum": "c47165554f49d3099d1f95e7d136eae5",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.can_read_data_group(bigint,bigint,bigint)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "checksum": "bcae895d24daf017a1e52a83e834f1a9",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+        "provolatile": "s"
+      }
+    ]
+  },
+  "postApplySmoke": {
+    "checks": [
+      "ordinary reader unchanged",
+      "shared metadata allowlist",
+      "shared provenance redacted",
+      "Zalo excluded",
+      "selected IDs scope",
+      "filtered multi-page export",
+      {
+        "campaignFixtureMs": 6.379
+      },
+      "multiple sources without duplicate results",
+      "person input excluded",
+      "unlinked input blank",
+      "message action gated",
+      {
+        "campaign500FixtureMs": 15.159
+      },
+      "cross-staff denied",
+      "cross-org denied",
+      "cross-campaign detail denied",
+      "duplicate IDs denied",
+      "revoked source blank",
+      "revoked group denied",
+      "bound Desktop metadata read",
+      "Desktop shared filtered export",
+      "bound Desktop cross-staff denied",
+      "Desktop missing credential denied",
+      "unbound Desktop token denied",
+      "ACL excludes anon/authenticated/Chat API"
+    ],
+    "rollback_removed_new_rpc_inside_transaction": true
+  },
+  "finalState": {
+    "at": "2026-11-02T10:12:26.904711+00:00",
+    "ledger": [
+      {
+        "name": "migration_v443_facebook_group_export",
+        "version": "20261102101104"
+      }
+    ],
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "1d683e7bd73dcd86276b44b27f91901f",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_group_sharing(bigint,bigint,text,text,text,jsonb)",
+        "provolatile": "v"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "f4c329181aa3a2e1a3c1f41a6d89f237",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_read_filtered_group_v1(bigint,bigint,text,text,jsonb)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "3b9d5d422593121d936effa8b225b496",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_get_campaign_group_export_metadata(bigint,bigint,bigint,bigint[],text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+        "owner": "postgres",
+        "checksum": "31494192d0a18efeafa4fb0296008230",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.aka_agent_assert_request_ownership(bigint,bigint,bigint)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "owner": "postgres",
+        "checksum": "da6cd0d362196536d99805382af28d1b",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "public.aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamp with time zone,timestamp with time zone,integer,integer,text,text,text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "owner": "postgres",
+        "checksum": "f50796438b0e90ef184fa25cc4043e98",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "public.auto_assert_automation_identity(bigint,bigint,text,text)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "checksum": "c47165554f49d3099d1f95e7d136eae5",
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.can_read_data_group(bigint,bigint,bigint)",
+        "provolatile": "s"
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "owner": "postgres",
+        "checksum": "bcae895d24daf017a1e52a83e834f1a9",
+        "proconfig": [
+          "search_path=pg_catalog, public",
+          "statement_timeout=60s"
+        ],
+        "prosecdef": true,
+        "signature": "private.read_shared_group_members(bigint,bigint,bigint,text,bigint[],boolean,text[],text[],text,bigint[],bigint[],bigint[],bigint[],integer,integer)",
+        "provolatile": "s"
+      }
+    ],
+    "fixtureAuthAbsent": true,
+    "fixtureStaffAbsent": true
+  },
+  "httpDiscoveryAndAnonymousDenial": [
+    {
+      "rpc": "aka_agent_get_campaign_group_export_metadata",
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function aka_agent_get_campaign_group_export_metadata"
+    },
+    {
+      "rpc": "aka_agent_group_sharing",
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function aka_agent_group_sharing"
+    },
+    {
+      "rpc": "aka_agent_read_filtered_group_v1",
+      "status": 401,
+      "code": "42501",
+      "message": "permission denied for function aka_agent_read_filtered_group_v1"
+    }
+  ],
+  "projectHealth": "ACTIVE_HEALTHY",
+  "validation": {
+    "typecheckNode": "PASS",
+    "typecheckWeb": "PASS",
+    "build": "PASS",
+    "buildBytes": 39284426,
+    "buildPhaseSeconds": {
+      "main": 1.56,
+      "preload": 0.08,
+      "renderer": 24
+    },
+    "applicationSmokeReceipt": "verification.json",
+    "performanceReceipt": "performance-review.json",
+    "generatedSqlWhitespace": "Two whitespace-only lines inherited from captured live function definitions intentionally retained to preserve exact checksums; other diff checks pass."
+  },
+  "limits": [
+    "No signed-in Desktop HTTP end-to-end export was run against production.",
+    "Desktop ownership/credential and sharing checks use rollback fixtures under service_role/aka_agent_desktop.",
+    "No concurrent fleet load test or 10k-row production HTTP export.",
+    "Application source not packaged or released."
+  ]
+}

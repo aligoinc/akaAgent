@@ -37,6 +37,7 @@ receipt/signature/checksum, không dùng filename để kết luận “chưa ch
 
 ## Build và phát hành
 
+- 02/11/2026: Excel Nhóm data/Kết quả chạy có cột metadata Facebook động, action gate và bỏ Loại nhóm AI ở Data tìm được. **V443 đã apply** lúc 17:11:04 Việt Nam (`20261102101104`), đổi số vì V442 đã được task khác dùng. Checksum/quyền/timeout, smoke SQL service_role/Desktop và guarded rollback đạt; HTTP đã nhận RPC mới, chặn anon đúng quyền. Smoke app, hai typecheck và build local đạt; **chưa đóng gói/phát hành app**. Không apply lại khi merge; [hợp đồng](../FACEBOOK_GROUP_EXPORT_METADATA.md), [receipt](../../migrations/snapshots/facebook-group-export/apply-receipt.json). Mốc 7 cột bên dưới là lịch sử trước yêu cầu bỏ AI.
 - 02/11/2026: source xuất Excel nhóm Facebook tìm theo từ khóa có đủ 7 cột; sau review đã giữ số liệu khi bổ sung tên dòng trùng và để trống số bài 0 chưa xác minh. Smoke Electron/XLSX, hai typecheck và build production local đạt trên nhánh `codex/facebook-group-excel`; **chưa đóng gói/phát hành app**. Giữ luồng quét nhóm đã tham gia, không sửa DB. Xem [hợp đồng và kiểm chứng](../FACEBOOK_SEARCH_GROUP_EXCEL.md).
 
 - 02/11/2026: source cột **Tên/Tên gốc Zalo** đã qua hai typecheck, 75 ca smoke và build production local trên worktree riêng trước PR. Nhãn **Tên** được giữ theo yêu cầu sau review để tương thích nhập lại Excel; backend V441 đã apply, **chưa đóng gói/phát hành app**. Không apply thêm DB trong lượt tạo PR. Xem [audit V441](../ZALO_SCAN_NAMES_V441.md).
