@@ -534,6 +534,18 @@ schema/RPC/quyền/source, không reload PostgREST/build/deploy.
 JSON, liên kết và phạm vi SQL có guard đã kiểm tra; không chạy lại SQL hay
 kích hoạt Facebook. [Receipt kiểm chứng](audits/facebook-comment-box-xpath-20261101/pr-verification-20261102.json).
 
+**Hậu kiểm theo dòng lịch sử, chốt 03/11/2026 ~02:40 VN (chỉ đọc):** dòng `Comment`
+(`action_code='fb_comment'`) ngày 02/11 theo loại chiến dịch:
+
+- `facebook_group_post`: trước 09:30 38 OK/308 thất bại (11%); 09:30–14:00 132/322 (29%);
+  14:00–24:00 235/338 (41%, 24 staff).
+- `facebook_comment_seeding`: 9/18 → 6/63 → 623/122 (84%); 03/11 tới 01:33 thêm 12/0.
+- `facebook_comment_seeding_post` 489/0 và `facebook_newsfeed_interaction` 177/0 cả ngày.
+
+Đã hồi một phần sau hai lần sửa element 13, nhưng comment sau đăng nhóm vẫn thất bại ~59%
+buổi chiều–tối. Chưa tách phần lỗi buổi chiều theo nguyên nhân (máy chưa khởi động lại để nạp
+cache, hay vị trí/khung bài như đối chiếu campaign 46363).
+
 ## C. "Không tìm thấy ô đăng bài": lỗi cũ, nay mới hiện
 
 `fb_open_composer` (block 27, V374/V375) trả `opened:false` + `actionResult`
@@ -686,6 +698,11 @@ akaAgentChatApi; **desktop** = theo bản phát hành (máy khách bản cũ kh�
 Thứ tự: (1) ngay — chính sách 112/161, poll 30 s trên VPS, báo khách các nhóm 112 và chiến dịch đang
 dừng; (2) đợt 1 — mục 7 (VPS + chat-sync + desktop), rồi mục 4, 3, 8, 11, giãn cách; (3) đợt 2 — bảng
 kết quả cố định (sau khi chốt phạm vi), QR; (4) dọn dữ liệu kẹt sau khi duyệt.
+
+Bảng tổng hợp 14 lỗi (mục D cùng A, B, C và 802) theo cột lỗi – mô tả – vị trí – bản chất – tác
+động – ưu tiên – cách sửa – tác động của việc sửa: [CAMPAIGN_RUN_DEFECTS_20261102.xlsx](CAMPAIGN_RUN_DEFECTS_20261102.xlsx).
+Bảng đánh số theo báo cáo gửi người dùng (mục 1 của bảng là D7 ở đây); bảng đối chiếu nằm ở sheet
+"Ghi chú".
 
 Đã kiểm và **không thấy** trên production (code có nhánh nhưng chưa xảy ra/không đáng kể): chat-sync
 nhận–nhả lượt chạy mỗi giây (tối đa 44 lượt/chiến dịch/24 h), gửi lại album đã tới (2 lệnh bị cắt/30
