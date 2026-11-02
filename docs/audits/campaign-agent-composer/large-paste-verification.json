@@ -1,0 +1,15 @@
+{
+  "characters": 4859,
+  "rows": 180,
+  "checks": [
+    "180 unrecognized recipients attach intact from oversize review",
+    "original clipboard bytes/order retained even with partially recognized data and edited description",
+    "surrounding instruction/selection preserved",
+    "no AI call on attachment and metadata-only later request",
+    "save/reopen then Upload retains all 180 phones",
+    "disk/file-count errors keep complete pending data and save lock until retry",
+    "discard restores original draft",
+    "collapse/reopen and narrow light layout"
+  ],
+  "errors": []
+}

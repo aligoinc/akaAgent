@@ -1,0 +1,24 @@
+{
+  "verifiedAt": "2026-11-02T21:43:42.513432+00:00",
+  "base": "7a9fb19298eb3dedcdc0bdc9d0a87c90335c5487",
+  "checks": {
+    "npx tsc --noEmit -p tsconfig.node.json": "passed",
+    "npx tsc --noEmit -p tsconfig.web.json": "passed",
+    "CAMPAIGN_AGENT_ARTIFACTS_DIR=/tmp/akaagent-composer-check node scripts/run-campaign-agent-ui-smoke.cjs --local-data-only": "passed: composer + complete local data import suite",
+    "npm run build": "passed",
+    "git diff --check": "passed"
+  },
+  "originalCampaignFormUnchanged": true,
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "49dbc77ef7fe88ac29a22e4966f964896d362313f3bc4b62e820075acab7ff00",
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "4608ecbaaa72b8862b9ba99e94bf2c5a817ef7cc98fc966ba17b04d12a3755f9",
+    "scripts/campaign-agent-composer-ui.cjs": "7e557a642fdbf87f8c8066d3e718e1f8f0417a777b856faac8577b6557a84214",
+    "scripts/campaign-agent-local-data-ui.cjs": "88457f8c8730de02f7e184942549280226df504207240f88365d28086bb4a8bf",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "bd4155e6e12a22bc8949934aa7e595360955b9a7c0918fa1cbdec726218b1a08"
+  },
+  "limits": [
+    "Electron uses real renderer and fixture IPC/stores/provider; drag events simulated with DataTransfer, filechooser intercepted by Playwright.",
+    "No live AI, DB mutation, OS Finder/Windows installer or release verification.",
+    "No migration, shared/main/preload/dependency changes."
+  ]
+}
