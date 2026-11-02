@@ -1,0 +1,24 @@
+{
+  "verifiedAt": "2026-11-02T16:01:30.214148+00:00",
+  "scope": "Match Agent input area to the existing campaign form without squeezing it for chat",
+  "checks": {
+    "nodeTypecheck": "passed",
+    "webTypecheck": "passed",
+    "fullElectronSmoke": "passed",
+    "layoutParity": "passed at 900, 1500, 1799, 1800 and 2200 CSS px, chat expanded and collapsed",
+    "gitDiffCheck": "passed",
+    "liveApp": "CSS hot update observed; original campaign form source unchanged"
+  },
+  "layout": "input-width-layout.json",
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "d2e6ed1b73581bef109ea9e2a5b5f485b97a8e8d5c4d1ce08bd0e61316a223e1",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "443d700991dbfcbde13f3ee306f7519c31556e5f063365caf4a12b72c8925893",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3"
+  },
+  "limitations": [
+    "Full Electron smoke uses fixture IPC; no AI live calls or campaign mutations.",
+    "First smoke failed because the overlay covered the section button; runner now collapses chat before selecting the section. Complete rerun passed.",
+    "macOS caps hidden windows at screen width unless enableLargerThanScreen is enabled; the targeted parity check enabled it and verified actual viewport sizes including both breakpoint sides.",
+    "Production build, DB migration and release were not run for this CSS-only UI change."
+  ]
+}

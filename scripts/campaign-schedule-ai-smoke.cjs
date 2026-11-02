@@ -78,9 +78,12 @@ async function main() {
   const output = path.join(directory, 'handler.cjs')
   await build({ entryPoints: [path.join(root, 'src/main/ipc/handlers/campaignFormAiHandlers.ts')], outfile: output,
     bundle: true, platform: 'node', format: 'cjs', logLevel: 'silent', plugins: [{ name: 'fixtures', setup(build) {
-      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits|Content|Exclusion|Facebook)AiService$|\/currentUser$|\/aiRepository$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      build.onResolve({ filter: /^(electron)$|\/campaign(?:Schedule|Limits|Content|Exclusion|Facebook)AiService$|\/services\/campaignAgent(?:Service|Images|Data)$|\/currentUser$|\/aiRepository$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       build.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents: args.path === 'electron'
         ? `export const ipcMain={handle:(k,v)=>global.__scheduleAiMock.handlers[k]=v}`
+        : args.path.endsWith('campaignAgentService') ? `export const AGENT_MESSAGES={invalid:'invalid',unavailable:'unavailable'};export const validateAgentRequest=x=>x;export const generateCampaignAgent=(request,signal)=>new Promise((resolve,reject)=>global.__scheduleAiMock.pending.push({request,signal,resolve,reject}));`
+        : args.path.endsWith('campaignAgentImages') ? `export const storeAgentImages=async()=>[];export const readAgentImage=async()=>null;export const removeAgentImage=async()=>{};`
+        : args.path.endsWith('campaignAgentData') ? `export const storeAgentData=async()=>[];export const readAgentData=(request,signal)=>new Promise((resolve,reject)=>global.__scheduleAiMock.pending.push({request,signal,resolve,reject}));`
         : args.path.endsWith('aiRepository')
           ? `export const listFormAiAvailability=async()=>[];`
         : args.path.endsWith('currentUser')
@@ -192,5 +195,35 @@ async function main() {
     pending.resolve({ok:true,patch:{name:'General'}});assert.equal((await task).ok,true)
   }
   console.log('PASS general IPC accepts Zalo/Email/SMS/voice with the existing request/response contract')
+  const generateAgent = input => mock.handlers['campaign-agent:generate'](event, input)
+  await assert.rejects(() => mock.handlers['campaign-agent:generate']({ ...event, senderFrame: {} }, request))
+  await assert.rejects(() => mock.handlers['campaign-agent:images']({ ...event, senderFrame: {} }, {}))
+  task = generateAgent(request); await flush()
+  assert.equal((await generate(request)).code, 'unavailable')
+  cancel(request.requestId); assert.equal(mock.pending[0].signal.aborted, false)
+  mock.handlers['campaign-agent:cancel'](event, request.requestId)
+  assert.equal((await task).code, 'cancelled'); mock.pending.shift().resolve({ ok: true, patch: {} })
+  assert.equal((await generateAgent(request)).code, 'unavailable'); assert(mock.pending.shift().signal.aborted)
+  task = generateAgent(request); await flush(); mock.credentials = {}; mock.pending.shift().resolve({ ok: true, patch: {} })
+  assert.equal((await task).code, 'cancelled')
+  console.log('PASS Agent IPC: main frame/images, shared flight, channel-scoped cancel, deadline and auth guard')
+  const dataRequest = { requestId: request.requestId, draftId: request.requestId,
+    file: { id: request.requestId, name: 'data.txt', kind: 'text', bytes: 10 } }
+  const readData = input => mock.handlers['campaign-agent:data-read'](event, input)
+  await assert.rejects(() => mock.handlers['campaign-agent:data-read']({ ...event, senderFrame: {} }, dataRequest))
+  await assert.rejects(() => mock.handlers['campaign-agent:data-store']({ ...event, senderFrame: {} }, {}))
+  assert.equal((await readData({ ...dataRequest, draftId: '../private' })).code, 'invalid')
+  task = readData(dataRequest); await flush()
+  assert.equal((await generateAgent(request)).code, 'unavailable')
+  mock.handlers['campaign-agent:cancel'](event, request.requestId)
+  assert.equal(mock.pending[0].signal.aborted, false)
+  mock.handlers['campaign-agent:data-cancel'](event, request.requestId)
+  assert.equal((await task).code, 'cancelled'); mock.pending.shift().resolve({ kind: 'text', name: 'late', text: 'late' })
+  task = readData(dataRequest); await flush(); mock.credentials = {}
+  mock.pending.shift().resolve({ kind: 'text', name: 'private', text: 'private' }); assert.equal((await task).code, 'cancelled')
+  assert.equal((await readData(dataRequest)).code, 'unavailable'); assert(mock.pending.shift().signal.aborted)
+  task = readData(dataRequest); await flush(); mock.pending.shift().resolve({ kind: 'text', name: 'data', text: '0901234567' })
+  assert.equal((await task).patch.text, '0901234567')
+  console.log('PASS local data IPC: frame, validation, shared flight, channel cancel, auth, deadline, retry')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 }).finally(() => fs.rmSync(directory, { recursive: true, force: true }))

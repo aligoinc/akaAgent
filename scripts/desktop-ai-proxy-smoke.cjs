@@ -17,6 +17,9 @@ const db={from(table){let filters=[],single=false,insert,projection='*';const q=
 global.__desktopAiDb=db;global.__desktopAiTrusted=()=>trusted
 const provider=async(url,init)=>{if(providerFailure)throw new TypeError('fetch failed');sent.push({url,body:JSON.parse(init.body),headers:Object.fromEntries(new Headers(init.headers))});return new Response(replyText,{status})}
 const clean=result=>{const copy=JSON.parse(JSON.stringify(result));delete copy.durationMs;delete copy.duration_ms;delete copy.generatedAt;return copy}
+const imageUrls=body=>(body.input||body.messages||[]).flatMap(message=>Array.isArray(message.content)?message.content:[])
+ .flatMap(block=>block.type==='input_image'?[block.image_url]:block.type==='image_url'?[block.image_url.url]
+ :block.type==='image'?[`data:${block.source.media_type};base64,${block.source.data}`]:[])
 async function main(){let app;try{
  const Fastify=require(path.join(web,'node_modules/fastify'))
  await build({entryPoints:[path.join(web,'apps/api/src/modules/desktop-ai/desktop-ai.routes.ts')],outfile:path.join(tmp,'routes.cjs'),bundle:true,platform:'node',format:'cjs',logLevel:'silent',plugins:[{name:'no-backend-secrets',setup(b){
@@ -40,7 +43,7 @@ async function main(){let app;try{
  const next=require(path.join(tmp,'next.cjs')),previous=require(path.join(tmp,'old.cjs'))
  const payload={name:'Hữu Thực',date:'2026-10-27T10:01:02.123456+07:00',count:12,promptOverride:'Ngày {{date}}: [name]',
    messages:[{role:'system',content:'A system'},{role:'user',content:'Xin chào'}],imageDataUrls:['data:image/png;base64,ZmFrZQ=='],bodyOverrides:{temperature:0.1}}
- let cases=0
+ let cases=0,imageCases=0
  for(const kind of ['responses','chat','custom','claude'])for(const outcome of ['ok','http_error','invalid_output','network_error']){
   const isForm=kind==='claude';providerFailure=outcome==='network_error';status=outcome==='http_error'?429:200
   model={id:2,code:'fixture',provider:isForm?'claude':kind==='custom'?'custom':'openai',model:'fixture-model',endpoint:'https://provider.fixture.test/v1/'+(kind==='responses'?'responses':isForm?'messages':'chat/completions'),api_key:'fixture-secret',is_active:true,organization_id:null,default_body:{max_tokens:1000}}
@@ -60,6 +63,22 @@ async function main(){let app;try{
   assert.deepEqual(logs.map(clean),expectedLogs)
   assert.deepEqual(sent,expectedSent)
   assert(queries.filter(([table])=>table==='ai_model').every(([,columns])=>columns!=='*'&&!columns.includes('api_key')))
+  if(outcome==='ok'){
+   const attached=Array.from({length:5},(_,i)=>`data:${['image/png','image/jpeg','image/webp'][i%3]};base64,${Buffer.from('fixture-image-'+i).toString('base64')}`)
+   if(isForm)replyText=JSON.stringify({...JSON.parse(replyText),stop_reason:'end_turn'})
+   for(const messages of [payload.messages,undefined]){
+    const withImages={...payload,messages,imageDataUrls:attached}
+    sent=[];logs=[]
+    await next.callAiUsing('fixture',withImages,{organizationId:10},{formConfig:config})
+    assert.deepEqual(imageUrls(sent[0].body),isForm?[]:attached.slice(0,3),'existing caller image contract stays unchanged')
+    sent=[];logs=[]
+    const imageResult=await next.callAiUsing('fixture',withImages,{organizationId:10},{formConfig:config,imageInput:{maxImages:5}})
+    assert(imageResult.ok);assert.equal(sent.length,1);assert.deepEqual(imageUrls(sent[0].body),attached,kind+' forwards all five images in order through the HTTP proxy')
+    const logged=JSON.stringify(logs)
+    for(const url of attached)assert(!logged.includes(url.split(',')[1]),'image bytes must not enter AI logs')
+    imageCases++
+   }
+  }
   cases++
  }
  // Rejections from the bridge are not mistaken for provider errors and never
@@ -67,6 +86,6 @@ async function main(){let app;try{
  providerFailure=false;trusted=false;let calls=0;global.fetch=async()=>{calls++;return new Response('{}',{status:503})}
  assert.equal((await next.callAiUsing('fixture')).error,'fetch failed');assert.equal(calls,1)
  const controller=new AbortController();controller.abort();await assert.rejects(()=>next.callAiUsing('fixture',{}, {},{signal:controller.signal}));assert.equal(calls,1)
- console.log(`PASS ${cases} old/new real HTTP cases: payload/headers/content/usage/error/log parity, secret-free Desktop queries, no retry/fallback and cancellation`)
+ console.log(`PASS ${cases} old/new real HTTP cases + ${imageCases} five-image cases: Responses/chat/custom/native Claude, order and log masking, legacy payload/headers/content/usage/error/log parity, secret-free Desktop queries, no retry/fallback and cancellation`)
 }finally{global.fetch=realFetch;if(app)await app.close();fs.rmSync(tmp,{recursive:true,force:true});delete process.env.AKA_AGENT_AI_API_URL}}
 main().catch(error=>{console.error(error);process.exitCode=1})

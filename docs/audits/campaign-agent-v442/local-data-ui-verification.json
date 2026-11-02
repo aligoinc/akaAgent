@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "content contacts preserved in typing/paste/main/history",
+    "literal Content-scoped request preserved",
+    "typed data bypasses AI",
+    "snapshot rows omitted",
+    "preview cancel is non-mutating",
+    "120 rows survive save/reopen",
+    "Excel mapping and leading zeros",
+    "replace waits for confirmation",
+    "multi-file import queue",
+    "image bypasses AI",
+    "pending attachment draft and missing-device handling",
+    "manual Upload image uses local OCR and editable columns",
+    "late local-read cancellation"
+  ],
+  "errors": []
+}

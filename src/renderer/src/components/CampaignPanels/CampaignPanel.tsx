@@ -60,6 +60,8 @@ import { utils, writeFile } from 'xlsx'
 import { buildFoundDataWorkbook, toFacebookGroupList, type FoundDataKind, type FoundFacebookGroup } from './foundDataExport'
 import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
+import CampaignAgentFormModal from './CampaignAgentFormModal'
+import { isAgentDraft } from '../../../../shared/campaignAgent'
 import CampaignDraftRow from './CampaignDraftRow'
 import CampaignAssistantMenu from './CampaignAssistantMenu'
 import type { CampaignAssistantMode } from '../../../../shared/campaignSupport'
@@ -2437,6 +2439,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
+  const [showAgentForm, setShowAgentForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
   const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
@@ -5828,6 +5831,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               <Plus size={14} />
               <span>Thêm chiến dịch</span>
             </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAgentForm(true)} title="Thêm bằng Agent">
+              <Sparkles size={14} /><span>Thêm bằng Agent</span>
+            </button>
           </div>
         </div>
 
@@ -5985,12 +5991,15 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           </div>
         )}
 
-        {campaignDrafts.draft && <CampaignFormModal key={campaignDrafts.draft.id} campaign={null}
-          savedDraft={campaignDrafts.draft} onOpenGeneralSettings={onOpenGeneralSettings}
-          onOpenContentTemplates={onOpenContentTemplates} onClose={() => {
-            campaignDrafts.closeDraft()
-            void loadCampaigns({ silent: true })
-          }} />}
+        {showAgentForm && <CampaignAgentFormModal campaign={null}
+          onOpenGeneralSettings={onOpenGeneralSettings} onOpenContentTemplates={onOpenContentTemplates}
+          onClose={() => { setShowAgentForm(false); campaignDrafts.refresh(); void loadCampaigns({ silent: true }) }} />}
+        {campaignDrafts.draft && (() => {
+          const DraftForm = isAgentDraft(campaignDrafts.draft.payload.values.agentChat) ? CampaignAgentFormModal : CampaignFormModal
+          return <DraftForm key={campaignDrafts.draft.id} campaign={null} savedDraft={campaignDrafts.draft}
+            onOpenGeneralSettings={onOpenGeneralSettings} onOpenContentTemplates={onOpenContentTemplates}
+            onClose={() => { campaignDrafts.closeDraft(); void loadCampaigns({ silent: true }) }} />
+        })()}
         {diagnosticRandomAccount && <FacebookRandomRunConfigModal key={diagnosticRandomAccount.id} account={diagnosticRandomAccount} enableAfterSave={false}
           onClose={() => { setDiagnosticRandomAccount(null); onDiagnosticsChanged?.() }} />}
         {diagnosticAccount && <AccountInfoView account={diagnosticAccount} mode="modal" onClose={() => {

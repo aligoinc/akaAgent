@@ -1,0 +1,51 @@
+{
+  "recordedAt": "2026-11-02T09:15:45.165603+00:00",
+  "branch": "codex/campaign-agent-form",
+  "base": "4c5081bf390fbc9a3c149387b495878a9c329e73",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "8419b6f16e65060ade91cbdc1dc1975528eeb10bc67e7e2f80096bd202d8b179",
+    "scripts/campaign-agent-ui-smoke.tsx": "97d06a72904dfeaf6f99ba08c8b8b46258318459b8569422d4946faef21c2327",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "bde9c06a3b7e7200d86bea3bcb35a1c2f34af3714f8e8fdbc52b305e07cc7528",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "migrations/snapshots/campaign-agent-v442/existing-configs.json": "59353eb1dd268115c3f334e1dcc9172b0252b5486a47e713db6d62d4106b4147",
+    "docs/audits/campaign-agent-v442/group-hydration-build.txt": "27f98a2c7b1d351d237e145a31a06d3cf20b8bf7bde44dc5919f26305e846ea0"
+  },
+  "oldFormSha256": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+  "dbAccessThisTurn": false,
+  "dbApplied": false,
+  "providerLiveTest": false,
+  "published": false,
+  "notes": [
+    "Real Electron renderer with isolated IPC/store fixtures and HTTP blocked; no production side effects.",
+    "Select A, select B, undo to A; resolve the new A request before the old B request. UI, next Agent snapshot and saved draft retain A/id 101.",
+    "Clearing the group source while its catalog request is pending retains direct mode, null group ID and empty name after the late response.",
+    "Existing form, migration candidate and AI configuration capture checksums remain unchanged.",
+    "Production build passed with existing mixed dynamic/static import warnings."
+  ]
+}

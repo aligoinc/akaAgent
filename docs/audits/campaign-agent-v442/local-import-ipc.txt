@@ -1,0 +1,8 @@
+PASS JSON boundaries, preservation, form capabilities, Sunday/monthly/multi-slots, Vietnam timezone, Save-only business checks
+PASS main-frame IPC, duplicate request, scoped cancellation, auth change, shutdown, deadline, retry after unlock
+PASS limits JSON/allowlist/preservation/clarification and shared cross-section flight, cancel, deadline, auth guards
+PASS exclusion main-frame/strict request, shared flight, channel cancellation, deadline and auth
+PASS Facebook main-frame, invalid scope, shared flight, channel cancellation, deadline and auth
+PASS general IPC accepts Zalo/Email/SMS/voice with the existing request/response contract
+PASS Agent IPC: main frame/images, shared flight, channel-scoped cancel, deadline and auth guard
+PASS local data IPC: frame, validation, shared flight, channel cancel, auth, deadline, retry

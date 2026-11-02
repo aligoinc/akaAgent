@@ -1,0 +1,80 @@
+{
+  "verifiedAt": "2026-11-03T00:27:09.457751+07:00",
+  "base": "6b7c75fe662b426d8fb2794ed149920ff999f2f6",
+  "platform": "macOS arm64 / Electron 33.4.11",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "exitCode": 0,
+      "log": "local-import-agent-service.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "exitCode": 0,
+      "log": "local-import-agent-ui.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs --local-data-only",
+      "exitCode": 0,
+      "log": "local-import-local-data-ui.txt"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-data-smoke.cjs --asar",
+      "exitCode": 0,
+      "log": "local-import-local-ocr-asar.txt"
+    },
+    {
+      "command": "node scripts/campaign-schedule-ai-smoke.cjs",
+      "exitCode": 0,
+      "log": "local-import-ipc.txt"
+    },
+    {
+      "command": "node scripts/campaign-import-ui-smoke.cjs",
+      "exitCode": 0,
+      "log": "local-import-legacy-importer.txt"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exitCode": 0,
+      "log": "local-import-typecheck-node.txt"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exitCode": 0,
+      "log": "local-import-typecheck-web.txt"
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "log": "local-import-build.txt"
+    }
+  ],
+  "manual": {
+    "nativeApp": "Started npm run dev and opened Thêm bằng Agent with CUA; both Đính kèm Excel, TXT hoặc ảnh dữ liệu and Dán data visible. No test campaign/draft saved or run.",
+    "visual": "Inspected local-data-import.png (real renderer fixture); Excel columns, leading zeros, preview and explicit replacement control visible."
+  },
+  "limitations": [
+    "No production provider canary of the new routing prompt",
+    "No Windows installer verification or release",
+    "ASAR smoke packs OCR runtime/dependencies and real worker; not a signed installer test",
+    "OCR quality verified on a generated legible PNG with two phone numbers; arbitrary image/table accuracy requires user review"
+  ],
+  "database": "No migration/RPC/ACL/connection changes or DB apply",
+  "sha256": {
+    "src/shared/campaignAgentData.ts": "ffd40421e6b524471eda44fa8d7ae030d8aaaf08457a33dd264c0efc6a0a7391",
+    "src/shared/campaignAgent.ts": "5a6941a2a7cfae97e499bf5134a1b9a3c23d4a045c7b6787b295be8b9ea3fd4e",
+    "src/main/services/campaignAgentData.ts": "ce8dd57c8fbddf00276ecf58966f9dff611d7fc393e1e74ecd509bedebf3215d",
+    "src/main/services/campaignAgentService.ts": "0d996027322f255184f436c86c70be2fc3bf056432e9469aadfc0d9ec3406f25",
+    "src/main/ipc/handlers/campaignFormAiHandlers.ts": "6098c2b2ecf4abb38c67f115bd22629b564ed094a85e7b23e0761b95fb38d4b5",
+    "src/preload/index.ts": "82a22edc76ae687a1132d7bb35f2fad31cf90c346b1fa86cbca2718b89cfe4cd",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "0df55aaaac9605a2cb803e6fb182181b85e0297c8b87353407c75d67c5a675a0",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "fc9f3bdec4798f6d311761709a7d695228b7a0ef166609ea90804e84702cf37a",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "8a75ecdca6d03b4bfc677ba03f5171c0231f6d5895233185d56868958b9b7c3c",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentDataImportModal.tsx": "6b775f68fae3efc524c17dba2d7c8fbb20cd2ee3625dbda58c47b7e1c9bb69cc",
+    "src/renderer/src/components/CampaignPanels/CampaignDataUploadModal.tsx": "c017e169618c819ddb5ff9ef4fbaa5e7a5c3954bf839aa002bf4984bb8433224",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "package.json": "9c567d19821fb2bbf109f8189f695e0f178a29e5c8abe8b36519c347d5c3d168",
+    "package-lock.json": "48f6f7149d9a36b63d49fb7bcb4980dbc824887184e2f52a30a4357036f441a9",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  }
+}

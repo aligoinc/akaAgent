@@ -1,0 +1,92 @@
+[
+  {
+    "viewport": 2200,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1620,
+    "chatMode": "static",
+    "expanded": true,
+    "padding": "24px"
+  },
+  {
+    "viewport": 2200,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "static",
+    "expanded": false,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1800,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1620,
+    "chatMode": "static",
+    "expanded": true,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1800,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "static",
+    "expanded": false,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1799,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "absolute",
+    "expanded": true,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1799,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "absolute",
+    "expanded": false,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1500,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "absolute",
+    "expanded": true,
+    "padding": "24px"
+  },
+  {
+    "viewport": 1500,
+    "expected": 1198,
+    "actual": 1198,
+    "outer": 1200,
+    "chatMode": "absolute",
+    "expanded": false,
+    "padding": "24px"
+  },
+  {
+    "viewport": 900,
+    "expected": 808,
+    "actual": 808,
+    "outer": 810,
+    "chatMode": "absolute",
+    "expanded": true,
+    "padding": "24px"
+  },
+  {
+    "viewport": 900,
+    "expected": 808,
+    "actual": 808,
+    "outer": 810,
+    "chatMode": "absolute",
+    "expanded": false,
+    "padding": "24px"
+  }
+]
