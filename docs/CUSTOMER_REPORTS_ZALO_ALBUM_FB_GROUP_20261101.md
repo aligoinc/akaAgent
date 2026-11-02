@@ -142,10 +142,29 @@ bị chặn. Cả 1.086 mục tiêu bị đánh `hoàn thành`, không gửi l�
 - Khoá 30 phút (id 61) có chạy: 0 lần 127 lặp lại trong 30 phút, nhưng trung vị giữa hai lần 127 của
   cùng tài khoản là 36 phút ⇒ hết khoá là gửi dồn lại và dính tiếp; 116 tài khoản bị ≥4 lần, 20 bị ≥10.
 - **Đánh đổi thông lượng**: chiến dịch chạy ≥2 giờ, ≥10 tin OK: <60 giây 10,3 tin OK/giờ, 60–119
-  giây 11,6, 120–299 giây 8,6, ≥300 giây chỉ **3,4** — vì khoảng nghỉ áp cho MỌI mục tiêu (cả tra số
-  không tồn tại và 122, vốn không tính vào cửa sổ) và nhóm này thường đặt hạn mức thấp. Cách giữ cả
-  hai: chỉ chờ ≥300–330 giây sau tin người lạ gửi OK, không chờ sau mục tiêu thất bại — **chưa có
-  trong code**, cần sửa scheduler cả ba runtime.
+  giây 11,6, 120–299 giây 8,6, ≥300 giây 3,4. Nhóm ≥300 giây gộp cả nghỉ 331–3.300 giây; tách riêng
+  (mọi chiến dịch, tính từ mục tiêu đầu tới cuối trong ngày): ~300 giây 4,1, 331–600 giây 3,0, >600
+  giây 1,6. Ở 300 giây hạn mức giờ thường không phải nút thắt: 86/96 chiến dịch đặt ≥8,3 tin/giờ
+  (phổ biến nhất 10 tin/65 phút, 43 chiến dịch), còn nhịp 300 giây với ~50% mục tiêu gửi OK chỉ cho
+  tối đa ~6 tin OK/giờ.
+- **Khoảng nghỉ chạy sau MỌI mục tiêu đã chạy** (đã kiểm code và dữ liệu tới 20:10 ngày 02/11):
+  desktop/App Server ([campaignScheduler.ts:4750](../src/main/services/campaignScheduler.ts:4750))
+  và chat-sync (`apps/system-worker/src/zaloCampaignScheduler.ts:965` bên akaAgentChatApi) nghỉ sau
+  mọi mục tiêu đã chạy, kể cả 122 và tra số không tồn tại. Không nghỉ khi mục tiêu bị loại trước khi
+  chạy (đã xử lý, lịch tương lai, danh sách chặn bạn bè, người từ chối nhận tin, giới hạn gửi lặp),
+  mục tiêu cuối lượt, dừng/tạm dừng; sau 127 chiến dịch nghỉ ~30 phút do khoá id 61. Khoảng cách tới
+  mục tiêu kế tiếp sau 122 hoặc số không tồn tại bằng khoảng nghỉ cộng 1–10 giây ở 95–99,8% trường
+  hợp, cả bốn runtime. Hai loại này không tính vào cửa sổ 5 phút: khi tin OK gần nhất đã ≥5 phút,
+  có 122 trong 5 phút trước vẫn chỉ 1/3.679 lượt bị 127, có số không tồn tại 0/4.217. Chiến dịch ~300
+  giây (96 chiến dịch, 5.348 mục tiêu: 51% gửi OK, 17% 122, 22% không tồn tại, 0 lần 127) dành 157
+  trong 382 giờ chạy (41%) để nghỉ sau 122/số không tồn tại. Ví dụ chiến dịch 40711 (App Server, 300
+  giây, 15 tin/65 phút): 121 mục tiêu 09:46–20:08, mục tiêu sau luôn cách 305–349 giây bất kể kết
+  quả; 3 giờ 42 phút là nghỉ sau 23 lần 122 và 21 số không tồn tại.
+- Cách giữ cả hai: chỉ chờ ≥300–330 giây sau tin người lạ gửi OK, không chờ sau mục tiêu thất bại —
+  **chưa có trong code**, cần sửa scheduler cả ba runtime. Chiến dịch 40711 khi đó xong 77 tin OK
+  trong ~6,7 giờ thay vì 10,4. Giới hạn phải giữ: Zalo chặn tra số bằng `221` "Vượt quá số request
+  cho phép" khi tài khoản tra ~50 lượt/giờ (chat-sync 14 ngày, giờ-tài khoản có 221: <40 lượt 6/7.036,
+  40–49 lượt 6/53, ≥50 lượt 52/71); ở nhịp trên chiến dịch 40711 tra ~18 lượt/giờ.
 
 ### Mã 122 và 120 (đo 01/11/2026, `chat_zalo_action` từ 20/08)
 
