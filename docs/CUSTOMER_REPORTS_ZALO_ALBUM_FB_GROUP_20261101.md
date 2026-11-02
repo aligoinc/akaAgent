@@ -624,6 +624,69 @@ Kiểm thêm sau hai lượt đọc code (desktop/App Server và chat-sync), ch�
 13. QR: lỗi mạng khi kiểm phiên hạ tài khoản xuống `chưa đăng nhập` và không tự hồi phục (14 ngày: ~43
     lần đăng xuất có lý do mạng/DB/proxy/500 trên desktop; 5 tài khoản QR đang kẹt).
 
+### Giải pháp đề xuất cho mục D (02/11/2026 tối, chưa làm gì)
+
+Kênh: **DB** = áp cho mọi runtime ngay; **VPS** = App Server mình tự deploy; **chat-sync** = deploy
+akaAgentChatApi; **desktop** = theo bản phát hành (máy khách bản cũ không nhận).
+
+- **Mục 7 (kẹt `tạm dừng`)** — gốc của 3, 4, 11. Thành công của bước tra số hiện bị gắn
+  `operationState='committed'` (desktop `src/main/services/actionResultRuntime.ts:165`, chat-sync
+  `packages/database/src/campaignActionResults.ts:112`; đo 02/11: 7.116/7.116 lượt tra OK đều
+  `committed`). Sửa: tra số (chỉ đọc) và tên gợi nhớ/tag (lặp lại vô hại) luôn `not_committed`;
+  thêm phòng thủ trong `aka_agent_settle_action_results_v1` bỏ ba mã đó khỏi `v_committed`. Riêng
+  DB chưa đủ: 120/802 không ghi dòng lịch sử, `suppressedResult.operationState` do client tính.
+  Tiếp tục chiến dịch không đụng input, "Chạy lại"/làm mới bỏ qua dòng `tạm dừng`
+  ([campaignRepository.ts:5945](../src/main/data/repositories/campaignRepository.ts:5945), `:3796`)
+  ⇒ cần thêm thao tác "Chạy lại mục tạm dừng". Dọn dữ liệu (cần duyệt): trả `chờ xử lý` các mục
+  120/802 đã hết khoá và chưa có lượt gửi/kết bạn OK; 1.108 mục trong chiến dịch `hoàn thành` cần
+  quyết định mở lại hay báo khách. VPS + chat-sync phủ 2.766/3.131 mục kẹt.
+- **Mục 8 (tạm dừng vì lỗi tạm thời)** — (a) nhánh `explicitOnly`
+  ([campaignScheduler.ts:9914](../src/main/services/campaignScheduler.ts:9914)) không áp
+  `update_status_campaign` của chính sách có ngưỡng khi chưa tới ngưỡng; (b) ghi kết quả lỗi mạng thì
+  thử lại 3 lần (1/3/10 s) trước khi coi là chưa xác định; nếu vẫn hỏng thì khoá riêng mục tiêu đó
+  (như nay) nhưng đưa chiến dịch về `chờ xử lý`, không `tạm dừng`; (c) ghi chú nêu lỗi thật thay
+  "Có lỗi xảy ra". Dọn: 93 chiến dịch đang dừng — mục tiêu dở đã khoá "không tự gửi lại" nên tiếp
+  tục không gửi trùng.
+- **Mục 3, 10 (lỗi tạm thời đốt mục tiêu)** — thêm chính sách lỗi tạm thời (không `detail_status` ⇒
+  về hàng đợi qua [campaignScheduler.ts:14553](../src/main/services/campaignScheduler.ts:14553), không
+  tính hạn mức/lỗi liên tiếp); code xếp vào đó: upload ảnh lỗi mạng (chưa gửi), lỗi gọi DB của mình
+  (`Failed to … fetch failed`), `net::ERR_*`, ECONNRESET/ETIMEDOUT/socket hang up ở bước tra
+  số/upload; thử lại tại chỗ 2–3 lần cho tra số và upload. `fetch failed` ở bước gửi chữ vẫn là
+  "không rõ kết quả". Cần mục 7 trước. Mục 9: áp đổi trạng thái chiến dịch sau khi đã chốt mục
+  tiêu đang chạy; mục tiêu mới qua tra số thì trả về hàng đợi.
+- **Mục 4 (127)** — sau khi mục 7 lên: `auto_error` id 61 `input_effect='requeue'`,
+  `counts_toward_limit=false`. Chưa nhận gì ⇒ quay lại sau khoá 30 phút; album đã tới
+  (`partialDelivery` ⇒ `committed`) vẫn không gửi lại. Đổi trước mục 7 thì mục tiêu 127 thành
+  `tạm dừng`.
+- **Mục 11 (chat-sync bỏ lời mời)** — thống nhất: khoá tạm thời ở bước nhắn tin (127/126/123/120/802)
+  ⇒ dừng các bước còn lại của mục tiêu và trả cả mục tiêu về hàng đợi (nhờ 7 + 4), chạy lại trọn khi
+  hết khoá. Chat-sync giữ nhánh dừng ở `zaloCampaignExecutor.ts:1191`; desktop thôi gửi lời mời khi tin
+  nhắn đang bị khoá (nay gửi lời mời rồi mục tiêu thành `tạm dừng`, tin nhắn không bao giờ đi).
+- **Mục 13 (QR rụng đăng nhập)** — [zaloRuntimeService.ts:2860](../src/main/services/zaloRuntimeService.ts:2860):
+  lỗi tạm thời không hạ `login_status`, chỉ ghi lỗi + đếm; hạ khi kéo dài (vd ≥3 lần trong ≥30
+  phút); poller kiểm lại 15–30 phút/lần các tài khoản `chưa đăng nhập` còn session và lỗi cuối tạm
+  thời. "Proxy Authentication Required" là lỗi cấu hình proxy, báo khách.
+- **Mục 1, 2 (không nhớ mục tiêu hỏng)** — bảng kết quả cố định theo mục tiêu (khoá SĐT
+  `md5(normalize_phone(phone))` như cooldown, hoặc uid nhóm + tài khoản; mã 122/không tồn tại/112/161;
+  hạn gợi ý 30/30/7/30 ngày). Ghi bằng trigger sau `auto_campaign_details` (DB, mọi runtime). Đọc:
+  bỏ qua trước bước tra số/gửi, không tốn hạn mức, không nghỉ. Mở rộng RPC chống gửi lặp chỉ phủ
+  775/1.341 chiến dịch đang bật nó; phủ hết phải sửa app. Cần chốt phạm vi: trong tổ chức (~20% lần
+  lặp) hay toàn hệ thống (~100%). Tạm thời: báo org 1835 và tài khoản 4011 bỏ ~56 nhóm luôn 112.
+- **Mục 12 + nghỉ sau thất bại** — giãn cách theo mốc tin người lạ gửi OK gần nhất của tài khoản thay
+  cho nghỉ cố định; sau mục tiêu hỏng nghỉ ngắn (5–10 s) và giữ tra số <40/giờ; lọc mục tiêu còn
+  `chờ xử lý` trước vòng lặp ([campaignScheduler.ts:3851](../src/main/services/campaignScheduler.ts:3851))
+  và kiểm hạn mức trước khi nghỉ (`:4750`, `:5883`; chat-sync `zaloCampaignScheduler.ts:965/1126`).
+  VPS: poll trạng thái 5 s → 30 s ([campaignScheduler.ts:1529](../src/main/services/campaignScheduler.ts:1529)),
+  bớt ~30 request/giây.
+- **Mục 5 (nhóm lỗi chung)** — DB: thêm `auto_error` cho 112 và 161 với
+  `zalo_action_codes=['zalo_message_group']`, `thất bại`, không tính hạn mức/lỗi liên tiếp;
+  `getZaloErrorPolicyByCode` ([errorPolicyRepository.ts:52](../src/main/data/repositories/errorPolicyRepository.ts:52))
+  đã khớp theo mã Zalo + mã hành động nên không cần phát hành app. Lỗi không có mã Zalo: theo mục 3.
+
+Thứ tự: (1) ngay — chính sách 112/161, poll 30 s trên VPS, báo khách các nhóm 112 và chiến dịch đang
+dừng; (2) đợt 1 — mục 7 (VPS + chat-sync + desktop), rồi mục 4, 3, 8, 11, giãn cách; (3) đợt 2 — bảng
+kết quả cố định (sau khi chốt phạm vi), QR; (4) dọn dữ liệu kẹt sau khi duyệt.
+
 Đã kiểm và **không thấy** trên production (code có nhánh nhưng chưa xảy ra/không đáng kể): chat-sync
 nhận–nhả lượt chạy mỗi giây (tối đa 44 lượt/chiến dịch/24 h), gửi lại album đã tới (2 lệnh bị cắt/30
 ngày, không lệnh nào sau album đã tới), chế độ chia sẻ tự tạm dừng khi runtime gián đoạn (0 ghi chú/30
