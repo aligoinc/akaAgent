@@ -4,6 +4,15 @@
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
 đọc live theo skill RPC; không suy ra quyền apply từ bảng này.
 
+## Tách quyền akaChat/akaAgent — DB tương thích đã apply, chưa kích hoạt
+
+[Tách quyền akaChat/akaAgent V445–V447](../APP_ACCESS_SPLIT.md): source bốn repo,
+build local, SQL rollback rehearsal và kiểm thử đã chuẩn bị ngày 03/11/2026.
+Đã sửa bốn lượt review: capability Chat độc lập, guard Data Scan, lifecycle reader, RLS Desktop cũ, capture cuối rollout và lỗi ACL của policy đọc staff, receipt QR khóa nguồn/quyền tại commit và reservation danh tính khi bật Chat. Audit hiện có 98 ca SQL, 13 RPC sửa và 42 target functions; 11 runtime dependencies giữ nguyên body/ACL. Policy dùng view staff đã scope; V445/V447 chặn drift metadata view, không mở SELECT `org_staff`.
+**Đã apply V445, V446 và hai private auth patches lúc 04:59:58–05:00:28 Việt Nam ngày 03/11/2026** trên `cgjbsmqtfhqvttudyjzq`. Trial production kết thúc ROLLBACK, đối chiếu metadata trước/sau và kiểm tra schema/ACL đạt. Ledger và bằng chứng ở [receipt apply](../audits/app-access-split/apply-receipt.json); không apply lại các bước này.
+**V447 chưa apply; `private.app_access_policy_enabled()` vẫn false.** Người dùng xác nhận backend/runtime/UI/Desktop chưa triển khai và yêu cầu giữ chưa kích hoạt. Chưa deploy service hoặc phát hành bộ cài; CRM không đổi source/deployment. Hai lỗi P2 về duplicate legacy identity và thứ tự khóa binding/account được người dùng tạm hoãn; xem [audit và thứ tự rollout](../audits/app-access-split/README.md). Production vẫn dùng cơ chế legacy trong giai đoạn này.
+Lượt tạo PR: người dùng chấp nhận Desktop cũ không hỗ trợ org có product 5, không cần đợi mọi máy cập nhật; deploy backend/runtime tương thích và phát hành Desktop mới vẫn phải đi trước activation. Việc tạo PR không cho phép apply V447/deploy/phát hành. [Kiểm chứng trước PR](../audits/app-access-split/pr-verification.json).
+
 ## Bảo mật và tương thích hiện hành
 
 [Facebook random AI V444](../FACEBOOK_RANDOM_AI_V442.md) **đã apply lúc 22:27:21 Việt Nam ngày 02/11/2026**, ledger `20261102152721 / migration_v444_facebook_random_ai`; đổi số candidate từ V442 vì ledger đã có migration khác dùng V442/V443. Trial `ROLLBACK`, hậu kiểm 11 hàm/metadata/quyền và smoke AI/luồng chạy thường đạt. App dev đã mở để người dùng test; **chưa đóng gói/phát hành, chưa kiểm canary AI/Facebook thật của tính năng**. [Audit](../audits/facebook-random-ai-v442/README.md), [receipt apply](../audits/facebook-random-ai-v442/apply-receipt.json). Không apply lại.

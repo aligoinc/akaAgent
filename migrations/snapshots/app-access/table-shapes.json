@@ -1,0 +1,70 @@
+[
+  {
+    "name": "auto_account_action_status",
+    "columns": "id bigint,account_id bigint,action_code text,count_action_in_day integer,count_date date,is_disable boolean,date_enable timestamp with time zone,created_at timestamp with time zone,updated_at timestamp with time zone,disabled_error_code text,disabled_reason text,disabled_at timestamp with time zone"
+  },
+  {
+    "name": "auto_account_groups",
+    "columns": "id bigint,name text,flatform_type text,settings jsonb,staff_id bigint,organization_id bigint,is_active boolean,is_delete boolean,created_at timestamp with time zone,updated_at timestamp with time zone"
+  },
+  {
+    "name": "auto_accounts",
+    "columns": "id bigint,name text,flatform_type text,login_status text,status text,is_active boolean,is_delete boolean,created_at timestamp with time zone,updated_at timestamp with time zone,sleep_between_actions integer,daily_limit integer,rate_limit_count integer,rate_limit_minutes integer,staff_id bigint,organization_id bigint,account_group_id bigint,proxy_id bigint,zalo_account_id bigint,zalo_session jsonb,zalo_session_updated_at timestamp with time zone,zalo_session_last_verified_at timestamp with time zone,zalo_session_last_error text,email_session jsonb,email_session_updated_at timestamp with time zone,email_session_last_verified_at timestamp with time zone,email_session_last_error text,username text,password text,mobile_device_id text,mobile_device_info jsonb,mobile_device_registered_at timestamp with time zone,mobile_device_last_seen_at timestamp with time zone,is_zalo_show_web boolean,runtime_operation_claim_token uuid,is_zalo_server boolean,facebook_uid text,facebook_login_managed boolean,facebook_login_claim_generation bigint,is_gom boolean,facebook_random_run_enabled boolean,facebook_random_run_config jsonb,facebook_web_enrichment_enabled boolean,facebook_web_enrichment_config jsonb,zalo_phone_check_usage jsonb"
+  },
+  {
+    "name": "auto_campaigns",
+    "columns": "id bigint,name text,action_id text,account_id bigint,status text,schedule timestamp with time zone,log text,is_delete boolean,created_at timestamp with time zone,updated_at timestamp with time zone,content text,schedule_type text,schedule_end_date timestamp with time zone,schedule_days text,schedule_week_days text,continue_next_day boolean,refresh_data boolean,extra_settings jsonb,images jsonb,staff_id bigint,organization_id bigint,note text,daily_stop_time time without time zone,original_schedule timestamp with time zone,completed_at timestamp with time zone,last_run_at timestamp with time zone,time_sleep_between_2 integer,control_idempotency_key text,data_target_source_mode text,data_group_id bigint,provisioning_state text,creation_bundle_id bigint,creation_bundle_child_index integer,secondary_account_id bigint,runtime_claim_token uuid,runtime_claim_target text,runtime_claim_vietnam_date date,runtime_claimed_at timestamp with time zone,runtime_unit_token uuid,runtime_unit_vietnam_date date,runtime_unit_claimed_at timestamp with time zone,runtime_unit_input_data_ids bigint[],content_rotation_indexes jsonb"
+  },
+  {
+    "name": "auto_control_sessions",
+    "columns": "id uuid,staff_id bigint,organization_id bigint,token_hash text,client_type text,user_agent text,created_at timestamp with time zone,last_seen_at timestamp with time zone,expires_at timestamp with time zone,revoked_at timestamp with time zone,web_device_id uuid,web_device_revision uuid,web_device_registered_at timestamp with time zone,web_device_fingerprint text,web_device_group_id uuid"
+  },
+  {
+    "name": "auto_proxies",
+    "columns": "id bigint,name text,protocol text,host text,port integer,username text,password text,staff_id bigint,organization_id bigint,is_active boolean,is_delete boolean,created_at timestamp with time zone,updated_at timestamp with time zone"
+  },
+  {
+    "name": "auto_staff_device_presence",
+    "columns": "instance_id uuid,staff_id bigint,organization_id bigint,device_fingerprint_hash text,device_label text,device_platform text,app_version text,started_at timestamp with time zone,last_seen_at timestamp with time zone,ended_at timestamp with time zone"
+  },
+  {
+    "name": "auto_staff_management_requests",
+    "columns": "request_id uuid,actor_id bigint,organization_id bigint,action text,payload jsonb,result jsonb,created_at timestamp with time zone"
+  },
+  {
+    "name": "chat_zalo_account",
+    "columns": "id bigint,zalo_id text,global_id text,username text,display_name text,zalo_name text,avatar_url text,background_avatar_url text,cover_url text,gender text,birth_day smallint,birth_month smallint,birth_year smallint,dob_raw bigint,sdob text,status_text text,phone_number text,last_action_at timestamp with time zone,zalo_updated_at timestamp with time zone,zalo_is_active boolean,key_code integer,user_type_code integer,is_active_pc boolean,is_active_web boolean,is_valid boolean,user_key text,account_status_code integer,user_mode_code integer,business_package_id integer,business_package_labels jsonb,oa_info jsonb,oa_status jsonb,zalo_created_at timestamp with time zone,add_friend_via_contact smallint,display_on_recommend_friend smallint,add_friend_via_group smallint,add_friend_via_qr smallint,quick_message_status smallint,show_online_status boolean,accept_stranger_call smallint,archived_chat_status smallint,receive_message smallint,add_friend_via_phone smallint,display_seen_status smallint,view_birthday smallint,two_factor_authentication_status smallint,friend_version text,group_version text,alias_last_updated_at timestamp with time zone,tag_version bigint,tag_last_updated_at timestamp with time zone,pinned_conversation_version bigint,archived_conversation_version bigint,last_user_sync_at timestamp with time zone,last_group_sync_at timestamp with time zone,last_tag_sync_at timestamp with time zone,is_enabled boolean,created_at timestamp with time zone,updated_at timestamp with time zone,is_akabiz_chat boolean,is_gom_theo_phien_lam_viec boolean,gom_question_idle_seconds integer,gom_answer_wait_seconds integer,gom_answer_idle_seconds integer"
+  },
+  {
+    "name": "chat_zalo_account_organization",
+    "columns": "id bigint,chat_zalo_account_id bigint,organization_id bigint,auto_account_id bigint,session_ciphertext bytea,session_format_version smallint,login_status_category_item_id bigint,socket_status_category_item_id bigint,is_active boolean,runtime_generation bigint,session_updated_at timestamp with time zone,session_last_verified_at timestamp with time zone,last_login_at timestamp with time zone,last_socket_connected_at timestamp with time zone,last_socket_disconnected_at timestamp with time zone,last_socket_event_at timestamp with time zone,socket_last_close_code integer,socket_last_close_reason text,session_last_error text,created_at timestamp with time zone,updated_at timestamp with time zone,supporters_can_view_unassigned boolean,assignment_mode text,first_response_mode text,assignment_pool text,round_robin_last_org_staff_id bigint,public_id uuid"
+  },
+  {
+    "name": "chat_zalo_account_organization_staff_access",
+    "columns": "id bigint,organization_id bigint,chat_zalo_account_organization_id bigint,org_staff_id bigint,access_role text,granted_by_org_staff_id bigint,created_at timestamp with time zone,updated_at timestamp with time zone,can_view_unassigned boolean"
+  },
+  {
+    "name": "org_group",
+    "columns": "id bigint,organization_id bigint,parent_id bigint,name text,created_at timestamp with time zone,updated_at timestamp with time zone"
+  },
+  {
+    "name": "org_group_staff",
+    "columns": "id bigint,group_id bigint,staff_id bigint,organization_id bigint,is_admin boolean,created_at timestamp with time zone"
+  },
+  {
+    "name": "org_organization",
+    "columns": "id bigint,customer_id bigint,name text,phone text,email text,sql_account_id text,staff_admin_id bigint,max_staff integer,created_at timestamp with time zone,updated_at timestamp with time zone,is_admin_akabiz boolean,staff_id_created bigint,staff_id_owner bigint,demo_created_by bigint,first_sale_by bigint,demo_created_at timestamp with time zone,first_sale_at timestamp with time zone,staff_duration_days integer,use_staff_expiration boolean,use_new_zalo_runtime boolean,zalo_message_sync_enabled boolean"
+  },
+  {
+    "name": "org_organization_product",
+    "columns": "id bigint,organization_id bigint,product_package_id bigint,organization_phone text,organization_email text,product_id bigint,product_name text,package_name text,package_type text,max_accounts integer,max_staff integer,duration_days integer,purchase_date timestamp with time zone,trial_start_date timestamp with time zone,expiration_date timestamp with time zone,created_at timestamp with time zone,is_deleted boolean,updated_at timestamp with time zone,created_by bigint,updated_by bigint,is_paid boolean,is_lock boolean,max_sends_per_day integer,is_zalo_server boolean,is_zalo_show_web boolean,is_chat_sync boolean,demo_created_by bigint,first_sale_by bigint,demo_created_at timestamp with time zone,first_sale_at timestamp with time zone"
+  },
+  {
+    "name": "org_staff",
+    "columns": "id bigint,organization_id bigint,customer_id bigint,name text,phone text,email text,username text,password text,is_active boolean,created_at timestamp with time zone,updated_at timestamp with time zone,device_fingerprint_hash text,device_label text,device_platform text,device_bound_at timestamp with time zone,device_last_seen_at timestamp with time zone,is_admin boolean,is_created_demo boolean,sql_staff_id bigint,name_akabiz character varying,is_update_product_package boolean,chat_staff_id uuid,akabiz_integrations jsonb,is_super_admin boolean,is_data_division boolean,pancake bigint,is_data_division_support boolean,pancake_staff_id text,is_admin_akabiz boolean,use_test_workflow boolean,pancake_staff_name text,is_zalo_server boolean,is_cskh_expired boolean,kh_hh_chia_toi_da integer,is_chia_kh_hh_staff_owner boolean,is_policy_accepted boolean,policy_accepted_at timestamp with time zone,deleted_at timestamp with time zone,deleted_by_org_staff_id bigint,app_notification text,device_changes_remaining integer,aka_agent_device_fingerprint_hash text,expiration_date timestamp with time zone,max_running_zalo_web_accounts integer,max_running_facebook_accounts integer,browser_run_limits_revision bigint,aka_agent_device_identity_version smallint,aka_agent_device_binding_revision bigint"
+  },
+  {
+    "name": "zalo_accounts",
+    "columns": "id bigint,zalo_uid text,display_name text,avatar_url text,metadata jsonb,last_seen_at timestamp with time zone,created_at timestamp with time zone,updated_at timestamp with time zone,phone text"
+  }
+]

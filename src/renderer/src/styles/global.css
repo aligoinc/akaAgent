@@ -26283,3 +26283,9 @@ body.theme-light .detail-dock-resize-handle {
 @media (max-width: 719px) {
   .report-filter-content { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* App access controls keep allocation failures visible beside the action. */
+.app-access-control { display: inline-flex; flex-direction: column; gap: 4px; vertical-align: top; }
+.app-access-control label { display: inline-flex; align-items: center; gap: 6px; }
+.app-access-control small { white-space: normal; max-width: 260px; font-size: 12px; }
+.app-access-control [role="alert"] { color: var(--color-danger, #b91c1c); }

@@ -1,4 +1,5 @@
 import { ipcMain, webContents, BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import type { CampaignAccountActionScope } from '../../../shared/campaignAccountActionSnapshot'
 import { preemptWebEnrichment } from '../../services/webEnrichmentControl'
 import { AutoAccount, AutoAccountContact, AutoProxy, IPC_EVENTS, ProxyTestRequest, ZaloLabelOption, EmailAccountConfig } from '../../../shared/types'
@@ -528,7 +529,7 @@ export function registerAccountHandlers(
     return trackLocalOperation((async () => {
       const claim = await claimLocalZaloOperation(accountId, false, 'zalo.loginQr.start')
       try {
-        const result = await zaloRuntime.startLoginQr(accountId)
+        const result = await zaloRuntime.startLoginQr(accountId, { operationId: randomUUID(), claimToken: claim.claimToken })
         if (!result.success) {
           await releaseLocalZaloOperation(accountId, claim)
           return result

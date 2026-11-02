@@ -1,0 +1,18 @@
+[
+  {
+    "policyname": "desktop_owned_resource",
+    "permissive": "RESTRICTIVE",
+    "roles": "{aka_agent_desktop}",
+    "cmd": "ALL",
+    "qual": "(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))",
+    "with_check": "((staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) AND ((account_group_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM auto_account_groups owned\n  WHERE (owned.id = auto_accounts.account_group_id)))) AND ((proxy_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM auto_proxies owned\n  WHERE (owned.id = auto_accounts.proxy_id)))))"
+  },
+  {
+    "policyname": "v435_existing_role_access",
+    "permissive": "PERMISSIVE",
+    "roles": "{aka_agent_desktop,aka_message_ingest_owner,authenticator,cli_login_postgres,dashboard_user,pg_checkpoint,pg_create_subscription,pg_database_owner,pg_execute_server_program,pg_maintain,pg_monitor,pg_read_all_data,pg_read_all_settings,pg_read_all_stats,pg_read_server_files,pg_signal_backend,pg_stat_scan_tables,pg_use_reserved_connections,pg_write_all_data,pg_write_server_files,pgbouncer,supabase_auth_admin,supabase_functions_admin,supabase_privileged_role,supabase_realtime_admin,supabase_replication_admin,supabase_storage_admin}",
+    "cmd": "ALL",
+    "qual": "true",
+    "with_check": "true"
+  }
+]

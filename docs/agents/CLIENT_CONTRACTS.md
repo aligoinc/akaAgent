@@ -28,6 +28,13 @@ Hợp đồng SMS gốc vẫn ở [campaigns-01](reference/campaigns-01.md).
 
 <a id="chat-routing"></a>
 
+Candidate 03/11/2026: [quyền riêng akaChat/akaAgent](../APP_ACCESS_SPLIT.md) bổ sung
+quyền UI, đồng bộ và transport độc lập cho tổ chức có product 5. Bảng legacy dưới
+đây tiếp tục áp dụng khi chưa kích hoạt hoặc tổ chức không có product 5. Source
+candidate dùng `usesChatRuntime` để route Desktop, không ghi lại DB `is_chat_sync`.
+QR local candidate dùng receipt niêm phong nguồn app/người yêu cầu và claim token; commit session kiểm quyền lại trong transaction. Bật Chat sau login giữ identity bằng binding hiện có ngay cả khi runtime offline, tắt quyền giữ binding. V445/V446 và hai private auth patches đã apply ngày 03/11/2026; V447 chưa apply, policy false, chưa deploy caller mới. Xem [receipt](../audits/app-access-split/apply-receipt.json) và audit feature trước khi thao tác production; không apply lại các bước đã live.
+
+
 ## Kết nối tenant Chat: Desktop và WebApp
 
 | Client | Hành vi hiện tại cần giữ |

@@ -16,6 +16,9 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
 
   return {
     id: row.id as number,
+    isAkaAgentEnabled: row.is_aka_agent_enabled !== false,
+    isAkachatEnabled: row.is_akachat_enabled === true,
+    appAccess: row.app_access as AutoAccount['appAccess'],
     name: row.name as string,
     flatformType,
     facebookUid: (row.facebook_uid as string | null) ?? null,

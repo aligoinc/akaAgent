@@ -372,6 +372,10 @@ export default function App() {
     )
   }
 
+  if (user.appAccess?.separateAccess && !user.appAccess.staff.akaAgentAllowed) {
+    return <div className="app-loading" role="status"><p>Quyền dùng akaAgent đã bị thu hồi. Đang dừng và lưu kết quả tác vụ…</p></div>
+  }
+
   return (
     <div className={`app-layout app-layout-authenticated ${platformClass}`}>
       <div className="app-window-drag-frame" aria-hidden="true" />

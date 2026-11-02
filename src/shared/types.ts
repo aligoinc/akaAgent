@@ -57,6 +57,9 @@ export interface VoiceCallCampaignSettings {
 }
 
 export interface AutoAccount {
+  isAkaAgentEnabled?: boolean
+  isAkachatEnabled?: boolean
+  appAccess?: import('./appAccess').AppAccessFlags
   id: number
   name: string
   flatformType: string
@@ -2876,6 +2879,7 @@ export interface ZaloAccountCapabilities {
 }
 
 export interface AuthUser {
+  appAccess?: import('./appAccess').AppAccessSnapshot
   staffId: number
   organizationId: number
   name: string

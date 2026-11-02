@@ -44,6 +44,8 @@ const ACCOUNT_SELECT = [
   'login_status',
   'status',
   'is_active',
+  'is_aka_agent_enabled',
+  'is_akachat_enabled',
   'rate_limit_minutes',
   'account_group_id',
   'proxy_id',
@@ -113,25 +115,11 @@ function getPlatformDisplayName(flatformType: string | null | undefined): string
 }
 
 async function countStaffAccountsByPlatform(staffId: number, flatformType: string): Promise<number> {
-  if (flatformType === 'zalo') {
-    const { count, error } = await client()
-      .from('auto_accounts')
-      .select('id', { count: 'exact', head: true })
-      .eq('staff_id', staffId)
-      .eq('flatform_type', 'zalo')
-      .eq('is_delete', false)
-    if (error) throw new Error(`Failed to count Zalo accounts: ${error.message}`)
-    return count || 0
-  }
-
-  const { count, error } = await client()
-    .from('auto_accounts')
-    .select('id', { count: 'exact', head: true })
-    .eq('staff_id', staffId)
-    .eq('flatform_type', flatformType)
-    .eq('is_delete', false)
-
-  if (error) throw new Error(`Failed to count accounts: ${error.message}`)
+  const query = client().from('auto_accounts').select('id', { count: 'exact', head: true })
+    .eq('staff_id', staffId).eq('flatform_type', flatformType).eq('is_delete', false)
+  if (requireCurrentUser().appAccess?.separateAccess) query.eq('is_aka_agent_enabled', true)
+  const { count, error } = await query
+  if (error) throw new Error('Không thể kiểm tra số lượng tài khoản.')
   return count || 0
 }
 
@@ -164,10 +152,22 @@ export async function getAccountIgnoringCapability(id: number, signal?: AbortSig
   return data ? rememberAccountLogSnapshot(mapAccountFromDB(toDbRow(data))) : null
 }
 
+async function localRuntimeSession(id: number, action: string, payload: object = {}): Promise<Record<string, any> | null> {
+  const { data, error } = await client().rpc('aka_agent_app_access_local_session', {
+    p_staff: requireCurrentUser().staffId, p_account: id, p_action: action, p_data: payload
+  })
+  if (error) throw new Error(`Failed to update local Zalo runtime: ${error.message}`)
+  return data as Record<string, any> | null
+}
+
 // Pausing needs the original runtime route even after deletion or loss of a
 // package capability. This read cannot authorize starting or resuming a run.
 export async function getAccountForCampaignPause(id: number): Promise<Pick<AutoAccount, 'id' | 'flatformType' | 'isZaloServer'> | null> {
   const u = requireCurrentUser()
+  if (u.appAccess?.separateAccess) {
+    const row = await localRuntimeSession(id, 'pause_route')
+    return row ? { id: Number(row.id), flatformType: row.flatform_type, isZaloServer: row.is_zalo_server === true } : null
+  }
   const { data, error } = await client()
     .from('auto_accounts')
     .select('id,flatform_type,is_zalo_server')
@@ -196,6 +196,10 @@ export async function getAccount(id: number, signal?: AbortSignal): Promise<Auto
 }
 
 export async function getAccountZaloSession(id: number): Promise<AccountZaloSession | null> {
+  if (requireCurrentUser().appAccess?.separateAccess) {
+    const row = (await readZaloRuntimeRows([id], true))[0]
+    return row ? { account: mapAccountFromDB(row), session: normalizeZaloSession(row.zalo_session) } : null
+  }
   await ensureCurrentUserFeatureActive('zalo')
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -221,6 +225,10 @@ export async function getAccountZaloSession(id: number): Promise<AccountZaloSess
 export async function listZaloAccountsWithSession(
   runtimeTarget?: ZaloAccountRuntimeTarget
 ): Promise<AccountZaloSession[]> {
+  if (requireCurrentUser().appAccess?.separateAccess) {
+    return (await readZaloRuntimeRows(null, true)).map(row => ({ account: mapAccountFromDB(row), session: normalizeZaloSession(row.zalo_session) }))
+      .filter(entry => !entry.account.isZaloShowWeb && !!entry.session && (runtimeTarget === undefined || entry.account.isZaloServer === (runtimeTarget === 'server')))
+  }
   await ensureCurrentUserFeatureActive('zalo')
   const capabilities = loadCurrentUserZaloAccountCapabilities()
   if (
@@ -295,12 +303,14 @@ export async function listAccounts(): Promise<AutoAccount[]> {
   const u = requireCurrentUser()
   const entitlements = await loadCurrentUserEffectiveEntitlements()
   const zaloAccountCapabilities = loadCurrentUserZaloAccountCapabilities()
-  const { data, error } = await client()
+  const query = client()
     .from('auto_accounts')
     .select(ACCOUNT_SELECT)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
+  if (u.appAccess?.separateAccess) query.eq('is_aka_agent_enabled', true)
+  const { data, error } = await query
 
   if (error) throw new Error(`Failed to list accounts: ${error.message}`)
   const accounts = (data || [])
@@ -337,6 +347,40 @@ export async function listAccounts(): Promise<AutoAccount[]> {
     ...account,
     hasDisabledActions: restrictedAccountIds.has(account.id)
   }))
+}
+
+/** Main only: seal the QR origin against the existing runtime claim. */
+export async function updateLocalQrOperation(id: number, operationId: string, action: 'begin' | 'bind' | 'cancel', claimToken?: string): Promise<void> {
+  const user = requireCurrentUser()
+  if (!user.appAccess?.separateAccess) return
+  const { error } = await client().rpc('aka_agent_app_access_qr_operation', {
+    p_owner: user.staffId, p_account: id, p_operation: operationId, p_action: action,
+    p_data: claimToken ? { claimToken } : {}
+  }).abortSignal(AbortSignal.timeout(15_000))
+  if (error) throw new Error('Thao tác QR đã hết hiệu lực hoặc quyền sử dụng đã thay đổi.')
+}
+
+/** Main-process reader only. Never expose the session-bearing result through IPC. */
+async function readZaloRuntimeRows(ids: number[] | null, sessions: boolean): Promise<ReturnType<typeof toDbRow>[]> {
+  const u = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_app_access_runtime_accounts', {
+    p_staff: u.staffId, p_ids: ids, p_sessions: sessions
+  }).abortSignal(AbortSignal.timeout(65_000))
+  if (error || !Array.isArray(data)) throw new Error('Không thể đọc tài khoản runtime.')
+  return data.map(toDbRow)
+}
+
+export async function listLocalChatRuntimeAccounts(): Promise<AutoAccount[]> {
+  if (!requireCurrentUser().appAccess?.separateAccess) return listAccounts()
+  return (await readZaloRuntimeRows(null, false)).map(mapAccountFromDB)
+    .filter(account => !account.isZaloShowWeb && !account.isZaloServer && account.appAccess?.akachatAllowed)
+}
+
+/** Never use this reader for campaign selection; Chat and cleanup retain the runtime. */
+export async function getAccountForZaloRuntime(id: number): Promise<AutoAccount | null> {
+  if (!requireCurrentUser().appAccess?.separateAccess) return getAccount(id)
+  const row = (await readZaloRuntimeRows([id], false))[0]
+  return row ? mapAccountFromDB(row) : null
 }
 
 export async function createAccount(account: Partial<AutoAccount>): Promise<AutoAccount> {
@@ -627,7 +671,7 @@ export async function clearAccountMobileDevice(id: number): Promise<AutoAccount>
 }
 
 export async function upsertZaloAccount(input: ZaloAccountUpsertInput): Promise<ZaloAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  if (!requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserFeatureActive('zalo')
   const zaloUid = String(input.zaloUid || '').trim()
   if (!zaloUid) throw new Error('Thiếu Zalo UID')
 
@@ -656,7 +700,8 @@ async function requireCompatibleZaloAccount(
   expectedShowWeb?: boolean,
   expectedServer?: boolean
 ): Promise<AutoAccount> {
-  const account = await getAccount(id)
+  let account = requireCurrentUser().appAccess?.separateAccess && expectedShowWeb !== true ? await getAccountForZaloRuntime(id) : await getAccount(id)
+  if (!account && expectedShowWeb === undefined) account = await getAccount(id)
   if (!account || account.flatformType !== 'zalo') {
     throw new Error('Không tìm thấy tài khoản Zalo phù hợp với gói hiện tại.')
   }
@@ -681,11 +726,19 @@ export async function updateAccountZaloSession(
     verified?: boolean
     clearError?: boolean
     expectedServerSessionUpdatedAt?: string | null
+    qrOperationId?: string
+    claimToken?: string
   }
 ): Promise<AutoAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  if (!requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserFeatureActive('zalo')
   const account = await requireCompatibleZaloAccount(id, false)
-  await ensureCurrentUserCanUseZaloAccountType(false, account.isZaloServer)
+  if (requireCurrentUser().appAccess?.separateAccess && !account.isZaloServer) {
+    if (input.expectedServerSessionUpdatedAt !== undefined) throw new Error('Tài khoản này không phải Zalo chạy trên server.')
+    const row = await localRuntimeSession(id, 'commit', input)
+    if (!row) throw new Error('Không tìm thấy tài khoản Zalo.')
+    return recordAccountState(mapAccountFromDB(toDbRow(row)), account)
+  }
+  if (!requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserCanUseZaloAccountType(false, account.isZaloServer)
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -729,8 +782,13 @@ export async function markAccountZaloSessionCheck(
   result: { ok: boolean; error?: string | null },
   expectedShowWeb: boolean
 ): Promise<AutoAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  if (expectedShowWeb || !requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserFeatureActive('zalo')
   const previous = await requireCompatibleZaloAccount(id, expectedShowWeb)
+  if (requireCurrentUser().appAccess?.separateAccess && !previous.isZaloServer && !expectedShowWeb) {
+    const row = await localRuntimeSession(id, 'mark', { ...result, error: normalizeNullableString(result.error) })
+    if (!row) throw new Error('Không tìm thấy tài khoản Zalo.')
+    return recordAccountState(mapAccountFromDB(toDbRow(row)), previous, result.ok ? null : result.error)
+  }
   const u = requireCurrentUser()
   const now = new Date().toISOString()
   const payload = {
@@ -795,8 +853,13 @@ export async function updateAccountZaloWebSession(
 }
 
 export async function clearAccountZaloSession(id: number): Promise<AutoAccount> {
-  await ensureCurrentUserFeatureActive('zalo')
+  if (!requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserFeatureActive('zalo')
   const previous = await requireCompatibleZaloAccount(id)
+  if (requireCurrentUser().appAccess?.separateAccess && !previous.isZaloServer && !previous.isZaloShowWeb) {
+    const row = await localRuntimeSession(id, 'clear')
+    if (!row) throw new Error('Không tìm thấy tài khoản Zalo.')
+    return recordAccountState(mapAccountFromDB(toDbRow(row)), previous)
+  }
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_accounts')
@@ -822,8 +885,12 @@ export async function clearInvalidLocalZaloSession(
   expectedSessionUpdatedAt: string | null,
   verificationError: string
 ): Promise<AutoAccount | null> {
-  await ensureCurrentUserFeatureActive('zalo')
+  if (!requireCurrentUser().appAccess?.separateAccess) await ensureCurrentUserFeatureActive('zalo')
   const previous = await requireCompatibleZaloAccount(id, false, false)
+  if (requireCurrentUser().appAccess?.separateAccess) {
+    const row = await localRuntimeSession(id, 'clear_invalid', { expectedSessionUpdatedAt, error: normalizeNullableString(verificationError) })
+    return row ? recordAccountState(mapAccountFromDB(toDbRow(row)), previous, verificationError) : null
+  }
   const u = requireCurrentUser()
   const update = client()
     .from('auto_accounts')
@@ -1093,8 +1160,10 @@ async function claimAccountOperation(
   })
   if (accountOperationRegistry.has(id)) return rejected('account_operation_pending')
   if (previousStatus === undefined) {
-    const { data, error } = await client().from('auto_accounts').select('status')
-      .eq('id', id).eq('staff_id', u.staffId).maybeSingle()
+    const { data, error } = u.appAccess?.separateAccess && platform === 'zalo'
+      ? { data: (await readZaloRuntimeRows([id], false))[0] ?? null, error: null }
+      : await client().from('auto_accounts').select('status')
+        .eq('id', id).eq('staff_id', u.staffId).maybeSingle()
     if (error) throw Object.assign(new Error(error.message), { code: error.code })
     if (!data) return rejected('account_not_found')
     if (data.status !== 'chờ xử lý' && data.status !== 'tạm dừng') return rejected('account_not_available')
