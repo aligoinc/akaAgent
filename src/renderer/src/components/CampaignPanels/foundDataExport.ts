@@ -18,7 +18,7 @@ interface FoundDataExportItem {
 }
 
 const TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
-const GROUP_HEADERS = ['Tên', 'UID', 'Số thành viên', 'Số bài', 'Đơn vị bài', 'Privacy', 'Loại nhóm AI']
+const GROUP_HEADERS = ['Tên', 'UID', 'Số thành viên', 'Số bài', 'Đơn vị bài', 'Privacy']
 
 // The search payload also uses 0 for missing/unparsed activity, without retaining evidence.
 const knownPostsPerDay = (value: number | undefined): number | undefined =>
@@ -126,13 +126,11 @@ export const buildFoundDataWorkbook = (
           group?.memberCount ?? '',
           postsPerDay ?? '',
           postsPerDay == null ? '' : 'ngày',
-          privacy.toLowerCase() === 'public' ? 'Công khai' : privacy.toLowerCase() === 'private' ? 'Riêng tư' : privacy,
-          // The search workflow does not classify group types with AI.
-          'Không biết'
+          privacy.toLowerCase() === 'public' ? 'Công khai' : privacy.toLowerCase() === 'private' ? 'Riêng tư' : privacy
         ]
       })
     ])
-    sheet['!cols'] = [40, 60, 16, 12, 14, 16, 22].map(wch => ({ wch }))
+    sheet['!cols'] = [40, 60, 16, 12, 14, 16].map(wch => ({ wch }))
     sheet['!autofilter'] = { ref: sheet['!ref']! }
     utils.book_append_sheet(workbook, sheet, templateItems.length > 0 ? 'Group Facebook' : 'Sheet1')
   }

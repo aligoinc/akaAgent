@@ -1,4 +1,5 @@
 import { invokeGroupSharing } from './groupSharingRepository'
+import { isFacebookGroupTarget, normalizeFacebookGroupMetadata } from '../../../shared/facebookGroupExport'
 import type { GroupSharing } from '../../../shared/groupSharing'
 import {
   BindCampaignDataGroupSourceRequest,
@@ -147,6 +148,11 @@ export function mapDataGroupMember(row: DbRow): DataGroupMember {
     ? row.dataset_names.map(value => asString(value)).filter(Boolean)
     : []
   return {
+    facebookGroupMetadata: row.facebook_group_metadata && isFacebookGroupTarget({
+      dataTypeCode: asNullableString(row.data_type_code), groupDataTypeCode: asNullableString(row.group_data_type_code),
+      contactType: asNullableString(row.contact_type), flatformType: asNullableString(row.flatform_type),
+      uid: asNullableString(row.uid), url: asNullableString(row.url)
+    }) ? normalizeFacebookGroupMetadata(row.facebook_group_metadata) : undefined,
     id: asNumber(row.id ?? row.membership_id),
     groupId: asNumber(row.group_id),
     contactId: asNumber(row.contact_id),
@@ -436,6 +442,9 @@ export async function listDataGroupMembers(
 ): Promise<DataGroupMemberListResult> {
   const data = await invokeGroupSharing('data_members', { ...query, kind: 'data' })
   const rows = unwrapRpcRows(data)
+  if (query.includeFacebookGroupMetadata && rows.some(row => !Object.hasOwn(row, 'facebook_group_metadata'))) {
+    throw new Error('Backend xuất thông tin nhóm Facebook chưa được cập nhật.')
+  }
   return {
     members: rows.map(mapDataGroupMember),
     total: rows.length > 0 ? asNumber(rows[0].total_count, rows.length) : 0
@@ -475,7 +484,7 @@ export async function exportDataGroupMembers(query: DataGroupMemberListQuery): P
   const pageSize = 500
   let offset = 0
   while (true) {
-    const page = await listDataGroupMembers({ ...query, offset, limit: pageSize })
+    const page = await listDataGroupMembers({ ...query, includeFacebookGroupMetadata: true, offset, limit: pageSize })
     members.push(...page.members)
     offset += page.members.length
     if (page.members.length === 0 || offset >= page.total) break

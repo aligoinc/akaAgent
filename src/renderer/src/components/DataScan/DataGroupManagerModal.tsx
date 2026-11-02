@@ -1,4 +1,5 @@
 import { ColumnFilterHeader, ColumnFilterBar, useColumnFilters } from '../DataFilters/ColumnFilters'
+import { appendFacebookGroupExportColumns } from '../../../../shared/facebookGroupExport'
 import { canManageGroup } from '../../../../shared/groupSharing'
 import { GroupSharingButton, GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import {
@@ -1604,7 +1605,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
           'Tự động hóa': getMemberAutomationText(member) === '—' ? '' : getMemberAutomationText(member)
         }
       })
-      const worksheet = utils.json_to_sheet(rows)
+      const worksheet = utils.json_to_sheet(appendFacebookGroupExportColumns(rows, exportedMembers.map(member => member.facebookGroupMetadata)))
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, worksheet, 'Nhóm data')
       writeFile(workbook, `nhom-data-${sanitizeFilename(activeGroup.name)}-${formatExportTimestamp()}.xlsx`)

@@ -58,6 +58,7 @@ import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import { buildFoundDataWorkbook, toFacebookGroupList, type FoundDataKind, type FoundFacebookGroup } from './foundDataExport'
+import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
 import CampaignDraftRow from './CampaignDraftRow'
 import CampaignAssistantMenu from './CampaignAssistantMenu'
@@ -4545,7 +4546,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       while (offset < total) {
         const page = await window.electronAPI.listCampaignDetailsPage({
           campaignId: selectedCampaign.id,
-          ...getCampaignDetailPageQuery(offset, exportPageSize)
+          ...getCampaignDetailPageQuery(offset, exportPageSize),
+          includeFacebookGroupMetadata: canExportFacebookGroupMetadata(selectedCampaign.actionId)
         })
         total = page.total
         details.push(...page.items)
@@ -4630,7 +4632,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           } : {})
         }
       })
-      const sheet = utils.json_to_sheet(rows)
+      const sheet = utils.json_to_sheet(appendFacebookGroupExportColumns(rows, details.map(detail => detail.facebookGroupMetadata)))
       sheet['!cols'] = isSelectedMobileManagedSmsCampaign
         ? [
           { wch: 6 },

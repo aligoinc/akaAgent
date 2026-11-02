@@ -3,12 +3,16 @@
 Ngày 02/11/2026. Thay đổi source Desktop ở tab **Data tìm được**, dành cho
 `facebook_find_data_search`. Chưa đóng gói hoặc phát hành bộ cài.
 
+Cập nhật tiếp ngày 02/11/2026: bỏ cột **Loại nhóm AI** theo yêu cầu người dùng;
+mẫu hiện tại còn **6 cột**. Xuất Nhóm data/Kết quả chạy được mở rộng riêng theo
+[hợp đồng metadata và migration V443](FACEBOOK_GROUP_EXPORT_METADATA.md).
+
 ## Hành vi
 
 - Chỉ chọn **Link group Facebook**: xuất một sheet `Sheet1` với đúng thứ tự
-  `Tên`, `UID`, `Số thành viên`, `Số bài`, `Đơn vị bài`, `Privacy`, `Loại nhóm AI`.
+  `Tên`, `UID`, `Số thành viên`, `Số bài`, `Đơn vị bài`, `Privacy`.
 - Chọn lẫn SĐT/UID/link Zalo/link bài post: nhóm Facebook vào sheet `Group Facebook`
-  với 7 cột; các loại đã chọn còn lại vào `Sheet1` theo mẫu 9 cột hiện có.
+  với 6 cột; các loại đã chọn còn lại vào `Sheet1` theo mẫu 9 cột hiện có.
 - Giữ lựa chọn loại data và quy tắc lọc trùng theo loại + giá trị. Với nhóm trùng
   qua nhiều lần/từ khóa, giữ ưu tiên tên như cũ và bổ sung metadata còn thiếu từ
   dòng trùng; không thay số liệu đã có bằng số liệu của dòng sau, kể cả khi dòng
@@ -16,8 +20,8 @@ Ngày 02/11/2026. Thay đổi source Desktop ở tab **Data tìm được**, dà
   dòng trùng.
 - Giữ UID/link dưới dạng chuỗi, số thành viên và số bài dưới dạng số. Thêm bộ lọc
   tiêu đề và độ rộng cột cho sheet nhóm.
-- Không thay `DataScanModal`, `ContactLoader`, luồng quét nhóm đã tham gia, xuất
-  Nhóm data hoặc các mẫu Excel của những hành động khác.
+- Không thay `DataScanModal`, `ContactLoader` hoặc luồng quét nhóm đã tham gia.
+  Mẫu cũ của các loại data khác trong tab Data tìm được giữ nguyên.
 
 ## Dữ liệu và giới hạn
 
@@ -34,7 +38,6 @@ Lượt này chỉ đọc DB; không sửa/apply block, workflow, element hoặc
 | Số bài | `postsPerDay` hợp lệ và lớn hơn 0; còn lại trống |
 | Đơn vị bài | `ngày` khi xuất được số bài; còn lại trống |
 | Privacy | `privacy`; đổi `Public`/`Private` thành `Công khai`/`Riêng tư` |
-| Loại nhóm AI | `Không biết`, vì workflow hiện chưa phân loại nhóm bằng AI |
 
 Không suy ra số bài theo tuần/tháng/năm hoặc gọi AI trong lúc xuất. Trường số
 vắng/null/rỗng/không hợp lệ để trống, không ép thành 0. Block live trả số bài 0
@@ -59,7 +62,7 @@ xuất không thay cách thu thập hoặc phục hồi thông tin đã mất t�
 - Chạy hai typecheck và `npm run build` theo AGENTS.md. Smoke dùng fixture,
   không xác nhận khả năng đọc DOM Facebook thật hay bộ cài đã phát hành.
 
-Kết quả local sau sửa review ngày 02/11/2026, nhánh
+Lịch sử kiểm chứng mẫu 7 cột trước khi bỏ AI: kết quả local sau sửa review ngày 02/11/2026, nhánh
 `codex/facebook-group-excel`: smoke Electron/XLSX **PASS**, typecheck node
 **PASS**, typecheck web **PASS**, build production **PASS** (exit 0). Build có
 cảnh báo static/dynamic import cùng module; không có lỗi build. Chưa phát hành.

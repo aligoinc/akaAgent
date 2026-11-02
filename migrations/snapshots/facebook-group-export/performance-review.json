@@ -1,0 +1,144 @@
+{
+  "date": "2026-11-02",
+  "scope": "Read-only performance review; no production migration or application source changes.",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "productionQueries": {
+    "readOnly": true,
+    "perStatementLimitSeconds": 5,
+    "largeExportOrConcurrentLoadTest": false
+  },
+  "database": {
+    "approximateTableRows": [
+      {
+        "table": "auto_account_contacts",
+        "approxRows": 5290338,
+        "lastAnalyze": "2026-10-31T03:48:40.369926+00:00"
+      },
+      {
+        "table": "auto_campaign_input_data",
+        "approxRows": 11321730,
+        "lastAnalyze": "2026-10-28T05:09:12.973683+00:00"
+      },
+      {
+        "table": "auto_campaign_details",
+        "approxRows": 10454592,
+        "lastAnalyze": "2026-11-02T06:33:22.440467+00:00"
+      },
+      {
+        "table": "auto_account_contact_groups",
+        "approxRows": 5477,
+        "lastAnalyze": "2026-11-02T09:37:49.140855+00:00"
+      },
+      {
+        "table": "auto_account_contact_group_members",
+        "approxRows": 2470045,
+        "lastAnalyze": "2026-10-30T09:48:56.211302+00:00"
+      },
+      {
+        "table": "auto_campaign_input_origins",
+        "approxRows": 1533408,
+        "lastAnalyze": "2026-10-30T11:20:45.131438+00:00"
+      }
+    ],
+    "existingFunctionsMatchCapturedBaseline": true,
+    "newMetadataRpcApplied": false,
+    "campaignMetadataQuery": {
+      "rows": 160,
+      "distinctInputs": 84,
+      "executionMs": 179.428,
+      "planningMs": 8.386,
+      "sharedHits": 3959,
+      "sharedReads": 130,
+      "allSourceJoinsUseIndexes": true,
+      "note": "EXPLAIN ANALYZE of the exact candidate inner SELECT on a bounded real sample, not HTTP/RPC end-to-end and not a 500-distinct-input load test."
+    },
+    "dataGroupProjection": {
+      "rows": 245,
+      "originalJsonTextBytes": 1811109,
+      "enrichedJsonTextBytes": 1834379,
+      "addedBytesPerRow": 95,
+      "baselineDiagnosticExecutionMs": 288.794,
+      "enrichedDiagnosticExecutionMs": 350.495,
+      "note": "Read-only helper + projection diagnostics with byte-count aggregation, not entire filtered export. jsonb::text has formatting overhead; app's compact JSON byte count differs."
+    }
+  },
+  "clientSyntheticBenchmark": {
+    "runtime": "v24.15.0",
+    "databaseTraffic": false,
+    "methodology": "Separate Node process per case, same installed SheetJS and bundled shared/facebookGroupExport helper, synthetic campaign rows with 10 existing columns and about 200 characters of log, default XLSX options. Peak RSS includes runtime. Source rows, export rows, sheet and output buffer remain live. Not a full Electron UI test; app baseline, network and IPC memory excluded.",
+    "maxOldSpaceSizeMiB": 1024,
+    "cases": [
+      {
+        "rows": 10000,
+        "metadata": false,
+        "totalMs": 802,
+        "fileMiB": 7.9,
+        "peakRssMiB": 239.5
+      },
+      {
+        "rows": 10000,
+        "metadata": true,
+        "totalMs": 386.9,
+        "fileMiB": 9.2,
+        "peakRssMiB": 247.9,
+        "metadataHelperMs": 7.7
+      },
+      {
+        "rows": 50000,
+        "metadata": false,
+        "totalMs": 1559.3,
+        "fileMiB": 40,
+        "peakRssMiB": 659.5
+      },
+      {
+        "rows": 50000,
+        "metadata": true,
+        "totalMs": 2008,
+        "fileMiB": 46.6,
+        "peakRssMiB": 792.8,
+        "metadataHelperMs": 48.6
+      },
+      {
+        "rows": 100000,
+        "metadata": true,
+        "totalMs": 4103.2,
+        "fileMiB": 93.3,
+        "peakRssMiB": 1378.3,
+        "metadataHelperMs": 80.7
+      }
+    ],
+    "note": "Single measurements, subject to JIT/cache/system noise; do not infer metadata improves speed from the 10k pair."
+  },
+  "confirmedConstraints": {
+    "dataGroup": {
+      "overallReadDeadlineMs": 65000,
+      "perRpcSqlTimeoutMs": 60000,
+      "perHttpPageDeadlineMs": 65000,
+      "pageSize": 500,
+      "maxRows": 100000,
+      "maxResponseBytes": 33554432,
+      "concurrentFilteredReadSlotsPerProcess": 2
+    },
+    "campaign": {
+      "pageSize": 500,
+      "perMetadataRpcSqlTimeoutMs": 60000,
+      "metadataRequestsFor100kRows": 200,
+      "ordinaryEnrichmentRequestsPerNonemptyPage": 3,
+      "totalTypicalRequestsFor100kRows": 800,
+      "unboundedWholeExportRowsAndBytes": true,
+      "repeatedCountAndOffsetPaging": true,
+      "synchronousRendererWorkbookCreation": true
+    }
+  },
+  "conclusions": [
+    "Sample metadata joins use existing PK/input indexes and do not scan full source tables; not proof of performance under fleet concurrency.",
+    "Data Group export may hit total 65-second deadline or 32-MiB response cap before row limit. These constraints predate metadata; metadata adds bytes and lookup work.",
+    "Campaign export retains all result rows and builds XLSX synchronously; large files can block UI and use over 1 GiB even without application overhead.",
+    "50k synthetic case added about 133 MiB peak RSS and 0.45 seconds compared with baseline; the shared column helper itself is a small fraction of the cost."
+  ],
+  "suggestedFollowUp": [
+    "Use a compact export-specific projection that preserves filters, selection and displayed values while avoiding unnecessary detail/provenance payload.",
+    "Use a cursor and one initial count for campaign export; preserve action gating, source authorization and bounded metadata batches.",
+    "Write XLSX outside renderer, with progress/cancellation and bounded buffering or split files; establish export size limits without increasing DB timeout or connection budget."
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "at": "2026-11-02T09:29:34.332Z",
+  "productionChanged": false,
+  "mode": "candidate + fixtures + guarded rollback, outer transaction ROLLBACK",
+  "driftGuardRejected": true,
+  "checks": {
+    "checks": [
+      "ordinary reader unchanged",
+      "shared metadata allowlist",
+      "shared provenance redacted",
+      "Zalo excluded",
+      "selected IDs scope",
+      "filtered multi-page export",
+      {
+        "campaignFixtureMs": 6.495
+      },
+      "multiple sources without duplicate results",
+      "person input excluded",
+      "unlinked input blank",
+      "message action gated",
+      {
+        "campaign500FixtureMs": 15.31
+      },
+      "cross-staff denied",
+      "cross-org denied",
+      "cross-campaign detail denied",
+      "duplicate IDs denied",
+      "revoked source blank",
+      "revoked group denied",
+      "bound Desktop metadata read",
+      "Desktop shared filtered export",
+      "bound Desktop cross-staff denied",
+      "Desktop missing credential denied",
+      "unbound Desktop token denied",
+      "ACL excludes anon/authenticated/Chat API"
+    ],
+    "rollback_removed_new_rpc": true
+  },
+  "after": {
+    "verification": {
+      "newRpcAbsent": true,
+      "sourceChecksums": {
+        "aka_agent_group_sharing": "0e17dec0570937cfea8a1ae035e2af4d",
+        "aka_agent_read_filtered_group_v1": "17ffadd05bb48b245a4382789c6d59ea"
+      },
+      "fixtureAuthAbsent": true,
+      "fixtureStaffAbsent": true
+    }
+  },
+  "migrationSha256": "52bc93dafae24cce99cfa89d701fcbe562ce9f79f2011c73d5e704ee4de4fe80",
+  "applicationChecks": {
+    "logicSmoke": "PASS",
+    "campaignAndDataGroupElectronXlsxSmoke": "PASS",
+    "foundDataElectronXlsxSmoke": "PASS",
+    "typecheckNode": "PASS",
+    "typecheckWeb": "PASS",
+    "build": "PASS",
+    "buildBytes": 39284426
+  }
+}
