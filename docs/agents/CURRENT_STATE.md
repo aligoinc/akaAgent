@@ -6,6 +6,15 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
+[Tối ưu ba điểm hiệu năng 03/11](../audits/app-access-split/PERFORMANCE_FIX_20261103.md):
+**V448 đã apply 06:40:52 VN**, ledger `20261102234145`: partial index cho campaign
+held, không đổi RPC/ACL/RLS. **Chat API deploy 06:47:34 VN** từ repo chính
+`644de45`; kiểm quyền một lần mỗi staff/account trong statement và lọc ứng viên
+runtime trước helper. 1.756 test, native PG17 parity và 11 đối chiếu production
+đạt; health/realtime và 226 runtime account giữ nguyên. Không build lại Desktop/
+App Server, không deploy hai web/worker/runtime/CRM hoặc tăng tài nguyên. Không
+apply lại index; [receipt DB](../audits/app-access-split/performance-v448-apply-receipt.json).
+
 [Tách quyền akaChat/akaAgent V445–V447](../APP_ACCESS_SPLIT.md): source bốn repo,
 build local, SQL rollback rehearsal và kiểm thử đã chuẩn bị ngày 03/11/2026.
 Đã sửa bốn lượt review: capability Chat độc lập, guard Data Scan, lifecycle reader, RLS Desktop cũ, capture cuối rollout và lỗi ACL của policy đọc staff, receipt QR khóa nguồn/quyền tại commit và reservation danh tính khi bật Chat. Audit hiện có 98 ca SQL, 13 RPC sửa và 42 target functions; 11 runtime dependencies giữ nguyên body/ACL. Policy dùng view staff đã scope; V445/V447 chặn drift metadata view, không mở SELECT `org_staff`.

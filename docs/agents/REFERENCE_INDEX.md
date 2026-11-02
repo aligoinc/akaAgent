@@ -6,6 +6,8 @@ Tìm tên RPC, file, action hoặc feature trong bảng và trong `docs/agents/r
 
 Đọc hướng dẫn đã đính chính trước các đoạn bảo toàn có liên quan:
 
+- [App-access held work, index V448, Chat API statement-scoped guards và runtime candidates; đã apply/deploy, không build lại app](../audits/app-access-split/PERFORMANCE_FIX_20261103.md).
+
 - [Credential staff/runtime và ngoại lệ SMS](CLIENT_CONTRACTS.md#sms-credentials).
 - [Kết nối tenant Chat trên Desktop và WebApp](CLIENT_CONTRACTS.md#chat-routing).
 - [Cô lập ô nội dung chính ở form thường và Agent; snapshot nháp đồng bộ, revision subscription, SMS/HTML, dev/production](../CAMPAIGN_CONTENT_TYPING.md).
