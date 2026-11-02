@@ -37,6 +37,8 @@ receipt/signature/checksum, không dùng filename để kết luận “chưa ch
 
 ## Build và phát hành
 
+- 02/11/2026: source xuất Excel nhóm Facebook tìm theo từ khóa có đủ 7 cột; sau review đã giữ số liệu khi bổ sung tên dòng trùng và để trống số bài 0 chưa xác minh. Smoke Electron/XLSX, hai typecheck và build production local đạt trên nhánh `codex/facebook-group-excel`; **chưa đóng gói/phát hành app**. Giữ luồng quét nhóm đã tham gia, không sửa DB. Xem [hợp đồng và kiểm chứng](../FACEBOOK_SEARCH_GROUP_EXCEL.md).
+
 - 02/11/2026: source cột **Tên/Tên gốc Zalo** đã qua hai typecheck, 75 ca smoke và build production local trên worktree riêng trước PR. Nhãn **Tên** được giữ theo yêu cầu sau review để tương thích nhập lại Excel; backend V441 đã apply, **chưa đóng gói/phát hành app**. Không apply thêm DB trong lượt tạo PR. Xem [audit V441](../ZALO_SCAN_NAMES_V441.md).
 
 - akaAgent 9.1.0 đã build local cho Windows, Mac ARM64/Intel và Server Windows; feed ba nền tảng được xác nhận 9.1.0 trong audit cutover. [Build receipt](../audits/akaagent-9.1.0-20261027/build-receipt.json), [cutover](../DESKTOP_PERMISSION_CUTOVER_V435.md).
