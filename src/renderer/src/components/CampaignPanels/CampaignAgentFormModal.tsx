@@ -1,3 +1,4 @@
+import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
 import { getActionCodeLabel, getActionLimitUnit } from './campaignAgentPresentation'
 // Independent creation form; baseline CampaignFormModal SHA-256:
 // 24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3.
@@ -38,7 +39,7 @@ import ZaloTagMultiSelector from './ZaloTagMultiSelector'
 import { normalizeZaloAccountTagSettings, pickZaloAccountTagSettings, resolveZaloAccountTagSettings, type ZaloTagSettingsByAccountId } from '../../../../shared/zaloAuxiliaryActions'
 import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { CAMPAIGN_DRAFT_VERSION, CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE, getPreservedCampaignDraftSchedule, preserveCampaignSchedule, restoreCampaignDraftSchedule, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
-import { useAgentDraftField as useCampaignDraftField } from './useAgentDraftField'
+import { useAgentDraftField as useCampaignDraftField, registerAgentDraftSetter } from './useAgentDraftField'
 import FacebookPageIdentitySettings from './FacebookPageIdentitySettings'
 import { supportsFacebookPageIdentity, validateFacebookPageIdentitySettings } from '../../../../shared/facebookPageIdentity'
 import { useCampaignAccountActionSnapshot } from './useCampaignAccountActionSnapshot'
@@ -1847,7 +1848,7 @@ export default function CampaignAgentFormModal({
           ? 'manual'
           : 'group')
     : 'group'
-  const [formData, setFormData] = useCampaignDraftField(draftPayload, draftValuesRef, 'formData', {
+  const [formData, setFormData, contentStore] = useCampaignContentFormData(draftPayload, draftValuesRef, {
     name: campaign?.name || '',
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
@@ -2077,6 +2078,7 @@ export default function CampaignAgentFormModal({
       ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
     } as FindDataTargetDataGroups
   })
+  registerAgentDraftSetter(draftValuesRef, 'formData', value => setFormData(value as typeof formData))
   const [preservedScheduleSnapshot] = useState(() => draftPayload ? draftPayload.preservedSchedule
     : preserveCampaignSchedule(formData, cloneFromId ? undefined : campaign?.schedule, campaign?.scheduleEndDate))
   const preservedDraftSchedule = getPreservedCampaignDraftSchedule(preservedScheduleSnapshot, formData)
@@ -2439,20 +2441,15 @@ export default function CampaignAgentFormModal({
   const canUseFormattedContent = supportsFormattedContent(formData.actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
-  const smsContentCounts = useMemo(
-    () => countSmsContentVariants(formData.content, {
-      useUnicode: formData.smsUseUnicode,
-      keepNewLines: formData.smsKeepNewLines
-    }),
-    [formData.content, formData.smsUseUnicode, formData.smsKeepNewLines]
-  )
-  const smsContentCountLabels = useMemo(
-    () => smsContentCounts.map((item, index) => {
-      const prefix = smsContentCounts.length > 1 ? `Mẫu ${index + 1}: ` : ''
+  const getSmsContentCountLabels = () => {
+    const counts = countSmsContentVariants(formData.content, {
+      useUnicode: formData.smsUseUnicode, keepNewLines: formData.smsKeepNewLines
+    })
+    return counts.map((item, index) => {
+      const prefix = counts.length > 1 ? `Mẫu ${index + 1}: ` : ''
       return `${prefix}${item.countChar} ký tự, ${item.countSms} tin`
-    }),
-    [smsContentCounts]
-  )
+    })
+  }
   const friendRequestMessageMaxLength = useMemo(
     () => renderContentSpinMax(formData.friendRequestMessage).length,
     [formData.friendRequestMessage]
@@ -13237,7 +13234,7 @@ export default function CampaignAgentFormModal({
       <div className="sms-content-meta">
         {showCounts && (
           <div className="sms-content-counts">
-            {smsContentCountLabels.map((label, index) => (
+            {getSmsContentCountLabels().map((label, index) => (
               <span key={`${index}:${label}`} className="sms-content-count-chip">{label}</span>
             ))}
           </div>
@@ -15815,7 +15812,7 @@ export default function CampaignAgentFormModal({
   }
   const agent = useCampaignAgent({
     draftId: draftIdRef.current, authScope: `${authUser?.organizationId}:${authUser?.staffId}:${draftIdRef.current}`,
-    values: draftValuesRef, initial: draftPayload?.values.agentChat, snapshot: buildAgentSnapshot,
+    values: draftValuesRef, subscribeValues: contentStore.subscribe, initial: draftPayload?.values.agentChat, snapshot: buildAgentSnapshot,
     apply: applyAgentReply, selectAction: handleActionChange,
     restore: values => {
       const form = values.formData as typeof formData
@@ -17089,7 +17086,7 @@ export default function CampaignAgentFormModal({
               onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
             />}
             {/* Nội dung */}
-            {showContentSection && <div
+            {showContentSection && <CampaignContentObserver store={contentStore}>{() => (<div
               className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
               ref={el => { sectionRefs.current['content'] = el }} data-agent-filled={agent.sectionChanged('content')}
             >
@@ -17217,7 +17214,7 @@ export default function CampaignAgentFormModal({
                   )}
                 </div>
               )}
-            </div>}
+            </div>)}</CampaignContentObserver>}
 
             {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
               <div

@@ -1,4 +1,4 @@
-const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{build}=require('esbuild'),{randomUUID,createHash}=require('node:crypto')
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{build}=require('esbuild'),{randomUUID}=require('node:crypto')
 const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'agent-smoke-'))
 const configs=require('../migrations/snapshots/campaign-agent-v442/new-configs.json')
 const f=global.__agent={outputs:[],calls:[],sectionCalls:[],groups:[],campaigns:[],deny:false,accounts:[11,12],tags:[{account_id:11,uid:'tag-1',name:'VIP'},{account_id:12,uid:'tag-2',name:'VIP'}],actions:[{id:'zalo_message_phone',flatform_type:'zalo',allow_multiple_accounts:true,limit_check_action_codes:['zalo_message_stranger','zalo_add_friend']},{id:'email_send',flatform_type:'email',allow_multiple_accounts:true,limit_check_action_codes:['email_send']}],configs}
@@ -459,9 +459,11 @@ async function main(){try{
  const change={key:'formData.name',label:'Tên',section:'general',before:'a',after:'b',revision:1},turn={id:randomUUID(),role:'assistant',text:'',changes:[change]}
  assert(m.canUndoAgentTurn(turn,()=> 'b',()=>1));assert(!m.canUndoAgentTurn(turn,()=> 'b',()=>2));assert(!m.canUndoAgentTurn(turn,()=> 'c',()=>1))
  assert(m.isAgentDraft({version:1,turns:[turn]}));assert(!m.isAgentDraft({version:1,turns:[{id:'broken'}]}))
- assert.equal(createHash('sha256').update(fs.readFileSync(path.join(root,'src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx'))).digest('hex'),'24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3')
+ // Shared content-typing optimization is now authorized in both forms; keep Agent behavior isolated.
+ const regularForm=fs.readFileSync(path.join(root,'src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx'),'utf8')
+ assert(!/useCampaignAgent|CampaignAgentChat|generateCampaignAgent/.test(regularForm),'regular form must not gain Agent chat/controller behavior')
  const panel=fs.readFileSync(path.join(root,'src/renderer/src/components/CampaignPanels/CampaignPanel.tsx'),'utf8');assert(panel.includes('isAgentDraft(campaignDrafts.draft.payload.values.agentChat) ? CampaignAgentFormModal : CampaignFormModal'));assert(panel.includes('{showForm && (\n          <CampaignFormModal'))
  for(const c of configs)assert.deepEqual(c.output_schema,c.desktop_section_id.endsWith('router')?m.AGENT_ROUTER_SCHEMA:m.AGENT_EXTRA_SCHEMA)
- console.log('PASS Agent: readable change rows + hidden quota guards, oversized content capability + atomic rejection + format guards, schema/allowlists, scoped catalogs, action-scoped content blockers, prospective Data/content/exclusion dependencies, hard locks and conflicting sources, exclusion account binding, source-tag append/remove/replace and stale/cross-account guards, atomic clarification, legacy draft compatibility, local-import metadata with no rows/images/OCR sent to AI, draft/undo, unchanged old form/routes, migration schema parity')
+ console.log('PASS Agent: readable change rows + hidden quota guards, oversized content capability + atomic rejection + format guards, schema/allowlists, scoped catalogs, action-scoped content blockers, prospective Data/content/exclusion dependencies, hard locks and conflicting sources, exclusion account binding, source-tag append/remove/replace and stale/cross-account guards, atomic clarification, legacy draft compatibility, local-import metadata with no rows/images/OCR sent to AI, draft/undo, independent forms and unchanged routes, migration schema parity')
 }finally{fs.rmSync(tmp,{recursive:true,force:true})}}
 main().catch(e=>{console.error(e);process.exitCode=1})

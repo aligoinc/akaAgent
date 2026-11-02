@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-03",
+  "branch": "codex/campaign-content-typing",
+  "base": "5df2678f3ae4e26fd97dc6a168d24dc6192b920f",
+  "scope": "Pre-PR verification after fixing the --small smoke fixture; application source is unchanged from verification.json.",
+  "checks": {
+    "nodeTypecheck": "PASS",
+    "webTypecheck": "PASS",
+    "productionBuild": {
+      "exitCode": 0,
+      "durationSeconds": 24.65,
+      "outputBytes": 40475016
+    },
+    "smallContentSmoke": "PASS: both forms, 0-row measurement and immediate draft/reopen, seed one recipient for campaign save, token/preview, latest AI context/patch, SMS and HTML",
+    "previousFullSmokeEvidence": "verification.json; application source checksums unchanged; full two-form development smoke and Agent service smoke also passed during review",
+    "documentationLinks": {
+      "checked": 198,
+      "missing": 0
+    },
+    "preservation": "PASS: AGENTS.md, archive and reference sources unchanged",
+    "diffWhitespace": "PASS"
+  },
+  "notPerformed": [
+    "Live AI/DB calls",
+    "Real campaign side effects",
+    "Windows/native IME",
+    "Installer packaging or release",
+    "Migration apply",
+    "Merge or sync this patch to primary checkout"
+  ],
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "3506db78650860d8e0eb4d923b9b0be01156e6021ac627361dda1eb1ca5715c5",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "a6872ef17df18452cee7da20dae4d9590710317e3607b22f9a95ffa8857ee46f",
+    "src/renderer/src/components/CampaignPanels/useAgentDraftField.ts": "6db3b1f0f88156eaca6b9e6d7d5c148d2bc8d66cba92569936a14225d17ec5cf",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "de8cf91391583ce83c36fd1fd00ca0b7869b8ef253c0f826d3bc7c18f0502796",
+    "src/renderer/src/components/CampaignPanels/useCampaignContentFormData.tsx": "524fc73c7bb6894980da6138d780dae638fcad709c6cffaabb5b7a3192b7b804",
+    "scripts/run-campaign-content-typing-smoke.cjs": "5a98512638835f69bf053eaec4853b241504d7fe3ccf988642f0177bbe79fe6e",
+    "scripts/campaign-agent-smoke.cjs": "a23c18e83c488918038f5a9297d894c5e7c227001781fb7349fcd0dbad34db5e"
+  }
+}
