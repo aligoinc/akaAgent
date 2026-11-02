@@ -1753,6 +1753,8 @@ export interface AutoAccountContact {
   /** Authoritative platform persisted in auto_account_contacts.flatform_type. */
   flatformType?: string | null
   name: string
+  /** Saved Zalo profile name; never falls back to a display name or UID. */
+  zaloOriginalName?: string | null
   uid?: string
   url?: string
   extraData?: Record<string, unknown>

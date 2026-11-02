@@ -42,7 +42,7 @@ async function main() {
     name: `Person ${String(index + 1).padStart(4, '0')}`, uid: `uid-${index + 1}`,
     is_friend: index < 50 ? true : index < 1050 ? false : null,
     is_delete: false,
-    zalo_user: index % 4 === 3 ? null : { gender: [0, 1, null][index % 4] },
+    zalo_user: index % 4 === 3 ? null : { gender: [0, 1, null][index % 4], zalo_name: index % 2 === 0 ? 'Tên gốc ' + index : null },
     extra_data: { zaloTagIds: index % 2 === 0 ? ['vip'] : [], phone: `090${String(index).padStart(7, '0')}` },
     akabiz_tag_ids: index % 5 === 0 ? [3] : []
   }))
@@ -63,7 +63,7 @@ async function main() {
       const query = {
         select(fields, options) {
           counted = options?.count === 'exact'
-          withZaloGender = fields.includes('zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender)')
+          withZaloGender = fields.includes('zalo_user:zalo_users!auto_account_contacts_zalo_user_id_fkey(gender,zalo_name)')
           return query
         },
         eq(key, value) { predicates.push(row => row[key] === value); return query },
@@ -100,6 +100,7 @@ async function main() {
     for (const contact of exported ? result : result.contacts) {
       const source = rows.find(row => row.id === contact.id)
       assert.equal(contact.extraData?.gender, source.zalo_user?.gender, `${name}: linked gender including 0/null/missing`)
+      assert.equal(contact.zaloOriginalName, source.zalo_user?.zalo_name || null, `${name}: original name never falls back to display name`)
       assert.equal(contact.extraData?.phone, source.extra_data.phone, `${name}: existing metadata stays intact`)
     }
     assert.equal(calls.reduce((total, call) => total + call.rowCount, 0), expectedRowsRead, `${name}: DB rows fetched`)

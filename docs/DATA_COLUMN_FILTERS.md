@@ -49,6 +49,8 @@ Receipt và bằng chứng trong `migrations/snapshots/column-filters-v421/produ
 
 ## Hợp đồng dùng chung và thêm cột
 
+Bổ sung source ngày 02/11/2026: hai bảng bạn bè Zalo và khách hàng cũ có nhãn **Tên** (giữ dữ liệu tên hiển thị) cùng cột **Tên gốc Zalo** (`zaloOriginalName`) lấy đúng `zalo_users.zalo_name`. V441 **đã apply trên akachat lúc 13:49:47 Việt Nam ngày 02/11/2026**, ledger `20261102064947`; source app đã build local, chưa phát hành bộ cài. Xem [hợp đồng, capture live, trial rollback và rollout](ZALO_SCAN_NAMES_V441.md); không chạy lại migration V421.
+
 `src/shared/dataColumnFilters.ts` là catalog chung cho tên cột, kiểu, toán tử, nguồn và danh sách lựa chọn. `ColumnFilterHeader`, `ColumnFilterBar`, editor và parser dùng catalog đó. Frontend không tải hết dữ liệu về để lọc.
 
 Kiểu có sẵn: chữ, định danh, số, ngày, một/nhiều lựa chọn, có/không dữ liệu. UID và điện thoại giữ kiểu chuỗi để không mất số 0. Chữ được chuẩn hóa NFC, không phân biệt hoa/thường, vẫn phân biệt dấu; `%` và `_` là ký tự thường. Ô trống gồm NULL/chuỗi rỗng/khoảng trắng thông dụng; số 0 và false không phải trống. Điều kiện phủ định không bao gồm ô trống. Khoảng ngày theo Việt Nam, đầu ngày bao gồm và đầu ngày kế tiếp không bao gồm.
