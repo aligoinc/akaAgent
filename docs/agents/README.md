@@ -22,6 +22,7 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Trigger Context khi nhập lịch sử Zalo, V439 | [bỏ qua nguồn old và receipt](../CONTEXT_ZALO_HISTORY_TRIGGER_V439_20261030.md); giữ realtime, job hiện có và các luồng thu thập độc lập |
 | Repository, Data Group, quét data, lọc/chọn/xuất | [data layer](reference/data-auth-ai-01.md); `campaigns-*`, `browser-*`, `pitfalls-*` theo feature; [bộ lọc cột](../DATA_COLUMN_FILTERS.md); [Tên/Tên gốc Zalo V441](../ZALO_SCAN_NAMES_V441.md) |
 | UI/form/log/status/content | [UI và log](reference/ui-logs-01.md); [IPC](reference/architecture-02.md); `campaigns-*`, `pitfalls-*` theo feature |
+| Excel nhóm Facebook tìm theo từ khóa, tab Data tìm được | [Mẫu 7 cột, xuất hỗn hợp và giới hạn dữ liệu](../FACEBOOK_SEARCH_GROUP_EXCEL.md); không áp dụng cho quét nhóm đã tham gia |
 | Nhóm mẫu nội dung, picker/preview, `CampaignFormModal`, snapshot | [luồng chọn nhóm hiện tại](CLIENT_CONTRACTS.md#content-group-selection); [campaign/content](reference/campaigns-01.md); [pitfall và đính chính](reference/pitfalls-02.md) |
 | Report/Automation/action status | [báo cáo](reference/reports-01.md); [kết quả hành động](reference/action-results-01.md); [hợp đồng report](../ACTION_STATUS_REPORTS.md) |
 | akaBiz API/SMS/SQL import/Sheet/template/staff admin | [SQL Account](reference/integrations-01.md); [tích hợp/quản trị](reference/integrations-02.md); `browser-*`/`campaigns-*` theo sản phẩm |
