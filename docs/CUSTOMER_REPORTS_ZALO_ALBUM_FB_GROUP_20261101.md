@@ -22,7 +22,7 @@ album (không caption) trước, chữ là lệnh `send_text` riêng sau ~0,1 s;
 
 - Chat-sync: `akaAgentChatApi/apps/system-worker/src/zaloCampaignExecutor.ts:1923`
   (`media_then_content` / `content_then_media` / `combined`).
-- Desktop/App Server: [campaignScheduler.ts:15198](../src/main/services/campaignScheduler.ts) `dispatchZaloMessage`.
+- Desktop/App Server: [campaignScheduler.ts:15263](../src/main/services/campaignScheduler.ts) `dispatchZaloMessage`.
 
 Ca lỗi: `send_campaign_media` completed (đủ `msgId` từng ảnh), rồi `send_text` failed
 `error_code='127'`, `error_message='Không thể nhận tin nhắn từ bạn.'`. Detail ghi đúng
@@ -148,7 +148,7 @@ bị chặn. Cả 1.086 mục tiêu bị đánh `hoàn thành`, không gửi l�
   (phổ biến nhất 10 tin/65 phút, 43 chiến dịch), còn nhịp 300 giây với ~50% mục tiêu gửi OK chỉ cho
   tối đa ~6 tin OK/giờ.
 - **Khoảng nghỉ chạy sau MỌI mục tiêu đã chạy** (đã kiểm code và dữ liệu tới 20:10 ngày 02/11):
-  desktop/App Server ([campaignScheduler.ts:4750](../src/main/services/campaignScheduler.ts:4750))
+  desktop/App Server ([campaignScheduler.ts:4798](../src/main/services/campaignScheduler.ts:4798))
   và chat-sync (`apps/system-worker/src/zaloCampaignScheduler.ts:965` bên akaAgentChatApi) nghỉ sau
   mọi mục tiêu đã chạy, kể cả 122 và tra số không tồn tại. Không nghỉ khi mục tiêu bị loại trước khi
   chạy (đã xử lý, lịch tương lai, danh sách chặn bạn bè, người từ chối nhận tin, giới hạn gửi lặp),
@@ -577,7 +577,7 @@ và code tại `5a0f560`. Chưa sửa gì; mọi mục dưới đây cần quy�
    `err_zalo_api_business_failed` và bị tính vào hạn mức. Nhóm không tồn tại (161) cùng kiểu: 67
    lượt, tài khoản 4011 lặp qua ~24 chiến dịch.
 3. **Lỗi tạm thời đốt mục tiêu.** Mục tiêu chỉ được trả về hàng đợi khi chính sách không có
-   `detail_status` ([campaignScheduler.ts:14553](../src/main/services/campaignScheduler.ts:14553));
+   `detail_status` ([campaignScheduler.ts:14615](../src/main/services/campaignScheduler.ts:14615));
    `err_zalo_api_business_failed` có `thất bại` nên mục tiêu thành `hoàn thành`. Hôm nay: upload ảnh
    lỗi mạng 252, lỗi mạng tới DB của chính mình (`Failed to get account: fetch failed`…) 57, `net::`
    16 ⇒ 325 mục tiêu chưa gửi gì mà 0 lần gửi lại; `fetch failed` 242 (phần lớn có tệp, chưa có
@@ -605,7 +605,7 @@ Kiểm thêm sau hai lượt đọc code (desktop/App Server và chat-sync), ch�
    desktop (44 Facebook, 9 QR, 8 Web; 42 dừng >24 h) vì `Lượt chạy gặp lỗi: …TypeError: fetch failed`
    (mạng tới DB của mình), và 32 với ghi chú chung `Có lỗi xảy ra` (`err_undefined`): 24 có mục tiêu
    cuối `thành công`, 18 bộ đếm lỗi liên tiếp chưa tới ngưỡng 4 — nhánh `explicitOnly`
-   ([campaignScheduler.ts:9974](../src/main/services/campaignScheduler.ts:9974)) áp chính sách mà không
+   ([campaignScheduler.ts:10037](../src/main/services/campaignScheduler.ts:10037)) áp chính sách mà không
    xét ngưỡng.
 9. **Ghi kết quả thất bại vì lượt chạy bị thu hồi giữa chừng**: 705 mục tiêu `hoàn thành` với ghi chú
    `action_result_claim_invalid … không tự gửi lại`, trong đó 315 mới qua bước tra số (chưa gửi gì).
@@ -636,19 +636,19 @@ akaAgentChatApi; **desktop** = theo bản phát hành (máy khách bản cũ kh�
   thêm phòng thủ trong `aka_agent_settle_action_results_v1` bỏ ba mã đó khỏi `v_committed`. Riêng
   DB chưa đủ: 120/802 không ghi dòng lịch sử, `suppressedResult.operationState` do client tính.
   Tiếp tục chiến dịch không đụng input, "Chạy lại"/làm mới bỏ qua dòng `tạm dừng`
-  ([campaignRepository.ts:5945](../src/main/data/repositories/campaignRepository.ts:5945), `:3796`)
+  ([campaignRepository.ts:5982](../src/main/data/repositories/campaignRepository.ts:5982), `:3833`)
   ⇒ cần thêm thao tác "Chạy lại mục tạm dừng". Dọn dữ liệu (cần duyệt): trả `chờ xử lý` các mục
   120/802 đã hết khoá và chưa có lượt gửi/kết bạn OK; 1.108 mục trong chiến dịch `hoàn thành` cần
   quyết định mở lại hay báo khách. VPS + chat-sync phủ 2.766/3.131 mục kẹt.
 - **Mục 8 (tạm dừng vì lỗi tạm thời)** — (a) nhánh `explicitOnly`
-  ([campaignScheduler.ts:9914](../src/main/services/campaignScheduler.ts:9914)) không áp
+  ([campaignScheduler.ts:9976](../src/main/services/campaignScheduler.ts:9976)) không áp
   `update_status_campaign` của chính sách có ngưỡng khi chưa tới ngưỡng; (b) ghi kết quả lỗi mạng thì
   thử lại 3 lần (1/3/10 s) trước khi coi là chưa xác định; nếu vẫn hỏng thì khoá riêng mục tiêu đó
   (như nay) nhưng đưa chiến dịch về `chờ xử lý`, không `tạm dừng`; (c) ghi chú nêu lỗi thật thay
   "Có lỗi xảy ra". Dọn: 93 chiến dịch đang dừng — mục tiêu dở đã khoá "không tự gửi lại" nên tiếp
   tục không gửi trùng.
 - **Mục 3, 10 (lỗi tạm thời đốt mục tiêu)** — thêm chính sách lỗi tạm thời (không `detail_status` ⇒
-  về hàng đợi qua [campaignScheduler.ts:14553](../src/main/services/campaignScheduler.ts:14553), không
+  về hàng đợi qua [campaignScheduler.ts:14615](../src/main/services/campaignScheduler.ts:14615), không
   tính hạn mức/lỗi liên tiếp); code xếp vào đó: upload ảnh lỗi mạng (chưa gửi), lỗi gọi DB của mình
   (`Failed to … fetch failed`), `net::ERR_*`, ECONNRESET/ETIMEDOUT/socket hang up ở bước tra
   số/upload; thử lại tại chỗ 2–3 lần cho tra số và upload. `fetch failed` ở bước gửi chữ vẫn là
@@ -674,9 +674,9 @@ akaAgentChatApi; **desktop** = theo bản phát hành (máy khách bản cũ kh�
   lặp) hay toàn hệ thống (~100%). Tạm thời: báo org 1835 và tài khoản 4011 bỏ ~56 nhóm luôn 112.
 - **Mục 12 + nghỉ sau thất bại** — giãn cách theo mốc tin người lạ gửi OK gần nhất của tài khoản thay
   cho nghỉ cố định; sau mục tiêu hỏng nghỉ ngắn (5–10 s) và giữ tra số <40/giờ; lọc mục tiêu còn
-  `chờ xử lý` trước vòng lặp ([campaignScheduler.ts:3851](../src/main/services/campaignScheduler.ts:3851))
-  và kiểm hạn mức trước khi nghỉ (`:4750`, `:5883`; chat-sync `zaloCampaignScheduler.ts:965/1126`).
-  VPS: poll trạng thái 5 s → 30 s ([campaignScheduler.ts:1529](../src/main/services/campaignScheduler.ts:1529)),
+  `chờ xử lý` trước vòng lặp ([campaignScheduler.ts:3899](../src/main/services/campaignScheduler.ts:3899))
+  và kiểm hạn mức trước khi nghỉ (`:4798`, `:5931`; chat-sync `zaloCampaignScheduler.ts:965/1126`).
+  VPS: poll trạng thái 5 s → 30 s ([campaignScheduler.ts:1541](../src/main/services/campaignScheduler.ts:1541)),
   bớt ~30 request/giây.
 - **Mục 5 (nhóm lỗi chung)** — DB: thêm `auto_error` cho 112 và 161 với
   `zalo_action_codes=['zalo_message_group']`, `thất bại`, không tính hạn mức/lỗi liên tiếp;
