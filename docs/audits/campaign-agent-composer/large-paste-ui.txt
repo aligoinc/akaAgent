@@ -1,0 +1,3 @@
+PASS Agent large paste: 180 rows, raw source preservation, selected-text boundaries, local-only attachment, draft/reopen/import, disk/quota retry and discard
+PASS Agent composer: compact shared input, file chooser, Excel drag/drop, busy/limit guards, metadata-only AI and Upload/draft preservation
+PASS Agent local data Electron: metadata-only requests, text/Excel/image preview, cancel/append/replace, 120 rows, file queue, draft reopen, missing files

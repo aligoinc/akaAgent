@@ -1,0 +1,32 @@
+{
+  "verifiedAt": "2026-11-03T04:52:23.868683+07:00",
+  "base": "7a9fb19298eb3dedcdc0bdc9d0a87c90335c5487",
+  "fix": "Attach the original oversized clipboard source locally while preserving instructions outside the replaced selection.",
+  "checks": {
+    "npx tsc --noEmit -p tsconfig.node.json": "passed",
+    "npx tsc --noEmit -p tsconfig.web.json": "passed",
+    "node scripts/run-campaign-agent-ui-smoke.cjs --large-paste-only": "passed",
+    "CAMPAIGN_AGENT_ARTIFACTS_DIR=/tmp/akaagent-large-paste-regression node scripts/run-campaign-agent-ui-smoke.cjs --local-data-only": "passed: large paste, composer, full local import suite",
+    "npm run build": "passed",
+    "git diff --check": "passed"
+  },
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "91351b92ca01344232972b2df55612c8e167f3cd5bd64f1459380934fbccfe32",
+    "scripts/campaign-agent-large-paste-ui.cjs": "64e6e11423a2fcc6fd6e3dc63dd96fc08523eb06410fa6e0e91009fc6a11e56d",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "cff6b5900c2ce942ea9f8f4844a6372b001c58e4e4f81ef1ae63baab52e12b0e"
+  },
+  "verified": [
+    "180 unrecognized recipients attach intact from oversize review",
+    "original clipboard bytes/order retained even with partially recognized data and edited description",
+    "surrounding instruction/selection preserved",
+    "no AI call on attachment and metadata-only later request",
+    "save/reopen then Upload retains all 180 phones",
+    "disk/file-count errors keep complete pending data and save lock until retry",
+    "discard restores original draft",
+    "collapse/reopen and narrow light layout"
+  ],
+  "limitations": [
+    "Real Electron renderer; IPC/stores/provider are fixtures; clipboard events simulated.",
+    "No live AI/DB calls, DB apply, Windows packaging, release or sync to the primary repository."
+  ]
+}

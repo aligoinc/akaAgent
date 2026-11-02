@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os')
 const {build}=require('esbuild'),{_electron}=require('playwright')
 const root=path.resolve(__dirname,'..'), dir=fs.mkdtempSync(path.join(os.tmpdir(),'campaign-agent-ui-'))
-const artifacts=path.join(root,'docs/audits/campaign-agent-v442');fs.mkdirSync(artifacts,{recursive:true})
+const artifacts=process.env.CAMPAIGN_AGENT_ARTIFACTS_DIR || path.join(root,'docs/audits/campaign-agent-v442');fs.mkdirSync(artifacts,{recursive:true})
 async function main(){let app,page
 try{
  // Validate real renderer requests with the main-process validator, not just IPC fixtures.
@@ -22,6 +22,10 @@ try{
  const reply=async(entries,message='Đã điền')=>page.evaluate(({entries,message})=>window.agentSmoke.resolve({ok:true,patch:{actionId:null,entries,message,extractedText:''}}),{entries,message})
  const idle=()=>page.waitForFunction(()=>!document.querySelector('.stepper-layout').inert)
  await input.waitFor();await page.waitForTimeout(300)
+ if(!process.argv.includes('--limits-only')) await require('./campaign-agent-large-paste-ui.cjs')({page,app,input,reply,idle,artifacts})
+ if(process.argv.includes('--large-paste-only')) return
+ if(!process.argv.includes('--limits-only')) await require('./campaign-agent-composer-ui.cjs')({page,app,input,send,reply,idle,artifacts})
+ if(process.argv.includes('--composer-only')) return
  if(!process.argv.includes('--limits-only')) await require('./campaign-agent-local-data-ui.cjs')({page,app,input,name,send,reply,idle,artifacts})
  if(process.argv.includes('--local-data-only')) return
  // Quotas shown in chat must use the same visible actions as the form; raw records remain undoable.

@@ -114,10 +114,10 @@ module.exports=async({page,app,input,name,send,reply,idle,artifacts})=>{
      await attach.setInputFiles(Array.from({length:5},(_,i)=>({name:`Nguồn ${i}.txt`,mimeType:'text/plain',buffer:Buffer.from(`090111111${i}`)})));await idle()
    } else await page.evaluate(()=>{window.agentSmoke.state.failDataStore=true})
    await paste('Nhập danh sách này\n'+waitingCsv,false);await waitingData.waitFor();await page.locator('.agent-chat-error').waitFor()
-   assert.equal(await waitingData.inputValue(),waitingCsv);assert.equal(await input.inputValue(),'Nhập danh sách này')
+   assert.equal(await waitingData.inputValue(),waitingCsv);assert.equal(await input.count(),0,'pending data uses the same composer, without a second input')
    assert(await page.getByRole('button',{name:'Lưu nháp',exact:true}).isDisabled())
    assert(await page.getByRole('button',{name:'Lưu chiến dịch',exact:true}).isDisabled())
-   assert(await page.getByRole('button',{name:'Gửi yêu cầu Agent',exact:true}).isDisabled());assert(await input.isDisabled())
+   assert(await page.getByRole('button',{name:'Gửi yêu cầu Agent',exact:true}).isDisabled());assert(await waitingData.isEnabled())
    await page.locator('.agent-chat-header button[title="Thu gọn Agent"]').click()
    await page.getByRole('button',{name:'Mở Agent',exact:true}).click();assert.equal(await waitingData.inputValue(),waitingCsv)
    if(failure==='file-limit-discard') {
@@ -126,7 +126,7 @@ module.exports=async({page,app,input,name,send,reply,idle,artifacts})=>{
      const size=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getSize())
      await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(900,800));await page.evaluate(()=>document.body.classList.add('theme-light'))
      await page.getByRole('button',{name:'Bỏ dữ liệu đang chờ',exact:true}).scrollIntoViewIfNeeded()
-     const bounds=await waitingData.evaluate(element=>{const panel=element.closest('.agent-data-paste');return{overflow:panel.scrollWidth>panel.clientWidth+1,bottom:panel.querySelector('.agent-paste-review-actions').getBoundingClientRect().bottom,chatBottom:panel.closest('.campaign-agent-chat').getBoundingClientRect().bottom}})
+     const bounds=await waitingData.evaluate(element=>{const panel=element.closest('.agent-input-box');return{overflow:panel.scrollWidth>panel.clientWidth+1,bottom:panel.querySelector('.agent-paste-review-actions').getBoundingClientRect().bottom,chatBottom:panel.closest('.campaign-agent-chat').getBoundingClientRect().bottom}})
      assert(!bounds.overflow);assert(bounds.bottom<=bounds.chatBottom+1)
      await page.screenshot({path:path.join(artifacts,'pending-data-retry-narrow.png')})
      await app.evaluate(({BrowserWindow},size)=>BrowserWindow.getAllWindows()[0].setSize(...size),size);await page.evaluate(()=>document.body.classList.remove('theme-light'))
@@ -160,9 +160,12 @@ module.exports=async({page,app,input,name,send,reply,idle,artifacts})=>{
    assert.deepEqual(await page.evaluate(()=>window.agentSmoke.state.saved.payload.values.details.map(row=>row.phone)),['0901234567','0987654321'])
  }
  await page.evaluate(()=>window.agentSmoke.open('zalo_message_phone',11));await input.waitFor();await name.fill('Data nhập tay')
- await page.getByRole('button',{name:'Dán data',exact:true}).click();await waitingData.fill(waitingCsv)
+ await page.evaluate(()=>{window.agentSmoke.state.failDataStore=true})
+ await input.fill(waitingCsv);await page.getByRole('button',{name:'Dùng nội dung ô nhập làm dữ liệu',exact:true}).click()
+ await waitingData.waitFor();await page.locator('.agent-chat-error').waitFor()
  assert(await page.getByRole('button',{name:'Lưu nháp',exact:true}).isDisabled())
  await page.getByRole('button',{name:'Bỏ dữ liệu đang chờ',exact:true}).click();await idle()
+ await page.evaluate(()=>{window.agentSmoke.state.failDataStore=false})
  // A naming instruction that starts like a column label is still prose.
  for(const tail of ['Tên chiến dịch: Chăm sóc khách hàng tháng 11','Tên chiến dịch: Chăm sóc, tháng 11']) {
    await page.evaluate(()=>window.agentSmoke.open('zalo_message_phone',11));await input.waitFor();await name.fill('Tên cũ')

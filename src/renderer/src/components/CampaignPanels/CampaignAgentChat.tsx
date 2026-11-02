@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Send, Square, X, RotateCcw, Sparkles, MessageSquarePlus, PanelRightClose, Undo2 } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Paperclip, Send, Square, X, RotateCcw, Sparkles, MessageSquarePlus, PanelRightClose, Undo2 } from 'lucide-react'
 import type { AgentImage } from '../../../../shared/campaignAgent'
 import type { useCampaignAgent } from './useCampaignAgent'
 import { agentChangeRows } from './campaignAgentPresentation'
@@ -20,21 +20,51 @@ function Attachment({ image, draftId, remove }: { image: AgentImage; draftId: st
   </div>
 }
 export default function CampaignAgentChat({ agent }: { agent: Controller }) {
-  const [pasting, setPasting] = useState(false)
-  const [pendingPaste, setPendingPaste] = useState<{ description: string; data: string } | null>(null)
+  const [draggingFiles, setDraggingFiles] = useState(false)
+  const dragDepth = useRef(0)
+  const [pendingPaste, setPendingPaste] = useState<{
+    description: string; data: string; pastedText: string; remainingDraft: string
+  } | null>(null)
   const scroller = useRef<HTMLDivElement>(null), input = useRef<HTMLTextAreaElement>(null), file = useRef<HTMLInputElement>(null)
   const applyPaste = (value: { description: string; data: string }) => {
     // Never write an oversized composer: isAgentDraft must remain valid on save.
     if (value.description.length > 4000) return
     agent.setDraft(value.description)
-    if (value.data) void agent.addDataText(value.data).then(ok => { if (!ok) setPasting(true) })
+    if (value.data) void agent.addDataText(value.data)
   }
+  const attachmentsDisabled = agent.busy || agent.hasPendingData || agent.disabled
+  const composerText = agent.hasPendingData ? agent.dataText : agent.draft
+  useLayoutEffect(() => {
+    if (!agent.open || !input.current) return
+    input.current.style.height = '0px'
+    input.current.style.height = `${Math.max(40, Math.min(120, input.current.scrollHeight))}px`
+  }, [composerText, agent.open])
+  useEffect(() => { if (!agent.open || attachmentsDisabled) { dragDepth.current = 0; setDraggingFiles(false) } }, [agent.open, attachmentsDisabled])
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' }) }, [agent.turns.length, agent.busy])
   useEffect(() => { if (agent.open) input.current?.focus() }, [agent.open, agent.scope])
   const suggestions = agent.scope === 'content' ? ['Viết ngắn hơn', 'Thêm một biến thể nội dung'] : agent.scope === 'schedule'
     ? ['Chạy thứ 2, 4, 6 lúc 8h', 'Chạy hằng ngày lúc 9h'] : agent.scope === 'limits'
       ? ['Nghỉ 30 giây giữa hai lần', 'Mỗi ngày tối đa 50 lượt'] : ['Tạo chiến dịch nhắn tin Zalo', 'Chạy thứ 2, 4, 6 lúc 8h', 'Không gửi trùng trong 14 ngày']
-  return <aside className={`campaign-agent-chat${agent.open ? ' is-open' : ''}${pendingPaste || agent.hasPendingData ? ' is-reviewing-paste' : ''}`} aria-label="Chat thêm chiến dịch bằng Agent" hidden={!agent.open}>
+  return <aside className={`campaign-agent-chat${agent.open ? ' is-open' : ''}${pendingPaste || agent.hasPendingData ? ' is-reviewing-paste' : ''}${draggingFiles ? ' is-dragging-files' : ''}`} aria-label="Chat thêm chiến dịch bằng Agent" hidden={!agent.open}
+    onDragEnter={event => {
+      if (!event.dataTransfer.types.includes('Files')) return
+      event.preventDefault(); dragDepth.current++
+      if (!attachmentsDisabled) setDraggingFiles(true)
+    }}
+    onDragOver={event => {
+      if (!event.dataTransfer.types.includes('Files')) return
+      event.preventDefault(); event.dataTransfer.dropEffect = attachmentsDisabled ? 'none' : 'copy'
+    }}
+    onDragLeave={event => {
+      if (!event.dataTransfer.types.includes('Files')) return
+      event.preventDefault(); dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (!dragDepth.current) setDraggingFiles(false)
+    }}
+    onDrop={event => {
+      if (!event.dataTransfer.types.includes('Files')) return
+      event.preventDefault(); event.stopPropagation(); dragDepth.current = 0; setDraggingFiles(false)
+      if (!attachmentsDisabled) void agent.addDataFiles(Array.from(event.dataTransfer.files))
+    }}>
     <header className="agent-chat-header"><Sparkles size={19} /><div><strong>akaAgent</strong><small>Điền chiến dịch bằng hội thoại</small></div>
       <button type="button" className="btn-icon" title="Hội thoại mới" disabled={agent.busy || agent.hasPendingData || agent.disabled} onClick={agent.newChat}><MessageSquarePlus size={17} /></button>
       <button type="button" className="btn-icon" title="Thu gọn Agent" onClick={() => agent.setOpen(false)}><PanelRightClose size={17} /></button>
@@ -70,38 +100,45 @@ export default function CampaignAgentChat({ agent }: { agent: Controller }) {
         onClick={() => { agent.setDraft(suggestion); input.current?.focus() }}>{suggestion}</button>)}</div>
       {agent.error && <div className="agent-chat-error" role="alert">{agent.error}</div>}
       {pendingPaste && <div className="agent-data-paste agent-paste-review">
-        <p role="alert">Phần mô tả sau khi dán vượt 4.000 ký tự. Hãy rút gọn bên dưới hoặc bỏ phần vừa dán. Nội dung hiện tại được giữ nguyên.</p>
+        <p role="alert">Phần mô tả sau khi dán vượt 4.000 ký tự. Hãy rút gọn bên dưới hoặc bỏ phần vừa dán. Nếu đây là danh sách dữ liệu, bạn có thể đính kèm nguyên phần vừa dán mà không cần rút gọn.</p>
         <textarea aria-label="Rút gọn mô tả vừa dán" value={pendingPaste.description} rows={6}
           onChange={event => setPendingPaste({ ...pendingPaste, description: event.target.value })} />
         <small>{pendingPaste.description.length.toLocaleString('vi-VN')} / 4.000 ký tự{pendingPaste.data ? ' · Bảng dữ liệu được giữ tại máy, sẽ đính kèm khi áp dụng.' : ''}</small>
         <div className="agent-paste-review-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={pendingPaste.description.length > 4000 || agent.disabled}
           onClick={() => { const value = pendingPaste; agent.endInputReview(); setPendingPaste(null); applyPaste(value) }}>Áp dụng phần vừa dán</button>
+        <button type="button" className="btn btn-secondary btn-sm" disabled={agent.disabled || !pendingPaste.pastedText.trim()}
+          onClick={() => {
+            const value = pendingPaste
+            agent.endInputReview(); setPendingPaste(null)
+            // Attach the exact clipboard source, including rows already recognized by
+            // the splitter. Keep instructions outside the replaced selection in chat.
+            agent.setDraft(value.remainingDraft)
+            void agent.addDataText(value.pastedText)
+          }}>Đính kèm nguyên phần vừa dán</button>
         <button type="button" className="btn btn-ghost btn-sm"
           onClick={() => { agent.endInputReview(); setPendingPaste(null) }}>Bỏ phần vừa dán</button></div>
       </div>}
       {!!agent.dataFiles.length && <div className="agent-data-files">{agent.dataFiles.map(file => <div key={file.id}><span>{file.name}</span>
         <button type="button" aria-label={`Gỡ dữ liệu ${file.name}`} disabled={agent.busy || agent.disabled} onClick={() => agent.removeDataFile(file.id)}><X size={12} /></button></div>)}
         <small>Dữ liệu được nhập tại máy, không gửi danh sách cho AI.</small></div>}
-      {(pasting || agent.hasPendingData) && <div className="agent-data-paste agent-paste-review">
-        {agent.hasPendingData && <p role="status">Dữ liệu đang chờ đính kèm. Hãy đính kèm thành công hoặc bỏ dữ liệu này trước khi lưu/gửi. Bạn có thể gỡ bớt file đã chọn để thử lại.</p>}
-        <textarea aria-label="Dữ liệu cần nhập" value={agent.dataText} rows={5}
-        disabled={agent.busy || agent.disabled} onChange={event => agent.setDataText(event.target.value)} placeholder="Dán toàn bộ bảng hoặc danh sách tại đây…" />
-        <div className="agent-paste-review-actions"><button type="button" className="btn btn-secondary btn-sm" disabled={agent.busy || agent.disabled || !agent.dataText.trim()}
-          onClick={() => { void agent.addDataText(agent.dataText).then(ok => { if (ok) setPasting(false) }) }}>Đính kèm dữ liệu</button>
-        <button type="button" className="btn btn-ghost btn-sm" disabled={agent.busy}
-          onClick={() => { agent.setDataText(''); setPasting(false) }}>{agent.hasPendingData ? 'Bỏ dữ liệu đang chờ' : 'Đóng'}</button></div></div>}
       {!!agent.images.length && <div className="agent-attachments">{agent.images.map(image => <Attachment key={image.id} draftId={agent.draftId} image={image}
         remove={agent.busy || agent.disabled ? undefined : () => agent.removeImage(image.id)} />)}</div>}
-      <div className="agent-input-box"><textarea ref={input} value={agent.draft} maxLength={4000} rows={3} aria-label="Yêu cầu cho Agent"
-        placeholder="Mô tả chiến dịch hoặc phần bạn muốn thay đổi…" disabled={agent.busy || agent.hasPendingData || agent.disabled}
+      <div className="agent-input-box">
+        {draggingFiles && <div className="agent-drop-hint" role="status">Thả file Excel, CSV, TXT hoặc ảnh vào đây</div>}
+        {agent.hasPendingData && <p className="agent-pending-data-hint" role="status">Dữ liệu chưa đính kèm được. Bạn có thể sửa bên dưới, gỡ bớt file rồi thử lại. Mô tả yêu cầu đã được giữ lại.</p>}
+        <textarea ref={input} value={composerText} maxLength={agent.hasPendingData ? undefined : 4000} rows={2}
+        aria-label={agent.hasPendingData ? 'Dữ liệu cần nhập' : 'Yêu cầu cho Agent'}
+        placeholder="Nhập yêu cầu hoặc dán dữ liệu…" disabled={agent.busy || agent.disabled}
         onPaste={event => {
-          if (event.clipboardData.files.length) { event.preventDefault(); void agent.addDataFiles(Array.from(event.clipboardData.files)); return }
+          if (event.clipboardData.files.length) { event.preventDefault(); if (!attachmentsDisabled) void agent.addDataFiles(Array.from(event.clipboardData.files)); return }
+          if (agent.hasPendingData) return
           const text = event.clipboardData.getData('text'), field = event.currentTarget
           const next = field.value.slice(0, field.selectionStart) + text + field.value.slice(field.selectionEnd)
           const split = splitAgentDataMessage(next, agent.scope === 'content')
           if (split.description.length > 4000) {
             event.preventDefault()
-            if (agent.beginInputReview()) setPendingPaste(split)
+            if (agent.beginInputReview()) setPendingPaste({ ...split, pastedText: text,
+              remainingDraft: field.value.slice(0, field.selectionStart) + field.value.slice(field.selectionEnd) })
             return
           }
           if (split.data) {
@@ -109,18 +146,30 @@ export default function CampaignAgentChat({ agent }: { agent: Controller }) {
             applyPaste(split)
           }
         }}
-        onChange={event => agent.setDraft(event.target.value)} onKeyDown={event => {
-          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void agent.send() }
+        onChange={event => agent.hasPendingData ? agent.setDataText(event.target.value) : agent.setDraft(event.target.value)} onKeyDown={event => {
+          if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault()
+            if (agent.hasPendingData) void agent.addDataText(agent.dataText)
+            else void agent.send()
+          }
         }} />
+        {agent.hasPendingData && <div className="agent-paste-review-actions">
+          <button type="button" className="btn btn-secondary btn-sm" disabled={agent.busy || agent.disabled}
+            onClick={() => void agent.addDataText(agent.dataText)}>Đính kèm dữ liệu</button>
+          <button type="button" className="btn btn-ghost btn-sm" disabled={agent.busy}
+            onClick={() => agent.setDataText('')}>Bỏ dữ liệu đang chờ</button>
+        </div>}
         <div className="agent-input-actions"><input ref={file} type="file" accept={AGENT_DATA_ACCEPT} multiple hidden
-          onChange={event => { void agent.addImages(Array.from(event.target.files || [])); event.target.value = '' }} />
-          <button type="button" className="btn-icon" title="Đính kèm Excel, TXT hoặc ảnh dữ liệu" disabled={agent.busy || agent.hasPendingData || agent.disabled} onClick={() => file.current?.click()}><ImagePlus size={18} /></button>
-          <button type="button" className="btn btn-ghost btn-sm" disabled={agent.busy || agent.hasPendingData || agent.disabled} onClick={() => setPasting(!pasting)}>Dán data</button>
+          disabled={attachmentsDisabled}
+          onChange={event => { void agent.addDataFiles(Array.from(event.target.files || [])); event.target.value = '' }} />
+          <button type="button" className="btn btn-ghost btn-sm agent-choose-file" title="Chọn file Excel, CSV, TXT hoặc ảnh dữ liệu" disabled={attachmentsDisabled} onClick={() => file.current?.click()}><Paperclip size={16} /> Chọn file</button>
           <span className="agent-scope">{agent.scopeLabel}{agent.scope && <button type="button" aria-label="Hỏi toàn bộ form" onClick={() => agent.setScope(null)} disabled={agent.busy || agent.hasPendingData}><X size={11} /></button>}</span>
           {pendingPaste ? null : agent.busy ? <button type="button" className="btn btn-secondary btn-icon" aria-label="Dừng Agent" onClick={agent.cancel}><Square size={14} /></button>
             : <button type="button" className="btn btn-primary btn-icon" aria-label="Gửi yêu cầu Agent" disabled={agent.hasPendingData || agent.disabled || !agent.draft.trim() && !agent.dataFiles.length} onClick={() => void agent.send()}><Send size={16} /></button>}
         </div></div>
-      <small className="agent-input-hint">Enter để gửi · Shift+Enter xuống dòng</small>
+      {!agent.hasPendingData && !!agent.draft.trim() && <button type="button" className="agent-use-as-data" disabled={agent.busy || agent.disabled}
+        onClick={() => { const text = agent.draft; agent.setDraft(''); void agent.addDataText(text) }}>Dùng nội dung ô nhập làm dữ liệu</button>}
+      <small className="agent-input-hint">Kéo file vào chat · Enter để {agent.hasPendingData ? 'đính kèm' : 'gửi'} · Shift+Enter xuống dòng</small>
     </div>
   </aside>
 }

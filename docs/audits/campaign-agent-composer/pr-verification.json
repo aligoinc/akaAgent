@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-11-03T04:55:53.740992+07:00",
+  "base": "7a9fb19298eb3dedcdc0bdc9d0a87c90335c5487",
+  "branch": "codex/campaign-agent-composer",
+  "checks": {
+    "nodeTypecheck": "PASS",
+    "webTypecheck": "PASS",
+    "productionBuild": {
+      "exitCode": 0,
+      "durationSeconds": 25.62,
+      "outputBytes": 40462941
+    },
+    "gitDiffCheck": "PASS",
+    "relativeDocLinks": "PASS",
+    "originalFormAndMigrationsUnchanged": "PASS",
+    "preservedGuidanceUnchanged": "PASS",
+    "credentialLiteralScan": "PASS"
+  },
+  "regressionEvidence": {
+    "receipt": "large-paste-fix-verification.json",
+    "log": "large-paste-ui.txt",
+    "sourceMatchesVerifiedRendererAndSmoke": "PASS",
+    "reviewRaces": "PASS in previous review: cancellation retains pending source/save guard, retry succeeds, late file reply does not mutate reopened form"
+  },
+  "sourceSha256": {
+    "src/renderer/src/components/CampaignPanels/CampaignAgentChat.tsx": "91351b92ca01344232972b2df55612c8e167f3cd5bd64f1459380934fbccfe32",
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "4608ecbaaa72b8862b9ba99e94bf2c5a817ef7cc98fc966ba17b04d12a3755f9",
+    "scripts/campaign-agent-composer-ui.cjs": "7e557a642fdbf87f8c8066d3e718e1f8f0417a777b856faac8577b6557a84214",
+    "scripts/campaign-agent-large-paste-ui.cjs": "64e6e11423a2fcc6fd6e3dc63dd96fc08523eb06410fa6e0e91009fc6a11e56d",
+    "scripts/campaign-agent-local-data-ui.cjs": "88457f8c8730de02f7e184942549280226df504207240f88365d28086bb4a8bf",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "cff6b5900c2ce942ea9f8f4844a6372b001c58e4e4f81ef1ae63baab52e12b0e"
+  },
+  "limitations": [
+    "Smoke uses real Electron renderer with fixture IPC/stores/provider and simulated paste/drop.",
+    "No live AI/DB call, migration apply, Windows installer or release in this PR."
+  ]
+}

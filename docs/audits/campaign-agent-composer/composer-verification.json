@@ -1,0 +1,50 @@
+{
+  "sizes": [
+    {
+      "width": 1500,
+      "light": false,
+      "height": 40,
+      "boxHeight": 90,
+      "overflow": false,
+      "bottom": 714.59375,
+      "panelBottom": 748.59375
+    },
+    {
+      "width": 1500,
+      "light": true,
+      "height": 40,
+      "boxHeight": 90,
+      "overflow": false,
+      "bottom": 714.59375,
+      "panelBottom": 748.59375
+    },
+    {
+      "width": 900,
+      "light": false,
+      "height": 40,
+      "boxHeight": 90,
+      "overflow": false,
+      "bottom": 714.59375,
+      "panelBottom": 748.59375
+    },
+    {
+      "width": 900,
+      "light": true,
+      "height": 40,
+      "boxHeight": 90,
+      "overflow": false,
+      "bottom": 714.59375,
+      "panelBottom": 748.59375
+    }
+  ],
+  "checks": [
+    "compact/autogrowing single input at wide/narrow sizes and both themes",
+    "visible chooser opens file picker and attaches TXT",
+    "explicit data conversion uses same composer",
+    "nested drag/drop Excel onto chat, cue reset and native navigation prevention",
+    "file limit rejection preserves existing attachment",
+    "busy drop is ignored",
+    "Excel request contains only metadata; Upload confirmation preserves leading zeros and draft chat omits rows"
+  ],
+  "errors": []
+}
