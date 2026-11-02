@@ -592,6 +592,45 @@ và code tại `5a0f560`. Chưa sửa gì; mọi mục dưới đây cần quy�
 6. Facebook cùng kiểu mục 1–2: "Không tìm thấy ô đăng bài" nằm 98,5% ở cặp tài khoản–nhóm chưa từng
    mở được (mục C), hôm nay 1.143 dòng `lỗi`; chưa có cơ chế bỏ qua cặp luôn lỗi.
 
+Kiểm thêm sau hai lượt đọc code (desktop/App Server và chat-sync), chỉ giữ mục có dữ liệu xác nhận:
+
+7. **Mục tiêu bị khoá tạm thời nằm "tạm dừng" vĩnh viễn.** `aka_agent_settle_action_results_v1`
+   (live) có `IF p_input_patch->>'status'='chờ xử lý' AND v_effect<>'pause' THEN v_status:=CASE WHEN
+   v_committed THEN 'tạm dừng' …`; bước tra số thành công cũng tính là "đã thực hiện". Nên khi tin
+   nhắn gặp 120/802 hoặc lời mời gặp 224 (chính sách muốn trả về hàng đợi), mục tiêu thành `tạm dừng`
+   và scheduler bỏ qua mãi. Đang có 1.898 (120) + 274 (802) + 959 (224) = 3.131 mục tiêu như vậy, mọi
+   runtime (App Server 2.562, QR 297, chat-sync 204, Web 68); ~2.600 quá 3 ngày; **1.108 nằm trong
+   chiến dịch đã `hoàn thành`** dù chưa từng được gửi.
+8. **Lỗi tạm thời làm tạm dừng chiến dịch.** Đang tạm dừng (cập nhật trong 14 ngày): 61 chiến dịch
+   desktop (44 Facebook, 9 QR, 8 Web; 42 dừng >24 h) vì `Lượt chạy gặp lỗi: …TypeError: fetch failed`
+   (mạng tới DB của mình), và 32 với ghi chú chung `Có lỗi xảy ra` (`err_undefined`): 24 có mục tiêu
+   cuối `thành công`, 18 bộ đếm lỗi liên tiếp chưa tới ngưỡng 4 — nhánh `explicitOnly`
+   ([campaignScheduler.ts:9974](../src/main/services/campaignScheduler.ts:9974)) áp chính sách mà không
+   xét ngưỡng.
+9. **Ghi kết quả thất bại vì lượt chạy bị thu hồi giữa chừng**: 705 mục tiêu `hoàn thành` với ghi chú
+   `action_result_claim_invalid … không tự gửi lại`, trong đó 315 mới qua bước tra số (chưa gửi gì).
+   Nghi do 22 chính sách đổi chiến dịch về `chờ xử lý` (`err_device_sleep`, `err_network_offline`,
+   `err_proxy_failed`…) xoá claim khi mục tiêu đang chạy — chưa tách được nguồn.
+10. **Tra số lỗi mạng đốt mục tiêu**: từ 31/10 sáng có 92 lượt tra (`fetch failed`, `ECONNRESET`) bị
+    `thất bại` → `hoàn thành`, dù tra số chỉ đọc, gửi lại vô hại.
+11. **Chat-sync bỏ lời mời kết bạn sau 127/126/123/120**: chiến dịch bật kết bạn, từ 31/10 sáng chỉ
+    1/468 mục tiêu chat-sync còn được mời (tag/tên gợi nhớ 2/468), trong khi App Server 52%, QR 72%,
+    Web 79% vẫn mời.
+12. **VPS hỏi trạng thái chạy mỗi 5 giây trong lúc nghỉ**: `rpc/aka_agent_get_zalo_server_run_control_state`
+    1.027.502 lượt 09:00–17:00 VN (35,7/giây, 100% từ `103.153.72.222`, ~20 lượt mỗi unit), ~7% số
+    request PostgREST; mỗi lượt chỉ 1,25 ms trong DB. Vòng nghỉ cũng chạy trước khi kiểm hạn mức và
+    tính cả dòng đã xong (`targets` = mọi dòng của chiến dịch), nên lượt chạy hay kết thúc bằng một
+    khoảng nghỉ thừa.
+13. QR: lỗi mạng khi kiểm phiên hạ tài khoản xuống `chưa đăng nhập` và không tự hồi phục (14 ngày: ~43
+    lần đăng xuất có lý do mạng/DB/proxy/500 trên desktop; 5 tài khoản QR đang kẹt).
+
+Đã kiểm và **không thấy** trên production (code có nhánh nhưng chưa xảy ra/không đáng kể): chat-sync
+nhận–nhả lượt chạy mỗi giây (tối đa 44 lượt/chiến dịch/24 h), gửi lại album đã tới (2 lệnh bị cắt/30
+ngày, không lệnh nào sau album đã tới), chế độ chia sẻ tự tạm dừng khi runtime gián đoạn (0 ghi chú/30
+ngày), một lỗi 221 đốt cả lô 50 (tối đa 4 dòng cùng giây), 122/119 tính hạn mức (live: 0 chính sách),
+SMS kiêm gửi thiếu ở chat-sync (0 chiến dịch chat-sync bật), poll lệnh 100 ms (0,06 ms/lượt), nạp lại
+toàn bộ input mỗi lượt (~0,012 core), media tải lỗi tạm thời (các lần dừng đều do thiếu file cục bộ).
+
 ## Phát hiện phụ
 
 2.352 dòng nhóm `auto_account_contacts` (476 tài khoản, 234 org, từ 23/04 đến nay) có
