@@ -28,19 +28,38 @@ function retainDraftImages(ids: Set<string>, value: unknown): void {
   for (const turn of value.turns) for (const image of turn.images || []) ids.add(image.id)
 }
 
+// Only the chat subscribes to keystrokes. Persist synchronously into the draft
+// ref so Save/Send immediately after input sees every character, without a timer.
+function createComposer(text: string, persist: (value: string) => void) {
+  const listeners = new Set<() => void>()
+  return {
+    getSnapshot: () => text,
+    subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    set: (value: string) => {
+      if (value === text) return
+      text = value; persist(value); listeners.forEach(listener => listener())
+    }
+  }
+}
+
 export function useCampaignAgent(props: Props) {
   const current = useRef(props); current.current = props
-  const [turns, setTurns] = useState<AgentTurn[]>(() => isAgentDraft(props.initial) ? props.initial.turns : [])
+  const [initial] = useState(() => isAgentDraft(props.initial) ? props.initial : undefined)
+  const [turns, setTurns] = useState<AgentTurn[]>(() => initial?.turns || [])
   const turnsRef = useRef(turns); turnsRef.current = turns
   const [open, setOpen] = useState(true), [scope, setScope] = useState<AgentSection | null>(null)
   const [scopeStep, setScopeStep] = useState<string | null>(null)
-  const initial = useRef(isAgentDraft(props.initial) ? props.initial : undefined).current
   const retainedImageIds = useRef<Set<string> | null>(null)
   if (!retainedImageIds.current) {
     retainedImageIds.current = new Set()
     retainDraftImages(retainedImageIds.current, initial)
   }
-  const [draft, setDraft] = useState(initial?.composer?.text || ''), [images, setImages] = useState<AgentImage[]>([])
+  const [composer] = useState(() => createComposer(initial?.composer?.text || '', text => {
+    const saved = current.current.values.current.agentChat as AgentDraft
+    current.current.values.current.agentChat = { ...saved, composer: { ...saved.composer!, text } }
+  }))
+  const setDraft = composer.set
+  const [images, setImages] = useState<AgentImage[]>([])
   const [dataText, setDataTextState] = useState(''), pendingDataText = useRef('')
   const hasPendingData = !!dataText.trim()
   const [dataFiles, setDataFiles] = useState<AgentDataFile[]>(() => [...(initial?.composer?.dataFiles || []), ...(initial?.composer?.images || []).map(image => ({ id: image.id, name: image.name, bytes: image.bytes, kind: 'image' as const, legacyImage: true }))])
@@ -52,16 +71,19 @@ export function useCampaignAgent(props: Props) {
   const inputReview = useRef(false)
   const revision = useRef(0), previous = useRef<Record<string, unknown> | null>(null)
   const fieldRevisions = useRef<Record<string, number>>({ ...initial?.fieldRevisions })
-  const flat = flatten(agentValuesSnapshot(props.values))
+  // Form fields use immutable React updates. Compare only changed references;
+  // cloning/serializing the full recipient list on each keystroke blocks typing.
+  // Detached snapshots are still taken at transaction/undo boundaries below.
+  const flat = flatten(Object.fromEntries(Object.entries(props.values.current).filter(([key]) => key !== 'agentChat')))
   if (previous.current) {
     for (const key of Array.from(new Set([...Object.keys(flat), ...Object.keys(previous.current)]))) {
-      if (!agentEqual(flat[key], previous.current[key])) {
+      if (!Object.is(flat[key], previous.current[key]) && !agentEqual(flat[key], previous.current[key])) {
         revision.current++; fieldRevisions.current[key] = (fieldRevisions.current[key] || 0) + 1
       }
     }
   }
   previous.current = flat
-  props.values.current.agentChat = { version: 1, turns, fieldRevisions: fieldRevisions.current, composer: { text: draft, images, dataFiles } } satisfies AgentDraft
+  props.values.current.agentChat = { version: 1, turns, fieldRevisions: fieldRevisions.current, composer: { text: composer.getSnapshot(), images, dataFiles } } satisfies AgentDraft
   const cancel = () => {
     epoch.current++; confirmation.current?.(false); confirmation.current = null; setPendingAction(null)
     if (activeRequest.current) void window.electronAPI.cancelCampaignAgent(activeRequest.current)
@@ -106,7 +128,7 @@ export function useCampaignAgent(props: Props) {
     inputReview.current = false; setWorking(false)
   }
   const send = async (suggestion?: string) => {
-    const sourceMessage = (suggestion ?? draft).trim()
+    const sourceMessage = (suggestion ?? composer.getSnapshot()).trim()
     const split = splitAgentDataMessage(sourceMessage, scope === 'content')
     const description = split.description || (split.data || dataFiles.length ? 'Nhập dữ liệu đính kèm vào chiến dịch.' : '')
     if (lock.current || pendingDataText.current.trim() || props.disabled || !description && !dataFiles.length) return
@@ -262,7 +284,7 @@ export function useCampaignAgent(props: Props) {
     return <button type="button" className="agent-ask-section" disabled={busy || hasPendingData || props.disabled}
       onClick={event => { event.stopPropagation(); ask(step) }}><Sparkles size={13} /> Hỏi Agent</button>
   }
-  return { turns, open, setOpen, scope, setScope: (value: AgentSection | null) => { setScope(value); setScopeStep(null) }, draft, setDraft, images, busy, error, send, cancel, beginInputReview, endInputReview, addImages: addDataFiles, addDataFiles, addDataText, removeImage, undo, dataFiles, dataText, setDataText, hasPendingData,
+  return { turns, open, setOpen, scope, setScope: (value: AgentSection | null) => { setScope(value); setScopeStep(null) }, composer, setDraft, images, busy, error, send, cancel, beginInputReview, endInputReview, addImages: addDataFiles, addDataFiles, addDataText, removeImage, undo, dataFiles, dataText, setDataText, hasPendingData,
     removeDataFile: (id: string) => { if (!lock.current && !current.current.disabled) setDataFiles(old => old.filter(file => file.id !== id)) },
     openDataImport: props.openDataImport,
     retainDraftImages: (value: unknown) => retainDraftImages(retainedImageIds.current!, value),

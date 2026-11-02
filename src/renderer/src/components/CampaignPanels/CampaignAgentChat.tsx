@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { Paperclip, Send, Square, X, RotateCcw, Sparkles, MessageSquarePlus, PanelRightClose, Undo2 } from 'lucide-react'
 import type { AgentImage } from '../../../../shared/campaignAgent'
 import type { useCampaignAgent } from './useCampaignAgent'
@@ -19,7 +19,40 @@ function Attachment({ image, draftId, remove }: { image: AgentImage; draftId: st
     {remove && <button type="button" className="agent-remove-image" aria-label={`Gỡ ảnh ${image.name}`} onClick={remove}><X size={12} /></button>}
   </div>
 }
+const AgentMessages = memo(function AgentMessages({ agent, scroller, pendingPaste }: {
+  agent: Controller; scroller: RefObject<HTMLDivElement | null>; pendingPaste: boolean
+}) {
+  return (
+    <div className="agent-chat-messages" ref={scroller} role="log" aria-live="polite" aria-relevant="additions text">
+      {!agent.turns.length && <div className="agent-chat-welcome"><Sparkles size={28} /><h3>Bạn muốn tạo chiến dịch gì?</h3>
+        <p>Mô tả chiến dịch, dán data hoặc đính kèm Excel, TXT, ảnh dữ liệu. Agent chọn nơi nhập; bạn kiểm tra dữ liệu trong Upload trước khi chèn.</p><p>Bạn tự bấm Lưu khi đã sẵn sàng.</p></div>}
+      {agent.turns.map(turn => {
+        const rows = (turn.changes || []).flatMap(change => agentChangeRows(change).map(row => ({ ...row, section: change.section, targetKey: row.targetKey || change.key })))
+        return <article key={turn.id} className={`agent-turn ${turn.role}`}>
+        <div className="agent-turn-text">{turn.text}</div>
+        {!!turn.images?.length && <div className="agent-attachments">{turn.images.map(image => <Attachment key={image.id} draftId={agent.draftId} image={image} />)}</div>}
+        {!!turn.dataFiles?.length && <div className="agent-data-files">{turn.dataFiles.map(file => <small key={file.id}>{file.name}</small>)}</div>}
+        {turn.dataImport && <button type="button" className="btn btn-secondary btn-sm" disabled={agent.busy || agent.hasPendingData || agent.disabled}
+          onClick={() => agent.openDataImport(turn.dataImport!)}>Mở Upload dữ liệu</button>}
+        {!!rows.length && <div className="agent-changes"><strong>{turn.undone ? 'Đã hoàn tác' : 'Đã điền vào form'} · {rows.length} thay đổi</strong>
+          {rows.map(row => <button key={row.key} type="button" className="agent-change" onClick={() => agent.jump(row.section, row.targetKey)}>
+            <span>{row.label}</span><div><del>{row.beforeText}</del><span aria-hidden="true"> → </span><b>{row.afterText}</b></div>
+          </button>)}
+          <div className="agent-undo"><button type="button" className="btn btn-secondary btn-sm" disabled={!agent.canUndo(turn)} onClick={() => void agent.undo(turn)}><Undo2 size={13} /> Hoàn tác</button>
+            {!turn.undone && !agent.canUndo(turn) && !agent.busy && !agent.hasPendingData && <small>Trường liên quan đã được sửa tiếp.</small>}</div>
+        </div>}
+        {turn.extractedText && <details className="agent-image-text"><summary>Nội dung đã đọc từ ảnh</summary><p>{turn.extractedText}</p></details>}
+      </article>})}
+      {agent.pendingAction && <div className="agent-action-confirm" role="alert"><strong>Đổi sang {agent.pendingAction}?</strong>
+        <p>Đổi loại có thể bỏ tài khoản/nhóm data không tương thích, chuyển nội dung định dạng về văn bản và bỏ media khi chuyển sang SMS/Gọi. Toàn bộ thay đổi sẽ hiện trong bảng trước → sau; bạn có thể hoàn tác cả lượt.</p>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => agent.confirmAction(true)}>Đổi loại và tiếp tục</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => agent.confirmAction(false)}>Giữ nguyên</button></div>}
+      {agent.busy && !agent.pendingAction && !pendingPaste && <div className="agent-working"><RotateCcw size={14} className="spin" /> Đang đọc yêu cầu và chuẩn bị form…</div>}
+    </div>
+  )
+})
 export default function CampaignAgentChat({ agent }: { agent: Controller }) {
+  const draft = useSyncExternalStore(agent.composer.subscribe, agent.composer.getSnapshot)
   const [draggingFiles, setDraggingFiles] = useState(false)
   const dragDepth = useRef(0)
   const [pendingPaste, setPendingPaste] = useState<{
@@ -33,7 +66,7 @@ export default function CampaignAgentChat({ agent }: { agent: Controller }) {
     if (value.data) void agent.addDataText(value.data)
   }
   const attachmentsDisabled = agent.busy || agent.hasPendingData || agent.disabled
-  const composerText = agent.hasPendingData ? agent.dataText : agent.draft
+  const composerText = agent.hasPendingData ? agent.dataText : draft
   useLayoutEffect(() => {
     if (!agent.open || !input.current) return
     input.current.style.height = '0px'
@@ -69,32 +102,7 @@ export default function CampaignAgentChat({ agent }: { agent: Controller }) {
       <button type="button" className="btn-icon" title="Hội thoại mới" disabled={agent.busy || agent.hasPendingData || agent.disabled} onClick={agent.newChat}><MessageSquarePlus size={17} /></button>
       <button type="button" className="btn-icon" title="Thu gọn Agent" onClick={() => agent.setOpen(false)}><PanelRightClose size={17} /></button>
     </header>
-    <div className="agent-chat-messages" ref={scroller} role="log" aria-live="polite" aria-relevant="additions text">
-      {!agent.turns.length && <div className="agent-chat-welcome"><Sparkles size={28} /><h3>Bạn muốn tạo chiến dịch gì?</h3>
-        <p>Mô tả chiến dịch, dán data hoặc đính kèm Excel, TXT, ảnh dữ liệu. Agent chọn nơi nhập; bạn kiểm tra dữ liệu trong Upload trước khi chèn.</p><p>Bạn tự bấm Lưu khi đã sẵn sàng.</p></div>}
-      {agent.turns.map(turn => {
-        const rows = (turn.changes || []).flatMap(change => agentChangeRows(change).map(row => ({ ...row, section: change.section, targetKey: row.targetKey || change.key })))
-        return <article key={turn.id} className={`agent-turn ${turn.role}`}>
-        <div className="agent-turn-text">{turn.text}</div>
-        {!!turn.images?.length && <div className="agent-attachments">{turn.images.map(image => <Attachment key={image.id} draftId={agent.draftId} image={image} />)}</div>}
-        {!!turn.dataFiles?.length && <div className="agent-data-files">{turn.dataFiles.map(file => <small key={file.id}>{file.name}</small>)}</div>}
-        {turn.dataImport && <button type="button" className="btn btn-secondary btn-sm" disabled={agent.busy || agent.hasPendingData || agent.disabled}
-          onClick={() => agent.openDataImport(turn.dataImport!)}>Mở Upload dữ liệu</button>}
-        {!!rows.length && <div className="agent-changes"><strong>{turn.undone ? 'Đã hoàn tác' : 'Đã điền vào form'} · {rows.length} thay đổi</strong>
-          {rows.map(row => <button key={row.key} type="button" className="agent-change" onClick={() => agent.jump(row.section, row.targetKey)}>
-            <span>{row.label}</span><div><del>{row.beforeText}</del><span aria-hidden="true"> → </span><b>{row.afterText}</b></div>
-          </button>)}
-          <div className="agent-undo"><button type="button" className="btn btn-secondary btn-sm" disabled={!agent.canUndo(turn)} onClick={() => void agent.undo(turn)}><Undo2 size={13} /> Hoàn tác</button>
-            {!turn.undone && !agent.canUndo(turn) && !agent.busy && !agent.hasPendingData && <small>Trường liên quan đã được sửa tiếp.</small>}</div>
-        </div>}
-        {turn.extractedText && <details className="agent-image-text"><summary>Nội dung đã đọc từ ảnh</summary><p>{turn.extractedText}</p></details>}
-      </article>})}
-      {agent.pendingAction && <div className="agent-action-confirm" role="alert"><strong>Đổi sang {agent.pendingAction}?</strong>
-        <p>Đổi loại có thể bỏ tài khoản/nhóm data không tương thích, chuyển nội dung định dạng về văn bản và bỏ media khi chuyển sang SMS/Gọi. Toàn bộ thay đổi sẽ hiện trong bảng trước → sau; bạn có thể hoàn tác cả lượt.</p>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => agent.confirmAction(true)}>Đổi loại và tiếp tục</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => agent.confirmAction(false)}>Giữ nguyên</button></div>}
-      {agent.busy && !agent.pendingAction && !pendingPaste && <div className="agent-working"><RotateCcw size={14} className="spin" /> Đang đọc yêu cầu và chuẩn bị form…</div>}
-    </div>
+    <AgentMessages agent={agent} scroller={scroller} pendingPaste={!!pendingPaste} />
     <div className="agent-chat-composer">
       <div className="agent-suggestions">{suggestions.map(suggestion => <button type="button" key={suggestion} disabled={agent.busy || agent.hasPendingData || agent.disabled}
         onClick={() => { agent.setDraft(suggestion); input.current?.focus() }}>{suggestion}</button>)}</div>
@@ -165,10 +173,10 @@ export default function CampaignAgentChat({ agent }: { agent: Controller }) {
           <button type="button" className="btn btn-ghost btn-sm agent-choose-file" title="Chọn file Excel, CSV, TXT hoặc ảnh dữ liệu" disabled={attachmentsDisabled} onClick={() => file.current?.click()}><Paperclip size={16} /> Chọn file</button>
           <span className="agent-scope">{agent.scopeLabel}{agent.scope && <button type="button" aria-label="Hỏi toàn bộ form" onClick={() => agent.setScope(null)} disabled={agent.busy || agent.hasPendingData}><X size={11} /></button>}</span>
           {pendingPaste ? null : agent.busy ? <button type="button" className="btn btn-secondary btn-icon" aria-label="Dừng Agent" onClick={agent.cancel}><Square size={14} /></button>
-            : <button type="button" className="btn btn-primary btn-icon" aria-label="Gửi yêu cầu Agent" disabled={agent.hasPendingData || agent.disabled || !agent.draft.trim() && !agent.dataFiles.length} onClick={() => void agent.send()}><Send size={16} /></button>}
+            : <button type="button" className="btn btn-primary btn-icon" aria-label="Gửi yêu cầu Agent" disabled={agent.hasPendingData || agent.disabled || !draft.trim() && !agent.dataFiles.length} onClick={() => void agent.send()}><Send size={16} /></button>}
         </div></div>
-      {!agent.hasPendingData && !!agent.draft.trim() && <button type="button" className="agent-use-as-data" disabled={agent.busy || agent.disabled}
-        onClick={() => { const text = agent.draft; agent.setDraft(''); void agent.addDataText(text) }}>Dùng nội dung ô nhập làm dữ liệu</button>}
+      {!agent.hasPendingData && !!draft.trim() && <button type="button" className="agent-use-as-data" disabled={agent.busy || agent.disabled}
+        onClick={() => { const text = draft; agent.setDraft(''); void agent.addDataText(text) }}>Dùng nội dung ô nhập làm dữ liệu</button>}
       <small className="agent-input-hint">Kéo file vào chat · Enter để {agent.hasPendingData ? 'đính kèm' : 'gửi'} · Shift+Enter xuống dòng</small>
     </div>
   </aside>
