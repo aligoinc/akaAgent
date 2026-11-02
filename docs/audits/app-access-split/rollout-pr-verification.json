@@ -1,0 +1,23 @@
+{
+  "verified_at": "2026-11-02T23:14:41.039685+00:00",
+  "base_commit": "d493dd9e3b2dde04ffb73afaed8c3ddbd64dc178",
+  "scope": "9.2.0 package metadata and deployment/build/activation documentation only",
+  "typecheck": "PASS — reused completed checks on identical inputs",
+  "build": "PASS — reused three completed 9.2.0 platform builds on identical inputs",
+  "verified_build_input_files": 1085,
+  "build_input_manifest_sha256": "3542e0bcdc03e60c32c24e9e7760c6b8b13b5b003cb1fc830c15c3f3da7d5d31",
+  "build_receipt": "../akaagent-9.2.0-20261103/build-receipt.json",
+  "sql_modified": false,
+  "runtime_source_modified": false,
+  "database_operations_in_pr_turn": false,
+  "service_deployments_in_pr_turn": false,
+  "installer_publication_in_pr_turn": false,
+  "excluded": [
+    "CLAUDE.md",
+    "docs/DE_XUAT_ENGINE_CHIEN_DICH_CHUNG.md",
+    "dist/",
+    "dist-server/",
+    "private security sources and credentials"
+  ],
+  "other_repositories": "Docs only; typecheck/build SKIP — chỉ tài liệu"
+}

@@ -1,6 +1,6 @@
 # Quyền riêng akaChat/akaAgent — 03/11/2026
 
-**V445/V446 và hai private auth patches đã apply; V447 chưa apply, policy false. Chưa deploy hoặc phát hành. CRM không đổi source/deployment.** Tài liệu nghiệp vụ: [APP_ACCESS_SPLIT](../../APP_ACCESS_SPLIT.md). Các kết quả source/build và câu “chưa apply” ở các lượt review bên dưới là lịch sử trước receipt apply này.
+**V445/V446, hai private auth patches và V447 đã apply; policy true từ 06:07:41 Việt Nam ngày 03/11/2026.** Backend/runtime, Chat Web và WebApp đã deploy từ repo chính; Server mới được người dùng xác nhận đã cài; Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. CRM không đổi source/deployment. Xem [activation và hậu kiểm](ACTIVATION_20261103.md), [receipt activation](activation-receipt.json) và [deploy](DEPLOYMENT_20261103.md). Tài liệu nghiệp vụ: [APP_ACCESS_SPLIT](../../APP_ACCESS_SPLIT.md). Các kết quả source/build và câu “chưa apply/chưa kích hoạt” bên dưới là lịch sử trước activation này; không dùng để apply lại hoặc rollback mở quyền.
 
 ## Apply DB tương thích — 03/11/2026
 
@@ -24,7 +24,7 @@ Private capture, SQL auth, wrapper và kết quả ở `$HOME/.codex/incident-re
 - Dòng legacy trùng Zalo ID được bootstrap bật Chat có thể làm `app_access_reserve_chat_identity` từ chối QR lại của dòng đang giữ binding hợp lệ (`zalo_already_linked`). Tình huống đã tái hiện local; trước apply không tìm thấy nhóm đang đáp ứng đầy đủ điều kiện trong dữ liệu live đã kiểm.
 - Cấp lại quyền Chat đồng thời với projection trạng thái Server có thể deadlock do thứ tự account → binding và binding → account. Transaction bị chọn rollback; không phải khóa DB vĩnh viễn. Đã tái hiện local với SQLSTATE `40P01`.
 
-Các nhánh quyền riêng liên quan vẫn bị gate false. Không coi DB tương thích đã apply là bằng chứng các lỗi trên đã được xử lý hay hệ thống đã chuyển sang quyền riêng. Bước tiếp theo là deploy callers tương thích rồi mới xem xét V447 theo chỉ thị rollout; không tự apply V447 hoặc apply lại bốn bước đã live.
+Tại mốc apply DB tương thích 05:00, các nhánh quyền riêng còn bị gate false; hai lỗi trên chưa được xử lý. V447 sau đó đã kích hoạt theo chỉ thị trực tiếp sau deploy/build; xem audit activation đầu trang. Không apply lại bốn bước tương thích hoặc V447.
 
 ## Phạm vi source
 
@@ -38,7 +38,7 @@ Các nhánh quyền riêng liên quan vẫn bị gate false. Không coi DB tươ
 
 Cả bốn nhánh source là `codex/app-access-split`. akaAgent dùng managed worktree riêng từ `origin/dev_3`; giữ nguyên thay đổi người dùng ở checkout chính. Người dùng đã yêu cầu tạo bốn PR ngày 03/11/2026: akaAgent vào `dev_3`, Chat API/Chat Web/WebApp vào `dev`. Lượt tạo PR không merge, deploy, phát hành hoặc apply thêm DB; `labs/` của Chat API nằm ngoài phạm vi.
 
-Người dùng chấp nhận Desktop cũ không hỗ trợ tổ chức có product 5; không cần đợi mọi máy cập nhật để activation. Backend/runtime phải được deploy tương thích và bản Desktop mới phải được phát hành trước; máy cũ thuộc org có product 5 gặp giới hạn QR/Chat-only cần cập nhật. Org không có product 5 giữ legacy. V447 chưa được kích hoạt và không có gate theo phiên bản máy. Kiểm chứng trước push ghi tại [receipt PR](pr-verification.json); các kết quả build/test bên dưới giữ mốc kiểm chứng ban đầu.
+Ở lượt trước PR, người dùng chấp nhận Desktop cũ không hỗ trợ tổ chức có product 5 và không cần đợi mọi máy cập nhật; thứ tự khi đó là deploy backend/runtime và phát hành Desktop trước activation. Sau deploy và build ba bộ cài Desktop 9.2.0, người dùng yêu cầu trực tiếp apply V447; chỉ thị mới thay bước chờ phát hành cho lần activation này. Máy cũ thuộc org có product 5 gặp giới hạn QR/Chat-only cần cập nhật; org không có product 5 giữ legacy. V447 đã kích hoạt, không có gate theo phiên bản máy. Kiểm chứng trước push ghi tại [receipt PR](pr-verification.json); các kết quả build/test bên dưới giữ mốc kiểm chứng ban đầu.
 
 ## Migration và private assets
 
@@ -114,3 +114,7 @@ Lượt này chỉ sửa SQL policy/guard, snapshot, harness/generator và tài 
 - Không dùng danh sách Agent cho reader Chat-only. Session-bearing RPC chỉ ở main/backend và scope chủ, không đi qua preload/renderer.
 - Hook IP và desktop-admin dùng private live source; ACL helper cho application callers `service_role`, `aka_agent_desktop`, `aka_agent_chat_api`, không mở SELECT/EXECUTE cho anon để che lỗi. Pre-request entrypoint void giữ grant cần thiết cho hook hiện tại.
 - Không apply tự động V447 cùng schema trước khi deploy callers. Không áp lại migration đã live ở lần rollout sau.
+
+## Hồ sơ sau rollout
+
+[Kiểm chứng PR version và hồ sơ triển khai](rollout-pr-verification.json) đối chiếu 1.085 build inputs với bộ cài Desktop 9.2.0 đã kiểm chứng. Không đổi source runtime/SQL, không apply hoặc deploy lại khi tạo PR. Ba repo web/API chỉ cập nhật tài liệu; các receipt deploy/build giữ trạng thái tại mốc thực hiện, trạng thái activation hiện tại ở đầu tài liệu.
