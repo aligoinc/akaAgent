@@ -599,7 +599,7 @@ Kiểm thêm sau hai lượt đọc code (desktop/App Server và chat-sync), ch�
    v_committed THEN 'tạm dừng' …`; bước tra số thành công cũng tính là "đã thực hiện". Nên khi tin
    nhắn gặp 120/802 hoặc lời mời gặp 224 (chính sách muốn trả về hàng đợi), mục tiêu thành `tạm dừng`
    và scheduler bỏ qua mãi. Đang có 1.898 (120) + 274 (802) + 959 (224) = 3.131 mục tiêu như vậy, mọi
-   runtime (App Server 2.562, QR 297, chat-sync 204, Web 68); ~2.600 quá 3 ngày; **1.108 nằm trong
+   runtime (App Server 2.562, QR 297, chat-sync 204, Web 68); 2.717 quá 3 ngày; **1.108 nằm trong
    chiến dịch đã `hoàn thành`** dù chưa từng được gửi.
 8. **Lỗi tạm thời làm tạm dừng chiến dịch.** Đang tạm dừng (cập nhật trong 14 ngày): 61 chiến dịch
    desktop (44 Facebook, 9 QR, 8 Web; 42 dừng >24 h) vì `Lượt chạy gặp lỗi: …TypeError: fetch failed`
