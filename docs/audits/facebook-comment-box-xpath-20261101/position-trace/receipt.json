@@ -1,0 +1,1188 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_date_vn": "2026-11-01",
+  "live_blocks": [
+    {
+      "id": 34,
+      "name": "fb_comment_at_position",
+      "updated_at": "2026-10-12 22:11:39.655208+00",
+      "code_md5": "30126bae87ff755164c80dbffda9d263"
+    },
+    {
+      "id": 2554,
+      "name": "fb_prepare_seeding_iterations",
+      "updated_at": "2026-07-28 07:36:18.973267+00",
+      "code_md5": "68fe2e31c508a4657e4de1470eedf01b"
+    },
+    {
+      "id": 2627,
+      "name": "fb_adjust_group_post_comments_after_pending",
+      "updated_at": "2026-05-18 08:55:38.385057+00",
+      "code_md5": "ffeb17c8967ab564098da8f641650674"
+    }
+  ],
+  "workflows": [
+    {
+      "id": 252,
+      "name": "facebook_group_post__test__facebook_group_post",
+      "updated_at": "2026-10-23 15:54:15.894832+00",
+      "nodes": [
+        {
+          "id": "if_comment",
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "loop_comment",
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "vars.commentIterations"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "comment",
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "hasCodeOverride": false
+        },
+        {
+          "id": "merge_comment",
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "adjust_comments_after_pending",
+          "blockId": 2627,
+          "blockName": "fb_adjust_group_post_comments_after_pending",
+          "config": {},
+          "hasCodeOverride": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "target": "loop_comment",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "target": "comment",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "target": "merge_comment",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        }
+      ]
+    },
+    {
+      "id": 245,
+      "name": "facebook_comment_seeding__test__facebook_comment_seeding",
+      "updated_at": "2026-10-20 15:35:04.739982+00",
+      "nodes": [
+        {
+          "id": "sleep_after_nav",
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "sort_posts",
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "config": {
+            "commentFeedSort": true
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "prepare_iters",
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "hasCodeOverride": false
+        },
+        {
+          "id": "loop_comment",
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "comment_at_pos",
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "hasCodeOverride": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-sort_posts",
+          "source": "sleep_after_nav",
+          "target": "sort_posts"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "target": "merge_end",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-loop_comment-comment_at_pos-body",
+          "source": "loop_comment",
+          "target": "comment_at_pos",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-comment_at_pos-if_like",
+          "source": "comment_at_pos",
+          "target": "if_like"
+        },
+        {
+          "id": "e-comment_at_pos-like_at_pos-result",
+          "source": "comment_at_pos",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-merge_like-result",
+          "source": "comment_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-sort_posts-prepare_iters",
+          "source": "sort_posts",
+          "target": "prepare_iters"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "facebook_group_post",
+      "updated_at": "2026-10-23 15:54:15.894832+00",
+      "nodes": [
+        {
+          "id": "if_comment",
+          "blockId": 1,
+          "blockName": "if_else",
+          "config": {
+            "condition": "vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "loop_comment",
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "vars.commentIterations"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "comment",
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "hasCodeOverride": false
+        },
+        {
+          "id": "merge_comment",
+          "blockId": 4,
+          "blockName": "merge",
+          "config": {
+            "mode": "any"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "adjust_comments_after_pending",
+          "blockId": 2627,
+          "blockName": "fb_adjust_group_post_comments_after_pending",
+          "config": {},
+          "hasCodeOverride": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-if_comment-loop_comment-true",
+          "source": "if_comment",
+          "target": "loop_comment",
+          "sourceHandle": "true"
+        },
+        {
+          "id": "e-if_comment-merge_comment-false",
+          "source": "if_comment",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-loop_comment-comment-body",
+          "source": "loop_comment",
+          "target": "comment",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-loop_comment-merge_comment-done",
+          "source": "loop_comment",
+          "target": "merge_comment",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-merge_comment-if_leave",
+          "source": "merge_comment",
+          "target": "if_leave"
+        },
+        {
+          "id": "e-if_submitted-merge_comment-false",
+          "source": "if_submitted",
+          "target": "merge_comment",
+          "sourceHandle": "false"
+        },
+        {
+          "id": "e-detect_pending-adjust_comments_after_pending",
+          "source": "detect_pending",
+          "target": "adjust_comments_after_pending"
+        },
+        {
+          "id": "e-adjust_comments_after_pending-if_comment",
+          "source": "adjust_comments_after_pending",
+          "target": "if_comment"
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "name": "facebook_comment_seeding",
+      "updated_at": "2026-10-20 15:35:04.739982+00",
+      "nodes": [
+        {
+          "id": "sleep_after_nav",
+          "blockId": 20,
+          "blockName": "sleep",
+          "config": {
+            "ms": 4000
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "sort_posts",
+          "blockId": 2600,
+          "blockName": "fb_sort_group_posts",
+          "config": {
+            "commentFeedSort": true
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "prepare_iters",
+          "blockId": 2554,
+          "blockName": "fb_prepare_seeding_iterations",
+          "config": {},
+          "hasCodeOverride": false
+        },
+        {
+          "id": "loop_comment",
+          "blockId": 2,
+          "blockName": "loop",
+          "config": {
+            "loopType": "forEach",
+            "itemsExpr": "(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []"
+          },
+          "hasCodeOverride": false
+        },
+        {
+          "id": "comment_at_pos",
+          "blockId": 34,
+          "blockName": "fb_comment_at_position",
+          "config": {},
+          "hasCodeOverride": false
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-wait_main-sleep_after_nav",
+          "source": "wait_main",
+          "target": "sleep_after_nav"
+        },
+        {
+          "id": "e-sleep_after_nav-sort_posts",
+          "source": "sleep_after_nav",
+          "target": "sort_posts"
+        },
+        {
+          "id": "e-prepare_iters-loop_comment",
+          "source": "prepare_iters",
+          "target": "loop_comment"
+        },
+        {
+          "id": "e-loop_comment-merge_end-done",
+          "source": "loop_comment",
+          "target": "merge_end",
+          "sourceHandle": "done"
+        },
+        {
+          "id": "e-loop_comment-comment_at_pos-body",
+          "source": "loop_comment",
+          "target": "comment_at_pos",
+          "sourceHandle": "body"
+        },
+        {
+          "id": "e-comment_at_pos-if_like",
+          "source": "comment_at_pos",
+          "target": "if_like"
+        },
+        {
+          "id": "e-comment_at_pos-like_at_pos-result",
+          "source": "comment_at_pos",
+          "target": "like_at_pos"
+        },
+        {
+          "id": "e-comment_at_pos-merge_like-result",
+          "source": "comment_at_pos",
+          "target": "merge_like"
+        },
+        {
+          "id": "e-sort_posts-prepare_iters",
+          "source": "sort_posts",
+          "target": "prepare_iters"
+        }
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "id": 51864237,
+      "run_id": 4851034,
+      "campaign_id": 42111,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 11:05:40.784+00",
+      "completed_at": "2026-11-01 11:05:51.915+00",
+      "position": 79,
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[79]",
+      "input_position": {
+        "position": null,
+        "loopIndex": null,
+        "loopItemPosition": null
+      }
+    },
+    {
+      "id": 51887687,
+      "run_id": 4853204,
+      "campaign_id": 42109,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 12:02:59.429+00",
+      "completed_at": "2026-11-01 12:03:08.982+00",
+      "position": 79,
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[79]",
+      "input_position": {
+        "position": null,
+        "loopIndex": null,
+        "loopItemPosition": null
+      }
+    },
+    {
+      "id": 51926130,
+      "run_id": 4853195,
+      "campaign_id": 42111,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 13:38:24.673+00",
+      "completed_at": "2026-11-01 13:42:41.24+00",
+      "position": 130,
+      "error": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[130]",
+      "input_position": {
+        "position": null,
+        "loopIndex": null,
+        "loopItemPosition": null
+      }
+    }
+  ],
+  "prepared_results": [
+    {
+      "id": 51846885,
+      "run_id": 4851034,
+      "block_id": 2554,
+      "block_name": "fb_prepare_seeding_iterations",
+      "status": "success",
+      "started_at": "2026-11-01 10:30:35.341+00",
+      "completed_at": "2026-11-01 11:04:17.399+00",
+      "duration_ms": 2021925,
+      "summary": {
+        "readCycles": 21,
+        "stopReason": "max_scroll_cycles",
+        "totalCount": 113,
+        "failedCount": 0,
+        "matchedCount": 4,
+        "scannedCount": 113,
+        "scrollCycles": 20,
+        "skippedCount": 109,
+        "aiMatchedCount": 0,
+        "noGrowthCycles": 0,
+        "maxScannedPosts": 300,
+        "maxScrollCycles": 20,
+        "hardLimitReached": true,
+        "maxNoGrowthCycles": 3,
+        "keywordMatchedCount": 4
+      },
+      "iterations": [
+        {
+          "position": 52,
+          "hasPostUrl": true
+        },
+        {
+          "position": 62,
+          "hasPostUrl": true
+        },
+        {
+          "position": 79,
+          "hasPostUrl": true
+        },
+        {
+          "position": 95,
+          "hasPostUrl": true
+        }
+      ]
+    },
+    {
+      "id": 51866248,
+      "run_id": 4853195,
+      "block_id": 2554,
+      "block_name": "fb_prepare_seeding_iterations",
+      "status": "success",
+      "started_at": "2026-11-01 11:09:59.906+00",
+      "completed_at": "2026-11-01 11:41:41.091+00",
+      "duration_ms": 1901087,
+      "summary": {
+        "readCycles": 21,
+        "stopReason": "max_scroll_cycles",
+        "totalCount": 148,
+        "failedCount": 0,
+        "matchedCount": 17,
+        "scannedCount": 148,
+        "scrollCycles": 20,
+        "skippedCount": 131,
+        "aiMatchedCount": 0,
+        "noGrowthCycles": 0,
+        "maxScannedPosts": 300,
+        "maxScrollCycles": 20,
+        "hardLimitReached": true,
+        "maxNoGrowthCycles": 3,
+        "keywordMatchedCount": 17
+      },
+      "iterations": [
+        {
+          "position": 50,
+          "hasPostUrl": true
+        },
+        {
+          "position": 53,
+          "hasPostUrl": true
+        },
+        {
+          "position": 63,
+          "hasPostUrl": true
+        },
+        {
+          "position": 74,
+          "hasPostUrl": true
+        },
+        {
+          "position": 78,
+          "hasPostUrl": true
+        },
+        {
+          "position": 80,
+          "hasPostUrl": true
+        },
+        {
+          "position": 97,
+          "hasPostUrl": true
+        },
+        {
+          "position": 96,
+          "hasPostUrl": true
+        },
+        {
+          "position": 102,
+          "hasPostUrl": true
+        },
+        {
+          "position": 113,
+          "hasPostUrl": true
+        },
+        {
+          "position": 123,
+          "hasPostUrl": true
+        },
+        {
+          "position": 124,
+          "hasPostUrl": true
+        },
+        {
+          "position": 125,
+          "hasPostUrl": true
+        },
+        {
+          "position": 127,
+          "hasPostUrl": true
+        },
+        {
+          "position": 128,
+          "hasPostUrl": true
+        },
+        {
+          "position": 129,
+          "hasPostUrl": true
+        },
+        {
+          "position": 130,
+          "hasPostUrl": true
+        }
+      ]
+    },
+    {
+      "id": 51867077,
+      "run_id": 4853204,
+      "block_id": 2554,
+      "block_name": "fb_prepare_seeding_iterations",
+      "status": "success",
+      "started_at": "2026-11-01 11:11:36.885+00",
+      "completed_at": "2026-11-01 12:02:48.178+00",
+      "duration_ms": 3071188,
+      "summary": {
+        "readCycles": 21,
+        "stopReason": "max_scroll_cycles",
+        "totalCount": 119,
+        "failedCount": 0,
+        "matchedCount": 3,
+        "scannedCount": 119,
+        "scrollCycles": 20,
+        "skippedCount": 116,
+        "aiMatchedCount": 0,
+        "noGrowthCycles": 0,
+        "maxScannedPosts": 300,
+        "maxScrollCycles": 20,
+        "hardLimitReached": true,
+        "maxNoGrowthCycles": 3,
+        "keywordMatchedCount": 3
+      },
+      "iterations": [
+        {
+          "position": 78,
+          "hasPostUrl": true
+        },
+        {
+          "position": 79,
+          "hasPostUrl": true
+        },
+        {
+          "position": 88,
+          "hasPostUrl": true
+        }
+      ]
+    }
+  ],
+  "summary_events": [
+    {
+      "run_id": 4851034,
+      "event_type": "comment_seeding_post_search_summary",
+      "element_count": 4,
+      "visible_post_count": 113,
+      "read_cycles": 21,
+      "scroll_cycles": 20,
+      "scanned_count": 113,
+      "requested_count": 30,
+      "matched_count": 4,
+      "stop_reason": "max_scroll_cycles"
+    },
+    {
+      "run_id": 4853195,
+      "event_type": "comment_seeding_post_search_summary",
+      "element_count": 17,
+      "visible_post_count": 131,
+      "read_cycles": 21,
+      "scroll_cycles": 20,
+      "scanned_count": 148,
+      "requested_count": 30,
+      "matched_count": 17,
+      "stop_reason": "max_scroll_cycles"
+    },
+    {
+      "run_id": 4853204,
+      "event_type": "comment_seeding_post_search_summary",
+      "element_count": 3,
+      "visible_post_count": 118,
+      "read_cycles": 21,
+      "scroll_cycles": 20,
+      "scanned_count": 119,
+      "requested_count": 30,
+      "matched_count": 3,
+      "stop_reason": "max_scroll_cycles"
+    }
+  ],
+  "run_configuration": [
+    {
+      "id": 4851034,
+      "campaign_id": 42111,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 10:30:24.357+00",
+      "completed_at": "2026-11-01 11:06:21.481+00",
+      "variables": {
+        "commentType": "own",
+        "commentCount": 30,
+        "postsPerTarget": 30,
+        "commentPostSort": "recent_activity",
+        "isFindPostByKeywords": true,
+        "isFindPostByContentAI": false
+      },
+      "initial_iterations": [
+        {
+          "position": 1
+        }
+      ]
+    },
+    {
+      "id": 4853195,
+      "campaign_id": 42111,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 11:07:34.379+00",
+      "completed_at": "2026-11-01 13:42:49.267+00",
+      "variables": {
+        "commentType": "own",
+        "commentCount": 30,
+        "postsPerTarget": 30,
+        "commentPostSort": "recent_activity",
+        "isFindPostByKeywords": true,
+        "isFindPostByContentAI": false
+      },
+      "initial_iterations": [
+        {
+          "position": 1
+        }
+      ]
+    },
+    {
+      "id": 4853204,
+      "campaign_id": 42109,
+      "workflow_id": 157,
+      "started_at": "2026-11-01 11:07:43.309+00",
+      "completed_at": "2026-11-01 12:03:23.983+00",
+      "variables": {
+        "commentType": "own",
+        "commentCount": 30,
+        "postsPerTarget": 30,
+        "commentPostSort": "recent_activity",
+        "isFindPostByKeywords": true,
+        "isFindPostByContentAI": false
+      },
+      "initial_iterations": [
+        {
+          "position": 1
+        }
+      ]
+    }
+  ],
+  "group_post_settings": [
+    {
+      "id": 4843523,
+      "campaign_id": 46363,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "all",
+        "commentCount": 3,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "id": 4845031,
+      "campaign_id": 43257,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "others",
+        "commentCount": 30,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": 4845043,
+      "campaign_id": 43258,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "others",
+        "commentCount": 30,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": 4845045,
+      "campaign_id": 43259,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "others",
+        "commentCount": 30,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": 4845050,
+      "campaign_id": 43260,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "others",
+        "commentCount": 30,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": 4851059,
+      "campaign_id": 37702,
+      "workflow_id": 1,
+      "settings": {
+        "commentType": "others",
+        "commentCount": 30,
+        "postsPerTarget": 3
+      },
+      "initial_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    }
+  ],
+  "pending_adjustments": [
+    {
+      "id": 51801040,
+      "run_id": 4845031,
+      "is_pending": true,
+      "adjusted": true,
+      "comment_type": "others",
+      "adjusted_positions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "id": 51801144,
+      "run_id": 4845043,
+      "is_pending": false,
+      "adjusted": false,
+      "comment_type": "others",
+      "adjusted_positions": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    {
+      "id": 51801064,
+      "run_id": 4845045,
+      "is_pending": true,
+      "adjusted": true,
+      "comment_type": "others",
+      "adjusted_positions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "id": 51801262,
+      "run_id": 4845050,
+      "is_pending": true,
+      "adjusted": true,
+      "comment_type": "others",
+      "adjusted_positions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    },
+    {
+      "id": 51847409,
+      "run_id": 4851059,
+      "is_pending": true,
+      "adjusted": true,
+      "comment_type": "others",
+      "adjusted_positions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ]
+    }
+  ],
+  "source_refs": {
+    "page_controller": "src/main/v2/runtime/pageController.ts:25 (visible filtering before numeric XPath index), :223 (waitForSelector fallback scroll)",
+    "scheduler": "src/main/services/campaignScheduler.ts:10160 (commentIndices), :10274 (commentIterations)",
+    "workflow_engine": "src/main/v2/runtime/workflowEngine.ts:551 (vars.loopItem)",
+    "element_helper": "src/main/v2/runtime/blockHelpers.ts:369 (template substitution)"
+  },
+  "findings": [
+    "Block 34 takes pos=Number(input.position || vars.loopItem.position || 1), then substitutes n=pos into element 13. Its workflow node config is empty; in observed 79/130 failures input.position is null.",
+    "Workflow 157 and test 245 use output.commentIterations from block 2554. That block enumerates visible-layout post roots from element1485, sets position=i+1, filters by keyword/AI and retains the original position and postUrl.",
+    "Campaign42111 run4851034 requested30, scanned113, used20 scroll cycles, selected positions52,62,79,95. Run4853195 requested30, scanned148, used20 scroll cycles, final DOM root count131, selected17 including130. Campaign42109 run4853204 scanned119 with final118 roots and selected78,79,88.",
+    "Preparation scrolls top first, waits2500ms, scrolls every enumerated post into view with300ms delay, then scrolls window down1500px+wait2000ms per outer cycle as needed. It stops at enough selected posts, three no-growth cycles,20 explicit scroll cycles, or max(30,N*10) scanned posts.",
+    "Selected positions index post-root matches from element1485, whereas block34 applies that integer to global comment-control matches from element13. No equality or one-to-one mapping is checked. Stored postUrl is not used to relocate the selected post before comment.",
+    "Current PageController waits at most8000ms on block34's first selector wait and has a lazy-scroll fallback every third unsuccessful poll: window.scrollBy(max(600,0.85*height)), then500ms sleep. It does not confirm a required button count. Runtime also filters visible-layout matches before applying the numeric XPath index; raw browser XPath indexing can differ.",
+    "Group-post workflow1/test252 takes scheduler vars.commentIterations: own=[1],all=[1..commentCount],others=[2..commentCount+1]. Block2627 can subtract1 for pending+others. It has no block2554 preparation/scroll pass before its comment loop, relying on shared waitForSelector behavior.",
+    "The mapping/identity gap is confirmed in code. No failing DOM capture/count exists to prove the exact root cause of every timeout. Actual per-client fallback scroll execution/version is not established by these DB logs."
+  ],
+  "database_mutations": false,
+  "runtime_source_changes": false
+}

@@ -1,0 +1,47 @@
+{
+  "target": {
+    "id": 13,
+    "name": "fb_comment_box_at_n",
+    "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[${n}]",
+    "category": "facebook",
+    "staff_id": 1,
+    "created_at": "2026-04-26T17:29:23.497781+00:00",
+    "is_builtin": true,
+    "updated_at": "2026-11-01T06:14:37.409568+00:00",
+    "description": "Khung Comment thứ ${n} (template ${n}=position)",
+    "organization_id": 1
+  },
+  "blocks_md5": "daf4447ff7c3af89f87f4a1a8ba9aa66",
+  "target_md5": "4259e1d74de0db2871762fb4833cae28",
+  "captured_at": "2026-11-01T06:14:38.340901+00:00",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "workflows_md5": "b436bc3c60de60ac473ad065067a0664",
+  "captured_at_vn": "2026-11-01T13:14:38.340901",
+  "other_elements_md5": "97872ef0646578ed98aac1e36fbb5cf4",
+  "unchanged_elements": [
+    {
+      "id": 14,
+      "name": "fb_comment_textbox_at_n",
+      "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận']|//*[@role='button' and .='Bình luận'])[${n}]",
+      "category": "facebook",
+      "staff_id": 1,
+      "created_at": "2026-04-26T17:29:23.615157+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-15T18:35:48.08+00:00",
+      "description": "Khung gõ comment thứ ${n} (alias same as box)",
+      "organization_id": 1
+    },
+    {
+      "id": 1517,
+      "name": "fb_comment_dialog_textbox",
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "category": "facebook",
+      "staff_id": null,
+      "created_at": "2026-05-15T19:21:26.531903+00:00",
+      "is_builtin": true,
+      "updated_at": "2026-05-15T19:21:26.531903+00:00",
+      "description": "Ô nhập comment/reply đang hiển thị trong dialog sau khi click khung comment",
+      "organization_id": null
+    }
+  ]
+}

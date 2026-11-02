@@ -1,0 +1,327 @@
+{
+  "inventory": [
+    {
+      "id": 13,
+      "name": "fb_comment_box_at_n",
+      "description": "Khung Comment thứ ${n} (template ${n}=position)",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về')]|//*[@role='button' and .='Bình luận'])[${n}]",
+      "updated_at": "2026-11-02 02:27:03.92025+00",
+      "block_refs": [
+        {
+          "id": 34,
+          "name": "fb_comment_at_position"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "name": "fb_comment_textbox_at_n",
+      "description": "Khung gõ comment thứ ${n} (alias same as box)",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận']|//*[@role='button' and .='Bình luận'])[${n}]",
+      "updated_at": "2026-05-15 18:35:48.08+00",
+      "block_refs": null
+    },
+    {
+      "id": 1489,
+      "name": "fb_comment_in_post_btn",
+      "description": "Nút bình luận trên bài viết",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": ".//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment'))]",
+      "updated_at": "2026-11-01 06:31:54.282234+00",
+      "block_refs": [
+        {
+          "id": 2603,
+          "name": "fb_collect_group_comments"
+        },
+        {
+          "id": 2719,
+          "name": "fb_collect_search_post_comments"
+        }
+      ]
+    },
+    {
+      "id": 1490,
+      "name": "fb_all_comments_btn",
+      "description": "Menu tất cả bình luận",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='menuitem' and contains(.,'Tất cả bình luận')]",
+      "updated_at": "2026-05-22 14:53:40.476486+00",
+      "block_refs": [
+        {
+          "id": 2603,
+          "name": "fb_collect_group_comments"
+        },
+        {
+          "id": 2719,
+          "name": "fb_collect_search_post_comments"
+        }
+      ]
+    },
+    {
+      "id": 1491,
+      "name": "fb_newest_comments_btn",
+      "description": "Menu bình luận mới nhất",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='menuitem' and contains(.,'Mới nhất')]",
+      "updated_at": "2026-05-22 14:53:40.476486+00",
+      "block_refs": [
+        {
+          "id": 2603,
+          "name": "fb_collect_group_comments"
+        },
+        {
+          "id": 2719,
+          "name": "fb_collect_search_post_comments"
+        }
+      ]
+    },
+    {
+      "id": 1493,
+      "name": "fb_cmt_element_full",
+      "description": "Element bình luận đầy đủ",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": ".//*[@role='article' and .//*[@class='xt0psk2']]",
+      "updated_at": "2026-05-06 10:39:48.503+00",
+      "block_refs": [
+        {
+          "id": 2603,
+          "name": "fb_collect_group_comments"
+        },
+        {
+          "id": 2719,
+          "name": "fb_collect_search_post_comments"
+        }
+      ]
+    },
+    {
+      "id": 1496,
+      "name": "fb_see_more_comments_btn",
+      "description": "Nút xem thêm bình luận",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='button' and ((contains(.,'Xem thêm') and contains(.,'bình luận')) or (contains(.,'View more') and contains(.,'comments')))]",
+      "updated_at": "2026-05-06 10:39:48.503+00",
+      "block_refs": null
+    },
+    {
+      "id": 1514,
+      "name": "PostLinkInUid",
+      "description": "Permalink thật của bài post trong feed sau khi focusin raw link",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='feed']//a[(contains(@href, '/pending_posts/') or contains(@href, '/posts/') or contains(@href, 'story_fbid=')) and not(contains(@href, 'comment_id=')) and not(contains(@href, 'reply_comment_id='))]",
+      "updated_at": "2026-05-18 06:43:27.775+00",
+      "block_refs": [
+        {
+          "id": 2554,
+          "name": "fb_prepare_seeding_iterations"
+        },
+        {
+          "id": 2601,
+          "name": "fb_collect_group_posts"
+        },
+        {
+          "id": 2717,
+          "name": "fb_collect_search_posts"
+        }
+      ]
+    },
+    {
+      "id": 1517,
+      "name": "fb_comment_dialog_textbox",
+      "description": "Ô nhập comment/reply đang hiển thị trong dialog sau khi click khung comment",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-15 19:21:26.531903+00",
+      "block_refs": [
+        {
+          "id": 34,
+          "name": "fb_comment_at_position"
+        },
+        {
+          "id": 2616,
+          "name": "fb_comment_current_post"
+        }
+      ]
+    },
+    {
+      "id": 1692,
+      "name": "fb_newsfeed_comment_button",
+      "description": "Comment button inside a post.",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]",
+      "updated_at": "2026-11-01 06:31:54.283749+00",
+      "block_refs": [
+        {
+          "id": 2707,
+          "name": "fb_newsfeed_comment_open"
+        },
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus"
+        }
+      ]
+    },
+    {
+      "id": 1693,
+      "name": "fb_newsfeed_comment_input",
+      "description": "Comment input inside a post.",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": ".//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_refs": [
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus"
+        }
+      ]
+    },
+    {
+      "id": 1694,
+      "name": "fb_newsfeed_dialog_comment_input",
+      "description": "Comment input inside dialog.",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_refs": [
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus"
+        }
+      ]
+    },
+    {
+      "id": 1695,
+      "name": "fb_newsfeed_comment_submit",
+      "description": "Comment submit button.",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": ".//*[@role='button' and (@aria-label='Bình luận' or @aria-label='Post comment' or @aria-label='Đăng bình luận') and @tabindex=0]",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_refs": null
+    },
+    {
+      "id": 1784,
+      "name": "fb_comment_permalink",
+      "description": "Link bình luận trong dialog bài viết; sau khi gửi comment lấy href đầu tiên theo thứ tự DOM.",
+      "category": "facebook",
+      "is_builtin": true,
+      "xpath": "(//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')])[1]//*[@role='article' and .//*[@class='xt0psk2']]//a[contains(@href,'comment_id=') or contains(@href,'reply_comment_id=')]",
+      "updated_at": "2026-10-12 22:01:59.530934+00",
+      "block_refs": [
+        {
+          "id": 34,
+          "name": "fb_comment_at_position"
+        },
+        {
+          "id": 2616,
+          "name": "fb_comment_current_post"
+        },
+        {
+          "id": 2710,
+          "name": "fb_newsfeed_comment_submit"
+        }
+      ]
+    }
+  ],
+  "references": [
+    {
+      "id": 14,
+      "name": "fb_comment_textbox_at_n",
+      "block_refs": null,
+      "workflow_refs": null
+    },
+    {
+      "id": 1489,
+      "name": "fb_comment_in_post_btn",
+      "block_refs": [
+        {
+          "id": 2603,
+          "name": "fb_collect_group_comments",
+          "snippet": "ctors = {\n  posts: await helpers.element('fb_post_in_uid'),\n  commentButton: await helpers.element('fb_comment_in_post_btn'),\n  mostRelevant: await helpers.element('fb_most_relevant_btn'),\n  allComments: await helpers.element('fb_all_comments_btn'),\n  newestComments: await helpers.element('fb_newest_comments_btn'),\n  dialog: await helpers.element('fb_dialog'),\n  commentElement: await helpers.element('fb_cmt_element_full'),\n  uidInComment: await helpers.element('fb_uid_in_cmt_element'),\n  contentInComment: await helpers.element('fb_content_in_cmt_element'),\n  closeDialog: await helpers.element('fb_close_dialog_btn')\n};\nconst postLimit = Math.max(1, Number(vars.countPostFindData || 10));\nconst commentLimit = Math.max(1, Number(vars.countCommentFindData || 30));\nconst sortType = String(vars.s"
+        },
+        {
+          "id": 2719,
+          "name": "fb_collect_search_post_comments",
+          "snippet": "   posts: await helpers.element('fb_search_post_in_uid'),\n    commentButton: await helpers.element('fb_comment_in_post_btn'),\n    mostRelevant: await helpers.element('fb_most_relevant_btn'),\n    allComments: await helpers.element('fb_all_comments_btn'),\n    newestComments: await helpers.element('fb_newest_comments_btn'),\n    dialog: await helpers.element('fb_dialog'),\n    commentElement: await helpers.element('fb_cmt_element_full'),\n    uidInComment: await helpers.element('fb_uid_in_cmt_element'),\n    contentInComment: await helpers.element('fb_content_in_cmt_element'),\n    closeDialog: await helpers.element('fb_close_dialog_btn')\n  };\n  const postLimit = Math.max(1, Number(vars.countSearchPostFindData || vars.countPostFindData || 10));\n  const commentLimit = Math.max(1, Number(vars.countC"
+        }
+      ],
+      "workflow_refs": null
+    },
+    {
+      "id": 1692,
+      "name": "fb_newsfeed_comment_button",
+      "block_refs": [
+        {
+          "id": 2707,
+          "name": "fb_newsfeed_comment_open",
+          "snippet": "ingComment <= 0) return { opened: false }\nconst selectors = { commentButton: await helpers.element('fb_newsfeed_comment_button') }\nconst actionGap = helpers.randomBetween(Number(state.actionGapSeconds || 4) * 600, Number(state.actionGapSeconds || 4) * 1400)\nconst result = await page.evaluate(`\n  const selector = __args[0];\n  const delayMs = Number(__args[1] || 1000) + Number(__args[2] || 0);\n  const batchId = String(__args[3] || '');\n  const batchIndex = Number(__args[4]);\n  function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }\n  function xpathOne(xpath, root) {\n    const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);\n    return result.singleNodeValue || null;\n  }\n  function findCurrentPost() {\n    const curren"
+        },
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus",
+          "snippet": "ned !== true) return { focused: false }\nconst selectors = {\n  commentButton: await helpers.element('fb_newsfeed_comment_button'),\n  dialog: await helpers.element('fb_newsfeed_dialog'),\n  dialogInput: await helpers.element('fb_newsfeed_dialog_comment_input'),\n  postInput: await helpers.element('fb_newsfeed_comment_input'),\n  closeDialog: await helpers.element('fb_newsfeed_close_dialog')\n}\nconst result = await page.evaluate(`\n  const selectors = __args[0];\n  const stepDelayMs = Number(__args[1] || 1000);\n  const batchId = String(__args[2] || '');\n  const batchIndex = Number(__args[3]);\n  function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }\n  function xpathOne(xpath, root) {\n    const result = document.evaluate(xpath, root || document, null, XPathResult.FIRST_ORDERED"
+        }
+      ],
+      "workflow_refs": null
+    },
+    {
+      "id": 1695,
+      "name": "fb_newsfeed_comment_submit",
+      "block_refs": null,
+      "workflow_refs": [
+        {
+          "id": 238,
+          "name": "facebook_newsfeed_interaction"
+        },
+        {
+          "id": 254,
+          "name": "facebook_newsfeed_interaction__test__facebook_newsfeed_interaction"
+        }
+      ]
+    }
+  ],
+  "decisions": {
+    "edit": [
+      1489,
+      1692
+    ],
+    "already_updated": [
+      13
+    ],
+    "already_contains_binh_luan": [
+      1517,
+      1693,
+      1694
+    ],
+    "unused_alias_unchanged": [
+      14
+    ],
+    "other_purposes_unchanged": [
+      1490,
+      1491,
+      1493,
+      1496,
+      1514,
+      1695,
+      1784
+    ]
+  },
+  "notes": [
+    "No current block/workflow/source consumer found for element14.",
+    "Element1695 is a submit button; workflow matches are blockName references, not element calls.",
+    "All existing selector alternatives, role constraints and relative roots are preserved."
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "authorization": "Người dùng yêu cầu rà và bổ sung cùng nhánh Bình luận về cho các element khác cần dùng.",
+  "changed_ids": [
+    1489,
+    1692
+  ],
+  "changed_columns": [
+    "xpath",
+    "updated_at"
+  ],
+  "applied_at": "2026-11-02T02:29:38.21425+00:00",
+  "changes": [
+    {
+      "id": 1489,
+      "name": "fb_comment_in_post_btn",
+      "before_xpath": ".//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment'))]",
+      "after_xpath": ".//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về'))]",
+      "before_row_md5": "e5f78ae7d73347bb18ac6fb17c62eff9",
+      "after_row_md5": "917b771cb8f2ffa0cb747e4051b05a4a"
+    },
+    {
+      "id": 1692,
+      "name": "fb_newsfeed_comment_button",
+      "before_xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]",
+      "after_xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về'))]",
+      "before_row_md5": "3e51b1001b3e04b0ae1483c826abfeeb",
+      "after_row_md5": "990d2d77a1b18f1acc81c91a933dc5f9"
+    }
+  ],
+  "verification": {
+    "trial_rollback_passed": true,
+    "guarded_commit_passed": true,
+    "separate_readback_passed": true,
+    "other_elements_unchanged": true,
+    "blocks_unchanged": true,
+    "workflows_unchanged": true
+  },
+  "unchanged_reasons": {
+    "13": "Already updated earlier today.",
+    "14": "Unused alias; no block/workflow/source consumer found.",
+    "1695": "Submit control, not open-comment control; no live element consumer found.",
+    "1517/1693/1694": "Already contain contains(@aria-label,'Bình luận'), which includes the new phrase; textbox constraints stay intact.",
+    "1490/1491/1493/1496/1514/1784": "Different functions: sorting, comment content, pagination or permalinks."
+  },
+  "scope": "No schema/RPC/ACL, block/workflow or source changes; no PostgREST reload/build/deploy/Facebook action.",
+  "runtime_note": "Fully exit/reopen already-running apps to load element cache.",
+  "limits": "Database verification passed; Facebook behavior after update has not been tested."
+}

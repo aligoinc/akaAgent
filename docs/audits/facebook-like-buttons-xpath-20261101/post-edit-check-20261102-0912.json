@@ -1,0 +1,872 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_at": "2026-11-02 02:12:26.487562+00",
+  "checked_at_vn": "2026-11-02 09:12:26.487562",
+  "max_step_id": 52126850,
+  "max_run_id": 4877301,
+  "elements": [
+    {
+      "id": 13,
+      "name": "fb_comment_box_at_n",
+      "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[${n}]",
+      "updated_at": "2026-11-01T06:14:37.409568+00:00"
+    },
+    {
+      "id": 1517,
+      "name": "fb_comment_dialog_textbox",
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-15T19:21:26.531903+00:00"
+    },
+    {
+      "id": 1692,
+      "name": "fb_newsfeed_comment_button",
+      "xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]",
+      "updated_at": "2026-11-01T06:31:54.283749+00:00"
+    },
+    {
+      "id": 1693,
+      "name": "fb_newsfeed_comment_input",
+      "xpath": ".//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-28T16:42:21.018934+00:00"
+    },
+    {
+      "id": 1694,
+      "name": "fb_newsfeed_dialog_comment_input",
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "updated_at": "2026-05-28T16:42:21.018934+00:00"
+    }
+  ],
+  "blocks": [
+    {
+      "id": 34,
+      "name": "fb_comment_at_position",
+      "code_md5": "30126bae87ff755164c80dbffda9d263",
+      "updated_at": "2026-10-12T22:11:39.655208+00:00"
+    },
+    {
+      "id": 2554,
+      "name": "fb_prepare_seeding_iterations",
+      "code_md5": "68fe2e31c508a4657e4de1470eedf01b",
+      "updated_at": "2026-07-28T07:36:18.973267+00:00"
+    },
+    {
+      "id": 2616,
+      "name": "fb_comment_current_post",
+      "code_md5": "fd83066b95a5a2c3c0932bd6009dd2be",
+      "updated_at": "2026-10-12T22:11:39.655985+00:00"
+    },
+    {
+      "id": 2707,
+      "name": "fb_newsfeed_comment_open",
+      "code_md5": "6335a9a666cb67bdd6604cd33c9a8e29",
+      "updated_at": "2026-05-29T08:38:42.804159+00:00"
+    },
+    {
+      "id": 2708,
+      "name": "fb_newsfeed_comment_focus",
+      "code_md5": "f20fed2c18410ce56c64eba954f019b5",
+      "updated_at": "2026-05-29T08:38:42.804159+00:00"
+    },
+    {
+      "id": 2710,
+      "name": "fb_newsfeed_comment_submit",
+      "code_md5": "183af4001118b2caf939ff3f9e1c0a22",
+      "updated_at": "2026-10-12T22:11:39.656298+00:00"
+    }
+  ],
+  "time_window": {
+    "from": "2026-11-02T00:00:00+07:00",
+    "to": "2026-11-02 09:12:26.487562"
+  },
+  "query_scope": {
+    "step_id_from_exclusive": 51959711,
+    "step_id_to": 52126850,
+    "filter": "started_at within time_window; local statement_timeout 15–20s; no global timeout or connection changes"
+  },
+  "aggregates": [
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 34,
+      "campaigns": 13,
+      "campaign_ids": [
+        "7851",
+        "37702",
+        "40443",
+        "40660",
+        "43257",
+        "43259",
+        "44665",
+        "46363",
+        "46487",
+        "46518",
+        "46521",
+        "46529",
+        "46536"
+      ],
+      "first_vn": "2026-11-02 00:00:39.591",
+      "last_vn": "2026-11-02 09:09:28.803"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element13_new_lookup_failure",
+      "n": 204,
+      "campaigns": 18,
+      "campaign_ids": [
+        "7851",
+        "37702",
+        "40443",
+        "40660",
+        "42398",
+        "43257",
+        "43258",
+        "43259",
+        "43260",
+        "44169",
+        "44665",
+        "46363",
+        "46518",
+        "46520",
+        "46522",
+        "46529",
+        "46531",
+        "46532"
+      ],
+      "first_vn": "2026-11-02 05:42:51.172",
+      "last_vn": "2026-11-02 09:11:37.324"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element13_old_lookup_failure",
+      "n": 61,
+      "campaigns": 13,
+      "campaign_ids": [
+        "34811",
+        "40096",
+        "44443",
+        "44444",
+        "44447",
+        "44448",
+        "44452",
+        "44458",
+        "44976",
+        "45457",
+        "45915",
+        "46475",
+        "46492"
+      ],
+      "first_vn": "2026-11-02 05:01:26.808",
+      "last_vn": "2026-11-02 09:09:45.827"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element1517_or_textbox_failure",
+      "n": 2,
+      "campaigns": 2,
+      "campaign_ids": [
+        "44445",
+        "44457"
+      ],
+      "first_vn": "2026-11-02 08:33:18.233",
+      "last_vn": "2026-11-02 08:39:11.321"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "other_noop",
+      "n": 36,
+      "campaigns": 1,
+      "campaign_ids": [
+        "45899"
+      ],
+      "first_vn": "2026-11-02 01:00:31.456",
+      "last_vn": "2026-11-02 01:18:26.599"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 157,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 9,
+      "campaigns": 1,
+      "campaign_ids": [
+        "46413"
+      ],
+      "first_vn": "2026-11-02 00:02:04.115",
+      "last_vn": "2026-11-02 02:03:22.814"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 157,
+      "status": "success",
+      "outcome": "element13_new_lookup_failure",
+      "n": 18,
+      "campaigns": 1,
+      "campaign_ids": [
+        "46413"
+      ],
+      "first_vn": "2026-11-02 00:31:13.474",
+      "last_vn": "2026-11-02 03:44:45.169"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 80,
+      "campaigns": 4,
+      "campaign_ids": [
+        "44751",
+        "45882",
+        "46433",
+        "46496"
+      ],
+      "first_vn": "2026-11-02 06:15:20.58",
+      "last_vn": "2026-11-02 09:11:37.107"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "status": "error",
+      "outcome": "element1517_or_textbox_failure",
+      "n": 15,
+      "campaigns": 4,
+      "campaign_ids": [
+        "44751",
+        "45882",
+        "46433",
+        "46602"
+      ],
+      "first_vn": "2026-11-02 06:01:51.182",
+      "last_vn": "2026-11-02 09:09:40.423"
+    },
+    {
+      "block_id": 2707,
+      "block_name": "fb_newsfeed_comment_open",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "Không tìm thấy nút Bình luận",
+      "n": 47,
+      "campaigns": 20,
+      "campaign_ids": [
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43159",
+        "43161",
+        "43163",
+        "43164",
+        "43166",
+        "43167",
+        "43168",
+        "43174",
+        "43175",
+        "43176",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:15:47.95",
+      "last_vn": "2026-11-02 02:58:56.701"
+    },
+    {
+      "block_id": 2707,
+      "block_name": "fb_newsfeed_comment_open",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "opened_true",
+      "n": 113,
+      "campaigns": 28,
+      "campaign_ids": [
+        "43148",
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43153",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43158",
+        "43159",
+        "43160",
+        "43161",
+        "43162",
+        "43163",
+        "43164",
+        "43165",
+        "43166",
+        "43167",
+        "43168",
+        "43173",
+        "43174",
+        "43175",
+        "43176",
+        "43178",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:14:39.648",
+      "last_vn": "2026-11-02 03:02:53.048"
+    },
+    {
+      "block_id": 2707,
+      "block_name": "fb_newsfeed_comment_open",
+      "workflow_id": 238,
+      "status": "running",
+      "outcome": "running",
+      "n": 1,
+      "campaigns": 1,
+      "campaign_ids": [
+        "43174"
+      ],
+      "first_vn": "2026-11-02 03:00:24.804",
+      "last_vn": "2026-11-02 03:00:24.804"
+    },
+    {
+      "block_id": 2708,
+      "block_name": "fb_newsfeed_comment_focus",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "focused_true",
+      "n": 113,
+      "campaigns": 28,
+      "campaign_ids": [
+        "43148",
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43153",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43158",
+        "43159",
+        "43160",
+        "43161",
+        "43162",
+        "43163",
+        "43164",
+        "43165",
+        "43166",
+        "43167",
+        "43168",
+        "43173",
+        "43174",
+        "43175",
+        "43176",
+        "43178",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:14:59.643",
+      "last_vn": "2026-11-02 03:02:57.165"
+    },
+    {
+      "block_id": 2708,
+      "block_name": "fb_newsfeed_comment_focus",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "other_noop",
+      "n": 47,
+      "campaigns": 20,
+      "campaign_ids": [
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43159",
+        "43161",
+        "43163",
+        "43164",
+        "43166",
+        "43167",
+        "43168",
+        "43174",
+        "43175",
+        "43176",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:15:51.318",
+      "last_vn": "2026-11-02 02:59:02.294"
+    },
+    {
+      "block_id": 2710,
+      "block_name": "fb_newsfeed_comment_submit",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 113,
+      "campaigns": 28,
+      "campaign_ids": [
+        "43148",
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43153",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43158",
+        "43159",
+        "43160",
+        "43161",
+        "43162",
+        "43163",
+        "43164",
+        "43165",
+        "43166",
+        "43167",
+        "43168",
+        "43173",
+        "43174",
+        "43175",
+        "43176",
+        "43178",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:15:29.603",
+      "last_vn": "2026-11-02 03:03:10.411"
+    },
+    {
+      "block_id": 2710,
+      "block_name": "fb_newsfeed_comment_submit",
+      "workflow_id": 238,
+      "status": "success",
+      "outcome": "other_noop",
+      "n": 47,
+      "campaigns": 20,
+      "campaign_ids": [
+        "43149",
+        "43150",
+        "43151",
+        "43152",
+        "43154",
+        "43155",
+        "43156",
+        "43157",
+        "43159",
+        "43161",
+        "43163",
+        "43164",
+        "43166",
+        "43167",
+        "43168",
+        "43174",
+        "43175",
+        "43176",
+        "43179",
+        "43180"
+      ],
+      "first_vn": "2026-11-02 01:16:07.336",
+      "last_vn": "2026-11-02 02:59:11.007"
+    }
+  ],
+  "last_hour": [
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 21,
+      "campaigns": 7,
+      "campaign_ids": [
+        "7851",
+        "40660",
+        "46363",
+        "46518",
+        "46521",
+        "46529",
+        "46536"
+      ],
+      "first_vn": "2026-11-02 08:18:18.221",
+      "last_vn": "2026-11-02 09:09:28.803"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element13_new_lookup_failure",
+      "n": 51,
+      "campaigns": 12,
+      "campaign_ids": [
+        "7851",
+        "40443",
+        "40660",
+        "42398",
+        "44169",
+        "46363",
+        "46518",
+        "46520",
+        "46522",
+        "46529",
+        "46531",
+        "46532"
+      ],
+      "first_vn": "2026-11-02 08:14:04.507",
+      "last_vn": "2026-11-02 09:11:37.324"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element13_old_lookup_failure",
+      "n": 18,
+      "campaigns": 11,
+      "campaign_ids": [
+        "34811",
+        "40096",
+        "44443",
+        "44444",
+        "44447",
+        "44448",
+        "44452",
+        "44458",
+        "44976",
+        "46475",
+        "46492"
+      ],
+      "first_vn": "2026-11-02 08:23:01.59",
+      "last_vn": "2026-11-02 09:09:45.827"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "status": "success",
+      "outcome": "element1517_or_textbox_failure",
+      "n": 2,
+      "campaigns": 2,
+      "campaign_ids": [
+        "44445",
+        "44457"
+      ],
+      "first_vn": "2026-11-02 08:33:18.233",
+      "last_vn": "2026-11-02 08:39:11.321"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "status": "success",
+      "outcome": "commented_true",
+      "n": 56,
+      "campaigns": 4,
+      "campaign_ids": [
+        "44751",
+        "45882",
+        "46433",
+        "46496"
+      ],
+      "first_vn": "2026-11-02 08:15:05.669",
+      "last_vn": "2026-11-02 09:11:37.107"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "status": "error",
+      "outcome": "element1517_or_textbox_failure",
+      "n": 12,
+      "campaigns": 3,
+      "campaign_ids": [
+        "44751",
+        "45882",
+        "46602"
+      ],
+      "first_vn": "2026-11-02 08:20:37.643",
+      "last_vn": "2026-11-02 09:09:40.423"
+    }
+  ],
+  "element13_new_error_campaigns": [
+    {
+      "campaign_id": 43258,
+      "name": "Đăng bài Facebook nhóm 29/10",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 30,
+      "first_vn": "2026-11-02 05:42:51.176",
+      "last_vn": "2026-11-02 05:47:40.168",
+      "min_position": 2,
+      "max_position": 31
+    },
+    {
+      "campaign_id": 43260,
+      "name": "Đăng bài Facebook nhóm 29/10",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 30,
+      "first_vn": "2026-11-02 05:42:51.172",
+      "last_vn": "2026-11-02 05:47:38.218",
+      "min_position": 2,
+      "max_position": 31
+    },
+    {
+      "campaign_id": 37702,
+      "name": "Đăng bài nhóm Facebook 23/10",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 29,
+      "first_vn": "2026-11-02 08:06:46.881",
+      "last_vn": "2026-11-02 08:11:22.546",
+      "min_position": 1,
+      "max_position": 30
+    },
+    {
+      "campaign_id": 43259,
+      "name": "Đăng bài Facebook nhóm 29/10",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 27,
+      "first_vn": "2026-11-02 05:43:21.636",
+      "last_vn": "2026-11-02 05:47:31.774",
+      "min_position": 4,
+      "max_position": 30
+    },
+    {
+      "campaign_id": 43257,
+      "name": "Đăng bài Facebook nhóm 29/10",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 24,
+      "first_vn": "2026-11-02 05:44:15.76",
+      "last_vn": "2026-11-02 05:48:01.688",
+      "min_position": 7,
+      "max_position": 30
+    },
+    {
+      "campaign_id": 40660,
+      "name": "G1.2116 - 2,6 tỷ bao phí, chưa có hh sale",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 18,
+      "first_vn": "2026-11-02 08:23:26.014",
+      "last_vn": "2026-11-02 09:00:03.976",
+      "min_position": 1,
+      "max_position": 3
+    },
+    {
+      "campaign_id": 46413,
+      "name": "Facebook Comment Seeding 01/11 tối ưu nhóm/page/profile - 79+ hiệu (Copy)",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 18,
+      "first_vn": "2026-11-02 00:31:13.474",
+      "last_vn": "2026-11-02 03:44:45.169",
+      "min_position": 4,
+      "max_position": 30
+    },
+    {
+      "campaign_id": 42398,
+      "name": "Đăng bài nhóm Facebook 28/10 Huyen",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 9,
+      "first_vn": "2026-11-02 09:01:36.484",
+      "last_vn": "2026-11-02 09:07:58.212",
+      "min_position": 1,
+      "max_position": 3
+    },
+    {
+      "campaign_id": 46363,
+      "name": "thuê đất Linh Sơn 1/11/2026",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 9,
+      "first_vn": "2026-11-02 08:00:56.499",
+      "last_vn": "2026-11-02 09:11:37.324",
+      "min_position": 1,
+      "max_position": 3
+    },
+    {
+      "campaign_id": 40443,
+      "name": "[26/10] VTV1-11-1 16TR CB [Nam Linh]",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 7,
+      "first_vn": "2026-11-02 07:49:52.975",
+      "last_vn": "2026-11-02 08:18:32.637",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46518,
+      "name": "Acc1-P1| Thuê | Penthouse 75ty | 2/11 8am",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 5,
+      "first_vn": "2026-11-02 08:26:19.749",
+      "last_vn": "2026-11-02 09:07:28.36",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46522,
+      "name": "Acc2| GH thuê 2PN FF New| 2/11 8am",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 5,
+      "first_vn": "2026-11-02 08:22:04.042",
+      "last_vn": "2026-11-02 08:56:22.75",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 44169,
+      "name": "[29/10][Nam Linh] VTV1-14-X Full 19tr",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 4,
+      "first_vn": "2026-11-02 08:29:32.521",
+      "last_vn": "2026-11-02 09:09:23.977",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46363,
+      "name": "thuê đất Linh Sơn 1/11/2026",
+      "block_id": 34,
+      "kind": "commented_true",
+      "n": 3,
+      "first_vn": "2026-11-02 09:07:35.293",
+      "last_vn": "2026-11-02 09:08:28.584",
+      "min_position": 1,
+      "max_position": 3
+    },
+    {
+      "campaign_id": 44665,
+      "name": "[30/10][Acc 1] VTV1-14-X Full 19tr",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 2,
+      "first_vn": "2026-11-02 07:49:42.652",
+      "last_vn": "2026-11-02 08:00:05.524",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 7851,
+      "name": "Đăng bài Facebook vào group 19/08",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 1,
+      "first_vn": "2026-11-02 09:06:20.674",
+      "last_vn": "2026-11-02 09:06:20.674",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46520,
+      "name": "Acc1| Thuê NNN| V1-14-7 20M HA new | 2/11 8am",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 1,
+      "first_vn": "2026-11-02 08:22:58.244",
+      "last_vn": "2026-11-02 08:22:58.244",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46529,
+      "name": "Acc1-P2| Bán GH | 2/11 8am",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 1,
+      "first_vn": "2026-11-02 08:48:18.181",
+      "last_vn": "2026-11-02 08:48:18.181",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46531,
+      "name": "Acc2-PTD| Thuê V3-19-6 18M | 2/11 8am",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 1,
+      "first_vn": "2026-11-02 09:00:35.99",
+      "last_vn": "2026-11-02 09:00:35.99",
+      "min_position": 1,
+      "max_position": 1
+    },
+    {
+      "campaign_id": 46532,
+      "name": "Đăng bài vào group 02/11 Han0007tg@gmail.com",
+      "block_id": 34,
+      "kind": "element13_new",
+      "n": 1,
+      "first_vn": "2026-11-02 08:28:10.922",
+      "last_vn": "2026-11-02 08:28:10.922",
+      "min_position": 1,
+      "max_position": 1
+    }
+  ],
+  "summary": {
+    "group_post_comment": {
+      "success": 34,
+      "new_element13_lookup_failure": 204,
+      "old_element13_lookup_failure": 61,
+      "textbox1517_timeout": 2,
+      "empty_noop": 36
+    },
+    "feed_seeding_comment": {
+      "success": 9,
+      "new_element13_lookup_failure": 18
+    },
+    "direct_post_comment": {
+      "success": 80,
+      "textbox1517_timeout": 15
+    },
+    "newsfeed_comment": {
+      "success": 113,
+      "opening_button_missing": 47,
+      "running": 1
+    }
+  },
+  "findings": [
+    "Not stable as of09:12VN. Element13 new-selector failures continue through09:11:37; 204 after-group-post and18 seeding failures today.",
+    "Last hour group-post:21 successes,51 new-selector failures,18 old-selector failures,2 textbox1517 failures. Direct-post:56 successes,12 textbox1517 failures.",
+    "Campaign46363 has3 successful comments and9 new-selector failures today; failures occur at positions1–3, latest09:11:37. High indexes are not the only failure pattern.",
+    "Element13 remains the requested XPath from01Nov13:14. Live blocks34 and2554 retain their previous code checksums; the documented post-index-to-comment-index mapping gap has not been changed in these blocks.",
+    "The47 newsfeed failures occur at opening; downstream focused/commented=false are not additional independent failures. Only count the opening failure once.",
+    "Text box timeouts alone do not establish a bad XPath or a confirmed opened dialog. Newsfeed missing-button logs do not expose the resolved selector version.",
+    "This is a read-only check; no Facebook actions were triggered and no database definitions or data were changed."
+  ],
+  "database_mutations": false,
+  "facebook_actions_triggered": false
+}

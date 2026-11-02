@@ -1,0 +1,26 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "element_id": 13,
+  "name": "fb_comment_box_at_n",
+  "authorization": "Người dùng tự kiểm tra trên trình duyệt và yêu cầu bổ sung or contains(@aria-label,'Bình luận về') vào XPath13.",
+  "changed_columns": [
+    "xpath",
+    "updated_at"
+  ],
+  "applied_at": "2026-11-02T02:27:03.92025+00:00",
+  "before_row_md5": "4259e1d74de0db2871762fb4833cae28",
+  "after_row_md5": "e0ad79c693e48f62be7ab0e79af2352a",
+  "before_xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment')]|//*[@role='button' and .='Bình luận'])[${n}]",
+  "after_xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về')]|//*[@role='button' and .='Bình luận'])[${n}]",
+  "verification": {
+    "trial_rollback_passed": true,
+    "guarded_commit_passed": true,
+    "separate_readback_passed": true,
+    "other_elements_unchanged": true,
+    "blocks_unchanged": true,
+    "workflows_unchanged": true
+  },
+  "scope": "Only element 13 edited. No schema/RPC/ACL, runtime source, block or workflow changes. No PostgREST reload, build, deployment or Facebook action.",
+  "runtime_note": "Existing processes cache element definitions; fully exit/reopen the app to load the new XPath.",
+  "evidence_limit": "The user confirmed this missing Vietnamese label in their browser. Database readback verified; no post-update campaign success claim."
+}

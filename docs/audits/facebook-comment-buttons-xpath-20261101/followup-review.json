@@ -1,0 +1,374 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_at": "2026-11-01 06:36:55.042281+00",
+  "checked_at_vn": "2026-11-01 13:36:55.042281",
+  "facebook_block_count": 95,
+  "scope": "Read-only review of Facebook elements, block code, workflow config and today's relevant run steps after the three user-requested XPath edits.",
+  "facebook_elements_reviewed": 138,
+  "mutations": false,
+  "findings": [
+    {
+      "id": 1691,
+      "type": "element",
+      "name": "fb_newsfeed_like_button",
+      "xpath": ".//*[@role='button' and .='Thích']",
+      "priority": "Inspect live DOM next",
+      "evidence": "462 missing-like-button steps across 28 campaigns; 13 steps reported liked=true. Does not establish the replacement aria-label or rule out a wrong parent."
+    },
+    {
+      "ids": [
+        2717,
+        2719
+      ],
+      "type": "blocks",
+      "priority": "Conditional compatibility gap",
+      "evidence": "Existing post-root fallback checks innerText/textContent for Comment/Bình luận/Share/Chia sẻ. aria-label-only controls may not satisfy it. Primary root selector is tried first; no runs of these blocks in today's inspected window."
+    },
+    {
+      "id": 2719,
+      "type": "block",
+      "priority": "No immediate edit",
+      "evidence": "Hardcoded fallback for comment button still uses exact text, but the primary selector now resolves updated element 1489."
+    },
+    {
+      "ids": [
+        1132,
+        257
+      ],
+      "type": "elements",
+      "priority": "Inspect only with matching failure or DOM evidence",
+      "evidence": "Like/share selectors have exact aria-label checks; Comment label change alone does not establish these are broken."
+    },
+    {
+      "ids": [
+        1517,
+        1693,
+        1694
+      ],
+      "type": "elements",
+      "priority": "Keep",
+      "evidence": "Already use contains(@aria-label, ...) and role=textbox; do not broaden to opening controls."
+    },
+    {
+      "ids": [
+        14,
+        1456,
+        1496,
+        1695
+      ],
+      "type": "elements",
+      "priority": "No active consumer found",
+      "evidence": "1695 name matched workflow blockName 2710, not an element reference. Block 2710 presses Enter and does not resolve element 1695."
+    }
+  ],
+  "relevant_elements": [
+    {
+      "id": 14,
+      "name": "fb_comment_textbox_at_n",
+      "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận']|//*[@role='button' and .='Bình luận'])[${n}]",
+      "category": "facebook",
+      "updated_at": "2026-05-15 18:35:48.08+00",
+      "block_references": null,
+      "direct_workflow_references": null
+    },
+    {
+      "id": 257,
+      "name": "fb_share_button_inner",
+      "xpath": "//*[@role=\"button\" and (@aria-label=\"Chia sẻ\" or @aria-label=\"Share\" or .=\"Chia sẻ\" or .=\"Share\" or .//*[@data-ad-rendering-role=\"share_button\"])]",
+      "category": "facebook",
+      "updated_at": "2026-04-29 10:24:45.454+00",
+      "block_references": [
+        {
+          "id": 36,
+          "name": "fb_share_post"
+        },
+        {
+          "id": 2835,
+          "name": "fb_select_native_share_group"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1132,
+      "name": "fb_like_button",
+      "xpath": ".//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]",
+      "category": "facebook",
+      "updated_at": "2026-10-20 08:08:58.949167+00",
+      "block_references": [
+        {
+          "id": 2074,
+          "name": "fb_click_like"
+        },
+        {
+          "id": 2615,
+          "name": "fb_click_like_current_post"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1456,
+      "name": "fb_like_button_at_n",
+      "xpath": "(//*[@role='article'])[${n}]//*[@role='button' and (@aria-label='Thích' or @aria-label='Like')]",
+      "category": "facebook",
+      "updated_at": "2026-04-29 09:36:35.184+00",
+      "block_references": null,
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1496,
+      "name": "fb_see_more_comments_btn",
+      "xpath": "//*[@role='button' and ((contains(.,'Xem thêm') and contains(.,'bình luận')) or (contains(.,'View more') and contains(.,'comments')))]",
+      "category": "facebook",
+      "updated_at": "2026-05-06 10:39:48.503+00",
+      "block_references": null,
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1517,
+      "name": "fb_comment_dialog_textbox",
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "category": "facebook",
+      "updated_at": "2026-05-15 19:21:26.531903+00",
+      "block_references": [
+        {
+          "id": 34,
+          "name": "fb_comment_at_position"
+        },
+        {
+          "id": 2616,
+          "name": "fb_comment_current_post"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1691,
+      "name": "fb_newsfeed_like_button",
+      "xpath": ".//*[@role='button' and .='Thích']",
+      "category": "facebook",
+      "updated_at": "2026-05-29 08:38:42.804159+00",
+      "block_references": [
+        {
+          "id": 2705,
+          "name": "fb_newsfeed_like_post"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1693,
+      "name": "fb_newsfeed_comment_input",
+      "xpath": ".//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "category": "facebook",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_references": [
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1694,
+      "name": "fb_newsfeed_dialog_comment_input",
+      "xpath": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "category": "facebook",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_references": [
+        {
+          "id": 2708,
+          "name": "fb_newsfeed_comment_focus"
+        }
+      ],
+      "direct_workflow_references": null
+    },
+    {
+      "id": 1695,
+      "name": "fb_newsfeed_comment_submit",
+      "xpath": ".//*[@role='button' and (@aria-label='Bình luận' or @aria-label='Post comment' or @aria-label='Đăng bình luận') and @tabindex=0]",
+      "category": "facebook",
+      "updated_at": "2026-05-28 16:42:21.018934+00",
+      "block_references": null,
+      "direct_workflow_references": [
+        {
+          "id": 238,
+          "name": "facebook_newsfeed_interaction"
+        },
+        {
+          "id": 254,
+          "name": "facebook_newsfeed_interaction__test__facebook_newsfeed_interaction"
+        }
+      ]
+    }
+  ],
+  "run_aggregates": [
+    {
+      "workflow_id": 206,
+      "block_id": 2603,
+      "block_name": "fb_collect_group_comments",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 7,
+      "campaigns": 1,
+      "first_vn": "2026-11-01 09:22:15.695",
+      "last_vn": "2026-11-01 12:47:56.41"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2702,
+      "block_name": "fb_newsfeed_read_post",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 1134,
+      "campaigns": 31,
+      "first_vn": "2026-11-01 01:10:35.051",
+      "last_vn": "2026-11-01 02:31:58.107"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2702,
+      "block_name": "fb_newsfeed_read_post",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": "Không tìm thấy tác giả post newsfeed",
+      "n": 129,
+      "campaigns": 27,
+      "first_vn": "2026-11-01 01:12:28.78",
+      "last_vn": "2026-11-01 02:31:03.392"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2702,
+      "block_name": "fb_newsfeed_read_post",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": "Không tìm thấy nội dung post newsfeed",
+      "n": 42,
+      "campaigns": 15,
+      "first_vn": "2026-11-01 01:10:35.02",
+      "last_vn": "2026-11-01 02:27:37.646"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2702,
+      "block_name": "fb_newsfeed_read_post",
+      "status": "running",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 3,
+      "campaigns": 3,
+      "first_vn": "2026-11-01 02:32:06.368",
+      "last_vn": "2026-11-01 02:32:17.694"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2705,
+      "block_name": "fb_newsfeed_like_post",
+      "status": "success",
+      "liked": "false",
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": "Không tìm thấy nút Thích trong post hiện tại",
+      "n": 462,
+      "campaigns": 28,
+      "first_vn": "2026-11-01 01:11:31.909",
+      "last_vn": "2026-11-01 02:31:49.628"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2705,
+      "block_name": "fb_newsfeed_like_post",
+      "status": "success",
+      "liked": "true",
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 13,
+      "campaigns": 10,
+      "first_vn": "2026-11-01 01:11:56.05",
+      "last_vn": "2026-11-01 01:31:30.742"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2710,
+      "block_name": "fb_newsfeed_comment_submit",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 165,
+      "campaigns": 28,
+      "first_vn": "2026-11-01 01:14:42.384",
+      "last_vn": "2026-11-01 02:31:54.222"
+    },
+    {
+      "workflow_id": 238,
+      "block_id": 2711,
+      "block_name": "fb_newsfeed_comment_close_dialog",
+      "status": "success",
+      "liked": null,
+      "skipped": null,
+      "already_liked": null,
+      "selected_all": null,
+      "reason": null,
+      "n": 165,
+      "campaigns": 28,
+      "first_vn": "2026-11-01 01:14:46.004",
+      "last_vn": "2026-11-01 02:32:05.868"
+    }
+  ],
+  "submit_nodes": [
+    {
+      "id": 238,
+      "node": {
+        "id": "comment_submit",
+        "label": "Submit comment",
+        "config": {},
+        "blockId": 2710,
+        "position": {
+          "x": 0,
+          "y": 1620
+        },
+        "blockName": "fb_newsfeed_comment_submit"
+      }
+    },
+    {
+      "id": 254,
+      "node": {
+        "id": "comment_submit",
+        "label": "Submit comment",
+        "config": {},
+        "blockId": 2710,
+        "position": {
+          "x": 0,
+          "y": 1620
+        },
+        "blockName": "fb_newsfeed_comment_submit"
+      }
+    }
+  ]
+}

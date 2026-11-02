@@ -1,0 +1,46 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "scope": {
+    "table": "auto_elements",
+    "ids": [
+      1489,
+      1692
+    ],
+    "fields": [
+      "xpath",
+      "updated_at"
+    ]
+  },
+  "authorization": "User explicitly supplied and requested both XPath edits. Markdown escaped asterisk in 1692 normalized to XPath wildcard '*'.",
+  "targets": [
+    {
+      "id": 1489,
+      "name": "fb_comment_in_post_btn",
+      "xpath": ".//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment'))]",
+      "before_md5": "985e63ddbe2ce722a9ae564794c56d54",
+      "after_md5": "e5f78ae7d73347bb18ac6fb17c62eff9",
+      "updated_at": "2026-11-01T06:31:54.282234+00:00"
+    },
+    {
+      "id": 1692,
+      "name": "fb_newsfeed_comment_button",
+      "xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]",
+      "before_md5": "4925eda928f4bf75b960d91f95da2d45",
+      "after_md5": "3e51b1001b3e04b0ae1483c826abfeeb",
+      "updated_at": "2026-11-01T06:31:54.283749+00:00"
+    }
+  ],
+  "verified_at": "2026-11-01T06:31:54.7357+00:00",
+  "verified_at_vn": "2026-11-01T13:31:54.7357",
+  "rollback_trial_passed": true,
+  "rollback_trial_restored_original_catalogs": true,
+  "requested_xpath_exact_match": true,
+  "other_elements_unchanged": true,
+  "blocks_unchanged": true,
+  "workflows_unchanged": true,
+  "parents_unchanged": true,
+  "postgrest_reload": false,
+  "rpc_or_schema_changed": false,
+  "real_facebook_execution_tested": false,
+  "runtime_cache": "Fully quit and reopen existing app processes to fetch the updated XPath."
+}

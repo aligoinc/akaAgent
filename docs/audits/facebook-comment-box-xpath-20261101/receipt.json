@@ -1,0 +1,28 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "scope": {
+    "table": "auto_elements",
+    "id": 13,
+    "name": "fb_comment_box_at_n",
+    "fields": [
+      "xpath",
+      "updated_at"
+    ]
+  },
+  "authorization": "User supplied the exact XPath and explicitly requested editing element 1 (id 13).",
+  "before_md5": "d11a7efb8fc0882f642a91f97c69a6fd",
+  "after_md5": "4259e1d74de0db2871762fb4833cae28",
+  "applied_at": "2026-11-01T06:14:37.409568+00:00",
+  "verified_at": "2026-11-01T06:14:38.340901+00:00",
+  "verified_at_vn": "2026-11-01T13:14:38.340901",
+  "rollback_trial_passed": true,
+  "rollback_trial_restored_original_catalogs": true,
+  "requested_xpath_exact_match": true,
+  "other_elements_unchanged": true,
+  "blocks_unchanged": true,
+  "workflows_unchanged": true,
+  "postgrest_reload": false,
+  "rpc_or_schema_changed": false,
+  "real_facebook_execution_tested": false,
+  "runtime_cache": "Existing app processes must fully quit and reopen, or invalidate via the existing element repository."
+}

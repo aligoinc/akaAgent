@@ -1,0 +1,38 @@
+{
+  "captured_at": "2026-11-02 02:29:10.858469+00",
+  "targets": [
+    {
+      "row": {
+        "id": 1489,
+        "name": "fb_comment_in_post_btn",
+        "xpath": ".//*[@role='button' and (.='Bình luận' or .='Comment' or contains(@aria-label,'Comment'))]",
+        "category": "facebook",
+        "staff_id": null,
+        "created_at": "2026-05-06T10:38:16.391659+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-11-01T06:31:54.282234+00:00",
+        "description": "Nút bình luận trên bài viết",
+        "organization_id": null
+      },
+      "row_md5": "e5f78ae7d73347bb18ac6fb17c62eff9"
+    },
+    {
+      "row": {
+        "id": 1692,
+        "name": "fb_newsfeed_comment_button",
+        "xpath": ".//*[@role='button' and (.='Bình luận' or contains(@aria-label,'Comment'))]",
+        "category": "facebook",
+        "staff_id": null,
+        "created_at": "2026-05-28T16:28:42.550407+00:00",
+        "is_builtin": true,
+        "updated_at": "2026-11-01T06:31:54.283749+00:00",
+        "description": "Comment button inside a post.",
+        "organization_id": null
+      },
+      "row_md5": "3e51b1001b3e04b0ae1483c826abfeeb"
+    }
+  ],
+  "other_elements_md5": "147d8989675e6057f2bc7a8ad0ac67b8",
+  "blocks_md5": "c9a9f26cd3c5e0d728a5b195e52c2a46",
+  "workflows_md5": "8d0b49b0ab2f2bbc401e892dc5d7dc6c"
+}
