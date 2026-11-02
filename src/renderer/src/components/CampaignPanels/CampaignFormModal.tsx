@@ -1,3 +1,4 @@
+import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
 import { validateGroupPostShareLinks } from '../../../../shared/facebookGroupPostShare'
@@ -35,7 +36,7 @@ import CampaignAccountPicker from './CampaignAccountPicker'
 import { buildCampaignAccountActionScopes, canSelectAccountForCampaignAction, getCampaignAccountPickerActionDescriptors } from '../../../../shared/campaignAccountActionSnapshot'
 import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '../../../../shared/accountActionLimits'
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
-import { useState, useEffect, useMemo, useRef, useId, type ChangeEvent, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, useRef, useId, useCallback, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -1749,7 +1750,14 @@ export default function CampaignFormModal({
   const saveBusy = saveStarting || savingCampaign
   const [scheduleAiBusy, setScheduleAiBusy] = useState(false)
   const [limitsAiBusy, setLimitsAiBusy] = useState(false)
-  const [contentAiBusy, setContentAiBusy] = useState(false)
+  const [contentAiBusy, setContentAiBusyState] = useState(false)
+  const contentAiBusyRef = useRef(false)
+  const setContentAiBusy = useCallback((busy: boolean) => {
+    // The content popover resets on every content revision. An idle reset must
+    // not enqueue another full form render for the same keystroke.
+    if (contentAiBusyRef.current === busy) return
+    contentAiBusyRef.current = busy; setContentAiBusyState(busy)
+  }, [])
   const [exclusionAiBusy, setExclusionAiBusy] = useState(false)
   const [facebookAiBusyKind, setFacebookAiBusyKind] = useState<FacebookAiKind | null>(null)
   const facebookAiBusy = facebookAiBusyKind !== null
@@ -1877,7 +1885,7 @@ export default function CampaignFormModal({
           ? 'manual'
           : 'group')
     : 'group'
-  const [formData, setFormData] = useCampaignDraftField(draftPayload, draftValuesRef, 'formData', {
+  const [formData, setFormData, contentStore] = useCampaignContentFormData(draftPayload, draftValuesRef, {
     name: campaign?.name || '',
     actionId: initialActionId,
     accountIds: initialAccountIds?.length ? initialAccountIds : (campaign?.accountId ? [campaign.accountId] : [] as number[]),
@@ -2467,20 +2475,15 @@ export default function CampaignFormModal({
   const canUseFormattedContent = supportsFormattedContent(formData.actionId)
   const isFormattedContentEnabled = canUseFormattedContent && formData.formattedContentEnabled
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
-  const smsContentCounts = useMemo(
-    () => countSmsContentVariants(formData.content, {
-      useUnicode: formData.smsUseUnicode,
-      keepNewLines: formData.smsKeepNewLines
-    }),
-    [formData.content, formData.smsUseUnicode, formData.smsKeepNewLines]
-  )
-  const smsContentCountLabels = useMemo(
-    () => smsContentCounts.map((item, index) => {
-      const prefix = smsContentCounts.length > 1 ? `Mẫu ${index + 1}: ` : ''
+  const getSmsContentCountLabels = () => {
+    const counts = countSmsContentVariants(formData.content, {
+      useUnicode: formData.smsUseUnicode, keepNewLines: formData.smsKeepNewLines
+    })
+    return counts.map((item, index) => {
+      const prefix = counts.length > 1 ? `Mẫu ${index + 1}: ` : ''
       return `${prefix}${item.countChar} ký tự, ${item.countSms} tin`
-    }),
-    [smsContentCounts]
-  )
+    })
+  }
   const friendRequestMessageMaxLength = useMemo(
     () => renderContentSpinMax(formData.friendRequestMessage).length,
     [formData.friendRequestMessage]
@@ -8237,7 +8240,7 @@ export default function CampaignFormModal({
     setDetails(prev => [...prev, { name: '', phone: '', uid: '', email: '', note: '' }])
   }
 
-  const removeDetailRow = (index: number) => {
+  const removeDetailRow = useCallback((index: number) => {
     setDetails(prev => {
       const copy = [...prev]
       const removed = copy.splice(index, 1)[0]
@@ -8246,7 +8249,7 @@ export default function CampaignFormModal({
       }
       return copy
     })
-  }
+  }, [setDetails, setDeletedIds])
 
   const appendFindDataSearchKeywords = (values: Array<string | undefined>): number => {
     const keywords = values.map(value => String(value || '').trim()).filter(Boolean)
@@ -8283,7 +8286,7 @@ export default function CampaignFormModal({
     )
   }
 
-  const updateDetailRow = (index: number, field: keyof CampaignInputData, value: string) => {
+  const updateDetailRow = useCallback((index: number, field: keyof CampaignInputData, value: string) => {
     setDetails(prev => {
       const copy = [...prev]
       const nextRow = { ...copy[index], [field]: value }
@@ -8293,7 +8296,7 @@ export default function CampaignFormModal({
       copy[index] = nextRow
       return copy
     })
-  }
+  }, [setDetails])
 
   const [dataScanPicker, setDataScanPicker] = useState<{
     action: DataScanAction
@@ -13250,7 +13253,7 @@ export default function CampaignFormModal({
       <div className="sms-content-meta">
         {showCounts && (
           <div className="sms-content-counts">
-            {smsContentCountLabels.map((label, index) => (
+            {getSmsContentCountLabels().map((label, index) => (
               <span key={`${index}:${label}`} className="sms-content-count-chip">{label}</span>
             ))}
           </div>
@@ -15657,6 +15660,92 @@ export default function CampaignFormModal({
     )
   }
 
+  const renderedDetailRows = useMemo(() => (
+    visibleDetails.map((d, pageIndex) => {
+      const i = detailsPageStartIndex + pageIndex
+      return (
+        <tr key={d.id || `new-${i}`}>
+        <td className="campaign-grid-index-col">{i + 1}</td>
+        {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
+          <td>
+            <input
+              type="text"
+              value={d.uid || ''}
+              onChange={e => updateDetailRow(i, 'uid', e.target.value)}
+              placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isFacebookJoinGroupCampaign ? 'Dán link hoặc UID group...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
+              disabled={isEditingSavedCampaign}
+            />
+          </td>
+        ) : isPagePostCampaign ? (
+          <>
+            <td title={d.name || '-'}>
+              <span>{d.name || '-'}</span>
+            </td>
+            <td title={d.uid || '-'}>
+              <span>{d.uid || '-'}</span>
+            </td>
+            <td title={d.email || '-'}>
+              <span>{d.email || '-'}</span>
+            </td>
+          </>
+        ) : (
+          <>
+            <td>
+              <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." disabled={isEditingSavedCampaign} />
+            </td>
+            <td>
+              <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
+            </td>
+            {isMobileManagedSmsCampaign ? (
+              <>
+                <td title={formatInputDataPhoneCarrier(d)}>
+                  <span>{formatInputDataPhoneCarrier(d)}</span>
+                </td>
+                <td>
+                  <input type="text" value={d.info1 || ''} onChange={e => updateDetailRow(i, 'info1', e.target.value)} placeholder="Info1..." disabled={isEditingSavedCampaign} />
+                </td>
+                <td>
+                  <input type="text" value={d.info2 || ''} onChange={e => updateDetailRow(i, 'info2', e.target.value)} placeholder="Info2..." disabled={isEditingSavedCampaign} />
+                </td>
+                <td>
+                  <input type="text" value={d.info3 || ''} onChange={e => updateDetailRow(i, 'info3', e.target.value)} placeholder="Info3..." disabled={isEditingSavedCampaign} />
+                </td>
+                <td>
+                  <input type="text" value={d.info4 || ''} onChange={e => updateDetailRow(i, 'info4', e.target.value)} placeholder="Info4..." disabled={isEditingSavedCampaign} />
+                </td>
+                <td>
+                  <input type="text" value={d.info5 || ''} onChange={e => updateDetailRow(i, 'info5', e.target.value)} placeholder="Info5..." disabled={isEditingSavedCampaign} />
+                </td>
+              </>
+            ) : (
+              <>
+                <td>
+                  <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : isZaloAddGroupMemberCampaign ? 'UID từ data quét...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign || isZaloAddGroupMemberCampaign} />
+                </td>
+                <td>
+                  <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
+                </td>
+              </>
+            )}
+          </>
+        )}
+        {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
+          <td key={field}>
+            <input type="text" value={d[field] || ''} onChange={e => updateDetailRow(i, field, e.target.value)} placeholder={`Info${index + 1}...`} aria-label={`Info${index + 1} dòng ${i + 1}`} disabled={isEditingSavedCampaign} />
+          </td>
+        ))}
+        {!isEditingSavedCampaign && (
+          <td>
+            <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
+          </td>
+        )}
+        </tr>
+      )
+    })
+  ), [visibleDetails, detailsPageStartIndex, isCommentSeedingPostCampaign, isFindDataSearchCampaign,
+    isFacebookJoinGroupCampaign, isZaloJoinGroupLinkCampaign, isPagePostCampaign, isEditingSavedCampaign,
+    isMobileManagedSmsCampaign, isZaloAddGroupMemberCampaign, isZaloMessagePhoneCampaign, updateDetailRow, removeDetailRow])
+
   return createPortal(
     <div className="modal-overlay campaign-form-modal-overlay" style={modalZIndex ? { zIndex: modalZIndex } : undefined}>
       <div className="campaign-full-modal stepper-modal" inert={generalSettingsOpen || undefined}>
@@ -16616,87 +16705,7 @@ export default function CampaignFormModal({
                           ) : details.length === 0 ? (
                             <tr><td colSpan={detailsColumnCount} className="text-center text-muted">Chưa có data nào.</td></tr>
                           ) : (
-                            visibleDetails.map((d, pageIndex) => {
-                              const i = detailsPageStartIndex + pageIndex
-                              return (
-                                <tr key={d.id || `new-${i}`}>
-                                <td className="campaign-grid-index-col">{i + 1}</td>
-                                {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
-                                  <td>
-                                    <input
-                                      type="text"
-                                      value={d.uid || ''}
-                                      onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-                                      placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isFacebookJoinGroupCampaign ? 'Dán link hoặc UID group...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
-                                      disabled={isEditingSavedCampaign}
-                                    />
-                                  </td>
-                                ) : isPagePostCampaign ? (
-                                  <>
-                                    <td title={d.name || '-'}>
-                                      <span>{d.name || '-'}</span>
-                                    </td>
-                                    <td title={d.uid || '-'}>
-                                      <span>{d.uid || '-'}</span>
-                                    </td>
-                                    <td title={d.email || '-'}>
-                                      <span>{d.email || '-'}</span>
-                                    </td>
-                                  </>
-                                ) : (
-                                  <>
-                                    <td>
-                                      <input type="text" value={d.name || ''} onChange={e => updateDetailRow(i, 'name', e.target.value)} placeholder="Tên..." disabled={isEditingSavedCampaign} />
-                                    </td>
-                                    <td>
-                                      <input type="text" value={d.phone || ''} onChange={e => updateDetailRow(i, 'phone', e.target.value)} placeholder="SĐT..." disabled={isEditingSavedCampaign} />
-                                    </td>
-                                    {isMobileManagedSmsCampaign ? (
-                                      <>
-                                        <td title={formatInputDataPhoneCarrier(d)}>
-                                          <span>{formatInputDataPhoneCarrier(d)}</span>
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.info1 || ''} onChange={e => updateDetailRow(i, 'info1', e.target.value)} placeholder="Info1..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.info2 || ''} onChange={e => updateDetailRow(i, 'info2', e.target.value)} placeholder="Info2..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.info3 || ''} onChange={e => updateDetailRow(i, 'info3', e.target.value)} placeholder="Info3..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.info4 || ''} onChange={e => updateDetailRow(i, 'info4', e.target.value)} placeholder="Info4..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.info5 || ''} onChange={e => updateDetailRow(i, 'info5', e.target.value)} placeholder="Info5..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <td>
-                                          <input type="text" value={d.uid || ''} onChange={e => updateDetailRow(i, 'uid', e.target.value)} placeholder={isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : isZaloAddGroupMemberCampaign ? 'UID từ data quét...' : 'UID hoặc link...'} disabled={isEditingSavedCampaign || isZaloAddGroupMemberCampaign} />
-                                        </td>
-                                        <td>
-                                          <input type="text" value={d.email || ''} onChange={e => updateDetailRow(i, 'email', e.target.value)} placeholder="Email..." disabled={isEditingSavedCampaign} />
-                                        </td>
-                                      </>
-                                    )}
-                                  </>
-                                )}
-                                {isZaloMessagePhoneCampaign && (['info1', 'info2', 'info3', 'info4', 'info5'] as const).map((field, index) => (
-                                  <td key={field}>
-                                    <input type="text" value={d[field] || ''} onChange={e => updateDetailRow(i, field, e.target.value)} placeholder={`Info${index + 1}...`} aria-label={`Info${index + 1} dòng ${i + 1}`} disabled={isEditingSavedCampaign} />
-                                  </td>
-                                ))}
-                                {!isEditingSavedCampaign && (
-                                  <td>
-                                    <button className="btn-icon text-error" onClick={() => removeDetailRow(i)}><Trash2 size={14} /></button>
-                                  </td>
-                                )}
-                                </tr>
-                              )
-                            })
+                            renderedDetailRows
                           )}
                           </tbody>
                         </table>
@@ -16853,7 +16862,7 @@ export default function CampaignFormModal({
               onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
             />}
             {/* Nội dung */}
-            {showContentSection && <div
+            {showContentSection && <CampaignContentObserver store={contentStore}>{() => (<div
               className={`stepper-section${isMessageCampaign && !isZaloShareMessageMode ? ' has-message-personalization' : ''}`}
               ref={el => { sectionRefs.current['content'] = el }}
             >
@@ -16980,7 +16989,7 @@ export default function CampaignFormModal({
                   )}
                 </div>
               )}
-            </div>}
+            </div>)}</CampaignContentObserver>}
 
             {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
               <div

@@ -1,0 +1,26 @@
+{
+  "baselineRef": "5df2678f",
+  "fixture": "Electron, StrictMode, isolated IPC, same source and fixture; includes automation overhead",
+  "results": [
+    {
+      "form": "regular",
+      "rows": 0,
+      "mode": "development",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 9608,
+      "formRenders": 126,
+      "ipcCalls": 0
+    },
+    {
+      "form": "agent",
+      "rows": 0,
+      "mode": "development",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 3497,
+      "formRenders": 74,
+      "ipcCalls": 0
+    }
+  ]
+}

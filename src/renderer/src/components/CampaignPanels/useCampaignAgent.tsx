@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Sparkles } from 'lucide-react'
 import { AGENT_EXTRA_FIELDS, AGENT_CAMPAIGN_LINKS, AGENT_SECTION_LABELS, AGENT_MAX_HISTORY_TURNS, agentEqual, canUndoAgentTurn, isAgentDraft,
   type AgentDraft, type AgentTurn, type AgentImage, type AgentSnapshot, type AgentReply, type AgentSection, type AgentChange } from '../../../../shared/campaignAgent'
@@ -7,6 +7,7 @@ import { FACEBOOK_AI_FIELDS } from '../../../../shared/campaignFacebookAi'
 import { agentValuesSnapshot, restoreAgentValues } from './useAgentDraftField'
 import { agentChangeRows, agentLimitWindows } from './campaignAgentPresentation'
 type Props = { draftId: string; authScope: string; values: MutableRefObject<Record<string, unknown>>; initial?: unknown;
+  subscribeValues: (listener: () => void) => () => void;
   snapshot: () => AgentSnapshot; apply: (reply: AgentReply) => void | Promise<void>; selectAction: (id: string) => void;
   restore: (values: Record<string, unknown>) => void; ready: boolean; disabled: boolean; onBusy: (busy: boolean) => void; jump: (section: string, key?: string) => void;
   openDataImport: (value: AgentDataImport) => void;
@@ -74,15 +75,29 @@ export function useCampaignAgent(props: Props) {
   // Form fields use immutable React updates. Compare only changed references;
   // cloning/serializing the full recipient list on each keystroke blocks typing.
   // Detached snapshots are still taken at transaction/undo boundaries below.
-  const flat = flatten(Object.fromEntries(Object.entries(props.values.current).filter(([key]) => key !== 'agentChat')))
-  if (previous.current) {
-    for (const key of Array.from(new Set([...Object.keys(flat), ...Object.keys(previous.current)]))) {
-      if (!Object.is(flat[key], previous.current[key]) && !agentEqual(flat[key], previous.current[key])) {
-        revision.current++; fieldRevisions.current[key] = (fieldRevisions.current[key] || 0) + 1
+  const trackValues = () => {
+    const changed: string[] = []
+    const flat = flatten(Object.fromEntries(Object.entries(current.current.values.current).filter(([key]) => key !== 'agentChat')))
+    if (previous.current) {
+      for (const key of Array.from(new Set([...Object.keys(flat), ...Object.keys(previous.current)]))) {
+        if (!Object.is(flat[key], previous.current[key]) && !agentEqual(flat[key], previous.current[key])) {
+          revision.current++; fieldRevisions.current[key] = (fieldRevisions.current[key] || 0) + 1
+          changed.push(key)
+        }
       }
     }
+    previous.current = flat
+    return changed
   }
-  previous.current = flat
+  trackValues()
+  const [, refreshChanges] = useState(0)
+  useLayoutEffect(() => props.subscribeValues(() => {
+    const changed = trackValues()
+    // The editor owns keystrokes. Render the form only when an existing Agent
+    // highlight/undo becomes invalid, not again for every subsequent key.
+    if (changed.some(key => turnsRef.current.some(turn => turn.changes?.some(change =>
+      change.key === key && change.revision === fieldRevisions.current[key] - 1)))) refreshChanges(n => n + 1)
+  }), [props.subscribeValues])
   props.values.current.agentChat = { version: 1, turns, fieldRevisions: fieldRevisions.current, composer: { text: composer.getSnapshot(), images, dataFiles } } satisfies AgentDraft
   const cancel = () => {
     epoch.current++; confirmation.current?.(false); confirmation.current = null; setPendingAction(null)
@@ -226,7 +241,7 @@ export function useCampaignAgent(props: Props) {
       }
     } finally { clearTimeout(deadline); activeRequest.current = null; if (sameScope()) setWorking(false) }
   }
-  const read = (key: string) => flat[key]
+  const read = (key: string) => previous.current?.[key]
   const availableSections = props.snapshot().sections
   const undo = async (turn: AgentTurn) => {
     if (lock.current || pendingDataText.current.trim() || !canUndoAgentTurn(turn, read, key => fieldRevisions.current[key] || 0)) return

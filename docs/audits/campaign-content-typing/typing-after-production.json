@@ -1,0 +1,46 @@
+{
+  "baselineRef": "5df2678f",
+  "fixture": "Electron, StrictMode, isolated IPC, same source and fixture; includes automation overhead",
+  "results": [
+    {
+      "form": "regular",
+      "rows": 0,
+      "mode": "production",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 101,
+      "formRenders": 0,
+      "ipcCalls": 0
+    },
+    {
+      "form": "regular",
+      "rows": 5000,
+      "mode": "production",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 266,
+      "formRenders": 0,
+      "ipcCalls": 0
+    },
+    {
+      "form": "agent",
+      "rows": 0,
+      "mode": "production",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 100,
+      "formRenders": 0,
+      "ipcCalls": 0
+    },
+    {
+      "form": "agent",
+      "rows": 5000,
+      "mode": "production",
+      "strictMode": true,
+      "keystrokes": 37,
+      "elapsedMs": 275,
+      "formRenders": 0,
+      "ipcCalls": 0
+    }
+  ]
+}
