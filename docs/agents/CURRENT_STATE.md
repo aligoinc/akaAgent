@@ -4,14 +4,14 @@
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
 đọc live theo skill RPC; không suy ra quyền apply từ bảng này.
 
-## Tách quyền akaChat/akaAgent — DB tương thích đã apply, chưa kích hoạt
+## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
 [Tách quyền akaChat/akaAgent V445–V447](../APP_ACCESS_SPLIT.md): source bốn repo,
 build local, SQL rollback rehearsal và kiểm thử đã chuẩn bị ngày 03/11/2026.
 Đã sửa bốn lượt review: capability Chat độc lập, guard Data Scan, lifecycle reader, RLS Desktop cũ, capture cuối rollout và lỗi ACL của policy đọc staff, receipt QR khóa nguồn/quyền tại commit và reservation danh tính khi bật Chat. Audit hiện có 98 ca SQL, 13 RPC sửa và 42 target functions; 11 runtime dependencies giữ nguyên body/ACL. Policy dùng view staff đã scope; V445/V447 chặn drift metadata view, không mở SELECT `org_staff`.
 **Đã apply V445, V446 và hai private auth patches lúc 04:59:58–05:00:28 Việt Nam ngày 03/11/2026** trên `cgjbsmqtfhqvttudyjzq`. Trial production kết thúc ROLLBACK, đối chiếu metadata trước/sau và kiểm tra schema/ACL đạt. Ledger và bằng chứng ở [receipt apply](../audits/app-access-split/apply-receipt.json); không apply lại các bước này.
-**V447 chưa apply; `private.app_access_policy_enabled()` vẫn false.** Người dùng xác nhận backend/runtime/UI/Desktop chưa triển khai và yêu cầu giữ chưa kích hoạt. Chưa deploy service hoặc phát hành bộ cài; CRM không đổi source/deployment. Hai lỗi P2 về duplicate legacy identity và thứ tự khóa binding/account được người dùng tạm hoãn; xem [audit và thứ tự rollout](../audits/app-access-split/README.md). Production vẫn dùng cơ chế legacy trong giai đoạn này.
-Lượt tạo PR: người dùng chấp nhận Desktop cũ không hỗ trợ org có product 5, không cần đợi mọi máy cập nhật; deploy backend/runtime tương thích và phát hành Desktop mới vẫn phải đi trước activation. Việc tạo PR không cho phép apply V447/deploy/phát hành. [Kiểm chứng trước PR](../audits/app-access-split/pr-verification.json).
+**V447 đã apply lúc 06:07:41 Việt Nam ngày 03/11/2026**, ledger `20261102230741`; `private.app_access_policy_enabled()` trả true. Bốn tổ chức có product 5 dùng quyền riêng, 1.782 tổ chức còn lại giữ legacy. Trial ROLLBACK, hậu kiểm 55 signatures/ACL/config, quota/scope/cleanup và 14 HTTP probes đạt; [audit activation](../audits/app-access-split/ACTIVATION_20261103.md), [receipt](../audits/app-access-split/activation-receipt.json). Không apply lại; sau activation chỉ roll forward, không mở lại quyền bằng rollback cũ.
+Chat API/worker/Server runtime, Chat Web và WebApp/API đã [deploy từ repo chính lúc 05:33–05:36](../audits/app-access-split/DEPLOYMENT_20261103.md). Người dùng đã xác nhận cài Server 9.2.0; Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. Yêu cầu trực tiếp apply V447 sau build thay bước chờ phát hành trong quyết định trước PR; người dùng chấp nhận app cũ không hỗ trợ org có product 5 và không cần chờ mọi máy cập nhật. CRM không đổi source/deployment. Hai lỗi P2 về duplicate legacy identity và thứ tự khóa binding/account vẫn được tạm hoãn. [Kiểm chứng trước PR](../audits/app-access-split/pr-verification.json).
 
 ## Bảo mật và tương thích hiện hành
 
@@ -52,6 +52,9 @@ chỉ thị riêng. File canonical có thể mang timestamp khác ledger; đối
 receipt/signature/checksum, không dùng filename để kết luận “chưa chạy”.
 
 ## Build và phát hành
+
+- 03/11/2026: **akaAgent Desktop 9.2.0 Windows x64, Mac ARM64 và Mac Intel x64 đã build local từ repo chính** (`dev_3`/`d493dd9e`). Hai typecheck, ba build, version/kiến trúc/native/payload/credential checks đạt; Mac SQLite chạy qua packaged Electron (Intel qua Rosetta), host native giữ checksum. Windows chưa ký Authenticode/chưa chạy trên Windows thật; Mac ký ad-hoc, chưa notarize. Chưa upload/phát hành; V447 không đổi. [Audit và checksum](../audits/akaagent-9.2.0-20261103/README.md).
+- 03/11/2026: **akaAgent Zalo Server 9.2.0 Windows x64 nội bộ đã build local từ repo chính** (`dev_3`/`5df2678f`). Hai typecheck, Server build, installer payload/native/version/credential checks đạt; host native khôi phục và SQLite smoke đạt. Chưa ký Authenticode, chưa được agent kiểm tra trên Windows thật, chưa upload/phát hành. Người dùng đã xác nhận cài Server mới; Desktop 9.2.0 đã build ở mốc trên, chưa phát hành; V447 không đổi. [Audit và checksum](../audits/akaagent-server-9.2.0-20261103/README.md).
 
 - 02/11/2026: Excel Nhóm data/Kết quả chạy có cột metadata Facebook động, action gate và bỏ Loại nhóm AI ở Data tìm được. **V443 đã apply** lúc 17:11:04 Việt Nam (`20261102101104`), đổi số vì V442 đã được task khác dùng. Checksum/quyền/timeout, smoke SQL service_role/Desktop và guarded rollback đạt; HTTP đã nhận RPC mới, chặn anon đúng quyền. Smoke app, hai typecheck và build local đạt; **chưa đóng gói/phát hành app**. Không apply lại khi merge; [hợp đồng](../FACEBOOK_GROUP_EXPORT_METADATA.md), [receipt](../../migrations/snapshots/facebook-group-export/apply-receipt.json). Mốc 7 cột bên dưới là lịch sử trước yêu cầu bỏ AI.
 - 02/11/2026: source xuất Excel nhóm Facebook tìm theo từ khóa có đủ 7 cột; sau review đã giữ số liệu khi bổ sung tên dòng trùng và để trống số bài 0 chưa xác minh. Smoke Electron/XLSX, hai typecheck và build production local đạt trên nhánh `codex/facebook-group-excel`; **chưa đóng gói/phát hành app**. Giữ luồng quét nhóm đã tham gia, không sửa DB. Xem [hợp đồng và kiểm chứng](../FACEBOOK_SEARCH_GROUP_EXCEL.md).

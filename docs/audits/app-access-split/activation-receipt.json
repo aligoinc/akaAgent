@@ -1,0 +1,1100 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "projectName": "akachat",
+  "migration": "migration_v447_app_access_activate",
+  "ledgerVersion": "20261102230741",
+  "appliedAtVietnam": "2026-11-03T06:07:41+07:00",
+  "status": "applied_and_verified",
+  "policyEnabled": true,
+  "authorization": "User explicitly requested V447 activation after Server installation confirmation and Desktop 9.2.0 local builds; no installer publication in this turn.",
+  "sourceRoot": "/Users/lequangnhut/Repos/akaAgent",
+  "sourceCommit": "d493dd9e3b2dde04ffb73afaed8c3ddbd64dc178",
+  "canonicalFile": "migrations/migration_v447_app_access_activate.sql",
+  "canonicalSha256": "4b012a2825b3fada7fba910840ed3824af91fbb1c76cace40ebfb22ae70eed4d",
+  "appliedWrapperSha256": "34133a03234df5c8e50a23de931c17cb31327987d77055fc3d177eb5e32afbd7",
+  "wrapper": "Canonical outer BEGIN/COMMIT omitted for MCP migration transaction and ledger; adds verified target metadata postflight before commit; no guard checksum changed.",
+  "changedFunction": {
+    "source": {
+      "signature": "private.app_access_policy_enabled()",
+      "checksum": "c6fd7d3a914f343d1b1baacd135c5ddf",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog"
+      ]
+    },
+    "target": {
+      "signature": "private.app_access_policy_enabled()",
+      "checksum": "8f87111c086e0e81364c0bad0ccbe65a",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog"
+      ]
+    }
+  },
+  "preservedFunctions": [
+    {
+      "signature": "aka_agent_app_access_account_allowed(bigint,text)",
+      "checksum": "694f41f6896f5c031f76a181ee0d9286",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_chat_organizations(bigint[])",
+      "checksum": "b48a2ab3d264c6a1c75345cd69a7582e",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_chat_runtime(bigint,boolean)",
+      "checksum": "875dd3c7e002a614dca11d23a979ab58",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_check_request()",
+      "checksum": "4d26d4af7f5be14564ff8e86be205f6d",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_local_session(bigint,bigint,text,jsonb)",
+      "checksum": "a136235e01eb1651b0ad3cc5a6d44b5d",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+      "checksum": "8366eb0aafe73f700214ff9c80542876",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_quota(bigint,bigint,text,text,text)",
+      "checksum": "33fde08561110ec3ee6a15f48c4f9d32",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_runtime_accounts(bigint,bigint[],boolean)",
+      "checksum": "e126bc5e68dbbf9e33e2102514afa527",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private",
+        "statement_timeout=60s"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_runtime_allowed(bigint)",
+      "checksum": "2bf894e789327b77d46d7eea4ab027ae",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_separate(bigint)",
+      "checksum": "38a487450a871d167f9df67f9a9c393e",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_staff_allowed(bigint,text)",
+      "checksum": "1cfd48cf50e988665a42b1f80aa7b408",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access_state(text,bigint)",
+      "checksum": "a886b8d4c26b18156ba7c1678caf0725",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "aka_agent_app_access(bigint,text,text,text,jsonb)",
+      "checksum": "5810ada148d7dadcb6edb0710ce6fe2d",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ]
+    },
+    {
+      "signature": "aka_agent_authenticate_control_session(text)",
+      "checksum": "c748df75349ebeef58c3c8f120439b0b",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "aka_agent_block_denied_ip_request()",
+      "checksum": "3d14fd34e0b35dac896876b9e6ec1604",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog"
+      ]
+    },
+    {
+      "signature": "aka_agent_check_campaign_daily_boundary(bigint,bigint,bigint,text,date)",
+      "checksum": "b6599acd23f714779aba5ac551d4c46f",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)",
+      "checksum": "3381b7f73df758e9a161cac5fbedc620",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)",
+      "checksum": "97e7a22c22f8ea9ab28a7a8aabcc634c",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)",
+      "checksum": "91b1ff4d36fc5c1ff2f9364bd7301fba",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)",
+      "checksum": "761108afe53ff4046efe0cd247846d10",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=public, pg_temp",
+        "statement_timeout=20s"
+      ]
+    },
+    {
+      "signature": "aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)",
+      "checksum": "e4dbe2f2dba71e96c0b669ef1a79179b",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ]
+    },
+    {
+      "signature": "aka_agent_desktop_session_admin(text,jsonb)",
+      "checksum": "2540676100a33615df3b5be3b8104345",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog",
+        "statement_timeout=12s",
+        "lock_timeout=3s"
+      ]
+    },
+    {
+      "signature": "aka_agent_facebook_account_operation(bigint,bigint,text,uuid,bigint,text)",
+      "checksum": "64f75be5b0f722dad02b765ff1ca220f",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+      "checksum": "532019b253e648044dd46821a3c4cec6",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "aka_agent_list_sms_due_input_data(bigint,bigint[],text,integer,integer)",
+      "checksum": "832d4d8f23cdf61b31f34802270d3679",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+      "security_definer": false,
+      "volatility": "s",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)",
+      "checksum": "3dffabe31ade3469f72664d226acfc78",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)",
+      "checksum": "2f7bd25ee7ba86653384737a63b73deb",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_access(bigint,text,text)",
+      "checksum": "10c2f7330813adcc91f5f12f36e80b82",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_client(text,text,text,jsonb)",
+      "checksum": "7d99fae02234962b74e26d24167a7414",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_management_row(bigint)",
+      "checksum": "2e2ac358e055d452ab8ed0c3d33f5596",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "aka_agent_staff_management(bigint,text,text,text,jsonb)",
+      "checksum": "912fe184892b574e5d64c4e1effe206d",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ]
+    },
+    {
+      "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+      "checksum": "15e9617caaeace5966742b8707a9c2ad",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "create_control_zalo_account_atomic(bigint,bigint,integer,jsonb)",
+      "checksum": "6ae582eefa775bb2bac43ad123226128",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "enforce_zalo_account_capability_and_quota()",
+      "checksum": "7668b1e0957c6b389c435f0134c0eb94",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "inspect_staff_zalo_running_state(bigint)",
+      "checksum": "b84b44b4100ffc99a41d174cbd7f5ab7",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "private.app_access_capture_rollout()",
+      "checksum": "434a8e1f587410bbe414fc1b26ee48ef",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_finish_stops()",
+      "checksum": "e42254a8932dab368e1234dbf2e29b06",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_flags(text,bigint)",
+      "checksum": "1d644c29faa018a63f6da93bd662d2e8",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_guard_account_runtime()",
+      "checksum": "c4357bf7f7dc2d756d10db76037e3906",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_guard_campaign_claim()",
+      "checksum": "973c05e0b7762b836b6f214394d6c8c9",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_guard_flags()",
+      "checksum": "aacbeba11f54e46705182d61915ff928",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_held(text,bigint)",
+      "checksum": "091b58186a65975e5faf5e620569feac",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "private.app_access_initialize(bigint)",
+      "checksum": "269bd4f827904e096f9900ed689544a0",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_packages(bigint,text,text)",
+      "checksum": "4f2251c2a5848ae174481a97fe02fe72",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "private.app_access_product_added()",
+      "checksum": "05bf6647a5c9b6471cb1360329c94d82",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_quota(bigint,bigint,text,text,text)",
+      "checksum": "0ac3b350f4c7871e4661b6a23a495e8a",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+      "checksum": "e1b81ef404854cd4290496a9dfc0ff46",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_reserve_enabled_identity()",
+      "checksum": "ddc0b1c0b4e11534cc5e8a403ec07158",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_staff_time_allowed(bigint)",
+      "checksum": "4589a06b40ae8f5f309c1ba83da512c3",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "checksum": "ff633bcc1b189376d584685f1b6decf7",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "recover_server_zalo_running_state(bigint,text,boolean)",
+      "checksum": "02c1541f6dbfcb1a352e94da888ac0bd",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+      "checksum": "06f2a974302b96a5dcacbfec83fd8e87",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text)",
+      "checksum": "3b9e3e76491a6e7a8ae91c9c3c714408",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    },
+    {
+      "signature": "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)",
+      "checksum": "6803509057e6ec91b349c9543757f3d3",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ]
+    }
+  ],
+  "checks": {
+    "captureExactSignatures": 55,
+    "unchangedFunctions": 54,
+    "accountPoliciesUnchanged": true,
+    "runtimeViewUnchanged": true,
+    "trialRollback": {
+      "account_flags_changed": 0,
+      "account_rows": 9192,
+      "at": "2026-11-02T23:07:19.428173+00:00",
+      "captured_receipts": 4,
+      "granted_rights_preserved": true,
+      "initialization_receipts": 4,
+      "non_flag_data_preserved": true,
+      "organization_count": 1786,
+      "policy_enabled": true,
+      "separate_organizations": 4,
+      "staff_flags_changed": 0,
+      "staff_rows": 1854
+    },
+    "trialRollbackConfirmedBeforeApply": {
+      "policyEnabled": false,
+      "sourceChecksum": "c6fd7d3a914f343d1b1baacd135c5ddf",
+      "v447LedgerRows": 0,
+      "capturedReceipts": 0
+    },
+    "postApplyReadOnlySmoke": {
+      "captured_receipts": 4,
+      "checked_at": "2026-11-02 23:08:12.759885+00",
+      "legacy_organizations": 1782,
+      "metadata_and_behavior_smoke": "passed",
+      "policy_enabled": true,
+      "separate_organizations": 4
+    },
+    "chatApiHelperExecute": {
+      "public.aka_agent_app_access_account_allowed(bigint,text)": true,
+      "public.aka_agent_app_access_quota(bigint,bigint,text,text,text)": true,
+      "public.aka_agent_app_access_runtime_allowed(bigint)": true,
+      "public.aka_agent_app_access_staff_allowed(bigint,text)": true,
+      "public.aka_agent_app_access_state(text,bigint)": true
+    },
+    "privateReceiptAcl": {
+      "acl": "{postgres=arwdDxtm/postgres}",
+      "anon_select": false,
+      "authenticated_select": false,
+      "chat_api_select": false,
+      "desktop_select": false,
+      "rls": true
+    },
+    "http": {
+      "phase": "post-activation",
+      "at": "2026-11-02T23:08:13.005788+00:00",
+      "checks": [
+        {
+          "name": "api-live",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 15
+        },
+        {
+          "name": "api-ready",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 245
+        },
+        {
+          "name": "chat-health",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 15
+        },
+        {
+          "name": "web-health",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 3
+        },
+        {
+          "name": "chat-home",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 14652
+        },
+        {
+          "name": "web-home",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 1958
+        },
+        {
+          "name": "chat-custom-health",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 15
+        },
+        {
+          "name": "chat-custom-home",
+          "status": 200,
+          "expected": 200,
+          "passed": true,
+          "bytes": 14608
+        },
+        {
+          "name": "api-access-snapshot",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 99
+        },
+        {
+          "name": "chat-access-snapshot",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 97
+        },
+        {
+          "name": "web-access-snapshot",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 82
+        },
+        {
+          "name": "api-access-set",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 99
+        },
+        {
+          "name": "chat-access-set",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 97
+        },
+        {
+          "name": "web-access-set",
+          "status": 401,
+          "expected": 401,
+          "passed": true,
+          "bytes": 82
+        }
+      ],
+      "admin": {
+        "state": "running",
+        "timeZoneOk": true,
+        "runtimeCount": 1,
+        "attachedAccountCount": 226,
+        "campaignRealtimeListener": "connected",
+        "campaignRealtimeLastError": null,
+        "runtimes": [
+          {
+            "runtimeType": "server",
+            "state": "running",
+            "connectedAt": "2026-11-02T22:34:01.728Z",
+            "lastSeenAt": "2026-11-02T23:08:03.038Z",
+            "accountCount": 226,
+            "lastError": null
+          }
+        ]
+      }
+    }
+  },
+  "productionBehaviorCoverage": {
+    "separateStaff": 4,
+    "separateAccounts": 11,
+    "heldSeparateAccounts": 0,
+    "separateWithoutValidChatPackage": 1,
+    "sampledStaffPerRole": 100,
+    "sampledAccountsPerRole": 100,
+    "rolesExecuted": [
+      "service_role",
+      "aka_agent_desktop"
+    ],
+    "rolesAclOnly": [
+      "aka_agent_chat_api"
+    ],
+    "legacyAssertions": "All organizations/staff/accounts with existing owner",
+    "quotaAssertions": "Separate org staff quota and per-owner Zalo account quota for both apps",
+    "tenantAssertions": "Mapped Desktop claims, own staff state, foreign staff/account denial and no direct org_staff SELECT",
+    "cleanupScope": "Function/ownership/token metadata preserved; no separate held work present, so no active producer stop was exercised"
+  },
+  "testHarnessCorrection": "First trial aborted and rolled back on an alias/record-variable collision in additional smoke SQL. Fixed harness only; canonical migration and guards unchanged. Second trial and post-apply smoke passed.",
+  "securityAdvisors": {
+    "checked_at": "2026-11-02T23:08:05.689Z",
+    "groups": [
+      {
+        "name": "policy_exists_rls_disabled",
+        "level": "ERROR",
+        "count": 3
+      },
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "count": 214
+      },
+      {
+        "name": "security_definer_view",
+        "level": "ERROR",
+        "count": 5
+      },
+      {
+        "name": "function_search_path_mutable",
+        "level": "WARN",
+        "count": 126
+      },
+      {
+        "name": "rls_disabled_in_public",
+        "level": "ERROR",
+        "count": 202
+      },
+      {
+        "name": "extension_in_public",
+        "level": "WARN",
+        "count": 4
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "count": 59
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "count": 57
+      },
+      {
+        "name": "auth_leaked_password_protection",
+        "level": "WARN",
+        "count": 1
+      }
+    ],
+    "in_scope_findings": []
+  },
+  "rollback": "After activation, roll forward only; existing pre-activation rollback guard verified to reject app_access_active_requires_roll_forward.",
+  "limits": [
+    "No live QR/provider/campaign send test",
+    "No UI smoke under customer session",
+    "No direct SET ROLE aka_agent_chat_api via Management API",
+    "No held separate-account producer existed for stop/cleanup exercise",
+    "Two user-deferred P2 identity/lock-order findings remain",
+    "Desktop installers remain local and unpublished by agent",
+    "Whole-database security advisors contain findings outside V447"
+  ],
+  "crmSourceChanged": false,
+  "crmDeployed": false,
+  "servicesRedeployedThisTurn": false,
+  "newSqlConnections": false,
+  "connectionPoolOrReplicaChanges": false,
+  "extraPostgrestReloadRequested": false,
+  "privateEvidence": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/activate-20261102T230513Z",
+  "evidenceFiles": [
+    {
+      "file": "activation-summary.sql",
+      "sha256": "72823164a149cb66cdb0ca17233283b16e4920946393f76bc7b2128ef65b1e20"
+    },
+    {
+      "file": "app_access_capture_rollout-before.sql",
+      "sha256": "fb617c15253d2e2c5b15a7212de2cd5d0c3b152cef0457bda5c6da56eb2cbd37"
+    },
+    {
+      "file": "app_access_policy_enabled-before.sql",
+      "sha256": "962ae25fbadce55faff466b33b3ab972f1b6e3098d1217d4a6298778e3d4a5c2"
+    },
+    {
+      "file": "apply-result.json",
+      "sha256": "5ec9e6a0ce0b96e161f07551da8f1bbeb018126662aa02019835691dcee6a386"
+    },
+    {
+      "file": "apply.sql",
+      "sha256": "34133a03234df5c8e50a23de931c17cb31327987d77055fc3d177eb5e32afbd7"
+    },
+    {
+      "file": "attempt-1-trial.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "attempt-1-trial.sql",
+      "sha256": "a57f806ffc4bef5b46584ed56c8d1c9b39c035e8a6044a2b739de6cf6d455bf8"
+    },
+    {
+      "file": "attempt-1-trial.stderr",
+      "sha256": "ebaa79be77b800076d8c63a16bb0d0654eb30ec3e4bd002f9ce9e52555bc233d"
+    },
+    {
+      "file": "before-status.txt",
+      "sha256": "c78af708aeb31ab16c38ca595655ca79b64a8fdb09d290142f8c1971a419f426"
+    },
+    {
+      "file": "candidate.sql",
+      "sha256": "4b012a2825b3fada7fba910840ed3824af91fbb1c76cace40ebfb22ae70eed4d"
+    },
+    {
+      "file": "capture.json",
+      "sha256": "24c10a83a10f1e0c63f9caceb6ed683e69524d2a8061df40e0f350ad60bd9fe9"
+    },
+    {
+      "file": "capture.sql",
+      "sha256": "f2dd4852df5bf20448ea84e93fbfa63b0bab0b8449617760e670e46ac1b11143"
+    },
+    {
+      "file": "capture.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "expected-source.json",
+      "sha256": "7f1c27f595bd43e825fe2a30bf0242b955e5a7b27eda128c0466f8905984c215"
+    },
+    {
+      "file": "fingerprint.sql",
+      "sha256": "3950cf3794c80e3f3113c081d7b5d318178da47b2dab4b60cf60061e188d7cca"
+    },
+    {
+      "file": "post-activation-admin.json",
+      "sha256": "3f8382b4baa35b286734988df49d266fb9d0801cc8fcb898f262c7cd64539c45"
+    },
+    {
+      "file": "post-activation-api-access-set.body",
+      "sha256": "f337a2f39afd94f9a5a4cbff2382e93d8e93926076a7aef8076be6903df2e5c8"
+    },
+    {
+      "file": "post-activation-api-access-snapshot.body",
+      "sha256": "f337a2f39afd94f9a5a4cbff2382e93d8e93926076a7aef8076be6903df2e5c8"
+    },
+    {
+      "file": "post-activation-api-live.body",
+      "sha256": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
+    },
+    {
+      "file": "post-activation-api-ready.body",
+      "sha256": "f7fb20aca5fcfc6e9ace5f32f8cefbc0f679e7176acc7044ae39a0b6f00ce77d"
+    },
+    {
+      "file": "post-activation-chat-access-set.body",
+      "sha256": "f7946aab24417695ed8297f1819999333d0afa5a12ac6c25a7ff3498663f2a5c"
+    },
+    {
+      "file": "post-activation-chat-access-snapshot.body",
+      "sha256": "f7946aab24417695ed8297f1819999333d0afa5a12ac6c25a7ff3498663f2a5c"
+    },
+    {
+      "file": "post-activation-chat-custom-health.body",
+      "sha256": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
+    },
+    {
+      "file": "post-activation-chat-custom-home.body",
+      "sha256": "5650b5a9be69ab93b5dde4c47893605c2222f206e15c8ecd6402f4a5c9f4550b"
+    },
+    {
+      "file": "post-activation-chat-health.body",
+      "sha256": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
+    },
+    {
+      "file": "post-activation-chat-home.body",
+      "sha256": "3ea28c687c43ddd60609d2f6a3a6aa3ca220903ea998b37e0919f270a5ec7165"
+    },
+    {
+      "file": "post-activation-verification.json",
+      "sha256": "98775609191001bd41394fcb4d5328055dc339e496783e6b472407aa33be34bc"
+    },
+    {
+      "file": "post-activation-web-access-set.body",
+      "sha256": "8c3a895ab8df45796a66d60b03e7ef5d3687fb973d57668a76b38d422a2f06fd"
+    },
+    {
+      "file": "post-activation-web-access-snapshot.body",
+      "sha256": "8c3a895ab8df45796a66d60b03e7ef5d3687fb973d57668a76b38d422a2f06fd"
+    },
+    {
+      "file": "post-activation-web-health.body",
+      "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+    },
+    {
+      "file": "post-activation-web-home.body",
+      "sha256": "160b13a42f2844aa99441cb35ad988110e4e71a0b2347b490242f798d36a1a6e"
+    },
+    {
+      "file": "post-capture.json",
+      "sha256": "d514d554ff74a66d898d656e8efecb5ce83324123db8b52339f70af50f6e08ce"
+    },
+    {
+      "file": "post-capture.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "post-metadata.sql",
+      "sha256": "90ab83b9a8901f130efe94449426bccb9ea0bbb5606988e4adaa81f48a764d62"
+    },
+    {
+      "file": "post-rights.json",
+      "sha256": "de93f107f8987942aa1e2ee59ad149895ef80f14a3853ae0926d33a840a12fe1"
+    },
+    {
+      "file": "post-rights.sql",
+      "sha256": "615338a218355731ccb09de74b27de10883e6b54c880ae6a73dec0c628b15b71"
+    },
+    {
+      "file": "post-rights.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "post-smoke.json",
+      "sha256": "d1d6d5bbdb6b33bbb1e46ed3e1c48f6dd2fd872d12068f76f384001c9e046f5f"
+    },
+    {
+      "file": "post-smoke.sql",
+      "sha256": "24d126b2892b032e716ea0765b30430d44f87f2b970b3db4e5c8d5e69e3435a8"
+    },
+    {
+      "file": "post-smoke.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "security-advisors-summary.json",
+      "sha256": "fa7b0d49c0bf303681cbfeb6ab8ba2549233b79e328547d0856e823c6b162879"
+    },
+    {
+      "file": "smoke.sql",
+      "sha256": "aabb0f8017a5c1976760e88b16625bc8faa49635c981a1933d9876fe36a6c5e5"
+    },
+    {
+      "file": "supabase-changelog.md",
+      "sha256": "e42d0a99566ae6cc8be923976da1548410d24a32a14c3f21d4e1819c405a721b"
+    },
+    {
+      "file": "trial.json",
+      "sha256": "a836c5cf8e3822fcda91406f2c284ce60ca1f1addf1efa419c2262a3b246442e"
+    },
+    {
+      "file": "trial.sql",
+      "sha256": "b46224339d8a506a0ae94e49460444a897618b60cfdf5cf4aedf93af890922cc"
+    },
+    {
+      "file": "trial.stderr",
+      "sha256": "b12c490e25b21e473f4cd94c1617a8c63ad1b59982dead9e7a4981235e4b732d"
+    },
+    {
+      "file": "verify-http.py",
+      "sha256": "089a59f110457624e726cf3de94b06c72b07166f3608bd59a9aa85f4b0f3480a"
+    }
+  ]
+}

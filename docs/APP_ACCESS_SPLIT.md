@@ -1,6 +1,6 @@
 # Quyền akaAgent và akaChat
 
-Ngày 03/11/2026, **V445, V446 và hai private auth patches đã apply** trên production `cgjbsmqtfhqvttudyjzq`; không apply lại. **V447 chưa apply, policy vẫn false** theo xác nhận của người dùng vì backend/runtime/UI/Desktop chưa triển khai. Source và build local đã chuẩn bị; chưa deploy service hoặc phát hành bộ cài. CRM không có thay đổi source/deployment. Xem [receipt apply](audits/app-access-split/apply-receipt.json) và [kiểm chứng, giới hạn, rollout](audits/app-access-split/README.md).
+Ngày 03/11/2026, **V445, V446, hai private auth patches và V447 đã apply** trên production `cgjbsmqtfhqvttudyjzq`; không apply lại. **V447 kích hoạt lúc 06:07:41 Việt Nam, policy true**: 4 tổ chức dùng quyền riêng, 1.782 tổ chức giữ legacy. Chat API/worker/Server runtime, Chat Web và WebApp/API đã deploy từ repo chính; Server mới được người dùng xác nhận đã cài. Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. Activation theo chỉ thị trực tiếp mới nhất sau build; CRM không đổi source/deployment. Xem [activation và hậu kiểm](audits/app-access-split/ACTIVATION_20261103.md), [receipt apply tương thích](audits/app-access-split/apply-receipt.json), [deploy](audits/app-access-split/DEPLOYMENT_20261103.md) và [hợp đồng rollout](audits/app-access-split/README.md).
 
 ## Quy tắc và schema
 
@@ -59,6 +59,8 @@ Khi có lịch sử gói Agent, first5 khôi phục cờ Agent của các dòng 
 V447 dùng `SHARE ROW EXCLUSIVE` trên product/staff/account trong bước capture cuối để chặn ghi đồng thời tới khi gate đã bật. `lock_timeout=5s`, `statement_timeout=60s`; tranh khóa thì rollback và thử lại sau, không tăng ngân sách connection. Capture chỉ phục hồi quyền legacy của nhóm gói liên quan, không cấp Agent cho tổ chức chỉ có Chat. Receipt ghi thời điểm chốt; helper từ chối chạy sau activation và gia hạn không chạy lại. Không chạy V447 cùng V445 trước khi các caller mới đã sẵn sàng.
 
 Quyết định rollout trước PR ngày 03/11/2026: người dùng chấp nhận Desktop cũ không hỗ trợ tổ chức từng có product 5. Không cần đợi toàn bộ người dùng cài bản mới; cần deploy backend/runtime tương thích và phát hành bản Desktop mới trước activation. Máy cũ của tổ chức có product 5 có thể bị từ chối QR local hoặc không duy trì Chat-only và cần cập nhật; tổ chức không có product 5 vẫn legacy. V447 bật toàn deployment, không kiểm phiên bản từng máy hay chuyển từng tổ chức. Quyết định này không phải chỉ thị apply V447 hoặc deploy trong task tạo PR.
+
+Chỉ thị mới sau build Desktop 9.2.0: người dùng yêu cầu trực tiếp apply V447; đã kích hoạt lúc 06:07:41 ngày 03/11/2026. Chỉ thị này thay bước chờ phát hành cho lần activation này, không đồng nghĩa bộ cài đã upload/phát hành. Các giới hạn của client cũ và yêu cầu roll forward sau activation vẫn giữ.
 
 ## Giới hạn và bàn giao
 
