@@ -1,0 +1,291 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-11-03T02:41:07.258211+00:00",
+  "target": {
+    "owner": "postgres",
+    "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+    "procost": 100,
+    "prorows": 0,
+    "checksum": "694f41f6896f5c031f76a181ee0d9286",
+    "proconfig": [
+      "search_path=pg_catalog, public, private"
+    ],
+    "prosecdef": true,
+    "signature": "aka_agent_app_access_account_allowed(bigint,text)",
+    "definition": "CREATE OR REPLACE FUNCTION public.aka_agent_app_access_account_allowed(p_account bigint, p_app text)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public', 'private'\nAS $function$\n  SELECT COALESCE((SELECT CASE WHEN NOT public.aka_agent_app_access_separate(s.organization_id) THEN true ELSE\n    NOT COALESCE(a.is_delete,false) AND s.deleted_at IS NULL AND s.is_active=true\n    AND private.app_access_staff_time_allowed(s.id)\n    AND (a.organization_id IS NULL OR a.organization_id=s.organization_id)\n    AND CASE p_app WHEN 'akaAgent' THEN a.is_aka_agent_enabled\n        AND public.aka_agent_app_access_staff_allowed(s.id,'akaAgent')\n        AND EXISTS(SELECT 1 FROM private.app_access_packages(s.organization_id,'akaAgent',lower(a.flatform_type)))\n        AND (lower(a.flatform_type)<>'zalo' OR EXISTS(SELECT 1 FROM private.resolve_organization_zalo_entitlement_pools(s.organization_id) p\n          WHERE p.entitlement_id IS NOT NULL AND p.account_subtype=CASE WHEN a.is_zalo_show_web THEN 'web' WHEN a.is_zalo_server THEN 'server' ELSE 'qr' END))\n      WHEN 'akaChat' THEN a.is_akachat_enabled AND lower(a.flatform_type)='zalo' AND NOT COALESCE(a.is_zalo_show_web,false)\n        AND EXISTS(SELECT 1 FROM private.app_access_packages(s.organization_id,'akaChat'))\n      ELSE false END END FROM public.auto_accounts a JOIN public.org_staff s ON s.id=a.staff_id\n    WHERE a.id=p_account),false)\n$function$\n",
+    "proisstrict": false,
+    "proparallel": "u",
+    "provolatile": "s",
+    "proleakproof": false
+  },
+  "related": [
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres}",
+      "checksum": "b48a2ab3d264c6a1c75345cd69a7582e",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_chat_organizations(bigint[])"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "38a487450a871d167f9df67f9a9c393e",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_separate(bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "1cfd48cf50e988665a42b1f80aa7b408",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_staff_allowed(bigint,text)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "694f41f6896f5c031f76a181ee0d9286",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_account_allowed(bigint,text)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "875dd3c7e002a614dca11d23a979ab58",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_chat_runtime(bigint,boolean)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "5810ada148d7dadcb6edb0710ce6fe2d",
+      "proconfig": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "signature": "aka_agent_app_access(bigint,text,text,text,jsonb)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "a886b8d4c26b18156ba7c1678caf0725",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_state(text,bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "33fde08561110ec3ee6a15f48c4f9d32",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_quota(bigint,bigint,text,text,text)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "2bf894e789327b77d46d7eea4ab027ae",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_runtime_allowed(bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "checksum": "a136235e01eb1651b0ad3cc5a6d44b5d",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "signature": "aka_agent_app_access_local_session(bigint,bigint,text,jsonb)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "8366eb0aafe73f700214ff9c80542876",
+      "proconfig": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "e126bc5e68dbbf9e33e2102514afa527",
+      "proconfig": [
+        "search_path=pg_catalog, public, private",
+        "statement_timeout=60s"
+      ],
+      "signature": "aka_agent_app_access_runtime_accounts(bigint,bigint[],boolean)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "checksum": "4d26d4af7f5be14564ff8e86be205f6d",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "aka_agent_app_access_check_request()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "8f87111c086e0e81364c0bad0ccbe65a",
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "signature": "private.app_access_policy_enabled()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "4589a06b40ae8f5f309c1ba83da512c3",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "signature": "private.app_access_staff_time_allowed(bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "091b58186a65975e5faf5e620569feac",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "signature": "private.app_access_held(text,bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "1d644c29faa018a63f6da93bd662d2e8",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_flags(text,bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "4f2251c2a5848ae174481a97fe02fe72",
+      "proconfig": [
+        "search_path=pg_catalog, public"
+      ],
+      "signature": "private.app_access_packages(bigint,text,text)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "0ac3b350f4c7871e4661b6a23a495e8a",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_quota(bigint,bigint,text,text,text)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "269bd4f827904e096f9900ed689544a0",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_initialize(bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "ddc0b1c0b4e11534cc5e8a403ec07158",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_reserve_enabled_identity()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "05bf6647a5c9b6471cb1360329c94d82",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_product_added()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "434a8e1f587410bbe414fc1b26ee48ef",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_capture_rollout()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "e1b81ef404854cd4290496a9dfc0ff46",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "ff633bcc1b189376d584685f1b6decf7",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "aacbeba11f54e46705182d61915ff928",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_guard_flags()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "e42254a8932dab368e1234dbf2e29b06",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_finish_stops()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "973c05e0b7762b836b6f214394d6c8c9",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_guard_campaign_claim()"
+    },
+    {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "checksum": "c4357bf7f7dc2d756d10db76037e3906",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "signature": "private.app_access_guard_account_runtime()"
+    }
+  ]
+}

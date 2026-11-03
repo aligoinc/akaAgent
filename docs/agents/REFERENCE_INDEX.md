@@ -7,6 +7,10 @@ Tìm tên RPC, file, action hoặc feature trong bảng và trong `docs/agents/r
 Đọc hướng dẫn đã đính chính trước các đoạn bảo toàn có liên quan:
 
 - [App-access held work, index V448, Chat API statement-scoped guards và runtime candidates; đã apply/deploy, không build lại app](../audits/app-access-split/PERFORMANCE_FIX_20261103.md).
+- [App-access V449: Chat sharing khi owner khóa/hết hạn, helper account_allowed; đã apply, không đổi auth/akaAgent/ACL hoặc cần build/deploy](../audits/app-access-split/SHARED_OWNER_FIX_20261103.md).
+- [App-access V450: app_access_validate_account, cấp/bật lại Chat Server khi owner khóa/hết hạn; đã apply, giữ Agent/QR local/quota/ACL](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md).
+- [App-access V451 đã apply: binding Chat là nguồn danh tính khi bật; logged-out ID cũ không chặn; QR/reservation vẫn giữ guard](../audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md).
+- [Identity audit sau V451: login-status trigger, local runtime registration và duplicate legacy còn check ID cũ; bốn repro, chưa sửa](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md).
 
 - [Credential staff/runtime và ngoại lệ SMS](CLIENT_CONTRACTS.md#sms-credentials).
 - [Kết nối tenant Chat trên Desktop và WebApp](CLIENT_CONTRACTS.md#chat-routing).

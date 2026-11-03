@@ -1,5 +1,22 @@
 # Quyền riêng akaChat/akaAgent — 03/11/2026
 
+**V451 đã apply 11:15:06 VN, ledger `20261103041506`:** [canonical Chat identity khi bật đồng bộ](CANONICAL_IDENTITY_FIX_20261103.md),
+[230 ca PG17 + trial ROLLBACK](canonical-identity-verification-20261103.json).
+Không đổi dữ liệu người dùng hoặc triển khai app; giữ V449/V450.
+[Receipt apply](canonical-identity-apply-receipt-20261103.json); không apply lại V451.
+[Rà soát nguồn ID sau apply](IDENTITY_CHECK_AUDIT_20261103.md): ba nhóm check legacy
+còn lại, bốn repro local đã xác nhận; chưa sửa/deploy thêm.
+
+**V450 đã apply lúc 10:21:32 VN:** [cấp lại Chat Server khi chủ khóa/hết hạn](SHARED_OWNER_GRANT_FIX_20261103.md),
+[receipt](shared-owner-grant-receipt-20261103.json). Bổ sung nhánh cấp quyền cho V449;
+giữ điều kiện akaAgent/QR local, không đổi cờ/chia sẻ thật và không deploy/build app.
+Không apply lại V449/V450.
+
+**V449 đã apply lúc 09:52:08 VN:** [Chat sharing khi chủ bị khóa/hết hạn](SHARED_OWNER_FIX_20261103.md),
+[receipt](shared-owner-receipt-20261103.json). Quyền người nhận/ACL và akaAgent giữ nguyên;
+không deploy service/build bộ cài/đổi CRM. Không apply lại V449. Đây là trạng thái
+mới hơn các baseline helper trước đó trong audit.
+
 **V445/V446, hai private auth patches và V447 đã apply; policy true từ 06:07:41 Việt Nam ngày 03/11/2026.** Backend/runtime, Chat Web và WebApp đã deploy từ repo chính; Server mới được người dùng xác nhận đã cài; Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. CRM không đổi source/deployment. Xem [activation và hậu kiểm](ACTIVATION_20261103.md), [receipt activation](activation-receipt.json) và [deploy](DEPLOYMENT_20261103.md). Tài liệu nghiệp vụ: [APP_ACCESS_SPLIT](../../APP_ACCESS_SPLIT.md). Các kết quả source/build và câu “chưa apply/chưa kích hoạt” bên dưới là lịch sử trước activation này; không dùng để apply lại hoặc rollback mở quyền.
 
 ## Hiệu năng sau activation — 03/11/2026
