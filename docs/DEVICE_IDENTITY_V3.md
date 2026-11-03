@@ -2,6 +2,29 @@
 
 **Đã apply migration v3 lên akachat lúc 15:57:44 ngày 27/10/2026 (giờ Việt Nam): `20261027085744 / device_identity_v3`. Chưa bật RLS C, đóng gói hoặc phát hành app.** Năm target khớp checksum/thuộc tính; 363 hàm ngoài phạm vi giữ nguyên. `org_staff` vẫn RLS=false, ACL/policy staff và tổ chức giữ nguyên. Không apply lại v3 hoặc auth A/B. Các ghi chú candidate/review bên dưới là lịch sử; bằng chứng production ở phần cuối.
 
+## Windows đọc phần cứng chậm — source 03/11/2026
+
+Lệnh PowerShell đọc hardware v3 và reader v2 dùng khi đối chiếu/khôi phục chờ tối đa
+30 giây mỗi lần đọc (trước đây 10 giây). Không tự retry, không đổi script, công thức,
+nguồn đã chọn hoặc giới hạn output; macOS và reader legacy giữ timeout cũ. Auth
+vẫn đọc lại ở các bước hiện hữu, nên 30 giây không phải tổng deadline đăng nhập.
+Timeout vẫn thất bại, không dùng cache để vượt kiểm tra auth hoặc xóa manifest.
+
+Khi quá hạn, UI báo `Đọc định danh phần cứng Windows quá 30 giây. Vui lòng thử lại.`
+Main console ghi thời gian đọc chậm từ 10 giây; khi lỗi ghi nhóm
+`timeout`/`process_error`/`output_limit`/`invalid_output` cùng thời gian và mã lỗi
+được giới hạn. Không ghi command, stdout/stderr, hardware ID, fingerprint hoặc
+credential. Đây là log console, chưa có file log lưu bền hay gửi lên server.
+
+Tăng timeout hỗ trợ máy đọc thành công trong khoảng 10–30 giây; chưa chứng minh
+timeout là nguyên nhân của máy khách báo lỗi. Kiểm chứng dùng child-process mock
+và clock giả: `node scripts/device-identity-v3/run-client-smoke.cjs` đạt 70 ca;
+hai typecheck và `npm run build` đạt. Fixture auth bổ sung dependency app access
+đã có trên `dev_3`. Chưa kiểm tra trên Windows khách thật, chưa đóng gói/phát hành;
+không đổi DB hoặc cơ chế đổi máy.
+
+Chi tiết kiểm chứng trước PR: [receipt](audits/windows-hardware-timeout/verification.json).
+
 ## Hành vi
 
 | Trường hợp | Kết quả |

@@ -1,0 +1,73 @@
+{
+  "verified_at": "2026-11-03T11:40:34.459658+07:00",
+  "branch": "codex/windows-hardware-timeout",
+  "base_commit": "918b05e9398784c052ed915496191fe88202b8c7",
+  "source_sha256": {
+    "src/main/services/deviceIdentity.ts": "a1d35d49a736253ab88622be38011894ee8a4a6dedd805a5cc63a23dbcca4082",
+    "scripts/device-identity-v3/client-smoke.ts": "dbe64367433d8d888306881d11dd94df3bf0692a44214816fe10af7a4fb712ce",
+    "scripts/device-identity-v3/review-regressions.ts": "f9bcb03a2bba74aa7d4a68cbe2b837ce3a65c48be45fbc70f7df098b60a7ec5a"
+  },
+  "checks": {
+    "tsc-node": {
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.node.json"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 2.43
+    },
+    "tsc-web": {
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "tsconfig.web.json"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 2.23
+    },
+    "smoke-v3": {
+      "command": [
+        "node",
+        "scripts/device-identity-v3/run-client-smoke.cjs"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 1.75
+    },
+    "build": {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 25.07
+    }
+  },
+  "v3_client_checks_passed": 70,
+  "build_output_bytes": {
+    "main": 3258522,
+    "preload": 74824,
+    "renderer": 36699740
+  },
+  "build_output_total_bytes": 40033086,
+  "scope": "Windows PowerShell hardware readers v2/v3: 10s to 30s; bounded read, sanitized console diagnostics and timeout UI message",
+  "preserved": [
+    "hardware scripts and fingerprint formula",
+    "manifest selection and fail-closed refresh/reset",
+    "single-flight and presence cache",
+    "macOS and legacy timeouts",
+    "subprocess output limits"
+  ],
+  "not_performed": [
+    "Windows hardware/customer-machine validation",
+    "installer packaging",
+    "upload or release",
+    "database mutation or deployment"
+  ],
+  "diagnostics": "Main console only; no persistent log file and no raw hardware, command, stdout/stderr or credential output"
+}
