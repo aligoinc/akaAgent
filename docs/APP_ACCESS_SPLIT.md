@@ -1,5 +1,14 @@
 # Quyền akaAgent và akaChat
 
+**V453 đã apply 12:16:02 VN ngày 03/11/2026:** theo chỉ thị người dùng, bỏ kiểm
+quyền akaAgent trên từng request khỏi hook IP; giữ kiểm IP và các guard khác.
+[Quyết định hiện hành và kiểm chứng](audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
+
+[V452 runtime identity](audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md):
+DB đã apply; status/flag giữ binding, canonical owner không bị duplicate legacy chặn.
+Đăng ký local đối chiếu actual UID với binding; Chat API đã deploy từ repo chính
+lúc 11:58:23 VN, source `83d2736`; receipt/giới hạn kiểm chứng xem audit.
+
 V451 đã apply — [dùng binding Chat khi bật đồng bộ](audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md):
 **Đã apply 11:15:06 VN ngày 03/11/2026**, ledger `20261103041506`. Binding hiện có là nguồn Zalo ID; unbound đang đăng xuất
 không bị ID legacy chặn, unbound đang đăng nhập vẫn reserve identity. QR thực vẫn chống trùng.
@@ -48,7 +57,7 @@ Giữ quyền được cấp đang vượt mức, báo overLimit và chặn cấ
 - Snapshot có quyền cấp/hiệu lực, product IDs, quota, runtime và stopping. UI chỉ hiện nút mới trong separate mode; có mutex, busy, UUID retry và bỏ response phiên cũ. Sau mutation tải lại danh sách/quota.
 - Account owner hoặc admin quản lý account được đổi cờ account; chỉ org admin đổi cờ staff. Chủ chỉ dùng Agent vẫn có thể bật Chat cho đồng nghiệp. Chat chỉ hỗ trợ Zalo QR local/Server, không Facebook/Zalo Web.
 - Từ V449, chủ bị khóa/hết hạn không làm account mất điều kiện Chat nếu account/gói vẫn hợp lệ; người nhận vẫn cần staff Chat hợp lệ và ACL tài khoản/hội thoại. Chủ bị khóa/hết hạn vẫn không đăng nhập/thao tác được; quyền chiến dịch vẫn kiểm trạng thái/thời hạn/quyền akaAgent của chủ. Chủ phải tồn tại, chưa xóa và đúng tenant. Không tự cấp chia sẻ hoặc đổi suất/cờ. Quyền giữ QR local vẫn yêu cầu host akaAgent hợp lệ, không được mở bằng quyền Chat của account.
-- Danh sách/picker/snapshot Agent lọc quyền ở backend; account không có Agent không được claim/chạy. Staff login/refresh, Control token, Desktop pre-request, campaign daily/control và DB claim trigger đều kiểm tra quyền mới. RPC SMS `aka_agent_list_sms_due_input_data(bigint,bigint[],text,integer,integer)` cũng kiểm quyền Agent của account/chủ trước khi trả việc pending; không đổi RPC báo kết quả gửi. RLS/ownership/CAS hiện hành vẫn giữ.
+- Danh sách/picker/snapshot Agent lọc quyền ở backend; account không có Agent không được claim/chạy. Các luồng xác thực/kiểm tra quyền của app, Control token, campaign daily/control và DB claim trigger giữ kiểm quyền mới. Từ V453, Desktop pre-request không còn kiểm quyền akaAgent chung trên từng request theo chỉ thị người dùng; các guard riêng vẫn giữ. RPC SMS `aka_agent_list_sms_due_input_data(bigint,bigint[],text,integer,integer)` cũng kiểm quyền Agent của account/chủ trước khi trả việc pending; không đổi RPC báo kết quả gửi. RLS/ownership/CAS hiện hành vẫn giữ.
 - Tắt Agent ghi cờ và receipt stopping trước khi trả UI. Không xóa claim/unit, không retry kết quả gửi chưa rõ. Chặn claim/dispatch mới, runtime giữ quyền cleanup và hồi phục sau restart đến khi producer xác nhận kết thúc. Bật lại Agent bị chặn khi còn held work; quyền Chat vẫn đổi độc lập.
 - Tắt Chat ẩn account/hội thoại, chặn action/job mới nhưng giữ lịch sử/phân công/binding. Event lịch sử đã được nhận vẫn hoàn tất receipt; quan sát tin gửi đi vẫn được xử lý để giải quyết kết quả gửi chưa rõ. Không dùng cờ Chat để cắt transport đang phục vụ Agent/cleanup.
 - Server Chat phục vụ account Agent hợp lệ dù gói Chat hết hạn. Reader nội bộ main trả cả Zalo Web khi còn quyền Agent; danh sách session QR/local Chat vẫn loại Web. QR local chỉ dùng Chat được đọc bởi reader nội bộ main, không xuất session ra renderer. Cấm thu hồi Agent của staff đang giữ QR local bật Chat; phải chuyển Server hoặc tắt Chat trước. App Server cũ loại tổ chức separate để tránh phiên thứ hai.

@@ -6,15 +6,31 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
+[V453 hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md):
+**Đã apply 12:16:02 VN ngày 03/11/2026**, ledger `20261103051602`. Người dùng
+yêu cầu bỏ kiểm quyền akaAgent chung trên từng request; giữ IP block, hook config,
+ACL và 31 helper/auth functions. 64 ca trial + 64 ca hậu kiểm đạt; không deploy/build.
+Không tự gắn lại lời gọi app-access trong hook. Phiên Desktop đăng nhập lại vẫn
+kiểm quyền; không bảo đảm thu hồi tức thời trên mọi đường của phiên đang mở.
+V453 là private migration, manifest giữ số phiên bản; không apply lại.
+
+[V452 runtime identity](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md):
+**DB đã apply 11:54:14 VN ngày 03/11/2026**, ledger `20261103045414`. Sửa hai nhánh
+DB dùng ID legacy trong audit V451; Chat API đăng ký local đã deploy **11:58:23 VN**
+từ repo chính, source `83d2736`. Health/live-ready đạt, 9 runtime/228 account phục hồi;
+worker/runtime image/config/instance giữ nguyên, không build bộ cài.
+270 ca PG17 (40 mới), typecheck/build, production trial và hậu kiểm ROLLBACK đạt.
+Không apply lại; trạng thái API/giới hạn full test xem audit. P2 lock-order riêng còn hoãn.
+
 [V451 canonical Chat identity](../audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md):
 **Đã apply 11:15:06 VN ngày 03/11/2026**, ledger `20261103041506`; sửa false conflict khi bật Chat từ ID legacy đã đăng xuất.
 230 ca PG17 (42 mới), hai typecheck akaAgent/build Chat API và trial production
 ROLLBACK và hậu kiểm đạt; chỉ hai hàm đổi đúng checksum, flags/bindings/ACL và các hàm khác giữ nguyên.
 Không deploy/build app hoặc tự bật account; giữ V449/V450. Không apply lại V451.
 [Receipt apply](../audits/app-access-split/canonical-identity-apply-receipt-20261103.json).
-[Audit tiếp theo](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md): còn
-login-status trigger/local registration/duplicate legacy đã hoãn dùng ID cũ;
-bốn repro local xác nhận, chưa sửa. Live 11:20:53: không có bound UID mismatch
+[Audit lịch sử sau V451](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md):
+ba nhóm login-status trigger/local registration/duplicate legacy từng dùng ID cũ;
+bốn repro local xác nhận, nay đã sửa bằng V452 nêu trên. Live 11:20:53: không có bound UID mismatch
 hay duplicate candidate đang bật; ba Server unbound logged-out còn ID cũ, Chat=false.
 
 [Cấp lại Chat Server khi chủ khóa/hết hạn — V450](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md):

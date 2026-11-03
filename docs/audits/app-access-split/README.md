@@ -1,11 +1,21 @@
 # Quyền riêng akaChat/akaAgent — 03/11/2026
 
+[V453 — bỏ kiểm quyền akaAgent trong hook IP](IP_HOOK_ACCESS_REMOVAL_20261103.md):
+đã apply 12:16:02 VN, ledger `20261103051602`, theo chỉ thị người dùng. Đây là
+quyết định mới thay nhánh Desktop pre-request của rollout cũ bên dưới; không
+apply lại private IP candidate cũ. Guard riêng và kiểm IP giữ nguyên.
+
+[V452 runtime identity](RUNTIME_IDENTITY_FIX_20261103.md): DB đã apply 11:54:14 VN,
+ledger `20261103045414`; sửa ba nhánh check lệch sau V451. Chat API đã deploy
+11:58:23 VN từ repo chính, source `83d2736`; worker/runtime giữ nguyên.
+[Receipt](runtime-identity-receipt-20261103.json). Không apply lại.
+
 **V451 đã apply 11:15:06 VN, ledger `20261103041506`:** [canonical Chat identity khi bật đồng bộ](CANONICAL_IDENTITY_FIX_20261103.md),
 [230 ca PG17 + trial ROLLBACK](canonical-identity-verification-20261103.json).
 Không đổi dữ liệu người dùng hoặc triển khai app; giữ V449/V450.
 [Receipt apply](canonical-identity-apply-receipt-20261103.json); không apply lại V451.
-[Rà soát nguồn ID sau apply](IDENTITY_CHECK_AUDIT_20261103.md): ba nhóm check legacy
-còn lại, bốn repro local đã xác nhận; chưa sửa/deploy thêm.
+[Rà soát nguồn ID sau V451](IDENTITY_CHECK_AUDIT_20261103.md): bằng chứng lịch sử
+về ba nhóm check legacy, bốn repro local; đã sửa/deploy qua V452 nêu trên.
 
 **V450 đã apply lúc 10:21:32 VN:** [cấp lại Chat Server khi chủ khóa/hết hạn](SHARED_OWNER_GRANT_FIX_20261103.md),
 [receipt](shared-owner-grant-receipt-20261103.json). Bổ sung nhánh cấp quyền cho V449;

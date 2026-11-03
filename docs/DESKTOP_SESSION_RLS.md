@@ -1,5 +1,9 @@
 # Desktop: thay anon JWT bằng token đăng nhập
 
+**V453 — 03/11/2026, đã apply 12:16:02 VN:** bỏ riêng kiểm quyền akaAgent khỏi
+hook IP theo chỉ thị người dùng; IP block, ACL/RLS và đăng nhập giữ nguyên.
+[Phạm vi phiên đang mở, rollback và kiểm chứng](audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
+
 **Chính sách chặn IP quản lý ngoài repo từ 28/10/2026:** mã Edge đang triển khai, migration chặn IP, bản chụp và kiểm thử riêng đã chuyển sang kho bảo mật ngoài repo. Quy tắc production giữ nguyên. Dùng `AKA_AGENT_PRIVATE_SECURITY_DIR` (mặc định `$HOME/.codex/incident-recovery/akaAgent-ip-block`) để tìm các file theo đường dẫn con cũ. Không deploy endpoint từ source lịch sử trong Git, không apply lại hotfix theo checksum cũ. Xem [hướng dẫn nguồn triển khai](../supabase/functions/aka-agent-desktop-session/README.md).
 
 **Cutover đã hoàn tất lúc 23:53:25 VN ngày 27/10/2026:** V435 (`20261027165325`) thu hồi anon/authenticated trên dữ liệu akaAgent, bật RLS còn thiếu và bỏ quyền Desktop đọc AI key. Quyền token đã thu hẹp, backend và bootstrap giữ nguyên; app cũ chỉ được đọc một dòng cấu hình cập nhật để nhận 9.1.0. V435 thay bước B và staff C lịch sử; **không chạy B/C hoặc rollback cũ**. Xem [audit V435](DESKTOP_PERMISSION_CUTOVER_V435.md). Các trạng thái chưa thu hồi/chưa deploy bên dưới ghi nhận những giai đoạn trước đó.
