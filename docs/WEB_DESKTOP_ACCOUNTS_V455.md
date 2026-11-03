@@ -1,4 +1,4 @@
-# Web quản lý tài khoản và chiến dịch Desktop (V454)
+# Web quản lý tài khoản và chiến dịch Desktop (V455)
 
 Web/PWA hiển thị và quản lý tài khoản Zalo **mã QR** và **trình duyệt** do app Desktop chạy,
 cùng chiến dịch, tiến trình và trạng thái app Desktop. App Desktop vẫn là nơi chạy duy nhất;
@@ -7,10 +7,12 @@ SMS mang nhãn **Web**.
 
 ## Trạng thái (03/11/2026)
 
-- `migrations/migration_v454_web_desktop_accounts.sql` là **candidate, chưa apply production**.
+- `migrations/migration_v455_web_desktop_accounts.sql` là **candidate, chưa apply production**.
   Bản nháp ban đầu đặt số v453, nhưng production đã có `20261103051602 /
   remove_aka_agent_access_from_ip_hook_v453` (và `20261103045414 / chat_runtime_identity_v452`)
-  nên đổi thành v454. Kiểm tra lại số và md5 ngay trước khi apply.
+  nên đổi thành v454; 16:28 VN cùng ngày production có thêm `20261103092858 /
+  migration_v454_app_access_guard_performance` (không đụng 10 hàm của bản này) nên đổi tiếp thành
+  v455. Kiểm tra lại số và md5 ngay trước khi apply.
 - Kiểm tra drift chỉ đọc lúc viết: cả 10 hàm nguồn trên akachat khớp md5 nguồn trong spec của
   migration; 3 hàm mới và cột `runtime_state` chưa tồn tại. `create_control_campaign_v2` (API
   đang gọi) chỉ gọi lại `create_control_campaign` nên không cần vá riêng.
@@ -82,7 +84,7 @@ lọc bỏ (fail closed).
   `onWaiting` của cổng bảo trì, [handlers.ts](../src/main/ipc/handlers.ts)); `reason`:
   `inactive`/`paused`/`not_logged_in`/`browser_tab_closed`. Chỉ đọc RAM của scheduler
   (`getRuntimeSnapshotSource`), không thêm truy vấn/timer/kết nối; tối đa 200 tài khoản
-  (~20 KB). Server trước V454 bỏ qua khoá này.
+  (~20 KB). Server trước V455 bỏ qua khoá này.
 - Web hiển thị hướng dẫn **Đăng xuất rồi Đăng nhập lại** khi app chờ bảo trì quá 10 phút
   (đúng cách gỡ đã kiểm chứng; tắt/mở app hoặc resume không đủ).
 - Renderer đọc lại danh sách tài khoản một lần khi cửa sổ được focus và lần đọc trước cũ hơn chu
@@ -93,16 +95,16 @@ lọc bỏ (fail closed).
 ## Kiểm chứng
 
 - SQL local PostgreSQL 16 (`scripts/test-web-desktop-accounts-sql.sh`, fixtures
-  `scripts/fixtures/web-desktop-accounts-v454/`): apply → assertions → apply lại → rollback →
+  `scripts/fixtures/web-desktop-accounts-v455/`): apply → assertions → apply lại → rollback →
   rollback assertions → apply lại đều đạt. Smoke chỉ đọc production:
-  `migrations/tests/migration_v454_web_desktop_accounts_smoke.sql` (BEGIN/ROLLBACK).
+  `migrations/tests/migration_v455_web_desktop_accounts_smoke.sql` (BEGIN/ROLLBACK).
 - Desktop: `tsc` node + web sạch; `node scripts/desktop-runtime-snapshot-smoke.cjs` 8/8.
 - Web/API: typecheck 7 workspace; test xem báo cáo cuối phiên. Chưa chạy trên Desktop/Windows
   thật, chưa có trình duyệt thật.
 
 ## Rollout
 
-1. Ngoài giờ cao điểm (DDL nạp lại schema PostgREST): kiểm số migration + md5, apply v454,
+1. Ngoài giờ cao điểm (DDL nạp lại schema PostgREST): kiểm số migration + md5, apply v455,
    chạy smoke chỉ đọc.
 2. Deploy API rồi Web (API mới chạy được với Web cũ; Web mới cần API mới).
 3. Bật chính sách cho tổ chức canary qua `organizationIds`, rồi mở rộng.
@@ -111,6 +113,6 @@ lọc bỏ (fail closed).
 ## Rollback
 
 - Nhanh: `enabled=false`.
-- Đầy đủ: `migrations/snapshots/web-desktop-accounts-v454/rollback.sql` (có guard md5) khôi phục
+- Đầy đủ: `migrations/snapshots/web-desktop-accounts-v455/rollback.sql` (có guard md5) khôi phục
   10 định nghĩa từ `baseline.sql`, xoá 4 hàm mới, constraint/cột runtime và dòng cấu hình.
   Không mở lại quyền legacy nào.

@@ -1,4 +1,4 @@
--- v454: Web/PWA hiển thị và quản lý tài khoản + chiến dịch Desktop
+-- v455: Web/PWA hiển thị và quản lý tài khoản + chiến dịch Desktop
 -- (Zalo mã QR, Zalo trình duyệt). App Desktop vẫn là nơi chạy duy nhất; Web chỉ
 -- đọc/ghi dữ liệu trong DB bằng service_role qua Control API.
 --
@@ -21,7 +21,7 @@
 --
 -- Canonical ở repo akaAgent; repo WebApp không sao chép. Định nghĩa nguồn được kiểm
 -- bằng md5 trước khi vá; lệch bản live thì dừng. Có DDL nên PostgREST nạp lại schema:
--- chỉ áp ngoài giờ cao điểm. Rollback: migrations/snapshots/web-desktop-accounts-v454/rollback.sql.
+-- chỉ áp ngoài giờ cao điểm. Rollback: migrations/snapshots/web-desktop-accounts-v455/rollback.sql.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
@@ -359,7 +359,7 @@ GRANT EXECUTE ON FUNCTION public.aka_agent_control_desktop_activity(bigint, bigi
   TO service_role;
 
 -- 4. Vá định nghĩa live đã kiểm md5. Mỗi phép thay phải khớp đúng số lần.
-CREATE OR REPLACE FUNCTION pg_temp.v454_replace(
+CREATE OR REPLACE FUNCTION pg_temp.v455_replace(
   p_definition text, p_old text, p_new text, p_expected integer, p_label text
 ) RETURNS text
 LANGUAGE plpgsql
@@ -369,13 +369,13 @@ DECLARE
 BEGIN
   v_count := (length(p_definition) - length(replace(p_definition, p_old, ''))) / greatest(length(p_old), 1);
   IF v_count <> p_expected THEN
-    RAISE EXCEPTION 'v454_pattern_count:%:% (expected %)', p_label, v_count, p_expected;
+    RAISE EXCEPTION 'v455_pattern_count:%:% (expected %)', p_label, v_count, p_expected;
   END IF;
   RETURN replace(p_definition, p_old, p_new);
 END
 $helper$;
 
-CREATE OR REPLACE FUNCTION pg_temp.v454_regexp(
+CREATE OR REPLACE FUNCTION pg_temp.v455_regexp(
   p_definition text, p_pattern text, p_replacement text, p_expected integer, p_label text
 ) RETURNS text
 LANGUAGE plpgsql
@@ -385,7 +385,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO v_count FROM regexp_matches(p_definition, p_pattern, 'g');
   IF v_count <> p_expected THEN
-    RAISE EXCEPTION 'v454_pattern_count:%:% (expected %)', p_label, v_count, p_expected;
+    RAISE EXCEPTION 'v455_pattern_count:%:% (expected %)', p_label, v_count, p_expected;
   END IF;
   RETURN regexp_replace(p_definition, p_pattern, p_replacement, 'g');
 END
@@ -437,13 +437,13 @@ BEGIN
   -- Preflight toàn bộ trước khi sửa hàm đầu tiên; giữ owner/security/config/ACL.
   FOR r IN SELECT * FROM jsonb_to_recordset(specs) AS x(signature text, source text, target text) LOOP
     f := to_regprocedure(r.signature);
-    IF f IS NULL THEN RAISE EXCEPTION 'v454_missing_function:%', r.signature; END IF;
+    IF f IS NULL THEN RAISE EXCEPTION 'v455_missing_function:%', r.signature; END IF;
     checksum := md5(pg_get_functiondef(f));
     IF checksum NOT IN (r.source, r.target) THEN
-      RAISE EXCEPTION 'v454_unexpected_definition:%:%', r.signature, checksum;
+      RAISE EXCEPTION 'v455_unexpected_definition:%:%', r.signature, checksum;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_proc p WHERE p.oid = f AND pg_get_userbyid(p.proowner) = 'postgres') THEN
-      RAISE EXCEPTION 'v454_unexpected_owner:%', r.signature;
+      RAISE EXCEPTION 'v455_unexpected_owner:%', r.signature;
     END IF;
   END LOOP;
 
@@ -455,18 +455,18 @@ BEGIN
     INTO attrs FROM pg_proc p WHERE p.oid = f;
 
     IF r.signature LIKE 'public.aka_agent_control_account_snapshot(%' THEN
-      d := pg_temp.v454_replace(d, '  v_chat boolean;' || E'\n',
+      d := pg_temp.v455_replace(d, '  v_chat boolean;' || E'\n',
         '  v_chat boolean;' || E'\n' || '  v_presence jsonb;' || E'\n', 1, 'snapshot_declare');
-      d := pg_temp.v454_replace(d, 'AND a.flatform_type=ANY(p_platforms)',
+      d := pg_temp.v455_replace(d, 'AND a.flatform_type=ANY(p_platforms)',
         'AND (a.flatform_type=ANY(p_platforms) OR (a.flatform_type=''zalo'' AND ' || c_any_desktop || '))', 3, 'snapshot_platform');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '(a.flatform_type=''sms'' OR (a.flatform_type=''zalo'' AND a.is_zalo_server IS TRUE AND a.is_zalo_show_web IS FALSE))',
         '(a.flatform_type=''sms'' OR (a.flatform_type=''zalo'' AND (' || c_zalo_scope_is || ')))', 3, 'snapshot_scope');
       -- Desktop không lưu phiên trình duyệt trong DB: suy ra từ trạng thái đăng nhập.
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '''has_zalo_session'',CASE WHEN a.flatform_type=''zalo'' AND v_chat THEN',
         '''has_zalo_session'',CASE WHEN a.flatform_type=''zalo'' AND (v_chat OR a.is_zalo_server IS NOT TRUE) THEN', 1, 'snapshot_session');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '  RETURN jsonb_build_object(''items'',v_items,''runningCampaigns'',v_running,''catalogVersion'',v_catalog_version,',
         '  IF p_view IN (''accounts'',''campaigns'') AND ' || c_any_desktop || ' THEN' || E'\n'
         || '    SELECT jsonb_build_object(' || E'\n'
@@ -486,23 +486,23 @@ BEGIN
         1, 'snapshot_presence');
 
     ELSIF r.signature LIKE 'public.aka_agent_control_campaign_page(%' THEN
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '      AND a.flatform_type = ANY(p_platforms)' || E'\n'
         || '      AND (a.flatform_type = ''sms'' OR (a.flatform_type = ''zalo'' AND a.is_zalo_show_web = false AND a.is_zalo_server = true))',
         '      AND (a.flatform_type = ANY(p_platforms) OR (a.flatform_type = ''zalo'' AND ' || c_any_desktop || '))' || E'\n'
         || '      AND (a.flatform_type = ''sms'' OR (a.flatform_type = ''zalo'' AND (' || c_zalo_scope_eq || ')))',
         1, 'page_scope');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '    SELECT c.id, c.status, c.name, c.account_id, c.action_id, a.flatform_type,' || E'\n',
         '    SELECT c.id, c.status, c.name, c.account_id, c.action_id, a.flatform_type,' || E'\n'
         || '      CASE WHEN a.flatform_type = ''zalo'' AND a.is_zalo_server IS NOT TRUE THEN ''desktop'' ELSE ''web'' END AS runtime_target,' || E'\n',
         1, 'page_runtime_target');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '      AND (NOT p_filters ? ''platforms'' OR p_filters->''platforms'' ? s.flatform_type)' || E'\n',
         '      AND (NOT p_filters ? ''platforms'' OR p_filters->''platforms'' ? s.flatform_type)' || E'\n'
         || '      AND (NOT p_filters ? ''runtimeTargets'' OR p_filters->''runtimeTargets'' ? s.runtime_target)' || E'\n',
         1, 'page_runtime_filter');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '(a.flatform_type = ''zalo'' AND a.is_zalo_show_web = false AND a.is_zalo_server = true) AS "isZaloServer",',
         '(a.flatform_type = ''zalo'' AND a.is_zalo_show_web = false AND a.is_zalo_server = true) AS "isZaloServer",'
         || ' (a.flatform_type = ''zalo'' AND a.is_zalo_show_web IS TRUE) AS "isZaloShowWeb",'
@@ -510,7 +510,7 @@ BEGIN
         1, 'page_summary');
 
     ELSIF r.signature LIKE 'public.aka_agent_control_campaign_logs(%' THEN
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '   AND a.flatform_type=ANY(p_platforms)' || E'\n'
         || '   AND (a.flatform_type<>''zalo'' OR (a.is_zalo_server IS TRUE AND a.is_zalo_show_web IS FALSE))',
         '   AND (a.flatform_type=ANY(p_platforms) OR (a.flatform_type=''zalo'' AND ' || c_any_desktop || '))' || E'\n'
@@ -523,26 +523,26 @@ BEGIN
        OR r.signature LIKE 'public.update_control_campaign_atomic(%' THEN
       -- Server cũ: show_web=false AND server=true. Mới: mọi tài khoản Zalo hợp lệ
       -- (Server, Desktop QR, Desktop trình duyệt); chỉ loại tổ hợp lỗi cả hai cờ true.
-      d := pg_temp.v454_regexp(d,
+      d := pg_temp.v455_regexp(d,
         'AND COALESCE\((account|target_account)\.is_zalo_show_web, false\) = false(\s+)AND COALESCE\(\1\.is_zalo_server, false\) = true',
         'AND NOT (COALESCE(\1.is_zalo_show_web, false)\2AND COALESCE(\1.is_zalo_server, false))',
         CASE WHEN r.signature LIKE 'public.update_control_campaign_atomic(%' THEN 5 ELSE 2 END,
         'mutation_scope:' || r.signature);
       IF r.signature LIKE 'public.update_control_campaign_atomic(%' THEN
         -- Gán lại tài khoản (kể cả sửa chiến dịch mồ côi) phải giữ nguyên nơi chạy.
-        d := pg_temp.v454_replace(d,
+        d := pg_temp.v455_replace(d,
           'AND target_account.flatform_type = account.flatform_type',
           'AND target_account.flatform_type = account.flatform_type'
           || ' AND COALESCE(target_account.is_zalo_server, false) = COALESCE(account.is_zalo_server, false)',
           2, 'update_target_runtime');
-        d := pg_temp.v454_replace(d,
+        d := pg_temp.v455_replace(d,
           'AND account.flatform_type = v_account_platform',
           'AND account.flatform_type = v_account_platform'
           || ' AND COALESCE(account.is_zalo_server, false) = (SELECT COALESCE(source_account.is_zalo_server, false)'
           || ' FROM public.auto_accounts AS source_account WHERE source_account.id = v_campaign.account_id)',
           1, 'update_patch_runtime');
       ELSIF r.signature LIKE 'public.delete_control_campaign_atomic(%' THEN
-        d := pg_temp.v454_replace(d,
+        d := pg_temp.v455_replace(d,
           '  IF v_campaign_status = ''đang chạy'' THEN' || E'\n'
           || '    RETURN jsonb_build_object(''deleted'', false, ''reason'', ''campaign_running'');' || E'\n'
           || '  END IF;' || E'\n',
@@ -564,23 +564,23 @@ BEGIN
       END IF;
 
     ELSIF r.signature LIKE 'public.update_control_campaign_input_statuses_atomic(%' THEN
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         'AND (v_is_zalo_show_web OR NOT v_is_zalo_server)',
         'AND v_is_zalo_show_web AND v_is_zalo_server',
         2, 'input_status_scope');
 
     ELSIF r.signature LIKE 'public.aka_agent_device_presence(%' THEN
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '(instance_id,staff_id,organization_id,device_fingerprint_hash,device_label,device_platform,app_version,started_at,last_seen_at,ended_at)',
         '(instance_id,staff_id,organization_id,device_fingerprint_hash,device_label,device_platform,app_version,started_at,last_seen_at,ended_at,runtime_state,runtime_state_at)',
         1, 'presence_columns');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         'stamp,stamp,CASE WHEN p_ended THEN stamp END)',
         'stamp,stamp,CASE WHEN p_ended THEN stamp END,' || E'\n'
         || '    CASE WHEN ' || c_runtime_valid || ' THEN p_device->''runtime'' END,' || E'\n'
         || '    CASE WHEN ' || c_runtime_valid || ' THEN stamp END)',
         1, 'presence_values');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '    ended_at = CASE WHEN p_ended THEN stamp ELSE NULL END' || E'\n',
         '    ended_at = CASE WHEN p_ended THEN stamp ELSE NULL END,' || E'\n'
         || '    runtime_state = CASE WHEN ' || c_runtime_valid || ' THEN p_device->''runtime'' ELSE presence.runtime_state END,' || E'\n'
@@ -588,11 +588,11 @@ BEGIN
         1, 'presence_update');
 
     ELSIF r.signature LIKE 'public.aka_agent_authenticate_control_session(%' THEN
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '  v_sms_enabled boolean := false;' || E'\n',
         '  v_sms_enabled boolean := false;' || E'\n' || '  v_web_desktop_policy jsonb := ''{}''::jsonb;' || E'\n',
         1, 'session_declare');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '  IF NOT v_zalo_server_enabled AND NOT v_sms_enabled THEN' || E'\n',
         '  v_web_desktop_policy := private.aka_agent_web_desktop_accounts_policy(v_staff.organization_id);' || E'\n'
         || '  -- Tổ chức chỉ có gói Zalo Desktop vào Web/PWA khi chính sách bật rõ desktopOnlyLogin.' || E'\n'
@@ -602,7 +602,7 @@ BEGIN
         || '    AND COALESCE((v_web_desktop_policy->>''desktopOnlyLogin'')::boolean, false)' || E'\n'
         || '  ) THEN' || E'\n',
         1, 'session_gate');
-      d := pg_temp.v454_replace(d,
+      d := pg_temp.v455_replace(d,
         '    ''sms_package'', CASE WHEN v_sms_package.id IS NULL',
         '    ''web_desktop_accounts'', v_web_desktop_policy,' || E'\n'
         || '    ''sms_package'', CASE WHEN v_sms_package.id IS NULL',
@@ -610,21 +610,21 @@ BEGIN
     END IF;
 
     IF md5(d) IS DISTINCT FROM r.target THEN
-      RAISE EXCEPTION 'v454_target_checksum_mismatch:%:%', r.signature, md5(d);
+      RAISE EXCEPTION 'v455_target_checksum_mismatch:%:%', r.signature, md5(d);
     END IF;
     EXECUTE d;
     IF NOT EXISTS (
       SELECT 1 FROM pg_proc p WHERE p.oid = f
         AND jsonb_build_object('secdef', p.prosecdef, 'volatile', p.provolatile, 'config', p.proconfig, 'acl', p.proacl::text) = attrs
     ) THEN
-      RAISE EXCEPTION 'v454_attributes_changed:%', r.signature;
+      RAISE EXCEPTION 'v455_attributes_changed:%', r.signature;
     END IF;
   END LOOP;
 
   -- Postflight: mọi hàm đã ở bản đích, ACL hàm Control mới chỉ service_role.
   FOR r IN SELECT * FROM jsonb_to_recordset(specs) AS x(signature text, source text, target text) LOOP
     IF md5(pg_get_functiondef(to_regprocedure(r.signature))) IS DISTINCT FROM r.target THEN
-      RAISE EXCEPTION 'v454_postflight_failed:%', r.signature;
+      RAISE EXCEPTION 'v455_postflight_failed:%', r.signature;
     END IF;
   END LOOP;
   IF has_function_privilege('anon', 'public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE')
@@ -636,7 +636,7 @@ BEGIN
     OR has_function_privilege('anon', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE')
     OR NOT has_function_privilege('service_role', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'v454_unexpected_new_function_acl';
+    RAISE EXCEPTION 'v455_unexpected_new_function_acl';
   END IF;
 END
 $migration$;

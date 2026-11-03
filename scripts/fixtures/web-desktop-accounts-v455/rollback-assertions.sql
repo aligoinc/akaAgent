@@ -8,6 +8,6 @@ BEGIN
   ASSERT NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'auto_staff_device_presence'
     AND column_name IN ('runtime_state', 'runtime_state_at')), 'runtime columns dropped';
   ASSERT NOT EXISTS (SELECT 1 FROM auto_system_settings WHERE key = 'web.desktop_accounts'), 'policy row removed';
-  RAISE NOTICE 'v454 rollback assertions passed';
+  RAISE NOTICE 'v455 rollback assertions passed';
 END
 $rollback$;

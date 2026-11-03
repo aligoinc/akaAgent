@@ -7,7 +7,7 @@ import { desktopRuntimeSnapshot } from './desktopRuntimeSnapshot'
 export const devicePresence = new PassiveDevicePresence({
   getDevice: async () => {
     const runtime = desktopRuntimeSnapshot.build()
-    // Bản Web cũ/RPC trước v454 bỏ qua khoá lạ; ảnh chụp lỗi không chặn heartbeat.
+    // Bản Web cũ/RPC trước v455 bỏ qua khoá lạ; ảnh chụp lỗi không chặn heartbeat.
     return { ...await getCurrentDeviceIdentity(), appVersion: app.getVersion(), ...(runtime ? { runtime: runtime as unknown as Record<string, unknown> } : {}) }
   },
   send: async (args, signal) => {

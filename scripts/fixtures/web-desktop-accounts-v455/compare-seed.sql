@@ -1,4 +1,4 @@
--- Dữ liệu mẫu cho script so sánh v454 (trích từ assertions.sql, không có cột runtime chưa tạo).
+-- Dữ liệu mẫu cho script so sánh v455 (trích từ assertions.sql, không có cột runtime chưa tạo).
 INSERT INTO org_organization(id, name) VALUES (9, 'Tổ chức Web'), (10, 'Tổ chức chỉ Desktop');
 INSERT INTO org_staff(id, organization_id, name, username, password, is_active) VALUES
   (7, 9, 'Nhân viên 7', 'u7', 'p7', true), (8, 9, 'Nhân viên 8', 'u8', 'p8', true), (70, 10, 'Nhân viên 70', 'u70', 'p70', true);

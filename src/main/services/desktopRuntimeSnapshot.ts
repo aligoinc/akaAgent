@@ -1,7 +1,7 @@
 import type { AutoAccount } from '../../shared/types'
 
 /**
- * Ảnh chụp trạng thái bộ chạy Desktop gửi kèm heartbeat có sẵn (v454), để Web hiển
+ * Ảnh chụp trạng thái bộ chạy Desktop gửi kèm heartbeat có sẵn (v455), để Web hiển
  * thị app Desktop đang chạy/đứng chờ và tài khoản nào chưa sẵn sàng. Chỉ đọc RAM của
  * scheduler: không thêm truy vấn DB, timer hay kết nối. Hợp đồng JSON khớp
  * `normalizeDesktopRuntimeState` ở akaAgentWebApp (packages/control-api).

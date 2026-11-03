@@ -1,6 +1,184 @@
--- Định nghĩa live trước v454 (12 hàm), tái tạo từ repo + các bản vá orphan-repair/v287/v288.
--- md5(pg_get_functiondef) khớp production akachat ngày 03/11/2026, xem baseline.json.
--- Dùng cho test cục bộ và rollback; CREATE OR REPLACE giữ owner/ACL hiện có.
+-- Rollback v455: khôi phục 10 định nghĩa live trước v455, bỏ hàm mới, cột runtime và khóa cấu hình.
+-- Chỉ chạy khi các hàm đang ở đúng bản v455 (hoặc đã về baseline); lệch thì dừng.
+-- Trước khi chạy: tắt 'web.desktop_accounts' hoặc deploy lại Control API cũ để Web không gọi hàm mới.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
+DO $guard$
+DECLARE r record; checksum text;
+BEGIN
+  FOR r IN SELECT * FROM (VALUES
+    ('public.aka_agent_authenticate_control_session(text)', 'c748df75349ebeef58c3c8f120439b0b', 'de8f93ee545bca94a199b2dffb9fe324'),
+    ('public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)', '761108afe53ff4046efe0cd247846d10', '6b148777006903e4830925c55616820b'),
+    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '12d454fbc38217dea3497addd39ed832', 'a2bc3f7cae264e647ac576c9895e840f'),
+    ('public.aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)', '1275ad05d4dd184f5f6d9cd937caa21c', '26875e2b1652ca56cc8e59460df8cae1'),
+    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', 'c1673974d0982ce6a731741072ca5338', '61a6b5c855fbcf86cafaf3c3c7ce6f0a'),
+    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'f285e48f4deaf2e1bf7896d7aeddbcf8', 'a86278195e18d1ef8d0091b41d1d0c5b'),
+    ('public.delete_control_campaign_atomic(bigint,bigint,bigint)', '1955af1c590ec870cb098cde9dd0714b', '4cfcad941c3acf22e674a77b203d086d'),
+    ('public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)', '0f22d3c6fe532176af0e3f38fd485f88', 'd283261c5e77558d10f5df86cd4d1127'),
+    ('public.update_control_campaign_input_statuses_atomic(bigint,bigint,bigint,bigint[],text,text)', 'a98a23f8e7f2e1e6582449f7ed45fb45', 'd61093635f226751c4a311840c6b3e29'),
+    ('public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'b504f4928a9dd271dec783796a7a0374', '478aa4281c683686437f31947bb760b1')
+  ) AS x(signature, source_md5, target_md5) LOOP
+    checksum := md5(pg_get_functiondef(r.signature::regprocedure));
+    IF checksum NOT IN (r.source_md5, r.target_md5) THEN
+      RAISE EXCEPTION 'v455_rollback_unexpected_definition:%:%', r.signature, checksum;
+    END IF;
+  END LOOP;
+END
+$guard$;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_authenticate_control_session(p_token_hash text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_session public.auto_control_sessions%ROWTYPE;
+  v_staff public.org_staff%ROWTYPE;
+  v_organization public.org_organization%ROWTYPE;
+  v_zalo_package public.org_organization_product%ROWTYPE;
+  v_sms_package public.org_organization_product%ROWTYPE;
+  v_zalo_capabilities record;
+  v_zalo_qr_enabled boolean := false;
+  v_zalo_web_enabled boolean := false;
+  v_zalo_server_enabled boolean := false;
+  v_sms_enabled boolean := false;
+  v_now timestamptz := now();
+  v_vietnam_day_start timestamptz := (
+    date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+      AT TIME ZONE 'Asia/Ho_Chi_Minh'
+  );
+BEGIN
+  SELECT session.* INTO v_session
+  FROM public.auto_control_sessions AS session
+  WHERE session.token_hash = p_token_hash
+    AND session.revoked_at IS NULL
+    AND session.expires_at > v_now
+  LIMIT 1;
+  IF v_session.id IS NULL THEN RETURN jsonb_build_object('status', 'invalid_session'); END IF;
+
+  SELECT staff.* INTO v_staff
+  FROM public.org_staff AS staff
+  WHERE staff.id = v_session.staff_id
+  LIMIT 1;
+  IF v_staff.id IS NULL
+    OR v_staff.is_active IS DISTINCT FROM true
+    OR v_staff.organization_id IS DISTINCT FROM v_session.organization_id
+  THEN
+    UPDATE public.auto_control_sessions SET revoked_at = v_now
+    WHERE id = v_session.id AND revoked_at IS NULL;
+    RETURN jsonb_build_object('status', 'invalid_staff');
+  END IF;
+
+  SELECT organization.* INTO v_organization
+  FROM public.org_organization AS organization
+  WHERE organization.id = v_staff.organization_id
+  LIMIT 1;
+  IF v_organization.id IS NULL THEN
+    UPDATE public.auto_control_sessions SET revoked_at = v_now
+    WHERE id = v_session.id AND revoked_at IS NULL;
+    RETURN jsonb_build_object('status', 'invalid_organization');
+  END IF;
+
+  -- Reuse Desktop's live staff/org expiry rule, before product entitlement checks.
+  -- Keep the existing failure status so older Control API clients still revoke safely.
+  IF NOT public.aka_agent_staff_time_allowed(v_staff.id) OR NOT public.aka_agent_app_access_staff_allowed(v_staff.id,'akaAgent') THEN
+    UPDATE public.auto_control_sessions SET revoked_at = v_now
+    WHERE id = v_session.id AND revoked_at IS NULL;
+    RETURN jsonb_build_object('status', 'invalid_staff');
+  END IF;
+
+  SELECT * INTO v_zalo_capabilities
+  FROM public.resolve_organization_zalo_account_capabilities(v_staff.organization_id);
+  IF v_zalo_capabilities.entitlement_id IS NOT NULL THEN
+    SELECT entitlement.* INTO v_zalo_package
+    FROM public.org_organization_product AS entitlement
+    WHERE entitlement.id = v_zalo_capabilities.entitlement_id;
+  END IF;
+
+  SELECT entitlement.* INTO v_sms_package
+  FROM public.org_organization_product AS entitlement
+  WHERE entitlement.organization_id = v_staff.organization_id
+    AND entitlement.is_deleted = false
+    AND entitlement.product_id = 17
+    AND entitlement.expiration_date >= v_vietnam_day_start
+  ORDER BY entitlement.created_at DESC NULLS LAST, entitlement.id DESC
+  LIMIT 1;
+
+  v_zalo_qr_enabled := COALESCE(v_zalo_capabilities.qr_enabled, false);
+  v_zalo_web_enabled := COALESCE(v_zalo_capabilities.web_enabled, false);
+  v_zalo_server_enabled := v_zalo_qr_enabled
+    AND COALESCE(v_zalo_capabilities.server_enabled, false);
+  v_sms_enabled := v_sms_package.id IS NOT NULL;
+
+  IF NOT v_zalo_server_enabled AND NOT v_sms_enabled THEN
+    UPDATE public.auto_control_sessions SET revoked_at = v_now
+    WHERE id = v_session.id AND revoked_at IS NULL;
+    RETURN jsonb_build_object('status', 'capability_unavailable');
+  END IF;
+  IF v_session.last_seen_at <= v_now - interval '5 minutes' THEN
+    UPDATE public.auto_control_sessions SET last_seen_at = v_now
+    WHERE id = v_session.id AND revoked_at IS NULL;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'status', 'authenticated',
+    'session', jsonb_build_object(
+      'id', v_session.id, 'staff_id', v_session.staff_id,
+      'organization_id', v_session.organization_id,
+      'client_type', v_session.client_type, 'user_agent', v_session.user_agent,
+      'created_at', v_session.created_at, 'last_seen_at', v_session.last_seen_at,
+      'expires_at', v_session.expires_at, 'revoked_at', v_session.revoked_at
+    ),
+    'staff', jsonb_build_object(
+      'id', v_staff.id, 'organization_id', v_staff.organization_id,
+      'name', v_staff.name, 'username', v_staff.username,
+      'phone', v_staff.phone, 'email', v_staff.email,
+      'is_active', v_staff.is_active, 'is_zalo_server', v_zalo_server_enabled
+    ),
+    'organization', jsonb_build_object('id', v_organization.id, 'name', v_organization.name),
+    'capabilities', jsonb_build_object(
+      'zalo_qr', v_zalo_qr_enabled,
+      'zalo_web', v_zalo_web_enabled,
+      'zalo_server', v_zalo_server_enabled,
+      'sms', v_sms_enabled
+    ),
+    'zalo_account_capabilities', jsonb_build_object(
+      'qr', v_zalo_qr_enabled,
+      'web', v_zalo_web_enabled,
+      'server', v_zalo_server_enabled,
+      'revision', v_zalo_capabilities.capability_revision
+    ),
+    'zalo_package', CASE WHEN v_zalo_package.id IS NULL THEN NULL ELSE jsonb_build_object(
+      'id', v_zalo_package.id,
+      'product_id', v_zalo_package.product_id,
+      'product_package_id', v_zalo_package.product_package_id,
+      'product_name', v_zalo_package.product_name,
+      'package_name', v_zalo_package.package_name,
+      'max_accounts', v_zalo_capabilities.max_accounts,
+      'max_staff', v_zalo_package.max_staff,
+      'max_sends_per_day', v_zalo_capabilities.max_sends_per_day,
+      'expiration_date', v_zalo_package.expiration_date,
+      'created_at', v_zalo_package.created_at,
+      'capability_revision', v_zalo_capabilities.capability_revision
+    ) END,
+    'sms_package', CASE WHEN v_sms_package.id IS NULL THEN NULL ELSE jsonb_build_object(
+      'id', v_sms_package.id,
+      'product_id', v_sms_package.product_id,
+      'product_package_id', v_sms_package.product_package_id,
+      'product_name', v_sms_package.product_name,
+      'package_name', v_sms_package.package_name,
+      'max_accounts', v_sms_package.max_accounts,
+      'max_staff', v_sms_package.max_staff,
+      'max_sends_per_day', v_sms_package.max_sends_per_day,
+      'expiration_date', v_sms_package.expiration_date,
+      'created_at', v_sms_package.created_at
+    ) END
+  );
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.aka_agent_control_account_snapshot(p_staff_id bigint, p_organization_id bigint, p_platforms text[], p_view text DEFAULT 'accounts'::text, p_account_ids bigint[] DEFAULT NULL::bigint[], p_versions jsonb DEFAULT '{}'::jsonb, p_catalog_version text DEFAULT NULL::text)
  RETURNS jsonb
@@ -392,45 +570,6 @@ BEGIN
     'input_count', v_input_count,
     'created', true
   );
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.create_control_campaign_v2(p_staff_id bigint, p_organization_id bigint, p_idempotency_key text, p_campaign jsonb, p_inputs jsonb DEFAULT '[]'::jsonb, p_initial_status text DEFAULT 'chờ xử lý'::text)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
- SET statement_timeout TO '60s'
-AS $function$
-DECLARE
-  v_result jsonb;
-  v_campaign_id bigint;
-BEGIN
-  IF p_initial_status NOT IN ('chờ xử lý', 'tạm dừng') THEN
-    RAISE EXCEPTION 'invalid_control_campaign_initial_status';
-  END IF;
-
-  v_result := public.create_control_campaign(
-    p_staff_id,
-    p_organization_id,
-    p_idempotency_key,
-    p_campaign,
-    p_inputs
-  );
-
-  -- The inner insert and this update share a transaction, so a cloned campaign is
-  -- never externally visible in the runnable state.
-  IF p_initial_status = 'tạm dừng' AND COALESCE((v_result->>'created')::boolean, false) THEN
-    v_campaign_id := NULLIF(v_result->>'campaign_id', '')::bigint;
-    UPDATE public.auto_campaigns
-    SET status = 'tạm dừng', updated_at = now()
-    WHERE id = v_campaign_id
-      AND staff_id = p_staff_id
-      AND organization_id = p_organization_id
-      AND COALESCE(is_delete, false) = false;
-  END IF;
-
-  RETURN v_result;
 END;
 $function$;
 
@@ -866,95 +1005,6 @@ BEGIN
     'appended_input_count', v_appended_inputs,
     'updated_at', v_campaign.updated_at
   );
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.update_control_campaign_by_config_version_atomic(p_staff_id bigint, p_organization_id bigint, p_campaign_id bigint, p_expected_updated_at timestamp with time zone, p_campaign_patch jsonb, p_sms_inputs jsonb DEFAULT NULL::jsonb, p_update_sms_schedule boolean DEFAULT false, p_append_idempotency_key text DEFAULT NULL::text, p_expected_input_count integer DEFAULT NULL::integer, p_append_inputs jsonb DEFAULT NULL::jsonb)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
- SET statement_timeout TO '60s'
-AS $function$
-DECLARE
-  v_campaign public.auto_campaigns%ROWTYPE;
-  v_expected_config_version text := lower(
-    NULLIF(btrim(COALESCE(p_campaign_patch->>'_expected_config_version', '')), '')
-  );
-  v_campaign_patch jsonb := COALESCE(p_campaign_patch, '{}'::jsonb)
-    - '_expected_config_version';
-  v_result jsonb;
-  v_attempt integer;
-BEGIN
-  IF v_expected_config_version IS NULL
-    OR v_expected_config_version !~ '^[0-9a-f]{32}$' THEN
-    RAISE EXCEPTION 'invalid_campaign_config_version';
-  END IF;
-
-  -- Preserve the core RPC's durable append-idempotency fast path. A retry of
-  -- an already committed append must succeed even though its config digest is
-  -- necessarily stale after the first transaction.
-  IF p_append_inputs IS NOT NULL THEN
-    v_result := public.update_control_campaign_atomic(
-      p_staff_id,
-      p_organization_id,
-      p_campaign_id,
-      p_expected_updated_at,
-      v_campaign_patch,
-      p_sms_inputs,
-      p_update_sms_schedule,
-      p_append_idempotency_key,
-      p_expected_input_count,
-      p_append_inputs
-    );
-
-    IF COALESCE((v_result->>'updated')::boolean, false)
-      OR v_result->>'reason' IS DISTINCT FROM 'version_conflict' THEN
-      RETURN v_result;
-    END IF;
-  END IF;
-
-  -- Runtime log/note/status writes also advance auto_campaigns.updated_at.
-  -- Retry those timestamp-only races while the editable config digest stays
-  -- equal to the version that the user loaded.
-  FOR v_attempt IN 1..5 LOOP
-    SELECT campaign.*
-    INTO v_campaign
-    FROM public.auto_campaigns AS campaign
-    WHERE campaign.id = p_campaign_id
-      AND campaign.staff_id = p_staff_id
-      AND campaign.organization_id = p_organization_id
-      AND COALESCE(campaign.is_delete, false) = false;
-
-    IF NOT FOUND THEN
-      RETURN jsonb_build_object('updated', false, 'reason', 'not_found');
-    END IF;
-
-    IF public.aka_agent_campaign_config_version(v_campaign)
-      IS DISTINCT FROM v_expected_config_version THEN
-      RETURN jsonb_build_object('updated', false, 'reason', 'version_conflict');
-    END IF;
-
-    v_result := public.update_control_campaign_atomic(
-      p_staff_id,
-      p_organization_id,
-      p_campaign_id,
-      v_campaign.updated_at,
-      v_campaign_patch,
-      p_sms_inputs,
-      p_update_sms_schedule,
-      p_append_idempotency_key,
-      p_expected_input_count,
-      p_append_inputs
-    );
-
-    IF COALESCE((v_result->>'updated')::boolean, false)
-      OR v_result->>'reason' IS DISTINCT FROM 'version_conflict' THEN
-      RETURN v_result;
-    END IF;
-  END LOOP;
-
-  RETURN jsonb_build_object('updated', false, 'reason', 'version_conflict');
 END;
 $function$;
 
@@ -1399,154 +1449,33 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.aka_agent_authenticate_control_session(p_token_hash text)
- RETURNS jsonb
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_session public.auto_control_sessions%ROWTYPE;
-  v_staff public.org_staff%ROWTYPE;
-  v_organization public.org_organization%ROWTYPE;
-  v_zalo_package public.org_organization_product%ROWTYPE;
-  v_sms_package public.org_organization_product%ROWTYPE;
-  v_zalo_capabilities record;
-  v_zalo_qr_enabled boolean := false;
-  v_zalo_web_enabled boolean := false;
-  v_zalo_server_enabled boolean := false;
-  v_sms_enabled boolean := false;
-  v_now timestamptz := now();
-  v_vietnam_day_start timestamptz := (
-    date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh')
-      AT TIME ZONE 'Asia/Ho_Chi_Minh'
-  );
+DROP FUNCTION IF EXISTS public.aka_agent_control_set_desktop_campaign_status(bigint, bigint, bigint, text);
+DROP FUNCTION IF EXISTS public.aka_agent_control_desktop_activity(bigint, bigint, text[], bigint, integer);
+DROP FUNCTION IF EXISTS public.aka_agent_control_web_desktop_accounts_policy(bigint);
+DROP FUNCTION IF EXISTS private.aka_agent_web_desktop_accounts_policy(bigint);
+ALTER TABLE public.auto_staff_device_presence DROP CONSTRAINT IF EXISTS auto_staff_device_presence_runtime_state_check;
+ALTER TABLE public.auto_staff_device_presence DROP COLUMN IF EXISTS runtime_state, DROP COLUMN IF EXISTS runtime_state_at;
+DELETE FROM public.auto_system_settings WHERE key = 'web.desktop_accounts';
+
+DO $postflight$
+DECLARE r record;
 BEGIN
-  SELECT session.* INTO v_session
-  FROM public.auto_control_sessions AS session
-  WHERE session.token_hash = p_token_hash
-    AND session.revoked_at IS NULL
-    AND session.expires_at > v_now
-  LIMIT 1;
-  IF v_session.id IS NULL THEN RETURN jsonb_build_object('status', 'invalid_session'); END IF;
-
-  SELECT staff.* INTO v_staff
-  FROM public.org_staff AS staff
-  WHERE staff.id = v_session.staff_id
-  LIMIT 1;
-  IF v_staff.id IS NULL
-    OR v_staff.is_active IS DISTINCT FROM true
-    OR v_staff.organization_id IS DISTINCT FROM v_session.organization_id
-  THEN
-    UPDATE public.auto_control_sessions SET revoked_at = v_now
-    WHERE id = v_session.id AND revoked_at IS NULL;
-    RETURN jsonb_build_object('status', 'invalid_staff');
-  END IF;
-
-  SELECT organization.* INTO v_organization
-  FROM public.org_organization AS organization
-  WHERE organization.id = v_staff.organization_id
-  LIMIT 1;
-  IF v_organization.id IS NULL THEN
-    UPDATE public.auto_control_sessions SET revoked_at = v_now
-    WHERE id = v_session.id AND revoked_at IS NULL;
-    RETURN jsonb_build_object('status', 'invalid_organization');
-  END IF;
-
-  -- Reuse Desktop's live staff/org expiry rule, before product entitlement checks.
-  -- Keep the existing failure status so older Control API clients still revoke safely.
-  IF NOT public.aka_agent_staff_time_allowed(v_staff.id) OR NOT public.aka_agent_app_access_staff_allowed(v_staff.id,'akaAgent') THEN
-    UPDATE public.auto_control_sessions SET revoked_at = v_now
-    WHERE id = v_session.id AND revoked_at IS NULL;
-    RETURN jsonb_build_object('status', 'invalid_staff');
-  END IF;
-
-  SELECT * INTO v_zalo_capabilities
-  FROM public.resolve_organization_zalo_account_capabilities(v_staff.organization_id);
-  IF v_zalo_capabilities.entitlement_id IS NOT NULL THEN
-    SELECT entitlement.* INTO v_zalo_package
-    FROM public.org_organization_product AS entitlement
-    WHERE entitlement.id = v_zalo_capabilities.entitlement_id;
-  END IF;
-
-  SELECT entitlement.* INTO v_sms_package
-  FROM public.org_organization_product AS entitlement
-  WHERE entitlement.organization_id = v_staff.organization_id
-    AND entitlement.is_deleted = false
-    AND entitlement.product_id = 17
-    AND entitlement.expiration_date >= v_vietnam_day_start
-  ORDER BY entitlement.created_at DESC NULLS LAST, entitlement.id DESC
-  LIMIT 1;
-
-  v_zalo_qr_enabled := COALESCE(v_zalo_capabilities.qr_enabled, false);
-  v_zalo_web_enabled := COALESCE(v_zalo_capabilities.web_enabled, false);
-  v_zalo_server_enabled := v_zalo_qr_enabled
-    AND COALESCE(v_zalo_capabilities.server_enabled, false);
-  v_sms_enabled := v_sms_package.id IS NOT NULL;
-
-  IF NOT v_zalo_server_enabled AND NOT v_sms_enabled THEN
-    UPDATE public.auto_control_sessions SET revoked_at = v_now
-    WHERE id = v_session.id AND revoked_at IS NULL;
-    RETURN jsonb_build_object('status', 'capability_unavailable');
-  END IF;
-  IF v_session.last_seen_at <= v_now - interval '5 minutes' THEN
-    UPDATE public.auto_control_sessions SET last_seen_at = v_now
-    WHERE id = v_session.id AND revoked_at IS NULL;
-  END IF;
-
-  RETURN jsonb_build_object(
-    'status', 'authenticated',
-    'session', jsonb_build_object(
-      'id', v_session.id, 'staff_id', v_session.staff_id,
-      'organization_id', v_session.organization_id,
-      'client_type', v_session.client_type, 'user_agent', v_session.user_agent,
-      'created_at', v_session.created_at, 'last_seen_at', v_session.last_seen_at,
-      'expires_at', v_session.expires_at, 'revoked_at', v_session.revoked_at
-    ),
-    'staff', jsonb_build_object(
-      'id', v_staff.id, 'organization_id', v_staff.organization_id,
-      'name', v_staff.name, 'username', v_staff.username,
-      'phone', v_staff.phone, 'email', v_staff.email,
-      'is_active', v_staff.is_active, 'is_zalo_server', v_zalo_server_enabled
-    ),
-    'organization', jsonb_build_object('id', v_organization.id, 'name', v_organization.name),
-    'capabilities', jsonb_build_object(
-      'zalo_qr', v_zalo_qr_enabled,
-      'zalo_web', v_zalo_web_enabled,
-      'zalo_server', v_zalo_server_enabled,
-      'sms', v_sms_enabled
-    ),
-    'zalo_account_capabilities', jsonb_build_object(
-      'qr', v_zalo_qr_enabled,
-      'web', v_zalo_web_enabled,
-      'server', v_zalo_server_enabled,
-      'revision', v_zalo_capabilities.capability_revision
-    ),
-    'zalo_package', CASE WHEN v_zalo_package.id IS NULL THEN NULL ELSE jsonb_build_object(
-      'id', v_zalo_package.id,
-      'product_id', v_zalo_package.product_id,
-      'product_package_id', v_zalo_package.product_package_id,
-      'product_name', v_zalo_package.product_name,
-      'package_name', v_zalo_package.package_name,
-      'max_accounts', v_zalo_capabilities.max_accounts,
-      'max_staff', v_zalo_package.max_staff,
-      'max_sends_per_day', v_zalo_capabilities.max_sends_per_day,
-      'expiration_date', v_zalo_package.expiration_date,
-      'created_at', v_zalo_package.created_at,
-      'capability_revision', v_zalo_capabilities.capability_revision
-    ) END,
-    'sms_package', CASE WHEN v_sms_package.id IS NULL THEN NULL ELSE jsonb_build_object(
-      'id', v_sms_package.id,
-      'product_id', v_sms_package.product_id,
-      'product_package_id', v_sms_package.product_package_id,
-      'product_name', v_sms_package.product_name,
-      'package_name', v_sms_package.package_name,
-      'max_accounts', v_sms_package.max_accounts,
-      'max_staff', v_sms_package.max_staff,
-      'max_sends_per_day', v_sms_package.max_sends_per_day,
-      'expiration_date', v_sms_package.expiration_date,
-      'created_at', v_sms_package.created_at
-    ) END
-  );
-END;
-$function$;
+  FOR r IN SELECT * FROM (VALUES
+    ('public.aka_agent_authenticate_control_session(text)', 'c748df75349ebeef58c3c8f120439b0b', 'de8f93ee545bca94a199b2dffb9fe324'),
+    ('public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)', '761108afe53ff4046efe0cd247846d10', '6b148777006903e4830925c55616820b'),
+    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '12d454fbc38217dea3497addd39ed832', 'a2bc3f7cae264e647ac576c9895e840f'),
+    ('public.aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)', '1275ad05d4dd184f5f6d9cd937caa21c', '26875e2b1652ca56cc8e59460df8cae1'),
+    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', 'c1673974d0982ce6a731741072ca5338', '61a6b5c855fbcf86cafaf3c3c7ce6f0a'),
+    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'f285e48f4deaf2e1bf7896d7aeddbcf8', 'a86278195e18d1ef8d0091b41d1d0c5b'),
+    ('public.delete_control_campaign_atomic(bigint,bigint,bigint)', '1955af1c590ec870cb098cde9dd0714b', '4cfcad941c3acf22e674a77b203d086d'),
+    ('public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)', '0f22d3c6fe532176af0e3f38fd485f88', 'd283261c5e77558d10f5df86cd4d1127'),
+    ('public.update_control_campaign_input_statuses_atomic(bigint,bigint,bigint,bigint[],text,text)', 'a98a23f8e7f2e1e6582449f7ed45fb45', 'd61093635f226751c4a311840c6b3e29'),
+    ('public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'b504f4928a9dd271dec783796a7a0374', '478aa4281c683686437f31947bb760b1')
+  ) AS x(signature, source_md5, target_md5) LOOP
+    IF md5(pg_get_functiondef(r.signature::regprocedure)) IS DISTINCT FROM r.source_md5 THEN
+      RAISE EXCEPTION 'v455_rollback_postflight:%', r.signature;
+    END IF;
+  END LOOP;
+END
+$postflight$;
+COMMIT;

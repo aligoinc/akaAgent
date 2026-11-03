@@ -1,5 +1,5 @@
 {
-  "migration": "migration_v454_web_desktop_accounts",
+  "migration": "migration_v455_web_desktop_accounts",
   "captured": "2026-11-03",
   "project_ref": "cgjbsmqtfhqvttudyjzq",
   "method": "md5(pg_get_functiondef) live; định nghĩa tái tạo cục bộ từ repo + orphan-repair/v287/v288 và khớp từng md5",
