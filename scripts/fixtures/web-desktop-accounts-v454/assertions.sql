@@ -1,4 +1,4 @@
--- Kiểm chứng v453 trên dữ liệu giả lập. Chạy trong BEGIN ... ROLLBACK để chạy lại được.
+-- Kiểm chứng v454 trên dữ liệu giả lập. Chạy trong BEGIN ... ROLLBACK để chạy lại được.
 BEGIN;
 INSERT INTO org_organization(id, name) VALUES (9, 'Tổ chức Web'), (10, 'Tổ chức chỉ Desktop');
 INSERT INTO org_staff(id, organization_id, name, username, password, is_active) VALUES
@@ -243,7 +243,7 @@ BEGIN
   ASSERT NOT has_function_privilege('authenticated', 'aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE');
   ASSERT has_function_privilege('service_role', 'aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE');
   ASSERT has_function_privilege('aka_agent_desktop', 'aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'EXECUTE'), 'presence ACL kept';
-  RAISE NOTICE 'v453 assertions passed';
+  RAISE NOTICE 'v454 assertions passed';
 END
 $test$;
 ROLLBACK;

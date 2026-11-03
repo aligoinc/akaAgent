@@ -1,4 +1,4 @@
--- Read-only production assertions sau khi apply v453. Chạy trong BEGIN ... ROLLBACK.
+-- Read-only production assertions sau khi apply v454. Chạy trong BEGIN ... ROLLBACK.
 -- Không trả dữ liệu khách; chỉ so phạm vi đọc cũ/mới trên vài nhân viên có tài khoản Desktop.
 SET LOCAL ROLE service_role;
 DO $smoke$
@@ -34,6 +34,6 @@ BEGIN
   ASSERT NOT has_function_privilege('anon', 'public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT NOT has_function_privilege('authenticated', 'public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT has_function_privilege('aka_agent_desktop', 'public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'EXECUTE');
-  RAISE NOTICE 'v453 production smoke passed for % staff', n;
+  RAISE NOTICE 'v454 production smoke passed for % staff', n;
 END
 $smoke$;
