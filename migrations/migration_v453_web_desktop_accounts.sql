@@ -12,6 +12,7 @@
 -- 3. RPC mới aka_agent_control_set_desktop_campaign_status: tạm dừng DB-first như
 --    Zalo Server (scheduler Desktop dừng trước mục tiêu kế tiếp), tiếp tục chỉ khi
 --    không còn claim/lease. Ghi một dòng lịch sử chạy cho khách.
+--    RPC mới aka_agent_control_desktop_activity: nguồn "Tiến trình" từ auto_campaign_logs.
 -- 4. Presence lưu ảnh chụp runtime quan sát do Desktop ≥ 9.3.0 gửi kèm heartbeat sẵn
 --    có (không thêm request). Desktop cũ không gửi → giữ NULL.
 -- 5. Chính sách bật tính năng: auto_system_settings 'web.desktop_accounts', mặc định
@@ -278,6 +279,83 @@ $function$;
 REVOKE ALL ON FUNCTION public.aka_agent_control_set_desktop_campaign_status(bigint, bigint, bigint, text)
   FROM PUBLIC, anon, authenticated, aka_agent_desktop, aka_agent_chat_api;
 GRANT EXECUTE ON FUNCTION public.aka_agent_control_set_desktop_campaign_status(bigint, bigint, bigint, text)
+  TO service_role;
+
+-- 3b. Nguồn "Tiến trình" cho chiến dịch Desktop: dòng lịch sử chạy mới của các chiến
+-- dịch Desktop đang/vừa chạy (tối đa 50 chiến dịch, 200 dòng/lượt). Con trỏ là id toàn cục;
+-- kèm cửa sổ nhìn lại 10 giây để không bỏ sót dòng của chiến dịch khác commit muộn hơn id
+-- lớn hơn — client khử trùng theo id. Không dùng làm lịch sử đầy đủ (đã có /logs theo chiến dịch).
+CREATE OR REPLACE FUNCTION public.aka_agent_control_desktop_activity(
+  p_staff_id bigint,
+  p_organization_id bigint,
+  p_platforms text[],
+  p_after_id bigint DEFAULT NULL,
+  p_limit integer DEFAULT 100
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public'
+SET statement_timeout TO '15s'
+AS $function$
+DECLARE
+  v_limit integer := least(greatest(COALESCE(p_limit, 100), 1), 200);
+  v_items jsonb;
+  v_cursor bigint;
+BEGIN
+  IF p_staff_id IS NULL OR p_staff_id <= 0 OR p_organization_id IS NULL OR p_organization_id <= 0
+    OR p_platforms IS NULL OR (p_after_id IS NOT NULL AND p_after_id < 0) THEN
+    RAISE EXCEPTION 'Invalid desktop activity scope';
+  END IF;
+  IF NOT (p_platforms && ARRAY['zalo_qr', 'zalo_web']::text[]) THEN
+    RETURN jsonb_build_object('items', '[]'::jsonb, 'cursor', p_after_id);
+  END IF;
+
+  WITH scoped AS MATERIALIZED (
+    SELECT c.id, c.name, c.account_id, a.name AS account_name, a.is_zalo_show_web IS TRUE AS is_browser
+    FROM public.auto_campaigns AS c
+    JOIN public.auto_accounts AS a ON a.id = c.account_id AND a.staff_id = c.staff_id
+    WHERE c.staff_id = p_staff_id AND c.organization_id = p_organization_id AND c.is_delete = false
+      AND a.organization_id = p_organization_id
+      AND a.flatform_type = 'zalo' AND a.is_zalo_server IS NOT TRUE
+      AND (('zalo_qr' = ANY(p_platforms) AND a.is_zalo_show_web IS NOT TRUE)
+        OR ('zalo_web' = ANY(p_platforms) AND a.is_zalo_show_web IS TRUE))
+      AND (c.status = 'đang chạy' OR c.last_run_at > now() - interval '30 minutes'
+        OR c.updated_at > now() - interval '30 minutes')
+    ORDER BY (c.status = 'đang chạy') DESC, c.last_run_at DESC NULLS LAST, c.id DESC
+    LIMIT 50
+  ), picked AS MATERIALIZED (
+    SELECT row.id, row.campaign_id, row.log, row.created_at
+    FROM scoped AS s
+    CROSS JOIN LATERAL (
+      SELECT l.id, l.campaign_id, l.log, l.created_at
+      FROM public.auto_campaign_logs AS l
+      WHERE l.campaign_id = s.id
+        AND (p_after_id IS NULL OR l.id > p_after_id OR l.created_at >= now() - interval '10 seconds')
+      ORDER BY l.id DESC
+      LIMIT v_limit
+    ) AS row
+    ORDER BY row.id DESC
+    LIMIT v_limit
+  )
+  SELECT
+    COALESCE(jsonb_agg(jsonb_build_object(
+      'id', p.id::text, 'campaignId', p.campaign_id, 'campaignName', s.name,
+      'accountId', s.account_id, 'accountName', s.account_name,
+      'accountType', CASE WHEN s.is_browser THEN 'zalo_browser' ELSE 'zalo_qr' END,
+      'log', p.log, 'createdAt', p.created_at
+    ) ORDER BY p.id), '[]'::jsonb),
+    max(p.id)
+  INTO v_items, v_cursor
+  FROM picked AS p JOIN scoped AS s ON s.id = p.campaign_id;
+
+  RETURN jsonb_build_object('items', v_items, 'cursor', COALESCE(greatest(v_cursor, p_after_id), p_after_id));
+END
+$function$;
+REVOKE ALL ON FUNCTION public.aka_agent_control_desktop_activity(bigint, bigint, text[], bigint, integer)
+  FROM PUBLIC, anon, authenticated, aka_agent_desktop, aka_agent_chat_api;
+GRANT EXECUTE ON FUNCTION public.aka_agent_control_desktop_activity(bigint, bigint, text[], bigint, integer)
   TO service_role;
 
 -- 4. Vá định nghĩa live đã kiểm md5. Mỗi phép thay phải khớp đúng số lần.
@@ -554,7 +632,10 @@ BEGIN
     OR has_function_privilege('anon', 'public.aka_agent_control_web_desktop_accounts_policy(bigint)', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.aka_agent_control_web_desktop_accounts_policy(bigint)', 'EXECUTE')
     OR NOT has_function_privilege('service_role', 'public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE')
-    OR NOT has_function_privilege('service_role', 'public.aka_agent_control_web_desktop_accounts_policy(bigint)', 'EXECUTE') THEN
+    OR NOT has_function_privilege('service_role', 'public.aka_agent_control_web_desktop_accounts_policy(bigint)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE') THEN
     RAISE EXCEPTION 'v453_unexpected_new_function_acl';
   END IF;
 END

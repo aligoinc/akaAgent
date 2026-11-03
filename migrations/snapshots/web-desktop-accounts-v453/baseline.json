@@ -22,6 +22,7 @@
   "new_functions": [
     "private.aka_agent_web_desktop_accounts_policy(bigint)",
     "public.aka_agent_control_web_desktop_accounts_policy(bigint)",
-    "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)"
+    "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)",
+    "public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)"
   ]
 }

@@ -1450,6 +1450,7 @@ END;
 $function$;
 
 DROP FUNCTION IF EXISTS public.aka_agent_control_set_desktop_campaign_status(bigint, bigint, bigint, text);
+DROP FUNCTION IF EXISTS public.aka_agent_control_desktop_activity(bigint, bigint, text[], bigint, integer);
 DROP FUNCTION IF EXISTS public.aka_agent_control_web_desktop_accounts_policy(bigint);
 DROP FUNCTION IF EXISTS private.aka_agent_web_desktop_accounts_policy(bigint);
 ALTER TABLE public.auto_staff_device_presence DROP CONSTRAINT IF EXISTS auto_staff_device_presence_runtime_state_check;

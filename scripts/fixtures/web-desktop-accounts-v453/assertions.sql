@@ -211,12 +211,37 @@ BEGIN
   UPDATE auto_system_settings SET value = '{"enabled":"yes"}' WHERE key = 'web.desktop_accounts';
   ASSERT aka_agent_control_web_desktop_accounts_policy(9)->>'enabled' = 'false', 'non boolean fails closed';
 
+  -- F0. Nguồn Tiến trình Desktop: chỉ chiến dịch Desktop đang/vừa chạy, con trỏ tăng dần.
+  INSERT INTO auto_campaign_logs(campaign_id, log, created_at) VALUES
+    (103, '10:00:00 03/11/2026 - Zalo trình duyệt - CD trình duyệt - ▶️ Xử lý 1', now() - interval '1 minute'),
+    (101, '10:00:01 03/11/2026 - Zalo Server - CD Server - server log', now() - interval '1 minute'),
+    (105, '10:00:02 03/11/2026 - SMS - CD SMS - sms log', now() - interval '1 minute');
+  UPDATE auto_campaigns SET status = 'đang chạy' WHERE id = 103;
+  v := aka_agent_control_desktop_activity(7, 9, ARRAY['zalo','sms']);
+  ASSERT jsonb_array_length(v->'items') = 0, 'legacy scope has no desktop activity';
+  v := aka_agent_control_desktop_activity(7, 9, ARRAY['zalo','sms','zalo_qr','zalo_web']);
+  ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'items') x WHERE (x->>'campaignId')::bigint IN (101,105)), 'server/sms excluded';
+  ASSERT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'items') x WHERE x->>'campaignId' = '103' AND x->>'accountType' = 'zalo_browser'
+    AND x->>'log' LIKE '%Xử lý 1'), 'browser running log included';
+  n := (v->>'cursor')::bigint;
+  ASSERT n = (SELECT max((x->>'id')::bigint) FROM jsonb_array_elements(v->'items') x), 'cursor is max id';
+  v := aka_agent_control_desktop_activity(7, 9, ARRAY['zalo_qr','zalo_web'], n::bigint);
+  ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'items') x WHERE (x->>'id')::bigint <= n
+    AND (x->>'createdAt')::timestamptz < now() - interval '10 seconds'), 'cursor excludes old rows';
+  ASSERT (v->>'cursor')::bigint >= n, 'cursor monotonic';
+  v := aka_agent_control_desktop_activity(7, 9, ARRAY['zalo_qr'], NULL, 1000);
+  ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v->'items') x WHERE x->>'accountType' = 'zalo_browser'), 'browser needs zalo_web';
+  v := aka_agent_control_desktop_activity(8, 9, ARRAY['zalo_qr','zalo_web']);
+  ASSERT jsonb_array_length(v->'items') = 0, 'other staff isolated';
+
   -- F. ACL hàm mới.
   ASSERT NOT has_function_privilege('anon', 'aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT NOT has_function_privilege('authenticated', 'aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT NOT has_function_privilege('aka_agent_desktop', 'aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT has_function_privilege('service_role', 'aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', 'EXECUTE');
   ASSERT NOT has_function_privilege('anon', 'aka_agent_control_web_desktop_accounts_policy(bigint)', 'EXECUTE');
+  ASSERT NOT has_function_privilege('authenticated', 'aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE');
+  ASSERT has_function_privilege('service_role', 'aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', 'EXECUTE');
   ASSERT has_function_privilege('aka_agent_desktop', 'aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'EXECUTE'), 'presence ACL kept';
   RAISE NOTICE 'v453 assertions passed';
 END
