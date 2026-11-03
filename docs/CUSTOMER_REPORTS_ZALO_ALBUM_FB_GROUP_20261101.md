@@ -251,6 +251,41 @@ thường trong 1–2 ngày (5899 sau 7 tin; 5078 sau 18 ngày 5–10 tin/ngày)
 mình không chặn các tài khoản này — **chưa xác minh** vì sao. Khoá 48 giờ ngắn hơn đợt cấm: mỗi 2 ngày
 tốn 1 lần tra SĐT + 1 lần gửi lỗi rồi khoá tiếp (21/97 lần đầu ghi nhận rơi đúng 09:45–10:00).
 
+### Giới hạn tra SĐT (đo 03/11/2026, chat-sync 29/09–03/11, ~197.000 lượt tra tới Zalo)
+
+Zalo **không** giới hạn khoảng cách giữa hai lần tra SĐT. Thứ bị giới hạn là **số lượt tra của một tài
+khoản trong ~60 phút cuốn chiếu**. Chỉ đo được trên chat-sync (`chat_zalo_action`, `campaign_find_user`
++ `find_user`); desktop/App Server không ghi dòng lịch sử cho 221/312 (`auto_error` id 9 không có
+`detail_status`). "Bị chặn" dưới đây là lần 221/312 đầu tiên sau ≥60 phút không bị chặn.
+
+| Lượt tra trong 60 phút trước | Lượt tra | Bị chặn |
+| --- | --- | --- |
+| <40 | 182.880 | 0 |
+| 40–44 | 3.433 | 0,70% |
+| 45–49 | 2.091 | 2,7% |
+| 50–59 | 1.885 | 3,2% |
+| ≥60 | 88 | 6,8% |
+
+- Khoảng cách không làm tăng rủi ro: dưới 40 lượt/60 phút thì 0/61.723 lượt cách lượt trước <60 giây
+  và 0/432 lượt cách <30 giây bị chặn (mẫu <30 giây nhỏ vì chiến dịch thường nghỉ ≥30 giây). Cùng
+  mức lượt/giờ, lượt cách <60 giây bị ít hơn hoặc bằng lượt cách 1–2 phút (40–44: 0,31% so với
+  0,92%; 45–49: 2,0% so với 3,1%).
+- Ngưỡng không cố định: 21/22 tài khoản từng bị chặn có mức thấp nhất 41–50 lượt/60 phút (tài khoản
+  còn lại 95), nhưng cùng tài khoản có lúc qua 60–68 lượt không bị (179, 40, 38, 84).
+- Không reset theo giờ đồng hồ: 60 phút trước có 40–59 lượt mà từ đầu giờ hiện tại <20 lượt vẫn bị
+  1,1% (33/2.943). Chưa thấy giới hạn ngày: tối đa 463 lượt/24 giờ; dưới 40 lượt/60 phút vẫn 0/1.014
+  lượt bị khi 24 giờ trước đã có 300–599 lượt.
+- Chặn ngắn: chat-sync vẫn tra tiếp sau 221 (147 đợt, trung vị 4 lượt bị chặn/đợt, tối đa 40), và
+  115/147 đợt có lượt tra OK lại trong <10 phút, 140/147 trong <60 phút. Desktop/App Server khoá tra số
+  60 phút (id 9).
+- Tra tiếp thì leo thang: tài khoản 179 sáu lần nhận `312` "Tìm số điện thoại quá nhiều lần trong 1
+  giờ có thể bị xem là hoạt động bất thường. Bạn hãy thử lại vào HH:00" (khoá tới đầu giờ kế), lúc
+  60 phút trước đã có 113–128 lượt tra, 28–39 lượt đã bị 221. `304` "Bạn đã bị chặn chức năng này do vi
+  phạm chính sách Zalo" (tài khoản 258, 16–17/10, 4 lần, 0–1 lượt tra trước đó) không gắn với số lượt.
+
+Hệ quả: cần giới hạn ≤~40 lượt tra mỗi 60 phút cuốn chiếu cho từng tài khoản, không cần khoảng cách
+cố định giữa hai lần tra; gặp 221 thì dừng tra thay vì thử tiếp.
+
 ## B. Comment sau đăng nhóm gãy toàn fleet từ 30/10
 
 Block `fb_comment_at_position` (id 34) chờ element `fb_comment_box_at_n` (id 13)
@@ -572,7 +607,7 @@ không xuất hiện trong 15 s); step vẫn `success` nên đếm lỗi phải 
 ## D. Rà soát logic chạy chiến dịch: lãng phí và cập nhật sai (02/11/2026 tối)
 
 Dữ liệu `auto_campaign_details` 02/11 tới ~20:40 VN (id ≥ 10.225.316), chính sách `auto_error`
-và code tại `5a0f560`. Chưa sửa gì; mọi mục dưới đây cần quyết định trước khi đổi code/DB.
+và code tại `5315d1b` (số dòng theo commit này). Chưa sửa gì; mọi mục dưới đây cần quyết định trước khi đổi code/DB.
 
 1. **Không nhớ mục tiêu đã hỏng cố định.** Cooldown gửi lặp
    (`aka_agent_apply_campaign_delivery_cooldown`) chỉ xét dòng `thành công`. Chỉ nhìn lại ~2 ngày
