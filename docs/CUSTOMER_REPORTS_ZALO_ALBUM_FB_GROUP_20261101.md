@@ -670,6 +670,21 @@ Kiểm thêm sau hai lượt đọc code (desktop/App Server và chat-sync), ch�
     khoảng nghỉ thừa.
 13. QR: lỗi mạng khi kiểm phiên hạ tài khoản xuống `chưa đăng nhập` và không tự hồi phục (14 ngày: ~43
     lần đăng xuất có lý do mạng/DB/proxy/500 trên desktop; 5 tài khoản QR đang kẹt).
+14. **Zalo trả "thành công" nhưng không có mã tin nhắn cho phần chữ** (đo 03/11, dòng code tại
+    `2a2ff39`). Tin chữ gửi được bình thường luôn có `msgId`; ở vài tài khoản Zalo trả `data` rỗng
+    (`message: ""`) mà không báo lỗi, và app coi như đã gửi chữ
+    ([campaignScheduler.ts:15294](../src/main/services/campaignScheduler.ts:15294), nhánh
+    `content_then_media` của nội dung định dạng + 1 tệp).
+    - Chữ trước, file sau bị `122`: 74/74 dòng từ 30/10 (staff 1153, 1415; 5 tài khoản) không có
+      `msgId` cho phần chữ, nhưng vẫn ghi "Đã gửi nội dung nhưng gửi file thất bại", tính hạn mức
+      (`countsTowardLimit: true`, [:15358](../src/main/services/campaignScheduler.ts:15358)) và khoá
+      không gửi lại. 122 thông thường thì không tính hạn mức (22.560 dòng từ 02/11, đủ bốn runtime).
+    - Báo `thành công` mà chữ không có `msgId`: 150 dòng từ 02/11 (staff 1415: 21–30% số lần gửi chữ
+      của 4 tài khoản QR; staff 1308: 7,5% của 2 tài khoản Server). Chat-sync 15 ngày: 1.368/51.503
+      `send_text` completed trên 4 tài khoản, có cả nhắn bạn bè (9275: 45% từ 30/10–01/11; 9239: 36%;
+      5321: 14%; 8820: 2%).
+    - **Chưa xác minh** chữ có tới người nhận hay không: lệnh campaign không ghi `content_fingerprint`
+      và truy vấn đối chiếu tin tự gửi bị quá thời gian giờ cao điểm.
 
 ### Giải pháp đề xuất cho mục D (02/11/2026 tối, chưa làm gì)
 
@@ -729,6 +744,11 @@ akaAgentChatApi; **desktop** = theo bản phát hành (máy khách bản cũ kh�
   `zalo_action_codes=['zalo_message_group']`, `thất bại`, không tính hạn mức/lỗi liên tiếp;
   `getZaloErrorPolicyByCode` ([errorPolicyRepository.ts:52](../src/main/data/repositories/errorPolicyRepository.ts:52))
   đã khớp theo mã Zalo + mã hành động nên không cần phát hành app. Lỗi không có mã Zalo: theo mục 3.
+- **Mục 14 (chữ không có mã tin nhắn)** — trước hết xác minh bằng một lượt gửi thử từ tài khoản bị
+  ảnh hưởng (xem trên máy người nhận). Nếu chữ không tới: chỉ coi chữ đã gửi khi có `msgId`; chữ rỗng
+  rồi file `122` ghi như 122 thường (không tính hạn mức, không ghi "Đã gửi nội dung", không khoá gửi
+  lại); chữ rỗng mà file tới thì báo "đã gửi file, Zalo không nhận nội dung" thay vì `thành công`.
+  Chat-sync kiểm `campaignCommandResult.message.msgId` của `send_text`. Kênh: VPS + desktop + chat-sync.
 
 Thứ tự: (1) ngay — chính sách 112/161, poll 30 s trên VPS, báo khách các nhóm 112 và chiến dịch đang
 dừng; (2) đợt 1 — mục 7 (VPS + chat-sync + desktop), rồi mục 4, 3, 8, 11, giãn cách; (3) đợt 2 — bảng
