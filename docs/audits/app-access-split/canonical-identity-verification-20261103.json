@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-03",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "status": "source-ready-not-applied",
+  "migration": "migrations/migration_v451_chat_canonical_identity.sql",
+  "changedFunctions": [
+    {
+      "signature": "private.app_access_reserve_enabled_identity()",
+      "sourceMd5": "ddc0b1c0b4e11534cc5e8a403ec07158",
+      "targetMd5": "66a710beb5d36f03d16d4684fd1a5385",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "sourceMd5": "bb948da088b5a8be76f9516e08255a14",
+      "targetMd5": "f9f8f66c263a45c7196808f1781a64cf",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    }
+  ],
+  "preservedDependencies": [
+    {
+      "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+      "md5": "e1b81ef404854cd4290496a9dfc0ff46"
+    },
+    {
+      "signature": "private.app_access_guard_flags()",
+      "md5": "aacbeba11f54e46705182d61915ff928"
+    },
+    {
+      "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+      "md5": "8366eb0aafe73f700214ff9c80542876"
+    }
+  ],
+  "local": {
+    "engine": "PostgreSQL 17",
+    "cases": 230,
+    "newCanonicalIdentityCases": 42,
+    "nodeTypecheck": "passed",
+    "rendererTypecheck": "passed",
+    "chatApiBuild": "passed",
+    "realZaloCalls": false
+  },
+  "productionTrial": {
+    "result": "passed",
+    "termination": "ROLLBACK",
+    "rowCopiesOnly": true,
+    "businessRowsWritten": false,
+    "flagsAndBindingFingerprintUnchanged": true,
+    "otherFunctionsFingerprintUnchanged": true,
+    "narrowRollbackVerified": true,
+    "liveDefinitionsAndMetadataRestored": true
+  },
+  "performance": {
+    "newIndexes": 0,
+    "newPools": 0,
+    "newConnections": 0,
+    "newPolling": 0,
+    "existingIndexes": [
+      "uq_chat_zalo_account_organization_auto_account",
+      "chat_zalo_account_pkey"
+    ],
+    "scope": "indexed binding lookup on permission grant; no per-message reader changes"
+  },
+  "rollout": {
+    "databaseApplied": false,
+    "servicesDeployed": false,
+    "installersBuilt": false,
+    "crmChanged": false
+  }
+}

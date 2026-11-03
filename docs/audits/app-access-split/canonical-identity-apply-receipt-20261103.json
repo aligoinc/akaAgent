@@ -1,0 +1,216 @@
+{
+  "migration": "migration_v451_chat_canonical_identity",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "ledgerVersion": "20261103041506",
+  "ledgerTimeVietnam": "2026-11-03 11:15:06",
+  "status": "applied",
+  "userAuthorization": "apply đi, rồi check lại xem còn chỗ nào check lệch như vậy ko",
+  "preflightMatchedLive": true,
+  "productionTrial": "passed; ends ROLLBACK; copied rows only",
+  "postflight": {
+    "verified": true,
+    "smoke": "passed; copied rows only; ends ROLLBACK",
+    "unexpectedDifferences": []
+  },
+  "before": {
+    "flags": "e990f61b06e6d81f83ebe6ffb8803102",
+    "bindings": "a6953ce273f510732cc5b31f12f22a8e",
+    "policies": "48d26dccc8535b795535b031c121fc55",
+    "triggers": "d4f76bca075513a15ba8317b9aa53252",
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "e1b81ef404854cd4290496a9dfc0ff46",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "ddc0b1c0b4e11534cc5e8a403ec07158",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_reserve_enabled_identity()",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "bb948da088b5a8be76f9516e08255a14",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "aacbeba11f54e46705182d61915ff928",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_guard_flags()",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+        "md5": "8366eb0aafe73f700214ff9c80542876",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private",
+          "lock_timeout=3s",
+          "statement_timeout=12s"
+        ],
+        "prosecdef": true,
+        "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      }
+    ],
+    "staffFlags": "1bb1cbef59a8260b7afeb46ff7449ea0",
+    "otherFunctions": "45b85ea03a0cac19a84ac91778772997"
+  },
+  "after": {
+    "flags": "e990f61b06e6d81f83ebe6ffb8803102",
+    "bindings": "a6953ce273f510732cc5b31f12f22a8e",
+    "policies": "48d26dccc8535b795535b031c121fc55",
+    "triggers": "d4f76bca075513a15ba8317b9aa53252",
+    "functions": [
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "e1b81ef404854cd4290496a9dfc0ff46",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "66a710beb5d36f03d16d4684fd1a5385",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_reserve_enabled_identity()",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "f9f8f66c263a45c7196808f1781a64cf",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "aacbeba11f54e46705182d61915ff928",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private"
+        ],
+        "prosecdef": true,
+        "signature": "private.app_access_guard_flags()",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+        "md5": "8366eb0aafe73f700214ff9c80542876",
+        "owner": "postgres",
+        "procost": 100,
+        "prorows": 0,
+        "proconfig": [
+          "search_path=pg_catalog, public, private",
+          "lock_timeout=3s",
+          "statement_timeout=12s"
+        ],
+        "prosecdef": true,
+        "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+        "proisstrict": false,
+        "proparallel": "u",
+        "provolatile": "v",
+        "proleakproof": false
+      }
+    ],
+    "staffFlags": "1bb1cbef59a8260b7afeb46ff7449ea0",
+    "otherFunctions": "45b85ea03a0cac19a84ac91778772997"
+  },
+  "preserved": {
+    "businessFlags": true,
+    "bindingIdentity": true,
+    "staffState": true,
+    "policies": true,
+    "triggers": true,
+    "otherFunctions": true,
+    "V449": true,
+    "V450": true
+  },
+  "rollout": {
+    "databaseApplied": true,
+    "servicesDeployed": false,
+    "installersBuilt": false,
+    "crmChanged": false
+  },
+  "automatedProviderRequests": 0
+}

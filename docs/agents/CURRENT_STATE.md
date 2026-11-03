@@ -6,6 +6,34 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
+[V451 canonical Chat identity](../audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md):
+**Đã apply 11:15:06 VN ngày 03/11/2026**, ledger `20261103041506`; sửa false conflict khi bật Chat từ ID legacy đã đăng xuất.
+230 ca PG17 (42 mới), hai typecheck akaAgent/build Chat API và trial production
+ROLLBACK và hậu kiểm đạt; chỉ hai hàm đổi đúng checksum, flags/bindings/ACL và các hàm khác giữ nguyên.
+Không deploy/build app hoặc tự bật account; giữ V449/V450. Không apply lại V451.
+[Receipt apply](../audits/app-access-split/canonical-identity-apply-receipt-20261103.json).
+[Audit tiếp theo](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md): còn
+login-status trigger/local registration/duplicate legacy đã hoãn dùng ID cũ;
+bốn repro local xác nhận, chưa sửa. Live 11:20:53: không có bound UID mismatch
+hay duplicate candidate đang bật; ba Server unbound logged-out còn ID cũ, Chat=false.
+
+[Cấp lại Chat Server khi chủ khóa/hết hạn — V450](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md):
+**Đã apply 10:21:32 VN ngày 03/11/2026**, ledger `20261103032132`. Chỉ sửa validator
+cấp quyền; giữ gói/quota/tenant/identity, actor auth, akaAgent và host QR local.
+188 ca PG17 đạt (44 ca mới), hai typecheck akaAgent và build TypeScript API đạt.
+Production trial ROLLBACK và hậu kiểm 6 Server/1 QR local đúng kỳ vọng, không đổi
+cờ hoặc chia sẻ thật. Không deploy/build bộ cài/đổi CRM; không apply lại.
+[Receipt](../audits/app-access-split/shared-owner-grant-receipt-20261103.json).
+
+[Chia sẻ Chat khi chủ bị khóa/hết hạn — V449](../audits/app-access-split/SHARED_OWNER_FIX_20261103.md):
+**Đã apply 09:52:08 VN ngày 03/11/2026**, ledger `20261103025208`. Chỉ helper
+account Chat bỏ điều kiện active/thời hạn của chủ; staff login/ACL người nhận,
+owner chưa xóa/đúng tenant và akaAgent giữ nguyên. Org 1 khôi phục eligibility
+Chat của 7 account, tổng 35/35; chủ vẫn bị khóa và không chạy chiến dịch. 144 ca
+PG17 (46 ca mới), 1.756 API tests, API build và hai typecheck akaAgent đạt.
+Không deploy/build bộ cài/đổi CRM, pool hoặc polling; không apply lại.
+[Receipt và giới hạn kiểm chứng](../audits/app-access-split/shared-owner-receipt-20261103.json).
+
 [Tối ưu ba điểm hiệu năng 03/11](../audits/app-access-split/PERFORMANCE_FIX_20261103.md):
 **V448 đã apply 06:40:52 VN**, ledger `20261102234145`: partial index cho campaign
 held, không đổi RPC/ACL/RLS. **Chat API deploy 06:47:34 VN** từ repo chính
