@@ -1,0 +1,27 @@
+{
+  "migration": "migration_v453_web_desktop_accounts",
+  "captured": "2026-11-03",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "method": "md5(pg_get_functiondef) live; định nghĩa tái tạo cục bộ từ repo + orphan-repair/v287/v288 và khớp từng md5",
+  "functions": [
+    {"signature": "public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)", "source": "761108afe53ff4046efe0cd247846d10", "target": "6b148777006903e4830925c55616820b"},
+    {"signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])", "source": "12d454fbc38217dea3497addd39ed832", "target": "a2bc3f7cae264e647ac576c9895e840f"},
+    {"signature": "public.aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)", "source": "1275ad05d4dd184f5f6d9cd937caa21c", "target": "26875e2b1652ca56cc8e59460df8cae1"},
+    {"signature": "public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)", "source": "c1673974d0982ce6a731741072ca5338", "target": "61a6b5c855fbcf86cafaf3c3c7ce6f0a"},
+    {"signature": "public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)", "source": "f285e48f4deaf2e1bf7896d7aeddbcf8", "target": "a86278195e18d1ef8d0091b41d1d0c5b"},
+    {"signature": "public.delete_control_campaign_atomic(bigint,bigint,bigint)", "source": "1955af1c590ec870cb098cde9dd0714b", "target": "4cfcad941c3acf22e674a77b203d086d"},
+    {"signature": "public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)", "source": "0f22d3c6fe532176af0e3f38fd485f88", "target": "d283261c5e77558d10f5df86cd4d1127"},
+    {"signature": "public.update_control_campaign_input_statuses_atomic(bigint,bigint,bigint,bigint[],text,text)", "source": "a98a23f8e7f2e1e6582449f7ed45fb45", "target": "d61093635f226751c4a311840c6b3e29"},
+    {"signature": "public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)", "source": "b504f4928a9dd271dec783796a7a0374", "target": "478aa4281c683686437f31947bb760b1"},
+    {"signature": "public.aka_agent_authenticate_control_session(text)", "source": "c748df75349ebeef58c3c8f120439b0b", "target": "de8f93ee545bca94a199b2dffb9fe324"}
+  ],
+  "unchanged_dependencies": [
+    {"signature": "public.create_control_campaign_v2(bigint,bigint,text,jsonb,jsonb,text)", "md5": "1b04e01063f2d59e23e063794a4574d2"},
+    {"signature": "public.update_control_campaign_by_config_version_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)", "md5": "3e1e2f8b67697d36b3c8c3830586a6c2"}
+  ],
+  "new_functions": [
+    "private.aka_agent_web_desktop_accounts_policy(bigint)",
+    "public.aka_agent_control_web_desktop_accounts_policy(bigint)",
+    "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)"
+  ]
+}
