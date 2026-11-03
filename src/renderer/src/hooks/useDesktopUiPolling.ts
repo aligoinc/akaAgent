@@ -16,6 +16,9 @@ export function useDesktopUiPolling(scope: string | null, active: boolean, hasSe
     let campaignsRunning = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let accountEventDue = 0
+    // Web có thể sửa tài khoản Desktop (v453). Không thêm polling nền: chỉ đọc lại khi
+    // người dùng quay lại cửa sổ và lần đọc trước đã cũ hơn chu kỳ tài khoản.
+    let focusRefreshDue = 0
     const visible = () => document.visibilityState === 'visible'
     const arm = () => {
       clearTimeout(timer)
@@ -25,6 +28,7 @@ export function useDesktopUiPolling(scope: string | null, active: boolean, hasSe
       const due: number[] = []
       if (!accountsRunning) {
         if (accountEventDue) due.push(accountEventDue)
+        if (focusRefreshDue) due.push(focusRefreshDue)
         if (active && hasServerAccounts) due.push(state.accountsReadAt + settings.accounts * 1000)
       }
       if (!campaignsRunning && active && state.campaignPageActive && state.campaignPageQuery) {
@@ -41,10 +45,12 @@ export function useDesktopUiPolling(scope: string | null, active: boolean, hasSe
       // At most one read of each kind, as before. A slow account read must not
       // block a campaign state event (or vice versa).
       if (!accountsRunning && ((accountEventDue && now >= accountEventDue)
+        || (focusRefreshDue && now >= focusRefreshDue)
         || (active && hasServerAccounts && now - state.accountsReadAt >= settings.accounts * 1000))) {
         accountsRunning = true
         const invalidate = accountEventDue > 0
         accountEventDue = 0
+        focusRefreshDue = 0
         void state.loadAccounts({ silent: true, invalidate }).finally(() => { accountsRunning = false; arm() })
       }
       if (!campaignsRunning && active && state.campaignPageActive && state.campaignPageQuery
@@ -58,18 +64,26 @@ export function useDesktopUiPolling(scope: string | null, active: boolean, hasSe
       if (!accountEventDue) accountEventDue = Date.now() + 300
       arm()
     }
+    const onFocus = () => {
+      const { hasServerAccounts, settings } = current.current
+      if (visible() && !hasServerAccounts && !focusRefreshDue
+        && Date.now() - useCampaignStore.getState().accountsReadAt >= settings.accounts * 1000) {
+        focusRefreshDue = Date.now() + 300
+      }
+      arm()
+    }
     const unsubscribe = window.electronAPI.onAccountStatusUpdated(accountEvent)
     const unsubscribeStore = useCampaignStore.subscribe(arm)
     reschedule.current = arm
-    document.addEventListener('visibilitychange', arm)
-    window.addEventListener('focus', arm)
+    document.addEventListener('visibilitychange', onFocus)
+    window.addEventListener('focus', onFocus)
     arm()
     return () => {
       disposed = true
       clearTimeout(timer)
       unsubscribe(); unsubscribeStore()
-      document.removeEventListener('visibilitychange', arm)
-      window.removeEventListener('focus', arm)
+      document.removeEventListener('visibilitychange', onFocus)
+      window.removeEventListener('focus', onFocus)
       reschedule.current = () => {}
     }
   }, [scope])

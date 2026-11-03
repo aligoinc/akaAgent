@@ -19,7 +19,8 @@ export class PassiveDevicePresence {
   private lastDiagnosticAt = -Infinity
 
   constructor(private readonly options: {
-    getDevice: () => Promise<DeviceIdentity & { appVersion: string }>
+    /** `runtime`: ảnh chụp bộ chạy (v453), RPC chỉ lưu khi là object ≤ 32 KB và phiên chưa kết thúc. */
+    getDevice: () => Promise<DeviceIdentity & { appVersion: string; runtime?: Record<string, unknown> }>
     send: (args: Record<string, unknown>, signal: AbortSignal) => Promise<void>
     warn: () => void
     now?: () => number
