@@ -1,0 +1,890 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "deployment": {
+    "component": "api",
+    "root": "/Users/lequangnhut/Repos/akaAgentChatApi",
+    "head": "644de45afe1ab5b787eb37b4003f25ac7c1a7cc3",
+    "app": "aka-agent-chat-api",
+    "machine": "7845747fe073e8",
+    "started_at": "2026-11-02T23:47:14.610649+00:00",
+    "finished_at": "2026-11-02T23:47:34.411816+00:00",
+    "before_image": "registry.fly.io/aka-agent-chat-api:app-access-main-c25b520-20261103@sha256:c062738cf27b4598bdb91c8e613a4a55702b673287739a623c344244c527e7b8",
+    "after_image": "registry.fly.io/aka-agent-chat-api:app-access-perf-main-644de45-20261103@sha256:7cb55524f36bce4a3fa82aafcb24912c6a4a934f0d204c114c5919ae043299c2",
+    "config_changed_paths": [
+      ".image"
+    ],
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 1024
+    },
+    "state": "started"
+  },
+  "image_verification": {
+    "node": "v22.23.4",
+    "files": {
+      "packages/database/src/chatAccessSql.ts": "d15c4b159e10d48a6e6b67371cb1a3a5039b16d9ccb5e5b0d644ea4115ee7a02",
+      "packages/database/src/chatAppAccessReadScope.ts": "6c7afc5dfd5c8a481c211e07c13711a5c174bfa844cef0e57507075a59194e87",
+      "packages/database/src/chatInboxRepository.ts": "8683bc59007f54da6a75be8f3a4ae967e204c3d8695ca544d15160ee04fb34d9",
+      "packages/database/src/chatWorkspaceRepository.ts": "3b595a475e2863a20bc5ad63f426d82d5e44c6d3743b0a73e0d381e00b995fc7",
+      "packages/database/src/chatEntitlementRepository.ts": "badf1d6e45551d4184b681e474d511136050c58468275f75fa7ec8e71422ea0d",
+      "packages/database/dist/chatAccessSql.js": "998bf60195389d85831bcfc031496598a54884f0acea70634b9895ccb2b62262",
+      "packages/database/dist/chatAppAccessReadScope.js": "0e71a821ebb832618409b77ba6214aed7fbafdeae3e0ae7764fa3f640e934a84",
+      "packages/database/dist/chatInboxRepository.js": "1005f2832d9e3d3cf867a8f08144451a45c52d03ccc893b515ab842bd722ebcb",
+      "packages/database/dist/chatWorkspaceRepository.js": "2affd6cc40f42ad18971a5acd183bad167dfeff44246f9d95220e24a53efd3e0",
+      "packages/database/dist/chatEntitlementRepository.js": "58e43b9442528b736dfbce29b38b20a434adcdb857cc3780987c309f6107bd13"
+    },
+    "source_matches_main": {
+      "packages/database/src/chatAccessSql.ts": true,
+      "packages/database/src/chatAppAccessReadScope.ts": true,
+      "packages/database/src/chatInboxRepository.ts": true,
+      "packages/database/src/chatWorkspaceRepository.ts": true,
+      "packages/database/src/chatEntitlementRepository.ts": true,
+      "packages/database/dist/chatAccessSql.js": true,
+      "packages/database/dist/chatAppAccessReadScope.js": true,
+      "packages/database/dist/chatInboxRepository.js": true,
+      "packages/database/dist/chatWorkspaceRepository.js": true,
+      "packages/database/dist/chatEntitlementRepository.js": true
+    }
+  },
+  "machine_parity": [
+    {
+      "process": "worker",
+      "id": "784574da214578",
+      "state": "started",
+      "changed_config_keys": [],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      }
+    },
+    {
+      "process": "api",
+      "id": "7845747fe073e8",
+      "state": "started",
+      "changed_config_keys": [
+        "image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      }
+    },
+    {
+      "process": "zalo_runtime",
+      "id": "7817d7daee2d58",
+      "state": "started",
+      "changed_config_keys": [],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 2048
+      }
+    }
+  ],
+  "http": {
+    "phase": "post-update",
+    "at": "2026-11-02T23:47:47.422814+00:00",
+    "checks": [
+      {
+        "name": "api-live",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "api-ready",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 245
+      },
+      {
+        "name": "chat-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "web-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 3
+      },
+      {
+        "name": "chat-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14652
+      },
+      {
+        "name": "web-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 1958
+      },
+      {
+        "name": "chat-custom-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "chat-custom-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14608
+      },
+      {
+        "name": "api-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      },
+      {
+        "name": "api-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      }
+    ],
+    "admin": {
+      "state": "running",
+      "timeZoneOk": true,
+      "runtimeCount": 1,
+      "attachedAccountCount": 226,
+      "campaignRealtimeListener": "connected",
+      "campaignRealtimeLastError": null,
+      "runtimes": [
+        {
+          "runtimeType": "server",
+          "state": "running",
+          "connectedAt": "2026-11-02T23:47:33.140Z",
+          "lastSeenAt": "2026-11-02T22:34:09.695Z",
+          "accountCount": 226,
+          "lastError": null
+        }
+      ]
+    }
+  },
+  "database": {
+    "migration": "V448",
+    "ledger": "20261102234145",
+    "index": "idx_auto_campaigns_app_access_held_account",
+    "bytes": 32768,
+    "oid": "54823920",
+    "canonical_repo": "akaAgent",
+    "rpc_acl_rls_unchanged": true
+  },
+  "tests": {
+    "typecheck": "passed",
+    "build": "passed",
+    "vitest_files": 120,
+    "vitest_tests": 1756,
+    "native_postgres_parity": 69,
+    "native_postgres_permission_transitions": 276,
+    "production_same_statement_parity": 11,
+    "native_index_concurrent_create_drop_rollback": "passed"
+  },
+  "rollout_notes": [
+    "Initial Fly manifest lookup failed; all existing machines/config verified unchanged before retry succeeded.",
+    "Two Fly health/proxy startup events occurred during the existing sole API restart at 06:47:28-30 VN; post-start health verified.",
+    "No Desktop/App Server build, Web/worker/runtime deploy, CRM changes, new connection budget, polling or replicas.",
+    "No authenticated UI/provider/campaign canary; two previously deferred P2 findings remain outside scope."
+  ],
+  "http_final": {
+    "phase": "post-observation",
+    "at": "2026-11-02T23:52:07.053581+00:00",
+    "checks": [
+      {
+        "name": "api-live",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "api-ready",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 245
+      },
+      {
+        "name": "chat-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "web-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 3
+      },
+      {
+        "name": "chat-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14652
+      },
+      {
+        "name": "web-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 1958
+      },
+      {
+        "name": "chat-custom-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "chat-custom-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14608
+      },
+      {
+        "name": "api-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      },
+      {
+        "name": "api-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      }
+    ],
+    "admin": {
+      "state": "running",
+      "timeZoneOk": true,
+      "runtimeCount": 1,
+      "attachedAccountCount": 226,
+      "campaignRealtimeListener": "connected",
+      "campaignRealtimeLastError": null,
+      "runtimes": [
+        {
+          "runtimeType": "server",
+          "state": "running",
+          "connectedAt": "2026-11-02T23:47:33.140Z",
+          "lastSeenAt": "2026-11-02T23:51:53.155Z",
+          "accountCount": 226,
+          "lastError": null
+        }
+      ]
+    }
+  },
+  "logs": {
+    "from": "2026-11-02T23:49:01.661675489Z",
+    "to": "2026-11-02T23:52:01.816832441Z",
+    "log_rows": 100,
+    "errors": [],
+    "completed_http_statuses": {
+      "200": 45,
+      "201": 1
+    },
+    "worker_reports": [
+      {
+        "intervalStartedAt": "2026-11-02T23:48:38.054Z",
+        "intervalEndedAt": "2026-11-02T23:49:38.069Z",
+        "project": {
+          "claimed": 189,
+          "completed": 189,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "normalize": {
+          "claimed": 196,
+          "completed": 195,
+          "failed": 1,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 0,
+          "retryScheduled": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 137,
+          "infrastructureErrors": 0
+        }
+      },
+      {
+        "intervalStartedAt": "2026-11-02T23:49:38.069Z",
+        "intervalEndedAt": "2026-11-02T23:50:38.084Z",
+        "project": {
+          "claimed": 200,
+          "completed": 200,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "normalize": {
+          "claimed": 214,
+          "completed": 209,
+          "failed": 5,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 2,
+          "retryScheduled": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 256,
+          "infrastructureErrors": 0
+        }
+      },
+      {
+        "intervalStartedAt": "2026-11-02T23:50:38.084Z",
+        "intervalEndedAt": "2026-11-02T23:51:38.098Z",
+        "project": {
+          "claimed": 177,
+          "completed": 177,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "normalize": {
+          "claimed": 190,
+          "completed": 187,
+          "failed": 3,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 1,
+          "retryScheduled": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 178,
+          "infrastructureErrors": 0
+        }
+      }
+    ]
+  },
+  "runtime_error_counts": [
+    {
+      "last_error_code": "runtime_event_not_json_serializable",
+      "last_error_stage": "normalize",
+      "phase": "after_api_deploy",
+      "rows": 11
+    },
+    {
+      "last_error_code": "runtime_event_not_json_serializable",
+      "last_error_stage": "normalize",
+      "phase": "before_api_deploy",
+      "rows": 12
+    },
+    {
+      "last_error_code": "invalid_zalo_event_payload",
+      "last_error_stage": "project",
+      "phase": "before_api_deploy",
+      "rows": 23
+    }
+  ],
+  "measurements": {
+    "method": "pg_stat_statements counter deltas keyed by userid/dbid/queryid/toplevel; selected app roles only, excludes administration probes; no reset/deallocation; query shape classification across changed IDs",
+    "limitations": "Different wall-clock windows and workload mix; SQL calls are not user HTTP requests. Sum SQL execution includes waiting and is not CPU. Small inbox/notification sample. No controlled peak load or provider/UI canary.",
+    "before": {
+      "from": "2026-11-02T23:34:13.450276+00:00",
+      "to": "2026-11-02T23:39:50.552996+00:00",
+      "seconds": 337.10272,
+      "stats_reset": "2026-09-28T09:11:42.019574+00:00",
+      "dealloc_delta": 0,
+      "calls": 263815,
+      "calls_per_second": 782.5952872762344,
+      "sum_execution_ms": 297038.5678817687,
+      "execution_ms_per_second": 881.151501482304,
+      "database_deltas": {
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "temp_bytes": 0,
+        "xact_commit": 92083,
+        "xact_rollback": 295
+      },
+      "groups": {
+        "staff_access": {
+          "calls": 481,
+          "total_exec_time": 115930.56905699987,
+          "shared_blks_hit": 28744677.0,
+          "shared_blks_read": 0.0,
+          "rows": 481.0,
+          "queryids": [
+            "7015753416304034681"
+          ],
+          "roles": [
+            "anon"
+          ],
+          "ms_per_call": 241.01989408939681,
+          "buffer_hits_per_call": 59760.24324324324,
+          "calls_per_second": 1.4268647847160654
+        },
+        "runtime_accounts": {
+          "calls": 23,
+          "total_exec_time": 8100.510412000003,
+          "shared_blks_hit": 6310689.0,
+          "shared_blks_read": 0.0,
+          "rows": 5198.0,
+          "queryids": [
+            "82505124312327825"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 352.1961048695654,
+          "buffer_hits_per_call": 274377.7826086957,
+          "calls_per_second": 0.06822846163922973
+        },
+        "notification_unread": {
+          "calls": 11,
+          "total_exec_time": 8192.826882999994,
+          "shared_blks_hit": 482718.0,
+          "shared_blks_read": 0.0,
+          "rows": 11.0,
+          "queryids": [
+            "-611292726412214011"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 744.8024439090904,
+          "buffer_hits_per_call": 43883.454545454544,
+          "calls_per_second": 0.03263100339267509
+        },
+        "runtime_organizations": {
+          "calls": 23,
+          "total_exec_time": 10689.737254000007,
+          "shared_blks_hit": 1615336.0,
+          "shared_blks_read": 0.0,
+          "rows": 1196.0,
+          "queryids": [
+            "1231756453178608020"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 464.77118495652206,
+          "buffer_hits_per_call": 70232.0,
+          "calls_per_second": 0.06822846163922973
+        },
+        "notification_page": {
+          "calls": 11,
+          "total_exec_time": 475.67258300000003,
+          "shared_blks_hit": 33656.0,
+          "shared_blks_read": 0.0,
+          "rows": 264.0,
+          "queryids": [
+            "7361345278182156175"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 43.242962090909096,
+          "buffer_hits_per_call": 3059.6363636363635,
+          "calls_per_second": 0.03263100339267509
+        },
+        "runtime_owners": {
+          "calls": 11,
+          "total_exec_time": 4927.106239000001,
+          "shared_blks_hit": 433978.0,
+          "shared_blks_read": 0.0,
+          "rows": 1078.0,
+          "queryids": [
+            "-323829245113530106"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 447.91874900000005,
+          "buffer_hits_per_call": 39452.545454545456,
+          "calls_per_second": 0.03263100339267509
+        },
+        "inbox": {
+          "calls": 11,
+          "total_exec_time": 16268.07699999999,
+          "shared_blks_hit": 1353128.0,
+          "shared_blks_read": 0.0,
+          "rows": 2211.0,
+          "queryids": [
+            "3169914642214758541"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 1478.91609090909,
+          "buffer_hits_per_call": 123011.63636363637,
+          "calls_per_second": 0.03263100339267509
+        }
+      }
+    },
+    "after": {
+      "from": "2026-11-02T23:47:55.045952+00:00",
+      "to": "2026-11-02T23:53:09.745487+00:00",
+      "seconds": 314.699535,
+      "stats_reset": "2026-09-28T09:11:42.019574+00:00",
+      "dealloc_delta": 0,
+      "calls": 283138,
+      "calls_per_second": 899.7089874950085,
+      "sum_execution_ms": 171214.36132408606,
+      "execution_ms_per_second": 544.0566072780694,
+      "database_deltas": {
+        "deadlocks": 0,
+        "conflicts": 0,
+        "temp_files": 0,
+        "temp_bytes": 0,
+        "xact_commit": 98216,
+        "xact_rollback": 428
+      },
+      "groups": {
+        "staff_access": {
+          "calls": 518,
+          "total_exec_time": 3087.7638420099393,
+          "shared_blks_hit": 717775.0,
+          "shared_blks_read": 0.0,
+          "rows": 518.0,
+          "queryids": [
+            "7015753416304034681"
+          ],
+          "roles": [
+            "anon"
+          ],
+          "ms_per_call": 5.960934057934246,
+          "buffer_hits_per_call": 1385.6660231660233,
+          "calls_per_second": 1.6460145071393257
+        },
+        "runtime_accounts": {
+          "calls": 21,
+          "total_exec_time": 7942.821742999993,
+          "shared_blks_hit": 5802625.0,
+          "shared_blks_read": 0.0,
+          "rows": 4746.0,
+          "queryids": [
+            "82505124312327825"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 378.2296068095235,
+          "buffer_hits_per_call": 276315.4761904762,
+          "calls_per_second": 0.06673031785699969
+        },
+        "notification_page": {
+          "calls": 9,
+          "total_exec_time": 45.964198999999994,
+          "shared_blks_hit": 8032.0,
+          "shared_blks_read": 0.0,
+          "rows": 216.0,
+          "queryids": [
+            "-4418847622143000496"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 5.107133222222221,
+          "buffer_hits_per_call": 892.4444444444445,
+          "calls_per_second": 0.028598707652999867
+        },
+        "notification_unread": {
+          "calls": 9,
+          "total_exec_time": 58.782247999999996,
+          "shared_blks_hit": 32771.0,
+          "shared_blks_read": 0.0,
+          "rows": 9.0,
+          "queryids": [
+            "675355476410728196"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 6.531360888888888,
+          "buffer_hits_per_call": 3641.222222222222,
+          "calls_per_second": 0.028598707652999867
+        },
+        "runtime_owners": {
+          "calls": 10,
+          "total_exec_time": 4487.501339999995,
+          "shared_blks_hit": 394769.0,
+          "shared_blks_read": 0.0,
+          "rows": 980.0,
+          "queryids": [
+            "-323829245113530106"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 448.75013399999955,
+          "buffer_hits_per_call": 39476.9,
+          "calls_per_second": 0.03177634183666652
+        },
+        "runtime_organizations": {
+          "calls": 21,
+          "total_exec_time": 1440.340884,
+          "shared_blks_hit": 12715.0,
+          "shared_blks_read": 0.0,
+          "rows": 1092.0,
+          "queryids": [
+            "-3325939134679791184"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 68.58766114285714,
+          "buffer_hits_per_call": 605.4761904761905,
+          "calls_per_second": 0.06673031785699969
+        },
+        "inbox": {
+          "calls": 9,
+          "total_exec_time": 684.157837,
+          "shared_blks_hit": 289980.0,
+          "shared_blks_read": 0.0,
+          "rows": 1809.0,
+          "queryids": [
+            "5250265058408384168"
+          ],
+          "roles": [
+            "aka_agent_chat_api"
+          ],
+          "ms_per_call": 76.01753744444444,
+          "buffer_hits_per_call": 32220.0,
+          "calls_per_second": 0.028598707652999867
+        }
+      }
+    },
+    "host_metrics_before": {
+      "from": "2026-11-02T23:34:20.758218+00:00",
+      "to": "2026-11-02T23:39:56.595473+00:00",
+      "seconds": 335.837255,
+      "cpu_executing_percent": 27.14916052798759,
+      "cpu_modes_percent": {
+        "idle": 72.23385558837903,
+        "iowait": 0.6169838836333789,
+        "irq": 0.0,
+        "nice": 0.0003739296264442327,
+        "softirq": 0.7119620087502655,
+        "steal": 0.0,
+        "system": 1.8861010357857162,
+        "user": 24.55072355382516
+      },
+      "ram_used_percent": 47.100161408013996,
+      "swap_in_pages_per_second": 0.7444081806826345,
+      "swap_out_pages_per_second": 0.0,
+      "disks": {
+        "nvme0n1": {
+          "node_disk_written_bytes_total": 181701.7233540692,
+          "node_disk_io_time_seconds_total": 0.0024178377708568934,
+          "node_disk_writes_completed_total": 3.5136066128220347,
+          "node_disk_reads_completed_total": 0.6104147081597603,
+          "node_disk_read_bytes_total": 3049.095908076071
+        },
+        "nvme1n1": {
+          "node_disk_written_bytes_total": 1153033.9122144147,
+          "node_disk_io_time_seconds_total": 0.055205310679535095,
+          "node_disk_writes_completed_total": 90.6510506108085,
+          "node_disk_reads_completed_total": 16.67176561456828,
+          "node_disk_read_bytes_total": 217302.9671767654
+        }
+      }
+    },
+    "host_metrics_after": {
+      "from": "2026-11-02T23:47:57.095746+00:00",
+      "to": "2026-11-02T23:53:10.660087+00:00",
+      "seconds": 313.564341,
+      "cpu_executing_percent": 24.355159525836484,
+      "cpu_modes_percent": {
+        "idle": 74.29179833496168,
+        "iowait": 1.3530421392018341,
+        "irq": 0.0,
+        "nice": 0.0008020403907542498,
+        "softirq": 0.8056495725120861,
+        "steal": 0.0,
+        "system": 1.7813317078648403,
+        "user": 21.767376205068803
+      },
+      "ram_used_percent": 50.77173907356932,
+      "swap_in_pages_per_second": 0.0,
+      "swap_out_pages_per_second": 0.0,
+      "disks": {
+        "nvme0n1": {
+          "node_disk_io_time_seconds_total": 0.002851089499364447,
+          "node_disk_read_bytes_total": 574.7592325876111,
+          "node_disk_writes_completed_total": 4.401010636601692,
+          "node_disk_written_bytes_total": 230465.38955780052,
+          "node_disk_reads_completed_total": 0.012756552569859976
+        },
+        "nvme1n1": {
+          "node_disk_io_time_seconds_total": 0.09500123612585704,
+          "node_disk_read_bytes_total": 753992.6741861249,
+          "node_disk_writes_completed_total": 125.68712333268788,
+          "node_disk_written_bytes_total": 1615909.4570004055,
+          "node_disk_reads_completed_total": 81.6100450656792
+        }
+      }
+    },
+    "sql_call_rate_change_percent": 14.96478475181977,
+    "sql_execution_per_second_drop_percent": 38.25617883385113
+  },
+  "source_probe_plans": [
+    {
+      "name": "inbox_1667_0",
+      "ms": 5.233,
+      "planning_ms": 43.996,
+      "rows": 0,
+      "hits": 535,
+      "reads": 0
+    },
+    {
+      "name": "notification_1667_0",
+      "ms": 7.661,
+      "planning_ms": 18.641,
+      "rows": 0,
+      "hits": 1666,
+      "reads": 0
+    },
+    {
+      "name": "notification_1667_1",
+      "ms": 5.253,
+      "planning_ms": 7.466,
+      "rows": 1,
+      "hits": 828,
+      "reads": 0
+    },
+    {
+      "name": "entitlement_server_0",
+      "ms": 76.329,
+      "planning_ms": 1.354,
+      "rows": 52,
+      "hits": 1998,
+      "reads": 0
+    },
+    {
+      "name": "entitlement_all_0",
+      "ms": 20.176,
+      "planning_ms": 1.332,
+      "rows": 54,
+      "hits": 1842,
+      "reads": 0
+    },
+    {
+      "name": "inbox_1731_0",
+      "ms": 100.454,
+      "planning_ms": 44.854,
+      "rows": 24,
+      "hits": 68734,
+      "reads": 0
+    },
+    {
+      "name": "notification_1731_0",
+      "ms": 5.52,
+      "planning_ms": 19.988,
+      "rows": 24,
+      "hits": 804,
+      "reads": 0
+    },
+    {
+      "name": "notification_1731_1",
+      "ms": 102.663,
+      "planning_ms": 7.464,
+      "rows": 1,
+      "hits": 133105,
+      "reads": 0
+    }
+  ],
+  "production_parity": {
+    "statements": 11,
+    "all_equal": true
+  }
+}

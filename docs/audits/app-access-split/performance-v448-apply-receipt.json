@@ -1,0 +1,83 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "version": "V448",
+  "ledger": {
+    "name": "migration_v448_app_access_campaign_held_index",
+    "version": "20261102234145",
+    "method": "validation-only after standalone concurrent index build"
+  },
+  "apply": {
+    "started_at": "2026-11-02T23:40:50.303862+00:00",
+    "finished_at": "2026-11-02T23:40:52.619923+00:00",
+    "exit_code": 0
+  },
+  "index": {
+    "bytes": 32768,
+    "definition": "CREATE INDEX idx_auto_campaigns_app_access_held_account ON public.auto_campaigns USING btree (account_id) WHERE ((status = 'đang chạy'::text) OR (runtime_claim_token IS NOT NULL) OR (runtime_unit_token IS NOT NULL))",
+    "live": true,
+    "name": "idx_auto_campaigns_app_access_held_account",
+    "oid": "54823920",
+    "ready": true,
+    "valid": true
+  },
+  "metadata": {
+    "before_at": "2026-11-02T23:37:25.299263+00:00",
+    "after_at": "2026-11-02T23:42:03.242994+00:00",
+    "functions_unchanged": 1296,
+    "original_indexes_unchanged": 8,
+    "column_table_acl_rls_policies_triggers_unchanged": true,
+    "function_body_owner_acl_security_config_unchanged": true
+  },
+  "local_postgres17": {
+    "synthetic": true,
+    "postgres": 17,
+    "campaigns": 47100,
+    "held": 771,
+    "accounts": 54,
+    "trialRollback": true,
+    "concurrentBuild": true,
+    "rollbackVerified": true,
+    "before": {
+      "ms": 615.377,
+      "blocks": 363371,
+      "walBytes": 0
+    },
+    "after": {
+      "ms": 0.08,
+      "blocks": 110,
+      "walBytes": 0
+    },
+    "writeBefore": {
+      "ms": 3.255,
+      "blocks": 6604,
+      "walBytes": 1258064
+    },
+    "writeAfter": {
+      "ms": 4.285,
+      "blocks": 8352,
+      "walBytes": 1319930
+    },
+    "indexBytes": 40960,
+    "cases": [
+      "primary",
+      "secondary",
+      "claim",
+      "unit",
+      "deleted-held",
+      "account-operation"
+    ],
+    "functionUnchanged": true
+  },
+  "production_writes": "index DDL and ledger only; no business rows or RPC/ACL changes",
+  "production_trial": "concurrent DDL cannot run inside a rollback transaction; trial and guarded drop rehearsed on disposable native PostgreSQL 17",
+  "rollback": "Postcheck exact definition/helper, compare live index OID to receipt, then standalone DROP INDEX CONCURRENTLY only; never roll back app-access policy/ACL",
+  "source_sha256": {
+    "migrations/migration_v448_app_access_campaign_held_index.sql": "e4fa4776c7b6020707bf8f20989833fdfd71e91ae1430054bf8bf277b92e6170",
+    "migrations/tests/migration_v448_app_access_campaign_held_index_postcheck.sql": "306add0d9fc2834c03d5d3572026da789e68aa39997d55bc7bfdb507c75ca214",
+    "migrations/rollback/migration_v448_app_access_campaign_held_index.sql": "4b3a9f26baedf61a07b978fb8782f794a8656fd7a90db4649d56b1aefd075569",
+    "migrations/snapshots/app-access/performance-v448.json": "b495d9c3cfc1df32757100d9b6aacff10d535f1a4e2fd817aa57999dfba84ddd"
+  },
+  "private_evidence": "$HOME/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/performance-fix-20261102T2334Z/",
+  "connections_or_resources_added": false,
+  "postgrest_reload_requested": false
+}

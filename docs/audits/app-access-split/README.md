@@ -2,6 +2,14 @@
 
 **V445/V446, hai private auth patches và V447 đã apply; policy true từ 06:07:41 Việt Nam ngày 03/11/2026.** Backend/runtime, Chat Web và WebApp đã deploy từ repo chính; Server mới được người dùng xác nhận đã cài; Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. CRM không đổi source/deployment. Xem [activation và hậu kiểm](ACTIVATION_20261103.md), [receipt activation](activation-receipt.json) và [deploy](DEPLOYMENT_20261103.md). Tài liệu nghiệp vụ: [APP_ACCESS_SPLIT](../../APP_ACCESS_SPLIT.md). Các kết quả source/build và câu “chưa apply/chưa kích hoạt” bên dưới là lịch sử trước activation này; không dùng để apply lại hoặc rollback mở quyền.
 
+## Hiệu năng sau activation — 03/11/2026
+
+[Kiểm tra production 06:21–06:28](PERFORMANCE_20261103.md) là baseline trước sửa.
+**Đã tối ưu cả ba điểm**: [V448, Chat API và đo lại](PERFORMANCE_FIX_20261103.md),
+[receipt DB](performance-v448-apply-receipt.json). Index CONCURRENTLY live lúc
+06:40:52 VN; API deploy từ repo chính lúc 06:47:34 VN. Giữ RPC/ACL/RLS, quyền và
+cleanup; không tăng pool/polling/replica, không cần build lại app. Không apply lại.
+
 ## Apply DB tương thích — 03/11/2026
 
 Người dùng yêu cầu apply migration và tạm hoãn hai lỗi review còn lại. Sau đó xác nhận: “Chưa triển khai — giữ V447 chưa kích hoạt”. Chỉ apply các bước tương thích trên `akachat / cgjbsmqtfhqvttudyjzq`; không đổi source triển khai hay kích hoạt quyền riêng.

@@ -1,0 +1,116 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-11-02T23:34:13.450276+00:00",
+  "heldFunction": {
+    "acl": [
+      "postgres=X/postgres"
+    ],
+    "config": [
+      "search_path=pg_catalog, public"
+    ],
+    "definition": "CREATE OR REPLACE FUNCTION private.app_access_held(p_type text, p_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n  SELECT EXISTS(SELECT 1 FROM public.auto_accounts a WHERE\n    CASE p_type WHEN 'account' THEN a.id=p_id WHEN 'staff' THEN a.staff_id=p_id ELSE false END\n    AND (a.runtime_operation_claim_token IS NOT NULL OR a.status='đang chạy'\n      OR EXISTS(SELECT 1 FROM public.auto_campaigns c WHERE (c.account_id=a.id OR c.secondary_account_id=a.id)\n        AND (c.status='đang chạy' OR c.runtime_claim_token IS NOT NULL OR c.runtime_unit_token IS NOT NULL))))\n$function$\n",
+    "md5": "091b58186a65975e5faf5e620569feac",
+    "owner": "postgres",
+    "security_definer": true,
+    "signature": "private.app_access_held(text,bigint)",
+    "volatility": "s"
+  },
+  "existingCampaignIndexes": [
+    {
+      "bytes": 1638400,
+      "definition": "CREATE INDEX idx_auto_campaigns_last_run_at ON public.auto_campaigns USING btree (staff_id, last_run_at) WHERE (is_delete = false)",
+      "fetch": 3126796470,
+      "index": "idx_auto_campaigns_last_run_at",
+      "live": true,
+      "read": 3269492109,
+      "ready": true,
+      "scans": 73893828,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 16384,
+      "definition": "CREATE INDEX idx_sms_campaigns_account_status_schedule ON public.auto_campaigns USING btree (account_id, action_id, status, schedule, id) WHERE ((COALESCE(is_delete, false) = false) AND (action_id = 'sms_send'::text))",
+      "fetch": 3918,
+      "index": "idx_sms_campaigns_account_status_schedule",
+      "live": true,
+      "read": 5784,
+      "ready": true,
+      "scans": 3295,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 2170880,
+      "definition": "CREATE UNIQUE INDEX auto_campaigns_pkey ON public.auto_campaigns USING btree (id)",
+      "fetch": 1062691746,
+      "index": "auto_campaigns_pkey",
+      "live": true,
+      "read": 2146897390,
+      "ready": true,
+      "scans": 1088480018,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 729088,
+      "definition": "CREATE INDEX auto_campaigns_staff_id_idx ON public.auto_campaigns USING btree (staff_id)",
+      "fetch": 106312073827,
+      "index": "auto_campaigns_staff_id_idx",
+      "live": true,
+      "read": 110103909383,
+      "ready": true,
+      "scans": 7531870454,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 917504,
+      "definition": "CREATE UNIQUE INDEX uq_auto_campaigns_control_idempotency ON public.auto_campaigns USING btree (staff_id, control_idempotency_key) WHERE (control_idempotency_key IS NOT NULL)",
+      "fetch": 1,
+      "index": "uq_auto_campaigns_control_idempotency",
+      "live": true,
+      "read": 2,
+      "ready": true,
+      "scans": 5820,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 237568,
+      "definition": "CREATE INDEX idx_auto_campaigns_data_group ON public.auto_campaigns USING btree (data_group_id, status, schedule, id) WHERE ((data_target_source_mode = 'data_group'::text) AND (COALESCE(is_delete, false) = false))",
+      "fetch": 0,
+      "index": "idx_auto_campaigns_data_group",
+      "live": true,
+      "read": 0,
+      "ready": true,
+      "scans": 0,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 139264,
+      "definition": "CREATE UNIQUE INDEX uq_auto_campaigns_creation_bundle_child ON public.auto_campaigns USING btree (creation_bundle_id, creation_bundle_child_index) WHERE ((creation_bundle_id IS NOT NULL) AND (creation_bundle_child_index IS NOT NULL))",
+      "fetch": 2,
+      "index": "uq_auto_campaigns_creation_bundle_child",
+      "live": true,
+      "read": 4,
+      "ready": true,
+      "scans": 1698,
+      "table": "auto_campaigns",
+      "valid": true
+    },
+    {
+      "bytes": 16384,
+      "definition": "CREATE INDEX idx_auto_campaigns_secondary_account_id ON public.auto_campaigns USING btree (secondary_account_id) WHERE (secondary_account_id IS NOT NULL)",
+      "fetch": 0,
+      "index": "idx_auto_campaigns_secondary_account_id",
+      "live": true,
+      "read": 0,
+      "ready": true,
+      "scans": 0,
+      "table": "auto_campaigns",
+      "valid": true
+    }
+  ]
+}

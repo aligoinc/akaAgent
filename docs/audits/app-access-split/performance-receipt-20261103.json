@@ -1,0 +1,649 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "date_vietnam": "2026-11-03",
+  "scope": "read-only production diagnosis; local synthetic PGlite index experiment",
+  "private_evidence_dir": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-20261103/performance-20261102T2321Z",
+  "changes": {
+    "production_ddl": false,
+    "production_dml": false,
+    "deploy": false,
+    "rpc_acl_rls_changes": false,
+    "new_production_connections_or_pools": false
+  },
+  "catalog": {
+    "matched_activation_functions": 55,
+    "function_metadata_unchanged": true,
+    "policies_unchanged": true,
+    "runtime_profile_view_unchanged": true
+  },
+  "http": {
+    "phase": "performance",
+    "at": "2026-11-02T23:21:42.990353+00:00",
+    "checks": [
+      {
+        "name": "api-live",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "api-ready",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 245
+      },
+      {
+        "name": "chat-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "web-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 3
+      },
+      {
+        "name": "chat-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14652
+      },
+      {
+        "name": "web-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 1958
+      },
+      {
+        "name": "chat-custom-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "chat-custom-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14608
+      },
+      {
+        "name": "api-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      },
+      {
+        "name": "api-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      }
+    ],
+    "admin": {
+      "state": "running",
+      "timeZoneOk": true,
+      "runtimeCount": 1,
+      "attachedAccountCount": 226,
+      "campaignRealtimeListener": "connected",
+      "campaignRealtimeLastError": null,
+      "runtimes": [
+        {
+          "runtimeType": "server",
+          "state": "running",
+          "connectedAt": "2026-11-02T22:34:01.728Z",
+          "lastSeenAt": "2026-11-02T23:21:42.229Z",
+          "accountCount": 226,
+          "lastError": null
+        }
+      ]
+    }
+  },
+  "metrics": {
+    "from": "2026-11-02T23:22:40.155591+00:00",
+    "to": "2026-11-02T23:24:21.847456+00:00",
+    "seconds": 101.691865,
+    "cpu_executing_percent": 25.967393439414167,
+    "cpu_modes_percent": {
+      "idle": 73.39054213316555,
+      "iowait": 0.6420644274202857,
+      "irq": 0.0,
+      "nice": 0.0,
+      "softirq": 0.7194067963080021,
+      "steal": 0.0,
+      "system": 1.5063347083089214,
+      "user": 23.74165193479723
+    },
+    "ram_used_percent": 49.57075782046616,
+    "swap_in_pages_per_second": 0.009833628284819046,
+    "swap_out_pages_per_second": 0.0,
+    "disks": {
+      "nvme0n1": {
+        "node_disk_reads_completed_total": 0.04916814142409523,
+        "node_disk_io_time_seconds_total": 0.002163398222671638,
+        "node_disk_writes_completed_total": 3.451603527971485,
+        "node_disk_read_bytes_total": 563.8995803646634,
+        "node_disk_written_bytes_total": 146291.66256317552
+      },
+      "nvme1n1": {
+        "node_disk_reads_completed_total": 19.24441055339087,
+        "node_disk_io_time_seconds_total": 0.05668103343336728,
+        "node_disk_writes_completed_total": 83.10399263500575,
+        "node_disk_read_bytes_total": 201473.2643560033,
+        "node_disk_written_bytes_total": 981185.2698345142
+      }
+    }
+  },
+  "natural_sql_interval": {
+    "from": "2026-11-02T23:21:34.915527+00:00",
+    "to": "2026-11-02T23:28:15.972238+00:00",
+    "stats_reset_unchanged": true,
+    "total_calls": 308432,
+    "total_exec_ms": 340938.56258898467,
+    "visible_app_access_exec_share": 26.814061933853523,
+    "db_delta": {
+      "deadlocks": 0,
+      "conflicts": 0,
+      "temp_files": 0,
+      "temp_bytes": 0
+    }
+  },
+  "selected_query_deltas": [
+    {
+      "id": "7015753416304034681",
+      "role": "anon",
+      "calls": 538,
+      "total_ms": 133409.78137299977,
+      "mean_ms": 247.97357132527839,
+      "blocks_per_call": 61899.239776951676,
+      "name": "staff_access",
+      "exec_time_share_percent": 39.13015305746763
+    },
+    {
+      "id": "-6987002987257234997",
+      "role": "aka_agent_chat_api",
+      "calls": 319,
+      "total_ms": 32787.313781000004,
+      "mean_ms": 102.78154790282133,
+      "blocks_per_call": 65532.94984326019,
+      "name": "campaign_maintenance_discovery",
+      "exec_time_share_percent": 9.616780669227625
+    },
+    {
+      "id": "3169914642214758541",
+      "role": "aka_agent_chat_api",
+      "calls": 6,
+      "total_ms": 12215.178385000007,
+      "mean_ms": 2035.8630641666678,
+      "blocks_per_call": 131514.5,
+      "name": "chat_inbox_list",
+      "exec_time_share_percent": 3.5828092581377784
+    },
+    {
+      "id": "1231756453178608020",
+      "role": "aka_agent_chat_api",
+      "calls": 26,
+      "total_ms": 12170.652447999993,
+      "mean_ms": 468.102017230769,
+      "blocks_per_call": 70232.0,
+      "name": "runtime_organization_entitlements",
+      "exec_time_share_percent": 3.569749445641974
+    },
+    {
+      "id": "82505124312327825",
+      "role": "aka_agent_chat_api",
+      "calls": 26,
+      "total_ms": 9257.434351999997,
+      "mean_ms": 356.05516738461523,
+      "blocks_per_call": 273452.1923076923,
+      "name": "runtime_account_snapshot",
+      "exec_time_share_percent": 2.7152793399789776
+    },
+    {
+      "id": "-611292726412214011",
+      "role": "aka_agent_chat_api",
+      "calls": 6,
+      "total_ms": 8120.509427999998,
+      "mean_ms": 1353.4182379999995,
+      "blocks_per_call": 77913.0,
+      "name": "notification_unread_count",
+      "exec_time_share_percent": 2.381810190767303
+    },
+    {
+      "id": "-323829245113530106",
+      "role": "aka_agent_chat_api",
+      "calls": 13,
+      "total_ms": 5826.452518999999,
+      "mean_ms": 448.1886553076922,
+      "blocks_per_call": 39433.692307692305,
+      "name": "runtime_maintenance_owners",
+      "exec_time_share_percent": 1.7089450001653301
+    }
+  ],
+  "read_only_plans": [
+    {
+      "name": "desktop-list",
+      "execution_ms": 2.124,
+      "planning_ms": 2.375,
+      "rows": 49,
+      "shared_hits": 219,
+      "shared_reads": 0
+    },
+    {
+      "name": "entitlement_all_0",
+      "execution_ms": 429.313,
+      "planning_ms": 1.221,
+      "rows": 54,
+      "shared_hits": 71500,
+      "shared_reads": 0
+    },
+    {
+      "name": "entitlement_prefilter_false_0",
+      "execution_ms": 168.481,
+      "planning_ms": 1.382,
+      "rows": 54,
+      "shared_hits": 32960,
+      "shared_reads": 0
+    },
+    {
+      "name": "entitlement_prefilter_true_0",
+      "execution_ms": 229.104,
+      "planning_ms": 1.322,
+      "rows": 52,
+      "shared_hits": 33116,
+      "shared_reads": 0
+    },
+    {
+      "name": "entitlement_server_0",
+      "execution_ms": 507.209,
+      "planning_ms": 1.15,
+      "rows": 52,
+      "shared_hits": 71679,
+      "shared_reads": 0
+    },
+    {
+      "name": "held_fn_legacy_0",
+      "execution_ms": 1730.921,
+      "planning_ms": 0.049,
+      "rows": 1,
+      "shared_hits": 421346,
+      "shared_reads": 0
+    },
+    {
+      "name": "held_inner_legacy_0",
+      "execution_ms": 1687.236,
+      "planning_ms": 1.876,
+      "rows": 1,
+      "shared_hits": 419038,
+      "shared_reads": 0
+    },
+    {
+      "name": "held_inner_separate_0",
+      "execution_ms": 187.5,
+      "planning_ms": 1.925,
+      "rows": 1,
+      "shared_hits": 38801,
+      "shared_reads": 0
+    },
+    {
+      "name": "inbox_legacy_small_0",
+      "execution_ms": 118.77,
+      "planning_ms": 32.9,
+      "rows": 24,
+      "shared_hits": 5246,
+      "shared_reads": 153
+    },
+    {
+      "name": "inbox_separate_0",
+      "execution_ms": 8.428,
+      "planning_ms": 32.827,
+      "rows": 0,
+      "shared_hits": 682,
+      "shared_reads": 0
+    },
+    {
+      "name": "inbox_separate_permission_once_0_0",
+      "execution_ms": 5.77,
+      "planning_ms": 45.35,
+      "rows": 0,
+      "shared_hits": 521,
+      "shared_reads": 0
+    },
+    {
+      "name": "inbox_legacy_large_0",
+      "execution_ms": 2540.297,
+      "planning_ms": 32.879,
+      "rows": 24,
+      "shared_hits": 147181,
+      "shared_reads": 1333
+    },
+    {
+      "name": "inbox_legacy_large_permission_once_0_0",
+      "execution_ms": 102.065,
+      "planning_ms": 45.997,
+      "rows": 24,
+      "shared_hits": 68714,
+      "shared_reads": 0
+    },
+    {
+      "name": "inbox_legacy_other_0",
+      "execution_ms": 1055.165,
+      "planning_ms": 33.196,
+      "rows": 24,
+      "shared_hits": 91025,
+      "shared_reads": 0
+    },
+    {
+      "name": "notification_legacy_small_0",
+      "execution_ms": 1.31,
+      "planning_ms": 18.971,
+      "rows": 0,
+      "shared_hits": 2,
+      "shared_reads": 1
+    },
+    {
+      "name": "notification_legacy_small_1",
+      "execution_ms": 0.444,
+      "planning_ms": 7.377,
+      "rows": 1,
+      "shared_hits": 3,
+      "shared_reads": 0
+    },
+    {
+      "name": "notification_separate_0",
+      "execution_ms": 103.166,
+      "planning_ms": 19.458,
+      "rows": 0,
+      "shared_hits": 2615,
+      "shared_reads": 105
+    },
+    {
+      "name": "notification_separate_1",
+      "execution_ms": 28.984,
+      "planning_ms": 7.117,
+      "rows": 1,
+      "shared_hits": 1851,
+      "shared_reads": 0
+    },
+    {
+      "name": "notification_separate_permission_once_1_0",
+      "execution_ms": 5.077,
+      "planning_ms": 7.321,
+      "rows": 1,
+      "shared_hits": 814,
+      "shared_reads": 0
+    },
+    {
+      "name": "notification_legacy_large_0",
+      "execution_ms": 34.902,
+      "planning_ms": 19.739,
+      "rows": 24,
+      "shared_hits": 1491,
+      "shared_reads": 22
+    },
+    {
+      "name": "notification_legacy_large_1",
+      "execution_ms": 6092.097,
+      "planning_ms": 7.244,
+      "rows": 1,
+      "shared_hits": 405903,
+      "shared_reads": 144
+    },
+    {
+      "name": "notification_legacy_large_permission_once_1_0",
+      "execution_ms": 102.248,
+      "planning_ms": 7.347,
+      "rows": 1,
+      "shared_hits": 133093,
+      "shared_reads": 0
+    },
+    {
+      "name": "notification_legacy_other_0",
+      "execution_ms": 45.721,
+      "planning_ms": 20.749,
+      "rows": 24,
+      "shared_hits": 1988,
+      "shared_reads": 40
+    },
+    {
+      "name": "notification_legacy_other_1",
+      "execution_ms": 156.175,
+      "planning_ms": 7.321,
+      "rows": 1,
+      "shared_hits": 11526,
+      "shared_reads": 284
+    },
+    {
+      "name": "quota_separate_0",
+      "execution_ms": 9.07,
+      "planning_ms": 0.077,
+      "rows": 1,
+      "shared_hits": 1442,
+      "shared_reads": 0
+    },
+    {
+      "name": "runtime_accounts_0",
+      "execution_ms": 460.403,
+      "planning_ms": 5.413,
+      "rows": 226,
+      "shared_hits": 273926,
+      "shared_reads": 0
+    }
+  ],
+  "index_synthetic_probe": {
+    "engine": "PGlite in-memory, synthetic; not production timing",
+    "campaigns": 47100,
+    "held": 771,
+    "accounts": 54,
+    "before": {
+      "ms": 612.389,
+      "hits": 363371,
+      "nodes": [
+        {
+          "type": "Result",
+          "loops": 1,
+          "rows": 1
+        },
+        {
+          "type": "Index Scan",
+          "relation": "auto_accounts",
+          "index": "auto_accounts_staff_id_idx",
+          "loops": 1,
+          "rows": 0
+        },
+        {
+          "type": "Seq Scan",
+          "relation": "auto_campaigns",
+          "loops": 54,
+          "rows": 0
+        }
+      ]
+    },
+    "after": {
+      "ms": 0.232,
+      "hits": 109,
+      "nodes": [
+        {
+          "type": "Result",
+          "loops": 1,
+          "rows": 1
+        },
+        {
+          "type": "Index Scan",
+          "relation": "auto_accounts",
+          "index": "auto_accounts_staff_id_idx",
+          "loops": 1,
+          "rows": 0
+        },
+        {
+          "type": "Bitmap Heap Scan",
+          "relation": "auto_campaigns",
+          "loops": 54,
+          "rows": 0
+        },
+        {
+          "type": "BitmapOr",
+          "loops": 54,
+          "rows": 0
+        },
+        {
+          "type": "Bitmap Index Scan",
+          "index": "app_access_campaign_held_account_probe",
+          "loops": 54,
+          "rows": 0
+        },
+        {
+          "type": "Bitmap Index Scan",
+          "index": "idx_auto_campaigns_secondary_account_id",
+          "loops": 54,
+          "rows": 0
+        }
+      ]
+    },
+    "cases": [
+      "primary",
+      "secondary",
+      "claim",
+      "unit"
+    ]
+  },
+  "parity": [
+    {
+      "name": "notification_legacy_large_permission_once_1-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 1,
+          "old_count": 1
+        }
+      ]
+    },
+    {
+      "name": "notification_separate_permission_once_1-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 1,
+          "old_count": 1
+        }
+      ]
+    },
+    {
+      "name": "entitlement_prefilter_true-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 52,
+          "old_count": 52
+        }
+      ]
+    },
+    {
+      "name": "entitlement_prefilter_false-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 54,
+          "old_count": 54
+        }
+      ]
+    },
+    {
+      "name": "inbox_legacy_large_permission_once_0-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 24,
+          "old_count": 24
+        }
+      ]
+    },
+    {
+      "name": "inbox_separate_permission_once_0-parity",
+      "returncode": 0,
+      "result": [
+        {
+          "equal_rows": true,
+          "new_count": 0,
+          "old_count": 0
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "active_sessions": 3,
+    "campaigns_total": 47100,
+    "held_campaigns": 771,
+    "held_with_secondary": 1,
+    "max_connections": "380",
+    "pending_access_requests": 0
+  },
+  "known_runtime_errors": {
+    "window_utc": [
+      "2026-11-02T22:10:00Z",
+      "2026-11-02T23:28:00Z"
+    ],
+    "before_deploy": {
+      "runtime_event_not_json_serializable": 27
+    },
+    "after_deploy_before_activation": {
+      "runtime_event_not_json_serializable": 57,
+      "invalid_zalo_event_payload": 1
+    },
+    "after_activation": {
+      "runtime_event_not_json_serializable": 23
+    }
+  },
+  "limitations": [
+    "No provider send, campaign execution, authenticated end-to-end UI or actual Windows runtime verification",
+    "Postgres role for administrative plans differs from aka_agent_chat_api; actual application-role timing comes from pg_stat_statements deltas",
+    "Four separate organizations and 11 accounts are insufficient for scale assurance",
+    "Statement statistics track top-level calls only; query text matching app_access does not measure isolated helper overhead",
+    "Candidate SELECTs are diagnostic prototypes, not committed implementations; six current-data parity checks are not a complete authorization regression suite",
+    "First two inbox parity probes used an invalid SQL array literal in the diagnostic harness; corrected probes passed; read-only transactions made no application changes"
+  ]
+}

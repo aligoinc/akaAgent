@@ -1,5 +1,8 @@
 # Quyền akaAgent và akaChat
 
+Tối ưu sau activation: [V448 và query Chat API đã triển khai 03/11/2026](audits/app-access-split/PERFORMANCE_FIX_20261103.md).
+Giữ quyền/cleanup, không cần build lại Desktop/App Server; không apply lại index.
+
 Ngày 03/11/2026, **V445, V446, hai private auth patches và V447 đã apply** trên production `cgjbsmqtfhqvttudyjzq`; không apply lại. **V447 kích hoạt lúc 06:07:41 Việt Nam, policy true**: 4 tổ chức dùng quyền riêng, 1.782 tổ chức giữ legacy. Chat API/worker/Server runtime, Chat Web và WebApp/API đã deploy từ repo chính; Server mới được người dùng xác nhận đã cài. Desktop 9.2.0 ba nền tảng đã build local, chưa được agent upload/phát hành. Activation theo chỉ thị trực tiếp mới nhất sau build; CRM không đổi source/deployment. Xem [activation và hậu kiểm](audits/app-access-split/ACTIVATION_20261103.md), [receipt apply tương thích](audits/app-access-split/apply-receipt.json), [deploy](audits/app-access-split/DEPLOYMENT_20261103.md) và [hợp đồng rollout](audits/app-access-split/README.md).
 
 ## Quy tắc và schema
