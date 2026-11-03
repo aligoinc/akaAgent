@@ -6,6 +6,14 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
+[V453 hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md):
+**Đã apply 12:16:02 VN ngày 03/11/2026**, ledger `20261103051602`. Người dùng
+yêu cầu bỏ kiểm quyền akaAgent chung trên từng request; giữ IP block, hook config,
+ACL và 31 helper/auth functions. 64 ca trial + 64 ca hậu kiểm đạt; không deploy/build.
+Không tự gắn lại lời gọi app-access trong hook. Phiên Desktop đăng nhập lại vẫn
+kiểm quyền; không bảo đảm thu hồi tức thời trên mọi đường của phiên đang mở.
+V453 là private migration, manifest giữ số phiên bản; không apply lại.
+
 [V452 runtime identity](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md):
 **DB đã apply 11:54:14 VN ngày 03/11/2026**, ledger `20261103045414`. Sửa hai nhánh
 DB dùng ID legacy trong audit V451; Chat API đăng ký local đã deploy **11:58:23 VN**

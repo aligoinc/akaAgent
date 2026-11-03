@@ -1,5 +1,10 @@
 # Quyền riêng akaChat/akaAgent — 03/11/2026
 
+[V453 — bỏ kiểm quyền akaAgent trong hook IP](IP_HOOK_ACCESS_REMOVAL_20261103.md):
+đã apply 12:16:02 VN, ledger `20261103051602`, theo chỉ thị người dùng. Đây là
+quyết định mới thay nhánh Desktop pre-request của rollout cũ bên dưới; không
+apply lại private IP candidate cũ. Guard riêng và kiểm IP giữ nguyên.
+
 [V452 runtime identity](RUNTIME_IDENTITY_FIX_20261103.md): DB đã apply 11:54:14 VN,
 ledger `20261103045414`; sửa ba nhánh check lệch sau V451. Chat API đã deploy
 11:58:23 VN từ repo chính, source `83d2736`; worker/runtime giữ nguyên.

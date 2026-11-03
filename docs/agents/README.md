@@ -35,6 +35,8 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 
 Bản sửa tiếp theo cho app-access/Zalo identity: [V452](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md).
 
+Quyết định mới về Desktop pre-request: [V453 bỏ kiểm quyền app trong hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
+
 ## Tra cứu đủ ngữ cảnh
 
 ```bash
