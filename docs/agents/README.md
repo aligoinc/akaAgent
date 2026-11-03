@@ -33,6 +33,8 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Build/package/update/release | [lệnh và native](reference/build-01.md); [updater](reference/build-02.md); [feed/version](reference/build-03.md); [CURRENT_STATE](CURRENT_STATE.md) |
 | Docs, Git và tổ chức hướng dẫn | [MAINTENANCE](MAINTENANCE.md); [skill trước PR](../../.agents/skills/source-command-verify-pr/SKILL.md); [chỉ mục](REFERENCE_INDEX.md) |
 
+Bản sửa tiếp theo cho app-access/Zalo identity: [V452](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md).
+
 ## Tra cứu đủ ngữ cảnh
 
 ```bash

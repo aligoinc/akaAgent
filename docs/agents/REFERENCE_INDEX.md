@@ -6,6 +6,8 @@ Tìm tên RPC, file, action hoặc feature trong bảng và trong `docs/agents/r
 
 Đọc hướng dẫn đã đính chính trước các đoạn bảo toàn có liên quan:
 
+- [V452: canonical identity ở status mark, local runtime registration và legacy reservation; DB đã apply, trạng thái API trong audit](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md).
+
 - [App-access held work, index V448, Chat API statement-scoped guards và runtime candidates; đã apply/deploy, không build lại app](../audits/app-access-split/PERFORMANCE_FIX_20261103.md).
 - [App-access V449: Chat sharing khi owner khóa/hết hạn, helper account_allowed; đã apply, không đổi auth/akaAgent/ACL hoặc cần build/deploy](../audits/app-access-split/SHARED_OWNER_FIX_20261103.md).
 - [App-access V450: app_access_validate_account, cấp/bật lại Chat Server khi owner khóa/hết hạn; đã apply, giữ Agent/QR local/quota/ACL](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md).

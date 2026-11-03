@@ -1,5 +1,10 @@
 # Quyền akaAgent và akaChat
 
+[V452 runtime identity](audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md):
+DB đã apply; status/flag giữ binding, canonical owner không bị duplicate legacy chặn.
+Đăng ký local đối chiếu actual UID với binding; Chat API đã deploy từ repo chính
+lúc 11:58:23 VN, source `83d2736`; receipt/giới hạn kiểm chứng xem audit.
+
 V451 đã apply — [dùng binding Chat khi bật đồng bộ](audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md):
 **Đã apply 11:15:06 VN ngày 03/11/2026**, ledger `20261103041506`. Binding hiện có là nguồn Zalo ID; unbound đang đăng xuất
 không bị ID legacy chặn, unbound đang đăng nhập vẫn reserve identity. QR thực vẫn chống trùng.
