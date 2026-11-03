@@ -79,7 +79,8 @@ export async function reviewRegressions(root: string): Promise<number> {
       './staffClientRepository': { callStaffClient: rpc }, '../../services/staffDeviceRecovery': proof,
       './entitlementRepository': { ensureLoginProductsActive: async () => {}, loadOrganizationEntitlementAccess: async () => ({ entitlements: {}, zaloAccountCapabilities: {}, chatSyncEnabled: false }), loadOrganizationAccountProducts: async () => [], loadOrganizationChatSyncProducts: async () => [] },
       './zaloRuntimeModeRepository': { loadStaffZaloServerModeSnapshot: async () => ({}) },
-      './staffManagementRepository': { readStaffAccess: async () => ({ isActive: true, timeAllowed: true }) }
+      './staffManagementRepository': { readStaffAccess: async () => ({ isActive: true, timeAllowed: true }) },
+      './appAccessRepository': { loadAppAccessForStaff: async () => ({ separateAccess: false, usesChatRuntime: false }) }
     })
     if (scenario === 'v2' || scenario === 'v3') {
       assert.deepEqual(plain(await repo.recoverDeviceCredentials()), credentials)
@@ -180,6 +181,101 @@ export async function reviewRegressions(root: string): Promise<number> {
   assert.notEqual((await identity.getCurrentDeviceIdentity(true)).fingerprintHash, original)
   pass('review confirmed reset repairs genuinely missing selected hardware')
   checks += await resetJournalRegressions(root)
+  checks += await windowsReadTimeoutRegressions(root)
+  return checks
+}
+
+async function windowsReadTimeoutRegressions(root: string): Promise<number> {
+  let checks = 0
+  const pass = (name: string) => { checks++; console.log('PASS', name) }
+  const directory = join(root, 'windows-slow-hardware')
+  await mkdir(directory)
+  const hardware = { uuid: '12345678-1234-1234-1234-123456789012', serials: ['board-111'],
+    machineGuid: '22345678-1234-1234-1234-123456789012', adapters: [] }
+  let now = 0, duration = 12_000, calls = 0, failure: unknown = null, stdout = JSON.stringify(hardware)
+  let release!: () => void
+  let pending: Promise<void> | null = new Promise(resolve => { release = resolve })
+  const logs: unknown[] = []
+  const loadIdentity = (platform = 'win32', userData = directory) => load('src/main/services/deviceIdentity.ts', {
+    'node:perf_hooks': { performance: { now: () => now } },
+    electron: { app: { getPath: () => userData } }, './hardwareDeviceIdentity': hardwareIdentity,
+    './deviceHardwareReaders': { ...hardwareReaders, parseMacComposite: () => hardware },
+    child_process: { execFile: () => {} }, crypto: { createHash }, os: { hostname: () => 'fixture' },
+    util: { promisify: () => async (file: string, args: string[], options: any) => {
+      calls++
+      if (platform === 'win32') {
+        assert.equal(file, 'powershell.exe')
+        assert.deepEqual(plain(args.slice(0, 4)), ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command'])
+        assert.equal(options.windowsHide, true)
+        if (args[4].includes('MSFT_NetAdapter')) {
+          assert.equal(args[4], hardwareReaders.WINDOWS_COMPOSITE_SCRIPT)
+          assert.equal(options.maxBuffer, 16 * 1024 * 1024)
+        } else assert.equal(options.maxBuffer, undefined, 'v2 retains its original output limit')
+      } else {
+        assert.equal(file, '/usr/sbin/ioreg')
+        assert.equal(options.timeout, 10_000)
+        assert.equal(options.maxBuffer, 32 * 1024 * 1024)
+      }
+      if (pending) await pending
+      now += duration
+      if (failure) throw failure
+      // Simulate the child-process deadline without waiting 30 seconds per case.
+      if (duration > options.timeout) throw Object.assign(new Error('private subprocess output'), { killed: true })
+      return { stdout }
+    } }
+  }, { process: { platform },
+    console: { info: (...args: unknown[]) => logs.push(args), warn: (...args: unknown[]) => logs.push(args) } })
+
+  const identity = await loadIdentity()
+  const first = identity.getCurrentDeviceIdentity(true)
+  assert.equal(identity.getCurrentDeviceIdentity(true), first, 'concurrent callers share the same read')
+  release(); pending = null
+  const original = (await first).fingerprintHash
+  assert.equal(calls, 1)
+  assert.equal((await identity.getCurrentDeviceIdentity()).fingerprintHash, original)
+  assert.equal(calls, 1, 'presence cache does not start another hardware process')
+  const file = join(directory, 'device-identity-v3.json'), manifest = await readFile(file, 'utf8')
+  assert.equal((plain(logs).at(-1)[1]).elapsedMs, 12_000)
+  pass('Windows 12-second read succeeds, shares in-flight work and preserves session cache')
+
+  duration = 31_000
+  for (const read of [() => identity.getCurrentDeviceIdentity(true), () => identity.getDeviceForBindingReset(), () => identity.resetCompositeSelection()]) {
+    await assert.rejects(read(), /quá 30 giây/)
+    assert.equal(await readFile(file, 'utf8'), manifest)
+  }
+  assert.equal(plain(logs).at(-1)[1].reason, 'timeout')
+  duration = 500
+  assert.equal((await identity.getCurrentDeviceIdentity(true)).fingerprintHash, original)
+  pass('30-second deadline fails closed for login/reset, keeps selection and allows a fresh attempt')
+
+  for (const [error, expectedReason] of [
+    [Object.assign(new Error('private command'), { code: 'EACCES', stdout: 'private raw hardware', stderr: 'private stderr' }), 'process_error'],
+    [Object.assign(new Error('private output'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', killed: true }), 'output_limit']
+  ] as const) {
+    failure = error; duration = 31_000
+    await assert.rejects(identity.getCurrentDeviceIdentity(true), /Không đọc được định danh phần cứng\./)
+    assert.equal(plain(logs).at(-1)[1].reason, expectedReason)
+    assert.equal(await readFile(file, 'utf8'), manifest)
+  }
+  failure = null; duration = 500; stdout = '{private raw hardware'
+  await assert.rejects(identity.getCurrentDeviceIdentity(true), /Không đọc được định danh phần cứng\./)
+  assert.equal(plain(logs).at(-1)[1].reason, 'invalid_output')
+  assert(!JSON.stringify(logs).includes('private'), 'no error message, command, stdout or stderr in diagnostics')
+  assert(!JSON.stringify(logs).includes(hardware.uuid), 'no hardware identifiers in diagnostics')
+  assert.equal(await readFile(file, 'utf8'), manifest)
+  pass('process, output-limit and parse failures are distinct and never leak hardware or replace selection')
+
+  stdout = JSON.stringify(hardware); duration = 12_000
+  const v2 = await loadIdentity()
+  assert.match((await v2.getV2DeviceIdentity()).fingerprintHash, /^[a-f0-9]{64}$/)
+  duration = 31_000
+  await assert.rejects((await loadIdentity()).getV2DeviceIdentity(), /quá 30 giây/)
+  pass('v2 compatibility reads also accept slow Windows hardware and remain bounded')
+  duration = 500
+  const macDirectory = join(root, 'mac-hardware-timeout')
+  await mkdir(macDirectory)
+  await (await loadIdentity('darwin', macDirectory)).getCurrentDeviceIdentity(true)
+  pass('Mac retains its original 10-second timeout and output limit')
   return checks
 }
 

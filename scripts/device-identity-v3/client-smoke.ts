@@ -95,7 +95,8 @@ async function repository(root:string){
    '../../services/deviceChangeService':{},'../currentUser':{},'../supabaseClient':{callDesktopSessionEndpoint:async()=>({staffId:1,organizationId:1,products:[]}),desktopSession:{revision:()=>0,install:()=>{},clear:()=>{}},desktopSessionTransport:{login:async()=>({staffId:1,organizationId:1,accessToken:'fixture'}),revoke:async()=>{}},getSupabaseClient:()=>({from:(name:string)=>{assert.equal(name,'org_organization','no direct staff/password reads');return builder}})},
    './staffClientRepository':{callStaffClient:rpc},'../../services/staffDeviceRecovery':{registerStaffDeviceRecovery:async()=>{},recoverStaffDeviceCredentials:async()=>scenario==='recovery-no-proof'?null:scenario==='recovery-collision'?'manual_login_required':credentials},
    './entitlementRepository':{ensureLoginProductsActive:async()=>{},loadOrganizationEntitlementAccess:async()=>({entitlements:{},zaloAccountCapabilities:{},chatSyncEnabled:false}),loadOrganizationAccountProducts:async()=>[],loadOrganizationChatSyncProducts:async()=>[]},
-   './zaloRuntimeModeRepository':{loadStaffZaloServerModeSnapshot:async()=>({})},'./staffManagementRepository':{readStaffAccess:async()=>({isActive:true,timeAllowed:true})}
+   './zaloRuntimeModeRepository':{loadStaffZaloServerModeSnapshot:async()=>({})},'./staffManagementRepository':{readStaffAccess:async()=>({isActive:true,timeAllowed:true})},
+   './appAccessRepository':{loadAppAccessForStaff:async()=>({separateAccess:false,usesChatRuntime:false})}
   })
   if(scenario==='recovery-no-proof')await assert.rejects(module.recoverDeviceCredentials())
   else if(scenario==='recovery-collision')assert.equal(await module.recoverDeviceCredentials(),null)

@@ -90,6 +90,8 @@ receipt/signature/checksum, không dùng filename để kết luận “chưa ch
 
 ## Build và phát hành
 
+- 03/11/2026: source trên `codex/windows-hardware-timeout` tăng giới hạn đọc hardware Windows v2/v3 từ 10 lên 30 giây, thêm thông báo timeout và diagnostic console đã lọc dữ liệu. Giữ công thức, selection, cache phiên, single-flight và cơ chế reset. 70 ca smoke, hai typecheck và build production local đạt; chưa kiểm chứng Windows khách thật, chưa đóng gói/phát hành, không đổi DB. [Hợp đồng](../DEVICE_IDENTITY_V3.md#windows-đọc-phần-cứng-chậm--source-03112026), [receipt kiểm chứng](../audits/windows-hardware-timeout/verification.json).
+
 - 03/11/2026: **akaAgent Desktop 9.2.0 Windows x64, Mac ARM64 và Mac Intel x64 đã build local từ repo chính** (`dev_3`/`d493dd9e`). Hai typecheck, ba build, version/kiến trúc/native/payload/credential checks đạt; Mac SQLite chạy qua packaged Electron (Intel qua Rosetta), host native giữ checksum. Windows chưa ký Authenticode/chưa chạy trên Windows thật; Mac ký ad-hoc, chưa notarize. Chưa upload/phát hành; V447 không đổi. [Audit và checksum](../audits/akaagent-9.2.0-20261103/README.md).
 - 03/11/2026: **akaAgent Zalo Server 9.2.0 Windows x64 nội bộ đã build local từ repo chính** (`dev_3`/`5df2678f`). Hai typecheck, Server build, installer payload/native/version/credential checks đạt; host native khôi phục và SQLite smoke đạt. Chưa ký Authenticode, chưa được agent kiểm tra trên Windows thật, chưa upload/phát hành. Người dùng đã xác nhận cài Server mới; Desktop 9.2.0 đã build ở mốc trên, chưa phát hành; V447 không đổi. [Audit và checksum](../audits/akaagent-server-9.2.0-20261103/README.md).
 

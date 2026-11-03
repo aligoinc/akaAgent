@@ -4,11 +4,39 @@ import { hostname } from 'os'
 import { promisify } from 'util'
 import { app } from 'electron'
 import { join } from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { CompositeHardwareDeviceIdentity, HardwareDeviceIdentity, SelectedHardwareMissingError } from './hardwareDeviceIdentity'
 import { parseMacComposite, parseWindowsComposite, WINDOWS_COMPOSITE_SCRIPT } from './deviceHardwareReaders'
 import { unlink } from 'node:fs/promises'
 
 const execFileAsync = promisify(execFile)
+const WINDOWS_HARDWARE_TIMEOUT_MS = 30_000
+
+async function readWindowsHardware<T>(script: string, parse: (stdout: string) => T, failureMessage: string, maxBuffer?: number): Promise<T> {
+  const started = performance.now()
+  let stage: 'process' | 'parse' = 'process'
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+      windowsHide: true, timeout: WINDOWS_HARDWARE_TIMEOUT_MS, ...(maxBuffer === undefined ? {} : { maxBuffer })
+    })
+    stage = 'parse'
+    const hardware = parse(stdout)
+    const elapsedMs = Math.round(performance.now() - started)
+    if (elapsedMs >= 10_000) console.info('[DeviceIdentity] Đọc phần cứng Windows chậm.', { elapsedMs })
+    return hardware
+  } catch (error) {
+    const elapsedMs = Math.round(performance.now() - started)
+    const details = error && typeof error === 'object' ? error as { code?: unknown; killed?: unknown } : {}
+    const outputLimit = details.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+    const timedOut = stage === 'process' && !outputLimit && details.killed === true && elapsedMs >= WINDOWS_HARDWARE_TIMEOUT_MS
+    const reason = stage === 'parse' ? 'invalid_output' : outputLimit ? 'output_limit' : timedOut ? 'timeout' : 'process_error'
+    // Child-process errors contain the command and raw stdout/stderr. Never log them.
+    const code = typeof details.code === 'number' ? details.code
+      : ['ENOENT', 'EACCES', 'EPERM', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(details.code as string) ? details.code : null
+    console.warn('[DeviceIdentity] Không đọc được phần cứng Windows.', { reason, elapsedMs, code })
+    throw new Error(timedOut ? 'Đọc định danh phần cứng Windows quá 30 giây. Vui lòng thử lại.' : failureMessage)
+  }
+}
 
 type DevicePlatform = 'mac' | 'win'
 
@@ -106,10 +134,8 @@ export function getV2DeviceIdentity(): Promise<DeviceIdentity> {
       readHardware: async () => {
         if (platform === 'mac') return { uuid: await readMacMachineId() }
         const script = "$ErrorActionPreference='Stop'; $system=Get-CimInstance -ClassName Win32_ComputerSystemProduct; $boards=Get-CimInstance -ClassName Win32_BaseBoard; @{uuid=$system.UUID; serials=@($boards | ForEach-Object { $_.SerialNumber })} | ConvertTo-Json -Compress"
-        try {
-          const { stdout } = await execFileAsync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true, timeout: 10_000 })
-          return JSON.parse(stdout.replace(/^\uFEFF/, '').trim())
-        } catch { throw new Error('Không đọc được định danh phần cứng Windows. Vui lòng thử lại.') }
+        return readWindowsHardware(script, stdout => JSON.parse(stdout.replace(/^\uFEFF/, '').trim()),
+          'Không đọc được định danh phần cứng Windows. Vui lòng thử lại.')
       }
     })
     return { fingerprintHash: await hardwareIdentity.fingerprint(), platform, label: buildLabel(platform) }
@@ -128,11 +154,11 @@ export function getCurrentDeviceIdentity(refresh = false): Promise<DeviceIdentit
     compositeIdentity ??= new CompositeHardwareDeviceIdentity({
       platform, file: join(app.getPath('userData'), 'device-identity-v3.json'),
       readHardware: async () => {
+        if (platform === 'win') return readWindowsHardware(WINDOWS_COMPOSITE_SCRIPT, parseWindowsComposite,
+          'Không đọc được định danh phần cứng. Vui lòng thử lại.', 16 * 1024 * 1024)
         try {
-          const { stdout } = platform === 'win'
-            ? await execFileAsync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_COMPOSITE_SCRIPT], { windowsHide: true, timeout: 10_000, maxBuffer: 16 * 1024 * 1024 })
-            : await execFileAsync('/usr/sbin/ioreg', ['-a', '-l', '-p', 'IOService'], { timeout: 10_000, maxBuffer: 32 * 1024 * 1024 })
-          return platform === 'win' ? parseWindowsComposite(stdout) : parseMacComposite(stdout)
+          const { stdout } = await execFileAsync('/usr/sbin/ioreg', ['-a', '-l', '-p', 'IOService'], { timeout: 10_000, maxBuffer: 32 * 1024 * 1024 })
+          return parseMacComposite(stdout)
         } catch { throw new Error('Không đọc được định danh phần cứng. Vui lòng thử lại.') }
       }
     })
