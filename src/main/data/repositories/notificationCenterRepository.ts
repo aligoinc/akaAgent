@@ -144,7 +144,7 @@ export async function getNotificationDetail(id: number): Promise<NotificationDet
 }
 
 export async function markNotificationsRead(request: NotificationReadRequest): Promise<NotificationReadResult> {
-  const payload = 'ids' in request ? { ids: request.ids } : { upToId: request.upToId }
+  const payload = 'ids' in request ? { ids: request.ids } : { upToId: request.upToId, ...(request.type ? { type: request.type } : {}) }
   return requireShape(parseNotificationReadResult(await callNotificationCenter('mark_read', payload)))
 }
 

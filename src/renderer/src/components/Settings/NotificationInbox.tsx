@@ -43,7 +43,6 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
   const [markingAll, setMarkingAll] = useState(false)
   const [openItem, setOpenItem] = useState<NotificationListItem | null>(null)
   const listRequest = useRef(0)
-  const newestSeenId = useRef(0)
   const markAllLock = useRef(false)
 
   useEffect(() => {
@@ -59,7 +58,6 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
         }
         setItems(result.data.items)
         setUnreadCount(result.data.unreadCount)
-        for (const item of result.data.items) newestSeenId.current = Math.max(newestSeenId.current, item.id)
       })
       .catch(() => { if (request === listRequest.current) setError('Không thể tải thông báo. Vui lòng thử lại.') })
       .finally(() => { if (request === listRequest.current) setLoading(false) })
@@ -74,19 +72,20 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
   }, [])
 
   const markAllRead = async () => {
-    // Đánh dấu tới thông báo mới nhất đã thấy; thông báo đến sau đó vẫn giữ chưa đọc.
-    const upToId = Math.max(newestSeenId.current, ...items.map(item => item.id))
+    // Mốc là mục đầu danh sách đang hiện (mới nhất theo thứ tự hộp thư); thông báo vào sau đó vẫn giữ chưa đọc.
+    // Đang lọc theo loại thì chỉ đánh dấu loại đó.
+    const upToId = items[0]?.id ?? 0
     if (markAllLock.current || upToId <= 0) return
     markAllLock.current = true
     setMarkingAll(true)
     try {
-      const result = await window.electronAPI.notificationCenter.markRead({ upToId })
+      const result = await window.electronAPI.notificationCenter.markRead(typeFilter ? { upToId, type: typeFilter } : { upToId })
       if (!result.ok) {
         showAlert(result.message, 'error')
         return
       }
       const readAt = new Date().toISOString()
-      setItems(previous => previous.map(item => (item.id <= upToId && !item.readAt ? { ...item, readAt } : item)))
+      setItems(previous => previous.map(item => (!item.readAt ? { ...item, readAt } : item)))
       setUnreadCount(result.data.unreadCount)
     } catch {
       showAlert('Không thể đánh dấu đã đọc. Vui lòng thử lại.', 'error')

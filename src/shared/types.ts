@@ -2957,7 +2957,8 @@ export interface NotificationDetail extends Omit<NotificationListItem, 'body' | 
   deliveries: NotificationDeliverySummary[]
 }
 
-export type NotificationReadRequest = { ids: number[] } | { upToId: number }
+/** `upToId`: mục mới nhất đang hiện; `type` chỉ đánh dấu một loại (khi đang lọc). Server đánh dấu theo thứ tự hộp thư (created_at, id). */
+export type NotificationReadRequest = { ids: number[] } | { upToId: number; type?: NotificationEventType }
 export interface NotificationReadResult { ok: true; updated: number; unreadCount: number }
 export interface NotificationTestResult { ok: true; id: number; deliveryMode: NotificationDeliveryMode }
 export interface NotificationVerificationResult { ok: true; requested: boolean }

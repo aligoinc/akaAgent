@@ -577,6 +577,11 @@ export function sanitizeNotificationReadRequest(input: unknown): NotificationRea
   if (Array.isArray(input.ids) && input.ids.length > 0 && input.ids.length <= NOTIFICATION_MAX_FILTER_IDS && input.ids.every(isPositiveId)) {
     return { ids: [...input.ids] }
   }
-  if (input.ids === undefined && isPositiveId(input.upToId)) return { upToId: input.upToId }
+  if (input.ids === undefined && isPositiveId(input.upToId)) {
+    if (input.type === undefined || input.type === null) return { upToId: input.upToId }
+    if (typeof input.type === 'string' && (NOTIFICATION_EVENT_TYPES as readonly string[]).includes(input.type)) {
+      return { upToId: input.upToId, type: input.type as NotificationEventType }
+    }
+  }
   return null
 }
