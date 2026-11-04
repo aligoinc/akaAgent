@@ -1,5 +1,66 @@
 # Chia sẻ bài viết nguồn vào nhóm — 23/10/2026
 
+## XPath Chia sẻ bài viết và Reel — live 03/11, đồng bộ source 04/11/2026
+
+<a id="share-xpath-20261103"></a>
+
+**Hướng dẫn hiện hành:** phần này thay quy ước bên dưới rằng element 257 cần
+ghép thêm parent. Từ hotfix trên akachat lúc **17:20:26 Việt Nam, 03/11/2026**,
+element **257** là XPath hoàn chỉnh do người dùng cung cấp. Dấu `|` giữ hai
+nhánh độc lập: nút trong dialog và nút Reel trên toàn trang. Nhánh Reel không
+được ép vào dialog.
+
+```xpath
+//*[@role='dialog']//*[@role="button" and (@aria-label="Chia sẻ" or @aria-label="Share" or .="Chia sẻ" or .="Share" or .//*[@data-ad-rendering-role="share_button"])]|//*[@role="button" and @tabindex="0" and contains(@aria-label,"Chia sẻ,")]
+```
+
+- Source element: [share-button.xpath](../scripts/workflows/facebook-share-post/share-button.xpath).
+- Block **36** `fb_share_post`: [share.js](../scripts/workflows/facebook-share-post/share.js)
+  dùng trực tiếp element 257; giữ bước chờ container bài nguồn, xử lý nội dung,
+  click/chờ và Chia sẻ ngay hiện có.
+- Block **2835** `fb_select_native_share_group`: [select.js](../scripts/workflows/facebook-native-group-share/select.js)
+  dùng trực tiếp element 257. Helper ghép scope vẫn dùng cho ô tìm nhóm.
+  Giữ yêu cầu đúng một nút, nhập tên, chờ 10 giây, đối chiếu UID/slug và ranh giới submit.
+- Element **1795**, workflow 1/2/251/252, RPC và quyền không đổi. Tên/mô tả lịch sử
+  của 257 vẫn giữ nguyên; caller phải theo hợp đồng XPath hoàn chỉnh này.
+  App đang mở cần thoát hẳn rồi mở lại để nạp cache element.
+
+Đọc lại live ngày 04/11 xác nhận ba row khớp hotfix. MD5 bên dưới tính trên
+`to_jsonb(row) - 'id' - 'created_at' - 'updated_at'`, bao gồm cả metadata:
+
+| Row | Checksum bản đích |
+| --- | --- |
+| Element 257 | `13e644b099750357a1c10a8a018eaccc` |
+| Block 36 | `ca7051b37dba1702a01acf50ccd8a2ec` |
+| Block 2835 | `5a062a2bc91691fcb4567725f4eee3be` |
+
+[Migration V455](../migrations/migration_v455_facebook_share_xpath.sql) ghi nhận
+hotfix: giải row theo tên, khóa/kiểm tra đủ ba row trước khi ghi, chỉ nhận baseline
+đã capture hoặc bản đích chính xác. Drift khác phải dừng. Row đã đúng được bỏ qua,
+giữ `updated_at`; chỉ đổi `xpath/code` và `updated_at`.
+Không ghi ledger, đổi schema/RPC/quyền/workflow hay reload PostgREST.
+**V455 chưa apply/đăng ký ledger trong lượt PR**; production đã có nội dung
+tương đương từ hotfix 03/11. Merge PR không yêu cầu apply lại hotfix.
+
+[Rollback V455](../migrations/rollback_v455_facebook_share_xpath.sql) là thao tác
+thủ công có guard, khôi phục đồng thời selector descendant và hai caller.
+Rollback làm mất hỗ trợ Reel mới; chỉ dùng sau chỉ thị rõ ràng, dừng lượt liên
+quan và khởi động lại app, không chạy trong deploy tự động.
+
+Giữ nguyên byte migration/snapshot/rollback lịch sử 23/10. Script
+`build-facebook-native-group-share-search-wait.cjs` đọc bản đích lịch sử từ SQL
+đã apply, kiểm tra SHA-256 theo receipt; không lấy source hiện hành để ghi lại
+migration cũ. Thay đổi tiếp theo phải đọc live, kiểm tra drift và tạo migration mới.
+
+Kiểm chứng đồng bộ: 70 ca PostgreSQL cục bộ cho baseline gốc/trung gian/hỗn hợp,
+idempotence, metadata/code drift, thiếu/trùng row, rollback và source khớp live;
+25 ca DOM (có Reel không dialog), 7 ca React và 15 ca migration lịch sử đạt.
+90 ca hồi quy native group-share đạt. Trial trên production kết thúc **ROLLBACK**,
+cả ba full-row checksum và `updated_at` không đổi. Hai typecheck và build production
+local đạt (40.033.086 byte output, tổng thời gian các pha Vite khoảng 28,44 giây).
+Không đăng Facebook thật, đóng gói/phát hành hoặc apply lại DB trong lượt này.
+Capture, script bổ sung và output kiểm tra tạm giữ ngoài repo theo yêu cầu người dùng.
+
 Đã apply production **akachat** ngày 23/10/2026 lúc **22:54 VN**: `20261023155415 / facebook_native_group_share`. Code Desktop đã chuyển về repo chính `/Users/lequangnhut/Repos/akaAgent` trên `dev_3`, dưới dạng thay đổi chưa commit; chưa đóng gói/phát hành và chưa đăng bài thật để kiểm chứng. **Không apply lại migration.** Các ghi chú “chưa apply” trong lịch sử sửa bên dưới là trạng thái trước lần apply này.
 
 Ngày 23/10/2026 đã chuyển đủ 26 file từ worktree `codex/facebook-native-group-share`, đối chiếu 12 file tracked bằng merge ba chiều và giữ nguyên các chỉnh sửa có sẵn ở repo chính. Hai typecheck, 72 ca logic/migration local, 18 fixture DOM + 7 ca React và form native share đều đạt trên repo chính. Worktree đã được archive bằng Codex, thư mục và đăng ký Git worktree đã xóa; snapshot khôi phục vẫn được giữ. Không apply lại DB trong lượt chuyển code này.

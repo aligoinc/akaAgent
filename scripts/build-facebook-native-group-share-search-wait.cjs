@@ -1,13 +1,23 @@
 // Data-only follow-up; never rewrite the already applied initial migration.
 const fs = require('node:fs')
 const path = require('node:path')
+const crypto = require('node:crypto')
 const root = path.resolve(__dirname, '..')
 const dir = path.join(root, 'migrations/snapshots/facebook-native-group-share')
 const snapshot = JSON.parse(fs.readFileSync(path.join(dir, 'search-wait-before.json'), 'utf8'))
 const name = 'fb_select_native_share_group'
 const before = snapshot.blocks.find(row => row.name === name)
 if (!before) throw new Error('Missing live block baseline')
-const after = { ...before, code: fs.readFileSync(path.join(root, 'scripts/workflows/facebook-native-group-share/select.js'), 'utf8') }
+// This applied migration is immutable. Current runtime source is maintained separately.
+const historicalMigrationPath = path.join(root, 'supabase/migrations/20261023162331_facebook_native_group_share_search_wait.sql')
+const historicalSql = fs.readFileSync(historicalMigrationPath, 'utf8')
+const receipt = JSON.parse(fs.readFileSync(path.join(dir, 'search-wait-apply-20261023.json'), 'utf8'))
+if (crypto.createHash('sha256').update(historicalSql).digest('hex') !== receipt.candidate_sha256) {
+  throw new Error('Applied search-wait migration changed; do not regenerate history')
+}
+const historicalTarget = historicalSql.match(/\$target\$([\s\S]*?)\$target\$::jsonb/)
+if (!historicalTarget) throw new Error('Missing applied search-wait target')
+const after = { ...before, code: JSON.parse(historicalTarget[1]).code }
 const comparable = row => Object.fromEntries(Object.entries(row).filter(([key]) => !['id', 'created_at', 'updated_at'].includes(key)))
 const json = (value, tag) => `$${tag}$${JSON.stringify(comparable(value))}$${tag}$::jsonb`
 function build(from, to, tag) {
