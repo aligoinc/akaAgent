@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 03/11/2026
 
+[V454: tối ưu staff access và Zalo Server control](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md):
+**Đã apply 16:28:58 VN, 03/11/2026** (`20261103092858`); dùng index sẵn có cho held lookup, loại kiểm quyền
+trùng và bỏ account helper ở nhánh control đã dừng/legacy đã xác minh owner.
+Giữ EXECUTE boundary, quyền/tenant/Chat owner V449 và claim/cleanup.
+574 ca PG17; parity production trước/sau và metadata/rollback đạt.
+Không thêm index/pool/polling, không deploy service/build bộ cài; không apply lại.
+Staff/control giảm 61,4%/26,8% thời gian mỗi lượt; CPU toàn DB 72,91% → 77,96%
+trong hai cửa sổ khác tải, chưa chứng minh giảm CPU chung. Số đo và ledger xem [receipt](../audits/app-access-split/guard-performance-v454-receipt.json).
+
 Đây là chỉ mục dựa trên receipt/audit đã có, không phải lệnh triển khai.
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
 đọc live theo skill RPC; không suy ra quyền apply từ bảng này.
