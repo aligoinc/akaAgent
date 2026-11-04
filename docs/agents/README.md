@@ -31,6 +31,7 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Excel nhóm Facebook: Data tìm được, Nhóm data, Kết quả chạy | [Mẫu 6 cột tìm theo từ khóa](../FACEBOOK_SEARCH_GROUP_EXCEL.md); [metadata động, action gate, quyền nguồn và V443](../FACEBOOK_GROUP_EXPORT_METADATA.md); giữ luồng quét nhóm đã tham gia |
 | Nhóm mẫu nội dung, picker/preview, `CampaignFormModal`, snapshot | [luồng chọn nhóm hiện tại](CLIENT_CONTRACTS.md#content-group-selection); [campaign/content](reference/campaigns-01.md); [pitfall và đính chính](reference/pitfalls-02.md) |
 | Report/Automation/action status | [báo cáo](reference/reports-01.md); [kết quả hành động](reference/action-results-01.md); [hợp đồng report](../ACTION_STATUS_REPORTS.md) |
+| Không tìm thấy ô đăng bài khi đăng nhóm, nhóm Mua bán, tách policy group/personal | [V459 đã apply: block 27, group policy 122 Bỏ qua, profile policy 94 giữ nguyên](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md); không đổi app, giữ log nguyên nhân, cần nạp lại catalog |
 | akaBiz API/SMS/SQL import/Sheet/template/staff admin | [SQL Account](reference/integrations-01.md); [tích hợp/quản trị](reference/integrations-02.md); `browser-*`/`campaigns-*` theo sản phẩm |
 | Build/package/update/release | [lệnh và native](reference/build-01.md); [updater](reference/build-02.md); [feed/version](reference/build-03.md); [CURRENT_STATE](CURRENT_STATE.md) |
 | Docs, Git và tổ chức hướng dẫn | [MAINTENANCE](MAINTENANCE.md); [skill trước PR](../../.agents/skills/source-command-verify-pr/SKILL.md); [chỉ mục](REFERENCE_INDEX.md) |

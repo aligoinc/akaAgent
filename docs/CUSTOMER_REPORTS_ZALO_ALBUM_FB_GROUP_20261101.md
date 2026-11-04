@@ -583,6 +583,13 @@ cache, hay vị trí/khung bài như đối chiếu campaign 46363).
 
 ## C. "Không tìm thấy ô đăng bài": lỗi cũ, nay mới hiện
 
+**Hướng dẫn hiện hành 04/11/2026:** [V459](FACEBOOK_GROUP_COMPOSER_POLICY_V459.md)
+đã apply lúc 15:55:32 VN. Riêng đăng nhóm, block 27 trả mã policy mới 122 để ghi
+**Bỏ qua**, không tăng chuỗi lỗi; vẫn có log nguyên nhân. Policy đăng cá nhân 94,
+XPath và workflow giữ nguyên. Khách cần thoát/mở lại app để nạp catalog, không
+cần cài bản mới. Phần điều tra và hướng xử lý bên dưới là lịch sử trước V459;
+không còn yêu cầu khách lọc thủ công các nhóm để tránh dừng vì lỗi composer này.
+
 `fb_open_composer` (block 27, V374/V375) trả `opened:false` + `actionResult`
 `err_fb_composer_editor_not_found`, stage `composer_button` (nút "Bạn viết gì đi…"
 không xuất hiện trong 15 s); step vẫn `success` nên đếm lỗi phải đọc

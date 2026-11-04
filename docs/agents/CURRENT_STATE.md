@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 04/11/2026
 
+[V459: không mở được composer khi đăng nhóm](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md):
+**Đã apply 15:55:32 VN, 04/11/2026**, ledger `20261104085532`.
+Block 27 trả mã riêng cho `fb_post_group`; policy mới 122 chuyển thành Bỏ qua,
+không tăng/reset chuỗi lỗi hoặc tính hạn mức, giữ log nguyên nhân. Policy 94 cho
+đăng cá nhân nguyên vẹn; XPath/workflow/app không sửa. 55 ca local, trial ROLLBACK
+và hậu kiểm checksum đạt; hai typecheck/build local đạt. Khách cần thoát/mở lại
+app để nạp catalog mới, không cần cài bản mới; tiến trình vẫn có chữ Lỗi theo
+lựa chọn của người dùng. Không apply lại hoặc tự bật campaign đã tạm dừng.
+
 [V458: nhật ký vào/rời nhóm data](../NOTIFICATION_CENTER.md#v458--nhật-ký-vàorời-nhóm-data-candidate-chưa-apply): **Candidate, chưa apply,
 cần V457 trước.** Sửa hàm bộ lọc động từ bản live (md5 `d40d1a23…`) đúng 3 chỗ, ghi sự kiện và gộp thông báo theo khung;
 mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với bản cũ) và preflight live READ ONLY đạt.
