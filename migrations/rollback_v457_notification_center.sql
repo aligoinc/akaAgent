@@ -14,6 +14,11 @@ BEGIN
     RAISE EXCEPTION 'rollback v457: tick is not the V457 target definition';
   END IF;
   IF to_regclass('public.auto_notifications') IS NULL THEN RAISE EXCEPTION 'rollback v457: V457 not applied'; END IF;
+  -- V458 gọi các hàm/bảng của V457 từ hàm bộ lọc động: phải rollback V458 trước.
+  IF to_regprocedure('private.aka_agent_data_group_record_member_event(uuid,bigint,bigint,bigint,bigint,bigint,bigint,bigint,text)') IS NOT NULL
+     OR to_regprocedure('private.aka_agent_notification_member_events_enabled()') IS NOT NULL THEN
+    RAISE EXCEPTION 'rollback v457: V458 is applied, run migrations/rollback_v458_data_group_member_events.sql first';
+  END IF;
 END
 $v457_rollback_preflight$;
 

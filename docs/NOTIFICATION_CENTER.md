@@ -108,7 +108,7 @@ Bắt buộc `staffId`; dữ liệu ngoài phạm vi trả `{found:false}`.
 
 ## Thứ tự bật (mỗi bước duyệt riêng)
 
-1. Apply V457 ngoài cao điểm (công tắc vẫn tắt, chưa tạo gì).
+1. Apply V457 ngoài cao điểm (công tắc vẫn tắt, chưa tạo gì), rồi V458 (cũng không ghi gì khi công tắc tắt).
 2. Deploy API WebApp có worker; đặt Vault URL/token điều phối; bật `notifications.enabled` ở
    `dry_run`, so nội dung với email cũ vài ngày.
 3. Chuyển `live`, tắt trigger `trg_aka_agent_enqueue_campaign_completed_email` và 2 job cron
@@ -124,3 +124,36 @@ cũ (V456 vẫn giới hạn dòng), dựng/gộp/chia lượt gửi ở `dry_ru
 báo cáo theo lịch, khóa thuê điều phối, thiết bị và thu hồi phiên, hộp thư, wrapper Desktop,
 quyền từng role, số liệu, dọn dữ liệu; chạy lại bị preflight từ chối; rollback khôi phục tick
 rồi apply lại được. Khối preflight chạy trên akachat ở chế độ READ ONLY ngày 04/11/2026: đạt.
+
+## V458 — nhật ký vào/rời nhóm data (candidate, chưa apply)
+
+`migrations/migration_v458_data_group_member_events.sql` sửa `aka_agent_process_data_group_dynamic_filters_core`
+từ đúng bản đang chạy trên akachat (md5 `d40d1a23943ae1a4a66339504382526f`, chụp nguyên văn ngày 04/11/2026 tại
+`migrations/snapshots/data-group-member-events-v458/core_live.sql`), chỉ 3 chỗ:
+
+1. Vòng bộ lọc đọc thêm `revision`.
+2. Hai điểm đang tăng `last_entered_count`/`last_exited_count` gọi `private.aka_agent_data_group_record_member_event`
+   trong cùng subtransaction của từng liên hệ (liên hệ lỗi thì nhật ký của nó rollback theo). Bản ghi chỉ rời bộ
+   lọc mà vẫn ở lại nhờ nguồn khác không phải "rời nhóm", không ghi.
+3. Cuối lượt gọi `private.aka_agent_data_group_finish_member_events`: gắn `group_total_after` cho sự kiện cuối của
+   mỗi nhóm (đếm 1 lần/nhóm/lượt) rồi gộp thông báo: 1 dòng `auto_notifications` cho mỗi (người nhận, nhóm, khung
+   `bucketMinutes`), `dedupe_key = dg:{staff}:{group}:{minutes}:{bucket UTC}`, `deliver_after` = cuối khung + 30 giây,
+   cộng dồn số vào/rời khi còn `pending`. Người nhận: chủ nhóm; người được chia sẻ nếu bật `includeSharedGroups`.
+   Lọc theo `groupIds` và `actions`; payload mang `groupId, groupName, from, to, added, removed, actions, shared`.
+
+Hai hàm ghi/chốt tự bắt lỗi (`RAISE WARNING`), nên lỗi nhật ký hay thông báo không bao giờ làm rollback thay đổi
+thành viên. Chỉ ghi khi `notifications.enabled = true` hoặc khóa mới `notifications.member_events.enabled = true`
+(mặc định `false`): có thể bật riêng nhật ký để quan sát lượng ghi trước khi bật thông báo. Dọn nhật ký 90 ngày chạy
+trong bước điều phối, tức chỉ khi `notifications.enabled = true`.
+
+Rollback: `migrations/rollback_v458_data_group_member_events.sql` (khôi phục đúng bản md5 `d40d1a23…`, xóa hàm
+phụ và khóa cấu hình; giữ dữ liệu đã ghi). Rollback V457 nay tự từ chối khi V458 còn áp dụng.
+
+Kiểm chứng: `scripts/data-group-member-events/smoke.sh` (PG17 tạm, metadata live, không dữ liệu khách),
+**40 ca đạt**: hàm lõi fixture khớp checksum live; cùng một kịch bản cho kết quả thành viên/nguồn/bộ đếm/revision
+giống hệt bản cũ cả khi tắt và bật công tắc (5 vào, 2 rời; ở lại nhờ nguồn khác không tính rời); ghi nhãn, mô tả
+luật, revision, tổng sau thay đổi; gộp theo khung và người nhận được chia sẻ; lọc nhóm/hành động; lỗi chèn nhật ký,
+lỗi gộp thông báo và lỗi so khớp một liên hệ không làm hỏng lượt; số liệu `data_group` và `claim_render` đọc đúng
+khung; chạy lại bị từ chối; rollback V457 bị chặn khi có V458; rollback khôi phục checksum và hành vi; apply lại được.
+Preflight phần không phụ thuộc V457 chạy READ ONLY trên akachat ngày 04/11/2026: 16/16 cột, index thành viên đang
+hoạt động, metadata hàm lõi và checksum khớp.

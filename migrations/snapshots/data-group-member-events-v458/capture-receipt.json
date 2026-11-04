@@ -1,0 +1,31 @@
+{
+  "migration": "migration_v458_data_group_member_events.sql",
+  "status": "candidate_not_applied",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "captured_at": "2026-11-04T06:47:00Z",
+  "capture_method": "read-only pg_get_functiondef via base64, statement_timeout 5s",
+  "live_core": {
+    "signature": "public.aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)",
+    "md5": "d40d1a23943ae1a4a66339504382526f",
+    "length": 10574,
+    "owner": "postgres",
+    "security_definer": true,
+    "proconfig": [
+      "search_path=pg_catalog, public"
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  "target_core_md5": "3b94712afe9d6aa725d8af55d825c5cb",
+  "live_preflight_read_only": {
+    "expected_columns": 16,
+    "active_member_index": true,
+    "core_metadata_ok": true,
+    "member_events_key_absent": true,
+    "v457_applied": false
+  },
+  "files_sha256": {
+    "migration": "a00b3501c9bbab6e89d8c13e47401f611119c3f5ec9807bf4fe4ab722f5d67d6",
+    "rollback": "f336daf1cd5702d0133aae071bf90a1e1e3b9bbf34eaee6cd806d6b208b98d93"
+  },
+  "local_verification": "scripts/data-group-member-events/smoke.sh on PostgreSQL 17: 40 checks pass"
+}

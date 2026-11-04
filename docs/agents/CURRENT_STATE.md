@@ -1,5 +1,9 @@
 # Trạng thái đã xác nhận — cập nhật 04/11/2026
 
+[V458: nhật ký vào/rời nhóm data](../NOTIFICATION_CENTER.md#v458--nhật-ký-vàorời-nhóm-data-candidate-chưa-apply): **Candidate, chưa apply,
+cần V457 trước.** Sửa hàm bộ lọc động từ bản live (md5 `d40d1a23…`) đúng 3 chỗ, ghi sự kiện và gộp thông báo theo khung;
+mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với bản cũ) và preflight live READ ONLY đạt.
+
 [V457: trung tâm thông báo (giai đoạn 1)](../NOTIFICATION_CENTER.md): **Candidate, chưa apply.** 5 bảng, trigger
 chiến dịch/tài khoản/phiên, cầu nối cài đặt cũ, điều phối trong tick 30 giây, RPC worker/số liệu/cài đặt;
 công tắc mặc định tắt + `dry_run`. 94 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
