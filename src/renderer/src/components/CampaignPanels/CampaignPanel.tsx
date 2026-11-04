@@ -57,7 +57,11 @@ import {
 import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
+import { buildFoundDataWorkbook, toFacebookGroupList, type FoundDataKind, type FoundFacebookGroup } from './foundDataExport'
+import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
+import CampaignAgentFormModal from './CampaignAgentFormModal'
+import { isAgentDraft } from '../../../../shared/campaignAgent'
 import CampaignDraftRow from './CampaignDraftRow'
 import CampaignAssistantMenu from './CampaignAssistantMenu'
 import type { CampaignAssistantMode } from '../../../../shared/campaignSupport'
@@ -104,7 +108,6 @@ interface CampaignPanelProps {
 }
 
 type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
-type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'findDataLogScope'
@@ -192,20 +195,13 @@ interface FoundPhoneProfile {
   source: string
 }
 
-interface FoundFacebookGroup {
-  url: string
-  name: string
-  privacy?: string
-  memberCount?: number
-  postsPerDay?: number
-}
-
 interface FoundDataItem {
   key: string
   kind: FoundDataKind
   label: string
   value: string
   name?: string
+  facebookGroup?: FoundFacebookGroup
   groupUrl: string
   createdAt?: string
 }
@@ -234,7 +230,6 @@ interface FindDataLogRow {
   aiMeaningCheck: string
 }
 
-const FOUND_DATA_TEMPLATE_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
 const CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Uid', 'Sđt', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nguồn thêm data']
 const SMS_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung SMS', 'Lịch gửi', 'Nguồn thêm data']
 const VOICE_CALL_CAMPAIGN_INPUT_DATA_EXPORT_HEADERS = ['Tên', 'Sđt', 'Nhà mạng', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nội dung cuộc gọi', 'Lịch gọi', 'Nguồn thêm data']
@@ -795,38 +790,6 @@ const toPhoneProfileList = (value: unknown): FoundPhoneProfile[] => {
   return profiles
 }
 
-const toFacebookGroupList = (value: unknown): FoundFacebookGroup[] => {
-  if (!Array.isArray(value)) return []
-  const seen = new Set<string>()
-  const groups: FoundFacebookGroup[] = []
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue
-    const group = item as {
-      url?: unknown
-      name?: unknown
-      privacy?: unknown
-      memberCount?: unknown
-      postsPerDay?: unknown
-    }
-    const url = String(group.url || '').trim()
-    const key = url.replace(/\/+$/g, '').toLowerCase()
-    if (!url || seen.has(key)) continue
-    seen.add(key)
-    const numberOrUndefined = (raw: unknown): number | undefined => {
-      const value = Number(raw)
-      return Number.isFinite(value) && value >= 0 ? value : undefined
-    }
-    groups.push({
-      url,
-      name: String(group.name || '').trim(),
-      privacy: String(group.privacy || '').trim() || undefined,
-      memberCount: numberOrUndefined(group.memberCount),
-      postsPerDay: numberOrUndefined(group.postsPerDay)
-    })
-  }
-  return groups
-}
-
 const getFindDataPayload = (detail: CampaignDetail): FoundDataPayload => {
   const data = detail.data || {}
   const phones = toStringList(data.phones)
@@ -1012,28 +975,6 @@ const buildFindDataLogRow = (event: CampaignRunEvent): FindDataLogRow => {
     aiRawResult: aiRawResult || '-',
     aiMeaningCheck
   }
-}
-
-const normalizeFoundDataExportValue = (item: FoundDataItem) => {
-  const value = String(item.value || '').trim()
-  if (item.kind === 'phone') return value.replace(/[\s.\-()+]/g, '')
-  if (item.kind === 'postLink') return value.replace(/\/+$/g, '').toLowerCase()
-  if (item.kind === 'facebookGroup') return value.replace(/\/+$/g, '').toLowerCase()
-  return value.toLowerCase()
-}
-
-const getUniqueFoundDataItems = (items: FoundDataItem[]) => {
-  const map = new Map<string, FoundDataItem>()
-  for (const item of items) {
-    const normalizedValue = normalizeFoundDataExportValue(item)
-    if (!normalizedValue) continue
-    const key = `${item.kind}:${normalizedValue}`
-    const existing = map.get(key)
-    if (!existing || (!existing.name && item.name)) {
-      map.set(key, item)
-    }
-  }
-  return Array.from(map.values())
 }
 
 const formatDisplayDateTime = (value?: string) => value ? new Date(value).toLocaleString('vi-VN') : '-'
@@ -2498,6 +2439,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const showAlert = useUiStore(s => s.showAlert)
 
   const [showForm, setShowForm] = useState(false)
+  const [showAgentForm, setShowAgentForm] = useState(false)
   const [showActionManager, setShowActionManager] = useState(false)
   const [showAddInputDataModal, setShowAddInputDataModal] = useState(false)
   const [addDataCampaign, setAddDataCampaign] = useState<CampaignConfig | null>(null)
@@ -4269,6 +4211,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           label: getFoundDataKindLabel('facebookGroup'),
           value: group.url,
           name: group.name,
+          facebookGroup: group,
           groupUrl,
           createdAt
         }))
@@ -4606,7 +4549,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       while (offset < total) {
         const page = await window.electronAPI.listCampaignDetailsPage({
           campaignId: selectedCampaign.id,
-          ...getCampaignDetailPageQuery(offset, exportPageSize)
+          ...getCampaignDetailPageQuery(offset, exportPageSize),
+          includeFacebookGroupMetadata: canExportFacebookGroupMetadata(selectedCampaign.actionId)
         })
         total = page.total
         details.push(...page.items)
@@ -4691,7 +4635,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           } : {})
         }
       })
-      const sheet = utils.json_to_sheet(rows)
+      const sheet = utils.json_to_sheet(appendFacebookGroupExportColumns(rows, details.map(detail => detail.facebookGroupMetadata)))
       sheet['!cols'] = isSelectedMobileManagedSmsCampaign
         ? [
           { wch: 6 },
@@ -4748,38 +4692,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     }
 
     try {
-      const uniqueItems = getUniqueFoundDataItems(selectedFoundDataItems)
-      const rows = [
-        FOUND_DATA_TEMPLATE_HEADERS,
-        ...uniqueItems.map(item => {
-          const isPhone = item.kind === 'phone'
-          return [
-            item.name || '',
-            isPhone ? '' : item.value,
-            isPhone ? item.value : '',
-            '',
-            '',
-            '',
-            '',
-            '',
-            ''
-          ]
-        })
-      ]
-      const sheet = utils.aoa_to_sheet(rows)
-      sheet['!cols'] = [
-        { wch: 24 },
-        { wch: 48 },
-        { wch: 18 },
-        { wch: 28 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 },
-        { wch: 14 }
-      ]
-      const workbook = utils.book_new()
-      utils.book_append_sheet(workbook, sheet, 'Sheet1')
+      const workbook = buildFoundDataWorkbook(selectedFoundDataItems, selectedCampaign.actionId)
       const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
       writeFile(workbook, `found-data-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
       showAlert('Đã xuất data tìm được ra Excel.', 'success')
@@ -5918,6 +5831,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               <Plus size={14} />
               <span>Thêm chiến dịch</span>
             </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAgentForm(true)} title="Thêm bằng Agent">
+              <Sparkles size={14} /><span>Thêm bằng Agent</span>
+            </button>
           </div>
         </div>
 
@@ -6075,12 +5991,15 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           </div>
         )}
 
-        {campaignDrafts.draft && <CampaignFormModal key={campaignDrafts.draft.id} campaign={null}
-          savedDraft={campaignDrafts.draft} onOpenGeneralSettings={onOpenGeneralSettings}
-          onOpenContentTemplates={onOpenContentTemplates} onClose={() => {
-            campaignDrafts.closeDraft()
-            void loadCampaigns({ silent: true })
-          }} />}
+        {showAgentForm && <CampaignAgentFormModal campaign={null}
+          onOpenGeneralSettings={onOpenGeneralSettings} onOpenContentTemplates={onOpenContentTemplates}
+          onClose={() => { setShowAgentForm(false); campaignDrafts.refresh(); void loadCampaigns({ silent: true }) }} />}
+        {campaignDrafts.draft && (() => {
+          const DraftForm = isAgentDraft(campaignDrafts.draft.payload.values.agentChat) ? CampaignAgentFormModal : CampaignFormModal
+          return <DraftForm key={campaignDrafts.draft.id} campaign={null} savedDraft={campaignDrafts.draft}
+            onOpenGeneralSettings={onOpenGeneralSettings} onOpenContentTemplates={onOpenContentTemplates}
+            onClose={() => { campaignDrafts.closeDraft(); void loadCampaigns({ silent: true }) }} />
+        })()}
         {diagnosticRandomAccount && <FacebookRandomRunConfigModal key={diagnosticRandomAccount.id} account={diagnosticRandomAccount} enableAfterSave={false}
           onClose={() => { setDiagnosticRandomAccount(null); onDiagnosticsChanged?.() }} />}
         {diagnosticAccount && <AccountInfoView account={diagnosticAccount} mode="modal" onClose={() => {

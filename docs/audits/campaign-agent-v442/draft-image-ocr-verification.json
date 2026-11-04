@@ -1,0 +1,63 @@
+{
+  "verifiedAt": "2026-11-02T10:25:31.983Z",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "scope": "Retain saved/submitted draft image bytes on removal; preserve full OCR in follow-up history",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "16000-character OCR response accepted unchanged; oversized OCR rejected",
+        "32001-character history entry accepted unchanged; oversized entry and more than 20 entries rejected",
+        "draft OCR length validation"
+      ]
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "saved image removed then closed without save restores on reopen",
+        "saved image removed then save fails before commit restores on reopen",
+        "successful save persists composer removal",
+        "new image survives removal after server commit with lost response",
+        "never-submitted image is still deleted on removal",
+        "16000-character OCR plus 2000-character clarification survives save/reopen and real main request validator"
+      ]
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "log": "draft-image-ocr-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "sha256": {
+    "src/shared/campaignAgent.ts": "1e54869588a2ff739e25d10d9a65d93bedd2ad872e9be80d3078320b3cfbb402",
+    "src/main/services/campaignAgentService.ts": "d193c09cbf047a9b2be50efec3bd0428bddd5d5ff0bafd6cbf0378211a3d7f95",
+    "src/renderer/src/components/CampaignPanels/useCampaignAgent.tsx": "cdd95f10a58906209c74cd176f437a9a6f2fbdeebc7f6a0f60115f17ebb47485",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "7c0a8148f896beb1fb70d2fa4da6c95a7728132459560f8a41578fd48da6a67c",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Actual Electron renderer with fixture IPC/stores; no production OCR quality claim.",
+    "Previously persisted or submitted images are retained locally; automatic cleanup is not implemented."
+  ]
+}

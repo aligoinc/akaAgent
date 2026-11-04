@@ -73,7 +73,7 @@ export function registerAuthHandlers(hooks: AuthLifecycleHooks = {}): void {
         assertCurrent()
         const authenticated = getCurrentUser()
         if (!authenticated) throw new Error('Phiên đăng nhập không còn hợp lệ.')
-        user.chatWebEnabledAtLogin = authenticated.isChatSync === true
+        user.chatWebEnabledAtLogin = authenticated.appAccess?.separateAccess ? authenticated.appAccess.staff.akachatAllowed : authenticated.isChatSync === true
         user.chatWebSessionId = user.chatWebEnabledAtLogin ? randomUUID() : undefined
         authenticated.chatWebEnabledAtLogin = user.chatWebEnabledAtLogin
         authenticated.chatWebSessionId = user.chatWebSessionId

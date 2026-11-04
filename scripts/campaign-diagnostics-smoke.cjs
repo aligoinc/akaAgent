@@ -14,7 +14,10 @@ const shared = load('src/shared/campaignDiagnostics.ts')
 const randomChecks = load('src/shared/facebookRandomRunDiagnostics.ts', { './facebookRandomRun': load('src/shared/facebookRandomRun.ts') })
 const scheduleRules = load('src/main/services/campaignDiagnosticsSchedule.ts')
 const diagnosticPrompt = JSON.parse(readFileSync(resolve(__dirname, '../migrations/snapshots/campaign-diagnostics-prompt-v395/target.json'), 'utf8')).prompt.prompt_system
-const auth = load('src/main/data/currentUser.ts', { 'node:async_hooks': require('node:async_hooks') })
+const auth = load('src/main/data/currentUser.ts', {
+  'node:async_hooks': require('node:async_hooks'),
+  './supabaseClient': { isTrustedServerSupabaseConfigured: () => true }
+})
 const deadline = load('src/main/services/requestDeadline.ts')
 const login = () => { auth.setCurrentUser({ staffId: 9, organizationId: 1 }); auth.setCurrentUserCredentials({ username: 'fixture', password: 'fixture' }) }
 const nextTick = () => new Promise(resolve => setImmediate(resolve))
@@ -203,6 +206,9 @@ async function rules() {
   let randomRun = { enabled: false, config: null }, accountReads = 0, randomChange = null
   const aiLogs=[]
   const aiRuntime=load('src/main/services/aiRuntimeService.ts', {
+    '../../shared/formAiClaude': load('src/shared/formAiClaude.ts'),
+    '../data/supabaseClient': { isTrustedServerSupabaseConfigured: () => true },
+    './desktopAiTransport': { fetchDesktopAi: () => { throw Error('Trusted fixture must not use Desktop transport') } },
     '../data/repositories/aiRepository': {
       getAiUsingConfigByCode:async()=>({
         using:{id:1,timeoutMs:1000,requestOptions:{}},
@@ -273,6 +279,7 @@ async function rules() {
     [{ enabled:true, config:{ ...configured, rules:[] } },'invalid'],
     [{ enabled:true, config:{ ...configured, rules:[{ campaignActionId:'facebook_group_post', quantity:1, unit:'data' }] } },'excluded'],
     [{ enabled:true, config:configured },'included'],
+    [{ enabled:true, config:{version:2,mode:'ai',revision:2,rules:[]} },'included'],
     [{ enabled:false, config:null },'off']
   ]) {
     randomRun=settings; accountReads=0
@@ -405,7 +412,11 @@ async function rules() {
 }
 async function promptCompositionRegression() {
   let endpoint='https://diagnostics.invalid/v1/responses', systemTemplate=''
-  const runtime=load('src/main/services/aiRuntimeService.ts',{'../data/repositories/aiRepository':{
+  const runtime=load('src/main/services/aiRuntimeService.ts',{
+    '../../shared/formAiClaude': load('src/shared/formAiClaude.ts'),
+    '../data/supabaseClient': { isTrustedServerSupabaseConfigured: () => true },
+    './desktopAiTransport': { fetchDesktopAi: () => { throw Error('Trusted fixture must not use Desktop transport') } },
+    '../data/repositories/aiRepository':{
     getAiUsingConfigByCode:async()=>({using:{id:1,timeoutMs:1000,requestOptions:{}},model:{id:1,model:'fixture',provider:'openai',endpoint,apiKey:'synthetic-key',defaultBody:{}},prompt:{id:1,promptSystem:systemTemplate,promptUser:'{{question}}'}}),
     createAiLog:async()=>1
   }})

@@ -57,6 +57,9 @@ export interface VoiceCallCampaignSettings {
 }
 
 export interface AutoAccount {
+  isAkaAgentEnabled?: boolean
+  isAkachatEnabled?: boolean
+  appAccess?: import('./appAccess').AppAccessFlags
   id: number
   name: string
   flatformType: string
@@ -1215,6 +1218,8 @@ export interface AddCampaignInputDataRowsResult {
 export type CampaignDetailStatus = string
 
 export interface CampaignDetail {
+  /** Loaded only for exports of actions accepting Facebook group targets. */
+  facebookGroupMetadata?: import('./facebookGroupExport').FacebookGroupMetadata
   statusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
   subStatusPresentation?: { code: string; name: string; color: string | null; statusValue?: string | null } | null
   statusId?: number | null
@@ -1257,6 +1262,7 @@ export interface CampaignDetailAutomationTrigger {
 }
 
 export interface CampaignDetailPageQuery {
+  includeFacebookGroupMetadata?: boolean
   engagementFilter?: EngagementFilter
   campaignId: number
   sort?: CampaignDetailSort
@@ -1753,6 +1759,8 @@ export interface AutoAccountContact {
   /** Authoritative platform persisted in auto_account_contacts.flatform_type. */
   flatformType?: string | null
   name: string
+  /** Saved Zalo profile name; never falls back to a display name or UID. */
+  zaloOriginalName?: string | null
   uid?: string
   url?: string
   extraData?: Record<string, unknown>
@@ -2063,6 +2071,7 @@ export interface DataProvenance {
 }
 
 export interface DataGroupMember {
+  facebookGroupMetadata?: import('./facebookGroupExport').FacebookGroupMetadata
   /** Selection and mutations are keyed by membership id, not contact id. */
   id: number
   groupId: number
@@ -2164,6 +2173,8 @@ export type DataGroupMemberStatusFilter =
   | 'inactive'
 
 export interface DataGroupMemberListQuery {
+  /** Export-only projection; ordinary list/filter reads omit this flag. */
+  includeFacebookGroupMetadata?: boolean
   columnFilters?: ColumnFilterRequest
   sourceCodes?: Array<'upload' | 'scan' | 'automation' | 'dynamic_filter' | 'external_sync'>
   groupId: number
@@ -2868,6 +2879,7 @@ export interface ZaloAccountCapabilities {
 }
 
 export interface AuthUser {
+  appAccess?: import('./appAccess').AppAccessSnapshot
   staffId: number
   organizationId: number
   name: string

@@ -1,0 +1,106 @@
+{
+  "verifiedAt": "2026-11-02T12:47:14.384512+00:00",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "scope": "Overall Agent form review and prospective Data, Content and Exclusions dependencies",
+  "reviewedAreas": [
+    "Existing form and draft routes",
+    "IPC main-frame, single-flight, cancellation, timeout and auth identity",
+    "Scoped account/Page/catalog validation and allowlists",
+    "Five images, private storage and proxy log masking",
+    "Atomic apply, undo revisions, draft reopen/CAS and stale response protection",
+    "Data modes, pending groups and dependent content/exclusion contexts"
+  ],
+  "fixes": [
+    "Compute effective direct data availability after Options while keeping stable editing locks",
+    "Expose editable dormant content with correct basic/advanced context; check effective mode before applying",
+    "Build exclusion context after General/Options and require one account including secondary",
+    "Normalize group-source options and preserve them in undo; reject conflicting requested sources",
+    "Keep renderer source-tab flags aligned with the effective snapshot used by Main"
+  ],
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-images-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-schedule-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-content-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-exclusion-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-facebook-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-facebook-ai-service-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "AKA_AGENT_WEB_REPO=/Users/lequangnhut/Repos/akaAgentWebApp node scripts/desktop-ai-proxy-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "newCases": [
+    "Zalo all/tagged friends and Facebook suggestions to manual UID list in one turn",
+    "Hard-locked input remains locked after option changes",
+    "Enabling automatic source plus direct rows or group returns clarification with OCR and no partial patches",
+    "Group source clears automatic mode; undo and draft preserve previous choices",
+    "Enable messaging or disable share/copy then edit basic/advanced content",
+    "Effective source tab is preserved when only sharing is disabled",
+    "First account selection plus messaging plus exclusion draft in one turn; ambiguous secondary account asks again"
+  ],
+  "runnerNote": "Initial new fixtures omitted a required draft name and an enabled exclusion rule; corrected fixtures without weakening app validation. Final full Electron suite passed.",
+  "sha256": {
+    "src/shared/campaignAgent.ts": "a51006eb038d8f17ad608531359457f6d782233470eec2c2c0a43e95b498d6c1",
+    "src/main/services/campaignAgentService.ts": "ff8f0eb38f7f50938825e8344647507185f6acd8daef2f2c177b3debb64cb75b",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "57621786a6641c3b37f848460660b01abbf7f863056f059def4ebd53e0becaf4",
+    "scripts/campaign-agent-smoke.cjs": "0fb1bc4d849b47c481099a946854205ffb1acc1434f0596aba0e395d6327cee9",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "cd7defabf6de69ea90c2f42bf2f95cbc4d4298e480af133c593d14e8247e5823",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "docs/CAMPAIGN_AGENT_FORM.md": "fcf31f0da3e8eeef0addd5b906547b444e7b2352dc472a061e17e22b5634a237"
+  },
+  "buildLog": "overall-dependencies-build.txt",
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Service AI/DB fixtures and a real Electron renderer with fixture IPC/stores; provider quality and Windows were not tested live.",
+    "Proxy HTTP smoke uses a local Fastify bridge and fake provider; no production campaign was created or run.",
+    "Existing V442 live migration and old form checksums remain unchanged."
+  ]
+}

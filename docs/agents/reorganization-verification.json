@@ -1,0 +1,27 @@
+{
+  "status": "passed",
+  "original_bytes": 361701,
+  "new_agents_bytes": 13473,
+  "original_lines": 1050,
+  "new_agents_lines": 111,
+  "archive_sha256": "3750842deac2ea6233f2c62dfd0edce988c600ba05b45a4bdf0bdb7c619740f5",
+  "preserved_source_lines": 1050,
+  "duplicate_or_missing_source_lines": 0,
+  "routed_reference_files": 35,
+  "markdown_local_links_checked": 638,
+  "new_broken_link_targets": [],
+  "inherited_missing_targets": [],
+  "preexisting_changed_files_preserved": 13,
+  "production_changed": false,
+  "application_code_changed": false,
+  "review_corrections": {
+    "date": "2026-10-28",
+    "findings_resolved": 4,
+    "client_contract_source": "docs/agents/CLIENT_CONTRACTS.md",
+    "preserved_body_hashes_unchanged": true,
+    "application_code_changed": false,
+    "outside_documentation_changes": [],
+    "client_contract_anchors_checked": 12,
+    "skill_validator": "passed"
+  }
+}

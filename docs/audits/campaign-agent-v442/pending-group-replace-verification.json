@@ -1,0 +1,64 @@
+{
+  "verifiedAt": "2026-11-02T10:52:26.177826+00:00",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "scope": "Expose pending group count and block full Data replacement until the user removes pending group sources on the form; preserve append and undo",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "pendingGroupCount requires a nonnegative safe integer and reaches router/Data",
+        "replace blocked by pending count or source lock independently",
+        "blocked multi-section turn returns no partial patch and preserves OCR",
+        "append allowed with pending groups; replace allowed after groups removed"
+      ]
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "live renderer rejects successful replace response before any field mutation",
+        "blocked replacement preserves name, direct rows and group sources across save/reopen",
+        "append and undo preserve group sources",
+        "manual group removal enables replacement; save/reopen contains only the new recipient and no pending groups"
+      ]
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "log": "pending-group-replace-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "sha256": {
+    "src/shared/campaignAgent.ts": "23ca406040a0dc6fac39cd50a874ee37c57aed3862fa0972485f6cc78887e53b",
+    "src/main/services/campaignAgentService.ts": "4b1ced8961008262edda5868e70abaa117e43ce8dfbace8841e8f36b8d2b1a61",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "f353df0cde561f9b471d5a97e506ca63ed547e5b9149d06f2671d732d233da98",
+    "scripts/campaign-agent-smoke.cjs": "28ad1823fa5bf94b326a0f8f9fd766347f35544f698bcc02264966ff65b38cca",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "28c4278293c11c7922d4d35c350606c7e988f725bc1425cf53af97e0523d363e",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51"
+  },
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Service tests use AI/DB fixtures; Electron tests use the real renderer with fixture IPC/stores.",
+    "No production campaign was created or run.",
+    "Agent does not remove pending group sources itself; the user removes them using existing form controls before requesting a full replacement."
+  ]
+}

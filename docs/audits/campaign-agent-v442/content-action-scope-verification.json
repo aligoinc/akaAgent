@@ -1,0 +1,67 @@
+{
+  "verifiedAt": "2026-11-02T14:39:37.391376+00:00",
+  "base": "37e68ef5013f4dce9f7e68e88ed0b0694cee48d2",
+  "scope": "Scope content blockers to the current campaign action while preserving dormant values for undo",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-content-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "newCases": [
+    "Inactive source flags do not block Email/SMS/voice, Facebook timeline or Zalo phone content",
+    "Active message/source/share controls remain blockers",
+    "Zalo friend share to Email",
+    "Zalo group share to SMS",
+    "Zalo friend share to Facebook timeline",
+    "Facebook native group share to Email",
+    "Facebook source copy/share to Zalo phone",
+    "Every transition saves/reopens its draft, restores the previous action via undo, retains original source values and rejects content edits while those sources are active"
+  ],
+  "sha256": {
+    "src/shared/campaignAgent.ts": "f538fd2c3f5add0b08ecccb6d081d0a02d30c331741181a49bb91880cee5b72a",
+    "scripts/campaign-agent-smoke.cjs": "b2e225979c3cdadddd3e191439cde02df7dca23898e13e589dd050902a64d95d",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "71684ba0e63eca5907dfe2e55050380659982dbf5605aa5c32a52212ab655d0a",
+    "src/main/services/campaignAgentService.ts": "ff8f0eb38f7f50938825e8344647507185f6acd8daef2f2c177b3debb64cb75b",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "57621786a6641c3b37f848460660b01abbf7f863056f059def4ebd53e0becaf4",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "docs/CAMPAIGN_AGENT_FORM.md": "b841c703acc2b3fb6a2eb9f3b0125924812ca4f04383e007775150a569167123"
+  },
+  "buildLog": "content-action-scope-build.txt",
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Real Electron renderer with fixture IPC/stores; service and provider fixtures. No production campaign was created or run.",
+    "Provider quality and Windows were not tested live.",
+    "Old form, Agent form, main service and applied V442 SQL remain unchanged from the previous verification."
+  ]
+}

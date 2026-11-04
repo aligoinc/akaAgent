@@ -9,6 +9,7 @@ const { before, elements, blocks } = require('./build-facebook-native-group-shar
 const root = path.resolve(__dirname, '..')
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 const selectors = Object.fromEntries([...before.elements, ...elements].map(e => [e.name, e.xpath]))
+selectors.fb_share_button_inner = fs.readFileSync(path.join(root, 'scripts/workflows/facebook-share-post/share-button.xpath'), 'utf8').trim()
 const searchXPath = "//*[@role='dialog']" + selectors.SearchAddGroupToPostInp
 const block = blocks.find(b => b.name === 'fb_select_native_share_group')
 const oldBlock = before.blocks.find(b => b.name === 'fb_select_group_post_share_targets')

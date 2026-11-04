@@ -3,13 +3,14 @@ const fs=require('node:fs'),path=require('node:path'),assert=require('node:asser
 const {app,BrowserWindow}=require('electron')
 const {before,elements,blocks}=require('./build-facebook-native-group-share.cjs')
 const selectors=Object.fromEntries([...before.elements,...elements].map(e=>[e.name,e.xpath]))
+selectors.fb_share_button_inner=fs.readFileSync(path.join(__dirname,'workflows/facebook-share-post/share-button.xpath'),'utf8').trim()
 const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor
 let checks=0
 async function main(){
  await app.whenReady()
  const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true}})
  try {
-  for(const mode of ['success','caption','missing','wrong-id','slow-list','slow-empty','deadline-result','late-result','suggestion-rerender','suggestion-disappears','outside-dialog-duplicate','tracking-result','query-changed','search-removed','abort-wait','no-list','duplicate','title-missing','title-duplicate','disabled','submit-timeout','abort-before','abort-selection','abort-submit']) {
+  for(const mode of ['success','reel','caption','missing','wrong-id','slow-list','slow-empty','deadline-result','late-result','suggestion-rerender','suggestion-disappears','outside-dialog-duplicate','tracking-result','query-changed','search-removed','abort-wait','no-list','duplicate','title-missing','title-duplicate','disabled','submit-timeout','abort-before','abort-selection','abort-submit']) {
    let now=0,location='https://www.facebook.com/groups/target/',posted=0,selected=0
    let searchStartedAt,selectedAt,searchEndedAt
    const delay=mode==='deadline-result'?10000:mode==='late-result'?10500:5000
@@ -27,7 +28,10 @@ async function main(){
    const outside=mode==='outside-dialog-duplicate'?`<div role="dialog">${result('target')}</div>`:''
    const search=`${outside}<div role="dialog"><input role="combobox" type="search" aria-label="Tìm kiếm nhóm"><div id="results">${suggestion?result('target'):''}</div></div>`
    const toGroup=`<div role="dialog"><div role="button" aria-label="Chia sẻ lên nhóm" onclick='document.body.innerHTML=${JSON.stringify(search).replace(/'/g,'&#39;')}'>Nhóm</div></div>`
-   const source=`<div role="dialog"><div role="button" aria-label="Chia sẻ" onclick='document.body.innerHTML=${JSON.stringify(toGroup).replace(/'/g,'&#39;')}'>Chia sẻ</div></div>`
+   const shareClick=`document.body.innerHTML=${JSON.stringify(toGroup).replace(/'/g,'&#39;')}`
+   const source=mode==='reel'
+    ?`<div role="button" tabindex="0" aria-label="Chia sẻ, gửi thước phim" onclick='${shareClick}'></div>`
+    :`<div role="dialog"><div role="button" aria-label="Chia sẻ" onclick='${shareClick}'>Chia sẻ</div></div>`
    const page={
     evaluate:async(code,...args)=>{
      const out=await evaluate(code,...args)
@@ -85,7 +89,7 @@ async function main(){
     output=await run('fb_select_native_share_group')
     if(vars.groupShareSelected)output=await run('fb_submit_native_group_share')
    }catch(e){e.message=mode+': '+e.message;error=e}
-   if(['success','caption','slow-list','slow-empty','deadline-result','suggestion-rerender','outside-dialog-duplicate','tracking-result'].includes(mode)){
+   if(['success','reel','caption','slow-list','slow-empty','deadline-result','suggestion-rerender','outside-dialog-duplicate','tracking-result'].includes(mode)){
     assert.ifError(error);assert.equal(posted,1);assert.equal(selected,1)
     assert.equal(output.actionResult.operationState,'committed');assert.equal(output.actionResult.data.destinationPostUrl,null)
     assert.equal(vars.postUrl,'');assert.equal(vars.groupPostUrl,'')

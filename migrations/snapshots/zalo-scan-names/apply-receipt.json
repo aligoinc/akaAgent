@@ -1,0 +1,103 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261102064947",
+    "name": "migration_v441_zalo_scan_names"
+  },
+  "appliedAtVietnam": "2026-11-02 13:49:47 +07:00",
+  "functions": [
+    {
+      "signature": "private.column_filter_predicate_v1(text,jsonb)",
+      "checksum": "3865e1b571db3b1cc91a28ab1e43a0c9",
+      "owner": "postgres",
+      "prosecdef": false,
+      "provolatile": "i",
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_read_filtered_contacts_v1(bigint,bigint,text,text,text,jsonb)",
+      "checksum": "85f3e6f7025787d2938c06e71f1589c3",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_read_filtered_remarketing_v1(bigint,bigint,text,text,jsonb)",
+      "checksum": "969a66f21752b62804c71acb4521cd33",
+      "owner": "postgres",
+      "prosecdef": true,
+      "provolatile": "s",
+      "proconfig": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    }
+  ],
+  "postApplyChecks": [
+    {
+      "role": "service_role",
+      "rows": 5,
+      "test": "contacts_parity_and_original_name"
+    },
+    {
+      "role": "service_role",
+      "test": "contacts_filter_and_account_guard"
+    },
+    {
+      "role": "service_role",
+      "rows": 5,
+      "test": "remarketing_parity_and_original_name"
+    },
+    {
+      "role": "service_role",
+      "test": "remarketing_filter_and_account_guard"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "rows": 5,
+      "test": "contacts_parity_and_original_name"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "test": "contacts_filter_and_account_guard"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "rows": 5,
+      "test": "remarketing_parity_and_original_name"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "test": "remarketing_filter_and_account_guard"
+    },
+    {
+      "test": "contacts_distinct_name_predicate"
+    },
+    {
+      "test": "remarketing_distinct_name_predicate"
+    }
+  ],
+  "rollbackRehearsalPassed": true,
+  "unknownSourceGuardRejected": true,
+  "migrationSha256": "6c87e365db1096094953a11a925be2f5b6a4f237b727707ec705fc9465632f7c",
+  "validation": {
+    "nodeTypecheck": "passed",
+    "webTypecheck": "passed",
+    "build": "passed (Vite mixed import warnings)",
+    "uiMockIpcChecks": 25,
+    "repositoryMockChecks": 19,
+    "filterContractChecks": 15,
+    "filterServiceChecks": 14,
+    "installerBuilt": false,
+    "appPublished": false
+  }
+}

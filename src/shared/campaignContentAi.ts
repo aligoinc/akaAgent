@@ -16,9 +16,19 @@ export interface ContentAiPatch {
   additions: Array<{ sourceIndex: number; content: string; emailSubject: string | null }>
 }
 export type ContentAiResult = CampaignFormAiResult<ContentAiPatch>
+// AI input limits are independent from the number of variants a campaign may save.
+export const CONTENT_AI_MAX_ITEMS = 100
+export const CONTENT_AI_MAX_TEXT = 16_000
+export const CONTENT_AI_MAX_SUBJECT = 500
+export const CONTENT_AI_MAX_ITEMS_JSON = 60_000
+export function exceedsContentAiInputLimits(items: ContentAiItem[]): boolean {
+  return items.length > CONTENT_AI_MAX_ITEMS
+    || items.some(item => item.content.length > CONTENT_AI_MAX_TEXT || (item.emailSubject?.length ?? 0) > CONTENT_AI_MAX_SUBJECT)
+    || JSON.stringify(items).length > CONTENT_AI_MAX_ITEMS_JSON
+}
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const keys = (v: Record<string, unknown>, expected: string[]) => Object.keys(v).sort().join() === [...expected].sort().join()
-const text = (v: unknown, max = 16_000): v is string => typeof v === 'string' && v.length <= max
+const text = (v: unknown, max = CONTENT_AI_MAX_TEXT): v is string => typeof v === 'string' && v.length <= max
 const index = (v: unknown, length: number): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v < length
 
 // Provider-compatible structural schema; bounds and field capabilities are checked locally.
@@ -45,14 +55,14 @@ export function validateContentAiRequest(input: unknown): ContentAiRequest {
     || !text(input.description, CAMPAIGN_FORM_AI_MAX_PROMPT) || !input.description.trim()
     || !record(input.context) || typeof input.context.actionId !== 'string' || !/^[a-z][a-z0-9_]{0,119}$/.test(input.context.actionId)
     || !['basic', 'advanced'].includes(String(input.context.mode)) || !['plain', 'html'].includes(String(input.context.format))
-    || !Array.isArray(input.items) || !input.items.length || input.items.length > 100) throw new Error(CONTENT_AI_MESSAGES.invalid)
+    || !Array.isArray(input.items) || !input.items.length || input.items.length > CONTENT_AI_MAX_ITEMS) throw new Error(CONTENT_AI_MESSAGES.invalid)
   const email = input.context.actionId.startsWith('email_')
   const items = input.items.map((item, i): ContentAiItem => {
-    if (!record(item) || !text(item.content) || !(item.emailSubject === null || email && text(item.emailSubject, 500))
+    if (!record(item) || !text(item.content) || !(item.emailSubject === null || email && text(item.emailSubject, CONTENT_AI_MAX_SUBJECT))
       || input.context && (input.context as ContentAiContext).mode === 'basic' && i > 0 && item.emailSubject !== null) throw new Error(CONTENT_AI_MESSAGES.invalid)
     return { content: item.content, emailSubject: item.emailSubject as string | null }
   })
-  if (JSON.stringify(items).length > 60_000) throw new Error(CONTENT_AI_MESSAGES.invalid)
+  if (JSON.stringify(items).length > CONTENT_AI_MAX_ITEMS_JSON) throw new Error(CONTENT_AI_MESSAGES.invalid)
   return { requestId: input.requestId, description: input.description.trim(), context: {
     actionId: input.context.actionId, mode: input.context.mode as ContentAiContext['mode'], format: input.context.format as ContentAiContext['format']
   }, items }

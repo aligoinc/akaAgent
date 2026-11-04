@@ -1,0 +1,1 @@
+PASS local data: private refs, source preservation, staff/draft boundaries, real OCR, missing/corrupt model retry, startup reject/error/exit/hang, native termination before unlock, cancellation cleanup

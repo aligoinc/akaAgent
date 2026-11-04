@@ -1,0 +1,22 @@
+PASS UI: counts, lineage, three separate Excel files, valid-only insertion
+PASS UI: zero valid report/download and edit invalidation
+PASS UI: Excel error rows counted/rejected/exported with evidence; valid-only insertion and all-error template report
+PASS UI: XML XLS customer/template, BIFF2/8, exact recipient/metadata insertion and corrupt XLSX guard
+PASS UI: TXT header detection and explicit override
+PASS UI: pagination does not truncate insertion
+PASS UI: sheet choice, raw numbers, displayed metadata, three phone policies
+PASS UI: no-header first row and ambiguous required column
+PASS UI: CSV phone lists keep the correct columns; ambiguous CSV cannot silently insert partial data
+PASS UI: scientific UID including zero mantissa, dedup/rejection, three exports, valid-only sink and template reimport
+PASS UI: TSV paste mapping preserves metadata and takes all phones
+PASS UI: Sheet mapping/verification/export reuses one fetch
+PASS UI: CSV template accepts prefaces/quoted-empty rows and preserves name/phone/Info through insertion
+PASS UI: template fallback, all-invalid report, automatic reverify, default reset
+PASS UI: image report covers unfiltered AI results without re-extraction on export
+PASS UI: image aliases/name fallback and unknown-record evidence
+PASS UI: UTF16 CSV
+PASS UI: UTF16 CSV, long-source exports for all groups and valid-file template reimport
+PASS UI: late Sheet/image success and failure cannot replace a new session
+PASS UI: action changes invalidate pending requests within the same modal
+PASS UI: source and expanded limits block insertion without truncating the report
+PASS importer UI end to end

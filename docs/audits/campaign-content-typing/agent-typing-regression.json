@@ -1,0 +1,46 @@
+{
+  "fixture": "real Electron renderer, isolated IPC/stores; development React",
+  "baselineRef": "3ccf39da",
+  "results": [
+    {
+      "rows": 0,
+      "kind": "chat",
+      "keystrokes": 37,
+      "elapsedMs": 149,
+      "formRenders": 0,
+      "largeClones": 0,
+      "largeSerializations": 0,
+      "requests": 0
+    },
+    {
+      "rows": 0,
+      "kind": "content",
+      "keystrokes": 37,
+      "elapsedMs": 345,
+      "formRenders": 1,
+      "largeClones": 0,
+      "largeSerializations": 0,
+      "requests": 0
+    },
+    {
+      "rows": 5000,
+      "kind": "chat",
+      "keystrokes": 37,
+      "elapsedMs": 277,
+      "formRenders": 0,
+      "largeClones": 0,
+      "largeSerializations": 0,
+      "requests": 0
+    },
+    {
+      "rows": 5000,
+      "kind": "content",
+      "keystrokes": 37,
+      "elapsedMs": 628,
+      "formRenders": 1,
+      "largeClones": 0,
+      "largeSerializations": 0,
+      "requests": 0
+    }
+  ]
+}

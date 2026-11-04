@@ -6,6 +6,7 @@ import { Ajv } from 'ajv'
 import { FORM_AI_SECTIONS, type FormAiSection } from '../../shared/campaignFormAiConfig'
 import { SCHEDULE_AI_SCHEMA } from '../../shared/campaignScheduleAi'
 import { LIMITS_AI_SCHEMA } from '../../shared/campaignLimitsAi'
+import { AGENT_ROUTER_SCHEMA, AGENT_EXTRA_SCHEMA } from '../../shared/campaignAgent'
 
 type Schema = Record<string, unknown>
 const record = (value: unknown): value is Schema => !!value && typeof value === 'object' && !Array.isArray(value)
@@ -28,7 +29,8 @@ function compatible(schema: Schema, contract: Schema): boolean {
 
 export function compileFormAiSchema(schema: unknown, section: FormAiSection): (content: string) => boolean {
   const facebookKind = (Object.keys(FACEBOOK_AI_SECTIONS) as FacebookAiKind[]).find(kind => FACEBOOK_AI_SECTIONS[kind] === section)
-  const contract = facebookKind ? facebookAiSchema(facebookKind) : section === FORM_AI_SECTIONS.exclusions ? EXCLUSION_AI_SCHEMA : section === FORM_AI_SECTIONS.content ? CONTENT_AI_SCHEMA : section === FORM_AI_SECTIONS.schedule ? SCHEDULE_AI_SCHEMA : LIMITS_AI_SCHEMA
+  const agent = section === FORM_AI_SECTIONS.agentRouter || section === FORM_AI_SECTIONS.agentExtra
+  const contract = section === FORM_AI_SECTIONS.agentRouter ? AGENT_ROUTER_SCHEMA : section === FORM_AI_SECTIONS.agentExtra ? AGENT_EXTRA_SCHEMA : facebookKind ? facebookAiSchema(facebookKind) : section === FORM_AI_SECTIONS.exclusions ? EXCLUSION_AI_SCHEMA : section === FORM_AI_SECTIONS.content ? CONTENT_AI_SCHEMA : section === FORM_AI_SECTIONS.schedule ? SCHEDULE_AI_SCHEMA : LIMITS_AI_SCHEMA
   if (!record(schema) || JSON.stringify(schema).length > 64_000 || !compatible(schema, contract)) {
     throw new Error('JSON Schema không tương thích với section.')
   }
@@ -36,7 +38,7 @@ export function compileFormAiSchema(schema: unknown, section: FormAiSection): (c
   const ajv = new Ajv({ strict: true, allowUnionTypes: true, allErrors: false, addUsedSchema: false })
   const validate = ajv.compile(schema)
   return content => {
-    if (content.length > (facebookKind ? 150_000 : section === FORM_AI_SECTIONS.content ? 100_000 : section === FORM_AI_SECTIONS.exclusions ? 32_000 : 16_000)) return false
+    if (content.length > (agent || facebookKind ? 150_000 : section === FORM_AI_SECTIONS.content ? 100_000 : section === FORM_AI_SECTIONS.exclusions ? 32_000 : 16_000)) return false
     try { return validate(JSON.parse(content)) === true } catch { return false }
   }
 }
@@ -51,7 +53,7 @@ export function formAiStructuredOptions(provider: string, endpoint: string, sche
     throw new Error('Model AI không tương thích Structured Outputs.')
   }
   const facebook = Object.values(FACEBOOK_AI_SECTIONS).some(value => value === section)
-  const name = facebook ? section.replaceAll('.', '_') : section === FORM_AI_SECTIONS.exclusions ? 'campaign_send_exclusions' : section === FORM_AI_SECTIONS.content ? 'campaign_content' : section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
+  const name = facebook || section.startsWith('campaign.agent.') ? section.replaceAll('.', '_') : section === FORM_AI_SECTIONS.exclusions ? 'campaign_send_exclusions' : section === FORM_AI_SECTIONS.content ? 'campaign_content' : section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
   return {
     store: false,
     ...(/\/responses\/?$/.test(url.pathname)

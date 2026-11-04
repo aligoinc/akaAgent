@@ -692,7 +692,7 @@ export class ZaloLocalChatSyncService {
       this.welcomed
     )
     if (!isCurrentConnection()) return
-    const listedAccounts = await this.supabase.listAccounts()
+    const listedAccounts = await this.supabase.listLocalChatRuntimeAccounts()
     if (!isCurrentConnection()) return
     const accounts = listedAccounts.filter(isEligibleLocalAccount)
     const eligibleIds = new Set(accounts.map(account => account.id))
@@ -967,7 +967,7 @@ export class ZaloLocalChatSyncService {
     if (!Number.isSafeInteger(accountId) || accountId <= 0) return
     try {
       if (this.reconcilePromise) await this.reconcilePromise
-      const account = await this.supabase.getAccount(accountId)
+      const account = await this.supabase.getAccountForZaloRuntime(accountId)
       if (!account || !isEligibleLocalAccount(account)) {
         throw new Error('Tài khoản không còn là Zalo QR local hợp lệ trên akaAgent.')
       }
@@ -1022,7 +1022,7 @@ export class ZaloLocalChatSyncService {
 
   private async publishCurrentAvailability(): Promise<void> {
     try {
-      this.sendAvailability((await this.supabase.listAccounts()).filter(isEligibleLocalAccount))
+      this.sendAvailability((await this.supabase.listLocalChatRuntimeAccounts()).filter(isEligibleLocalAccount))
     } catch (error) {
       this.logError('refresh local availability', error)
     }
@@ -1859,7 +1859,7 @@ export class ZaloLocalChatSyncService {
       ownedClaim = { previousStatus: claim.previousStatus, claimToken: claim.claimToken, staffId: claim.staffId }
       const completedClaim = ownedClaim
       this.qrClaimPreviousStatus.set(accountId, ownedClaim)
-      const result = await this.zaloRuntime.startLoginQr(accountId)
+      const result = await this.zaloRuntime.startLoginQr(accountId, { operationId: command.operationId, claimToken: claim.claimToken, remote: true })
       if (!result.success) {
         this.sendLocalQrEvent(accountId, 'failed', { message: result.reason || 'Không thể tạo QR.' })
         this.activeQrOperations.delete(accountId)

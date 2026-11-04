@@ -1,0 +1,14 @@
+{
+  "quotaText": "Đã điền vào form · 6 thay đổi\nTên chiến dịch\nChưa có → Hạn mức dễ đọc\nNhắn tin người lạ · Giới hạn trong ngày\n30 tin nhắn/ngày → 25 tin nhắn/ngày\nNhắn tin người lạ · Giới hạn theo thời gian\n9 tin nhắn trong 65 phút → 6 tin nhắn trong 90 phút\nKết bạn · Giới hạn trong ngày\n30 lời mời/ngày → 20 lời mời/ngày\nKết bạn · Giới hạn theo thời gian\n9 lời mời trong 65 phút → 7 lời mời trong 90 phút\nKết bạn\nTắt → Bật\nHoàn tác",
+  "inheritedQuotaText": "Đã điền vào form · 2 thay đổi\nTên chiến dịch\nChưa có → Hạn mức theo tài khoản\nNhắn tin người lạ · Giới hạn theo thời gian\n9 tin nhắn trong 90 phút → 7 tin nhắn trong 90 phút\nHoàn tác",
+  "checks": [
+    "hidden lookup omitted from renderer and main snapshots",
+    "readable daily/window rows",
+    "row click focuses matching form control",
+    "draft retains internal lookup defaults",
+    "legacy raw map formats on reopen",
+    "undo restores raw values without rewriting history",
+    "hidden quota patch rejected atomically",
+    "account-inherited window matches the form and survives reopen"
+  ]
+}

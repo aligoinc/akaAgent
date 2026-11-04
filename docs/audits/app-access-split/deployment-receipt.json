@@ -1,0 +1,739 @@
+{
+  "verified_at": "2026-11-02T22:44:23.868452+00:00",
+  "source": "primary checkouts only; no worktree deployment",
+  "components": [
+    {
+      "component": "api",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "head": "c25b520054d27f2c01395fd2e2c9653fe2cd669d",
+      "app": "aka-agent-chat-api",
+      "machine": "7845747fe073e8",
+      "started_at": "2026-11-02T22:32:43.232417+00:00",
+      "finished_at": "2026-11-02T22:33:06.180729+00:00",
+      "before_image": "registry.fly.io/aka-agent-chat-api:sync-ui-org-v440-20261030@sha256:df7511c3c4df01e2082348cfa7dfbb1d761202716e73b719c50ac8bc589ee29f",
+      "after_image": "registry.fly.io/aka-agent-chat-api:app-access-main-c25b520-20261103@sha256:c062738cf27b4598bdb91c8e613a4a55702b673287739a623c344244c527e7b8",
+      "config_changed_paths": [
+        ".image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "state": "started"
+    },
+    {
+      "component": "worker",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "head": "c25b520054d27f2c01395fd2e2c9653fe2cd669d",
+      "app": "aka-agent-chat-api",
+      "machine": "784574da214578",
+      "started_at": "2026-11-02T22:34:13.918986+00:00",
+      "finished_at": "2026-11-02T22:34:34.191135+00:00",
+      "before_image": "registry.fly.io/aka-agent-chat-api:phone-history-quotes-main-20261030@sha256:a370e217ad7b1414c8362ed25043a8cc6da708e736e04cb9c9085be1ba9e5261",
+      "after_image": "registry.fly.io/aka-agent-chat-api:app-access-main-c25b520-20261103@sha256:c062738cf27b4598bdb91c8e613a4a55702b673287739a623c344244c527e7b8",
+      "config_changed_paths": [
+        ".image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 1024
+      },
+      "state": "started"
+    },
+    {
+      "component": "zalo_runtime",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "head": "c25b520054d27f2c01395fd2e2c9653fe2cd669d",
+      "app": "aka-agent-chat-api",
+      "machine": "7817d7daee2d58",
+      "started_at": "2026-11-02T22:33:29.359142+00:00",
+      "finished_at": "2026-11-02T22:33:59.716248+00:00",
+      "before_image": "registry.fly.io/aka-agent-chat-api:phone-history-ack-ui-20261030@sha256:589db63cc62202f7d41feb2f3bb197e023a7e3c04679de21ab158822ea4e13ae",
+      "after_image": "registry.fly.io/aka-agent-chat-api:app-access-main-c25b520-20261103@sha256:c062738cf27b4598bdb91c8e613a4a55702b673287739a623c344244c527e7b8",
+      "config_changed_paths": [
+        ".image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 2048
+      },
+      "state": "started"
+    },
+    {
+      "component": "chat",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatWeb",
+      "head": "da7124e1ffd0d5ef576916092351fae2226de010",
+      "app": "aka-agent-chat-web",
+      "machine": "7847d95cd4ddd8",
+      "started_at": "2026-11-02T22:34:37.033773+00:00",
+      "finished_at": "2026-11-02T22:35:32.161900+00:00",
+      "before_image": "registry.fly.io/aka-agent-chat-web:sync-ui-main-7772ed6-20261030@sha256:48684cb46809d6a412027376876ce9ccb7f56c2764a34866d3c40fa8e097b275",
+      "after_image": "registry.fly.io/aka-agent-chat-web:app-access-main-da7124e-20261103@sha256:5a0e2a1caae440762b5c9a0aad98c96291e0f435fedbafb4e5d460c8f27a199e",
+      "config_changed_paths": [
+        ".image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 512
+      },
+      "state": "started"
+    },
+    {
+      "component": "web",
+      "root": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "head": "24846f59cde38174d3fba89b7b05b4b3ed1208e6",
+      "app": "aka-agent-web-app",
+      "machine": "48ee749f357398",
+      "started_at": "2026-11-02T22:35:47.772478+00:00",
+      "finished_at": "2026-11-02T22:36:12.592971+00:00",
+      "before_image": "registry.fly.io/aka-agent-web-app:web-zalo-names-e40d9e5-20261102@sha256:cd2104b767ae9a98b8f9ec22546fd557aa4f5f0a2f2ab1e98dddb6767dece3bb",
+      "after_image": "registry.fly.io/aka-agent-web-app:app-access-main-24846f5-20261103@sha256:565253ecae7b3a72b2044b1eb3704b4829e54cf21b8391b73eddc8ddd65bad61",
+      "config_changed_paths": [
+        ".image"
+      ],
+      "guest": {
+        "cpu_kind": "shared",
+        "cpus": 2,
+        "memory_mb": 2048
+      },
+      "state": "started"
+    }
+  ],
+  "builds": [
+    {
+      "key": "api",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "head": "c25b520054d27f2c01395fd2e2c9653fe2cd669d",
+      "started_at": "2026-11-02T22:30:15.026575+00:00",
+      "finished_at": "2026-11-02T22:31:55.660522+00:00",
+      "exit_code": 0,
+      "image_tag": "registry.fly.io/aka-agent-chat-api:app-access-main-c25b520-20261103",
+      "image_digest": "sha256:c062738cf27b4598bdb91c8e613a4a55702b673287739a623c344244c527e7b8"
+    },
+    {
+      "key": "chat",
+      "root": "/Users/lequangnhut/Repos/akaAgentChatWeb",
+      "head": "da7124e1ffd0d5ef576916092351fae2226de010",
+      "started_at": "2026-11-02T22:30:16.206321+00:00",
+      "finished_at": "2026-11-02T22:32:34.469308+00:00",
+      "exit_code": 0,
+      "image_tag": "registry.fly.io/aka-agent-chat-web:app-access-main-da7124e-20261103",
+      "image_digest": "sha256:5a0e2a1caae440762b5c9a0aad98c96291e0f435fedbafb4e5d460c8f27a199e"
+    },
+    {
+      "key": "web",
+      "root": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "head": "24846f59cde38174d3fba89b7b05b4b3ed1208e6",
+      "started_at": "2026-11-02T22:30:17.351927+00:00",
+      "finished_at": "2026-11-02T22:32:12.469521+00:00",
+      "exit_code": 0,
+      "image_tag": "registry.fly.io/aka-agent-web-app:app-access-main-24846f5-20261103",
+      "image_digest": "sha256:565253ecae7b3a72b2044b1eb3704b4829e54cf21b8391b73eddc8ddd65bad61"
+    }
+  ],
+  "machine_verification": {
+    "at": "2026-11-02T22:36:54.141352+00:00",
+    "image_only_changes": true,
+    "unchanged_machine_count": true,
+    "machines": {
+      "api": [
+        {
+          "machine": "784574da214578",
+          "state": "started",
+          "guest": {
+            "cpu_kind": "shared",
+            "cpus": 2,
+            "memory_mb": 1024
+          },
+          "checks": []
+        },
+        {
+          "machine": "7845747fe073e8",
+          "state": "started",
+          "guest": {
+            "cpu_kind": "shared",
+            "cpus": 2,
+            "memory_mb": 1024
+          },
+          "checks": [
+            {
+              "name": "servicecheck-00-http-8080",
+              "status": "passing"
+            }
+          ]
+        },
+        {
+          "machine": "7817d7daee2d58",
+          "state": "started",
+          "guest": {
+            "cpu_kind": "shared",
+            "cpus": 2,
+            "memory_mb": 2048
+          },
+          "checks": []
+        }
+      ],
+      "chat": [
+        {
+          "machine": "7847d95cd4ddd8",
+          "state": "started",
+          "guest": {
+            "cpu_kind": "shared",
+            "cpus": 2,
+            "memory_mb": 512
+          },
+          "checks": [
+            {
+              "name": "servicecheck-00-http-3000",
+              "status": "passing"
+            }
+          ]
+        }
+      ],
+      "web": [
+        {
+          "machine": "48ee749f357398",
+          "state": "started",
+          "guest": {
+            "cpu_kind": "shared",
+            "cpus": 2,
+            "memory_mb": 2048
+          },
+          "checks": [
+            {
+              "name": "servicecheck-00-http-8080",
+              "status": "passing"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "http_verification": {
+    "phase": "final",
+    "at": "2026-11-02T22:36:35.223942+00:00",
+    "checks": [
+      {
+        "name": "api-live",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "api-ready",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 245
+      },
+      {
+        "name": "chat-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "web-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 3
+      },
+      {
+        "name": "chat-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14652
+      },
+      {
+        "name": "web-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 1958
+      },
+      {
+        "name": "chat-custom-health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 15
+      },
+      {
+        "name": "chat-custom-home",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "bytes": 14608
+      },
+      {
+        "name": "api-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-snapshot",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      },
+      {
+        "name": "api-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 99
+      },
+      {
+        "name": "chat-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 97
+      },
+      {
+        "name": "web-access-set",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "bytes": 82
+      }
+    ],
+    "admin": {
+      "state": "running",
+      "timeZoneOk": true,
+      "runtimeCount": 1,
+      "attachedAccountCount": 226,
+      "campaignRealtimeListener": "connected",
+      "campaignRealtimeLastError": null,
+      "runtimes": [
+        {
+          "runtimeType": "server",
+          "state": "running",
+          "connectedAt": "2026-11-02T22:34:01.728Z",
+          "lastSeenAt": "2026-11-02T22:36:22.056Z",
+          "accountCount": 226,
+          "lastError": null
+        }
+      ]
+    }
+  },
+  "image_verification": {
+    "api": {
+      "node": "v22.23.4",
+      "files": {
+        "apps/chat-api/src/appAccessRoutes.ts": "864e1305fca5a6df95e693e7e5f9bd50a563573f64d88dc3214a0c812f78bf4e",
+        "packages/database/src/appAccessRepository.ts": "8d517dd9abcae7d6b12f8ca86d5277365986c6b23742e979f2697cbddfa3234d",
+        "packages/database/src/runtimeAccountRepository.ts": "5ddc7346428b960aa0c1d2deecb2f3faece3356f1f1d1b040d346d834eb968ad",
+        "apps/system-worker/src/zaloCampaignExecutor.ts": "b1acd1f58403804a6da73db91485b7c93deb2a6970dee16b0c3f246f8b53a0e2",
+        "apps/zalo-server-runtime/src/main.ts": "2cf172d9258acdd3d5a86e3e440e4f086c8162725c593a342f6668fffb5f6617"
+      },
+      "source_matches_main": {
+        "apps/chat-api/src/appAccessRoutes.ts": true,
+        "packages/database/src/appAccessRepository.ts": true,
+        "packages/database/src/runtimeAccountRepository.ts": true,
+        "apps/system-worker/src/zaloCampaignExecutor.ts": true,
+        "apps/zalo-server-runtime/src/main.ts": true
+      }
+    },
+    "chat": {
+      "node": "v22.23.4",
+      "buildId": "-58lm5HcZuXccs825CYPI",
+      "files": {
+        ".next/server/app/api/chat/app-access/snapshot/route.js": "b76e4782ff8110789cb783b41c3cef48f95cac7125952af2fa76de0be37063de",
+        ".next/server/app/api/chat/app-access/set/route.js": "8add054e021b4eff20fca80c8349a62a1d5917cdcc30e1344d3ac1644d1341a8"
+      }
+    },
+    "web": {
+      "node": "v22.23.4",
+      "apiBundleSha256": "85e4f413fb9bba1de22534c878fa56be9ab1a72f2df4830ec54223bbd015c649",
+      "files": {
+        "index.html": "160b13a42f2844aa99441cb35ad988110e4e71a0b2347b490242f798d36a1a6e",
+        "assets/PublicApiDocsPage-B6sECQRP.css": "d133a347dee2c9d2a66dffeae83a506288bb5b86fcd9fb02a79911bbced97c03",
+        "assets/PublicApiDocsPage-Ba-CsiI0.js": "52682537508d2169b32a921940917950b2a219ce75d47843b7ab2a2fbe923265",
+        "assets/StaffManagementPage-DUAK50CE.js": "0e00d91bc7b7f6d26ea4b2b47dcac4dd6720ab0fa9c3f1526b8f459400b3b254",
+        "assets/StaffManagementPage-D_-rScfs.css": "18f3ce611cc4068dcdfc636ebddce990df76fbe631a8a2e6d5c3ad3579be991e",
+        "assets/index-DM4woFQy.css": "13a43d85316677e1ab7724b556a59eb67c1b682afb60c16d1fb948a0f14bcfca",
+        "assets/index-wdkR_dBm.js": "5869bbaac8180a52b14a19d434431b9f342901f64517ed70d0d733fc0aaffbb8",
+        "assets/spreadsheet-BBWTpfDg.js": "ffc8e29501816eaf483c2b44adc85dbfd15ecb9178db6179baafdd588d2d03c1"
+      },
+      "http_asset_matches": {
+        "index.html": true,
+        "assets/PublicApiDocsPage-B6sECQRP.css": true,
+        "assets/PublicApiDocsPage-Ba-CsiI0.js": true,
+        "assets/StaffManagementPage-DUAK50CE.js": true,
+        "assets/StaffManagementPage-D_-rScfs.css": true,
+        "assets/index-DM4woFQy.css": true,
+        "assets/index-wdkR_dBm.js": true,
+        "assets/spreadsheet-BBWTpfDg.js": true
+      }
+    }
+  },
+  "worker_verification": {
+    "observed_at": "2026-11-02T22:44:23.868452+00:00",
+    "stats": [
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:34:36.144Z",
+        "intervalEndedAt": "2026-11-02T22:35:36.380Z",
+        "normalize": {
+          "claimed": 5337,
+          "completed": 5337,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 3216,
+          "completed": 3216,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 475,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 24389,
+          "projectPending": 2119,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:35:36.380Z",
+        "intervalEndedAt": "2026-11-02T22:36:36.510Z",
+        "normalize": {
+          "claimed": 6350,
+          "completed": 6350,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 3999,
+          "completed": 3999,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 47,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 18376,
+          "projectPending": 4496,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:36:36.510Z",
+        "intervalEndedAt": "2026-11-02T22:37:36.724Z",
+        "normalize": {
+          "claimed": 8536,
+          "completed": 8534,
+          "failed": 2,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 5611,
+          "completed": 5611,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 61,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 9869,
+          "projectPending": 7396,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:37:36.724Z",
+        "intervalEndedAt": "2026-11-02T22:38:36.797Z",
+        "normalize": {
+          "claimed": 5797,
+          "completed": 5792,
+          "failed": 5,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 6770,
+          "completed": 6770,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 33,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 4121,
+          "projectPending": 6421,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:38:36.797Z",
+        "intervalEndedAt": "2026-11-02T22:39:36.967Z",
+        "normalize": {
+          "claimed": 2854,
+          "completed": 2849,
+          "failed": 5,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 4355,
+          "completed": 4355,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 99,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 1295,
+          "projectPending": 4919,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:39:36.967Z",
+        "intervalEndedAt": "2026-11-02T22:40:37.047Z",
+        "normalize": {
+          "claimed": 854,
+          "completed": 852,
+          "failed": 2,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 2108,
+          "completed": 2108,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 65,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 468,
+          "projectPending": 3663,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:40:37.047Z",
+        "intervalEndedAt": "2026-11-02T22:41:37.075Z",
+        "normalize": {
+          "claimed": 545,
+          "completed": 545,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 2133,
+          "completed": 2133,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 87,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 2076,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:41:37.075Z",
+        "intervalEndedAt": "2026-11-02T22:42:37.091Z",
+        "normalize": {
+          "claimed": 40,
+          "completed": 40,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 1553,
+          "completed": 1553,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 72,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 563,
+          "retryScheduled": 0
+        }
+      },
+      {
+        "event": "zalo_runtime_inbox_worker_stats",
+        "intervalStartedAt": "2026-11-02T22:42:37.091Z",
+        "intervalEndedAt": "2026-11-02T22:43:37.104Z",
+        "normalize": {
+          "claimed": 23,
+          "completed": 23,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "project": {
+          "claimed": 585,
+          "completed": 585,
+          "failed": 0,
+          "claimLost": 0,
+          "rejected": 0,
+          "infrastructureErrors": 0
+        },
+        "cleanup": {
+          "runs": 1,
+          "deleted": 60,
+          "infrastructureErrors": 0
+        },
+        "backlog": {
+          "rawPending": 0,
+          "projectPending": 0,
+          "retryScheduled": 0
+        }
+      }
+    ]
+  },
+  "runtime_verification": {
+    "observed_at": "2026-11-02T22:36:27.938767+00:00",
+    "since": "2026-11-02T22:33:59.716248",
+    "log_records": 100,
+    "levels": {
+      "info": 100
+    },
+    "stats": [
+      {
+        "event": "zalo_runtime_queue_stats",
+        "observedAt": "2026-11-02T22:36:01.698533552Z",
+        "queuedEvents": 0,
+        "queuedWireBytes": 0,
+        "inFlightEvents": 0,
+        "inFlightWireBytes": 0,
+        "unsentEvents": 0,
+        "oldestQueuedAgeMs": null,
+        "attachedAccounts": 226,
+        "pendingDetachAccounts": 0,
+        "connectionState": "ready",
+        "consecutiveProtocolFailures": 0
+      }
+    ]
+  },
+  "database": {
+    "project_ref": "cgjbsmqtfhqvttudyjzq",
+    "policy_before": false,
+    "policy_after": false,
+    "v447_in_ledger_before": false,
+    "v447_in_ledger_after": false,
+    "applied_in_this_deployment": false
+  },
+  "desktop_release": false,
+  "crm_source_or_deployment_changed": false,
+  "private_evidence": "/Users/lequangnhut/.codex/deployments/app-access-main-20261102T222951Z",
+  "normalize_error_comparison": {
+    "window_created_since": "2026-11-02T21:30:00Z",
+    "worker_deploy_boundary": "2026-11-02T22:34:34Z",
+    "last_error_code": "runtime_event_not_json_serializable",
+    "event_type": "runtime_event_transport_error",
+    "before_worker_deploy_count": 113,
+    "after_worker_deploy_count": 7,
+    "note": "Same error family existed before deployment; point-in-time counts, no payload read or mutation."
+  },
+  "user_files_preserved": {
+    "docs/DE_XUAT_ENGINE_CHIEN_DICH_CHUNG.md": true,
+    "CLAUDE.md": true
+  },
+  "runtime_followup": {
+    "observed_at": "2026-11-02T22:40:43.568197+00:00",
+    "state": "running",
+    "runtimeCount": 1,
+    "attachedAccountCount": 226,
+    "campaignRealtimeListener": "connected",
+    "campaignRealtimeLastError": null,
+    "runtimes": [
+      {
+        "runtimeType": "server",
+        "state": "running",
+        "lastSeenAt": "2026-11-02T22:40:42.079Z",
+        "accountCount": 226,
+        "lastError": null
+      }
+    ]
+  },
+  "post_restart_backlog_drained": true
+}

@@ -44,6 +44,7 @@ export const DATA_COLUMNS: readonly DataColumnDefinition[] = [
   { id: 'latestStatus', label: 'Trạng thái gửi tin gần nhất', kind: 'text', sources: ['remarketing'] },
   { id: 'latestLog', label: 'Ghi chú gửi tin gần nhất', kind: 'text', sources: ['remarketing'] },
   { id: 'recipientStatus', label: 'Trạng thái của người nhận trong tin nhắn gần nhất', kind: 'text', sources: ['remarketing'] },
+  { id: 'zaloOriginalName', label: 'Tên gốc Zalo', kind: 'text', sources: ['contacts', 'remarketing'] },
   { id: 'displayName', label: 'Tên hiển thị', kind: 'text', sources: ['data_group'] },
   { id: 'account', label: 'Tài khoản', kind: 'enum', sources: ['data_group'], optionSource: 'accounts' },
   { id: 'dataType', label: 'Loại data', kind: 'enum', sources: ['data_group'], optionSource: 'dataTypes' },

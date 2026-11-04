@@ -1,0 +1,200 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "migration_v449_chat_shared_owner_access",
+    "version": "20261103025208"
+  },
+  "signature": "public.aka_agent_app_access_account_allowed(bigint,text)",
+  "source_checksum": "694f41f6896f5c031f76a181ee0d9286",
+  "target_checksum": "daf197a1cc419fd29030338e2ef2c936",
+  "before": {
+    "at": "2026-11-03T02:51:57.27654+00:00",
+    "policies": "baea15ce17af62a94bd7dfabc4503fd6",
+    "triggers": "6c446b4f06fb87113af0f6e85c698276",
+    "other_routines": {
+      "count": 1296,
+      "checksum": "1837284e6b8329ce13defe4917371f5b"
+    },
+    "target_checksum": "694f41f6896f5c031f76a181ee0d9286",
+    "migration_exists": 0
+  },
+  "after": {
+    "at": "2026-11-03T02:52:22.468025+00:00",
+    "policies": "baea15ce17af62a94bd7dfabc4503fd6",
+    "triggers": "6c446b4f06fb87113af0f6e85c698276",
+    "other_routines": {
+      "count": 1296,
+      "checksum": "1837284e6b8329ce13defe4917371f5b"
+    },
+    "target_checksum": "daf197a1cc419fd29030338e2ef2c936",
+    "migration_exists": 1
+  },
+  "production_trial": {
+    "trial_only": true,
+    "staff_checked": 76,
+    "target_checksum": "daf197a1cc419fd29030338e2ef2c936",
+    "accounts_checked": 596,
+    "routines_checked": 1297,
+    "new_chat_accounts": [
+      2666,
+      3359,
+      4949,
+      4992,
+      4993,
+      4994,
+      7025
+    ]
+  },
+  "verification": {
+    "target": {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "checksum": "daf197a1cc419fd29030338e2ef2c936",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": true,
+      "provolatile": "s"
+    },
+    "accounts": [
+      {
+        "id": 2666,
+        "owner": 377,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 3359,
+        "owner": 377,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 4949,
+        "owner": 619,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 4992,
+        "owner": 377,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 4993,
+        "owner": 377,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 4994,
+        "owner": 377,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      },
+      {
+        "id": 7025,
+        "owner": 1240,
+        "chat_flag": true,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false,
+        "owner_chat_allowed": false,
+        "owner_agent_allowed": false
+      }
+    ],
+    "migration": {
+      "name": "migration_v449_chat_shared_owner_access",
+      "version": "20261103025208"
+    },
+    "checked_at": "2026-11-03T02:52:21.882032+00:00",
+    "staff_quota": {
+      "used": 25,
+      "limit": 100,
+      "overLimit": false,
+      "remaining": 75,
+      "hasPackage": true,
+      "productIds": [
+        5
+      ]
+    },
+    "org1_chat_counts": {
+      "allowed": 35,
+      "enabled": 35
+    },
+    "caller_permissions": [
+      {
+        "role": "service_role",
+        "can_execute": true
+      },
+      {
+        "role": "aka_agent_desktop",
+        "can_execute": true
+      },
+      {
+        "role": "aka_agent_chat_api",
+        "can_execute": true
+      },
+      {
+        "role": "anon",
+        "can_execute": false
+      },
+      {
+        "role": "authenticated",
+        "can_execute": false
+      }
+    ]
+  },
+  "local_tests": {
+    "postgres": "17 disposable local",
+    "existing_and_new_scenarios": 144,
+    "shared_owner_scenarios": 46,
+    "api_test_files": 120,
+    "api_tests": 1756,
+    "api_typecheck_build": "passed",
+    "akaagent_node_typecheck": "passed",
+    "akaagent_web_typecheck": "passed",
+    "runtime_provider_side_effects": false
+  },
+  "limits": {
+    "production_set_role": "Management postgres cannot SET ROLE aka_agent_chat_api; initial trial rolled back. Actual role execution and HTTP auth tested on local PG17; production EXECUTE/schema ACLs and SECURITY DEFINER metadata verified.",
+    "production_message_or_campaign_test": false,
+    "desktop_installer_build": false,
+    "service_deployment": false,
+    "crm_source_or_deployment": false,
+    "manual_postgrest_reload": false,
+    "new_connection_budget": false
+  },
+  "notes": [
+    "Only one existing helper body changed; owner/ACL/config/security/volatility preserved.",
+    "Other 1296 function definitions/metadata, all policies and noninternal triggers unchanged.",
+    "V447 remains active. No business data, per-app flags, sharing ACLs or staff status changed.",
+    "Seven accounts become Chat-eligible; this does not log them into Zalo or grant a sharing membership.",
+    "No direct owner bypass for Desktop QR hosting; inactive/expired local host remains denied."
+  ]
+}

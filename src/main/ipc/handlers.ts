@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { registerZaloPhoneCheckHandlers } from './handlers/zaloPhoneCheckHandlers'
 import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
 import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
@@ -42,6 +43,8 @@ import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
 import { registerStaffManagementHandlers } from './handlers/staffManagementHandlers'
+import { registerAppAccessHandlers } from './handlers/appAccessHandlers'
+import { readAppAccess } from '../data/repositories/appAccessRepository'
 import { readStaffAccess } from '../data/repositories/staffManagementRepository'
 import { registerGroupSharingHandlers } from './handlers/groupSharingHandlers'
 import { registerDataGroupExternalSyncHandlers } from './handlers/dataGroupExternalSyncHandlers'
@@ -167,6 +170,7 @@ export function registerIpcHandlers(
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
   registerStaffManagementHandlers(mainWindow)
+  registerAppAccessHandlers(mainWindow)
   registerSendExclusionHandlers(mainWindow)
   registerDataGroupExternalSyncHandlers(mainWindow)
   registerGroupSharingHandlers(mainWindow)
@@ -823,24 +827,29 @@ export function registerIpcHandlers(
 
     sessionExpiryCheckRunning = true
     try {
-      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts, liveStaffAccess] = await Promise.all([
-        loadOrganizationEntitlementAccess(checkedUser.organizationId),
-        loadOrganizationAccountProducts(checkedUser.organizationId),
-        loadOrganizationChatSyncProducts(checkedUser.organizationId),
+      const [liveEntitlementAccess, liveAccountProducts, liveChatSyncProducts, liveStaffAccess, liveAppAccess] = await Promise.all([
+        loadOrganizationEntitlementAccess(checkedUser.organizationId).catch(() => null),
+        loadOrganizationAccountProducts(checkedUser.organizationId).catch(() => null),
+        loadOrganizationChatSyncProducts(checkedUser.organizationId).catch(() => null),
         checkedCredentials
           ? readStaffAccess(checkedUser.staffId, checkedCredentials.username, checkedCredentials.password).catch(() => null)
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        checkedCredentials ? readAppAccess().catch(() => null) : Promise.resolve(null)
       ])
-      const liveEntitlements = liveEntitlementAccess.entitlements
       const currentUser = getCurrentUser()
       if (!currentUser || currentUser.staffId !== checkedUser.staffId || currentUser.organizationId !== checkedUser.organizationId || getCurrentUserCredentials() !== checkedCredentials) return
 
-      if (liveStaffAccess && (!liveStaffAccess.isActive || !liveStaffAccess.timeAllowed)) {
+      if (liveStaffAccess && (!liveStaffAccess.isActive || !liveStaffAccess.timeAllowed || (liveStaffAccess.appAccessSeparate && !liveStaffAccess.akaAgentAllowed))) {
+        if (liveAppAccess) {
+          const stoppedUser = { ...currentUser, appAccess: liveAppAccess }
+          setCurrentUser(stoppedUser)
+          notifyRendererUserUpdated(stoppedUser)
+        }
         // Drain an already claimed target before the normal session cleanup.
         campaignScheduler.stopAcceptingNewZaloWork()
         automationProcessor.stopAcceptingNewWork()
         if (currentUser.isAdmin) {
-          const revokedUser = { ...currentUser, isAdmin: false }
+          const revokedUser = { ...currentUser, isAdmin: false, ...(liveAppAccess ? { appAccess: liveAppAccess } : {}) }
           setCurrentUser(revokedUser)
           notifyRendererUserUpdated(revokedUser)
           await admin.revokeIfNeeded()
@@ -851,6 +860,10 @@ export function registerIpcHandlers(
         await expireCurrentSession(reason)
         return
       }
+      // Revocation may deny the ordinary reads while the credential-bound bootstrap
+      // still returns staff status. Process that status before handling transient failures.
+      if (!liveEntitlementAccess || !liveAccountProducts || !liveChatSyncProducts) throw new Error('Không thể làm mới quyền sử dụng.')
+      const liveEntitlements = liveEntitlementAccess.entitlements
       const liveAdminFlag = liveStaffAccess?.isAdmin === true
 
       if (!hasAnyEntitlement(liveEntitlements)) {
@@ -866,13 +879,17 @@ export function registerIpcHandlers(
         isAdmin: liveAdminFlag,
         entitlements: liveEntitlements,
         accountProducts: liveAccountProducts,
-        isChatSync: liveEntitlementAccess.chatSyncEnabled,
+        isChatSync: liveAppAccess?.separateAccess ? liveAppAccess.usesChatRuntime : liveEntitlementAccess.chatSyncEnabled,
+        appAccess: liveAppAccess ?? currentUser.appAccess,
+        chatWebEnabledAtLogin: liveAppAccess?.separateAccess ? liveAppAccess.staff.akachatAllowed : currentUser.chatWebEnabledAtLogin,
+        chatWebSessionId: liveAppAccess?.separateAccess ? (liveAppAccess.staff.akachatAllowed ? currentUser.chatWebSessionId ?? randomUUID() : undefined) : currentUser.chatWebSessionId,
         chatSyncProducts: liveChatSyncProducts,
         zaloAccountCapabilities: nextZaloAccountCapabilities
       }
       const entitlementsChanged = !authEntitlementsEqual(currentUser.entitlements, liveEntitlements)
       const accountProductsChanged = JSON.stringify(currentUser.accountProducts || []) !== JSON.stringify(liveAccountProducts)
-      const chatSyncChanged = currentUser.isChatSync !== liveEntitlementAccess.chatSyncEnabled ||
+      const chatSyncChanged = currentUser.isChatSync !== updatedUser.isChatSync ||
+        JSON.stringify(currentUser.appAccess) !== JSON.stringify(updatedUser.appAccess) ||
         JSON.stringify(currentUser.chatSyncProducts || []) !== JSON.stringify(liveChatSyncProducts)
       const zaloCapabilitiesChanged = JSON.stringify(currentUser.zaloAccountCapabilities)
         !== JSON.stringify(nextZaloAccountCapabilities)
@@ -929,16 +946,22 @@ export function registerIpcHandlers(
   const syncZaloBackgroundForCurrentUser = (_reason: string): void => {
     const user = getCurrentUser()
     const zaloCapabilities = getUserZaloAccountCapabilities(user)
-    if (user?.entitlements?.zalo && zaloCapabilities.qr) {
-      // Only QR accounts use stored zca-js sessions and realtime. Web accounts
-      // remain attached independently through their visible browser tabs.
+    const agentQr = user?.entitlements?.zalo === true && zaloCapabilities.qr
+    const chatReader = user?.appAccess?.separateAccess === true &&
+      user.appAccess.usesChatRuntime && user.appAccess.staff.akaAgentAllowed
+    if (agentQr || chatReader) {
+      // The main-only reader obtains live permitted accounts from its scoped RPC.
+      // It remains available when Chat is paid for independently of Agent Zalo.
       warmZaloSessions()
       zaloLocalChatSync?.start()
-      zaloRealtimeGroupManager?.start()
+      if (agentQr) zaloRealtimeGroupManager?.start()
+      else zaloRealtimeGroupManager?.stop()
       return
     }
 
     zaloRealtimeGroupManager?.stop()
+    // Existing producers keep their transport/claim until the cleanup receipt settles.
+    if (user?.appAccess?.separateAccess && user.appAccess.staff.stopping) return
     zaloLocalChatSync?.stop()
     zaloRuntime.clearAll()
     stopZaloRemoteClients()

@@ -1,0 +1,66 @@
+{
+  "checkedAt": "2026-11-03T04:20:53.991326+00:00",
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "mode": "read-only production scan and disposable PG17 repros",
+  "featureRegressionCasesPassed": 230,
+  "diagnosticReprosConfirmed": 4,
+  "providerRequests": 0,
+  "findings": [
+    {
+      "key": "login_status_reservation_legacy_id",
+      "paths": [
+        "Server QR final status write",
+        "local session mark"
+      ],
+      "reproduced": true,
+      "source": "private.app_access_reserve_enabled_identity()",
+      "liveMd5": "66a710beb5d36f03d16d4684fd1a5385",
+      "fixed": false
+    },
+    {
+      "key": "local_runtime_registration_legacy_id",
+      "reproduced": true,
+      "source": "packages/database/src/chatAccountManagementRepository.ts:1050-1082",
+      "fixed": false
+    },
+    {
+      "key": "legacy_duplicate_reservation",
+      "reproduced": true,
+      "previouslyDeferred": true,
+      "source": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+      "liveMd5": "e1b81ef404854cd4290496a9dfc0ff46",
+      "fixed": false
+    }
+  ],
+  "impact": {
+    "checkedAt": "2026-11-03T04:20:53.991326+00:00",
+    "boundMismatchCount": 0,
+    "unboundStaleServerRows": [
+      {
+        "id": 9709,
+        "org": 1835,
+        "name": "Quế Anh",
+        "chatEnabled": false
+      },
+      {
+        "id": 9701,
+        "org": 1835,
+        "name": "Ming Pham",
+        "chatEnabled": false
+      },
+      {
+        "id": 9963,
+        "org": 1879,
+        "name": "chien1",
+        "chatEnabled": false
+      }
+    ],
+    "duplicateReservationCandidateCount": 0
+  },
+  "limitations": [
+    "No real QR or provider login tested",
+    "Server repro executes the exact terminal account status UPDATE after a synthetic valid binding, not the entire Server QR HTTP flow",
+    "Local registration repro uses the actual repository against synthetic historical DB rows",
+    "Counts are point-in-time, with nullable account organization resolved through the owner"
+  ]
+}

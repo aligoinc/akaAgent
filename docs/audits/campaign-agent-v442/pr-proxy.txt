@@ -1,0 +1,1 @@
+PASS 16 old/new real HTTP cases + 8 five-image cases: Responses/chat/custom/native Claude, order and log masking, legacy payload/headers/content/usage/error/log parity, secret-free Desktop queries, no retry/fallback and cancellation

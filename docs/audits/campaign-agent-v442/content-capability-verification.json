@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-11-02T15:23:56.938983+00:00",
+  "base": "37e68ef5013f4dce9f7e68e88ed0b0694cee48d2",
+  "scope": "Keep oversized campaign content intact while allowing independent Agent sections; preserve Content AI bounds and atomic rejection",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/campaign-content-ai-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "newCases": [
+    "100 variants remain valid; 101 variants, text beyond 16000, subject beyond 500 and item JSON beyond 60000 use the same Content AI limits",
+    "Raw oversized input and malformed/conflicting/cross-action capability markers are rejected by main",
+    "General, Limits and whole-form independent tasks work without sending the oversized content",
+    "Scoped Content returns a clear limit response without a provider call; mixed Content requests return no partial patch and retain OCR",
+    "HTML context is retained so enabling Facebook post background remains blocked",
+    "Electron cases: 101 advanced variants, five long advanced variants, one long basic content item",
+    "Each Electron case verifies scoped rename, whole-form schedule, bounded IPC, draft/reopen, undo, renderer rejection of a forced Content patch and complete campaign save payload"
+  ],
+  "sha256": {
+    "src/shared/campaignContentAi.ts": "603b02bb52a492b5c580cbf1ff9d6c0a6ec5cb92b4f1680fe340009c490a710e",
+    "src/shared/campaignAgent.ts": "f509614aa9a325bd39bdb70ae289494e750123eff4ba808ad3931d9ab1c43c11",
+    "src/main/services/campaignAgentService.ts": "48d36defeac4020093b96965388d4f6d59b998a21d38866d3a54c0b6f26ff19c",
+    "src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx": "8c9105a9ab056398b7ed6fe4fb172f7ab702bac1656012f8346e3cd2c93fe70e",
+    "scripts/campaign-agent-smoke.cjs": "d2ac058f3d1d467e565bced77dae21a1427dfcea2bbf02addd90cf3dae5bf4dc",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "3ef1c1e62fd6ea75c7f9d89072137d2d5178025b5804b3e3c28cbc5b15851227",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "docs/CAMPAIGN_AGENT_FORM.md": "e1565af1e8b777ce34d5bcd019be9b6d2461c078f58e509bf0049e67a48e1e66"
+  },
+  "buildLog": "content-capability-build.txt",
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Electron renderer and actual save payload builder with fixture IPC/stores; service/provider fixtures. No production campaign was created or run.",
+    "Provider quality and Windows were not tested live.",
+    "The first full UI run hit a test click covered by the narrow-screen chat panel; the runner now collapses chat before selecting a section, and the complete rerun passed.",
+    "Old campaign form and applied V442 SQL remain unchanged."
+  ]
+}

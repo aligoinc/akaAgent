@@ -1,0 +1,851 @@
+{
+  "recordedAt": "2026-11-02T22:04:00.040527+00:00",
+  "productionProject": "cgjbsmqtfhqvttudyjzq",
+  "applyDb": true,
+  "deploy": false,
+  "releaseInstaller": false,
+  "crmSourceChanges": false,
+  "crmDeployment": false,
+  "committed": false,
+  "pushed": false,
+  "repos": {
+    "akaAgent": {
+      "path": "/Users/lequangnhut/.codex/worktrees/app-access-akaagent/akaAgent",
+      "branch": "codex/app-access-split",
+      "baseHead": "9080a12dfd62c48ddee8e067d7d99aa44cfd8920",
+      "files": {
+        "docs/APP_ACCESS_SPLIT.md": "56c0f9ce337f8ec92dc511a67ffbae337738db2b69274bf65ebd74629c62ff20",
+        "docs/agents/CLIENT_CONTRACTS.md": "77f3b3b625361a2d7ebf828929fd0ab6da106c7e6aa6728cb2ca80f818ce51e5",
+        "docs/agents/CURRENT_STATE.md": "9f1afe41ecb3d3d20ef417492f291f56a5bdad07fffd0f57ba9f80804637fd9c",
+        "docs/agents/README.md": "171eb3d1ad389f47168c3aad695d577dcaefc55ca27115603b76c06ed6ccb70a",
+        "docs/audits/app-access-split/README.md": "13069f419ece59048a6844ad57e425bcacb2f20a4d5c5feb740eaed2826b6404",
+        "docs/audits/app-access-split/ui-menu.png": "cd8c942826c08169d774fc046407233a90bba700a08467d5e7467704e494bfbb",
+        "migrations/audits/app_access_capture.sql": "28b1c982aa637bef04421f7a72c145911ddc691be33b2b8f694c637d286089ed",
+        "migrations/migration_v445_app_access_schema.sql": "cad1240e2533809a668e6bade367b7a0a43c37920d5d267962ea12450c0eec26",
+        "migrations/migration_v446_app_access_callers.sql": "41c49ed5d97fa454c76715e55711591422ee2079c668bb353d5fa9dda7e2e544",
+        "migrations/migration_v447_app_access_activate.sql": "4b012a2825b3fada7fba910840ed3824af91fbb1c76cace40ebfb22ae70eed4d",
+        "migrations/rollback/app_access_pre_activation.sql": "eda84a9f4e197fa0d78e2c56b38477aed8652f762299a9fd01ae3033c6cc25b5",
+        "migrations/snapshots/app-access/account-policies.json": "0277db1c17b3f11f37336e04a8314599f764a1821e5e60d387651a14a623fed5",
+        "migrations/snapshots/app-access/rpc-baseline.json": "65bb2bc4d49093b928ac34b784e9ad68826fcd8243052d9d1dd8e82890bb9f99",
+        "migrations/snapshots/app-access/runtime-dependencies.json": "3c502465f6fef03ba3d7336e5d8bef6c7d0852c8a5b1c378685052ab01baaf21",
+        "migrations/snapshots/app-access/runtime-profile-view.json": "cd1dfa1e91215ff032f711ff4cf279da6d49643dd0aa23dcd6e1c79ae5eaccd5",
+        "migrations/snapshots/app-access/source-metadata.json": "9199006f8993cd1ae7fed5a785a4f5b730927e92663bdebfbf3755038c287ce1",
+        "migrations/snapshots/app-access/table-shapes.json": "0e1d0371be2d54b03a03fd8c7f5aa6d56ed081f9a18f93b766f525ec12531929",
+        "migrations/snapshots/app-access/verified-candidate.json": "e6e2fd9fe299d4bea37fd325c2a6abd4dba73c8d2eafec330876faf457f4e803",
+        "scripts/app-access-qr-smoke-test.cjs": "f2d1e950ff1d6695cff04bb281e1b147dd8f45e9a4d94ad98c071e1ddca0f88b",
+        "scripts/app-access-runtime-smoke-test.cjs": "7806931bcbe2d42d570da373c8552d40bbac023940bb26f935384329ed3db14e",
+        "scripts/generate-app-access-rollout.py": "c17d0f1d232408f8505e528b1f64ba8be0db5e761988a224d60fe9a4fd79582e",
+        "scripts/zalo-web-session-recovery-smoke-test.cjs": "8dbf6a26d63962ea798387bc17ebfe7bd62effec035acb89c1c4764f1a2b046e",
+        "src/main/data/mappers.ts": "c1aa412cac94e54179121a1990b84645fcc319ae7740bbd1f0d01f04abe68eb4",
+        "src/main/data/repositories/accountRepository.ts": "907f498d499635fb6ca466e21eed01eb8ce7eaa6535a0d4337b066bf58bbe065",
+        "src/main/data/repositories/appAccessRepository.ts": "112e58a27040d9ab29a8cf16de205d312af08c4c936b38a70751e227f2971c26",
+        "src/main/data/repositories/authRepository.ts": "383ef783700726a5cf7fb3e26c5f4c194889bb3b6e445136bdb278dac5fa4e0a",
+        "src/main/data/repositories/entitlementRepository.ts": "864bf47bc7faa4971513fdc2f8d467ee70f338bee746255b6b0d6343c9850d18",
+        "src/main/data/repositories/serverRuntimeRepository.ts": "e032f7bb43b9fcac0d2cf156bbc5c31d892cb77046813bff7513c262d4d7005e",
+        "src/main/ipc/handlers.ts": "1facdafe89604701469b0d38a48606f766cc4d77767182d6019b24109ae4843f",
+        "src/main/ipc/handlers/accountHandlers.ts": "c08fc120b85bb463f957f42c679d5608c312e24ee554445443b3ff8e56973d72",
+        "src/main/ipc/handlers/appAccessHandlers.ts": "04b17459eaca6d3e3b3bfe85bf0d224c0ddd24645de91a188ce203c3ef998637",
+        "src/main/ipc/handlers/authHandlers.ts": "cc492a455ed2993713169d8cf1d5bd8db99de6c40cd9b3b14b38cd6cd5306b0d",
+        "src/main/services/campaignScheduler.ts": "06873b93758f32263aab2d62ee6a3e4eee507928a3e0dd40da2c7ab1f0e1a711",
+        "src/main/services/supabase.ts": "c99d8f95f081833f842c9a04fa544a1710e6add330ba4370d2fb3b168c41c072",
+        "src/main/services/zaloChatApiClient.ts": "60d60c17beed10906ff09281f94b806e9a80f5830eec14b9f0a7f9eee0b3def2",
+        "src/main/services/zaloLocalChatSyncService.ts": "5080e5b5ad6e861f77cc8ebc8bedfcf0c99b43dfba195918e3911ad06a5d144b",
+        "src/main/services/zaloRuntimeService.ts": "5345d5a356efda14360010b9111827c720a4bd185ec741ebbccb90d5a7377a62",
+        "src/preload/appAccessBridge.ts": "89234519d28da92590fe9ce70bc407ea606e203bdc1a0618be02bf9a449dd2ba",
+        "src/preload/index.ts": "e03585f2ce8d7987d7dac016fce7b01ced6343826790d6684a23f33c2426e0aa",
+        "src/renderer/src/App.tsx": "bd346a2deb8d87451c8fb18e71fb241c09a507eacaecea706133543861574825",
+        "src/renderer/src/components/AppAccessToggle.tsx": "4f5cb3ce6eb17831f3f8dd9f6c1870c5931bcf8a6edfda27ec1074d02be670a7",
+        "src/renderer/src/components/CampaignPanels/AccountContextMenu.tsx": "633d08adfe12020a9654aa9d58895bb1fa57884799740732b81d0dcbee3ee0a8",
+        "src/renderer/src/pages/StaffManagementPage.tsx": "626d2b617f494b74613c92abaa54f1432bb01c34a13fcad81368c165b7dc0fc5",
+        "src/renderer/src/styles/global.css": "752a9794ca1f06bf8bb908f14676bb775f85154a13b7a6ff4b9c15e04329cd08",
+        "src/shared/appAccess.ts": "258105eaa5cf7272aaceef75a51399feb2e8ed5ed393ebe3a4da490790b347c1",
+        "src/shared/staffManagement.ts": "05377ac5b5add4bdef87c04b67b63f66a400de380bc189a1e198423719510aba",
+        "src/shared/types.ts": "2fdda42db732fe120c52bcbeb0cd592c312831695ea4e6cd6910a159baac259f",
+        "docs/audits/app-access-split/apply-receipt.json": "80a5ab912cf2169c621df74c7d205fe2bfe622c45bceeea5cdac5bb0c2848ff5",
+        "docs/audits/app-access-split/pr-verification.json": "a8637cc31863159550dc27fa81a4d0131ceca8a3b797d0fa1355b032d86013ff"
+      }
+    },
+    "akaAgentChatApi": {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatApi",
+      "branch": "codex/app-access-split",
+      "baseHead": "112cbb2dc434fa40f7b1a5dc4a16fe2720790faf",
+      "files": {
+        "README.md": "2c2b3b587ae5dc11a942ab4e873cd4f2364e5aa4842694a99799b9ab746603c3",
+        "apps/chat-api/src/accountManagementRoutes.ts": "e0754615dee93a52781a40f5c7881429ecd7f7e512cab1952ca613181e3e8fdc",
+        "apps/chat-api/src/appAccessRoutes.test.ts": "1c6c5869aea6bee850b83102a2677714889d062e03f8aaccf75d0f6a76b6b54f",
+        "apps/chat-api/src/appAccessRoutes.ts": "864e1305fca5a6df95e693e7e5f9bd50a563573f64d88dc3214a0c812f78bf4e",
+        "apps/chat-api/src/chatStaffExpiration.integration.test.ts": "f10c716a848dd14c0259e33451c9f2c76658ab8de3e8a8de75227263e177145a",
+        "apps/chat-api/src/contactRefreshCoordinator.ts": "ecfc357a4b49dd1c9fea74e0f9c21f574dc8925959af3554ed23238f9fc278fa",
+        "apps/chat-api/src/dataScanQueryCoordinator.test.ts": "0bd1658b0cbc427458ca5615ea64e3d4faa46d2f3785df0d54390c0d0ef3f845",
+        "apps/chat-api/src/dataScanQueryCoordinator.ts": "7c4be01cb0b2d2544623c37df5814567a3cd6ef8b7b2b7c3fa4e799282682854",
+        "apps/chat-api/src/dataScanQueryRoutes.test.ts": "81e0960d70665c6a1b5d24ba5d2b4446460cbea8299ef6dec09d767922e6f6cb",
+        "apps/chat-api/src/dataScanQueryRoutes.ts": "843c64acbfbc5b41cd2d833e0f3eed7c34aa39ed52f8f27899cab15f415f64ee",
+        "apps/chat-api/src/desktopAuthRoutes.ts": "849aeed8526e32c7a289770535e4fac431b1cf59c68511b0d0ef334616787da8",
+        "apps/chat-api/src/localQrLoginCoordinator.test.ts": "024eb0575ecb03aac4a0f2968600951a23f441c48de97c28b256f7a4283d482d",
+        "apps/chat-api/src/localQrLoginCoordinator.ts": "e32e9c9fc17e0751e2b5c848c9566375e2c532d6c769d3c304a72504a89c17b1",
+        "apps/chat-api/src/main.ts": "95ae2adf2dca347d3438868e12506bc939429a8adc6aa3fd7d805d6b363b9165",
+        "apps/chat-api/src/qrLoginCoordinator.test.ts": "f369590909a4a4a3ff302fd5d19fa8b9bd43523901a03b98f2c8be9453581497",
+        "apps/chat-api/src/qrLoginCoordinator.ts": "cd38e7b5287feea4bcb48b9b58d61ba7ac7f6a3ecb74db8625de2365f3a446dc",
+        "apps/chat-api/src/server.test.ts": "22141f1ef0f3d423487436caf300fe75be5dd7494b82cefb152d890fa35634b6",
+        "apps/chat-api/src/server.ts": "0d03f1a13e697e170f83e9ae8892424ab173e48be34386506a10a8a02a51109b",
+        "apps/chat-api/src/zaloCommandCoordinator.test.ts": "7b5c99b06152375c9afb42d9c58c800ad22e55ac8fec797ae1c2e102b7b9dec0",
+        "apps/chat-api/src/zaloCommandCoordinator.ts": "59992d446714399b441f38011daabe453a38cb0a55baaf3bf10e5692eb475fb0",
+        "apps/system-worker/src/zaloCampaignScheduler.test.ts": "8b9da950c71e95295c7a285de2818f621c7361f9a5498cf60adfde5f73fed3b5",
+        "apps/system-worker/src/zaloCampaignScheduler.ts": "531f4d827ba8df1af4e5007ce398382873a74d5f27d11e0d5e93b49941d5dcda",
+        "docs/APP_ACCESS_SPLIT.md": "052703300f04a02f7cfe72dbe677d82e14746f3da92c6ce581e9c707af357030",
+        "load-tests/app-access-qr-identity.mjs": "ce19181e82015e5b2e10bc717eafa7815bea5eabfd02648a5feec833b1a4cda3",
+        "load-tests/app-access-rpc.mjs": "ef22350b6bd1c277ece96fb9da81f3bbaaf068ceef61c5a873fca5bd305332a9",
+        "load-tests/app-access.mjs": "9ea46c28d9aee91e1a3d300d4ebcf32a01663bbcea8a359beb699f2047f08a95",
+        "packages/chat-domain/src/index.ts": "548ac29a14c98db09753f19e61bd3866706d75c861d92a1d9fefa718b5256bda",
+        "packages/database/src/accountLogCommit.integration.test.ts": "b35657fbb0084a3533951d4acb0995f85d65ed2ca0e0bbcb07222b82ce162814",
+        "packages/database/src/appAccessLegacyTestFixture.ts": "67472bdc7c721f0207c0b2f2a101bcc5311e1e823c449c70218c00838af2f34b",
+        "packages/database/src/appAccessRepository.ts": "8d517dd9abcae7d6b12f8ca86d5277365986c6b23742e979f2697cbddfa3234d",
+        "packages/database/src/appAccessTypes.ts": "258105eaa5cf7272aaceef75a51399feb2e8ed5ed393ebe3a4da490790b347c1",
+        "packages/database/src/campaignActionRepository.integration.test.ts": "9ad953220d953454b9c9b765a1179953fd0eed671bdf7b9040e066331901a92b",
+        "packages/database/src/campaignActionRepository.ts": "28d19f171215724b0b194f35f97b37f5197112567181f548c38e704bafbc9c84",
+        "packages/database/src/campaignContactPersistence.integration.test.ts": "5b45f2d42b504e1f5d20684745bac43f6c15b108903d92ac07f3ddeffc874bfa",
+        "packages/database/src/campaignFailureCleanup.integration.test.ts": "2fa5a1d72bdc52d9c2f4177c577b0c2b4a7df5c5bf1c4df9bf40a1e19ebc4ee7",
+        "packages/database/src/campaignRealtimeRepository.ts": "a25bc9706061d83985fe8771a8bcab4871be679b0468700644c041d499817667",
+        "packages/database/src/campaignRuntimeRepository.ts": "51490d33b65dd3d081b34cfa28a121799b91250ea9279c96bdfc52e2fbe56dff",
+        "packages/database/src/campaignRuntimeSideEffects.integration.test.ts": "4cc281e43c9388e0d16cc13bf7850d02db765e68d08ad83121ef492008fe67fc",
+        "packages/database/src/chatAccessSql.ts": "4a578f9bebd0e386f45e496dcde6694696b5cbda49277254bd3e6ee6a613f29f",
+        "packages/database/src/chatAccountAccessRepository.ts": "09a3e905dbe888435442cd8ef1351fd72ddc5e299826d851a4ae11bedbd8cefe",
+        "packages/database/src/chatAccountManagementRepository.ts": "55133a30c6a3ea5f788b46aa3a0e9839bb79532214321bff74455e5d5823ed16",
+        "packages/database/src/chatActionRepository.ts": "95a7c0c34728e4b34288203d4155d26462f55d0ecbe3f4e8cd7df40595e553f2",
+        "packages/database/src/chatApiTokenRepository.integration.test.ts": "24e37a2dd452a23791cf9e93e347dd4dc2096f7f9d1291c309ec7a9e125f9b77",
+        "packages/database/src/chatConversationTransferRepository.ts": "307aad0007a6cf7a5d534c665500367f7e89cc3b12202d1b7a4feaa052fda745",
+        "packages/database/src/chatEntitlementRepository.ts": "38bb47f42a8cffd3d0eabfa70f928ab1eae675ebfbe36587b6fcaacddd94c13c",
+        "packages/database/src/chatFeatureActionRepository.ts": "42bd69cdc09c876ba640f03988f07e48e55cedec834282a50cd9329e64cf5286",
+        "packages/database/src/chatInboxRepository.ts": "a3a4e33bd17e0e9dff9e255c00e6e1e3936974893907abff87d8a43fedab2186",
+        "packages/database/src/chatMediaRepository.ts": "f22472af20c7cfd38e76523c60c9e2202a71c6f840b7b880971265dcd87a1386",
+        "packages/database/src/chatPublicApiRepository.ts": "9d22b740871b2d05dc022e06a1269c93d747c4684f0f672bfa730b046fcaf102",
+        "packages/database/src/chatStaffManagementRepository.ts": "85e547994b5fcbcf67e3b92e25f08961a74296e32d053724f3e0ae09bb38f97a",
+        "packages/database/src/chatStaffRepository.ts": "c65e98096534ff86f9c0c013a9f48729c0ccd8168451bcc4b843cf8f067462c5",
+        "packages/database/src/index.ts": "e96a95add77c9f1c925ad1fb22f1afc396515a1fbee9c2135c48bc65d467ce62",
+        "packages/database/src/messageSyncRepository.ts": "b2b7244c31fd3c00c7f500231d34ba1c4e4cdbe4000231693e953fc1604285e2",
+        "packages/database/src/runtimeAccountAssignments.integration.test.ts": "017dc281c529c2062932afc07cd38345bb1bbe5536993e7f6afab275b2c11a08",
+        "packages/database/src/runtimeAccountRepository.ts": "5ddc7346428b960aa0c1d2deecb2f3faece3356f1f1d1b040d346d834eb968ad",
+        "packages/database/src/runtimeEventInboxRepository.ts": "1fb54e876f7f83b4ab28a0179b22b58a5ce0357eb4fd8cde90a312277fd959f5",
+        "packages/database/src/runtimeEventRepository.integration.test.ts": "4bd08a8a442c364dac70c02197985399037226ac26c33bab3eba48eaf5e2aa97",
+        "packages/database/src/staffPolicyTestFixture.ts": "1e79b5315801dd02e64bf3ef01fa81ddd3089fe8c64d5fb2d958874a505aa808",
+        "packages/zalo-event-processor/src/index.ts": "d932855964221899353be9165b791957b5bcda930d3270847441bb87eff017e8"
+      }
+    },
+    "akaAgentChatWeb": {
+      "path": "/Users/lequangnhut/Repos/akaAgentChatWeb",
+      "branch": "codex/app-access-split",
+      "baseHead": "1f017128ecf8fbd6b4f80789c0a98010aa75aa3e",
+      "files": {
+        "README.md": "947e6f79411947dcebdf45a39b3b1b1e664b258551327b7f1f4c1459700dc249",
+        "app/accounts/accounts-client.tsx": "bb9c514d1c48cc6fb3d87928e4730efffa4d4281fd693ceacafdaed460125418",
+        "app/api/chat/app-access/set/route.ts": "a7b74f0d4e3f1b1166831a1f233ec2596c86dc6da79417190b56f5c3ba6889bb",
+        "app/api/chat/app-access/snapshot/route.ts": "14f491133bc28567c5fbeb01ca27d82d58730e6408c8b4d575cd31223418c094",
+        "app/app-access-toggle.tsx": "9fe19c9a312392c669de95d97de51fc2f705b4fbfa96e6bd459ba48a6009f362",
+        "app/app-access-types.ts": "258105eaa5cf7272aaceef75a51399feb2e8ed5ed393ebe3a4da490790b347c1",
+        "app/globals.css": "5636cbc32c8f23b26d931b572148d682f0f040bead88fae1898c77e4bfd9f6cb",
+        "app/workspace-staff-settings.tsx": "edb666b08632abbb17c207ca013494562b361ca06d508a0a05d854d1c32f8bfe",
+        "docs/APP_ACCESS_SPLIT.md": "4f7ef7365b3d7c3ebed4cf70bbb7fedf018fb6e15ce586156f8b805a57a66617"
+      }
+    },
+    "akaAgentWebApp": {
+      "path": "/Users/lequangnhut/Repos/akaAgentWebApp",
+      "branch": "codex/app-access-split",
+      "baseHead": "303a1ccd9a8ca04740d25657761da630e101cbd8",
+      "files": {
+        "README.md": "e10916dc059e8b9363191c1cbe49e85a63794e9593c9fb0a4497a13fbb61caf0",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.repository.test.ts": "2e8f549200a892f3b899ff9375be2dacea907215bc11389ee3615822404d4011",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.repository.ts": "55f23f3ad8e89091b081abe29ad050e38f7365ef8af35060028a08a0094103c0",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.routes.test.ts": "a729543a513fdd2d65e34855b8df367c20b48e6462e5479bb46bbf455795e87d",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.routes.ts": "b09930b55041670b8fa871a27cba1ac94f232248e8d265f2b3617137564a41f5",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.service.test.ts": "0a07ba8954d5ca327825362e62b3c33d5bce44b7e0519e6b94c8ab60d3e3fe7c",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.service.ts": "86cecdd7fd98f9d2498ccbe1724dbb6e5ab0c35f8517dac08fe58bd693f88488",
+        "apps/api/src/modules/aka-agent-control/aka-agent-control.types.ts": "0603dc923cceb91b8c020150ca11504c7bf89f9cf98aed5e607071546ab0539a",
+        "apps/api/src/modules/aka-agent-control/auth/native-auth.test.ts": "2945fe144f20616432ffb0850ce5dd2f2b4815fa9ed04ea57bd69abdee2c578c",
+        "apps/web/e2e/app-access.spec.ts": "3038c83823ddf87d1934329cbdece33ad743032df4d2964ad1f36cd3ccd497df",
+        "apps/web/src/components/AppAccessToggle.tsx": "5f4eff3fc630d53ba9f67b4521f45657dd8176ba4ca1a2c9180fc486d4fb46a9",
+        "apps/web/src/features/AccountsPage.tsx": "f1b1ec761ad5bacc1b8a519a0fed4cba36b400e349554d12d6bed8b0a5c8adb9",
+        "apps/web/src/features/StaffManagementPage.tsx": "475f8358fec0bce2676dbb2a4898696e13a944755579a33ac132b8f172e05d85",
+        "apps/web/src/styles.css": "9eb24051c1785219b735f443d04816fc92ed394448718b75f204c5eb4191f3e3",
+        "apps/web/src/test/AppAccessToggle.test.tsx": "db9b920524fb8f9399f18d7147b4fbe5e1f2c50490280276ca31e2dfcb9eddc7",
+        "docs/APP_ACCESS_SPLIT.md": "ca435067e83b20ac0be8db8c138081963f5035481d4de849423d82a77f796c5a",
+        "packages/control-api/src/accountSnapshot.ts": "e283de7afd99a7a29cf365b3bf4fe21cf600c7e124ae666c1a28ff8bc8477712",
+        "packages/control-api/src/appAccess.ts": "258105eaa5cf7272aaceef75a51399feb2e8ed5ed393ebe3a4da490790b347c1",
+        "packages/control-api/src/auth/identity.ts": "a4d54a58d4f9c84c9a652b59f4ce896a657640e20d4768820d8ca02079d41891",
+        "packages/control-api/src/contracts.ts": "0bcc60a3f13e3cf0aa599484198ef7745f6c6eae59ad8d39612a6efbf6a163f1",
+        "packages/control-api/src/index.ts": "68d07899b4041071e206db10672f26ded385f5e257c799af61467c4a1b7d0b81",
+        "packages/control-api/src/staffManagement.ts": "859f80795d7e4b11c530e29458eaed7d088f380a8ec27ab8e2c0ea9ccc6fecd6",
+        "packages/control-client/src/index.ts": "e1433c83ffd714c2f9c92cd11a2cc9c0d1cdb966833cb340631e3d78d72788ad"
+      }
+    }
+  },
+  "verification": {
+    "sqlBusinessCases": 84,
+    "catalogBaselineFunctions": 31,
+    "changedRpcFunctions": 13,
+    "candidateFunctions": 39,
+    "privateAuthFunctions": 2,
+    "rollbackTrial": true,
+    "activationTrial": true,
+    "driftGuard": true,
+    "chatApiFullTests": 1748,
+    "chatApiFinalSchedulerTests": 163,
+    "webApiTests": 1340,
+    "webRegressionTests": 861,
+    "newWebUiTests": 4,
+    "chromiumE2eTests": 2,
+    "chatWebTests": 200,
+    "desktopTypechecks": [
+      "tsconfig.node.json",
+      "tsconfig.web.json"
+    ],
+    "builds": [
+      "akaAgent production",
+      "ChatAPI TypeScript",
+      "WebApp production",
+      "ChatWeb Next production"
+    ],
+    "limitations": [
+      "No production HTTP/provider/Zalo sends/campaigns",
+      "No Windows/macOS installer or real-device QA",
+      "CRM flow checked with local SQL, not production UI"
+    ],
+    "desktopAppAccessLifecycleCases": 5,
+    "runtimeDependencies": 11,
+    "policyDriftGuard": true,
+    "viewDriftGuard": true,
+    "viewDriftCasesPerMigration": 4
+  },
+  "initialRecordedAt": "2026-11-02T18:43:19.594975+00:00",
+  "reviewFixVerification": {
+    "recordedAt": "2026-11-02T19:59:01.409921+00:00",
+    "fixes": [
+      "Restore Zalo Web in Agent runtime reader; QR/local-only consumers still filter Web",
+      "Gate pending SMS work on current Agent account and owner access; preserve completion receipts",
+      "Bind QR actor/account checks and late completion to authenticated originating app",
+      "Capture effective legacy Agent flags on first product 5; renewal preserves explicit revocations"
+    ],
+    "sqlBusinessCases": 46,
+    "catalogBaselineFunctions": 31,
+    "changedRpcFunctions": 13,
+    "candidateFunctions": 37,
+    "privateAuthFunctions": 2,
+    "rollbackAndActivationTrials": "passed locally",
+    "driftGuard": "passed locally",
+    "liveMetadataCapture": "read-only; cgjbsmqtfhqvttudyjzq",
+    "chatApi": {
+      "testFiles": 119,
+      "tests": 1744,
+      "build": "passed"
+    },
+    "desktop": {
+      "typecheckNode": "passed",
+      "typecheckWeb": "passed",
+      "productionBuild": "passed",
+      "zaloWebSessionRecoverySmoke": "passed"
+    },
+    "unchangedInFixTurn": [
+      "akaAgentWebApp",
+      "akaAgentChatWeb",
+      "SqlServerDashboard"
+    ],
+    "productionChanged": false,
+    "connectionsAddedToProduction": 0,
+    "notes": [
+      "WebApp/ChatWeb results above are from implementation verification, not rerun for this fix.",
+      "RPC catalog trial preserves exact source owner/ACL/security/volatility/config; no production apply.",
+      "Synthetic local data only; no messages or campaigns sent."
+    ]
+  },
+  "reviewFix2Verification": {
+    "recordedAt": "2026-11-02T21:03:58.536406+00:00",
+    "fixes": [
+      "Shared Chat-only capability for messages/features/history; legacy resolver retained",
+      "Source-aware Data Scan admission and dispatch permission checks; cancellation/receipt retained",
+      "Keep local Chat reader without Zalo Agent entitlement; preserve stopping runtime",
+      "Desktop SELECT RLS with guarded runtime RPC paths; local session invoker and CAS",
+      "Final legacy capture under writer locks before activation; no replay after activation or renewal"
+    ],
+    "sqlBusinessCases": 68,
+    "candidateFunctions": 39,
+    "changedRpcFunctions": 13,
+    "privateAuthFunctions": 2,
+    "runtimeDependencySignatures": 11,
+    "catalog": {
+      "rollback": "passed",
+      "activation": "passed",
+      "metadata": "preserved",
+      "rpcDriftGuard": "passed",
+      "policyDriftGuard": "passed"
+    },
+    "chatApi": {
+      "files": 119,
+      "tests": 1748,
+      "typecheckBuild": "passed",
+      "focusedFiles": 3,
+      "focusedTests": 36
+    },
+    "desktop": {
+      "typecheckNode": "passed",
+      "typecheckWeb": "passed",
+      "productionBuild": "passed",
+      "localLifecycleCases": 5,
+      "zaloWebRecoverySmoke": "passed"
+    },
+    "crmGitStatus": "clean; no source edits or deployment",
+    "liveCapture": "read-only production cgjbsmqtfhqvttudyjzq; 13 changed signatures match prior baseline, 11 runtime dependencies and account policies captured",
+    "newProductionConnections": 0,
+    "productionChanged": false,
+    "notes": [
+      "Final inactive-binding dispatch restriction checked by TypeScript build and SQL harness after full unit suite.",
+      "Desktop role/REST request context simulated in PostgreSQL; no real PostgREST HTTP or Zalo/provider actions.",
+      "WebApp/ChatWeb checks remain from prior implementation; neither source was edited in this pass.",
+      "Existing user labs/ in Chat API excluded from source inventory and left untouched."
+    ],
+    "logs": {
+      "sql": {
+        "path": "/tmp/app-access-fix2-sql.log",
+        "sha256": "03e1ec1c74502c367331eb9359ab947fdbe15ba318bc3144929c9bbe79751e8a"
+      },
+      "catalog": {
+        "path": "/tmp/app-access-fix2-rollout.log",
+        "sha256": "b0115338009679d7375437c9f26bf8e511992e60cb6eebf4f4faf53f08f9e5ba"
+      },
+      "apiTests": {
+        "path": "/tmp/app-access-fix2-api-suite.log",
+        "sha256": "27b9f4816e35afa48dcb68b86f0ba9b0332837fd55e7ba7d3a41a8bfb3185d9d"
+      },
+      "apiBuild": {
+        "path": "/tmp/app-access-fix2-api-build.log",
+        "sha256": "9bfd257180bb2996d9280c2a7ef429903952ba65bd0e6707ab3c2e21e2fda068"
+      },
+      "desktopBuild": {
+        "path": "/tmp/app-access-fix2-desktop-build.log",
+        "sha256": "d13629e55b2be0fe7271bd592526b3854670e1c036d50adcc4e03cb8477f79ee"
+      },
+      "nodeTypecheck": {
+        "path": "/tmp/app-access-fix2-node.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rendererTypecheck": {
+        "path": "/tmp/app-access-fix2-renderer.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "zaloWebRecovery": {
+        "path": "/tmp/app-access-fix2-web-recovery.log",
+        "sha256": "21dd0aee7d23c37719c82e598bf8b6f80ab77e0a9340de64c7cafb13c725276d"
+      }
+    }
+  },
+  "reviewFix3Verification": {
+    "recordedAt": "2026-11-02T21:22:04.601618+00:00",
+    "fix": "Desktop account SELECT policy resolves nullable organization through the existing scoped runtime profile view; no org_staff grants added",
+    "sqlBusinessCases": 84,
+    "regressionControl": "Original policy fails with 42501 org_staff before activation under the tightened fixture",
+    "desktopStaffTableSelect": false,
+    "desktopStaffColumnSelect": false,
+    "runtimeProfileView": {
+      "name": "public.aka_agent_staff_runtime_profile",
+      "sourceChecksum": "bb879c13f7469398e75650bf7403a7d7",
+      "targetChecksum": "bb879c13f7469398e75650bf7403a7d7",
+      "changed": false
+    },
+    "catalog": {
+      "baselineFunctions": 31,
+      "changedRpcFunctions": 13,
+      "candidateFunctions": 39,
+      "privateAuthFunctions": 2,
+      "runtimeDependencies": 11,
+      "rollback": "passed",
+      "activation": "passed",
+      "rpcDriftGuard": "passed",
+      "policyDriftGuard": "passed",
+      "viewDriftGuard": "passed",
+      "viewDriftCasesPerMigration": 4,
+      "metadata": "preserved"
+    },
+    "liveCapture": "Read-only cgjbsmqtfhqvttudyjzq; 26 public/private/runtime definitions unchanged from prior capture; runtime view and staff lock/time helper metadata verified live",
+    "typescriptOrUiChanged": false,
+    "typecheckBuildRerun": false,
+    "previousCheckResults": "TypeScript/full suites/builds remain from prior verification passes",
+    "crmGitStatus": "clean; no source edits or deployment",
+    "newProductionConnections": 0,
+    "productionChanged": false,
+    "limitations": [
+      "Local PostgreSQL SET ROLE/request context, not real PostgREST HTTP",
+      "Fixture retains reduced schema; not a full production clone",
+      "No provider messages, campaigns or installer tests"
+    ],
+    "logs": {
+      "sql": {
+        "path": "/tmp/app-access-fix3-sql.log",
+        "sha256": "d8b56d82891d603b6ff625b9a147395f66eb9238a1ce126068c1b4a4169c074b"
+      },
+      "catalog": {
+        "path": "/tmp/app-access-fix3-rollout.log",
+        "sha256": "b0115338009679d7375437c9f26bf8e511992e60cb6eebf4f4faf53f08f9e5ba"
+      },
+      "negativeControl": {
+        "path": "/tmp/app-access-fix3-negative.log",
+        "sha256": "ec44e6f8ba486d2fa9f61e0785f13f8c62facf8cb28e3e14b136282fca1f12f2"
+      }
+    }
+  },
+  "reviewFix4Verification": {
+    "recordedAt": "2026-11-02T21:48:23.056611+00:00",
+    "fixes": [
+      "Seal native/remote local QR origin, actor and claim in a private receipt and enforce at session commit; preserve previous session on rejection",
+      "Reserve logged-in Zalo identity in existing Chat binding atomically with Chat flag; preserve binding on disable and guard deleted reuse/undelete"
+    ],
+    "sqlBusinessCases": 98,
+    "newSqlCases": 14,
+    "negativeControls": {
+      "qrOrigin": "Removing origin recheck allows revoked native QR to commit; expected rejection fails",
+      "identityReservation": "Removing reservation trigger allows both concurrent enables; 2 != 1"
+    },
+    "catalog": {
+      "privateFunctions": 2,
+      "rolloutTrial": true,
+      "baselineFunctions": 31,
+      "changedFunctions": 13,
+      "targetFunctions": 42,
+      "rollbackTrial": "passed",
+      "metadata": "preserved",
+      "driftGuard": "passed",
+      "policyDriftGuard": "passed",
+      "viewDriftGuard": "passed",
+      "viewDriftCases": 4,
+      "runtimeDependencies": 11,
+      "productionChanged": false
+    },
+    "liveCapture": {
+      "project": "cgjbsmqtfhqvttudyjzq",
+      "readOnly": true,
+      "newHelperSignaturesAbsent": true,
+      "existingFunctionMetadata": [
+        {
+          "signature": "aka_agent_list_sms_due_input_data(bigint,bigint[],text,integer,integer)",
+          "checksum": "70ffadf2302e9601f68d1af0dab41469",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+          "security_definer": false,
+          "volatility": "s",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "recover_server_zalo_running_state(bigint,text,boolean)",
+          "checksum": "02c1541f6dbfcb1a352e94da888ac0bd",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "inspect_staff_zalo_running_state(bigint)",
+          "checksum": "b84b44b4100ffc99a41d174cbd7f5ab7",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text)",
+          "checksum": "3b9e3e76491a6e7a8ae91c9c3c714408",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "create_control_zalo_account_atomic(bigint,bigint,integer,jsonb)",
+          "checksum": "a42a8a093fd19dc094b002c45890e1bd",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public, private"
+          ]
+        },
+        {
+          "signature": "aka_agent_authenticate_control_session(text)",
+          "checksum": "7995d6e92b16eb17b44995e14aae1b87",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+          "checksum": "e8fbdc5224846296f0c8816be82958d3",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+          "security_definer": false,
+          "volatility": "s",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)",
+          "checksum": "6803509057e6ec91b349c9543757f3d3",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "resolve_organization_zalo_account_capabilities(bigint)",
+          "checksum": "46412e94cf00a788230835f6d56d8d3b",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog, public, private"
+          ]
+        },
+        {
+          "signature": "enforce_zalo_account_capability_and_quota()",
+          "checksum": "1edc48a7985f2268159ad0b605fb205b",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public, private"
+          ]
+        },
+        {
+          "signature": "claim_zalo_account_runtime_operation(bigint,bigint,text,text,uuid,boolean)",
+          "checksum": "6884cc5eb00e3076c491ac35f453babf",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "release_zalo_account_runtime_operation(bigint,bigint,text,text,uuid)",
+          "checksum": "06f2a974302b96a5dcacbfec83fd8e87",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=public"
+          ]
+        },
+        {
+          "signature": "aka_agent_check_campaign_daily_boundary(bigint,bigint,bigint,text,date)",
+          "checksum": "272de6b1e353a955d6394b912578e024",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_settle_campaign_run_unit_v2(bigint,bigint,bigint,text,uuid,boolean)",
+          "checksum": "2f7bd25ee7ba86653384737a63b73deb",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_recover_campaign_runtime_unit_leases(bigint,text,text)",
+          "checksum": "3dffabe31ade3469f72664d226acfc78",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_block_denied_ip_request()",
+          "checksum": "ecfc014981c5058f9cd84e0e8e504bed",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog"
+          ]
+        },
+        {
+          "signature": "aka_agent_cleanup_failed_campaign_runtime(bigint,bigint,bigint,text,uuid,uuid,bigint[],text,boolean,text,text)",
+          "checksum": "91b1ff4d36fc5c1ff2f9364bd7301fba",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_claim_account_operation(bigint,bigint,text,text,text,uuid,boolean,text)",
+          "checksum": "3381b7f73df758e9a161cac5fbedc620",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_cleanup_account_operation(bigint,bigint,text,text,text,uuid)",
+          "checksum": "97e7a22c22f8ea9ab28a7a8aabcc634c",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_time_allowed(bigint)",
+          "checksum": "7569f2b3816985cac48c114c891b5672",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres,aka_message_ingest_owner=X/postgres,authenticator=X/postgres,cli_login_postgres=X/postgres,crm_interest_worker=X/postgres,dashboard_user=X/postgres,pg_checkpoint=X/postgres,pg_create_subscription=X/postgres,pg_database_owner=X/postgres,pg_execute_server_program=X/postgres,pg_maintain=X/postgres,pg_monitor=X/postgres,pg_read_all_data=X/postgres,pg_read_all_settings=X/postgres,pg_read_all_stats=X/postgres,pg_read_server_files=X/postgres,pg_signal_backend=X/postgres,pg_stat_scan_tables=X/postgres,pg_use_reserved_connections=X/postgres,pg_write_all_data=X/postgres,pg_write_server_files=X/postgres,pgbouncer=X/postgres,supabase_admin=X/postgres,supabase_auth_admin=X/postgres,supabase_etl_admin=X/postgres,supabase_functions_admin=X/postgres,supabase_privileged_role=X/postgres,supabase_read_only_user=X/postgres,supabase_realtime_admin=X/postgres,supabase_replication_admin=X/postgres,supabase_storage_admin=X/postgres}",
+          "security_definer": true,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_access(bigint,text,text)",
+          "checksum": "ca59bfbfa79c7e40ec50788e77b9d022",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_management_row(bigint)",
+          "checksum": "4964edb52ffc866f610036212d14fb08",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_management(bigint,text,text,text,jsonb)",
+          "checksum": "689c389e3380c75497c720e7e6c5dafb",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public",
+            "lock_timeout=3s",
+            "statement_timeout=12s"
+          ]
+        },
+        {
+          "signature": "aka_agent_facebook_account_operation(bigint,bigint,text,uuid,bigint,text)",
+          "checksum": "64f75be5b0f722dad02b765ff1ca220f",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": false,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)",
+          "checksum": "6ac923806e9e78cb4872e6909d487a6c",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": false,
+          "volatility": "s",
+          "config": [
+            "search_path=public, pg_temp",
+            "statement_timeout=20s"
+          ]
+        },
+        {
+          "signature": "aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)",
+          "checksum": "c2fcb127716bc511d36d8f0763fcc07b",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": true,
+          "volatility": "s",
+          "config": [
+            "search_path=pg_catalog, public",
+            "statement_timeout=60s"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_client(text,text,text,jsonb)",
+          "checksum": "73830b14c79b98802050cc9419cfd6c1",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public",
+            "lock_timeout=3s",
+            "statement_timeout=12s"
+          ]
+        },
+        {
+          "signature": "aka_agent_staff_runtime_scope(bigint,text)",
+          "checksum": "b24e654e7f7d3e840db80611affdaa43",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog, public"
+          ]
+        },
+        {
+          "signature": "aka_agent_desktop_session_admin(text,jsonb)",
+          "checksum": "0f7bf99a4f0b78914c97133a47486f97",
+          "owner": "postgres",
+          "acl": "{postgres=X/postgres,service_role=X/postgres}",
+          "security_definer": true,
+          "volatility": "v",
+          "config": [
+            "search_path=pg_catalog",
+            "statement_timeout=12s",
+            "lock_timeout=3s"
+          ]
+        }
+      ]
+    },
+    "apiTests": {
+      "files": 119,
+      "tests": 1752,
+      "passed": true
+    },
+    "apiTypeScriptBuild": "passed",
+    "agentNodeTypecheck": "passed",
+    "agentRendererTypecheck": "passed",
+    "agentProductionBuild": "passed",
+    "agentQrSmokeCases": 4,
+    "agentLifecycleSmokeCases": 5,
+    "agentWebRecoverySmoke": "passed",
+    "crmGitStatus": "clean; no source or deployment changes",
+    "newProductionConnections": 0,
+    "productionChanged": false,
+    "limitations": [
+      "PostgreSQL disposable local with reduced business schema and real captured RPC/view/roles, not full production clone",
+      "No real PostgREST production, provider/QR device or installer tests",
+      "Web/PWA/Chat Web unchanged in this fix; earlier verification retained"
+    ],
+    "logs": {
+      "sql": {
+        "path": "/tmp/app-access-fix4-sql.log",
+        "sha256": "a0fc96071ab2fff6e892276d947b415108641677128a28dd13f401dafdcde52e"
+      },
+      "catalog": {
+        "path": "/tmp/app-access-fix4-rollout.log",
+        "sha256": "23fdfa10f7de8b783000a31def92768b8ab9a22936118fda8e49f6d9ae35aad1"
+      },
+      "negativeOrigin": {
+        "path": "/tmp/app-access-fix4-control-origin.log",
+        "sha256": "e6e8b07a0e3f104c289808c6b51560c210ba22d22c2d31b0a9bbadf0e7c0aad0"
+      },
+      "negativeReservation": {
+        "path": "/tmp/app-access-fix4-control-reservation.log",
+        "sha256": "61211dd884fcccbc980b86046f5f9434070dfde918b04c73514be67067558ba5"
+      },
+      "apiBuild": {
+        "path": "/tmp/app-access-fix4-api-build.log",
+        "sha256": "9bfd257180bb2996d9280c2a7ef429903952ba65bd0e6707ab3c2e21e2fda068"
+      },
+      "apiTests": {
+        "path": "/tmp/app-access-fix4-api-tests.log",
+        "sha256": "4c733e7ab9e5fbe4652b74c0a2a72b09d13007eb680eadd05b9c3353c916a91c"
+      },
+      "agentNode": {
+        "path": "/tmp/app-access-fix4-agent-node.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "agentWeb": {
+        "path": "/tmp/app-access-fix4-agent-web.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "agentBuild": {
+        "path": "/tmp/app-access-fix4-agent-build.log",
+        "sha256": "820d3a2be86aba108c196771859e463a4bce9a066a4944bd85daec6d4f3bc401"
+      },
+      "qrSmoke": {
+        "path": "/tmp/app-access-fix4-qr-smoke.log",
+        "sha256": "de2d02779473245327b9ea0ae2209feaa863291a4e6d7eb2c8a4cb09a27f4ff2"
+      },
+      "webRecovery": {
+        "path": "/tmp/app-access-fix4-recovery.log",
+        "sha256": "21dd0aee7d23c37719c82e598bf8b6f80ab77e0a9340de64c7cafb13c725276d"
+      },
+      "focused": {
+        "path": "/tmp/app-access-fix4-focused.log",
+        "sha256": "b43b908106467be2030bc06c66a0d1719cda2ed05ebb2f9b3b1efdf4f6df4e57"
+      }
+    }
+  },
+  "sourceVerificationRecordedAt": "2026-11-02T21:48:23.056611+00:00",
+  "databaseApply": {
+    "receipt": "docs/audits/app-access-split/apply-receipt.json",
+    "activationApplied": false,
+    "policyEnabled": false,
+    "ledger": [
+      {
+        "name": "migration_v445_app_access_schema",
+        "version": "20261102215958"
+      },
+      {
+        "name": "migration_v446_app_access_callers",
+        "version": "20261102220006"
+      },
+      {
+        "name": "app_access_ip_pre_request",
+        "version": "20261102220027"
+      },
+      {
+        "name": "app_access_desktop_admin",
+        "version": "20261102220028"
+      }
+    ]
+  },
+  "prePrVerification": "docs/audits/app-access-split/pr-verification.json",
+  "inventoryUpdatedAt": "2026-11-02T22:24:03.141337+00:00"
+}

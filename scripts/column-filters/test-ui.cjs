@@ -4,16 +4,16 @@ const root=path.resolve(__dirname,'../..'),dir=fs.mkdtempSync(path.join(require(
 let code=fs.readFileSync(path.join(root,'scripts/run-data-group-zalo-ui-smoke.cjs'),'utf8').match(/const code=`([\s\S]*?)`\n;\(async/)[1]
 code=code.replace("import React from 'react';", "import React from 'react'; import Scan from './src/renderer/src/components/DataScan/DataScanModal'; import {useAuthStore} from './src/renderer/src/stores/authStore';")
 code=code.replace("createRoot(document.getElementById('root')).render(<Modal initialGroupId={1} onClose={()=>{}} />);",`
-const data=Array.from({length:250},(_,n)=>({...members[0],id:1000+n,contactId:2000+n,name:'Khách '+n,zaloName:n<150?'Nguyễn An '+n:'Bình '+n,displayName:'Khách '+n,uid:'00'+n,phone:'090'+String(n).padStart(7,'0')}));
+const data=Array.from({length:250},(_,n)=>({...members[0],id:1000+n,contactId:2000+n,name:'Khách '+n,zaloName:n<150?'Nguyễn An '+n:'Bình '+n,displayName:'Khách '+n,zaloOriginalName:n===249?null:(n<150?'Nguyễn An '+n:'Bình '+n),uid:'00'+n,phone:'090'+String(n).padStart(7,'0')}));
 window.electronAPI.cancelDataColumnFilters=async(formId,requestId)=>{window.calls.push(['cancel',formId,requestId]);return true};
-const filtered=q=>data.filter(row=>(q.columnFilters?.filters||[]).every(f=>f.field==='name'?row.zaloName.toLocaleLowerCase('vi').includes(String(f.value).toLocaleLowerCase('vi')):f.field==='uid'?row.uid===f.value:true));
+const filtered=q=>data.filter(row=>(q.columnFilters?.filters||[]).every(f=>f.field==='name'?row.zaloName.toLocaleLowerCase('vi').includes(String(f.value).toLocaleLowerCase('vi')):f.field==='zaloOriginalName'?!!row.zaloOriginalName&&row.zaloOriginalName.toLocaleLowerCase('vi').includes(String(f.value).toLocaleLowerCase('vi')):f.field==='uid'?row.uid===f.value:true));
 window.electronAPI.readDataColumnFilters=async request=>{
  window.calls.push(['filtered',request]);
  if(window.failRead)throw new Error('Truy vấn lọc quá thời gian cho phép. Hãy thu hẹp điều kiện rồi thử lại.');
  if(window.deferRead)await new Promise(resolve=>window.resolveRead=resolve);
  if(window.backendAbsent)return {available:false,contacts:[],members:[],ids:[],total:0};
  const rows=filtered(request.query),page=rows.slice(request.query.offset||0,(request.query.offset||0)+(request.query.limit||100));
- return {available:true,total:rows.length,members:request.source==='data_group'?page:[],contacts:request.source==='data_group'?[]:page.map(r=>({...r,name:r.zaloName,accountId:13,contactType:'person'})),ids:[]};
+ return {available:true,total:rows.length,members:request.source==='data_group'?page:[],contacts:request.source==='data_group'?[]:page.map(r=>({...r,name:window.zaloScan?r.displayName:r.zaloName,accountId:window.zaloScan?11:13,contactType:'person'})),ids:[]};
 };
 window.electronAPI.exportDataColumnFilters=async(request,idsOnly)=>{window.calls.push(['filteredExport',request,idsOnly]);const rows=filtered(request.query);return {available:true,total:rows.length,members:rows,contacts:rows,ids:idsOnly?rows.map(r=>r.id):[]}};
 window.electronAPI.listDataGroupMemberIds=async()=>({ids:[1],total:1});
@@ -29,10 +29,13 @@ window.electronAPI.onZaloServerOperationState=()=>()=>{};
 useAuthStore.setState({user:{staffId:1,organizationId:1,entitlements:{facebookCore:true,facebookFanpage:true,zalo:true}}});
 const view=createRoot(document.getElementById('root'));
 window.showGroup=()=>view.render(<Modal key="group" initialGroupId={1} onClose={()=>view.render(null)}/>);
+window.showZaloScan=action=>{window.backendAbsent=false;window.zaloScan=true;view.render(<Scan key={action} initialAction={action} initialAccountId={11} lockAction onClose={()=>view.render(null)}/>)};
 window.showScan=()=>view.render(<Scan key="scan" initialAction="facebook_friends" initialAccountId={13} lockAction onClose={()=>view.render(null)}/>);
 window.showGroup();
 `)
 ;(async()=>{
+ await esbuild.build({stdin:{contents:"export {detectImportColumns,mapImportTable} from './src/shared/campaignImportVerification'; export {importWorkbookTables} from './src/shared/campaignImportWorkbook';",resolveDir:root},bundle:true,platform:'node',format:'cjs',outfile:dir+'/import.cjs'})
+ const {detectImportColumns,mapImportTable,importWorkbookTables}=require(dir+'/import.cjs')
  await esbuild.build({stdin:{contents:code,resolveDir:root,loader:'tsx'},bundle:true,format:'iife',outfile:dir+'/app.js',jsx:'automatic',define:{'process.env.NODE_ENV':'"development"'},loader:{'.woff2':'file','.woff':'file','.ttf':'file','.svg':'file','.png':'file'}})
  fs.writeFileSync(dir+'/index.html','<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="/app.css"></head><body><div id="root"></div><script src="/app.js"></script></body></html>')
  const server=http.createServer((req,res)=>{const name=req.url==='/'?'index.html':req.url.slice(1);if(name.includes('..')){res.writeHead(400);return res.end()}const file=path.join(dir,name);if(!fs.existsSync(file)){res.writeHead(404);return res.end()}res.setHeader('content-type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(file))})
@@ -74,6 +77,38 @@ window.showGroup();
  // A response from the unmounted scan form must not replace the newly opened Data form.
  await page.evaluate(()=>window.deferRead=true);dialog=await open('Tên');await dialog.getByLabel('Giá trị',{exact:true}).fill('Nguyễn');await dialog.getByRole('button',{name:'Áp dụng',exact:true}).click();await page.waitForFunction(()=>!!window.resolveRead);await page.evaluate(()=>{window.deferRead=false;window.showGroup()});await page.getByRole('cell',{name:'Nguyễn An 0',exact:true}).waitFor();await page.evaluate(()=>window.resolveRead());await page.waitForTimeout(50);assert.equal(await page.getByRole('dialog',{name:'Quản lý nhóm data',exact:true}).count(),1);assert.equal(await page.getByRole('button',{name:'Bỏ điều kiện Tên',exact:true}).count(),0);checks++;
  await page.evaluate(()=>window.showScan());await page.getByRole('cell',{name:'Nguyễn An 0',exact:true}).waitFor();await page.evaluate(()=>{window.backendAbsent=true;window.showGroup()});await page.getByText('Bộ lọc cột cần cập nhật backend.',{exact:false}).waitFor();assert.ok(await page.getByRole('button',{name:'Lọc cột Tên',exact:true}).isDisabled());await page.getByRole('cell',{name:'Nguyễn An',exact:true}).waitFor();checks++
- assert.deepEqual(errors,[]);console.log(JSON.stringify({checks,screenshot:dir+'/scan-filter.png',errors}))
+
+ // Two Zalo lists show separate names; the existing Facebook heading stays unchanged.
+ for (const action of ['zalo_friends','zalo_remarketing_customers']) {
+  await page.evaluate(action=>window.showZaloScan(action),action);
+  await page.getByRole('cell',{name:'Khách 0',exact:true}).waitFor();
+  await page.getByRole('columnheader',{name:'Tên',exact:true}).waitFor();
+  await page.getByRole('columnheader',{name:'Tên gốc Zalo',exact:true}).waitFor();
+  assert.equal(await page.getByRole('cell',{name:'Nguyễn An 0',exact:true}).count(),1);
+  const table=page.locator('.data-scan-table');
+  assert.equal(await table.locator('thead th').count(),await table.locator('tbody tr').first().locator('td').count());checks++;
+  dialog=await open('Tên');await dialog.waitFor();await dialog.press('Escape');checks++;
+  dialog=await open('Tên gốc Zalo');await dialog.getByLabel('Giá trị',{exact:true}).fill('Nguyễn');await dialog.getByRole('button',{name:'Áp dụng',exact:true}).click();
+  await page.getByRole('button',{name:'Bỏ điều kiện Tên gốc Zalo',exact:true}).waitFor();
+  await table.locator('thead input[type=checkbox]').check();
+  const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Xuất Excel',exact:true}).click();
+  const download=await downloadPromise;const workbook=require('xlsx').readFile(await download.path());const rows=require('xlsx').utils.sheet_to_json(workbook.Sheets.Sheet1,{header:1});
+  assert.deepEqual(rows[0].slice(0,2),['Tên','Tên gốc Zalo']);assert.equal(rows.length,151);assert.deepEqual(rows[1].slice(0,2),['Khách 0','Nguyễn An 0']);checks++;
+  // Import the downloaded workbook by UID for friends and phone for remarketing.
+  // The legacy remarketing 'Zalo Id' header is not an importer UID alias.
+  const importTable=importWorkbookTables(workbook).tables[0];
+  const detected=detectImportColumns(importTable,'zalo',action==='zalo_friends'?'zalo_message_friend':'zalo_message_phone');
+  assert.equal(detected.hasHeader,true);assert.equal(detected.mapping.name,0);
+  const imported=mapImportTable(importTable,detected.mapping,detected.hasHeader?1:0,'scan.xlsx');
+  assert.equal(imported.length,150);assert.equal(imported[0].data.name,'Khách 0');checks++;
+  assert.equal(await page.evaluate(()=>window.calls.filter(c=>c[0]==='filteredExport').at(-1)[1].query.columnFilters.filters[0].field),'zaloOriginalName');checks++;
+  await page.screenshot({path:dir+'/'+action+'-names.png',fullPage:true});
+  await page.getByRole('button',{name:'Bỏ điều kiện Tên gốc Zalo',exact:true}).click();
+  await page.getByRole('button',{name:'Trang sau',exact:true}).click();await page.getByRole('cell',{name:'Khách 100',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Trang sau',exact:true}).click();await page.getByRole('cell',{name:'Khách 249',exact:true}).waitFor();
+  const missingRow=table.locator('tbody tr').filter({has:page.getByRole('cell',{name:'Khách 249',exact:true})});
+  assert.equal(await missingRow.getByRole('cell',{name:'—',exact:true}).count(),1);checks++;
+ }
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({checks,screenshot:dir+'/scan-filter.png',zaloScreenshots:[dir+'/zalo_friends-names.png',dir+'/zalo_remarketing_customers-names.png'],errors}))
  }finally{await browser.close();server.close()}
 })().catch(e=>{console.error(e);process.exitCode=1})

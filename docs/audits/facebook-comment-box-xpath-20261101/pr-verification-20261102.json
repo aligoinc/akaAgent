@@ -1,0 +1,62 @@
+{
+  "verified_at": "2026-11-02T09:34:48+07:00",
+  "target_branch": "dev_3",
+  "base_commit": "4d5bc8ef0d1ca5cf35ef22fba95d2d1a70e60313",
+  "branch": "codex/facebook-comment-like-xpath-audit",
+  "scope": "Documentation, snapshots and guarded SQL receipts for already-applied Facebook element edits. Runtime source and workflow/block definitions are unchanged.",
+  "checks": [
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "exit_code": 0
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run build",
+      "exit_code": 0,
+      "duration_seconds": 25.144,
+      "output_bytes": {
+        "out/main": 3156076,
+        "out/preload": 66630,
+        "out/renderer": 35579400
+      },
+      "warnings": "Vite reported modules imported both statically and dynamically; build completed."
+    },
+    {
+      "check": "Local Markdown file targets",
+      "result": "PASS",
+      "checked_links": 117
+    },
+    {
+      "check": "Audit JSON parse and SQL scope",
+      "result": "PASS",
+      "allowed_element_ids": [
+        13,
+        1489,
+        1692,
+        1691,
+        1132
+      ],
+      "guard": "Every SQL file is guarded by captured row checksum and fails closed on drift."
+    },
+    {
+      "check": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "check": "AGENTS/archive/PRESERVED SOURCE",
+      "result": "Unchanged; AGENTS.md remains under 20 KiB."
+    }
+  ],
+  "excluded_existing_work": [
+    "docs/DE_XUAT_ENGINE_CHIEN_DICH_CHUNG.md"
+  ],
+  "limits": [
+    "Build output is local only; no installer, upload or deployment.",
+    "No DB write or Facebook action was performed during PR preparation.",
+    "This verification does not establish campaign success after the Vietnamese selector update."
+  ],
+  "instructions": "SQL records completed data edits and manual guarded rollback. Do not reapply them when merging this PR."
+}

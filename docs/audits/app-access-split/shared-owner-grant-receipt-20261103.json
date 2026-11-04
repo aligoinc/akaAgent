@@ -1,0 +1,228 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "name": "migration_v450_chat_shared_owner_grant",
+    "version": "20261103032132"
+  },
+  "signature": "private.app_access_validate_account(public.auto_accounts,public.auto_accounts)",
+  "source_checksum": "ff633bcc1b189376d584685f1b6decf7",
+  "target_checksum": "bb948da088b5a8be76f9516e08255a14",
+  "authorization": "User approved fixing the described DB-only grant validation issue, including the supplemental migration.",
+  "before": {
+    "flags": "3b3bdaacf57c427a69ca5709d74399aa",
+    "target": {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "procost": 100,
+      "prorows": 0,
+      "checksum": "ff633bcc1b189376d584685f1b6decf7",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": true,
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "proisstrict": false,
+      "proparallel": "u",
+      "provolatile": "v",
+      "proleakproof": false
+    },
+    "policies": "baea15ce17af62a94bd7dfabc4503fd6",
+    "triggers": "da7b56dd46f72bb06b30078a96b54363",
+    "migration": null,
+    "checked_at": "2026-11-03T03:20:51.760437+00:00",
+    "staff_flags": "c7041b8025e54998cacbfba90acd6e12",
+    "other_routines": {
+      "count": 1296,
+      "checksum": "a9dd576e45996253b72d13272f6b148d"
+    }
+  },
+  "preapply": {
+    "flags": "3b3bdaacf57c427a69ca5709d74399aa",
+    "target": {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "procost": 100,
+      "prorows": 0,
+      "checksum": "ff633bcc1b189376d584685f1b6decf7",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": true,
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "proisstrict": false,
+      "proparallel": "u",
+      "provolatile": "v",
+      "proleakproof": false
+    },
+    "policies": "baea15ce17af62a94bd7dfabc4503fd6",
+    "triggers": "da7b56dd46f72bb06b30078a96b54363",
+    "migration": null,
+    "checked_at": "2026-11-03T03:21:23.698586+00:00",
+    "staff_flags": "c7041b8025e54998cacbfba90acd6e12",
+    "other_routines": {
+      "count": 1296,
+      "checksum": "a9dd576e45996253b72d13272f6b148d"
+    }
+  },
+  "after": {
+    "flags": "3b3bdaacf57c427a69ca5709d74399aa",
+    "target": {
+      "owner": "postgres",
+      "proacl": "{postgres=X/postgres}",
+      "procost": 100,
+      "prorows": 0,
+      "checksum": "bb948da088b5a8be76f9516e08255a14",
+      "proconfig": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "prosecdef": true,
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "proisstrict": false,
+      "proparallel": "u",
+      "provolatile": "v",
+      "proleakproof": false
+    },
+    "policies": "baea15ce17af62a94bd7dfabc4503fd6",
+    "triggers": "da7b56dd46f72bb06b30078a96b54363",
+    "migration": [
+      {
+        "name": "migration_v450_chat_shared_owner_grant",
+        "version": "20261103032132"
+      }
+    ],
+    "checked_at": "2026-11-03T03:21:47.931689+00:00",
+    "staff_flags": "c7041b8025e54998cacbfba90acd6e12",
+    "other_routines": {
+      "count": 1296,
+      "checksum": "a9dd576e45996253b72d13272f6b148d"
+    }
+  },
+  "production_trial": {
+    "cases": [
+      {
+        "id": 2666,
+        "server": false,
+        "target_allowed": false,
+        "baseline_denied": true
+      },
+      {
+        "id": 3359,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      },
+      {
+        "id": 4949,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      },
+      {
+        "id": 4992,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      },
+      {
+        "id": 4993,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      },
+      {
+        "id": 4994,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      },
+      {
+        "id": 7025,
+        "server": true,
+        "target_allowed": true,
+        "baseline_denied": true
+      }
+    ],
+    "trial_only": true,
+    "target_checksum": "bb948da088b5a8be76f9516e08255a14",
+    "accounts_checked": 405,
+    "routines_checked": 1297
+  },
+  "postcheck": {
+    "accounts": [
+      {
+        "id": 2666,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 3359,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 4949,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 4992,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 4993,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 4994,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      },
+      {
+        "id": 7025,
+        "chat_allowed": true,
+        "owner_active": false,
+        "agent_allowed": false
+      }
+    ],
+    "v447_enabled": true,
+    "local_qr_denied": 1,
+    "server_grant_allowed": 6,
+    "composite_probes_passed": 7
+  },
+  "local_tests": {
+    "postgres": "17 disposable local",
+    "total": 188,
+    "shared_owner_access": 46,
+    "shared_owner_grant": 44,
+    "api_typescript_build": "passed",
+    "akaagent_node_typecheck": "passed",
+    "akaagent_web_typecheck": "passed",
+    "full_api_suite": "Not rerun for V450; previous V449 result was 120 files / 1756 tests. No production TypeScript changes."
+  },
+  "limitations": {
+    "production_business_row_mutations": false,
+    "production_http_ui": false,
+    "provider_messages_or_campaigns": false,
+    "production_set_role": false,
+    "service_deploy": false,
+    "installer_build": false,
+    "crm_changes": false,
+    "manual_postgrest_reload": false,
+    "new_connection_source_or_budget": false
+  },
+  "notes": [
+    "Only private.app_access_validate_account body changed; its owner/ACL/config/security/volatility preserved.",
+    "Other 1296 routines, RLS policies, noninternal triggers, all account app flags and staff app flags/status/expiry fingerprints unchanged.",
+    "Production validation uses in-memory composite row copies; no actual account toggles, sharing or sessions were changed.",
+    "Six Server cases pass grant validation; QR local account 2666 remains denied for an inactive owner. Existing V449 Chat eligibility remains unchanged.",
+    "Role execution, real RPC/repository mutations, retry, quota race and rollbacks tested locally. Production verifies ACLs and owner-context composite validation."
+  ]
+}

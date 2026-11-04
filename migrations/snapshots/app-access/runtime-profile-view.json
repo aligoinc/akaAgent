@@ -1,0 +1,16 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "capturedAt": "2026-11-02T21:16:48.606Z",
+  "relname": "aka_agent_staff_runtime_profile",
+  "owner": "postgres",
+  "relacl": "{postgres=arwdDxtm/postgres,service_role=r/postgres,aka_agent_chat_api=r/postgres,aka_agent_desktop=r/postgres}",
+  "reloptions": [
+    "security_barrier=true"
+  ],
+  "definition": " SELECT id,\n    organization_id,\n    name,\n    phone,\n    username,\n    is_active,\n    is_admin,\n    is_admin_akabiz,\n    use_test_workflow,\n    deleted_at,\n    expiration_date,\n    max_running_zalo_web_accounts,\n    max_running_facebook_accounts\n   FROM org_staff\n  WHERE (( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request)) IS NULL OR id = (( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request));",
+  "checksum": "bb879c13f7469398e75650bf7403a7d7",
+  "desktop_select": true,
+  "desktopStaffSelect": false,
+  "desktopStaffAnyColumnSelect": false,
+  "desktopProductSelect": true
+}

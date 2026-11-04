@@ -1,6 +1,8 @@
 import { FACEBOOK_AI_SECTIONS } from './campaignFacebookAi'
 /** Stable application slots. Database IDs and AI credentials never come from the form. */
 export const FORM_AI_SECTIONS = {
+  agentRouter: 'campaign.agent.router',
+  agentExtra: 'campaign.agent.section',
   ...FACEBOOK_AI_SECTIONS,
   exclusions: 'campaign.send_exclusions',
   content: 'campaign.content',

@@ -1,6 +1,5 @@
 import type { AuthAccountProduct, AuthChatSyncProduct, AuthEntitlements, AuthUser } from '../../../shared/types'
 import { getAuthProductById } from '../../../shared/authProductCatalog'
-import { getVietnamDayStart } from '../../../shared/vietnamTime'
 import { getSupabaseClient } from '../supabaseClient'
 import {
   ZALO_PRODUCT_IDS,
@@ -254,13 +253,13 @@ async function loadOrganizationContext(organizationId: number): Promise<ServerOr
     loadOrganizationAccountProducts(organizationId),
     loadOrganizationChatSyncProducts(organizationId)
   ])
-  const { entitlements, chatSyncEnabled } = entitlementAccess
+  const { entitlements } = entitlementAccess
   const context: ServerOrganizationContext = {
     organizationId,
     organizationName: organizationNames.get(organizationId) || '',
     entitlements,
     accountProducts,
-    isChatSync: chatSyncEnabled,
+    isChatSync: await isChatSyncOrganization(organizationId),
     chatSyncProducts
   }
   return entitlements.zalo ? context : null
@@ -291,25 +290,12 @@ async function loadChatSyncEnabledOrganizationIds(
     Number.isSafeInteger(id) && id > 0
   ))))
   if (uniqueIds.length === 0) return enabled
-  const todayStart = getVietnamDayStart().getTime()
-
   for (const idChunk of chunkValues(uniqueIds, ID_CHUNK_SIZE)) {
-    const { data, error } = await client()
-      .from('org_organization_product')
-      .select('organization_id, expiration_date')
-      .in('organization_id', idChunk)
-      .in('product_id', ZALO_PRODUCT_IDS)
-      .eq('is_deleted', false)
-      .eq('is_chat_sync', true)
-
+    const { data, error } = await client().rpc('aka_agent_app_access_chat_organizations', { p_orgs: idChunk })
     if (error) throwServerRuntimeTechnicalError('load Chat sync organizations', error)
-    for (const row of data || []) {
-      const organizationId = Number(row.organization_id)
-      const expirationTime = row.expiration_date ? Date.parse(row.expiration_date) : NaN
-      if (
-        Number.isSafeInteger(organizationId) && organizationId > 0 &&
-        Number.isFinite(expirationTime) && expirationTime >= todayStart
-      ) enabled.add(organizationId)
+    for (const id of data || []) {
+      const organizationId = Number(id)
+      if (Number.isSafeInteger(organizationId) && organizationId > 0) enabled.add(organizationId)
     }
   }
   return enabled

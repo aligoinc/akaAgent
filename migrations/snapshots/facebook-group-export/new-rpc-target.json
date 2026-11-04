@@ -1,0 +1,12 @@
+{
+  "signature": "public.aka_agent_get_campaign_group_export_metadata(bigint,bigint,bigint,bigint[],text,text)",
+  "checksum": "3b9d5d422593121d936effa8b225b496",
+  "owner": "postgres",
+  "prosecdef": true,
+  "provolatile": "s",
+  "proconfig": [
+    "search_path=pg_catalog, public",
+    "statement_timeout=60s"
+  ],
+  "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+}

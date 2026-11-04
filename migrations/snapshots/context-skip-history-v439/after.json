@@ -1,0 +1,60 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "backend": {
+    "insert_message": true,
+    "select_message": true,
+    "direct_context_function": false
+  },
+  "triggers": [
+    {
+      "name": "trg_chat_zalo_message_sync_conversation_contact_info",
+      "enabled": "O",
+      "checksum": "28d06841c56e8e19a8ed1d2d91da8bb4",
+      "definition": "CREATE TRIGGER trg_chat_zalo_message_sync_conversation_contact_info AFTER INSERT OR UPDATE OF chat_zalo_action_id, sender_org_staff_id, direction, sender_display_name, content_text, content_kind, media_title, media_description, content_extra, zalo_sent_at, received_at, is_recalled, deletion_scope ON public.chat_zalo_message FOR EACH ROW EXECUTE FUNCTION chat_zalo_sync_conversation_contact_info()"
+    },
+    {
+      "name": "trg_chat_zalo_message_touch_updated_at",
+      "enabled": "O",
+      "checksum": "2d22adc3ca9425ec0b8698f878050fd9",
+      "definition": "CREATE TRIGGER trg_chat_zalo_message_touch_updated_at BEFORE UPDATE ON public.chat_zalo_message FOR EACH ROW EXECUTE FUNCTION chat_zalo_touch_updated_at()"
+    },
+    {
+      "name": "trg_context_xep_hang",
+      "enabled": "O",
+      "checksum": "8c7c490bc897f189910b9f8d2f8bdbfa",
+      "definition": "CREATE TRIGGER trg_context_xep_hang AFTER INSERT ON public.chat_zalo_message FOR EACH ROW WHEN (((new.direction = 'incoming'::text) AND (COALESCE(new.content_text, ''::text) <> ''::text) AND (new.sync_source IS DISTINCT FROM 'old'::text))) EXECUTE FUNCTION fn_context_trg_chat_zalo_message()"
+    }
+  ],
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "checksum": "35cae0ef11d7f53c385d229523ddf410",
+      "signature": "fn_context_xep_hang(text,text,text)",
+      "volatility": "v",
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "checksum": "0e0e281069b421112dcf78b4d2eb4407",
+      "signature": "fn_context_trg_chat_zalo_message()",
+      "volatility": "v",
+      "security_definer": true
+    }
+  ],
+  "migration": {
+    "name": "migration_v439_chat_zalo_context_skip_history",
+    "version": "20261030081324",
+    "statements": [
+      "-- Skip automatic Context enqueue for imported history only.\n-- Canonical source: live akachat capture in snapshots/context-skip-history-v439.\n-- One atomic DO block; no function, ACL, existing job or application change.\n-- The runner must execute this file in one transaction.\nSET LOCAL lock_timeout = '2s';\nSET LOCAL statement_timeout = '10s';\nSET LOCAL search_path = pg_catalog, public;\n\nDO $migration$\nDECLARE\n  v_trigger oid;\n  v_checksum text;\nBEGIN\n  -- Serialize trigger replacement before checking its captured definition.\n  LOCK TABLE public.chat_zalo_message IN SHARE ROW EXCLUSIVE MODE;\n\n  IF (SELECT count(*) FROM pg_proc p\n      WHERE p.oid IN (to_regprocedure('public.fn_context_trg_chat_zalo_message()'),\n                      to_regprocedure('public.fn_context_xep_hang(text,text,text)'))\n        AND pg_get_userbyid(p.proowner) = 'postgres'\n        AND p.prosecdef AND p.provolatile = 'v'\n        AND p.proconfig = ARRAY['search_path=\"\"']::text[]\n        AND p.proacl::text = '{postgres=X/postgres,service_role=X/postgres}'\n        AND ((p.oid = to_regprocedure('public.fn_context_trg_chat_zalo_message()')\n              AND md5(pg_get_functiondef(p.oid)) = '0e0e281069b421112dcf78b4d2eb4407')\n          OR (p.oid = to_regprocedure('public.fn_context_xep_hang(text,text,text)')\n              AND md5(pg_get_functiondef(p.oid)) = '35cae0ef11d7f53c385d229523ddf410'))) <> 2 THEN\n    RAISE EXCEPTION 'V439: Context function definition or privileges drifted; capture and review live state';\n  END IF;\n\n  SELECT t.oid, md5(pg_get_triggerdef(t.oid)) INTO v_trigger, v_checksum\n  FROM pg_trigger t\n  WHERE t.tgrelid = 'public.chat_zalo_message'::regclass\n    AND t.tgname = 'trg_context_xep_hang'\n    AND NOT t.tgisinternal AND t.tgenabled = 'O';\n  IF v_trigger IS NULL OR v_checksum NOT IN\n      ('21da2094428e85bfb7ce8cfbf0b57750', '8c7c490bc897f189910b9f8d2f8bdbfa') THEN\n    RAISE EXCEPTION 'V439: Context trigger missing, disabled or drifted; capture and review live state';\n  END IF;\n\n  IF v_checksum = '21da2094428e85bfb7ce8cfbf0b57750' THEN\n    CREATE OR REPLACE TRIGGER trg_context_xep_hang\n    AFTER INSERT ON public.chat_zalo_message\n    FOR EACH ROW\n    WHEN (NEW.direction = 'incoming'\n      AND COALESCE(NEW.content_text, '') <> ''\n      AND NEW.sync_source IS DISTINCT FROM 'old')\n    EXECUTE FUNCTION public.fn_context_trg_chat_zalo_message();\n  END IF;\n\n  IF NOT EXISTS (SELECT 1 FROM pg_trigger t\n      WHERE t.tgrelid = 'public.chat_zalo_message'::regclass\n        AND t.tgname = 'trg_context_xep_hang' AND t.tgenabled = 'O'\n        AND md5(pg_get_triggerdef(t.oid)) = '8c7c490bc897f189910b9f8d2f8bdbfa') THEN\n    RAISE EXCEPTION 'V439: Context trigger postcondition failed';\n  END IF;\nEND\n$migration$;\n"
+    ]
+  },
+  "checked_at": "2026-10-30T08:14:37.307518+00:00"
+}

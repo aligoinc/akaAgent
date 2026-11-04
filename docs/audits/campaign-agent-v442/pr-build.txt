@@ -1,0 +1,140 @@
+
+> aka-biz-auto@9.1.0 build
+> electron-vite build
+
+vite v6.4.1 building SSR bundle for production...
+transforming...
+✓ 345 modules transformed.
+rendering chunks...
+[plugin vite:reporter]
+(!) /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/node_modules/https-proxy-agent/dist/index.js?commonjs-es-import is dynamically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/services/proxyRuntimeService.ts but also statically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/services/facebookSessionRequest.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/node_modules/socks-proxy-agent/dist/index.js?commonjs-es-import is dynamically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/services/proxyRuntimeService.ts but also statically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/services/facebookSessionRequest.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/data/repositories/desktopUiRepository.ts is dynamically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/data/repositories/campaignRepository.ts but also statically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/main/ipc/handlers/desktopUiHandlers.ts, dynamic import will not move module into another chunk.
+
+out/main/index-CQx4wsHT.js      5.75 kB
+out/main/index.js           3,237.42 kB
+✓ built in 2.03s
+vite v6.4.1 building SSR bundle for production...
+transforming...
+✓ 40 modules transformed.
+rendering chunks...
+out/preload/index.js  74.58 kB
+✓ built in 92ms
+vite v6.4.1 building for production...
+transforming...
+✓ 3285 modules transformed.
+rendering chunks...
+[plugin vite:reporter]
+(!) /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/node_modules/xlsx/xlsx.mjs is dynamically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/FacebookImportModal.tsx but also statically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/CampaignDataUploadModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/CampaignPanel.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/foundDataExport.ts, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/DataScan/DataGroupManagerModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/DataScan/DataScanModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/DataScan/ZaloPhoneCheckModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/pages/ReportPage.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/shared/campaignImportWorkbook.ts, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/DataScan/DataScanModal.tsx is dynamically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/DataScan/DataGroupManagerModal.tsx but also statically imported by /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/App.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/CampaignAgentFormModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx, /Users/lequangnhut/.codex/worktrees/campaign-agent-form/akaAgent/src/renderer/src/components/CampaignPanels/CampaignPanel.tsx, dynamic import will not move module into another chunk.
+
+../../out/renderer/index.html                                    0.68 kB
+../../out/renderer/assets/codicon-ngg6Pgfi.ttf                 121.97 kB
+../../out/renderer/assets/editor.worker-CNgWLVu7.js            540.92 kB
+../../out/renderer/assets/app-icon-Dl1sgIWN.png                723.06 kB
+../../out/renderer/assets/json.worker-D4JVmXIe.js              840.01 kB
+../../out/renderer/assets/html.worker-BT47iy49.js            1,241.54 kB
+../../out/renderer/assets/css.worker-umuuUiIb.js             1,865.95 kB
+../../out/renderer/assets/ts.worker-C7hW3aY-.js             13,264.91 kB
+../../out/renderer/assets/AdminPage-Coc6ybSs.css                 9.65 kB
+../../out/renderer/assets/StaffManagementPage-BKUE8u-4.css      22.61 kB
+../../out/renderer/assets/index-DzF2RHQB.css                 1,013.11 kB
+../../out/renderer/assets/AdminSqlViewer-DXvFF9UZ.js             0.74 kB
+../../out/renderer/assets/azcli-BEAhqcuE.js                      1.30 kB
+../../out/renderer/assets/javascript-E9PRyWdy.js                 1.30 kB
+../../out/renderer/assets/ini-BcQysCTb.js                        1.67 kB
+../../out/renderer/assets/csp-D_3BK2Wp.js                        1.70 kB
+../../out/renderer/assets/scheme-D7PxodDG.js                     2.36 kB
+../../out/renderer/assets/bat-Bqkp9Cfu.js                        2.66 kB
+../../out/renderer/assets/xml-Zg4f5vaP.js                        2.75 kB
+../../out/renderer/assets/flow9-ZSTChSMd.js                      2.76 kB
+../../out/renderer/assets/sb-Chfc_wZF.js                         2.81 kB
+../../out/renderer/assets/pla-DEV89yYj.js                        2.87 kB
+../../out/renderer/assets/dockerfile--oxj0cAH.js                 3.02 kB
+../../out/renderer/assets/pascaligo-VA_LQ1oU.js                  3.25 kB
+../../out/renderer/assets/lua-hNsuGJkO.js                        3.43 kB
+../../out/renderer/assets/bicep-DIlfshcM.js                      3.44 kB
+../../out/renderer/assets/objective-c-B1L1C5EC.js                3.48 kB
+../../out/renderer/assets/cameligo-CLaaYNMV.js                   3.51 kB
+../../out/renderer/assets/graphql-BeiGgjIU.js                    3.77 kB
+../../out/renderer/assets/lexon-C1U0m2n9.js                      3.81 kB
+../../out/renderer/assets/typespec-R77Ln7Jb.js                   3.90 kB
+../../out/renderer/assets/sparql-DxuVdnRl.js                     3.94 kB
+../../out/renderer/assets/mips-CJm71dS3.js                       4.14 kB
+../../out/renderer/assets/m3-6ko6q9-_.js                         4.15 kB
+../../out/renderer/assets/sophia-D7pU0Y1d.js                     4.27 kB
+../../out/renderer/assets/shell-vZEubQ82.js                      4.48 kB
+../../out/renderer/assets/go-brnMpFrj.js                         4.49 kB
+../../out/renderer/assets/fsharp-D2uoxuLH.js                     4.51 kB
+../../out/renderer/assets/pascal-DMQyD4Xk.js                     4.71 kB
+../../out/renderer/assets/r-CtqYUQ6l.js                          4.80 kB
+../../out/renderer/assets/less-B7Qaxw-O.js                       5.00 kB
+../../out/renderer/assets/tcl-Bb4GCwBr.js                        5.05 kB
+../../out/renderer/assets/liquid-BEmURDUq.js                     5.08 kB
+../../out/renderer/assets/CrmPage-ecgzAJuT.js                    5.14 kB
+../../out/renderer/assets/qsharp-BWK6YLKm.js                     5.14 kB
+../../out/renderer/assets/cypher-D0--_GAN.js                     5.15 kB
+../../out/renderer/assets/java-Dt3iMn2o.js                       5.16 kB
+../../out/renderer/assets/kotlin-Ddo1SjA5.js                     5.20 kB
+../../out/renderer/assets/hcl-CrX1Es2W.js                        5.21 kB
+../../out/renderer/assets/redis-O7gSt3oh.js                      5.25 kB
+../../out/renderer/assets/restructuredtext-B-KQCVu_.js           5.33 kB
+../../out/renderer/assets/powershell-BXiKvz7Z.js                 5.39 kB
+../../out/renderer/assets/coffee-CzJ5oEdj.js                     5.51 kB
+../../out/renderer/assets/mdx-BUJgwq-Z.js                        5.76 kB
+../../out/renderer/assets/yaml-DPhLIVW1.js                       5.81 kB
+../../out/renderer/assets/ChatPage-Bzek9904.js                   5.90 kB
+../../out/renderer/assets/css-i3rI3_64.js                        6.10 kB
+../../out/renderer/assets/cssMode-ratSKoWm.js                    6.15 kB
+../../out/renderer/assets/rust-B1c0VCeq.js                       6.27 kB
+../../out/renderer/assets/apex-DVGUZ64i.js                       6.39 kB
+../../out/renderer/assets/python-DtbRLk0f.js                     6.43 kB
+../../out/renderer/assets/dart-vLMHv35g.js                       6.48 kB
+../../out/renderer/assets/markdown-B0YTnTxW.js                   6.65 kB
+../../out/renderer/assets/htmlMode-C1hXwxNH.js                   6.89 kB
+../../out/renderer/assets/msdax-BBeIktCY.js                      6.95 kB
+../../out/renderer/assets/csharp-BJeIuvde.js                     6.98 kB
+../../out/renderer/assets/swift-BmOZGynf.js                      7.18 kB
+../../out/renderer/assets/html-HJnjUH76.js                       7.56 kB
+../../out/renderer/assets/typescript-D1gzbHQW.js                 7.84 kB
+../../out/renderer/assets/ecl-CeuUgzaZ.js                        7.94 kB
+../../out/renderer/assets/cpp-CcN6f0ik.js                        8.22 kB
+../../out/renderer/assets/pug-BxCXwerb.js                        8.26 kB
+../../out/renderer/assets/vb-Bm6ESA0Q.js                         8.33 kB
+../../out/renderer/assets/scss-B42qMyAu.js                       9.07 kB
+../../out/renderer/assets/wgsl-_KPae5vw.js                       9.78 kB
+../../out/renderer/assets/st-C-b0Dh53.js                        10.15 kB
+../../out/renderer/assets/twig-DvgEGWAV.js                      10.26 kB
+../../out/renderer/assets/handlebars-FWycKTxA.js                10.34 kB
+../../out/renderer/assets/julia-Cm3ItYL_.js                     10.54 kB
+../../out/renderer/assets/scala-DbVzH-3O.js                     10.70 kB
+../../out/renderer/assets/systemverilog-BOC0OOdC.js             11.63 kB
+../../out/renderer/assets/php-Bkx1qpkQ.js                       12.48 kB
+../../out/renderer/assets/protobuf-CndvAUGu.js                  12.68 kB
+../../out/renderer/assets/perl-DC0Z0tlO.js                      12.82 kB
+../../out/renderer/assets/razor-Dnx6pQzC.js                     13.27 kB
+../../out/renderer/assets/clojure-fcgFaMHx.js                   13.94 kB
+../../out/renderer/assets/ruby-DCd4DmAr.js                      15.31 kB
+../../out/renderer/assets/sql-BAGepFCR.js                       15.56 kB
+../../out/renderer/assets/mysql-BWiizXSn.js                     16.16 kB
+../../out/renderer/assets/redshift-CvYMMYZY.js                  16.33 kB
+../../out/renderer/assets/pgsql-DaSGFTLp.js                     18.25 kB
+../../out/renderer/assets/elixir-eLfY1jWH.js                    18.74 kB
+../../out/renderer/assets/postiats-CVVurEnu.js                  19.30 kB
+../../out/renderer/assets/powerquery-BQ_t1ZiQ.js                21.65 kB
+../../out/renderer/assets/abap-D5KwWAsZ.js                      22.97 kB
+../../out/renderer/assets/solidity-yHOxYChb.js                  26.03 kB
+../../out/renderer/assets/jsonMode-cAKnlDMQ.js                  29.12 kB
+../../out/renderer/assets/tsMode-CPcPOdvJ.js                    40.32 kB
+../../out/renderer/assets/freemarker2-DGCHS_tL.js               42.10 kB
+../../out/renderer/assets/StaffManagementPage-BhNJNr_D.js       50.71 kB
+../../out/renderer/assets/AdminPage-B_tlox5J.js                 60.41 kB
+../../out/renderer/assets/lspLanguageFeatures-CGwuUBhI.js       61.69 kB
+../../out/renderer/assets/index-DRbJBX4o.js                 16,046.19 kB
+✓ built in 25.99s

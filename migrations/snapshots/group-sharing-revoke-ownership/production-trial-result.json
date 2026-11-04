@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-28 06:41:12.996429+00",
+  "status": "passed",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "eligibleMappings": 6,
+  "fullFingerprintUnchanged": true,
+  "functionsUnchanged": 1255,
+  "businessRowsWritten": 0,
+  "localRegressionGroups": 9,
+  "exactProductionScriptsPassedLocally": 2
+}

@@ -1,0 +1,24 @@
+{
+  "verifiedAt": "2026-11-02T16:05:39.287460+00:00",
+  "scope": "Restore 90% modal with side-by-side chat and narrow the chat to 300–360 CSS px",
+  "checks": {
+    "nodeTypecheck": "passed",
+    "webTypecheck": "passed",
+    "targetedElectronLayout": "passed at 2200,1500,1151,1150,900 px in dark/light themes; toggling preserves form/chat; no horizontal chat overflow",
+    "uiRunnerSyntax": "passed",
+    "gitDiffCheck": "passed",
+    "liveApp": "Observed hot-updated side-by-side form and chat"
+  },
+  "layout": "compact-chat-layout.json",
+  "sha256": {
+    "src/renderer/src/components/CampaignPanels/campaignAgent.css": "a0b594b84c279ad4b3dc20bafa6d57122162c998cbf4d08f0309c702bf4f5522",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "fa3f285753895e23346528b3ce0b5c74e643dc4adb74d40032086cad2199e5c3",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3"
+  },
+  "limitations": [
+    "Targeted Electron smoke uses fixture IPC, not live AI.",
+    "Full business smoke and production build were not repeated for the CSS-only adjustment.",
+    "No DB apply or release."
+  ],
+  "supersedesLayout": "input-width-verification.json"
+}

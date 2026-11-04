@@ -1,0 +1,52 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261028093922",
+    "name": "migration_v436_desktop_data_privacy",
+    "file": "migrations/migration_v436_desktop_data_privacy.sql",
+    "sha256": "4d43a597f97e7e0f25d5facc2a2f6b8016147767c8b5b2469b54f01c9cfdb598"
+  },
+  "appliedAt": "2026-10-28T09:39:22Z",
+  "verifiedAt": "2026-10-28T09:39:38.128337+00:00",
+  "existingFunctionsUnchanged": 1255,
+  "newFunctions": [
+    {
+      "signature": "private.aka_agent_desktop_data_context()",
+      "checksum": "1c661248ef952acb98ee2a2082cf8bf8",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "private.aka_agent_desktop_shared_content_groups()",
+      "checksum": "ce9391404723fb4355bd113d84a7159d",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    },
+    {
+      "signature": "private.aka_agent_guard_desktop_data_write()",
+      "checksum": "df137ce894beaf837f8862138d385734",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "config": [
+        "search_path=pg_catalog, public"
+      ]
+    }
+  ],
+  "restrictivePolicies": 23,
+  "writeGuards": 11,
+  "otherRelationsUnchanged": 771,
+  "otherRolesAndExistingTimeoutsUnchanged": true,
+  "appInputsAndOtherTaskFileUnchanged": 478,
+  "rollbackTrialMappings": 219,
+  "postApply": {
+    "activeMappings": 219,
+    "status": "passed"
+  },
+  "customerBusinessWrites": 0
+}

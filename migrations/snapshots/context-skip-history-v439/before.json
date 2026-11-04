@@ -1,0 +1,73 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "trigger": {
+    "oid": "25115562",
+    "name": "trg_context_xep_hang",
+    "enabled": "O",
+    "checksum": "21da2094428e85bfb7ce8cfbf0b57750",
+    "function": "fn_context_trg_chat_zalo_message()",
+    "definition": "CREATE TRIGGER trg_context_xep_hang AFTER INSERT ON public.chat_zalo_message FOR EACH ROW WHEN (((new.direction = 'incoming'::text) AND (COALESCE(new.content_text, ''::text) <> ''::text))) EXECUTE FUNCTION fn_context_trg_chat_zalo_message()"
+  },
+  "functions": [
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "checksum": "35cae0ef11d7f53c385d229523ddf410",
+      "signature": "fn_context_xep_hang(text,text,text)",
+      "definition": "CREATE OR REPLACE FUNCTION public.fn_context_xep_hang(p_bang text, p_ban_ghi_id text, p_ly_do text DEFAULT 'tin_moi'::text)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_src public.context_nguon_thu_thap%rowtype;\n  v_cfg public.context_cai_dat_to_chuc%rowtype;\n  v_kh bigint; v_job bigint; v_luc timestamptz;\n  g record; z record;\nbegin\n  if p_bang = 'message_gom' then\n    select m.id, m.account_id, m.contact_id, m.conversation_id, m.question_content, m.image_content,\n           coalesce(m.question_last_at, m.question_first_at, m.created_at, now()) as luc\n      into g from public.message_gom m where m.id = p_ban_ghi_id::uuid;\n    if not found or g.contact_id is null then return null; end if;\n    if public.fn_context_noi_dung_gom_hoi(g.question_content, g.image_content) is null then return null; end if;\n    select s.* into v_src from public.context_nguon_thu_thap s\n     where s.bang_nguon = 'public.message_gom' and s.account_id = g.account_id and s.is_active;\n    if not found then return null; end if;\n    if coalesce((v_src.dieu_kien_loc_tin ->> 'bo_qua_hoi_thoai_nhom')::boolean, true) and coalesce(g.conversation_id, '') like 'pzl_g_%' then return null; end if;\n    select c.* into v_cfg from public.context_cai_dat_to_chuc c where c.organization_id = v_src.organization_id and c.is_active;\n    if not found then return null; end if;\n    v_kh := public.fn_context_nhan_dien_khach_gom(v_src.organization_id, g.contact_id);\n    v_luc := g.luc;\n\n  elsif p_bang = 'chat_zalo_message' then\n    select m.id, m.organization_id, m.chat_zalo_account_organization_id as ao_id, m.chat_zalo_conversation_id as conv_id,\n           m.direction, m.content_text, m.content_kind, m.is_recalled, m.deleted_at, m.deletion_scope,\n           coalesce(m.zalo_sent_at, m.received_at) as luc, ac.conversation_type\n      into z\n      from public.chat_zalo_message m\n      join public.chat_zalo_conversation c on c.id = m.chat_zalo_conversation_id\n      join public.chat_zalo_account_conversation ac on ac.id = c.chat_zalo_account_conversation_id\n     where m.id = p_ban_ghi_id::bigint;\n    if not found or z.direction <> 'incoming' or coalesce(btrim(z.content_text), '') = ''\n       or z.is_recalled or z.deleted_at is not null or z.deletion_scope is not null then return null; end if;\n    select s.* into v_src from public.context_nguon_thu_thap s\n     where s.bang_nguon = 'public.chat_zalo_message' and s.organization_id = z.organization_id and s.account_id is null and s.is_active;\n    if not found then return null; end if;\n    if coalesce((v_src.dieu_kien_loc_tin ->> 'chi_hoi_thoai_ca_nhan')::boolean, true) and z.conversation_type <> 'user' then return null; end if;\n    if coalesce(v_src.dieu_kien_loc_tin -> 'bo_qua_tai_khoan_zalo_ids', '[]'::jsonb) @> to_jsonb(z.ao_id) then return null; end if;\n    if jsonb_typeof(v_src.dieu_kien_loc_tin -> 'loai_noi_dung') = 'array'\n       and not ((v_src.dieu_kien_loc_tin -> 'loai_noi_dung') ? z.content_kind) then return null; end if;\n    select c.* into v_cfg from public.context_cai_dat_to_chuc c where c.organization_id = v_src.organization_id and c.is_active;\n    if not found then return null; end if;\n    v_kh := public.fn_context_nhan_dien_khach_zalo(z.organization_id, z.conv_id);\n    v_luc := z.luc;\n  else\n    return null;\n  end if;\n\n  if v_kh is null then return null; end if;\n  if exists (select 1 from public.context_khach_hang k where k.id = v_kh and k.la_noi_bo) then return null; end if;\n\n  update public.context_khach_hang set khach_nhan_cuoi_luc = greatest(coalesce(khach_nhan_cuoi_luc, v_luc), v_luc)\n   where id = v_kh and (khach_nhan_cuoi_luc is null or khach_nhan_cuoi_luc < v_luc);\n\n  insert into public.context_lan_thu_thap (organization_id, khach_hang_id, nguon_thu_thap_id, ban_ghi_nguon_id, ly_do_chay, status, due_at)\n  values (v_src.organization_id, v_kh, v_src.id, p_ban_ghi_id, coalesce(p_ly_do, 'tin_moi'), 'pending',\n          now() + make_interval(mins => v_cfg.so_phut_cho_gom))\n  on conflict (khach_hang_id, ly_do_chay) where status = 'pending'\n  do update set\n    due_at = least(excluded.due_at, public.context_lan_thu_thap.created_at + make_interval(mins => v_cfg.so_phut_cho_toi_da)),\n    ban_ghi_nguon_id = excluded.ban_ghi_nguon_id,\n    nguon_thu_thap_id = excluded.nguon_thu_thap_id\n  returning id into v_job;\n  return v_job;\nend $function$\n",
+      "volatility": "v",
+      "security_definer": true
+    },
+    {
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "checksum": "0e0e281069b421112dcf78b4d2eb4407",
+      "signature": "fn_context_trg_chat_zalo_message()",
+      "definition": "CREATE OR REPLACE FUNCTION public.fn_context_trg_chat_zalo_message()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\nbegin\n  begin\n    perform public.fn_context_xep_hang('chat_zalo_message', new.id::text);\n  exception when others then\n    raise warning 'fn_context_trg_chat_zalo_message %: % (%)', new.id, sqlerrm, sqlstate;\n  end;\n  return null;\nend $function$\n",
+      "volatility": "v",
+      "security_definer": true
+    }
+  ],
+  "search_path": "\"\\$user\", public, extensions",
+  "database_version": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 13.2.0, 64-bit",
+  "latest_migrations": [
+    {
+      "name": "migration_v438_chat_zalo_message_sync_request",
+      "version": "20261030043145"
+    },
+    {
+      "name": "chat_runtime_event_autovacuum",
+      "version": "20261030034557"
+    },
+    {
+      "name": "zalo_report_friend_proactive_detail",
+      "version": "20261030015701"
+    },
+    {
+      "name": "zalo_report_friend_proactive_summary",
+      "version": "20261030015528"
+    },
+    {
+      "name": "zalo_report_friend_proactive_conversations",
+      "version": "20261030015349"
+    },
+    {
+      "name": "migration_v437_chat_zalo_message_sync",
+      "version": "20261029180830"
+    },
+    {
+      "name": "chat_runtime_event_pending_id_index",
+      "version": "20261029044702"
+    },
+    {
+      "name": "zalo_report_by_account",
+      "version": "20261029024129"
+    }
+  ]
+}

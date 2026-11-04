@@ -1,0 +1,1 @@
+//*[@role='dialog']//*[@role="button" and (@aria-label="Chia sẻ" or @aria-label="Share" or .="Chia sẻ" or .="Share" or .//*[@data-ad-rendering-role="share_button"])]|//*[@role="button" and @tabindex="0" and contains(@aria-label,"Chia sẻ,")]

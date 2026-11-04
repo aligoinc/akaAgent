@@ -1,0 +1,48 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "mode": "transaction_rollback",
+  "checks": [
+    {
+      "role": "service_role",
+      "rows": 5,
+      "test": "contacts_parity_and_original_name"
+    },
+    {
+      "role": "service_role",
+      "test": "contacts_filter_and_account_guard"
+    },
+    {
+      "role": "service_role",
+      "rows": 5,
+      "test": "remarketing_parity_and_original_name"
+    },
+    {
+      "role": "service_role",
+      "test": "remarketing_filter_and_account_guard"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "rows": 5,
+      "test": "contacts_parity_and_original_name"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "test": "contacts_filter_and_account_guard"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "rows": 5,
+      "test": "remarketing_parity_and_original_name"
+    },
+    {
+      "role": "aka_agent_desktop",
+      "test": "remarketing_filter_and_account_guard"
+    },
+    {
+      "test": "contacts_distinct_name_predicate"
+    },
+    {
+      "test": "remarketing_distinct_name_predicate"
+    }
+  ]
+}

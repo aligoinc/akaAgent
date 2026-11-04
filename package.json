@@ -1,6 +1,6 @@
 {
   "name": "aka-biz-auto",
-  "version": "9.1.0",
+  "version": "9.2.0",
   "description": "Browser Automation Desktop App with Visual Flow Builder",
   "main": "./out/main/index.js",
   "author": "akaBiz",
@@ -29,6 +29,8 @@
     "@aws-sdk/client-s3": "^3.1075.0",
     "@monaco-editor/react": "^4.7.0",
     "@supabase/supabase-js": "^2.49.1",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/vie": "1.0.0",
     "@tiptap/extension-link": "^3.26.1",
     "@tiptap/extension-text-align": "^3.26.1",
     "@tiptap/extension-underline": "^3.26.1",
@@ -46,6 +48,7 @@
     "nodemailer": "^6.10.1",
     "playwright": "^1.58.2",
     "proxy-agent": "^8.0.2",
+    "tesseract.js": "7.0.0",
     "uuid": "^11.1.0",
     "ws": "^8.20.1",
     "xlsx": "^0.18.5",
@@ -91,7 +94,8 @@
     ],
     "asarUnpack": [
       "node_modules/playwright-core/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/{tesseract.js,tesseract.js-core,wasm-feature-detect,bmp-js,is-url,regenerator-runtime,node-fetch,whatwg-url,tr46,webidl-conversions,zlibjs}/**/*"
     ],
     "win": {
       "files": [

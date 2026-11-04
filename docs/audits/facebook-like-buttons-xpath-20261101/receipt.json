@@ -1,0 +1,47 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "scope": {
+    "table": "auto_elements",
+    "ids": [
+      1132,
+      1691
+    ],
+    "fields": [
+      "xpath",
+      "updated_at"
+    ]
+  },
+  "authorization": "User requested adding or contains(@aria-label,'Bày tỏ cảm xúc Thích') only to the two Like elements and confirmed Share is not affected.",
+  "targets": [
+    {
+      "id": 1132,
+      "name": "fb_like_button",
+      "xpath": ".//*[@role='button' and (@aria-label='Thích' or @aria-label='Like' or contains(@aria-label,'Bày tỏ cảm xúc Thích'))]",
+      "before_md5": "abde47e52e8a594f9df5cdb68d98b1f4",
+      "after_md5": "57df25510f7354602a6f4788e8563b9b",
+      "updated_at": "2026-11-01T06:49:07.803683+00:00"
+    },
+    {
+      "id": 1691,
+      "name": "fb_newsfeed_like_button",
+      "xpath": ".//*[@role='button' and (.='Thích' or contains(@aria-label,'Bày tỏ cảm xúc Thích'))]",
+      "before_md5": "3f136fa78a2aa28aef2b5b9f5a27ee40",
+      "after_md5": "4fa6a9c694c25517ba13a3cd359562f3",
+      "updated_at": "2026-11-01T06:49:07.805347+00:00"
+    }
+  ],
+  "verified_at": "2026-11-01T06:49:08.22391+00:00",
+  "verified_at_vn": "2026-11-01T13:49:08.22391",
+  "rollback_trial_passed": true,
+  "rollback_trial_restored_original_catalogs": true,
+  "requested_xpath_exact_match": true,
+  "other_elements_unchanged": true,
+  "share_element_257_unchanged": true,
+  "blocks_unchanged": true,
+  "workflows_unchanged": true,
+  "parents_unchanged": true,
+  "postgrest_reload": false,
+  "rpc_or_schema_changed": false,
+  "real_facebook_execution_tested": false,
+  "runtime_cache": "Fully quit and reopen existing app processes to fetch the updated XPath."
+}

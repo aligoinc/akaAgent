@@ -1,0 +1,66 @@
+{
+  "verifiedAt": "2026-11-02T10:41:11.805898+00:00",
+  "base": "c40be4b3590b689b62de127fe7f39bec78043af1",
+  "scope": "Forward validated original request, history, OCR and current images to the existing Data AI call, independent of the short router task",
+  "checks": [
+    {
+      "command": "node scripts/campaign-agent-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "120 recipients from current OCR and five current image refs reach Data unchanged",
+        "120 recipients from conversation history with no current images",
+        "90 recipients from the complete typed request",
+        "configured system prompts retained with main-owned supplements",
+        "Options receives no extra source context/images; Data cannot bypass direct-data or field/section guards; 2000-character task cap retained"
+      ]
+    },
+    {
+      "command": "node scripts/run-campaign-agent-ui-smoke.cjs",
+      "status": "passed",
+      "newCases": [
+        "120 Data rows apply, save as draft, reopen and appear intact in snapshot"
+      ]
+    },
+    {
+      "command": "AKA_AGENT_WEB_REPO=/Users/lequangnhut/Repos/akaAgentWebApp node scripts/desktop-ai-proxy-smoke.cjs",
+      "status": "passed",
+      "cases": "16 legacy HTTP parity and 8 five-image cases against local proxy/fake provider"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "status": "passed"
+    },
+    {
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed",
+      "log": "data-source-handoff-build.txt"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "sha256": {
+    "src/main/services/campaignAgentService.ts": "60455e22066718c7b15abfbe1140bbbe9150b84bdc1387e4126ceb025d3e1d6a",
+    "scripts/campaign-agent-smoke.cjs": "478a9a5e675903c08ce24284e2afabe9c3c60c5f9351345c19cc2dba6040ae25",
+    "scripts/run-campaign-agent-ui-smoke.cjs": "ccce5b3fef1f346fe43e012351e54db10a48566e6f5ff7eb547b4f7bd3e63064",
+    "src/renderer/src/components/CampaignPanels/CampaignFormModal.tsx": "24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3",
+    "migrations/migration_v442_campaign_agent_form.sql": "abf4ea7e87e2c44e53865e4fcb440e827fe2aa8fe5c02da849f0822437d10e51",
+    "migrations/snapshots/campaign-agent-v442/new-configs.json": "45ff0c2f823a9cd47d755e95cb6a0c0ea90b1ee9234f600f7c433f46727bfc3f"
+  },
+  "production": {
+    "databaseApplied": false,
+    "providerCalled": false,
+    "appRestarted": false,
+    "released": false
+  },
+  "limitations": [
+    "Service AI/DB fixtures derive rows from received source context; no live OCR quality claim.",
+    "Actual Electron renderer with fixture IPC/stores; HTTP probes use local proxy and fake provider.",
+    "The existing model output/token limits and 120-second turn deadline are unchanged."
+  ]
+}

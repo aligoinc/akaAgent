@@ -65,6 +65,9 @@ export class SupabaseService {
   getAccountForCampaignPause(id: number) { return accountRepo.getAccountForCampaignPause(id) }
   getAccountIgnoringCapability(id: number) { return accountRepo.getAccountIgnoringCapability(id) }
   listAccounts() { return accountRepo.listAccounts() }
+  listLocalChatRuntimeAccounts() { return accountRepo.listLocalChatRuntimeAccounts() }
+  getAccountForZaloRuntime(id: number) { return accountRepo.getAccountForZaloRuntime(id) }
+  updateLocalQrOperation(...args: Parameters<typeof accountRepo.updateLocalQrOperation>) { return accountRepo.updateLocalQrOperation(...args) }
   createAccount(account: Partial<AutoAccount>) { return accountRepo.createAccount(account) }
   updateAccount(id: number, updates: Partial<AutoAccount>, options?: accountRepo.UpdateAccountOptions) {
     return accountRepo.updateAccount(id, updates, options)

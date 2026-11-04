@@ -82,7 +82,7 @@ async function fixture(initialStatus = 'đã đăng nhập') {
   Object.assign(checker, {
     webRuntime: service, getErrorMessage: error => error.message,
     supabase: {
-      getAccount: async () => state.account,
+      getAccountForZaloRuntime: async () => state.account,
       markAccountZaloSessionCheck: async (_, result) => {
         state.failedWrites++
         state.account = { ...state.account, loginStatus: result.ok ? 'đã đăng nhập' : 'chưa đăng nhập' }
@@ -165,7 +165,7 @@ async function runServiceChecks() {
     f.age()
     f.state.onReload = () => setTimeout(f.promote, 2)
     let reads = 0
-    f.checker.supabase.getAccount = async () => {
+    f.checker.supabase.getAccountForZaloRuntime = async () => {
       if (++reads > 1) throw Error('fixture final DB read failed')
       return f.state.account
     }

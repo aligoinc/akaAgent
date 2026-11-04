@@ -1,0 +1,325 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "migration": "migration_v452_chat_runtime_identity.sql",
+  "ledger": {
+    "version": "20261103045414",
+    "name": "chat_runtime_identity_v452"
+  },
+  "appliedAt": "2026-11-03T04:54:14.884Z",
+  "migrationSha256": "651f08d5e41c9b4213ddb9a8c055de79e0d455eb5266b2399b1a50002fda345e",
+  "source": [
+    {
+      "signature": "aka_agent_app_access_local_session(bigint,bigint,text,jsonb)",
+      "md5": "a136235e01eb1651b0ad3cc5a6d44b5d",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+      "md5": "8366eb0aafe73f700214ff9c80542876",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "private.app_access_guard_account_runtime()",
+      "md5": "c4357bf7f7dc2d756d10db76037e3906",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "private.app_access_guard_flags()",
+      "md5": "aacbeba11f54e46705182d61915ff928",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+      "md5": "e1b81ef404854cd4290496a9dfc0ff46",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "private.app_access_reserve_enabled_identity()",
+      "md5": "66a710beb5d36f03d16d4684fd1a5385",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    },
+    {
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "md5": "f9f8f66c263a45c7196808f1781a64cf",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}",
+      "parallel": "u",
+      "leakproof": false,
+      "strict": false,
+      "cost": 100,
+      "rows": 0
+    }
+  ],
+  "postFunctions": [
+    {
+      "signature": "aka_agent_app_access_local_session(bigint,bigint,text,jsonb)",
+      "md5": "a136235e01eb1651b0ad3cc5a6d44b5d",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    {
+      "signature": "aka_agent_app_access_qr_operation(bigint,bigint,uuid,text,jsonb)",
+      "md5": "8366eb0aafe73f700214ff9c80542876",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private",
+        "lock_timeout=3s",
+        "statement_timeout=12s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres,aka_agent_chat_api=X/postgres}"
+    },
+    {
+      "signature": "private.app_access_guard_account_runtime()",
+      "md5": "c4357bf7f7dc2d756d10db76037e3906",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.app_access_guard_flags()",
+      "md5": "aacbeba11f54e46705182d61915ff928",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.app_access_reserve_chat_identity(bigint,bigint,bigint)",
+      "md5": "151cabcf20c6a5d2f76ff158ad1b72ea",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.app_access_reserve_enabled_identity()",
+      "md5": "c7a04ca3aad62ebcf30794cd440402a5",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.app_access_validate_account(auto_accounts,auto_accounts)",
+      "md5": "f9f8f66c263a45c7196808f1781a64cf",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres}"
+    }
+  ],
+  "verification": {
+    "nativePostgres17": {
+      "passed": 270,
+      "newCases": 40,
+      "providerRequests": 0
+    },
+    "akaAgentNodeTypecheck": "passed",
+    "akaAgentWebTypecheck": "passed",
+    "akaAgentBuild": "passed",
+    "chatApiBuild": "passed",
+    "apiFullSuite": {
+      "passed": 1754,
+      "failed": 2,
+      "total": 1756,
+      "failures": "Two phone-history tests hit the unchanged 5-second timeout under the full concurrent run",
+      "targetedRerun": "Both passed; 19 related/failed cases passed. After final conflict-code adjustment, all 17 account-management cases passed again."
+    },
+    "productionTrial": "candidate + temp-table mirrors + narrow rollback, outer ROLLBACK passed",
+    "postApply": "metadata guard + isolated mirror smoke, ROLLBACK passed",
+    "businessRowsMutated": false,
+    "securityAdvisors": {
+      "before": 9,
+      "after": 9,
+      "new": 0
+    }
+  },
+  "rollout": {
+    "database": "applied",
+    "chatApi": "deployed from primary repository",
+    "desktopInstaller": "not required",
+    "appServerInstaller": "not required",
+    "crm": "unchanged"
+  },
+  "limitations": [
+    "No real QR scan/provider login or customer message send during tests.",
+    "The separate previously deferred binding/account lock-order issue remains outside scope."
+  ],
+  "chatApiDeployment": {
+    "app": "aka-agent-chat-api",
+    "sourceRoot": "/Users/lequangnhut/Repos/akaAgentChatApi",
+    "sourceCommit": "83d2736f7d323bfaf03d9f0698c413c3662a0020",
+    "deployedAt": "2026-11-03T04:58:23Z",
+    "machineId": "7845747fe073e8",
+    "image": "registry.fly.io/aka-agent-chat-api:chat-runtime-identity-main-83d2736-20261103@sha256:f377a780a56febd3f53c786e5c1c06d17fc51db050702f3ec79bee3488d5d41a",
+    "previousImage": "registry.fly.io/aka-agent-chat-api:app-access-perf-main-644de45-20261103@sha256:7cb55524f36bce4a3fa82aafcb24912c6a4a934f0d204c114c5919ae043299c2",
+    "sourceSha256": "b5d3dd5757663938af47848a6e6d5bbc0a980c93c4f4e555acb4e01931ac4bb8",
+    "compiledSha256": "d8a9c75c1607c9e8f7e551415f89be0e7f18bb19fc51ff53fc8aa9c10a8ad61d",
+    "imageSourceAndCompiledMatchPrimary": true,
+    "machines": [
+      {
+        "id": "784574da214578",
+        "state": "started",
+        "instanceChanged": false,
+        "changedConfigKeys": []
+      },
+      {
+        "id": "7817d7daee2d58",
+        "state": "started",
+        "instanceChanged": false,
+        "changedConfigKeys": []
+      },
+      {
+        "id": "7845747fe073e8",
+        "state": "started",
+        "instanceChanged": true,
+        "changedConfigKeys": [
+          "image"
+        ]
+      }
+    ],
+    "http": {
+      "/health/live": {
+        "status": 200,
+        "body": {
+          "status": "ok"
+        }
+      },
+      "/health/ready": {
+        "status": 200,
+        "body": {
+          "status": "ready",
+          "checks": {
+            "databaseConfigured": true,
+            "databaseReachable": true,
+            "runtimeAuthConfigured": true,
+            "managementAuthConfigured": true,
+            "controlProxyAuthConfigured": true,
+            "dataScanProxyAuthConfigured": true,
+            "sessionEncryptionConfigured": true
+          }
+        }
+      },
+      "/admin/api/snapshot": {
+        "status": 200,
+        "body": {
+          "startedAt": "2026-11-03T04:58:27.166Z",
+          "runtimeCount": 9,
+          "attachedAccountCount": 228,
+          "connectedRealtimeClients": 16,
+          "campaignRealtimeListener": "connected"
+        }
+      },
+      "/api/chat/zalo/accounts": {
+        "status": 401
+      },
+      "time": "2026-11-03T04:58:46.515585+00:00"
+    },
+    "workerRuntimeUnchanged": true,
+    "poolResourcesAndReplicasUnchanged": true,
+    "excludedUntracked": [
+      "labs/"
+    ],
+    "remoteBranchPushed": false
+  }
+}

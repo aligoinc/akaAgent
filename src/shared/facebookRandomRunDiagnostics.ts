@@ -1,4 +1,4 @@
-import { validateFacebookRandomConfig, type FacebookRandomConfig } from './facebookRandomRun'
+import { isAiRandomConfig, validateFacebookRandomConfig, type FacebookRandomConfig } from './facebookRandomRun'
 
 /** Raw configuration read with the account; never infer disabled from missing evidence. */
 export interface FacebookRandomDiagnosticSettings { enabled: unknown; config: unknown }
@@ -31,7 +31,7 @@ export function checkFacebookRandomConfiguration(
       ? error.message : 'Thiếu hoặc sai thông tin cấu hình; cần từ 1 đến 100 loại chiến dịch.'
     return { state: 'invalid', enabled: true, config: null, reason: `Cấu hình chạy ngẫu nhiên chưa hợp lệ: ${detail}` }
   }
-  const included = config.rules.some(rule => rule.campaignActionId === action.id)
+  const included = isAiRandomConfig(config) || config.rules.some(rule => rule.campaignActionId === action.id)
   return { state: included ? 'included' : 'excluded', enabled: true, config,
     reason: included ? null : `Loại chiến dịch “${action.name}” chưa có trong cấu hình chạy ngẫu nhiên của tài khoản.` }
 }

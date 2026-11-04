@@ -1,4 +1,7 @@
 import { FACEBOOK_AI_IPC, type FacebookAiRequest, type FacebookAiResult } from '../shared/campaignFacebookAi'
+import { AGENT_IPC, type AgentRequest, type AgentResult, type AgentImage } from '../shared/campaignAgent'
+import { AGENT_DATA_IPC, type AgentDataFile, type AgentDataUpload, type AgentDataSource } from '../shared/campaignAgentData'
+import type { CampaignSupportImage } from '../shared/campaignSupport'
 import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
@@ -24,6 +27,7 @@ import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimit
 import { CAMPAIGN_TYPE_VISIBILITY_IPC, type CampaignTypeVisibilityResult, type CampaignVisibilityChange } from '../shared/campaignTypeVisibility'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
+import { appAccessAPI } from './appAccessBridge'
 import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
@@ -69,6 +73,7 @@ const electronAPI = {
   listMessageOptOutCustomers: (query?: MessageOptOutCustomerQuery): Promise<MessageOptOutCustomerPage> => ipcRenderer.invoke(MESSAGE_OPT_OUT_CUSTOMERS_IPC, query),
   admin: adminAPI,
   staffManagement: staffManagementAPI,
+  appAccess: appAccessAPI,
   dataGroupExternalSync: dataGroupExternalSyncAPI,
   groupSharing: groupSharingAPI,
   listCampaignDrafts: (page?: number): Promise<CampaignDraftPage> => ipcRenderer.invoke(CAMPAIGN_DRAFT_IPC.list, page),
@@ -329,6 +334,14 @@ const electronAPI = {
   generateCampaignScheduleAi: (request: ScheduleAiRequest): Promise<ScheduleAiResult> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.generate, request),
   cancelCampaignScheduleAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_SCHEDULE_AI_IPC.cancel, requestId),
   generateCampaignFacebookAi: (request: FacebookAiRequest): Promise<FacebookAiResult> => ipcRenderer.invoke(FACEBOOK_AI_IPC.generate, request),
+  generateCampaignAgent: (request: AgentRequest): Promise<AgentResult> => ipcRenderer.invoke(AGENT_IPC.generate, request),
+  storeCampaignAgentData: (draftId: string, files: AgentDataUpload[]): Promise<AgentDataFile[]> => ipcRenderer.invoke(AGENT_DATA_IPC.store, { draftId, files }),
+  readCampaignAgentData: (requestId: string, draftId: string, file: AgentDataFile): Promise<import('../shared/campaignFormAi').CampaignFormAiResult<AgentDataSource>> => ipcRenderer.invoke(AGENT_DATA_IPC.read, { requestId, draftId, file }),
+  cancelCampaignAgentData: (requestId: string): Promise<void> => ipcRenderer.invoke(AGENT_DATA_IPC.cancel, requestId),
+  cancelCampaignAgent: (requestId: string): Promise<void> => ipcRenderer.invoke(AGENT_IPC.cancel, requestId),
+  storeCampaignAgentImages: (draftId: string, images: CampaignSupportImage[]): Promise<AgentImage[]> => ipcRenderer.invoke(AGENT_IPC.images, { draftId, images }),
+  readCampaignAgentImage: (draftId: string, id: string): Promise<string | null> => ipcRenderer.invoke(AGENT_IPC.image, { draftId, id }),
+  removeCampaignAgentImage: (draftId: string, id: string): Promise<void> => ipcRenderer.invoke(AGENT_IPC.removeImage, { draftId, id }),
   cancelCampaignFacebookAi: (requestId: string): Promise<void> => ipcRenderer.invoke(FACEBOOK_AI_IPC.cancel, requestId),
   generateCampaignContentAi: (request: ContentAiRequest): Promise<ContentAiResult> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.generate, request),
   cancelCampaignContentAi: (requestId: string): Promise<void> => ipcRenderer.invoke(CAMPAIGN_CONTENT_AI_IPC.cancel, requestId),
@@ -555,6 +568,7 @@ const electronAPI = {
     }
   },
   facebookRandomRun: {
+    retryAi: (accountId: number): Promise<void> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'retryAi', accountId),
     get: (accountId: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'get', accountId),
     save: (accountId: number, config: FacebookRandomConfig): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'save', accountId, config),
     toggle: (accountId: number, enabled: boolean, revision: number): Promise<FacebookRandomSettings> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'toggle', accountId, { enabled, revision }),

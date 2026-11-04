@@ -2,7 +2,7 @@ import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { ensureCurrentUserCanUseCampaignAction, ensureCurrentUserFeatureActive } from './entitlementRepository'
 import { listCampaignActions } from './campaignActionRepository'
-import { validateFacebookRandomConfig, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomPlan, type FacebookRandomReadQuery, type FacebookRandomTurn } from '../../../shared/facebookRandomRun'
+import { isAiRandomConfig, validateFacebookRandomConfig, type FacebookRandomConfig, type FacebookRandomSettings, type FacebookRandomDay, type FacebookRandomPlan, type FacebookRandomReadQuery, type FacebookRandomTurn } from '../../../shared/facebookRandomRun'
 
 /** Runtime operations are intentionally absent from preload / renderer IPC. */
 export async function randomRunRpc<T>(accountId: number, operation: string, input: Record<string, unknown> = {}): Promise<T> {
@@ -16,6 +16,7 @@ export async function randomRunRpc<T>(accountId: number, operation: string, inpu
   }).abortSignal(AbortSignal.timeout(30_000))
   if (error) {
     if (error.message.includes('random_config_conflict')) throw new Error('Cấu hình đã thay đổi trên máy khác. Hãy tải lại trước khi lưu.')
+    if (error.message.includes('random_ai_retry_unavailable')) throw new Error('Chưa thể thử lại AI. Hãy làm mới tiến trình.')
     throw new Error(`Không thể xử lý chạy ngẫu nhiên: ${error.message}`)
   }
   return data as T
@@ -27,7 +28,8 @@ export async function getRandomSettings(accountId: number): Promise<FacebookRand
 export async function saveRandomSettings(accountId: number, value: unknown): Promise<FacebookRandomSettings> {
   const actions = await listCampaignActions()
   const config = validateFacebookRandomConfig(value, actions.filter(a => a.flatformType === 'facebook').map(a => a.id))
-  for (const id of new Set(config.rules.map(r => r.campaignActionId))) await ensureCurrentUserCanUseCampaignAction(id)
+  await ensureCurrentUserFeatureActive('facebookCore')
+  if (!isAiRandomConfig(config)) for (const id of new Set(config.rules.map(r => r.campaignActionId))) await ensureCurrentUserCanUseCampaignAction(id)
   return randomRunRpc(accountId, 'save', { config })
 }
 export async function setRandomEnabled(accountId: number, enabled: boolean, revision: number): Promise<FacebookRandomSettings> {
@@ -51,4 +53,11 @@ export function planRandomRound(accountId: number, config: FacebookRandomConfig,
 }
 export function finishRandomTurn(accountId: number, turn: FacebookRandomTurn, reason?: string): Promise<FacebookRandomTurn> {
   return randomRunRpc(accountId, 'finish', { turnId: turn.id, claimToken: turn.claimToken ?? null, reason: reason ?? null })
+}
+export function planAiRandomTurn(accountId: number, revision: number, candidateIds: number[]): Promise<FacebookRandomPlan> {
+  return randomRunRpc(accountId, 'plan', { revision, protocol: 2, candidateIds })
+}
+export async function retryRandomAi(accountId: number): Promise<void> {
+  await ensureCurrentUserFeatureActive('facebookCore')
+  await randomRunRpc(accountId, 'ai_retry')
 }

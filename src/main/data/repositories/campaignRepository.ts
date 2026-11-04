@@ -1,4 +1,5 @@
 import { validateContentGroupSelection } from './groupSharingRepository'
+import { resolveCampaignGroupMetadata } from '../../../shared/facebookGroupExport'
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { getCampaignEditVersion } from '../campaignEditVersion'
@@ -3485,6 +3486,43 @@ export async function getPendingCampaigns(accountId: number, dbNow: string): Pro
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
+/** Complete AI candidate inventory; the manual scheduler's existing read stays unchanged. */
+export async function getPendingCampaignsForRandomAi(accountId: number, dbNow: string): Promise<Array<Campaign & {
+  randomRunInput: { any: boolean; due: boolean }
+}>> {
+  const u = requireCurrentUser(), now = parseDatabaseNow(dbNow)
+  const currentVietnamTime = formatVietnamTimeForQuery(now)
+  if (currentVietnamTime >= '23:59:00') return []
+  const campaigns: Array<Campaign & { randomRunInput: { any: boolean; due: boolean } }> = []
+  let afterId = 0
+  for (;;) {
+    // Left embeds keep campaigns with no data (newsfeed/timeline/suggested friends).
+    // Each embed returns at most one ID, regardless of the campaign's data size.
+    const { data, error } = await client().from('auto_campaigns').select(`
+      id,name,account_id,staff_id,organization_id,action_id,status,is_delete,schedule,
+      daily_stop_time,schedule_end_date,data_target_source_mode,extra_settings,
+      random_any_input:auto_campaign_input_data!auto_campaign_input_data_campaign_id_fkey(id),
+      random_due_input:auto_campaign_input_data!auto_campaign_input_data_campaign_id_fkey(id)
+    `)
+      .eq('account_id', accountId).eq('staff_id', u.staffId).eq('organization_id', u.organizationId)
+      .eq('status', 'chờ xử lý').eq('is_delete', false).eq('provisioning_state', 'ready')
+      .like('action_id', 'facebook_%').lte('schedule', now.toISOString())
+      .or(`daily_stop_time.is.null,daily_stop_time.gt.${currentVietnamTime}`)
+      .eq('random_any_input.is_delete', false).limit(1, { referencedTable: 'random_any_input' })
+      .eq('random_due_input.is_delete', false).eq('random_due_input.status', 'chờ xử lý')
+      .or(`schedule.is.null,schedule.lte.${now.toISOString()}`, { referencedTable: 'random_due_input' })
+      .limit(1, { referencedTable: 'random_due_input' })
+      .gt('id', afterId).order('id').limit(500)
+    if (error) throw new Error('Không tải được đầy đủ chiến dịch chạy ngẫu nhiên.')
+    if (!data?.length) break
+    campaigns.push(...data.map(row => ({ ...mapCampaignFromDB(row), randomRunInput: {
+      any: row.random_any_input.length > 0, due: row.random_due_input.length > 0
+    } })))
+    afterId = Number(data[data.length - 1].id)
+  }
+  return campaigns
+}
+
 export async function getDueMobileManagedCampaignsForLimitCheck(
   accountId: number,
   dbNow: string
@@ -4349,6 +4387,7 @@ function normalizeAkaBizTagIds(value: unknown): number[] {
 
 interface ZaloRemarketingLookup {
   nameByUid: Map<string, string>
+  zaloOriginalNameByUid: Map<string, string>
   originalNameByUid: Map<string, string>
   phoneByUid: Map<string, string>
   groupNameByUid: Map<string, string>
@@ -4369,6 +4408,7 @@ async function loadZaloRemarketingLookup(
   ))
   const empty: ZaloRemarketingLookup = {
     nameByUid: new Map<string, string>(),
+    zaloOriginalNameByUid: new Map<string, string>(),
     originalNameByUid: new Map<string, string>(),
     phoneByUid: new Map<string, string>(),
     groupNameByUid: new Map<string, string>(),
@@ -4381,6 +4421,7 @@ async function loadZaloRemarketingLookup(
   if (normalizedUids.length === 0) return empty
 
   const nameByUid = new Map<string, string>()
+  const zaloOriginalNameByUid = new Map<string, string>()
   const originalNameByUid = new Map<string, string>()
   const phoneByUid = new Map<string, string>()
   const contactGroupIdByUid = new Map<string, string>()
@@ -4407,11 +4448,13 @@ async function loadZaloRemarketingLookup(
       const uid = textValue(record.zalo_uid)
       const rawPayload = normalizeRecord(record.raw_payload) || {}
       const name = firstText(record.display_name, record.zalo_name)
+      const zaloOriginalName = textValue(record.zalo_name)
       const originalName = firstText(record.zalo_name, record.display_name)
       const phone = normalizeVietnamMobilePhone(firstText(record.phone_number, rawPayload.phoneNumber, rawPayload.phone_number, rawPayload.phone))
       const isFr = Number(record.is_fr)
       const gender = record.gender
       if (uid && name && !nameByUid.has(uid)) nameByUid.set(uid, name)
+      if (uid && zaloOriginalName) zaloOriginalNameByUid.set(uid, zaloOriginalName)
       if (uid && originalName && !originalNameByUid.has(uid)) originalNameByUid.set(uid, originalName)
       if (uid && phone && !phoneByUid.has(uid)) phoneByUid.set(uid, phone)
       if (uid && Number.isFinite(isFr)) {
@@ -4494,6 +4537,7 @@ async function loadZaloRemarketingLookup(
   const groupIds = Array.from(new Set(Array.from(groupIdByUid.values()).filter(Boolean)))
   if (groupIds.length === 0) return {
     nameByUid,
+    zaloOriginalNameByUid,
     originalNameByUid,
     phoneByUid,
     groupNameByUid: new Map(),
@@ -4529,6 +4573,7 @@ async function loadZaloRemarketingLookup(
   }
   return {
     nameByUid,
+    zaloOriginalNameByUid,
     originalNameByUid,
     phoneByUid,
     groupNameByUid,
@@ -4865,6 +4910,7 @@ async function buildZaloRemarketingCustomers(
       accountId: normalizedAccountId,
       contactType: 'person',
       name,
+      zaloOriginalName: lookup.zaloOriginalNameByUid.get(uid) || null,
       uid,
       url: '',
       extraData: {
@@ -6202,6 +6248,28 @@ export async function listCampaignDetailsPage(
     organizationId,
     campaignId
   )
+  if (query.includeFacebookGroupMetadata === true && items.length > 0) {
+    const { data: metadata, error: metadataError } = await client().rpc('aka_agent_get_campaign_group_export_metadata', {
+      p_staff_id: staffId, p_organization_id: organizationId, p_campaign_id: campaignId,
+      p_detail_ids: items.map(item => item.id), p_auth_username: auth.username, p_auth_password: auth.password
+    })
+    if (getCurrentUserCredentials() !== auth) throw new Error('Phiên đăng nhập đã thay đổi. Vui lòng xuất lại.')
+    if (metadataError) throw new Error('Không thể đọc thông tin nhóm Facebook để xuất. Vui lòng kiểm tra backend và thử lại.')
+    if (!metadata || metadata.version !== 1 || typeof metadata.eligible !== 'boolean' || !Array.isArray(metadata.rows)) {
+      throw new Error('Thông tin nhóm Facebook để xuất không hợp lệ.')
+    }
+    if (metadata.eligible) {
+      const expected = new Set(items.map(item => item.id))
+      const byId = new Map<number, ReturnType<typeof resolveCampaignGroupMetadata>>()
+      for (const row of metadata.rows) {
+        const id = Number(row?.detail_id)
+        if (!expected.has(id) || byId.has(id)) throw new Error('Dữ liệu xuất đã thay đổi. Vui lòng xuất lại.')
+        byId.set(id, resolveCampaignGroupMetadata(row))
+      }
+      if (byId.size !== items.length) throw new Error('Dữ liệu xuất đã thay đổi. Vui lòng xuất lại.')
+      return { items: items.map(item => ({ ...item, facebookGroupMetadata: byId.get(item.id) })), total: Number(data.total) }
+    }
+  }
   return { items, total: Number(data.total) }
 }
 

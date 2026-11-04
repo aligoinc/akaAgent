@@ -1,0 +1,457 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "checked_at": "2026-11-01 06:57:13.494859+00",
+  "checked_at_vn": "2026-11-01 13:57:13.494859",
+  "scope": "Read-only post-edit review. Per-block cutoffs: element 13 at 13:14:37 VN; 1489/1692 at 13:31:54 VN; 1132/1691 at 13:49:07 VN. Element 1517 direct-post comments inspected since 13:14:37 VN for comparison.",
+  "query_scope": {
+    "run_step_id_from": 51596317,
+    "recent_step_window_rows": 100000,
+    "earliest_step_started_vn": "2026-11-01 12:11:25.969",
+    "run_id_from": 4821416,
+    "earliest_recent_run_created_vn": "2026-11-01 12:33:00.059645",
+    "time_filter": "started_at at or after each cutoff and at or before checked_at"
+  },
+  "query_note": "Initial unbounded aggregate timed out; used primary-key-bounded recent logs covering the edit window. Subsequent SQL transactions had local 15–20s statement timeouts. No global timeout or connection budget changes.",
+  "aggregates": [
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "action_id": "facebook_group_post",
+      "status": "success",
+      "commented": "false",
+      "comment_failed": null,
+      "liked": null,
+      "opened": null,
+      "focused": null,
+      "skipped": null,
+      "reason": null,
+      "n": 87,
+      "campaigns": 1,
+      "campaign_ids": [
+        "45900"
+      ],
+      "first_vn": "2026-11-01 13:15:50.564",
+      "last_vn": "2026-11-01 13:55:57.788"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "action_id": "facebook_group_post",
+      "status": "success",
+      "commented": "false",
+      "comment_failed": "true",
+      "liked": null,
+      "opened": null,
+      "focused": null,
+      "skipped": null,
+      "reason": "waitForSelector timeout: (//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận']|//*[@role='button' and .='Bình luận'])[1]",
+      "n": 18,
+      "campaigns": 7,
+      "campaign_ids": [
+        "34811",
+        "37293",
+        "39049",
+        "40443",
+        "41786",
+        "44976",
+        "45527"
+      ],
+      "first_vn": "2026-11-01 13:18:34.75",
+      "last_vn": "2026-11-01 13:56:56.512"
+    },
+    {
+      "block_id": 34,
+      "block_name": "fb_comment_at_position",
+      "workflow_id": 1,
+      "action_id": "facebook_group_post",
+      "status": "success",
+      "commented": "true",
+      "comment_failed": null,
+      "liked": null,
+      "opened": null,
+      "focused": null,
+      "skipped": null,
+      "reason": null,
+      "n": 2,
+      "campaigns": 1,
+      "campaign_ids": [
+        "46340"
+      ],
+      "first_vn": "2026-11-01 13:20:02.387",
+      "last_vn": "2026-11-01 13:20:29.232"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "action_id": "facebook_comment_seeding_post",
+      "status": "success",
+      "commented": "true",
+      "comment_failed": null,
+      "liked": null,
+      "opened": null,
+      "focused": null,
+      "skipped": null,
+      "reason": null,
+      "n": 20,
+      "campaigns": 2,
+      "campaign_ids": [
+        "45621",
+        "46084"
+      ],
+      "first_vn": "2026-11-01 13:16:56.548",
+      "last_vn": "2026-11-01 13:46:49.985"
+    },
+    {
+      "block_id": 2616,
+      "block_name": "fb_comment_current_post",
+      "workflow_id": 207,
+      "action_id": "facebook_comment_seeding_post",
+      "status": "error",
+      "commented": null,
+      "comment_failed": null,
+      "liked": null,
+      "opened": null,
+      "focused": null,
+      "skipped": null,
+      "reason": "waitForSelector timeout: //*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "n": 1,
+      "campaigns": 1,
+      "campaign_ids": [
+        "45621"
+      ],
+      "first_vn": "2026-11-01 13:43:20.023",
+      "last_vn": "2026-11-01 13:43:20.023"
+    }
+  ],
+  "old_selector_campaigns": [
+    {
+      "campaign_id": 34811,
+      "name": "Đăng bài HC@fpt.com",
+      "failures": 4,
+      "first_vn": "2026-11-01 13:20:04.174",
+      "last_vn": "2026-11-01 13:51:31.998",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 37293,
+      "name": " Cho Thuê PD3 Bảo Tuyền",
+      "failures": 4,
+      "first_vn": "2026-11-01 13:18:52.06",
+      "last_vn": "2026-11-01 13:50:52.216",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 40443,
+      "name": "[26/10] VTV1-11-1 16TR CB [Nam Linh]",
+      "failures": 4,
+      "first_vn": "2026-11-01 13:21:32.005",
+      "last_vn": "2026-11-01 13:40:39.116",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 45527,
+      "name": "APPT COACH LEO",
+      "failures": 3,
+      "first_vn": "2026-11-01 13:18:34.75",
+      "last_vn": "2026-11-01 13:55:32.848",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 39049,
+      "name": "APPT COACH SABER 2",
+      "failures": 1,
+      "first_vn": "2026-11-01 13:56:55.147",
+      "last_vn": "2026-11-01 13:56:55.147",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 41786,
+      "name": "APPT COACH LUMI",
+      "failures": 1,
+      "first_vn": "2026-11-01 13:56:56.512",
+      "last_vn": "2026-11-01 13:56:56.512",
+      "old_selector_only": true
+    },
+    {
+      "campaign_id": 44976,
+      "name": "Sun Saphia 30/10",
+      "failures": 1,
+      "first_vn": "2026-11-01 13:19:25.011",
+      "last_vn": "2026-11-01 13:19:25.011",
+      "old_selector_only": true
+    }
+  ],
+  "selected_steps": [
+    {
+      "id": 51662086,
+      "run_id": 4827113,
+      "campaign_id": 46340,
+      "block_id": 34,
+      "status": "success",
+      "error": null,
+      "started_vn": "2026-11-01 13:20:02.387",
+      "completed_vn": "2026-11-01 13:20:29.106",
+      "outcome": {
+        "error": null,
+        "reason": null,
+        "position": 1,
+        "commented": true,
+        "commentFailed": null
+      }
+    },
+    {
+      "id": 51662507,
+      "run_id": 4827113,
+      "campaign_id": 46340,
+      "block_id": 34,
+      "status": "success",
+      "error": null,
+      "started_vn": "2026-11-01 13:20:29.232",
+      "completed_vn": "2026-11-01 13:20:56.018",
+      "outcome": {
+        "error": null,
+        "reason": null,
+        "position": 2,
+        "commented": true,
+        "commentFailed": null
+      }
+    },
+    {
+      "id": 51684740,
+      "run_id": 4830018,
+      "campaign_id": 45621,
+      "block_id": 2616,
+      "status": "error",
+      "error": "waitForSelector timeout: //*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+      "started_vn": "2026-11-01 13:43:20.023",
+      "completed_vn": "2026-11-01 13:43:28.302",
+      "outcome": {
+        "error": null,
+        "reason": null,
+        "position": null,
+        "commented": null,
+        "commentFailed": null
+      }
+    }
+  ],
+  "direct_post_failed_run": {
+    "run_id": 4830018,
+    "campaign_id": 45621,
+    "element_id": 1517,
+    "steps": [
+      {
+        "id": 51684584,
+        "node_id": "page_identity_restore_only",
+        "block_id": 1,
+        "block_name": "if_else",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:12.076",
+        "completed_vn": "2026-11-01 13:43:12.171",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684588,
+        "node_id": "page_identity_needs_switch",
+        "block_id": 1,
+        "block_name": "if_else",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:12.254",
+        "completed_vn": "2026-11-01 13:43:12.338",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684590,
+        "node_id": "page_identity_enter",
+        "block_id": 4,
+        "block_name": "merge",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:12.422",
+        "completed_vn": "2026-11-01 13:43:12.516",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684595,
+        "node_id": "resolve_url",
+        "block_id": 612,
+        "block_name": "fb_resolve_url",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:12.739",
+        "completed_vn": "2026-11-01 13:43:12.829",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684599,
+        "node_id": "nav",
+        "block_id": 5,
+        "block_name": "nav_to_url",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:12.912",
+        "completed_vn": "2026-11-01 13:43:13.482",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684608,
+        "node_id": "wait_main",
+        "block_id": 21,
+        "block_name": "wait_for_selector",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:13.591",
+        "completed_vn": "2026-11-01 13:43:15.856",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": true,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684648,
+        "node_id": "sleep_after_nav",
+        "block_id": 20,
+        "block_name": "sleep",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:15.94",
+        "completed_vn": "2026-11-01 13:43:19.629",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684736,
+        "node_id": "prepare_iters",
+        "block_id": 2614,
+        "block_name": "fb_prepare_post_link_comment_iteration",
+        "status": "success",
+        "started_vn": "2026-11-01 13:43:19.711",
+        "completed_vn": "2026-11-01 13:43:19.815",
+        "error": null,
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684739,
+        "node_id": "loop_comment",
+        "block_id": 2,
+        "block_name": "loop",
+        "status": "error",
+        "started_vn": "2026-11-01 13:43:19.916",
+        "completed_vn": "2026-11-01 13:43:28.404",
+        "error": "Body iteration #1 lỗi",
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      },
+      {
+        "id": 51684740,
+        "node_id": "comment_current_post",
+        "block_id": 2616,
+        "block_name": "fb_comment_current_post",
+        "status": "error",
+        "started_vn": "2026-11-01 13:43:20.023",
+        "completed_vn": "2026-11-01 13:43:28.302",
+        "error": "waitForSelector timeout: //*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+        "outcome": {
+          "error": null,
+          "found": null,
+          "liked": null,
+          "opened": null,
+          "reason": null,
+          "skipped": null,
+          "commented": null,
+          "skipReason": null
+        }
+      }
+    ],
+    "xpath_events": []
+  },
+  "conclusions": [
+    "18 element-13 timeouts across seven campaigns contain the exact old XPath, without contains(@aria-label,'Comment'). This establishes those steps still used the old selector; runtime cache is consistent with the known cache contract.",
+    "Two block-34 comment successes after the edit, both campaign 46340. No selector telemetry for those successful steps, so cannot prove they loaded the new element.",
+    "87 commented=false outputs in campaign 45900 are empty-content/image skips and not XPath failures.",
+    "Element 1517 direct-post path: 20 comment successes and one timeout in campaign 45621 at 13:43:20 VN. Navigation/main readiness succeeded, but no evidence confirms the dialog opened; timeout does not establish a broken textbox XPath.",
+    "No observed post-cutoff steps for element 1489 (2603/2719), 1692 (2707/2708), 1691 (2705) or 1132 (2074/2615). Cannot conclude effectiveness from no runs."
+  ],
+  "database_mutations": false,
+  "facebook_actions_triggered": false
+}

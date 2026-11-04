@@ -16,6 +16,9 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
 
   return {
     id: row.id as number,
+    isAkaAgentEnabled: row.is_aka_agent_enabled !== false,
+    isAkachatEnabled: row.is_akachat_enabled === true,
+    appAccess: row.app_access as AutoAccount['appAccess'],
     name: row.name as string,
     flatformType,
     facebookUid: (row.facebook_uid as string | null) ?? null,
@@ -354,7 +357,8 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
 }
 
 export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccountContact {
-  const zaloUser = row.zalo_user as { gender?: number | null } | null | undefined
+  const zaloUser = row.zalo_user as { gender?: number | null; zalo_name?: string | null } | null | undefined
+  const originalName = row.zalo_original_name ?? zaloUser?.zalo_name
   const extraData = row.extra_data as Record<string, unknown> | undefined
   return {
     id: row.id as number,
@@ -362,6 +366,7 @@ export function mapAccountContactFromDB(row: Record<string, unknown>): AutoAccou
     contactType: row.contact_type as ContactType,
     flatformType: (row.flatform_type as string | null | undefined) ?? null,
     name: row.name as string,
+    zaloOriginalName: typeof originalName === 'string' ? originalName.trim() || null : null,
     uid: row.uid as string | undefined,
     url: row.url as string | undefined,
     extraData: zaloUser ? { ...extraData, gender: zaloUser.gender ?? null } : extraData,

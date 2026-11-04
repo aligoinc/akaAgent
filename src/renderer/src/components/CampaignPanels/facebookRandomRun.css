@@ -46,3 +46,8 @@ body.theme-light .random-plan-filters .random-filter-control { color-scheme: lig
 .random-mode-badge, .random-turn-running { color: #8b5cf6; background: rgba(139,92,246,.12); }
 .random-turn-completed { color: var(--accent-success); background: rgba(22,163,74,.1); }
 .random-turn-stopped { color: var(--accent-warning); background: rgba(217,119,6,.1); }
+.random-ai-checkbox { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.random-ai-plan { padding: 12px; border: 1px solid var(--border-default); border-radius: 8px; margin: 12px 0; }
+.random-ai-plan .random-table-scroll { max-height: 280px; overflow: auto; }
+.random-ai-current { background: color-mix(in srgb, var(--accent-primary) 18%, transparent); color: var(--text-primary); }
+.random-ai-turn-ref { display: block; color: var(--text-secondary, #626b77); white-space: nowrap; margin-top: 4px; }
