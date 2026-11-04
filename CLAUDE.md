@@ -160,7 +160,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 - `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (engine v2)
 - `accountHandlers` / `accountContactHandlers` / `updateHandlers`
 - `v2Handlers` ([handlers/v2Handlers.ts](src/main/ipc/handlers/v2Handlers.ts)) — engine v2: BLOCK_LIST/SAVE/DELETE, WORKFLOW_LIST/GET/SAVE/DELETE, ELEMENT_LIST/SAVE/DELETE, WORKFLOW_TEST_RUN, BLOCK_TEST_RUN, RUN_STOP, RUN_PROGRESS broadcast, RUN_LOG broadcast
-- `notificationCenterHandlers` ([handlers/notificationCenterHandlers.ts](src/main/ipc/handlers/notificationCenterHandlers.ts)) — Cài đặt chung → Nhận thông báo qua RPC `aka_agent_notification_center` (V457, chưa apply) bằng [notificationCenterRepository.ts](src/main/data/repositories/notificationCenterRepository.ts); trả `{ok,data}|{ok:false,code,message}`, RPC chưa có (`PGRST202`) → `notification_center_not_ready` thì giữ form email cũ. Hợp đồng chép từ WebApp ở [shared/notificationCenter.ts](src/shared/notificationCenter.ts); xem [docs/NOTIFICATION_CENTER.md](docs/NOTIFICATION_CENTER.md).
+- `notificationCenterHandlers` ([handlers/notificationCenterHandlers.ts](src/main/ipc/handlers/notificationCenterHandlers.ts)) — Cài đặt chung → Nhận thông báo qua RPC `aka_agent_notification_center` (V457, chưa apply) bằng [notificationCenterRepository.ts](src/main/data/repositories/notificationCenterRepository.ts); trả `{ok,data}|{ok:false,code,message}`, RPC chưa có (`PGRST202`) → `notification_center_not_ready` thì giữ form email cũ. Hợp đồng chép từ WebApp ở [shared/notificationCenter.ts](src/shared/notificationCenter.ts); xem [docs/NOTIFICATION_CENTER.md](docs/NOTIFICATION_CENTER.md). Chuông thanh bên ([NotificationBell](src/renderer/src/components/Notifications/NotificationBell.tsx)) + trang [NotificationsPage](src/renderer/src/pages/NotificationsPage.tsx): số chưa đọc đọc khi đăng nhập/focus/đổi trang (≤1 lần/phút), không hẹn giờ; mở nhanh chiến dịch/tài khoản/nhóm data qua `openNotificationTarget` trong App.
 
 Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repository/service. Renderer gọi qua `electronAPI.xxx()` ([preload/index.ts](src/preload/index.ts), typed trong [electron.d.ts](src/renderer/src/types/electron.d.ts)).
 
@@ -171,6 +171,7 @@ Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repositor
 - `campaignStore` — accounts, campaigns, action templates, log realtime broadcast
 - `blockLibraryStore` / `elementLibraryStore` / `workflowV2Store` — engine v2 editor state
 - `themeStore` / `uiStore` — UI prefs
+- `notificationCenterStore` — số chưa đọc của chuông thông báo (V457), không hẹn giờ
 
 ### Workflow Editor v2 UI
 

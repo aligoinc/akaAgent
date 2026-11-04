@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import AccountPanel from '../components/CampaignPanels/AccountPanel'
 import CampaignPanel, { type CampaignDiagnosticActionRequest } from '../components/CampaignPanels/CampaignPanel'
 import LogPanel from '../components/CampaignPanels/LogPanel'
@@ -8,6 +8,8 @@ import type { CampaignAssistantMode, CampaignAssistantOpenRequest } from '../../
 
 interface CampaignPageProps {
   isActive: boolean
+  /** Mở tài khoản từ nơi khác (ví dụ thông báo): lọc chiến dịch theo tài khoản và mở Thông tin tài khoản. */
+  accountOpenRequest?: { accountId: number; requestId: number } | null
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
@@ -15,7 +17,7 @@ interface CampaignPageProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPageProps) {
+export default function CampaignPage({ isActive, accountOpenRequest, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPageProps) {
   const [panelWidths, setPanelWidths] = useState([250, -1, 300]) // accountW, auto, logW
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
   const [editAccountRequest, setEditAccountRequest] = useState<{ accountId: number; requestId: number } | null>(null)
@@ -72,6 +74,12 @@ export default function CampaignPage({ isActive, onNavigateToBrowser, onOpenGene
       requestId: (previous?.requestId ?? 0) + 1
     }))
   }, [])
+
+  useEffect(() => {
+    if (!accountOpenRequest) return
+    setFilterAccountId(accountOpenRequest.accountId)
+    handleOpenAccountInfo(accountOpenRequest.accountId)
+  }, [accountOpenRequest?.accountId, accountOpenRequest?.requestId, handleOpenAccountInfo])
 
   const handleAskAssistant = useCallback((campaignId: number, mode: CampaignAssistantMode) => {
     setAssistantOpenRequest({ campaignId, mode, requestId: crypto.randomUUID() })
