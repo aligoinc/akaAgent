@@ -1,9 +1,9 @@
-# Trạng thái đã xác nhận — cập nhật 03/11/2026
+# Trạng thái đã xác nhận — cập nhật 04/11/2026
 
 [V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
-**Candidate, chưa apply.** RESTRICTIVE policy theo staff token Desktop trên hai bảng email
-thông báo; không đổi ACL/hàm. Preflight live READ ONLY và 21 ca PG17 đạt. Kèm sửa worker
-email cũ lọc chi tiết theo staff, chưa deploy Edge.
+**Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token
+Desktop trên hai bảng email thông báo; không đổi ACL/hàm. Thử production ROLLBACK, hậu kiểm role
+thật và 21 ca PG17 đạt; không apply lại. Kèm sửa worker email cũ lọc chi tiết theo staff.
 
 [V454: tối ưu staff access và Zalo Server control](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md):
 **Đã apply 16:28:58 VN, 03/11/2026** (`20261103092858`); dùng index sẵn có cho held lookup, loại kiểm quyền

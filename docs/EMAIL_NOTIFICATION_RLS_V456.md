@@ -1,7 +1,24 @@
 # Cài đặt/outbox thông báo email theo chủ sở hữu — V456
 
-**Trạng thái: candidate, CHƯA apply.** Giai đoạn 0 của phương án Thông báo akaBiz
-(chốt 04/11/2026). Chỉ apply khi người dùng đồng ý rõ ràng.
+**Đã apply akachat lúc 12:21:05 VN ngày 04/11/2026** theo yêu cầu người dùng, ledger
+`20261104052006 / migration_v456_email_notification_owner_rls`, sha256 file và ledger
+`f2bda26473b3c5a2e050e82cf85cb7fca1cbf7e7152d64fc69bf59b7f2a087b3`.
+[Receipt](../migrations/snapshots/email-notification-rls-v456/apply-receipt.json). Không apply lại.
+Giai đoạn 0 của phương án Thông báo akaBiz (chốt 04/11/2026).
+
+## Apply production — 04/11/2026
+
+- **Thử trước (12:19:42 VN, ROLLBACK):** chạy trọn migration rồi kiểm bằng token Desktop thật:
+  trước V456 thấy 18/18 dòng cài đặt; sau V456 thấy 1 dòng của chính mình, UPDATE dòng staff
+  khác 0 dòng, chèn outbox cho staff khác bị từ chối `42501`, token lạ thấy 0. Không để lại dòng
+  hoặc policy nào.
+- **Apply (12:21:05 VN):** migration và INSERT `supabase_migrations.schema_migrations` trong cùng
+  transaction, có chặn ghi trùng `migration_v456_%`. Lúc apply DB 0–4/8 vCPU; CREATE POLICY không
+  làm PostgREST nạp lại schema.
+- **Hậu kiểm:** hai policy đúng biểu thức, 4 policy trên hai bảng; ACL bảng và 13 mục ACL cột giữ
+  nguyên; token Desktop của staff khác chỉ thấy dòng của mình; token lạ 0; service_role thấy đủ 18.
+- **Lưu lượng 24 giờ trước apply:** worker Edge và API WebApp đọc/ghi qua service_role (không chịu
+  RLS); Desktop chỉ đọc theo `staff_id` của chính mình, không có POST/PATCH; 0 lỗi.
 
 ## Vấn đề
 
