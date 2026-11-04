@@ -6,7 +6,7 @@ mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với b
 
 [V457: trung tâm thông báo (giai đoạn 1)](../NOTIFICATION_CENTER.md): **Candidate, chưa apply.** 5 bảng, trigger
 chiến dịch/tài khoản/phiên, cầu nối cài đặt cũ, điều phối trong tick 30 giây, RPC worker/số liệu/cài đặt;
-công tắc mặc định tắt + `dry_run`. 104 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
+công tắc mặc định tắt + `dry_run`. 108 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
 
 [V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
 **Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token

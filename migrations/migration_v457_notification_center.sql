@@ -49,6 +49,10 @@ BEGIN
              'trg_aka_agent_notify_session_revoked','trg_aka_agent_notification_settings_before','trg_aka_agent_notification_settings_after')) THEN
     RAISE EXCEPTION 'v457: notification triggers already exist';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.auto_accounts'::regclass AND attname = 'email_session'
+                   AND NOT attisdropped AND atttypid = 'jsonb'::regtype) THEN
+    RAISE EXCEPTION 'v457: auto_accounts.email_session missing';
+  END IF;
   IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key LIKE 'notifications.%') THEN
     RAISE EXCEPTION 'v457: notifications.* system settings already exist';
   END IF;
@@ -250,7 +254,10 @@ INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_
   ('notifications.push.hourly_cap', '60', 'Trần số push mỗi giờ cho một nhân viên.', false, true),
   ('notifications.retention_days', '90', 'Số ngày giữ thông báo.', false, true),
   ('notifications.report_retention_days', '30', 'Số ngày giữ nội dung báo cáo (content_snapshot).', false, true),
-  ('notifications.member_event_retention_days', '90', 'Số ngày giữ nhật ký vào/rời nhóm.', false, true);
+  ('notifications.member_event_retention_days', '90', 'Số ngày giữ nhật ký vào/rời nhóm.', false, true),
+  ('notifications.email.sender_account_id', '9742',
+   'auto_accounts.id của tài khoản email gửi thông báo (loại email, cấu hình SMTP trong email_session). Mặc định: tài khoản nội bộ akaBiz akabizzm@gmail.com.',
+   false, true);
 
 -- 4. Hàm phụ (private, chỉ owner gọi trực tiếp).
 CREATE FUNCTION private.aka_agent_notification_setting(p_key text, p_default text)
@@ -973,6 +980,28 @@ BEGIN
   ELSIF p_action = 'release' THEN
     UPDATE private.aka_agent_notification_dispatch_state SET leased_until = NULL, updated_at = v_now WHERE id = 1;
     RETURN jsonb_build_object('ok', true);
+
+  ELSIF p_action = 'sender' THEN
+    -- Cấu hình SMTP của tài khoản email gửi thông báo (auto_accounts.email_session). Chỉ service_role gọi được hàm này;
+    -- mật khẩu chỉ đi tới worker trên server, không bao giờ trả cho client.
+    SELECT jsonb_build_object('configured', true, 'accountId', a.id,
+             'host', btrim(a.email_session ->> 'host'),
+             'port', CASE WHEN (a.email_session ->> 'port') ~ '^[0-9]{1,5}$' THEN (a.email_session ->> 'port')::integer ELSE 587 END,
+             'secure', lower(coalesce(a.email_session ->> 'secure', 'false')) = 'true',
+             'user', btrim(coalesce(a.email_session ->> 'user', '')), 'pass', a.email_session ->> 'pass',
+             'fromEmail', lower(btrim(a.email_session ->> 'fromEmail')),
+             'brandName', nullif(btrim(coalesce(a.email_session ->> 'brandName', '')), ''),
+             'replyTo', nullif(btrim(coalesce(a.email_session ->> 'replyTo', '')), ''))
+      INTO v_result
+      FROM public.auto_accounts a
+     WHERE a.id = (SELECT CASE WHEN v ~ '^[0-9]{1,18}$' THEN v::bigint END
+                     FROM (SELECT btrim(private.aka_agent_notification_setting('notifications.email.sender_account_id', '')) AS v) x)
+       AND a.flatform_type = 'email' AND a.is_delete IS NOT TRUE AND a.is_active IS NOT FALSE
+       AND jsonb_typeof(a.email_session) = 'object'
+       AND nullif(btrim(coalesce(a.email_session ->> 'host', '')), '') IS NOT NULL
+       AND nullif(btrim(coalesce(a.email_session ->> 'fromEmail', '')), '') IS NOT NULL
+       AND nullif(a.email_session ->> 'pass', '') IS NOT NULL;
+    RETURN coalesce(v_result, jsonb_build_object('configured', false));
 
   ELSIF p_action = 'stats' THEN
     RETURN jsonb_build_object(
@@ -1734,7 +1763,7 @@ BEGIN
         'trg_aka_agent_notify_session_revoked','trg_aka_agent_notification_settings_before','trg_aka_agent_notification_settings_after')) <> 5 THEN
     RAISE EXCEPTION 'v457: triggers missing';
   END IF;
-  IF (SELECT count(*) FROM public.auto_system_settings WHERE key LIKE 'notifications.%') <> 8
+  IF (SELECT count(*) FROM public.auto_system_settings WHERE key LIKE 'notifications.%') <> 9
      OR private.aka_agent_notification_enabled() THEN
     RAISE EXCEPTION 'v457: system settings mismatch';
   END IF;

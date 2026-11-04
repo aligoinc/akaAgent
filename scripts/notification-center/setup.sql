@@ -25,7 +25,7 @@ CREATE TABLE public.auto_accounts (
   id bigint PRIMARY KEY, name text, flatform_type text, login_status text, status text DEFAULT 'chờ xử lý', is_active boolean DEFAULT true,
   is_delete boolean DEFAULT false, staff_id bigint, organization_id bigint, proxy_id bigint, mobile_device_id text, mobile_device_info jsonb,
   mobile_device_last_seen_at timestamptz, is_zalo_server boolean DEFAULT false, is_zalo_show_web boolean DEFAULT false,
-  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
+  email_session jsonb, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now());
 CREATE TABLE public.auto_campaigns (
   id bigint PRIMARY KEY, name text NOT NULL, action_id text, account_id bigint, status text NOT NULL DEFAULT 'chờ xử lý', is_delete boolean DEFAULT false,
   staff_id bigint, organization_id bigint, note text, completed_at timestamptz, last_run_at timestamptz, schedule_end_date timestamptz,
@@ -211,6 +211,9 @@ INSERT INTO public.org_staff (id, organization_id, name, username, password, is_
 INSERT INTO public.org_organization_product (organization_id, product_name, expiration_date) VALUES (1, 'akaAgent Zalo', now() + interval '5 days');
 INSERT INTO private.aka_agent_desktop_users VALUES ('11111111-1111-4111-8111-111111111111', 1), ('22222222-2222-4222-8222-222222222222', 2);
 INSERT INTO public.auto_campaign_actions VALUES ('zalo_message_phone', 'Zalo - Nhắn tin theo SĐT');
+-- Tài khoản email gửi thông báo (id như live 9742); cấu hình SMTP giả, không dùng mật khẩu thật.
+INSERT INTO public.auto_accounts (id, name, flatform_type, login_status, staff_id, organization_id, email_session) VALUES
+  (9742, 'akaBiz ZM', 'email', 'đã đăng nhập', 3, 2, '{"host":"smtp.example.test","port":"587","secure":false,"user":"sender@example.test","pass":"fixture-pass","fromEmail":"Sender@Example.test","brandName":"akaBiz","replyTo":"support@example.test"}');
 INSERT INTO public.auto_proxies VALUES (7, 'Proxy HN');
 INSERT INTO public.auto_accounts (id, name, flatform_type, login_status, status, staff_id, organization_id, proxy_id) VALUES
   (100, 'Zalo Shop Hà', 'zalo', 'đã đăng nhập', 'chờ xử lý', 1, 1, 7), (101, 'SMS Hà', 'sms', 'đã đăng nhập', 'chờ xử lý', 1, 1, NULL),

@@ -69,6 +69,7 @@ Vault `AKA_AGENT_NOTIFICATION_DISPATCH_URL` với header `x-internal-token` =
 | `complete_delivery` | `{id, leaseToken, outcome:'sent'|'retry'|'failed'|'invalid_token'|'cancelled', providerMessageId, errorCode, error}`; `invalid_token` ngưng thiết bị; `device.active=false` thì gửi `cancelled`. |
 | `release` | Mở khóa thuê để tick kế tiếp gọi lại ngay. |
 | `stats` | Số việc tồn, chế độ gửi. |
+| `sender` | Cấu hình SMTP của tài khoản email gửi thông báo (`auto_accounts.email_session` của id trong `notifications.email.sender_account_id`): `{configured, accountId, host, port, secure, user, pass, fromEmail, brandName, replyTo}`; tài khoản xóa/tắt/thiếu cấu hình → `{configured:false}`. Mật khẩu chỉ tới worker trên server. |
 
 Chia lượt gửi đọc cài đặt tại lúc gửi: email chỉ tới địa chỉ đã xác minh (tối đa 5); push tới
 thiết bị còn hiệu lực có phiên chưa thu hồi/hết hạn; bỏ qua nhân viên không còn quyền akaAgent;
@@ -125,6 +126,10 @@ kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts`
 `notifications.cooldown_minutes.account`=15, `notifications.push.hourly_cap`=60, thời gian giữ
 `notifications.retention_days`=90, `notifications.report_retention_days`=30,
 `notifications.member_event_retention_days`=90. Dọn theo lô trong bước điều phối, 1 lần/giờ.
+`notifications.email.sender_account_id`=`9742`: tài khoản email nội bộ akaBiz `akabizzm@gmail.com` (Gmail
+`smtp.gmail.com:587`, tên gửi "akaBiz", trả lời về `support@akabiz.net`). Worker chỉ hỏi cấu hình này khi lượt
+chạy có thư cần gửi; đặt `SMTP_*` trên Fly sẽ ghi đè. Gmail cá nhân giới hạn khoảng 500 người nhận/ngày (hệ email
+cũ hiện ~6–16 thư/ngày); lỗi hết hạn mức được thử lại chứ không đánh hỏng thư.
 
 ## Thứ tự bật (mỗi bước duyệt riêng)
 

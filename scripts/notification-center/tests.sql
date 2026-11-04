@@ -203,6 +203,28 @@ SELECT fixture_assert((public.aka_agent_notification_dispatch() ->> 'requestId')
 SELECT public.aka_agent_data_group_background_tick();
 SELECT fixture_assert((SELECT count(*) FROM private.fixture_tick_calls) = 2, 'tick still runs filter worker and sheet dispatch');
 
+\echo '== email sender account'
+SET ROLE service_role;
+SELECT fixture_assert(r ->> 'configured' = 'true' AND r ->> 'host' = 'smtp.example.test' AND (r ->> 'port')::int = 587 AND r ->> 'secure' = 'false'
+         AND r ->> 'user' = 'sender@example.test' AND r ->> 'pass' = 'fixture-pass' AND r ->> 'fromEmail' = 'sender@example.test'
+         AND r ->> 'brandName' = 'akaBiz' AND r ->> 'replyTo' = 'support@example.test' AND (r ->> 'accountId')::bigint = 9742,
+       'worker reads the sender account SMTP settings')
+  FROM (SELECT public.aka_agent_notification_worker('sender') AS r) x;
+RESET ROLE;
+UPDATE auto_accounts SET is_delete = true WHERE id = 9742;
+SET ROLE service_role;
+SELECT fixture_assert(public.aka_agent_notification_worker('sender') = '{"configured": false}'::jsonb, 'deleted sender account is not used');
+RESET ROLE;
+UPDATE auto_accounts SET is_delete = false WHERE id = 9742;
+UPDATE auto_system_settings SET value = 'abc' WHERE key = 'notifications.email.sender_account_id';
+SET ROLE service_role;
+SELECT fixture_assert(public.aka_agent_notification_worker('sender') ->> 'configured' = 'false', 'invalid sender setting is ignored');
+RESET ROLE;
+UPDATE auto_system_settings SET value = '9742' WHERE key = 'notifications.email.sender_account_id';
+SET ROLE authenticated;
+SELECT fixture_assert(fixture_error($$SELECT public.aka_agent_notification_worker('sender')$$) LIKE '42501:%', 'only the server role can read the sender');
+RESET ROLE;
+
 \echo '== devices'
 SET ROLE service_role;
 SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'ios', 'register_device', jsonb_build_object('installationId', 'cccccccc-0000-4000-8000-000000000001',
