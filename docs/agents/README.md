@@ -34,6 +34,7 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Report/Automation/action status | [báo cáo](reference/reports-01.md); [kết quả hành động](reference/action-results-01.md); [hợp đồng report](../ACTION_STATUS_REPORTS.md) |
 | Không tìm thấy ô đăng bài khi đăng nhóm, nhóm Mua bán, tách policy group/personal | [V459 đã apply: block 27, group policy 122 Bỏ qua, profile policy 94 giữ nguyên](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md); không đổi app, giữ log nguyên nhân, cần nạp lại catalog |
 | akaBiz API/SMS/SQL import/Sheet/template/staff admin | [SQL Account](reference/integrations-01.md); [tích hợp/quản trị](reference/integrations-02.md); `browser-*`/`campaigns-*` theo sản phẩm |
+| Loại trừ gửi Zalo, xóa tag trên Zalo làm báo thiếu dữ liệu | [Hợp đồng tag đã xóa 04/11/2026](../CAMPAIGN_SEND_EXCLUSIONS.md#deleted-native-zalo-tags--source-change-04112026); bỏ tag khỏi điều kiện đang xét chỉ sau khi đọc đủ danh sách, giữ lỗi API/phiên và các bộ lọc khác |
 | Build/package/update/release | [lệnh và native](reference/build-01.md); [updater](reference/build-02.md); [feed/version](reference/build-03.md); [CURRENT_STATE](CURRENT_STATE.md) |
 | Docs, Git và tổ chức hướng dẫn | [MAINTENANCE](MAINTENANCE.md); [skill trước PR](../../.agents/skills/source-command-verify-pr/SKILL.md); [chỉ mục](REFERENCE_INDEX.md) |
 
