@@ -68,6 +68,13 @@ IPC: `AUTH_RENEWAL_RECHECK`, `AUTH_RENEWAL_CANCEL`, `AUTH_RENEWAL_OPEN_EXTERNAL`
 
 ## Edge `renewal_link` — bản vá cần áp vào source riêng
 
+**Hoãn theo quyết định ngày 04/11/2026.** Hiện chạy bằng trang đăng nhập cổng: Edge chưa vá trả 400, app nạp
+`/gia-han?next=<trang>` và khách gõ lại tên đăng nhập + mật khẩu akaAgent trên trang CRM. Khi áp bản vá dưới đây
+và đặt khoá, app tự chuyển sang link ký số, không cần phát hành lại. Hai hệ quả của chế độ này: (1) không có `opid`
+nên trang đích CRM tự chọn theo mọi sản phẩm của tổ chức; đo 04/11, CRM chọn sản phẩm không phải akaAgent cho 4/766
+tổ chức đã hết hẳn akaAgent; (2) khách quen đăng nhập tự động có thể quên mật khẩu, mà Lấy lại tài khoản cần email
+(mục CRM), nên cần đặt liên hệ hỗ trợ trên Fly.
+
 Source `aka-agent-desktop-session` nằm ở kho bảo mật ngoài repo (xem
 [README](../supabase/functions/aka-agent-desktop-session/README.md)). Thêm vào handler live, giữ nguyên mọi quy tắc
 chặn IP và thao tác hiện có. Helper ký (WebCrypto, không thư viện):
@@ -137,7 +144,7 @@ Kiểm chéo không cần deploy: `CRM_REPO=<checkout SqlServerDashboard đã np
 của CRM), token Edge qua đúng `verifyRenewalLinkToken` của CRM (sai khóa bị từ chối), test CRM
 `renewal-portal.test.ts` 28 PASS, thử V456/rollback tự huỷ trên production.
 
-Chưa làm: chạy Electron với tài khoản hết hạn thật, deploy Edge `renewal_link`, apply V456, deploy CRM, đặt biến
+Chưa làm: chạy Electron với tài khoản hết hạn thật, deploy Edge `renewal_link` (hoãn, xem mục Edge), apply V456, deploy CRM, đặt biến
 môi trường Fly, thanh toán thật, đóng gói/phát hành Desktop, kiểm Windows/Mac thật.
 
 Dữ liệu 04/11: 595 tổ chức chỉ còn dùng thử hết hạn (69 mở app trong 30 ngày), 173 tổ chức hết hạn gói (21 mở app
