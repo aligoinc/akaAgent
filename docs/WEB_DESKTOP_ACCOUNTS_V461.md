@@ -103,6 +103,15 @@ lọc bỏ (fail closed).
 - Web/API: typecheck 7 workspace; test xem báo cáo cuối phiên. Chưa chạy trên Desktop/Windows
   thật, chưa có trình duyệt thật.
 
+- Áp bằng Supabase SQL Editor khi không bấm được thẻ xác nhận MCP:
+  `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql` (sinh bởi
+  `scripts/build-v461-guarded-apply-sql.py`). Một giao dịch: so sánh chỉ đọc → chốt chặn (kiểm nào
+  không đạt thì `v461_guard_failed`/`v461_unexpected_definition`, rollback toàn bộ) → thân migration →
+  ghi `supabase_migrations.schema_migrations`. Test local
+  `scripts/test-web-desktop-accounts-guarded-apply.sh`: chạy một thông điệp như SQL Editor, trạng thái
+  cuối giống hệt áp file migration thường (fingerprint hàm/cột/constraint/cấu hình), chạy lại bị chặn,
+  hàm nguồn lệch thì dừng mà không đổi gì.
+
 ## Rollout
 
 1. Ngoài giờ cao điểm (DDL nạp lại schema PostgREST): kiểm số migration + md5, apply v461,
