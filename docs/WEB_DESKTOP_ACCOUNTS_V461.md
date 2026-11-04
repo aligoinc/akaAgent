@@ -5,20 +5,29 @@ cùng chiến dịch, tiến trình và trạng thái app Desktop. App Desktop v
 Web chỉ đọc/ghi dữ liệu trong DB. Mọi dòng thuộc loại này mang nhãn **Desktop**; Zalo Server và
 SMS mang nhãn **Web**.
 
-## Trạng thái (03/11/2026)
+## Trạng thái — ĐÃ APPLY akachat 04/11/2026 23:33:21 VN
 
-- `migrations/migration_v461_web_desktop_accounts.sql` là **candidate, chưa apply production**.
-  Số đã đổi nhiều lần vì bị dùng trước: v453 (`remove_aka_agent_access_from_ip_hook_v453`), v454
-  (`migration_v454_app_access_guard_performance`), rồi v455–v460 trên dev_3 (v455 facebook_share_xpath …
-  v460 desktop_login_renewal_links). Các migration đó không sửa 10 hàm của bản này; v457 chỉ đọc
-  `auto_staff_device_presence`. Kiểm tra lại số và md5 ngay trước khi apply.
-- Bốn lần thử apply (03/11 17:30 và 22:02, 04/11 00:10 và 20:56) đều dừng ở bước script so sánh vì thẻ xác nhận
-  của Supabase MCP không được bấm trong 230 giây; production chưa đổi gì.
-- Kiểm tra drift chỉ đọc lúc viết: cả 10 hàm nguồn trên akachat khớp md5 nguồn trong spec của
-  migration; 3 hàm mới và cột `runtime_state` chưa tồn tại. `create_control_campaign_v2` (API
-  đang gọi) chỉ gọi lại `create_control_campaign` nên không cần vá riêng.
-- API/Web (akaAgentWebApp) chưa deploy; Desktop chưa đóng gói/phát hành.
-- Chính sách mặc định **tắt**: apply migration không đổi hành vi nào cho tới khi bật.
+- `20261104163321 / migration_v461_web_desktop_accounts` (apply_migration qua Supabase MCP, người dùng
+  bấm xác nhận). **Không apply lại.** Số đã đổi nhiều lần vì bị dùng trước: v453
+  (`remove_aka_agent_access_from_ip_hook_v453`), v454 (`migration_v454_app_access_guard_performance`), rồi
+  v455–v460 trên dev_3; các migration đó không sửa 10 hàm của bản này (v457 chỉ đọc
+  `auto_staff_device_presence`). Bốn lần thử trước (03/11 17:30, 22:02; 04/11 00:10, 20:56) dừng ở thẻ
+  xác nhận MCP không được bấm, production không đổi.
+- Trước apply (22:26–23:30 VN, tải 0,8 tiến trình dùng CPU/8 vCPU): 10 hàm nguồn khớp md5; script so sánh
+  chỉ đọc trên dữ liệu thật đạt 10/10 `patch_dry_run`, 9/9 `*_legacy_same` (3 nhân viên nhiều chiến dịch
+  Zalo Server/SMS nhất: trang 2,1–4,6 ms cũ ↔ 2,2–3,8 ms mới, snapshot 5,2–12,4 ↔ 5,0–12,1 ms; logs cũ
+  4,5–66 ms do cache lạnh lượt đầu ↔ mới 0,8–1,6 ms), không `already_applied`. Đường Desktop (chưa ai
+  gọi): trang 4,6–8,6 ms, activity 1,3–3,4 ms, snapshot 12,9–101,6 ms (101,6 ms là nhân viên 48 tài khoản).
+- Hậu kiểm 23:33–23:40 VN: 10 hàm ở md5 đích; md5 4 hàm mới trùng bản áp local từ file repo
+  (`214999ca…`, `ea05f7ca…`, `b1385c38…`, `0bc017aa…`); 3 hàm Control mới chỉ `service_role` (+ owner),
+  helper private chỉ owner; quyền 10 hàm cũ giữ nguyên (presence vẫn `aka_agent_desktop` + `service_role`);
+  cột `runtime_state`/`runtime_state_at` + CHECK có; `web.desktop_accounts` = `enabled:false`; smoke
+  production (BEGIN/ROLLBACK, `service_role`) đạt; 63 heartbeat trong 60 giây sau apply, 66 máy online
+  (85 lúc 22:26, giảm theo giờ khuya). PostgREST nạp lại schema 3,0 s, 0 lỗi 503/5xx; phút apply p99
+  283 ms rồi về ~105 ms.
+- **Chưa** bật chính sách, **chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
+- Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
+  (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
 ## Bật/tắt
 
