@@ -2994,6 +2994,10 @@ export interface LoginScreenContent {
     userGuide: string | null
     upgradePayment: string | null
     contactUs: string | null
+    /** Trang Lấy lại tài khoản của cổng gia hạn CRM (email + SĐT đã đăng ký). */
+    recoverAccount: string | null
+    /** Trang Đăng ký dùng thử của cổng gia hạn CRM. */
+    trialSignup: string | null
   }
 }
 
@@ -3101,10 +3105,55 @@ export interface AuthUser {
   deviceLastSeenAt?: string | null
 }
 
+/** Loại trang gia hạn CRM cần mở khi tổ chức không còn sản phẩm akaAgent còn hạn. */
+export type AuthRenewalKind = 'trial_expired' | 'package_expired' | 'no_package'
+
+export interface AuthRenewalProduct {
+  productId: number
+  displayName: string
+  isTrial: boolean
+  expirationDate: string | null
+}
+
+/**
+ * Thông tin hiển thị màn Gia hạn. Không chứa mật khẩu, token hay link ký số;
+ * main giữ thông tin đăng nhập và mã sản phẩm cần gia hạn.
+ */
+export interface AuthRenewalRequired {
+  kind: AuthRenewalKind
+  username: string
+  focusProduct: AuthRenewalProduct | null
+  products: AuthRenewalProduct[]
+}
+
 export type AuthLoginResult =
   | { status: 'authenticated'; user: AuthUser; loginState?: AuthLocalState; automaticLoginAllowed?: boolean }
   | { status: 'manual_login_required'; loginState?: AuthLocalState }
   | { status: 'policy_required' }
+  | { status: 'renewal_required'; renewal: AuthRenewalRequired }
+
+/**
+ * Kết quả kiểm lại ở màn Gia hạn. `renewal_ended`: phiên gia hạn đã kết thúc
+ * (gói đã còn hạn nhưng đăng nhập vướng bước khác, hoặc quá thời gian chờ) —
+ * renderer về màn đăng nhập kèm câu báo.
+ */
+export type AuthRenewalRecheckResult = AuthLoginResult | { status: 'renewal_ended'; message: string }
+
+/** Webview màn Gia hạn: renderer gắn `about:blank`, main tự nạp link ký số. */
+export interface RenewalWebDescriptor {
+  partition: string
+  url: string
+}
+
+export interface RenewalWebState {
+  revision: number
+  status: 'loading' | 'ready' | 'error'
+  /** false: không lấy được link ký số, khách đăng nhập cổng bằng mật khẩu. */
+  signed: boolean
+  /** Trang CRM báo đơn đã kích hoạt; renderer kiểm tra lại để vào phần mềm. */
+  orderCompleted: boolean
+  message?: string
+}
 
 export interface ChatWebState {
   sessionId: string
@@ -3143,6 +3192,8 @@ export interface AuthLocalState {
 export interface AuthBootstrapResult extends AuthLocalState {
   user: AuthUser | null
   policyAcceptanceRequired?: boolean
+  /** Tự đăng nhập lúc mở app gặp tài khoản hết hạn: mở thẳng màn Gia hạn. */
+  renewal?: AuthRenewalRequired | null
   errorMessage?: string | null
 }
 
@@ -3333,6 +3384,14 @@ export const IPC_EVENTS = {
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
   AUTH_USER_UPDATED: 'auth:user-updated',
   AUTH_ZALO_RUNTIME_RESTART_REQUIRED: 'auth:zalo-runtime-restart-required',
+  // Màn Gia hạn (cổng CRM /gia-han) khi tổ chức hết hạn gói/dùng thử
+  AUTH_RENEWAL_REQUIRED: 'auth:renewal-required',
+  AUTH_RENEWAL_RECHECK: 'auth:renewal-recheck',
+  AUTH_RENEWAL_CANCEL: 'auth:renewal-cancel',
+  AUTH_RENEWAL_OPEN_EXTERNAL: 'auth:renewal-open-external',
+  AUTH_RENEWAL_WEB_PREPARE: 'auth:renewal-web-prepare',
+  AUTH_RENEWAL_WEB_RELOAD: 'auth:renewal-web-reload',
+  AUTH_RENEWAL_WEB_STATE: 'auth:renewal-web-state',
 
   CHAT_WEB_PREPARE: 'chat-web:prepare',
   CHAT_WEB_RELOAD: 'chat-web:reload',

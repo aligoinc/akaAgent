@@ -9,6 +9,7 @@ import ReportPage from './pages/ReportPage'
 import AutomationPage from './pages/AutomationPage'
 import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
+import RenewalPage from './pages/RenewalPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
@@ -54,7 +55,9 @@ export default function App() {
     rehydrateFromStorage,
     handleSessionExpired,
     handleUserUpdated,
-    handleZaloRuntimeRestartRequired
+    handleZaloRuntimeRestartRequired,
+    renewal,
+    handleRenewalRequired
   } = useAuthStore()
   const { theme } = useThemeStore()
   const {
@@ -158,6 +161,11 @@ export default function App() {
       handleSessionExpired(payload?.message)
     })
   }, [handleSessionExpired])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onRenewalRequired) return
+    return window.electronAPI.onRenewalRequired(handleRenewalRequired)
+  }, [handleRenewalRequired])
 
   useEffect(() => {
     if (!window.electronAPI?.onAuthUserUpdated) return
@@ -356,7 +364,7 @@ export default function App() {
     return (
       <div className={`app-layout ${platformClass}`}>
         <div className="app-window-drag-frame" aria-hidden="true" />
-        <LoginPage />
+        {renewal ? <RenewalPage /> : <LoginPage />}
         <AlertModal />
         <ConfirmModal />
         <CampaignEditDialogs />

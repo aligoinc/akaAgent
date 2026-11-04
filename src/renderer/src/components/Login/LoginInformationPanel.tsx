@@ -1,10 +1,9 @@
 import { AlertTriangle, ArrowUpRight, BookOpen, CheckCircle2, CircleAlert, CreditCard, Globe2, Info, MessageCircle, Sparkles } from 'lucide-react'
 import type { LoginScreenContent } from '../../../../shared/types'
-import { useLoginScreenContent } from '../../hooks/useLoginScreenContent'
 
 const noticeIcons = { info: Info, success: CheckCircle2, warning: AlertTriangle, error: CircleAlert }
 const resourceLinks: {
-  key: keyof LoginScreenContent['links']
+  key: 'website' | 'userGuide' | 'upgradePayment' | 'contactUs'
   label: string
   detail: string
   icon: typeof Globe2
@@ -15,8 +14,9 @@ const resourceLinks: {
   { key: 'contactUs', label: 'Liên hệ', detail: 'Kết nối với akaBiz', icon: MessageCircle }
 ]
 
-export default function LoginInformationPanel() {
-  const { notification, links } = useLoginScreenContent()
+/** Nội dung do LoginPage tải một lần (dùng chung với link trong form đăng nhập). */
+export default function LoginInformationPanel({ content }: { content: LoginScreenContent }) {
+  const { notification, links } = content
   const visibleLinks = resourceLinks.filter(link => links[link.key])
   const Icon = notification ? noticeIcons[notification.level] : Sparkles
   const urgent = notification?.level === 'warning' || notification?.level === 'error'

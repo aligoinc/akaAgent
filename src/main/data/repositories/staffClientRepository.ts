@@ -35,7 +35,9 @@ const messages: Record<string, string> = {
   staff_client_device_locked: 'Tài khoản này đang liên kết với máy tính khác. Vui lòng chọn Đổi máy tính trên trang đăng nhập hoặc liên hệ hỗ trợ.',
   staff_client_forbidden: 'Bạn không có quyền thực hiện thao tác này.',
   staff_client_policy_required: 'Vui lòng xác nhận chính sách sử dụng để tiếp tục.',
-  staff_client_invalid_input: 'Thông tin nhập chưa hợp lệ. Vui lòng kiểm tra lại.'
+  staff_client_invalid_input: 'Thông tin nhập chưa hợp lệ. Vui lòng kiểm tra lại.',
+  // Chế độ tách quyền: thiếu cờ akaAgent của nhân viên hoặc tổ chức hết gói akaAgent.
+  app_access_denied: 'Tài khoản chưa được cấp quyền akaAgent hoặc gói akaAgent đã hết hạn. Vui lòng liên hệ quản trị viên tổ chức, hoặc chọn "Nâng cấp và thanh toán" để gia hạn.'
 }
 
 export async function callStaffClient(

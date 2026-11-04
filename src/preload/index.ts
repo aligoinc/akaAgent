@@ -23,7 +23,7 @@ import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, t
 import type { BrowserPreview } from '../shared/browserPreview'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
-import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import type { AuthRenewalRecheckResult, AuthRenewalRequired, ChatWebState, CrmWebDescriptor, LoginScreenContent, RenewalWebDescriptor, RenewalWebState } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimitsResult } from '../shared/browserRunLimits'
@@ -164,6 +164,23 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, user: AuthUser) => callback(user)
     ipcRenderer.on(IPC_EVENTS.AUTH_USER_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_USER_UPDATED, handler)
+  },
+
+  // Màn Gia hạn: không có mật khẩu hay link ký số đi qua renderer.
+  recheckRenewal: (): Promise<AuthRenewalRecheckResult> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_RECHECK),
+  cancelRenewal: (): Promise<void> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_CANCEL),
+  openRenewalExternal: (): Promise<{ signed: boolean }> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_OPEN_EXTERNAL),
+  prepareRenewalWeb: (): Promise<RenewalWebDescriptor> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_WEB_PREPARE),
+  reloadRenewalWeb: (): Promise<RenewalWebState> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_WEB_RELOAD),
+  onRenewalWebState: (callback: (state: RenewalWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: RenewalWebState) => callback(state)
+    ipcRenderer.on(IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, handler)
+  },
+  onRenewalRequired: (callback: (renewal: AuthRenewalRequired) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, renewal: AuthRenewalRequired) => callback(renewal)
+    ipcRenderer.on(IPC_EVENTS.AUTH_RENEWAL_REQUIRED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_RENEWAL_REQUIRED, handler)
   },
 
   onZaloRuntimeRestartRequired: (callback: (payload: ZaloRuntimeRestartRequiredPayload) => void): (() => void) => {

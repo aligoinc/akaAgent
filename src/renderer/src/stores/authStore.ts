@@ -1,6 +1,10 @@
 import { create } from 'zustand'
 import { useUiStore } from './uiStore'
-import { AuthUser, DeviceLockResetResult, LoginPreferences, AuthLocalState, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
+import { AuthRenewalRequired, AuthUser, DeviceLockResetResult, LoginPreferences, AuthLocalState, ZaloRuntimeRestartRequiredPayload } from '../../../shared/types'
+
+export interface RenewalNotice { tone: 'info' | 'error'; text: string }
+
+const RENEWAL_PENDING_TEXT = 'Chưa ghi nhận gia hạn. Nếu vừa chuyển khoản, vui lòng chờ 1–2 phút; akaAgent sẽ tự vào phần mềm khi gói được kích hoạt.'
 
 interface AuthState {
   user: AuthUser | null
@@ -15,6 +19,10 @@ interface AuthState {
   rememberedLogin: AuthLocalState['rememberedLogin']
   manualLoginRequired: boolean
   zaloRuntimeRestartRequired: ZaloRuntimeRestartRequiredPayload | null
+  /** Tổ chức hết hạn gói/dùng thử: App hiển thị màn Gia hạn thay form đăng nhập. */
+  renewal: AuthRenewalRequired | null
+  renewalChecking: boolean
+  renewalNotice: RenewalNotice | null
 
   setLoginOptions: (updates: Partial<LoginPreferences>) => Promise<void>
   login: (username: string, password: string, options?: LoginPreferences) => Promise<void>
@@ -31,6 +39,10 @@ interface AuthState {
   handleSessionExpired: (message?: string | null) => void
   handleUserUpdated: (user: AuthUser) => void
   handleZaloRuntimeRestartRequired: (payload: ZaloRuntimeRestartRequiredPayload) => void
+  handleRenewalRequired: (renewal: AuthRenewalRequired) => void
+  recheckRenewal: (options?: { automatic?: boolean }) => Promise<void>
+  cancelRenewal: () => Promise<void>
+  openRenewalExternal: () => Promise<void>
   clearError: () => void
 }
 
@@ -129,6 +141,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null, initializing: true, loggingIn: false, acceptingPolicy: false,
   recoveringCredentials: false, resettingDevice: false, policyAcceptanceRequired: false,
   errorMessage: null, loginOptions: DEFAULT_LOGIN_OPTIONS, rememberedLogin: null, manualLoginRequired: false, zaloRuntimeRestartRequired: null,
+  renewal: null, renewalChecking: false, renewalNotice: null,
 
   setLoginOptions: async (updates) => {
     const revision = ++optionsRevision
@@ -155,7 +168,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (auth !== authRevision) return
       if (result.status === 'manual_login_required') { set({ user: null, policyAcceptanceRequired: false, errorMessage: null, rememberedLogin: null, manualLoginRequired: true, ...(result.loginState ? localState(result.loginState) : {}) }); return }
       if (result.status === 'policy_required') { set({ policyAcceptanceRequired: true }); return }
-      set({ user: result.user, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
+      if (result.status === 'renewal_required') { set({ user: null, renewal: result.renewal, renewalNotice: null, errorMessage: null }); return }
+      set({ user: result.user, renewal: null, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
       if (result.loginState) warnStorage(result.loginState)
     } catch (error) {
       if (auth !== authRevision) return
@@ -174,8 +188,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const result = await window.electronAPI.acceptPolicyAndLogin()
       if (auth !== authRevision) return
       if (result.status === 'manual_login_required') { set({ user: null, policyAcceptanceRequired: false, errorMessage: null, rememberedLogin: null, manualLoginRequired: true, ...(result.loginState ? localState(result.loginState) : {}) }); return }
+      if (result.status === 'renewal_required') { set({ user: null, renewal: result.renewal, renewalNotice: null, policyAcceptanceRequired: false }); return }
       if (result.status !== 'authenticated') return
-      set({ user: result.user, policyAcceptanceRequired: false, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
+      set({ user: result.user, renewal: null, policyAcceptanceRequired: false, ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
       if (result.loginState) warnStorage(result.loginState)
     } catch (error) {
       if (auth === authRevision) set({ errorMessage: formatAuthErrorMessage(error, 'Không thể xác nhận chính sách.') })
@@ -210,6 +225,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     authRevision++
     try { await window.electronAPI.logout() } catch { /* cleanup is best effort */ }
     set({ user: null, acceptingPolicy: false, policyAcceptanceRequired: false, errorMessage: null,
+      renewal: null, renewalNotice: null, renewalChecking: false,
       ...(get().rememberedLogin?.source === 'recovery' ? { rememberedLogin: null } : {}) })
   },
   resetDeviceLock: async () => {
@@ -249,6 +265,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (auth !== authRevision) { set({ initializing: false }); return }
       const local = revision === optionsRevision ? localState(state) : {}
       set({ ...local, user: state.user, initializing: false, policyAcceptanceRequired: !!state.policyAcceptanceRequired,
+        renewal: state.user ? null : state.renewal ?? null, renewalNotice: null,
         errorMessage: state.errorMessage ? formatAuthErrorMessage(state.errorMessage, 'Không thể đăng nhập tự động.') : null })
       warnStorage(state)
     } catch (error) {
@@ -259,7 +276,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   handleSessionExpired: (message) => {
     get().cancelPendingLogin()
+    // Hết gói: main kiểm lại rồi gửi riêng sự kiện mở màn Gia hạn (handleRenewalRequired).
     set({ user: null, loggingIn: false, acceptingPolicy: false, policyAcceptanceRequired: false, initializing: false,
+      renewal: null, renewalNotice: null, renewalChecking: false,
       errorMessage: formatAuthErrorMessage(message || 'Tài khoản của bạn đã hết hạn', 'Tài khoản của bạn đã hết hạn') })
   },
 
@@ -281,6 +300,64 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   handleZaloRuntimeRestartRequired: (payload) => set((state) => ({
     zaloRuntimeRestartRequired: state.zaloRuntimeRestartRequired || payload
   })),
+
+  handleRenewalRequired: (renewal) => {
+    // Chỉ mở khi đang ở màn đăng nhập và không có lượt đăng nhập mới.
+    if (get().user || get().loggingIn || get().acceptingPolicy) return
+    set({ renewal, renewalNotice: null, errorMessage: null, policyAcceptanceRequired: false })
+  },
+
+  recheckRenewal: async (options) => {
+    const automatic = options?.automatic === true
+    if (!get().renewal || get().renewalChecking || get().loggingIn) return
+    const auth = ++authRevision
+    const revision = optionsRevision
+    set({ renewalChecking: true, ...(automatic ? {} : { renewalNotice: null }) })
+    try {
+      const result = await window.electronAPI.recheckRenewal()
+      if (auth !== authRevision) return
+      if (result.status === 'renewal_required') {
+        set({ renewal: result.renewal, ...(automatic ? {} : { renewalNotice: { tone: 'info', text: RENEWAL_PENDING_TEXT } }) })
+        return
+      }
+      if (result.status === 'renewal_ended') {
+        set({ renewal: null, renewalNotice: null, errorMessage: formatAuthErrorMessage(result.message, 'Vui lòng đăng nhập lại.') })
+        return
+      }
+      if (result.status === 'manual_login_required') {
+        set({ user: null, renewal: null, renewalNotice: null, policyAcceptanceRequired: false, errorMessage: null, rememberedLogin: null,
+          manualLoginRequired: true, ...(result.loginState ? localState(result.loginState) : {}) })
+        return
+      }
+      if (result.status === 'policy_required') { set({ renewal: null, renewalNotice: null, policyAcceptanceRequired: true }); return }
+      set({ user: result.user, renewal: null, renewalNotice: null, errorMessage: null,
+        ...(result.loginState && revision === optionsRevision ? localState(result.loginState) : {}) })
+      if (result.loginState) warnStorage(result.loginState)
+      useUiStore.getState().showAlert('Gói akaAgent đã được kích hoạt. Chào mừng quay lại!', 'success')
+    } catch (error) {
+      if (auth !== authRevision || automatic) return
+      set({ renewalNotice: { tone: 'error', text: formatAuthErrorMessage(error, 'Chưa kiểm tra được gói. Vui lòng thử lại.') } })
+    } finally {
+      set({ renewalChecking: false })
+    }
+  },
+
+  cancelRenewal: async () => {
+    authRevision++
+    set({ renewal: null, renewalNotice: null, renewalChecking: false, errorMessage: null })
+    try { await window.electronAPI.cancelRenewal() } catch { /* main tự kết thúc sau thời gian chờ */ }
+  },
+
+  openRenewalExternal: async () => {
+    try {
+      const result = await window.electronAPI.openRenewalExternal()
+      if (!result.signed) {
+        set({ renewalNotice: { tone: 'info', text: 'Đã mở trình duyệt. Vui lòng đăng nhập trang gia hạn bằng tài khoản akaAgent.' } })
+      }
+    } catch (error) {
+      set({ renewalNotice: { tone: 'error', text: formatAuthErrorMessage(error, 'Không mở được trình duyệt. Vui lòng thử lại.') } })
+    }
+  },
 
   clearError: () => set({ errorMessage: null })
 }))
