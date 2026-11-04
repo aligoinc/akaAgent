@@ -48,7 +48,9 @@ export function toNotificationCenterError(error: { message?: unknown; code?: unk
   const sqlState = typeof error?.code === 'string' ? error.code : ''
   const message = typeof error?.message === 'string' ? error.message : ''
   if (sqlState === 'PGRST202' || sqlState === '42883') return new NotificationCenterError(NOTIFICATION_CENTER_NOT_READY)
-  const code = /notification_[a-z_]+/.exec(message)?.[0]
+  // Mã do RPC tự RAISE (vd. `notification_settings_conflict`); bỏ qua tên hàm `aka_agent_notification_*`
+  // có thể xuất hiện trong lỗi quyền/PostgREST.
+  const code = /(?:^|[^a-z_])(notification_[a-z_]+)/.exec(message)?.[1]
   if (code) return new NotificationCenterError(code)
   if (/automation_auth_(?:required|invalid)|desktop_[a-z_]+_denied/.test(message)) return new NotificationCenterError('notification_session_invalid')
   if (sqlState === '57014' || /AbortError|TimeoutError/i.test(message)) {

@@ -98,6 +98,26 @@ Bắt buộc `staffId`; dữ liệu ngoài phạm vi trả `{found:false}`.
 | `test` | `{channel}`; tối đa 3 lần/10 phút (`54000`); công tắc tắt → `55000` |
 | `verify_email`, `unsubscribe` | Chỉ web, sau khi API kiểm token HMAC trong link |
 
+### Client Desktop (source, chưa phát hành)
+
+Cài đặt chung → **Nhận thông báo** dùng
+[NotificationCenterSettings](../src/renderer/src/components/Settings/NotificationCenterSettings.tsx); main gọi RPC qua
+[notificationCenterRepository](../src/main/data/repositories/notificationCenterRepository.ts) (staff/tổ chức và mật khẩu
+lấy từ phiên trong main, timeout 15 giây, client Supabase sẵn có), IPC `notification-center:*` trả
+`{ok, data}` hoặc `{ok:false, code, message}`; chỉ chuyển mã `notification_*`, không chuyển SQL sang renderer. Hợp đồng
+kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts` vào
+[shared/notificationCenter.ts](../src/shared/notificationCenter.ts).
+
+- RPC chưa có (`PGRST202`/`42883` → `notification_center_not_ready`): hiện nguyên form email cũ
+  (`emailNotificationRepository`), chỉ hỏi lại RPC sau 10 phút.
+- Lưu theo `revision`; lệch phiên bản giữ nội dung đang nhập, khóa nút Lưu và mời tải lại. Tắt kênh Email/App làm mờ
+  cột tương ứng nhưng giữ lựa chọn; mỗi loại bật khi có ít nhất một kênh. "Đã chọn" chiến dịch/tài khoản dùng dữ liệu
+  store sẵn có; nhóm data chỉ liệt kê nhóm tự tạo (danh sách Desktop không phân biệt chia sẻ toàn tổ chức với chia sẻ
+  đích danh, mà `notification_ids_not_owned` chỉ nhận nhóm sở hữu hoặc có dòng người nhận).
+- "Thông báo gần đây" (Desktop chưa có chuông): 20 thông báo mới nhất, lọc loại, đánh dấu đã đọc tất cả (`upToId` =
+  thông báo mới nhất đã thấy), chi tiết dựng từ `content.sections` + lượt gửi và đánh dấu đã đọc. Chỉ tải khi mở mục
+  hoặc bấm tải lại; không poll, không hẹn giờ.
+
 ## Cấu hình
 
 `auto_system_settings` (không bí mật): `notifications.enabled`=`false`,

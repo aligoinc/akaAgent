@@ -140,8 +140,14 @@ export function isValidNotificationTime(value: string): boolean {
   return /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value)
 }
 
+/** Phần cài đặt người dùng sửa được (NotificationSettings cũng thỏa kiểu này). */
+export interface NotificationSettingsDraftInput {
+  channels: { email: { enabled: boolean; recipients: readonly string[] } }
+  subscriptions: NotificationSubscriptions
+}
+
 /** Lỗi kiểm tra phía client, cùng quy tắc với RPC save_settings (để báo sớm, server vẫn kiểm lại). */
-export function validateNotificationSettingsDraft(draft: Pick<NotificationSettings, 'channels' | 'subscriptions'>): string | null {
+export function validateNotificationSettingsDraft(draft: NotificationSettingsDraftInput): string | null {
   const recipients = normalizeNotificationEmails(draft.channels.email.recipients)
   if (recipients.length > NOTIFICATION_MAX_EMAILS) return `Tối đa ${NOTIFICATION_MAX_EMAILS} email nhận thông báo.`
   if (recipients.some(email => !isValidNotificationEmail(email))) return 'Email nhận thông báo không hợp lệ.'
