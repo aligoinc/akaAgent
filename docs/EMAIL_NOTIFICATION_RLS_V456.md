@@ -65,7 +65,7 @@ thông báo mới sẽ thay trigger này.
 Thủ công: `migrations/rollback_v456_email_notification_owner_rls.sql` chỉ DROP hai policy
 V456 sau khi kiểm tra đúng định nghĩa. Rollback mở lại lỗ hổng; cần chỉ thị rõ.
 
-## Sửa tạm worker email cũ
+## Sửa tạm worker email cũ (đã hoàn tác)
 
 `supabase/functions/aka-agent-email-notification-worker` (`findDailyCampaigns`): truy vấn
 `auto_campaign_details` theo ngày nay inner join `auto_campaigns` lọc `staff_id`. Trước đây
@@ -81,3 +81,13 @@ quét chi tiết của mọi tenant, lặp mỗi 5 phút và để dòng của s
 (trung bình 781 ms), 12 lượt 502 và 4 lượt 503 khoảng 10 ms (lỗi hạ tầng Edge).
 Rollback: deploy lại file `supabase/functions/aka-agent-email-notification-worker/index.ts` của
 `origin/dev_3` trước commit này (bằng version 6), giữ `verify_jwt=false`.
+
+### Hoàn tác version 7 → bản cũ — 04/11/2026
+
+- **Lỗi ở lượt dùng thật đầu tiên.** Lượt daily 16:15 và 16:20 VN gọi truy vấn mới cho staff 1 (giờ báo cáo 16:13). PostgREST trả 500 sau khoảng 8 giây, lúc 09:16:01Z và 09:20:08Z. Postgres ghi `57014 canceling statement due to statement timeout` cho câu `INNER JOIN LATERAL auto_campaigns`. Lượt daily 09:20Z của worker trả 500 sau 8,4 giây.
+- **Nguyên nhân.** Embed `!inner` có lọc trên bảng con được PostgREST dựng thành LATERAL theo từng dòng chi tiết trong ngày. Nhân viên có ít kết quả trong ngày nên câu này phải quét gần hết chi tiết hôm nay của mọi tổ chức, và buổi chiều thì vượt trần 8 giây. EXPLAIN lúc 12:25 không lộ ra vì khi đó dữ liệu trong ngày còn ít.
+- **Ảnh hưởng.** `enqueueDueDailyReports` dừng ở lỗi đầu tiên, nên chặn cả các báo cáo đứng sau staff 1 trong vòng lặp. Trước 18:00 chỉ staff 1 tới giờ, và ở bản cũ staff 1 cũng không có báo cáo (0 lượt ngày 03/11). Email hoàn thành không bị ảnh hưởng vì job `process` vẫn trả 200.
+- **Hoàn tác.** Lúc 16:41:37 VN đã deploy lại đúng mã `f4abca6` (bản cũ, tức version 6) thành version 8, giữ `verify_jwt=false`. Nội dung deploy đã được đối chiếu với git.
+- **Kiểm chứng lượt 16:45 (09:45Z).** Hai lượt gọi worker đều trả 200, chạy 2,5 giây và 5,3 giây. Câu cũ `select=campaign_id … limit=2000` trả 200 sau 2,5 giây; không còn lỗi 500. Có một lượt `pg_net` hết thời gian chờ 5 giây ở phía DB, nhưng đây là giới hạn sẵn có của `pg_net`, còn worker vẫn chạy xong và trả 200.
+- **Không vá lại worker cũ**, vì nó sẽ được thay bằng worker thông báo mới. Nếu vẫn cần vá, phải đo đúng câu SQL PostgREST sinh ra, vào giờ cao điểm, với nhân viên có ít kết quả trong ngày.
+- Mã trong repo được trả về bản cũ cùng commit này, để deploy từ `dev_3` không mang lại lỗi.
