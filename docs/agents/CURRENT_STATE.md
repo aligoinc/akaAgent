@@ -1,4 +1,10 @@
-# Trạng thái đã xác nhận — cập nhật 03/11/2026
+# Trạng thái đã xác nhận — cập nhật 04/11/2026
+
+[V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
+**Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token
+Desktop trên hai bảng email thông báo; không đổi ACL/hàm. Thử production ROLLBACK, hậu kiểm role
+thật và 21 ca PG17 đạt; không apply lại. Worker email cũ lọc chi tiết theo staff, đã deploy version 7
+lúc 12:25:35 VN (`verify_jwt=false` giữ nguyên); đoạn sửa chạy thật lần đầu ở lượt 16:15 VN.
 
 [V454: tối ưu staff access và Zalo Server control](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md):
 **Đã apply 16:28:58 VN, 03/11/2026** (`20261103092858`); dùng index sẵn có cho held lookup, loại kiểm quyền
