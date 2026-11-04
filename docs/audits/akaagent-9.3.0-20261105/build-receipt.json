@@ -1,0 +1,181 @@
+{
+  "version": "9.3.0",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent",
+  "source_branch": "codex/release-9.3.0",
+  "source_commit": "646ddd981f37f4aa6fce68f3253cd39fb9dc3225",
+  "version_overlay": [],
+  "worktree_used": false,
+  "verified_at": "2026-11-04T17:05:59.283Z",
+  "source_inputs_verified": 1124,
+  "checks": {
+    "typecheck_node": "passed",
+    "typecheck_renderer": "passed",
+    "packaged_output_parity": "passed",
+    "desktop_secret_absence": "passed",
+    "existing_installers_preserved": true,
+    "host_native_restored": true,
+    "host_native_sqlite": {
+      "electron": "33.4.11",
+      "architecture": "arm64",
+      "in_memory_select_1": true
+    },
+    "mac_intel_execution": "Packaged x86_64 Electron with in-memory SQLite via Rosetta on ARM64 host"
+  },
+  "artifacts": [
+    {
+      "id": "win",
+      "platform": "Windows x64",
+      "path": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent-Setup-9.3.0.exe",
+      "version": "9.3.0",
+      "resource_version": "9.3.0",
+      "main": "./out/main/index.js",
+      "packaged_output_files": 108,
+      "credential_scan_files": 628,
+      "server_secret_and_previous_anon_absent": true,
+      "windows_execution_tested": false,
+      "pe_versions": {
+        "installer": {
+          "version": "9.3.0",
+          "machine": "14c",
+          "authenticode_present": false
+        },
+        "app": {
+          "version": "9.3.0",
+          "machine": "8664",
+          "authenticode_present": false
+        }
+      },
+      "installer_payload_parity": true,
+      "bytes": 152804160,
+      "sha256": "a3aeba58d4dbea993172505fb45867c90ce7fc87b048dbe7cf182547d5b23d14",
+      "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.3.0/akaAgent-Setup-9.3.0.exe"
+    },
+    {
+      "id": "arm",
+      "platform": "macOS ARM64",
+      "path": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgent.dmg",
+      "version": "9.3.0",
+      "resource_version": "9.3.0",
+      "main": "./out/main/index.js",
+      "packaged_output_files": 108,
+      "credential_scan_files": 631,
+      "server_secret_and_previous_anon_absent": true,
+      "windows_execution_tested": false,
+      "native_modules_checked": 2,
+      "mac_checks": {
+        "architecture": "arm64",
+        "signature": "ad-hoc verified",
+        "native_sqlite_load": true,
+        "dmg_checksum": true,
+        "mounted_payload_parity": true,
+        "apple_notarized": false
+      },
+      "bytes": 182692567,
+      "sha256": "71ac3c9c194adc07b590b53743ee9bb2ac65fb12c16b91ef186aaa57b16abce6",
+      "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.3.0/akaAgent.dmg"
+    },
+    {
+      "id": "intel",
+      "platform": "macOS Intel x64",
+      "path": "/Users/lequangnhut/Repos/akaAgent/dist/akaAgentIntel.dmg",
+      "version": "9.3.0",
+      "resource_version": "9.3.0",
+      "main": "./out/main/index.js",
+      "packaged_output_files": 108,
+      "credential_scan_files": 631,
+      "server_secret_and_previous_anon_absent": true,
+      "windows_execution_tested": false,
+      "native_modules_checked": 2,
+      "mac_checks": {
+        "architecture": "x86_64",
+        "signature": "ad-hoc verified",
+        "native_sqlite_load": true,
+        "dmg_checksum": true,
+        "mounted_payload_parity": true,
+        "apple_notarized": false
+      },
+      "bytes": 189904531,
+      "sha256": "08804f4443b04e41dbddc938a4e105a8b2e1330b73f70b23f572d24b895c65ab",
+      "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.3.0/akaAgentIntel.dmg"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "database_changed": false,
+  "private_evidence": "/Users/lequangnhut/.codex/builds/akaagent-9.3.0-20261104T165834Z",
+  "builds": [
+    {
+      "target": "win",
+      "command": "npm run build:win",
+      "started_at": "2026-11-04T17:00:53.203604+00:00",
+      "finished_at": "2026-11-04T17:02:08.264781+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "arm",
+      "command": "npm run build:mac",
+      "started_at": "2026-11-04T17:02:08.265503+00:00",
+      "finished_at": "2026-11-04T17:03:01.042552+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "intel",
+      "command": "npm run build:mac:intel",
+      "started_at": "2026-11-04T17:03:01.043293+00:00",
+      "finished_at": "2026-11-04T17:03:53.076498+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "server",
+      "command": "npm run build:server:win:private",
+      "started_at": "2026-11-04T17:03:53.077211+00:00",
+      "finished_at": "2026-11-04T17:04:38.544842+00:00",
+      "exit_code": 0
+    }
+  ],
+  "source_base_commit": "c332ecf5782eca8359964727cead7200b4520d6e",
+  "build_input_manifest_sha256": "e5ca3442f1972a71bbd30ef006113228cdb7da70b73a32a1d5e714ef421e3fca",
+  "existing_installers_preserved_count": 105,
+  "server": {
+    "verified_at": "2026-11-04T17:05:01.594Z",
+    "version": "9.3.0",
+    "installer": "dist-server/private/2026-11-04T17-03-53-218Z/akaAgent-Zalo-Server-Internal-Setup-9.3.0.exe",
+    "installer_bytes": 140343359,
+    "installer_sha256": "ae01b08cf53617be555567d455ff34445c966ceb7e212eaf9f31177710b633ee",
+    "checks": {
+      "windows_x64": true,
+      "installer_payload_parity": true,
+      "clean_host_credential_loading": true,
+      "server_main_parity": true,
+      "credential_absent_from_source_desktop_and_js": true,
+      "source_and_output_files_scanned": 3859,
+      "git_ignored": true,
+      "existing_server_installers_unchanged": true,
+      "host_native_restored": true
+    },
+    "windows_runtime_tested": false,
+    "published": false,
+    "rls_activation_applied": false,
+    "pe_versions": {
+      "installer": {
+        "version": "9.3.0",
+        "authenticode_present": false
+      },
+      "app": {
+        "version": "9.3.0",
+        "authenticode_present": false
+      }
+    },
+    "private_key_selection_smoke": {
+      "cases": 14,
+      "passed": true
+    }
+  },
+  "limitations": [
+    "Windows installers are unsigned and have not been installed/executed on real Windows.",
+    "Mac packages are ad-hoc signed, not Apple notarized; Intel runtime tested through Rosetta, not Intel hardware.",
+    "Server installer contains its existing backend credential in a separate private resource; keep internal/local.",
+    "No campaign/runtime side effects were exercised; no upload, release feed update or DB mutation."
+  ],
+  "verified_local": "2026-11-05T00:05:59.413350+07:00"
+}

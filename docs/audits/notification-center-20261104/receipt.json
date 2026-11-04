@@ -1,0 +1,722 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "source": {
+    "root": "/Users/lequangnhut/Repos/akaAgentWebApp",
+    "head": "8da46d6e31acf4068395e2aad5d70dd98615693c",
+    "image_tag": "registry.fly.io/aka-agent-web-app:notifications-8da46d6-20261104",
+    "akaagent_head": "c332ecf5782eca8359964727cead7200b4520d6e"
+  },
+  "database": {
+    "ledger": [
+      {
+        "name": "migration_v457_notification_center",
+        "version": "20261104161948"
+      },
+      {
+        "name": "migration_v458_data_group_member_events",
+        "version": "20261104162008"
+      }
+    ],
+    "source_functions": [
+      {
+        "signature": "aka_agent_data_group_background_tick()",
+        "definition_md5": "873b2939cc09a51e0e9d71f685dfd0e0",
+        "owner": "postgres",
+        "security_definer": true,
+        "volatility": "v",
+        "parallel": "u",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "acl": "{postgres=X/postgres}"
+      },
+      {
+        "signature": "aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)",
+        "definition_md5": "d40d1a23943ae1a4a66339504382526f",
+        "owner": "postgres",
+        "security_definer": true,
+        "volatility": "v",
+        "parallel": "u",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "acl": "{postgres=X/postgres}"
+      }
+    ],
+    "post_apply_functions": [
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "md5": "dddfbfb96c2c9f4d0acd16a72e1c3da6",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_control_notification_center(bigint,bigint,text,text,jsonb,uuid)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "10a2465bf8273b269ed5123344cff4db",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_data_group_background_tick()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+        "md5": "72818096be86de3a5d95cc14f6f108f8",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_notification_center(bigint,bigint,text,text,text,jsonb)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "6b4f5464803f8b528072e44703ef94de",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_notification_dispatch()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "md5": "8c311a4c00fef984f746f2d8fb66c023",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_notification_snapshot(text,jsonb)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres}",
+        "md5": "f598494e22bf8d1f9ae8879a72a95840",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_notification_worker(text,jsonb)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "3b94712afe9d6aa725d8af55d825c5cb",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "aka_agent_process_data_group_dynamic_filters_core(bigint,bigint,integer)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "010fd1e9e2da4c87f0f655880157f79f",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_data_group_contact_label(bigint)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "d1e4a0efcd45765e0ee6590d64c428a7",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_data_group_filter_summary(bigint)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "f9033d68611637d1615fdd747161d933",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_data_group_finish_member_events(uuid)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "ef1912548141af355bc9d45d447f8abe",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_data_group_record_member_event(uuid,bigint,bigint,bigint,bigint,bigint,bigint,bigint,text)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "a5ffeca76e6e14dd3d9c1c097a940df5",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_apply_legacy_campaign(bigint,bigint,boolean)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "1d3fa4be8ca7210d3bc162fcaa0092e5",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_apply_legacy_report(bigint,bigint,boolean,time without time zone,text)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "6876be1efe4c2ce6f837b57d5584e2d9",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_capture_account()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "690159475b3b866cf409d37a1cb5f1d0",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_capture_campaign()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "bd5a9c0eb8248231c2e77708f2948323",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_capture_data_group(uuid)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "ce94e5820e068aa441361500b0204715",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_center(bigint,bigint,text,text,jsonb,uuid)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "f5ce4dff1cb642a25f63963415f858dc",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_change_source()",
+        "volatility": "s",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "5f8f4b5859b9224e8f1efcc734cdb883",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_cleanup(timestamp with time zone)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "ba8475893dfdf19e3deed8356987f4c6",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_cooldown(jsonb)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "c5cc0691cc495c86e5b59b5f2f6e39c8",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_default_filters(text)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "e2a27d332bdd6eb829bb63f78bab7b1e",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_enabled()",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "74b1a6296f18c67674f64d6948b2163f",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_fanout(bigint)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "149fe3f20b7d4d03fbf0bb2c6050a0a5",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_flag(jsonb,boolean)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "2b06bfe077dd4fa8ed5ba6d1a5816e20",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_int_setting(text,integer)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "0f1cab4fd7ab3b9fd56dd602dd24e545",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_mask_email(text)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "53a87c8f71fae2ad22de69f4a9378888",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_member_events_enabled()",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "c3d9473836cc61edafdf84a9d5784b1a",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_next_run(smallint[],time without time zone[],text,timestamp with time zone)",
+        "volatility": "s",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "f66df4c38714c4bf08cc89fdb9a4f116",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_refresh_channel_state(bigint,text)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "cde71abb744fe19b6852cc85f0187802",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_request_verification(bigint,bigint,text)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "8652143eb7297e1401e8b5898a8c86e3",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_result_group(text,text)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "208e5a5c185503c514d1c687cde4211e",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_save_subscription(bigint,bigint,text,boolean,boolean,boolean,jsonb,integer,smallint[],time without time zone[],text)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "bce0405ad0fed1c0f96c5276ee294308",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_schedule_reports(timestamp with time zone)",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "bf5816c69bb1a1cc454509e6d210bfc3",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_session_revoked()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "59a4d24b5253e82f4762dfb3e1d274d3",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_setting(text,text)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "c9b392d39841f6781f2e11b0278ec95c",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_settings_after()",
+        "volatility": "v",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "16d3b24203525e5208d83f01bafa8f86",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_settings_before()",
+        "volatility": "v",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "7f73a571f8e85077c8c3cce611d9c661",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_settings_json(bigint,uuid)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "a82852e08182b77bc586e1a24258c276",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_staff_org(bigint,bigint)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "dfb68495969ec882480c82e056b1c3c3",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_string_set(jsonb,text[],jsonb)",
+        "volatility": "i",
+        "security_definer": false
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "b400edcd2237492c18e19311ea719002",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_subscription_json(bigint,text)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "784e26d99897a0bcef36d04263413006",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_unread_count(bigint)",
+        "volatility": "s",
+        "security_definer": true
+      },
+      {
+        "acl": "{postgres=X/postgres}",
+        "md5": "2bf627417d7850722156533a740ec0a3",
+        "owner": "postgres",
+        "config": [
+          "search_path=pg_catalog, public"
+        ],
+        "parallel": "u",
+        "signature": "private.aka_agent_notification_valid_ids(bigint,text,jsonb)",
+        "volatility": "s",
+        "security_definer": true
+      }
+    ],
+    "sql_sha256": {
+      "migration_v457_notification_center.sql": "263f5e5058ff67ddbea37a513c8e3c4d1950ce7e912016f54c8be0bac9a35584",
+      "migration_v458_data_group_member_events.sql": "a00b3501c9bbab6e89d8c13e47401f611119c3f5ec9807bf4fe4ab722f5d67d6",
+      "rollback_v458_data_group_member_events.sql": "f336daf1cd5702d0133aae071bf90a1e1e3b9bbf34eaee6cd806d6b208b98d93",
+      "rollback_v457_notification_center.sql": "55ea9e2ce20056ac7aad65d3df24071a5504670adf504947546496c98853aac1"
+    },
+    "legacy_settings_hash": "4547aaf94172a1e68837e8637df8bc54",
+    "trial_and_rollback_passed": true,
+    "post_apply_role_checks_passed": true,
+    "settings_inbox_wrong_org_smoke_passed": true,
+    "activation": {
+      "activated_at": "2026-11-04 16:24:47.524288+00",
+      "stats": {
+        "dueNow": 0,
+        "enabled": true,
+        "deliveryMode": "dry_run",
+        "pendingRender": 0,
+        "pendingDeliveries": 0
+      }
+    },
+    "observation": {
+      "observed_at": "2026-11-04 16:25:46.85836+00",
+      "stats": {
+        "dueNow": 0,
+        "enabled": true,
+        "deliveryMode": "dry_run",
+        "pendingRender": 0,
+        "pendingDeliveries": 0
+      },
+      "subscriptions": 38,
+      "notification_counts": {},
+      "delivery_counts": {},
+      "existing_cron": [
+        {
+          "name": "aka_agent_email_notification_worker_retry",
+          "active": true,
+          "schedule": "*/5 * * * *"
+        },
+        {
+          "name": "aka_agent_email_notification_daily_report",
+          "active": true,
+          "schedule": "*/5 * * * *"
+        },
+        {
+          "name": "aka-agent-data-group-dynamic-filter-worker",
+          "active": true,
+          "schedule": "30 seconds"
+        }
+      ],
+      "legacy_trigger_enabled": "O",
+      "legacy_settings_hash": "4547aaf94172a1e68837e8637df8bc54"
+    }
+  },
+  "web_api": {
+    "started_at": "2026-11-04T16:22:11.881068+00:00",
+    "finished_at": "2026-11-04T16:22:37.748433+00:00",
+    "source": "8da46d6e31acf4068395e2aad5d70dd98615693c",
+    "machine": "48ee749f357398",
+    "before_image": "registry.fly.io/aka-agent-web-app:app-access-main-24846f5-20261103@sha256:565253ecae7b3a72b2044b1eb3704b4829e54cf21b8391b73eddc8ddd65bad61",
+    "after_image": "registry.fly.io/aka-agent-web-app:notifications-8da46d6-20261104@sha256:ff9ddc5da0d57ec77878f676f9aa2551ff13be649c4620690b9342b28c917a89",
+    "config_changed_paths": [
+      ".image"
+    ],
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 2048
+    },
+    "state": "started"
+  },
+  "verification": {
+    "local_build": true,
+    "remote_build": true,
+    "typecheck_all_7_workspaces": true,
+    "api_notification_tests": 34,
+    "web_notification_tests": 38,
+    "v457_pg17_smoke": true,
+    "v458_pg17_smoke": true,
+    "api_source_files_verified": 114,
+    "web_assets_verified": 9,
+    "http": [
+      {
+        "name": "health",
+        "status": 200,
+        "expected": 200,
+        "passed": true,
+        "body_bytes": 3
+      },
+      {
+        "name": "settings-auth",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "body_bytes": 82
+      },
+      {
+        "name": "inbox-auth",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "body_bytes": 82
+      },
+      {
+        "name": "devices-auth",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "body_bytes": 82
+      },
+      {
+        "name": "dispatch-auth",
+        "status": 401,
+        "expected": 401,
+        "passed": true,
+        "body_bytes": 52
+      },
+      {
+        "name": "invalid-email-link",
+        "status": 400,
+        "expected": 400,
+        "passed": true,
+        "body_bytes": 774
+      },
+      {
+        "name": "invalid-unsubscribe-link",
+        "status": 400,
+        "expected": 400,
+        "passed": true,
+        "body_bytes": 752
+      }
+    ],
+    "db_to_worker": {
+      "id": 636994,
+      "status_code": 200,
+      "timed_out": false,
+      "error_msg": null,
+      "content": "{\"status\":1,\"errorCode\":0,\"message\":\"Thành công!\",\"data\":{\"rendered\":0,\"suppressed\":0,\"renderRetried\":0,\"sent\":0,\"retried\":0,\"failed\":0,\"cancelled\":0,\"durationMs\":116}}",
+      "created": "2026-11-04 16:23:41.017014+00"
+    },
+    "browser": "Production login page rendered in IAB; authenticated UI not exercised"
+  },
+  "configured_secret_names": {
+    "fly": [
+      "NOTIFICATION_DISPATCH_TOKEN",
+      "NOTIFICATION_LINK_SECRET"
+    ],
+    "vault": [
+      "AKA_AGENT_NOTIFICATION_DISPATCH_URL",
+      "AKA_AGENT_NOTIFICATION_DISPATCH_TOKEN"
+    ]
+  },
+  "deferred": [
+    "live email/push cutover",
+    "APNs setup and mobile release",
+    "Desktop release",
+    "V460 and renewal Edge patch"
+  ],
+  "private_evidence": "/Users/lequangnhut/.codex/deployments/notification-center-20261104T161539Z"
+}

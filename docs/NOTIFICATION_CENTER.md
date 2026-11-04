@@ -1,8 +1,14 @@
 # Trung tâm thông báo akaBiz — hợp đồng DB (V457)
 
-**Trạng thái: candidate, CHƯA apply.** Giai đoạn 1 của phương án đã chốt 04/11/2026
-(push iOS và email cho 4 loại sự kiện). V456 đã live. Apply V457 cần duyệt riêng, chạy ngoài
-cao điểm (ALTER TABLE và CREATE OR REPLACE FUNCTION làm PostgREST nạp lại schema).
+**Trạng thái hiện tại: V457/V458 đã apply 04/11/2026 lúc 23:19–23:20 VN; Web/API `3281a40` đã deploy 23:50 VN.**
+Điều phối Fly/Vault đã cấu hình, `notifications.enabled=true`; `delivery_mode=live` từ 23:39:22 VN.
+Trigger và hai cron email cũ đã tắt trong cùng transaction. Canary production lúc 23:51 VN đạt:
+API tạo `system.test` → cron/pg_net → render/fanout → worker → một email tới `akabizzm@gmail.com`;
+người dùng xác nhận đã nhận. API danh sách/chi tiết, web-entry và số chưa đọc 1 → 0 đạt.
+Cấu hình/phiên thử đã dọn, giữ receipt thông báo; chưa thử thao tác UI production hoặc sự kiện campaign thật.
+Chưa cấu hình APNs/phát hành mobile hoặc Desktop.
+Không apply lại. [Audit, receipt và giới hạn kiểm chứng](audits/notification-center-20261104/README.md).
+Các mục trial/candidate bên dưới ghi quá trình chuẩn bị trước apply.
 
 SQL: [migration](../migrations/migration_v457_notification_center.sql),
 [rollback](../migrations/rollback_v457_notification_center.sql),
@@ -132,7 +138,7 @@ kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts`
 
 ## Cấu hình
 
-`auto_system_settings` (không bí mật): `notifications.enabled`=`false`,
+Giá trị mặc định trong migration của `auto_system_settings` (không bí mật): `notifications.enabled`=`false`,
 `notifications.delivery_mode`=`dry_run`, `notifications.cooldown_minutes.campaign`=10,
 `notifications.cooldown_minutes.account`=15, `notifications.push.hourly_cap`=60, thời gian giữ
 `notifications.retention_days`=90, `notifications.report_retention_days`=30,
@@ -142,13 +148,15 @@ kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts`
 chạy có thư cần gửi; đặt `SMTP_*` trên Fly sẽ ghi đè. Gmail cá nhân giới hạn khoảng 500 người nhận/ngày (hệ email
 cũ hiện ~6–16 thư/ngày); lỗi hết hạn mức được thử lại chứ không đánh hỏng thư.
 
-## Thứ tự bật (mỗi bước duyệt riêng)
+## Thứ tự rollout (bước 1–3 đã hoàn tất)
 
 1. Apply V457 ngoài cao điểm (công tắc vẫn tắt, chưa tạo gì), rồi V458 (cũng không ghi gì khi công tắc tắt).
 2. Deploy API WebApp có worker; đặt Vault URL/token điều phối; bật `notifications.enabled` ở
-   `dry_run`, so nội dung với email cũ vài ngày.
+   `dry_run` để kiểm tra điều phối. Kế hoạch ban đầu đối chiếu vài ngày; người dùng yêu cầu chuyển live
+   ngay ngày 04/11 sau khi kiểm tra cấu hình, hàng đợi cũ và SMTP.
 3. Chuyển `live`, tắt trigger `trg_aka_agent_enqueue_campaign_completed_email` và 2 job cron
-   email 5 phút (giữ bảng outbox cũ để tra cứu).
+   email 5 phút (giữ bảng outbox cũ để tra cứu). Đã thực hiện lúc 23:39:22 VN ngày 04/11/2026;
+   tick 30 giây dùng chung vẫn bật, không sửa RPC hoặc thêm connection.
 4. Phát hành Desktop/iOS dùng cài đặt mới; push iOS sau khi có key APNs.
 
 ## Kiểm chứng
@@ -161,7 +169,7 @@ báo cáo theo lịch, khóa thuê điều phối, thiết bị và thu hồi ph
 quyền từng role, số liệu, dọn dữ liệu; chạy lại bị preflight từ chối; rollback khôi phục tick
 rồi apply lại được. Khối preflight chạy trên akachat ở chế độ READ ONLY ngày 04/11/2026: đạt.
 
-## V458 — nhật ký vào/rời nhóm data (candidate, chưa apply)
+## V458 — nhật ký vào/rời nhóm data (đã apply)
 
 `migrations/migration_v458_data_group_member_events.sql` sửa `aka_agent_process_data_group_dynamic_filters_core`
 từ đúng bản đang chạy trên akachat (md5 `d40d1a23943ae1a4a66339504382526f`, chụp nguyên văn ngày 04/11/2026 tại

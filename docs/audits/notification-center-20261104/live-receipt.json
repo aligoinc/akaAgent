@@ -1,0 +1,282 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "operation": "notification_center_live_cutover",
+  "authorized_scope": "Enable live, disable legacy campaign email trigger and both email cron jobs, send one real email to akabizzm@gmail.com; mobile later.",
+  "cutover_at": "2026-11-04T16:39:22.566773+00:00",
+  "ledger": [
+    {
+      "name": "notification_center_live_cutover_20261104",
+      "version": "20261104163922"
+    }
+  ],
+  "sql_sha256": "afb88c6a8ddfa537ac2b4b5d6a4d263c9eff41cf1dbe18d9faded232f4cd389a",
+  "before": {
+    "checked_at": "2026-11-04 16:38:19.638484+00",
+    "settings": [
+      {
+        "key": "notifications.delivery_mode",
+        "value": "dry_run"
+      },
+      {
+        "key": "notifications.email.sender_account_id",
+        "value": "9742"
+      },
+      {
+        "key": "notifications.member_events.enabled",
+        "value": "false"
+      },
+      {
+        "key": "notifications.enabled",
+        "value": "true"
+      }
+    ],
+    "jobs": [
+      {
+        "id": 21,
+        "name": "aka_agent_email_notification_worker_retry",
+        "active": true,
+        "schedule": "*/5 * * * *",
+        "command_md5": "0ee3d7b47a74b471b5a552dc7aba47cb"
+      },
+      {
+        "id": 22,
+        "name": "aka_agent_email_notification_daily_report",
+        "active": true,
+        "schedule": "*/5 * * * *",
+        "command_md5": "bc6ff85195934ffa77f3d4adb6c3c610"
+      },
+      {
+        "id": 66,
+        "name": "aka-agent-data-group-dynamic-filter-worker",
+        "active": true,
+        "schedule": "30 seconds",
+        "command_md5": "d854961ce89a30cf923d22a63f3f70dd"
+      }
+    ],
+    "trigger": [
+      {
+        "name": "trg_aka_agent_enqueue_campaign_completed_email",
+        "def_md5": "b541818158273f7293bae09468e15512",
+        "enabled": "O"
+      }
+    ],
+    "recent_legacy_runs": [
+      {
+        "jobid": 22,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:35:00.133843+00:00",
+        "start_time": "2026-11-04T16:35:00.121557+00:00"
+      },
+      {
+        "jobid": 21,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:35:00.109723+00:00",
+        "start_time": "2026-11-04T16:35:00.091639+00:00"
+      },
+      {
+        "jobid": 22,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:30:00.164719+00:00",
+        "start_time": "2026-11-04T16:30:00.15083+00:00"
+      },
+      {
+        "jobid": 21,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:30:00.161676+00:00",
+        "start_time": "2026-11-04T16:30:00.143122+00:00"
+      }
+    ],
+    "stats": {
+      "dueNow": 0,
+      "enabled": true,
+      "deliveryMode": "dry_run",
+      "pendingRender": 0,
+      "pendingDeliveries": 0
+    }
+  },
+  "after": {
+    "checked_at": "2026-11-04 16:39:54.76289+00",
+    "settings": [
+      {
+        "key": "notifications.email.sender_account_id",
+        "value": "9742",
+        "updated_at": "2026-11-04T16:19:48.490225+00:00"
+      },
+      {
+        "key": "notifications.member_events.enabled",
+        "value": "false",
+        "updated_at": "2026-11-04T16:20:08.128859+00:00"
+      },
+      {
+        "key": "notifications.enabled",
+        "value": "true",
+        "updated_at": "2026-11-04T16:24:47.52179+00:00"
+      },
+      {
+        "key": "notifications.delivery_mode",
+        "value": "live",
+        "updated_at": "2026-11-04T16:39:22.566773+00:00"
+      }
+    ],
+    "jobs": [
+      {
+        "id": 21,
+        "name": "aka_agent_email_notification_worker_retry",
+        "active": false,
+        "schedule": "*/5 * * * *",
+        "command_md5": "0ee3d7b47a74b471b5a552dc7aba47cb"
+      },
+      {
+        "id": 22,
+        "name": "aka_agent_email_notification_daily_report",
+        "active": false,
+        "schedule": "*/5 * * * *",
+        "command_md5": "bc6ff85195934ffa77f3d4adb6c3c610"
+      },
+      {
+        "id": 66,
+        "name": "aka-agent-data-group-dynamic-filter-worker",
+        "active": true,
+        "schedule": "30 seconds",
+        "command_md5": "d854961ce89a30cf923d22a63f3f70dd"
+      }
+    ],
+    "trigger": [
+      {
+        "name": "trg_aka_agent_enqueue_campaign_completed_email",
+        "def_md5": "b541818158273f7293bae09468e15512",
+        "enabled": "D"
+      }
+    ],
+    "ledger": [
+      {
+        "name": "notification_center_live_cutover_20261104",
+        "version": "20261104163922"
+      }
+    ],
+    "legacy_deliveries": [
+      {
+        "count": 773,
+        "status": "sent"
+      },
+      {
+        "count": 1,
+        "status": "failed"
+      }
+    ],
+    "stats": {
+      "dueNow": 0,
+      "enabled": true,
+      "deliveryMode": "live",
+      "pendingRender": 0,
+      "pendingDeliveries": 0
+    }
+  },
+  "smtp_test": {
+    "smtp_test": true,
+    "send_calls": 1,
+    "sent_at": "2026-11-04T16:40:01.208Z",
+    "to": "akabizzm@gmail.com",
+    "from": "akabizzm@gmail.com",
+    "accepted": [
+      "akabizzm@gmail.com"
+    ],
+    "rejected": [],
+    "messageId": "<akaagent-live-20261104T163318Z@akabiz.net>",
+    "response": "250 2.0.0 OK  1793810401 98e67ed59e1d1-3b09445a7f6sm4647035a91.6 - gsmtp",
+    "deliveryMode": "live",
+    "route": "one_shot_smtp_from_production_machine"
+  },
+  "smtp_test_limitations": [
+    "Provider acceptance recorded; recipient subsequently confirmed receipt in this chat. Inbox folder placement was not independently inspected.",
+    "One-shot SMTP from the existing production machine using Nodemailer and sender RPC; no persistent recipient settings changed.",
+    "This test did not run a notification event through render/fanout/delivery. No natural notifications existed at observation."
+  ],
+  "observation": {
+    "checked_at": "2026-11-04 16:40:31.496828+00",
+    "stats": {
+      "dueNow": 0,
+      "enabled": true,
+      "deliveryMode": "live",
+      "pendingRender": 0,
+      "pendingDeliveries": 0
+    },
+    "legacy_pending": 0,
+    "recent_jobs": [
+      {
+        "jobid": 66,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:40:09.205966+00:00",
+        "start_time": "2026-11-04T16:40:09.192753+00:00"
+      },
+      {
+        "jobid": 66,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:39:39.191632+00:00",
+        "start_time": "2026-11-04T16:39:39.177085+00:00"
+      },
+      {
+        "jobid": 66,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:39:09.170156+00:00",
+        "start_time": "2026-11-04T16:39:09.157416+00:00"
+      },
+      {
+        "jobid": 66,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:38:39.154237+00:00",
+        "start_time": "2026-11-04T16:38:39.14129+00:00"
+      },
+      {
+        "jobid": 66,
+        "status": "succeeded",
+        "end_time": "2026-11-04T16:38:09.138344+00:00",
+        "start_time": "2026-11-04T16:38:09.125552+00:00"
+      }
+    ],
+    "notifications": 0,
+    "notification_deliveries": null
+  },
+  "health": {
+    "checked_at": "2026-11-04T16:40:30.970019+00:00",
+    "machines": [
+      {
+        "id": "48ee749f357398",
+        "state": "started",
+        "image": "registry.fly.io/aka-agent-web-app:notifications-8da46d6-20261104@sha256:ff9ddc5da0d57ec77878f676f9aa2551ff13be649c4620690b9342b28c917a89",
+        "checks": [
+          {
+            "name": "servicecheck-00-http-8080",
+            "status": "passing",
+            "output": "ok",
+            "updated_at": "2026-11-04T16:22:35.923Z"
+          }
+        ]
+      }
+    ],
+    "health": {
+      "status": 200,
+      "body": "ok\n"
+    }
+  },
+  "source": {
+    "akaAgent": "c332ecf5782eca8359964727cead7200b4520d6e",
+    "webapp_local": "3281a405a326b270b88c0a3f7f5234b9cbbd1e1c",
+    "webapp_deployed": "8da46d6e31acf4068395e2aad5d70dd98615693c"
+  },
+  "unchanged": [
+    "Business code",
+    "RPC definitions and ACL",
+    "Connection budget and machine count",
+    "Mobile/APNs rollout",
+    "Historical legacy delivery rows"
+  ],
+  "private_evidence_dir": "/Users/lequangnhut/.codex/deployments/notification-live-20261104T163318Z",
+  "recipient_confirmation": {
+    "confirmed": true,
+    "source": "User message in this chat",
+    "date_local": "2026-11-04",
+    "timezone": "Asia/Saigon",
+    "statement": "đã nhận được thư"
+  }
+}

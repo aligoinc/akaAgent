@@ -1,0 +1,425 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "deployment": {
+    "started_at": "2026-11-04T16:50:10.493645+00:00",
+    "finished_at": "2026-11-04T16:50:33.969144+00:00",
+    "exit_code": 0,
+    "source": "3281a405a326b270b88c0a3f7f5234b9cbbd1e1c",
+    "machine": "48ee749f357398",
+    "before_image": "registry.fly.io/aka-agent-web-app:notifications-8da46d6-20261104@sha256:ff9ddc5da0d57ec77878f676f9aa2551ff13be649c4620690b9342b28c917a89",
+    "after_image": "registry.fly.io/aka-agent-web-app:notifications-3281a40-20261104@sha256:6d9f39688a9aa70707f72019fdaa7a4978182ef0a8873140aeda5dc762d71931",
+    "config_changed_paths": [
+      "image"
+    ],
+    "guest": {
+      "cpu_kind": "shared",
+      "cpus": 2,
+      "memory_mb": 2048
+    },
+    "state": "started",
+    "checks": [
+      {
+        "name": "servicecheck-00-http-8080",
+        "status": "passing",
+        "output": "ok",
+        "updated_at": "2026-11-04T16:50:31.965Z"
+      }
+    ]
+  },
+  "validation": {
+    "typecheck_workspaces": 7,
+    "api_tests": 226,
+    "web_tests": 38,
+    "production_build": "passed",
+    "image_http": {
+      "matched_api_sources": 114,
+      "missing_sources": [],
+      "mismatched_sources": [],
+      "http": [
+        {
+          "path": "/healthz",
+          "status": 200
+        },
+        {
+          "path": "/assets/index-BXQ-Stgp.js",
+          "status": 200,
+          "container_sha256_match": true
+        },
+        {
+          "path": "/assets/spreadsheet-BBWTpfDg.js",
+          "status": 200,
+          "container_sha256_match": true
+        },
+        {
+          "path": "/assets/index-BWmj8x8W.css",
+          "status": 200,
+          "container_sha256_match": true
+        },
+        {
+          "path": "/api/aka-agent/control/v1/settings/notifications",
+          "status": 401
+        },
+        {
+          "path": "/api/aka-agent/control/v1/notifications",
+          "status": 401
+        },
+        {
+          "path": "/api/aka-agent/control/v1/me",
+          "status": 401
+        }
+      ]
+    }
+  },
+  "test_creation": {
+    "ok": true,
+    "phase": "created",
+    "notificationId": 1,
+    "sessionId": "17f386eb-0e71-4084-a527-d94e669f825d",
+    "recipient": "akabizzm@gmail.com",
+    "loginUnreadCount": 0,
+    "settingsRevision": 1,
+    "recipientVerification": "previous_email_receipt_confirmed_by_user",
+    "deliveryMode": "live",
+    "events": [
+      {
+        "path": "/auth/login",
+        "method": "POST",
+        "status": 200,
+        "at": "2026-11-04T16:51:33.569Z"
+      },
+      {
+        "path": "/settings/notifications",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:51:33.667Z"
+      },
+      {
+        "path": "/settings/notifications",
+        "method": "PUT",
+        "status": 200,
+        "at": "2026-11-04T16:51:33.751Z"
+      },
+      {
+        "path": "/settings/notifications",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:51:33.858Z"
+      },
+      {
+        "path": "/settings/notifications/test",
+        "method": "POST",
+        "status": 200,
+        "at": "2026-11-04T16:51:33.933Z"
+      }
+    ]
+  },
+  "test_api_checks": {
+    "ok": true,
+    "notificationId": 1,
+    "sessionId": "17f386eb-0e71-4084-a527-d94e669f825d",
+    "unreadBefore": 1,
+    "webEntryUnread": 1,
+    "marked": {
+      "ok": true,
+      "updated": 1,
+      "unreadCount": 0
+    },
+    "unreadAfter": 0,
+    "meUnreadAfter": 0,
+    "detailBefore": {
+      "id": 1,
+      "body": "Kênh email đã hoạt động lúc 23:51:33.",
+      "title": "Thông báo thử từ akaBiz",
+      "readAt": null,
+      "content": {
+        "kind": "test",
+        "headline": "Thông báo thử từ akaBiz",
+        "sections": [
+          {
+            "note": "Nếu bạn nhận được thông báo này, kênh email đã sẵn sàng (gửi lúc 23:51:33).",
+            "tone": "info",
+            "title": "Kết quả"
+          }
+        ],
+        "countedAt": "2026-11-04T16:51:33.918713+00:00"
+      },
+      "severity": "info",
+      "accountId": null,
+      "createdAt": "2026-11-04T16:51:46.639267+00:00",
+      "entityKey": "test:email",
+      "eventType": "system.test",
+      "pushState": "none",
+      "campaignId": null,
+      "deliveries": [
+        {
+          "sentAt": "2026-11-04T16:51:49.504558+00:00",
+          "status": "sent",
+          "channel": "email",
+          "attempts": 1,
+          "errorCode": null,
+          "destination": "ak***@gmail.com"
+        }
+      ],
+      "emailState": "sent",
+      "occurredAt": "2026-11-04T16:51:33.918713+00:00",
+      "dataGroupId": null,
+      "mergedCount": 0,
+      "emailSubject": "[akaBiz] Thông báo thử",
+      "suppressedCount": 0,
+      "templateVersion": 1
+    },
+    "detailAfter": {
+      "id": 1,
+      "body": "Kênh email đã hoạt động lúc 23:51:33.",
+      "title": "Thông báo thử từ akaBiz",
+      "readAt": "2026-11-04T16:52:57.362337+00:00",
+      "content": {
+        "kind": "test",
+        "headline": "Thông báo thử từ akaBiz",
+        "sections": [
+          {
+            "note": "Nếu bạn nhận được thông báo này, kênh email đã sẵn sàng (gửi lúc 23:51:33).",
+            "tone": "info",
+            "title": "Kết quả"
+          }
+        ],
+        "countedAt": "2026-11-04T16:51:33.918713+00:00"
+      },
+      "severity": "info",
+      "accountId": null,
+      "createdAt": "2026-11-04T16:51:46.639267+00:00",
+      "entityKey": "test:email",
+      "eventType": "system.test",
+      "pushState": "none",
+      "campaignId": null,
+      "deliveries": [
+        {
+          "sentAt": "2026-11-04T16:51:49.504558+00:00",
+          "status": "sent",
+          "channel": "email",
+          "attempts": 1,
+          "errorCode": null,
+          "destination": "ak***@gmail.com"
+        }
+      ],
+      "emailState": "sent",
+      "occurredAt": "2026-11-04T16:51:33.918713+00:00",
+      "dataGroupId": null,
+      "mergedCount": 0,
+      "emailSubject": "[akaBiz] Thông báo thử",
+      "suppressedCount": 0,
+      "templateVersion": 1
+    },
+    "loggedOut": true,
+    "events": [
+      {
+        "path": "/notifications?type=system.test&limit=20",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.053Z"
+      },
+      {
+        "path": "/notifications/1",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.114Z"
+      },
+      {
+        "path": "/me",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.217Z"
+      },
+      {
+        "path": "/auth/web-entry",
+        "method": "POST",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.323Z"
+      },
+      {
+        "path": "/notifications/read",
+        "method": "POST",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.371Z"
+      },
+      {
+        "path": "/notifications?unreadOnly=true&type=system.test&limit=20",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.415Z"
+      },
+      {
+        "path": "/notifications/1",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.464Z"
+      },
+      {
+        "path": "/me",
+        "method": "GET",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.549Z"
+      },
+      {
+        "path": "/auth/logout",
+        "method": "POST",
+        "status": 200,
+        "at": "2026-11-04T16:52:57.610Z"
+      },
+      {
+        "path": "/me",
+        "method": "GET",
+        "status": 401,
+        "at": "2026-11-04T16:52:57.618Z"
+      }
+    ]
+  },
+  "final_database": {
+    "checked_at": "2026-11-04 16:54:53.713326+00",
+    "stats": {
+      "dueNow": 0,
+      "enabled": true,
+      "deliveryMode": "live",
+      "pendingRender": 0,
+      "pendingDeliveries": 0
+    },
+    "jobs": [
+      {
+        "id": 21,
+        "name": "aka_agent_email_notification_worker_retry",
+        "active": false
+      },
+      {
+        "id": 22,
+        "name": "aka_agent_email_notification_daily_report",
+        "active": false
+      },
+      {
+        "id": 66,
+        "name": "aka-agent-data-group-dynamic-filter-worker",
+        "active": true
+      }
+    ],
+    "legacy_trigger_enabled": "D",
+    "dispatch_responses": [
+      {
+        "id": 637204,
+        "result": {
+          "data": {
+            "sent": 1,
+            "failed": 0,
+            "retried": 0,
+            "rendered": 1,
+            "cancelled": 0,
+            "durationMs": 3075,
+            "suppressed": 0,
+            "renderRetried": 0
+          },
+          "status": 1,
+          "message": "Thành công!",
+          "errorCode": 0
+        },
+        "created": "2026-11-04T16:51:45.584071+00:00",
+        "status_code": 200
+      }
+    ],
+    "rpc_metadata": [
+      {
+        "md5": "74b1a6296f18c67674f64d6948b2163f",
+        "owner": "postgres",
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.aka_agent_notification_fanout(bigint)",
+        "provolatile": "v"
+      },
+      {
+        "md5": "ce94e5820e068aa441361500b0204715",
+        "owner": "postgres",
+        "proacl": [
+          "postgres=X/postgres"
+        ],
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "private.aka_agent_notification_center(bigint,bigint,text,text,jsonb,uuid)",
+        "provolatile": "v"
+      },
+      {
+        "md5": "dddfbfb96c2c9f4d0acd16a72e1c3da6",
+        "owner": "postgres",
+        "proacl": [
+          "postgres=X/postgres",
+          "service_role=X/postgres"
+        ],
+        "proconfig": [
+          "search_path=pg_catalog, public"
+        ],
+        "prosecdef": true,
+        "signature": "aka_agent_control_notification_center(bigint,bigint,text,text,jsonb,uuid)",
+        "provolatile": "v"
+      }
+    ],
+    "legacy_deliveries": [
+      {
+        "count": 773,
+        "status": "sent"
+      },
+      {
+        "count": 1,
+        "status": "failed"
+      }
+    ],
+    "test_notification": {
+      "read": true,
+      "sent": true,
+      "render_attempts": 1
+    },
+    "test_delivery": {
+      "status": "sent",
+      "sent_at": "2026-11-04T16:51:49.504558+00:00",
+      "attempt_count": 1,
+      "provider_message_id": "<3973fd69-a89d-3b3d-4073-8f4532bc59c6@gmail.com>"
+    }
+  },
+  "cleanup": {
+    "cleaned_at": "2026-11-04 16:54:26.640044+00",
+    "remaining_test_settings": 0,
+    "remaining_test_subscriptions": 0,
+    "retained_read_test_receipt": 1
+  },
+  "temporary_session_file": {
+    "removed_temporary_session_file": true
+  },
+  "recipient_confirmation": {
+    "confirmed": true,
+    "source": "User reply to email-receipt question in this chat",
+    "date_local": "2026-11-04",
+    "timezone": "Asia/Saigon",
+    "statement": "Đã nhận được"
+  },
+  "scope": [
+    "Authenticated production HTTP API test action created system.test notification.",
+    "Existing cron/pg_net dispatched real worker; render/fanout/SMTP/DB completion succeeded once.",
+    "Real list/detail/me/web-entry/read/logout API checks succeeded.",
+    "Temporary recipients/subscriptions removed with checksum guards; test notification/delivery audit retained."
+  ],
+  "limitations": [
+    "Production browser UI clicks were not exercised; Web components have automated tests.",
+    "This canary used system.test, not a real customer campaign/account event or scheduled report.",
+    "Recipient was preverified using the user-confirmed prior email receipt; no new verification email was sent.",
+    "Mobile/APNs and Desktop installer release remain deferred."
+  ],
+  "unchanged": [
+    "RPC definitions/ACL/timeouts",
+    "Machine count/CPU/RAM/connection budget",
+    "Legacy email trigger and two cron jobs remain disabled"
+  ],
+  "private_evidence_dir": "/Users/lequangnhut/.codex/deployments/notification-e2e-20261104T164555Z",
+  "rpc_metadata_preserved": true
+}
