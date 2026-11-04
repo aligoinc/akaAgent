@@ -906,6 +906,7 @@ BEGIN
              'destination', CASE WHEN u.channel = 'email' THEN u.destination END,
              'attempt', u.attempt_count, 'maxAttempts', u.max_attempts,
              'notification', jsonb_build_object('id', n.id, 'eventType', n.event_type, 'severity', n.severity, 'staffId', n.staff_id,
+               'organizationId', n.organization_id,
                'entityKey', n.entity_key, 'occurredAt', n.occurred_at, 'appTitle', n.app_title, 'appBody', n.app_body,
                'emailSubject', n.email_subject, 'templateVersion', n.template_version,
                'contentSnapshot', CASE WHEN u.channel = 'email' THEN n.content_snapshot END,

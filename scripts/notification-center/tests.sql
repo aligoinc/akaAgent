@@ -147,7 +147,10 @@ SELECT fixture_assert(public.aka_agent_notification_worker('complete_render', js
          'status', 'ready', 'appTitle', 'Chiến dịch Nam hoàn thành', 'emailSubject', '[akaBiz] Chiến dịch hoàn thành', 'contentSnapshot', '{}'::jsonb)) #>> '{fanout,email}' = '1',
        'live fanout to verified email only')
   FROM jsonb_array_elements(public.aka_agent_notification_worker('claim_render', '{"limit": 50}') -> 'items') x WHERE x ->> 'eventType' = 'campaign.status_changed';
-SELECT fixture_assert(jsonb_array_length(public.aka_agent_notification_worker('claim_deliveries', '{"limit": 10}') -> 'items') = 2, 'claim email + push deliveries');
+SELECT fixture_assert(jsonb_array_length(c.items) = 2, 'claim email + push deliveries'),
+       fixture_assert((SELECT bool_and(x #>> '{notification,staffId}' = '2' AND x #>> '{notification,organizationId}' = '1')
+                         FROM jsonb_array_elements(c.items) x), 'claimed delivery carries staff and organization for signed links')
+  FROM (SELECT public.aka_agent_notification_worker('claim_deliveries', '{"limit": 10}') -> 'items' AS items) c;
 RESET ROLE;
 SELECT fixture_assert((SELECT bool_and(status = 'sending') FROM auto_notification_deliveries d JOIN auto_notifications n ON n.id = d.notification_id WHERE n.campaign_id = 20),
                       'claimed deliveries are sending');

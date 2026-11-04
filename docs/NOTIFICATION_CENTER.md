@@ -65,7 +65,7 @@ Vault `AKA_AGENT_NOTIFICATION_DISPATCH_URL` với header `x-internal-token` =
 | --- | --- |
 | `claim_render` | `{limit≤50, leaseSeconds}` → `{items:[{id, leaseToken, eventType, severity, staffId, organizationId, staffName, timezone, campaignId, accountId, dataGroupId, entityKey, occurredAt, payload, attempt}]}`. Gộp trước: ≥5 thông báo chiến dịch cùng nhân viên + trạng thái trong 2 phút → 1 (`payload.merged`, `mergedCount`). Quá 5 lần dựng → `failed`. |
 | `complete_render` | `{id, leaseToken, status:'ready'|'suppressed'|'failed'|'retry', appTitle(1–200), appBody(≤1000), emailSubject(1–300), contentSnapshot(object ≤512 KB), templateVersion, error}`. `ready` → chia lượt gửi ngay. Lệch lease → `{ok:false,error:'lease_lost'}`. |
-| `claim_deliveries` | `{limit≤100, leaseSeconds}` → `{items:[{id, leaseToken, channel, provider, destination(email), attempt, maxAttempts, notification:{...appTitle, appBody, emailSubject, contentSnapshot(email), payload(verify)}, device:{id, pushToken, apnsEnvironment, bundleId, active}, badge}]}` |
+| `claim_deliveries` | `{limit≤100, leaseSeconds}` → `{items:[{id, leaseToken, channel, provider, destination(email), attempt, maxAttempts, notification:{id, eventType, severity, staffId, organizationId, entityKey, occurredAt, appTitle, appBody, emailSubject, templateVersion, contentSnapshot(email), payload(verify)}, device:{id, pushToken, apnsEnvironment, bundleId, active}, badge}]}` |
 | `complete_delivery` | `{id, leaseToken, outcome:'sent'|'retry'|'failed'|'invalid_token'|'cancelled', providerMessageId, errorCode, error}`; `invalid_token` ngưng thiết bị; `device.active=false` thì gửi `cancelled`. |
 | `release` | Mở khóa thuê để tick kế tiếp gọi lại ngay. |
 | `stats` | Số việc tồn, chế độ gửi. |
@@ -118,7 +118,7 @@ Bắt buộc `staffId`; dữ liệu ngoài phạm vi trả `{found:false}`.
 ## Kiểm chứng
 
 `scripts/notification-center/smoke.sh`: PG17 tạm dựng theo metadata live (hàm live chính xác
-theo checksum, không dữ liệu khách), **93 ca đạt**: chuyển dữ liệu cũ, công tắc tắt không bắt
+theo checksum, không dữ liệu khách), **94 ca đạt**: chuyển dữ liệu cũ, công tắc tắt không bắt
 gì, bắt sự kiện Desktop/Chat API và thời gian chờ, cài đặt mới và lỗi kiểm tra, cầu nối Desktop
 cũ (V456 vẫn giới hạn dòng), dựng/gộp/chia lượt gửi ở `dry_run` và `live`, thử lại và token hỏng,
 báo cáo theo lịch, khóa thuê điều phối, thiết bị và thu hồi phiên, hộp thư, wrapper Desktop,
