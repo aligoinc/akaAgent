@@ -71,4 +71,13 @@ V456 sau khi kiểm tra đúng định nghĩa. Rollback mở lại lỗ hổng; 
 `auto_campaign_details` theo ngày nay inner join `auto_campaigns` lọc `staff_id`. Trước đây
 quét chi tiết của mọi tenant, lặp mỗi 5 phút và để dòng của staff khác chiếm giới hạn
 2.000 dòng. EXPLAIN live: index `auto_campaigns_staff_id_idx` → index-only scan
-`idx_campaign_details_page`. Chưa deploy Edge function.
+`idx_campaign_details_page`.
+
+**Đã deploy version 7 lúc 12:25:35 VN ngày 04/11/2026** theo yêu cầu người dùng, giữ
+`verify_jwt=false` (xác thực bằng `x-internal-token`). Bản đang chạy trước đó (version 6, deploy
+27/05/2026) khớp `origin/dev_3` trước commit sửa, nên deploy chỉ mang đúng thay đổi này. Lượt cron
+12:30 VN trên version 7 trả 200 (`ok: true`). Đoạn đã sửa chỉ chạy khi qua giờ báo cáo, sớm nhất là
+16:13 VN, nên lượt dùng thật đầu tiên là 16:15 VN cùng ngày. Mốc 24 giờ trước deploy: 550 lượt 200
+(trung bình 781 ms), 12 lượt 502 và 4 lượt 503 khoảng 10 ms (lỗi hạ tầng Edge).
+Rollback: deploy lại file `supabase/functions/aka-agent-email-notification-worker/index.ts` của
+`origin/dev_3` trước commit này (bằng version 6), giữ `verify_jwt=false`.
