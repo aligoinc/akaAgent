@@ -37,6 +37,8 @@ Bản sửa tiếp theo cho app-access/Zalo identity: [V452](../audits/app-acces
 
 Quyết định mới về Desktop pre-request: [V453 bỏ kiểm quyền app trong hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
 
+Tối ưu DB tiếp theo: [V454 staff/control guards đã apply, giữ quyền và cleanup](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
+
 ## Tra cứu đủ ngữ cảnh
 
 ```bash

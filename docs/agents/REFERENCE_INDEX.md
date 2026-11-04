@@ -1,5 +1,7 @@
 # Nội dung chuyển từ AGENTS.md — 28/10/2026
 
+- [V454: indexable held lookup, Agent guard reuse và legacy run-control fast path; đã apply, giữ quyền/ACL/cleanup](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
+
 Các ghi nhận deployment trong tài liệu chuyển là lịch sử tại thời điểm ghi. Đọc [trạng thái hiện tại](CURRENT_STATE.md) trước khi áp dụng; các ràng buộc nghiệp vụ vẫn phải giữ trừ khi đã có quyết định mới hơn.
 
 Tìm tên RPC, file, action hoặc feature trong bảng và trong `docs/agents/reference/`/`history/`; chỉ đọc phần liên quan. Không nạp toàn bộ archive vào context.

@@ -1,5 +1,9 @@
 # Quyền akaAgent và akaChat
 
+**V454 đã apply 03/11/2026:** tối ưu held lookup và kiểm quyền Zalo Server,
+giữ nguyên kết quả quyền/ACL/cleanup; không cần deploy/build lại ứng dụng.
+[Audit, rollback và số đo](audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
+
 **V453 đã apply 12:16:02 VN ngày 03/11/2026:** theo chỉ thị người dùng, bỏ kiểm
 quyền akaAgent trên từng request khỏi hook IP; giữ kiểm IP và các guard khác.
 [Quyết định hiện hành và kiểm chứng](audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
