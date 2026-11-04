@@ -3,7 +3,7 @@ import type { LoginScreenContent } from '../../../shared/types'
 
 const EMPTY_CONTENT: LoginScreenContent = {
   notification: null,
-  links: { website: null, userGuide: null, upgradePayment: null, contactUs: null }
+  links: { website: null, userGuide: null, upgradePayment: null, contactUs: null, recoverAccount: null, trialSignup: null }
 }
 const REFRESH_INTERVAL_MS = 60 * 60_000
 

@@ -84,6 +84,11 @@ body:not(.theme-light) .login-page {
 .login-password-toggle:hover { color: var(--login-accent); background: var(--bg-accent-subtle); }
 .login-recover { align-self: flex-end; border: 0; padding: 0; background: none; color: var(--login-accent); font: inherit; font-size: 12px; cursor: pointer; }
 .login-recover:hover { text-decoration: underline; text-underline-offset: 3px; }
+a.login-recover { text-decoration: none; }
+a.login-recover:hover { text-decoration: underline; }
+.login-signup { margin: 0; color: var(--login-muted); font-size: 12px; text-align: center; }
+.login-signup a { color: var(--login-accent); font-weight: 600; text-decoration: none; }
+.login-signup a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .login-options { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 0; border: 0; }
 .login-option { display: flex; align-items: center; gap: 9px; width: fit-content; color: var(--login-muted); font-size: 12px; line-height: 1.5; cursor: pointer; user-select: none; }
 .login-option input { width: 15px; height: 15px; margin: 0; accent-color: #6366f1; cursor: inherit; }

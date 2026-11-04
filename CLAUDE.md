@@ -153,7 +153,7 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 ### IPC pattern
 
 [src/main/ipc/handlers.ts](src/main/ipc/handlers.ts) gom các nhóm trong `handlers/` directory:
-- `authHandlers` (login/logout/me)
+- `authHandlers` (login/logout/me; tổ chức hết hạn gói/dùng thử → `renewal_required`, màn Gia hạn nhúng cổng CRM `/gia-han` qua `renewalWebHandlers`/`renewalWebService`, Edge `renewal_link` ký link — [hợp đồng](docs/RENEWAL_PORTAL_DESKTOP.md))
 - `campaignHandlers` (CRUD campaign + scheduler control)
 - `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (engine v2)
 - `accountHandlers` / `accountContactHandlers` / `updateHandlers`

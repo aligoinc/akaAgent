@@ -17,6 +17,7 @@ import {
   AUTH_ZALO_PRODUCT_IDS,
   getAuthProductById
 } from '../../../shared/authProductCatalog'
+import { classifyRenewalRequirement, type RenewalRequirement } from '../../../shared/renewalPortal'
 import { getVietnamDayStart } from '../../../shared/vietnamTime'
 import { getCurrentUser, requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
@@ -483,10 +484,44 @@ export async function ensureAkaAgentSubscriptionActive(organizationId: number): 
   if (!hasAnyEntitlement(entitlements)) throw new Error(ACCOUNT_EXPIRED_MESSAGE)
 }
 
-export function ensureLoginProductsActive(rows: unknown[]): void {
-  if (!hasAnyEntitlement(resolveOrganizationEntitlementAccess(rows as OrganizationProductRow[]).entitlements)) {
-    throw new Error(ACCOUNT_EXPIRED_MESSAGE)
+/** Thông tin đăng nhập đã được xác minh khi phát hiện hết hạn; chỉ dùng trong main. */
+export interface RenewalLoginContext {
+  staffId: number
+  organizationId: number
+  fingerprintHash: string
+  /**
+   * Quyết định định danh máy v3 của lượt đăng nhập. `manual_login_required` nghĩa là
+   * thông tin đăng nhập đã lưu không được dùng: không mở màn Gia hạn bằng chúng.
+   */
+  deviceDecision?: 'allowed' | 'manual_login_required' | 'device_locked'
+}
+
+/**
+ * Tổ chức không còn sản phẩm akaAgent còn hạn. Giữ đúng câu báo cũ để mọi nơi
+ * chưa xử lý màn Gia hạn vẫn hiển thị như trước.
+ */
+export class RenewalRequiredError extends Error {
+  readonly requirement: RenewalRequirement
+  readonly context: RenewalLoginContext | null
+
+  constructor(requirement: RenewalRequirement, context: RenewalLoginContext | null = null) {
+    super(ACCOUNT_EXPIRED_MESSAGE)
+    this.name = 'RenewalRequiredError'
+    this.requirement = requirement
+    this.context = context
   }
+}
+
+/** null khi còn ít nhất một quyền akaAgent; ngược lại trả trang gia hạn cần mở. */
+export function findRenewalRequirement(rows: unknown[], username: string): RenewalRequirement | null {
+  const productRows = rows as OrganizationProductRow[]
+  if (hasAnyEntitlement(resolveOrganizationEntitlementAccess(productRows).entitlements)) return null
+  return classifyRenewalRequirement(productRows, todayStartTimestamp(), username)
+}
+
+export function ensureLoginProductsActive(rows: unknown[], username = ''): void {
+  const requirement = findRenewalRequirement(rows, username)
+  if (requirement) throw new RenewalRequiredError(requirement)
 }
 
 export function hasFeatureEntitlement(

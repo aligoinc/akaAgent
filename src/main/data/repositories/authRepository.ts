@@ -16,12 +16,13 @@ import { getSupabaseClient, desktopSession, desktopSessionTransport, callDesktop
 import { callStaffClient, callCurrentStaffClient } from './staffClientRepository'
 import { recoverStaffDeviceCredentials, registerStaffDeviceRecovery } from '../../services/staffDeviceRecovery'
 import {
-  ACCOUNT_EXPIRED_MESSAGE,
-  ensureLoginProductsActive,
+  findRenewalRequirement,
   loadOrganizationAccountProducts,
   loadOrganizationChatSyncProducts,
-  loadOrganizationEntitlementAccess
+  loadOrganizationEntitlementAccess,
+  RenewalRequiredError
 } from './entitlementRepository'
+import { isRenewalPortalUrl, type RenewalRequirement } from '../../../shared/renewalPortal'
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
@@ -95,7 +96,55 @@ async function ensureStaffSubscriptionActive(staff: Pick<StaffRow, 'id' | 'organ
   if (result.staffId !== staff.id || result.organizationId !== staff.organization_id || !Array.isArray(result.products)) {
     throw new Error('Thông tin xác thực đã thay đổi. Vui lòng đăng nhập lại.')
   }
-  ensureLoginProductsActive(result.products)
+  const requirement = findRenewalRequirement(result.products, staff.username)
+  if (requirement) {
+    // Mật khẩu đã đúng ở bước trước; main dùng context này để mở màn Gia hạn.
+    throw new RenewalRequiredError(requirement, { staffId: staff.id, organizationId: staff.organization_id, fingerprintHash })
+  }
+}
+
+export interface RenewalSubscriptionStatus {
+  staffId: number
+  organizationId: number
+  /** null: tổ chức đã có lại sản phẩm akaAgent còn hạn. */
+  requirement: RenewalRequirement | null
+}
+
+/**
+ * Kiểm nhẹ bằng đúng endpoint `check` của đăng nhập (1 request) trong lúc khách
+ * ở màn Gia hạn; chỉ khi còn hạn mới chạy lại toàn bộ luồng đăng nhập.
+ */
+export async function checkRenewalStatus(credentials: SavedLoginCredentials, fingerprintHash: string): Promise<RenewalSubscriptionStatus> {
+  const result = await callDesktopSessionEndpoint<{ staffId: number; organizationId: number; products: unknown[] }>({
+    action: 'check', username: credentials.username, password: credentials.password, fingerprintHash
+  }, AbortSignal.timeout(15_000))
+  if (!Number.isSafeInteger(result.staffId) || !Number.isSafeInteger(result.organizationId) || !Array.isArray(result.products)) {
+    throw new Error('Không thể kiểm tra gói sử dụng. Vui lòng thử lại.')
+  }
+  return {
+    staffId: result.staffId,
+    organizationId: result.organizationId,
+    requirement: findRenewalRequirement(result.products, credentials.username)
+  }
+}
+
+/**
+ * Edge ký link HS256 (`RENEWAL_PORTAL_LINK_SECRET`) sau khi xác minh tài khoản;
+ * Desktop không giữ khóa ký. Chỉ nhận URL thuộc cổng /gia-han của CRM.
+ */
+export async function createRenewalPortalLink(
+  credentials: SavedLoginCredentials,
+  fingerprintHash: string,
+  organizationProductId: number | null
+): Promise<string> {
+  const result = await callDesktopSessionEndpoint<{ url?: unknown }>({
+    action: 'renewal_link', username: credentials.username, password: credentials.password, fingerprintHash,
+    ...(organizationProductId ? { opid: organizationProductId } : {})
+  }, AbortSignal.timeout(15_000))
+  if (typeof result.url !== 'string' || result.url.length > 4096 || !isRenewalPortalUrl(result.url)) {
+    throw new Error('Link gia hạn không hợp lệ.')
+  }
+  return result.url
 }
 
 async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumns): Promise<AuthUser> {
@@ -165,7 +214,13 @@ async function prepareDeviceLogin(username: string, password: string, source: De
     fingerprintHash: device.fingerprintHash, legacyHash, source
   })
   const staff: StaffRow = { ...profile, password }
-  await ensureStaffSubscriptionActive(staff, device.fingerprintHash)
+  try {
+    await ensureStaffSubscriptionActive(staff, device.fingerprintHash)
+  } catch (error) {
+    if (!(error instanceof RenewalRequiredError) || !error.context) throw error
+    // Hết hạn vẫn kiểm trước khoá máy như cũ; giữ quyết định máy để không dùng sai thông tin đã lưu.
+    throw new RenewalRequiredError(error.requirement, { ...error.context, deviceDecision: profile.deviceV3!.decision })
+  }
   const decision = profile.deviceV3!
   if (decision.decision === 'device_locked') throw new Error(deviceLockedMessage())
   return { staff, device, legacyHash, decision, source }
@@ -173,8 +228,15 @@ async function prepareDeviceLogin(username: string, password: string, source: De
 
 /** Called even when auto-login is off, before exposing the remembered username to renderer. */
 export async function checkRememberedDeviceLogin(credentials: SavedLoginCredentials): Promise<boolean> {
-  const prepared = await prepareDeviceLogin(credentials.username, credentials.password, 'remembered')
-  return prepared.decision.decision === 'allowed'
+  try {
+    const prepared = await prepareDeviceLogin(credentials.username, credentials.password, 'remembered')
+    return prepared.decision.decision === 'allowed'
+  } catch (error) {
+    // Mật khẩu ghi nhớ vẫn đúng; bấm Đăng nhập sẽ mở màn Gia hạn thay vì bắt nhập lại.
+    // Giữ chốt máy: thông tin đã lưu không được dùng thì vẫn bắt nhập thủ công như trước.
+    if (error instanceof RenewalRequiredError) return error.context?.deviceDecision !== 'manual_login_required'
+    throw error
+  }
 }
 
 export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials | null> {
@@ -182,8 +244,14 @@ export async function recoverDeviceCredentials(): Promise<SavedLoginCredentials 
   const recovered = await recoverStaffDeviceCredentials(fingerprintHash, async () => (await getV2DeviceIdentity()).fingerprintHash)
   if (recovered === 'manual_login_required') return null
   if (!recovered) throw new Error('Máy chưa đăng ký khôi phục. Vui lòng nhập tên đăng nhập và mật khẩu.')
-  const prepared = await prepareDeviceLogin(recovered.username, recovered.password, 'recovery')
-  if (prepared.decision.decision === 'manual_login_required') return null
+  try {
+    const prepared = await prepareDeviceLogin(recovered.username, recovered.password, 'recovery')
+    if (prepared.decision.decision === 'manual_login_required') return null
+  } catch (error) {
+    // Tài khoản hết hạn vẫn lấy lại được tên đăng nhập; đăng nhập sẽ chuyển sang màn Gia hạn.
+    if (!(error instanceof RenewalRequiredError)) throw error
+    if (error.context?.deviceDecision === 'manual_login_required') return null
+  }
   return recovered
 }
 
@@ -231,17 +299,29 @@ function hasAcceptedPolicy(staff: StaffRow): boolean {
   return staff.is_policy_accepted === true
 }
 
+/** Hết hạn kèm quyết định máy "phải đăng nhập thủ công" thì xử lý như luồng thường, không mở màn Gia hạn. */
+async function prepareLoginOrManual(username: string, password: string, source: DeviceLoginSource): Promise<PreparedDeviceLogin | null> {
+  try {
+    return await prepareDeviceLogin(username.trim(), password, source)
+  } catch (error) {
+    if (error instanceof RenewalRequiredError && error.context?.deviceDecision === 'manual_login_required') return null
+    throw error
+  }
+}
+
 export async function login(username: string, password: string, assertCurrent?: () => void, source: DeviceLoginSource = 'manual'): Promise<AuthLoginResult> {
-  const prepared = await prepareDeviceLogin(username.trim(), password, source)
+  const prepared = await prepareLoginOrManual(username, password, source)
   assertCurrent?.()
+  if (!prepared) return { status: 'manual_login_required' }
   if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
   if (!hasAcceptedPolicy(prepared.staff)) return { status: 'policy_required' }
   return completeDeviceLogin(prepared, assertCurrent)
 }
 
 export async function acceptPolicyAndLogin(username: string, password: string, assertCurrent?: () => void, source: DeviceLoginSource = 'manual'): Promise<AuthLoginResult> {
-  const prepared = await prepareDeviceLogin(username.trim(), password, source)
+  const prepared = await prepareLoginOrManual(username, password, source)
   assertCurrent?.()
+  if (!prepared) return { status: 'manual_login_required' }
   if (prepared.decision.decision === 'manual_login_required') return { status: 'manual_login_required' }
   if (!hasAcceptedPolicy(prepared.staff)) await callStaffClient({ username: prepared.staff.username, password }, 'accept_policy', { staffId: prepared.staff.id })
   assertCurrent?.()
