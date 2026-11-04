@@ -92,9 +92,9 @@ Bắt buộc `staffId`; dữ liệu ngoài phạm vi trả `{found:false}`.
 | `save_settings` | Bắt buộc `revision`; thiếu khóa nào giữ giá trị cũ. Lỗi: `notification_settings_conflict` (40001), `notification_invalid_email`, `notification_email_required`, `notification_invalid_filter`, `notification_invalid_schedule`, `notification_invalid_cooldown`, `notification_ids_not_owned` |
 | `list` | `{cursor:{createdAt,id}, limit≤50, type, unreadOnly}` → `{items, nextCursor, unreadCount}` (keyset, chỉ `ready`) |
 | `detail` | Nội dung đã chốt + lượt gửi (email che bớt) |
-| `mark_read` | `{ids≤200}` hoặc `{upToId}` → `unreadCount` (tối đa 100) |
+| `mark_read` | `{ids≤200}` hoặc `{upToId, type?}` → `unreadCount` (tối đa 100). `upToId` phải là thông báo đã hiện của chính nhân viên; đánh dấu mọi mục có `(created_at, id)` ≤ mục đó, tùy chọn chỉ một loại |
 | `unread_count`, `set_device_enabled`, `unregister_device` (`deviceId` hoặc `current`), `resend_verification` | |
-| `register_device` | Chỉ `ios` + phiên native còn hạn; token đã thuộc máy khác thì ngưng ràng buộc cũ (`staff_changed`) |
+| `register_device` | Chỉ `ios` + phiên native còn hạn; token đã thuộc máy khác thì ngưng ràng buộc cũ (`staff_changed`). Máy bị gỡ từ nơi khác (`user_removed`) chỉ bật lại khi gửi `explicit: true` (người dùng tự bật trên máy); trả `{ok, deviceId, active}` |
 | `test` | `{channel}`; tối đa 3 lần/10 phút (`54000`); công tắc tắt → `55000` |
 | `verify_email`, `unsubscribe` | Chỉ web, sau khi API kiểm token HMAC trong link |
 
@@ -138,7 +138,7 @@ kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts`
 ## Kiểm chứng
 
 `scripts/notification-center/smoke.sh`: PG17 tạm dựng theo metadata live (hàm live chính xác
-theo checksum, không dữ liệu khách), **94 ca đạt**: chuyển dữ liệu cũ, công tắc tắt không bắt
+theo checksum, không dữ liệu khách), **104 ca đạt**: chuyển dữ liệu cũ, công tắc tắt không bắt
 gì, bắt sự kiện Desktop/Chat API và thời gian chờ, cài đặt mới và lỗi kiểm tra, cầu nối Desktop
 cũ (V456 vẫn giới hạn dòng), dựng/gộp/chia lượt gửi ở `dry_run` và `live`, thử lại và token hỏng,
 báo cáo theo lịch, khóa thuê điều phối, thiết bị và thu hồi phiên, hộp thư, wrapper Desktop,
@@ -177,3 +177,9 @@ lỗi gộp thông báo và lỗi so khớp một liên hệ không làm hỏng 
 khung; chạy lại bị từ chối; rollback V457 bị chặn khi có V458; rollback khôi phục checksum và hành vi; apply lại được.
 Preflight phần không phụ thuộc V457 chạy READ ONLY trên akachat ngày 04/11/2026: 16/16 cột, index thành viên đang
 hoạt động, metadata hàm lõi và checksum khớp.
+
+### Thứ tự hộp thư
+
+`created_at` của thông báo là lúc nó vào hộp thư (được đặt lại khi `complete_render` chuyển sang `ready`); thời điểm sự kiện
+nằm ở `occurred_at`. Nhờ vậy thông báo gộp theo khung (tạo từ đầu khung, dựng sau khi khung đóng) hiện lên đầu danh sách,
+và "Đánh dấu đã đọc tất cả" (`upToId` theo `(created_at, id)`) không đánh dấu thông báo dựng sau lúc người dùng xem.

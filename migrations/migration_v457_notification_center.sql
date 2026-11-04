@@ -869,7 +869,9 @@ BEGIN
          SET content_status = 'ready', app_title = v_payload ->> 'appTitle', app_body = v_payload ->> 'appBody',
              email_subject = v_payload ->> 'emailSubject', content_snapshot = v_payload -> 'contentSnapshot',
              template_version = coalesce((v_payload ->> 'templateVersion')::smallint, 1),
-             lease_token = NULL, leased_until = NULL, last_error = NULL, updated_at = v_now
+             lease_token = NULL, leased_until = NULL, last_error = NULL, updated_at = v_now,
+             -- created_at = lúc vào hộp thư: thông báo gộp theo khung (tạo từ đầu khung) vẫn lên đầu danh sách.
+             created_at = v_now
        WHERE id = v_id;
       RETURN jsonb_build_object('ok', true, 'fanout', private.aka_agent_notification_fanout(v_id));
     ELSIF v_status IN ('suppressed', 'failed') THEN
@@ -1334,7 +1336,7 @@ DECLARE
   v_g_enabled boolean; v_g_email boolean; v_g_push boolean; v_g_ids jsonb; v_g_actions jsonb; v_g_bucket integer; v_g_shared boolean;
   v_limit integer; v_cursor_at timestamptz; v_cursor_id bigint; v_type text; v_unread boolean; v_items jsonb; v_count integer;
   v_id bigint; v_installation uuid; v_token text; v_bundle text; v_env text; v_rows integer; v_session record; v_ids bigint[];
-  v_n public.auto_notifications%ROWTYPE; v_tz text;
+  v_n public.auto_notifications%ROWTYPE; v_tz text; v_explicit boolean; v_active boolean;
 BEGIN
   IF p_client NOT IN ('web', 'ios', 'desktop') THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'notification_invalid_client'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.org_staff st WHERE st.id = p_staff_id AND st.organization_id = p_organization_id
@@ -1510,8 +1512,17 @@ BEGIN
       UPDATE public.auto_notifications SET read_at = v_now, updated_at = v_now
        WHERE staff_id = p_staff_id AND id = ANY (v_ids) AND read_at IS NULL;
     ELSIF v_p ? 'upToId' THEN
+      -- "Đánh dấu đã đọc tất cả" theo đúng thứ tự hộp thư (created_at, id) tới mục mới nhất đã thấy; tùy chọn chỉ một loại.
+      v_type := nullif(v_p ->> 'type', '');
+      IF v_type IS NOT NULL AND v_type NOT IN ('campaign.status_changed','account.status_changed','report.scheduled','data_group.membership_changed','system.test') THEN
+        RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'notification_invalid_filter';
+      END IF;
+      SELECT n.created_at, n.id INTO v_cursor_at, v_cursor_id FROM public.auto_notifications n
+       WHERE n.id = (v_p ->> 'upToId')::bigint AND n.staff_id = p_staff_id AND n.content_status = 'ready';
+      IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE = 'P0002', MESSAGE = 'notification_not_found'; END IF;
       UPDATE public.auto_notifications SET read_at = v_now, updated_at = v_now
-       WHERE staff_id = p_staff_id AND read_at IS NULL AND content_status = 'ready' AND id <= (v_p ->> 'upToId')::bigint;
+       WHERE staff_id = p_staff_id AND read_at IS NULL AND content_status = 'ready'
+         AND (v_type IS NULL OR event_type = v_type) AND (created_at, id) <= (v_cursor_at, v_cursor_id);
     ELSE
       RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'notification_invalid_ids';
     END IF;
@@ -1529,6 +1540,7 @@ BEGIN
     BEGIN v_installation := (v_p ->> 'installationId')::uuid;
     EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'notification_invalid_device'; END;
     v_token := lower(nullif(btrim(v_p ->> 'pushToken'), ''));
+    v_explicit := private.aka_agent_notification_flag(v_p -> 'explicit', false);
     v_bundle := v_p ->> 'bundleId';
     v_env := coalesce(v_p ->> 'apnsEnvironment', 'production');
     IF v_installation IS NULL OR v_bundle IS NULL OR v_bundle NOT IN ('net.akabiz.agent', 'net.akabiz.agent.dev')
@@ -1552,10 +1564,14 @@ BEGIN
            app_version = EXCLUDED.app_version, bundle_id = EXCLUDED.bundle_id, push_token = EXCLUDED.push_token,
            apns_environment = EXCLUDED.apns_environment, permission_status = EXCLUDED.permission_status,
            is_enabled = CASE WHEN dv.staff_id = EXCLUDED.staff_id THEN dv.is_enabled ELSE true END,
-           is_active = true, deactivated_reason = NULL, failure_count = 0, last_registered_at = EXCLUDED.last_registered_at,
+           -- Máy bị gỡ từ nơi khác chỉ bật lại khi người dùng tự bật trên chính máy đó (explicit); lần làm mới tự động thì giữ nguyên.
+           is_active = NOT (dv.deactivated_reason = 'user_removed' AND dv.staff_id = EXCLUDED.staff_id AND NOT v_explicit),
+           deactivated_reason = CASE WHEN dv.deactivated_reason = 'user_removed' AND dv.staff_id = EXCLUDED.staff_id AND NOT v_explicit
+                                     THEN 'user_removed' END,
+           failure_count = 0, last_registered_at = EXCLUDED.last_registered_at,
            updated_at = EXCLUDED.updated_at
-    RETURNING dv.id INTO v_id;
-    RETURN jsonb_build_object('ok', true, 'deviceId', v_id);
+    RETURNING dv.id, dv.is_active INTO v_id, v_active;
+    RETURN jsonb_build_object('ok', true, 'deviceId', v_id, 'active', v_active);
 
   ELSIF p_action = 'unregister_device' THEN
     IF coalesce((v_p ->> 'current')::boolean, false) THEN

@@ -210,6 +210,21 @@ SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'ios',
          'aaaaaaaa-0000-4000-8000-000000000001') ->> 'deviceId') IS NOT NULL, 'ios session registers device');
 SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'ios', 'get_settings', '{}', 'aaaaaaaa-0000-4000-8000-000000000001')
                        #> '{channels,push,devices,0,isCurrentDevice}') = 'true', 'settings mark current device');
+SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'web', 'unregister_device', jsonb_build_object('deviceId',
+         (public.aka_agent_control_notification_center(1, 1, 'ios', 'get_settings', '{}', 'aaaaaaaa-0000-4000-8000-000000000001')
+            #>> '{channels,push,devices,0,id}')::bigint)) ->> 'updated')::int = 1,
+       'web removes the iPhone');
+SELECT fixture_assert((r ->> 'ok') = 'true' AND (r ->> 'active') = 'false', 'automatic refresh does not bring a removed iPhone back')
+  FROM (SELECT public.aka_agent_control_notification_center(1, 1, 'ios', 'register_device', jsonb_build_object('installationId', 'cccccccc-0000-4000-8000-000000000001',
+         'bundleId', 'net.akabiz.agent', 'pushToken', repeat('cd', 32), 'apnsEnvironment', 'production', 'permissionStatus', 'granted'),
+         'aaaaaaaa-0000-4000-8000-000000000001') AS r) x;
+RESET ROLE;
+SELECT fixture_assert((SELECT NOT is_active AND deactivated_reason = 'user_removed' FROM auto_notification_devices WHERE installation_id = 'cccccccc-0000-4000-8000-000000000001'),
+                      'removed iPhone stays removed');
+SET ROLE service_role;
+SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'ios', 'register_device', jsonb_build_object('installationId', 'cccccccc-0000-4000-8000-000000000001',
+         'bundleId', 'net.akabiz.agent', 'pushToken', repeat('cd', 32), 'apnsEnvironment', 'production', 'permissionStatus', 'granted', 'explicit', true),
+         'aaaaaaaa-0000-4000-8000-000000000001') ->> 'active') = 'true', 'turning it on again on the iPhone re-activates it');
 SELECT fixture_assert(fixture_error($$SELECT public.aka_agent_control_notification_center(1, 1, 'ios', 'register_device',
   '{"installationId":"cccccccc-0000-4000-8000-000000000002","bundleId":"net.akabiz.agent"}', 'aaaaaaaa-0000-4000-8000-000000000002')$$)
                       LIKE '42501:notification_session_invalid%', 'web session cannot register device');
@@ -229,7 +244,33 @@ SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web',
 SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'detail', jsonb_build_object('id',
          (public.aka_agent_control_notification_center(2, 1, 'web', 'list') -> 'items' -> 0 ->> 'id')::bigint)) -> 'deliveries' -> 0 ->> 'destination') = 'na***@example.test',
        'detail masks email destination');
-SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'mark_read', jsonb_build_object('upToId', 9223372036854775807)) ->> 'unreadCount')::int = 0, 'mark all read');
+SELECT fixture_assert(fixture_error($$SELECT public.aka_agent_control_notification_center(2, 1, 'web', 'mark_read', '{"upToId": 1}')$$) LIKE 'P0002:notification_not_found%',
+                      'mark all read needs one of your visible notifications as the anchor');
+SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'mark_read', jsonb_build_object('upToId',
+         (public.aka_agent_control_notification_center(2, 1, 'web', 'list') -> 'items' -> 0 ->> 'id')::bigint)) ->> 'unreadCount')::int = 0, 'mark all read');
+RESET ROLE;
+-- Hai thông báo mới khác loại, và một thông báo tạo sớm (id nhỏ) nhưng dựng xong muộn.
+INSERT INTO auto_notifications (organization_id, staff_id, event_type, entity_key, dedupe_key, content_status, app_title, created_at)
+VALUES (1, 2, 'account.status_changed', 'account:9', 'fx:acc', 'ready', 'Tài khoản', now() - interval '2 seconds'),
+       (1, 2, 'report.scheduled', 'report:fx', 'fx:rep', 'ready', 'Báo cáo', now() - interval '1 second');
+SELECT id AS rep_id FROM auto_notifications WHERE dedupe_key = 'fx:rep' \gset
+INSERT INTO auto_notifications (organization_id, staff_id, event_type, entity_key, dedupe_key, content_status, lease_token, leased_until, created_at, payload)
+VALUES (1, 2, 'system.test', 'test:email', 'fx:late', 'rendering', 'dddddddd-0000-4000-8000-000000000001', now() + interval '2 minutes',
+        now() - interval '1 hour', '{"channel":"email"}') RETURNING id AS late_id \gset
+SET ROLE service_role;
+SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'mark_read',
+         jsonb_build_object('upToId', :rep_id, 'type', 'account.status_changed')) ->> 'updated')::int = 1,
+       'mark all read of one type leaves other types unread');
+RESET ROLE;
+SELECT fixture_assert((SELECT read_at IS NULL FROM auto_notifications WHERE dedupe_key = 'fx:rep'), 'report still unread');
+SET ROLE service_role;
+SELECT fixture_assert(public.aka_agent_notification_worker('complete_render', jsonb_build_object('id', :late_id,
+         'leaseToken', 'dddddddd-0000-4000-8000-000000000001', 'status', 'ready', 'appTitle', 'Dựng muộn', 'emailSubject', '[akaBiz] Dựng muộn',
+         'contentSnapshot', '{}'::jsonb)) ->> 'ok' = 'true', 'late render completes');
+SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'list') -> 'items' -> 0 ->> 'title') = 'Dựng muộn',
+                      'notification rendered late enters the inbox on top');
+SELECT fixture_assert((public.aka_agent_control_notification_center(2, 1, 'web', 'mark_read', jsonb_build_object('upToId', :rep_id)) ->> 'unreadCount')::int = 1,
+       'mark all read up to the newest item seen keeps the late one unread');
 SELECT fixture_assert(fixture_error($$SELECT public.aka_agent_control_notification_center(2, 1, 'web', 'detail', '{"id": 1}')$$) LIKE 'P0002:notification_not_found%',
                       'cannot open another staff notification');
 SELECT fixture_assert((public.aka_agent_control_notification_center(1, 1, 'web', 'test', '{"channel": "email"}') ->> 'ok') = 'true', 'test 1');
