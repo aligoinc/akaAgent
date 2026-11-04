@@ -1,5 +1,9 @@
 # Rà soát nguồn danh tính Zalo sau V451 — 03/11/2026
 
+**Cập nhật V452:** ba nhóm dưới đây đã sửa/kiểm thử; DB đã apply, Chat API
+đã deploy từ repo chính. Receipt ở [audit V452](RUNTIME_IDENTITY_FIX_20261103.md).
+Nội dung bên dưới giữ nguyên bằng chứng tại thời điểm sau V451, trước V452.
+
 V451 đã apply theo chỉ thị lúc **11:15:06 Việt Nam**, ledger `20261103041506`.
 [Receipt apply](canonical-identity-apply-receipt-20261103.json).
 Rà soát tiếp theo là read-only với production; các repro dùng PostgreSQL disposable.

@@ -34,10 +34,11 @@ import { useUiStore } from '../../stores/uiStore'
 import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/deviceChange'
 import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
+import NotificationBell from '../Notifications/NotificationBell'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
 
 interface TopBarProps {
   activePage: AppPage
@@ -49,6 +50,8 @@ interface TopBarProps {
   onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
+  /** Mở trang Thông báo; truyền id để mở sẵn chi tiết một thông báo. */
+  onOpenNotifications: (notificationId?: number) => void
   currentVersion: string
   availableUpdateVersion?: string
   checkingUpdate: boolean
@@ -82,6 +85,7 @@ export default function TopBar({
   onOpenAccountInfo,
   onOpenGeneralSettings,
   onOpenChangePassword,
+  onOpenNotifications,
   currentVersion,
   availableUpdateVersion,
   checkingUpdate,
@@ -302,6 +306,12 @@ export default function TopBar({
           {sidebarExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
         </button>
       </div>
+
+      <NotificationBell
+        active={activePage === 'notifications'}
+        onOpenAll={() => onOpenNotifications()}
+        onOpenNotification={notificationId => onOpenNotifications(notificationId)}
+      />
 
       <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
         {navItems.map(item => (

@@ -9,13 +9,16 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Phạm vi task / đường dẫn | Tài liệu cần đọc |
 | --- | --- |
 | Tách quyền akaAgent/akaChat, product 5, quota riêng, local reader, app_access | [Hợp đồng](../APP_ACCESS_SPLIT.md); [audit triển khai](../audits/app-access-split/README.md); [V447 đã kích hoạt, chỉ roll forward](../audits/app-access-split/ACTIVATION_20261103.md); [V448/query performance đã triển khai](../audits/app-access-split/PERFORMANCE_FIX_20261103.md); [V449 chia sẻ khi chủ khóa/hết hạn đã apply](../audits/app-access-split/SHARED_OWNER_FIX_20261103.md); [V450 cấp/bật lại Chat Server đã apply](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md); [V451 canonical identity đã apply](../audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md) |
+| Hết hạn gói/dùng thử khi đăng nhập, màn Gia hạn nhúng cổng CRM `/gia-han`, Edge `renewal_link`, link Lấy lại tài khoản/Đăng ký dùng thử, V460 | [Hợp đồng, bản vá Edge riêng và trạng thái](../RENEWAL_PORTAL_DESKTOP.md); [cấu hình màn đăng nhập](../LOGIN_SCREEN_SETTINGS.md); giữ khóa ký ở server, không đưa link/mật khẩu qua renderer |
 | DB, RPC, RLS, auth, quyền hoặc rollout | [CURRENT_STATE](CURRENT_STATE.md); [connection](reference/database-01.md); [RPC/migration](reference/database-02.md); skill RPC trong AGENTS.md |
 | Token, staff, device recovery, Windows đọc hardware chậm/timeout 30 giây, AI key, credentials | [CURRENT_STATE](CURRENT_STATE.md); [phạm vi credential và ngoại lệ SMS](CLIENT_CONTRACTS.md#sms-credentials); [data/auth/AI](reference/data-auth-ai-01.md); [Desktop token](../DESKTOP_SESSION_RLS.md); [device v3](../DEVICE_IDENTITY_V3.md); [AI proxy](../DESKTOP_AI_PROXY.md) |
 | Quyền account/campaign hoặc chia sẻ nhóm | [ownership](../DESKTOP_ACCOUNT_CAMPAIGN_OWNERSHIP.md); [staff privacy](../DESKTOP_STAFF_SELF_ACCESS.md); [sharing revoke](../GROUP_SHARING_REVOKE_OWNERSHIP.md); [Data Group sharing](../GROUP_SHARING_V409.md) |
 | Quyền thư viện contacts/content/media, settings, element/XPath, org/gói | [V436: phạm vi, ngoại lệ chia sẻ và admin](../DESKTOP_DATA_PRIVACY_V436.md); [CURRENT_STATE](CURRENT_STATE.md) |
 | `src/main`, preload, shared IPC, renderer stores | [kiến trúc](reference/architecture-01.md); [IPC](reference/architecture-02.md); [renderer/editor](reference/architecture-03.md) |
 | `src/main/v2`, Facebook/browser/login, nội dung và DOM | Các mục `browser-*` và `workflow-*` trong [chỉ mục](REFERENCE_INDEX.md); [engine v2](reference/workflow-01.md); skill C# khi có nguồn C# |
+| Chia sẻ bài nguồn vào nhóm/trang cá nhân, Reel không có dialog, element 257, block 36/2835 | [XPath hoàn chỉnh đã live 03/11, source/V455 đồng bộ 04/11](../FACEBOOK_NATIVE_GROUP_SHARE.md#share-xpath-20261103); không ghép thêm parent vào 257, không tái sinh migration lịch sử từ source hiện hành |
 | Zalo album + chữ tới người lạ (lỗi 127); mã 122/120/802 khi nhắn người lạ; "Nghỉ giữa 2 lần" sau mục tiêu thất bại, tra số `221`; gửi lại mục tiêu đã hỏng, lỗi tạm thời đốt mục tiêu; comment sau đăng nhóm (`fb_comment_box_at_n`), nút comment newsfeed/quét data (element 1692/1489), nút Like newsfeed/dialog (1691/1132); `Không tìm thấy ô đăng bài` | [điều tra và cập nhật XPath 01–02/11/2026: số liệu, cơ chế, phần chưa xác minh](../CUSTOMER_REPORTS_ZALO_ALBUM_FB_GROUP_20261101.md) |
+| Kiểm tra gửi trùng/cooldown, tra UID/SĐT/SMS, `aka_agent_apply_campaign_delivery_cooldown` | [V431 và tra người nhận bằng index đã apply 28/10](../COOLDOWN_HISTORY_V431.md); giữ lịch sử xóa mềm/guard Desktop, không apply lại; đổi `normalize_phone` phải rebuild index SĐT |
 | Scheduler/campaign/runtime/quota/source/claim/recovery | `campaigns-*`, `action-results-*`, `media-*`, `pitfalls-*` trong [chỉ mục](REFERENCE_INDEX.md); [media timeout](reference/media-01.md); [kết quả explicit/legacy](reference/action-results-01.md) |
 | Facebook chạy ngẫu nhiên AI, checkbox/ẩn Tải lại, phân lượt campaign, deadline/retry, giới hạn cũ, lease/UI và cách ly luồng chạy thường | [Hợp đồng V444](../FACEBOOK_RANDOM_AI_V442.md); [audit V444 đã apply DB, app chưa phát hành](../audits/facebook-random-ai-v442/README.md); giữ lifecycle/quota/ownership hiện hành |
 | Zalo QR/Web/Server, akaChat, listener, replay | [Desktop/WebApp và kết nối Chat](CLIENT_CONTRACTS.md#chat-routing); [subtype và runtime](reference/browser-04.md); [listener/replay](reference/pitfalls-04.md); [HTTP các repo](../CROSS_REPO_RLS_DEPLOY_20261028.md); tìm thêm tên service trong [chỉ mục](REFERENCE_INDEX.md) |
@@ -29,9 +32,17 @@ Task chạm nhiều phần phải đọc nhiều dòng; không cần nạp toàn
 | Excel nhóm Facebook: Data tìm được, Nhóm data, Kết quả chạy | [Mẫu 6 cột tìm theo từ khóa](../FACEBOOK_SEARCH_GROUP_EXCEL.md); [metadata động, action gate, quyền nguồn và V443](../FACEBOOK_GROUP_EXPORT_METADATA.md); giữ luồng quét nhóm đã tham gia |
 | Nhóm mẫu nội dung, picker/preview, `CampaignFormModal`, snapshot | [luồng chọn nhóm hiện tại](CLIENT_CONTRACTS.md#content-group-selection); [campaign/content](reference/campaigns-01.md); [pitfall và đính chính](reference/pitfalls-02.md) |
 | Report/Automation/action status | [báo cáo](reference/reports-01.md); [kết quả hành động](reference/action-results-01.md); [hợp đồng report](../ACTION_STATUS_REPORTS.md) |
+| Không tìm thấy ô đăng bài khi đăng nhóm, nhóm Mua bán, tách policy group/personal | [V459 đã apply: block 27, group policy 122 Bỏ qua, profile policy 94 giữ nguyên](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md); không đổi app, giữ log nguyên nhân, cần nạp lại catalog |
 | akaBiz API/SMS/SQL import/Sheet/template/staff admin | [SQL Account](reference/integrations-01.md); [tích hợp/quản trị](reference/integrations-02.md); `browser-*`/`campaigns-*` theo sản phẩm |
+| Loại trừ gửi Zalo, xóa tag trên Zalo làm báo thiếu dữ liệu | [Hợp đồng tag đã xóa 04/11/2026](../CAMPAIGN_SEND_EXCLUSIONS.md#deleted-native-zalo-tags--source-change-04112026); bỏ tag khỏi điều kiện đang xét chỉ sau khi đọc đủ danh sách, giữ lỗi API/phiên và các bộ lọc khác |
 | Build/package/update/release | [lệnh và native](reference/build-01.md); [updater](reference/build-02.md); [feed/version](reference/build-03.md); [CURRENT_STATE](CURRENT_STATE.md) |
 | Docs, Git và tổ chức hướng dẫn | [MAINTENANCE](MAINTENANCE.md); [skill trước PR](../../.agents/skills/source-command-verify-pr/SKILL.md); [chỉ mục](REFERENCE_INDEX.md) |
+
+Bản sửa tiếp theo cho app-access/Zalo identity: [V452](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md).
+
+Quyết định mới về Desktop pre-request: [V453 bỏ kiểm quyền app trong hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
+
+Tối ưu DB tiếp theo: [V454 staff/control guards đã apply, giữ quyền và cleanup](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
 
 ## Tra cứu đủ ngữ cảnh
 

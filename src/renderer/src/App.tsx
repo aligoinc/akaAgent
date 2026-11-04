@@ -9,6 +9,7 @@ import ReportPage from './pages/ReportPage'
 import AutomationPage from './pages/AutomationPage'
 import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
+import RenewalPage from './pages/RenewalPage'
 import WorkflowEditorV2 from './components/v2/WorkflowEditorV2'
 import { useThemeStore } from './stores/themeStore'
 import { useCampaignStore } from './stores/campaignStore'
@@ -28,6 +29,9 @@ import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
+import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
+import type { NotificationTarget } from './components/Notifications/notificationTargets'
+import { useNotificationUnreadSync } from './stores/notificationCenterStore'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 import { canAccessAdmin } from '../../shared/admin'
 import { canManageStaff } from '../../shared/staffManagement'
@@ -54,7 +58,9 @@ export default function App() {
     rehydrateFromStorage,
     handleSessionExpired,
     handleUserUpdated,
-    handleZaloRuntimeRestartRequired
+    handleZaloRuntimeRestartRequired,
+    renewal,
+    handleRenewalRequired
   } = useAuthStore()
   const { theme } = useThemeStore()
   const {
@@ -118,6 +124,11 @@ export default function App() {
   const [showDataGroups, setShowDataGroups] = useState(false)
   const [dataGroupCampaignRequest, setDataGroupCampaignRequest] = useState<DataGroupCampaignNavigationRequest | null>(null)
   const dataGroupCampaignRequestSeq = useRef(0)
+  const [dataGroupInitialId, setDataGroupInitialId] = useState<number | null>(null)
+  const [accountOpenRequest, setAccountOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
+  const accountOpenRequestSeq = useRef(0)
+  const [notificationSelectRequest, setNotificationSelectRequest] = useState<NotificationSelectRequest | null>(null)
+  const notificationSelectRequestSeq = useRef(0)
   const [generalSettingsRequest, setGeneralSettingsRequest] = useState<(GeneralSettingsOpenOptions & { menu: GeneralSettingsMenu; returnFocusTo: HTMLElement | null }) | null>(null)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showAccountProfile, setShowAccountProfile] = useState(false)
@@ -131,6 +142,28 @@ export default function App() {
   const platformClass = `platform-${runtimePlatform}`
   const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
   useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, activePage === 'campaigns', hasZaloServerAccounts)
+  useNotificationUnreadSync(user ? `${user.organizationId}:${user.staffId}` : null, activePage)
+
+  const openNotifications = useCallback((notificationId?: number) => {
+    if (notificationId) setNotificationSelectRequest({ notificationId, requestId: ++notificationSelectRequestSeq.current })
+    setActivePage('notifications')
+  }, [])
+
+  // Nút "Mở nhanh" trong trang Thông báo: chiến dịch/tài khoản mở ở trang Chiến dịch, nhóm data mở hộp Nhóm data.
+  const openNotificationTarget = useCallback((target: NotificationTarget) => {
+    if (target.kind === 'campaign') {
+      setActivePage('campaigns')
+      setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'open', campaignId: target.id })
+      return
+    }
+    if (target.kind === 'account') {
+      setActivePage('campaigns')
+      setAccountOpenRequest({ accountId: target.id, requestId: ++accountOpenRequestSeq.current })
+      return
+    }
+    setDataGroupInitialId(target.id)
+    setShowDataGroups(true)
+  }, [])
 
   useEffect(() => {
     const handleDataGroupCampaignNavigation = (event: Event) => {
@@ -158,6 +191,11 @@ export default function App() {
       handleSessionExpired(payload?.message)
     })
   }, [handleSessionExpired])
+
+  useEffect(() => {
+    if (!window.electronAPI?.onRenewalRequired) return
+    return window.electronAPI.onRenewalRequired(handleRenewalRequired)
+  }, [handleRenewalRequired])
 
   useEffect(() => {
     if (!window.electronAPI?.onAuthUserUpdated) return
@@ -356,7 +394,7 @@ export default function App() {
     return (
       <div className={`app-layout ${platformClass}`}>
         <div className="app-window-drag-frame" aria-hidden="true" />
-        <LoginPage />
+        {renewal ? <RenewalPage /> : <LoginPage />}
         <AlertModal />
         <ConfirmModal />
         <CampaignEditDialogs />
@@ -393,10 +431,14 @@ export default function App() {
           onOpenDataScan={() => setShowDataScan(true)}
           onOpenMediaLibrary={() => setShowMediaLibrary(true)}
           onOpenProxyManager={openProxyManager}
-          onOpenDataGroups={() => setShowDataGroups(true)}
+          onOpenDataGroups={() => {
+            setDataGroupInitialId(null)
+            setShowDataGroups(true)
+          }}
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
+          onOpenNotifications={openNotifications}
           currentVersion={localVersion}
           availableUpdateVersion={availableUpdate?.remoteVersion}
           checkingUpdate={checkingUpdate}
@@ -428,9 +470,19 @@ export default function App() {
               </Suspense>
             </div>
           )}
+          {activePage === 'notifications' && (
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <NotificationsPage
+                key={`${user.organizationId}:${user.staffId}`}
+                selectRequest={notificationSelectRequest}
+                onOpenTarget={openNotificationTarget}
+              />
+            </div>
+          )}
           <div style={{ display: activePage === 'campaigns' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <CampaignPage
               isActive={activePage === 'campaigns'}
+              accountOpenRequest={accountOpenRequest}
               dataGroupCampaignRequest={dataGroupCampaignRequest}
               onDataGroupCampaignRequestHandled={(requestId) => {
                 setDataGroupCampaignRequest(previous => previous?.requestId === requestId ? null : previous)
@@ -509,7 +561,11 @@ export default function App() {
       )}
       {showDataGroups && (
         <DataGroupManagerModal
-          onClose={() => setShowDataGroups(false)}
+          initialGroupId={dataGroupInitialId}
+          onClose={() => {
+            setShowDataGroups(false)
+            setDataGroupInitialId(null)
+          }}
           onOpenCampaign={(campaignId, options) => {
             setDataGroupCampaignRequest({
               requestId: ++dataGroupCampaignRequestSeq.current,

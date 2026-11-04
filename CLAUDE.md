@@ -2,6 +2,8 @@
 
 Web quản lý tài khoản/chiến dịch Desktop: **V461 đã apply akachat 04/11/2026 23:33:21 VN** (`20261104163321 / migration_v461_web_desktop_accounts`, **không apply lại**; số đổi từ v453 vì v453–v460 đã có migration khác). So sánh chỉ đọc trên dữ liệu thật 10/10 + 9/9 caller cũ giống hệt, hậu kiểm md5/quyền/smoke đạt, 0 lỗi 503; chưa bật chính sách, chưa deploy Web/API, chưa phát hành Desktop; chính sách `web.desktop_accounts` mặc định tắt, Web gửi header `x-aka-desktop-accounts`, client cũ/native giữ Server/SMS. Token `zalo_qr`/`zalo_web` thêm vào `p_platforms` ('zalo' vẫn là Server); tạm dừng từ Web ghi DB, Desktop dừng sau mục tiêu đang xử lý; xoá/tắt bị chặn khi còn lease. Heartbeat 30 giây gửi thêm ảnh chụp bộ chạy chỉ từ RAM ([desktopRuntimeSnapshot.ts](src/main/services/desktopRuntimeSnapshot.ts)). SQL local apply/rollback, smoke 8/8 và hai typecheck đạt. Thẻ xác nhận Supabase MCP có thể không hiện trên client của người dùng: đường dự phòng là script dán một lần cho SQL Editor (`migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`). [Hợp đồng, rollout, rollback](docs/WEB_DESKTOP_ACCOUNTS_V461.md).
 
+V456 đã apply akachat lúc 12:21:05 VN ngày 04/11/2026 (`20261104052006 / migration_v456_email_notification_owner_rls`): RESTRICTIVE policy `v456_desktop_owner` cho `aka_agent_desktop` trên `auto_email_notification_settings`/`_deliveries` theo `private.aka_agent_staff_scope_for_request()`; không đổi ACL/RLS/hàm, Desktop cũ không cần cập nhật. Thử production ROLLBACK, hậu kiểm role thật và 21 ca PG17 đạt; không apply lại. Trigger email hoàn thành vẫn cần SELECT `dedupe_key` mà Desktop không có (lỗi có sẵn). Worker email cũ v7 (lọc staff bằng embed `!inner`, PostgREST dựng LATERAL quét chi tiết cả ngày) bị `57014` lúc 16:15 VN nên production đã về mã v6 (version 8) và repo đã đồng bộ; không deploy lại v7. [Audit](docs/EMAIL_NOTIFICATION_RLS_V456.md).
+
 V435 đã apply akachat lúc 23:53:25 ngày 27/10/2026 (`20261027165325 / migration_v435_desktop_permission_cutover`): thu hồi anon/authenticated trên 113 bảng/view, 87 sequence và 596 RPC dữ liệu; bật RLS thêm 47 bảng (109 bảng trong phạm vi đều bật). Giữ quyền Desktop/backend, bootstrap và ngoại lệ một dòng cấu hình cập nhật app cũ; Desktop không còn đọc `ai_model.api_key`. 8 nhóm local, production rollback trial, 20 HTTP và hậu kiểm 1.245 hàm không đổi đạt; feed ba nền tảng 9.1.0. Không apply lại B/C cũ; rollback mở lại quyền legacy phải có chỉ thị riêng. [Audit và rollback](docs/DESKTOP_PERMISSION_CUTOVER_V435.md).
 
 Ngày 27/10/2026 đã đóng gói local **9.1.0** từ `dev_3` tại `c9fd49fc`: Desktop Windows x64, macOS ARM64/Intel và App Server Windows x64 nội bộ có sẵn backend credential; hai typecheck + tám nhóm smoke, payload/version/native/checksum, SQLite hai Mac (Intel qua Rosetta), 998 input và khôi phục native host đều đạt. Desktop không chứa backend credential/anon key cũ; Server chỉ dùng trên máy chủ quản lý, Mac ký ad-hoc, chưa thử Windows thật, chưa upload/phát hành hoặc thu hồi anon/đổi RLS; [receipt](docs/audits/akaagent-9.1.0-20261027/build-receipt.json), log/output cũ ở `dist/build-9.1.0/`, Bộ cài Server ở `dist-server/akaAgent-Zalo-Server-Internal-Setup-9.1.0.exe`, bản kiểm chứng giữ tại `dist-server/private/2026-10-27T16-33-47-301Z/`.
@@ -155,11 +157,12 @@ Status values trong DB lưu **tiếng Việt có dấu**:
 ### IPC pattern
 
 [src/main/ipc/handlers.ts](src/main/ipc/handlers.ts) gom các nhóm trong `handlers/` directory:
-- `authHandlers` (login/logout/me)
+- `authHandlers` (login/logout/me; tổ chức hết hạn gói/dùng thử → `renewal_required`, màn Gia hạn nhúng cổng CRM `/gia-han` qua `renewalWebHandlers`/`renewalWebService`, Edge `renewal_link` ký link khi đã vá — hoãn từ 04/11 nên khách đăng nhập lại trên cổng; [hợp đồng](docs/RENEWAL_PORTAL_DESKTOP.md))
 - `campaignHandlers` (CRUD campaign + scheduler control)
 - `browserHandlers` ([handlers/browserHandlers.ts](src/main/ipc/handlers/browserHandlers.ts)) — webview register/unregister/status. Khi register cũng register vào cả `WebviewRegistry` (cho contactLoader / scheduler `isRegistered` check) lẫn `PageControllerRegistry` (engine v2)
 - `accountHandlers` / `accountContactHandlers` / `updateHandlers`
 - `v2Handlers` ([handlers/v2Handlers.ts](src/main/ipc/handlers/v2Handlers.ts)) — engine v2: BLOCK_LIST/SAVE/DELETE, WORKFLOW_LIST/GET/SAVE/DELETE, ELEMENT_LIST/SAVE/DELETE, WORKFLOW_TEST_RUN, BLOCK_TEST_RUN, RUN_STOP, RUN_PROGRESS broadcast, RUN_LOG broadcast
+- `notificationCenterHandlers` ([handlers/notificationCenterHandlers.ts](src/main/ipc/handlers/notificationCenterHandlers.ts)) — Cài đặt chung → Nhận thông báo qua RPC `aka_agent_notification_center` (V457, chưa apply) bằng [notificationCenterRepository.ts](src/main/data/repositories/notificationCenterRepository.ts); trả `{ok,data}|{ok:false,code,message}`, RPC chưa có (`PGRST202`) → `notification_center_not_ready` thì giữ form email cũ. Hợp đồng chép từ WebApp ở [shared/notificationCenter.ts](src/shared/notificationCenter.ts); xem [docs/NOTIFICATION_CENTER.md](docs/NOTIFICATION_CENTER.md). Chuông thanh bên ([NotificationBell](src/renderer/src/components/Notifications/NotificationBell.tsx)) + trang [NotificationsPage](src/renderer/src/pages/NotificationsPage.tsx): số chưa đọc đọc khi đăng nhập/focus/đổi trang (≤1 lần/phút), không hẹn giờ; mở nhanh chiến dịch/tài khoản/nhóm data qua `openNotificationTarget` trong App.
 
 Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repository/service. Renderer gọi qua `electronAPI.xxx()` ([preload/index.ts](src/preload/index.ts), typed trong [electron.d.ts](src/renderer/src/types/electron.d.ts)).
 
@@ -170,6 +173,7 @@ Mỗi handler `ipcMain.handle(eventName, fn)` → method tương ứng repositor
 - `campaignStore` — accounts, campaigns, action templates, log realtime broadcast
 - `blockLibraryStore` / `elementLibraryStore` / `workflowV2Store` — engine v2 editor state
 - `themeStore` / `uiStore` — UI prefs
+- `notificationCenterStore` — số chưa đọc của chuông thông báo (V457), không hẹn giờ
 
 ### Workflow Editor v2 UI
 

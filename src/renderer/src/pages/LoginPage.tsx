@@ -4,6 +4,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useUiStore } from '../stores/uiStore'
 import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../shared/deviceChange'
 import LoginInformationPanel from '../components/Login/LoginInformationPanel'
+import { useLoginScreenContent } from '../hooks/useLoginScreenContent'
+import { DEFAULT_RECOVER_ACCOUNT_URL, DEFAULT_TRIAL_SIGNUP_URL } from '../../../shared/renewalPortal'
 import './LoginPage.css'
 
 const appIconUrl = new URL('../assets/app-icon.png', import.meta.url).href
@@ -218,6 +220,10 @@ export default function LoginPage() {
     rememberedLogin,
     manualLoginRequired
   } = useAuthStore()
+  const loginContent = useLoginScreenContent()
+  // Cổng gia hạn CRM; auto_system_settings ghi đè được sau migration v460.
+  const recoverAccountUrl = loginContent.links.recoverAccount ?? DEFAULT_RECOVER_ACCOUNT_URL
+  const trialSignupUrl = loginContent.links.trialSignup ?? DEFAULT_TRIAL_SIGNUP_URL
   const usernameEdited = useRef(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -348,6 +354,15 @@ export default function LoginPage() {
               >
                 {recoveringCredentials ? 'Đang lấy tên đăng nhập…' : 'Lấy lại tên đăng nhập'}
               </button>
+              <a
+                className="login-recover"
+                href={recoverAccountUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Nhận lại thông tin đăng nhập qua email đã đăng ký với akaBiz"
+              >
+                Lấy lại tài khoản
+              </a>
               <button
                 ref={deviceChangeButtonRef}
                 type="button"
@@ -382,10 +397,15 @@ export default function LoginPage() {
               {loggingIn ? 'Đang đăng nhập…' : 'Đăng nhập'}
               {!loggingIn && <ArrowRight size={17} aria-hidden="true" />}
             </button>
+
+            <p className="login-signup">
+              Chưa có tài khoản?{' '}
+              <a href={trialSignupUrl} target="_blank" rel="noopener noreferrer">Đăng ký dùng thử</a>
+            </p>
           </form>
         </section>
 
-        <LoginInformationPanel />
+        <LoginInformationPanel content={loginContent} />
       </div>
       {deviceChangeModalOpen && (
         <DeviceChangeUsernameModal

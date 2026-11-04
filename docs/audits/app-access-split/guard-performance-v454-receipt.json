@@ -1,0 +1,295 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": "migration_v454_app_access_guard_performance",
+  "ledger": {
+    "name": "migration_v454_app_access_guard_performance",
+    "version": "20261103092858"
+  },
+  "sourceBase": "b8f43bc3",
+  "functions": [
+    {
+      "signature": "private.app_access_held(text,bigint)",
+      "sourceMd5": "091b58186a65975e5faf5e620569feac",
+      "targetMd5": "b181b7ce926f8bf4b07cc6233ac4380a"
+    },
+    {
+      "signature": "aka_agent_app_access_account_allowed(bigint,text)",
+      "sourceMd5": "daf197a1cc419fd29030338e2ef2c936",
+      "targetMd5": "410005b7e2720a1db565acfcd8c7e197"
+    },
+    {
+      "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+      "sourceMd5": "532019b253e648044dd46821a3c4cec6",
+      "targetMd5": "16505c0962e7a9a9d304d280400bfda1"
+    }
+  ],
+  "metadataPreserved": true,
+  "dependencyFunctionsUnchanged": 6,
+  "localPostgres": {
+    "version": 17,
+    "passed": 574,
+    "newCases": 304,
+    "previousCases": 270
+  },
+  "productionTrial": {
+    "before": [
+      {
+        "checks": 2380,
+        "kind": "account"
+      },
+      {
+        "checks": 180,
+        "kind": "control"
+      },
+      {
+        "checks": 469,
+        "kind": "held"
+      },
+      {
+        "checks": 35,
+        "kind": "staff"
+      }
+    ],
+    "after": [
+      {
+        "checks": 2380,
+        "kind": "account"
+      },
+      {
+        "checks": 180,
+        "kind": "control"
+      },
+      {
+        "checks": 469,
+        "kind": "held"
+      },
+      {
+        "checks": 35,
+        "kind": "staff"
+      }
+    ],
+    "transactions": "ROLLBACK; no user-data writes"
+  },
+  "typecheckNode": "passed",
+  "typecheckWeb": "passed",
+  "productionBuildLocal": "passed",
+  "applyDb": "completed",
+  "deployServices": false,
+  "installerBuild": false,
+  "release": false,
+  "crmSourceOrDeploymentChanges": false,
+  "newIndexes": false,
+  "connectionOrPollingChanges": false,
+  "manualPostgrestReload": false,
+  "sourceSha256": "dc832bf32f9607e2188adaecfa61d5a97543b02e200871b05415c178d3afb4cb",
+  "privateEvidenceDirectory": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/app-access-guard-perf-20261103T091935Z",
+  "measurement": "completed",
+  "appliedAtVietnam": "2026-11-03T16:28:58+07:00",
+  "sql": {
+    "before": {
+      "from": "2026-11-03 09:19:38.003913+00",
+      "to": "2026-11-03 09:28:03.831427+00",
+      "seconds": 505.827514,
+      "deallocation_delta": 0,
+      "queries": [
+        {
+          "role": "aka_agent_chat_api",
+          "queryid": "909557992464752019",
+          "calls": 1395,
+          "calls_per_second": 2.7578570982993225,
+          "ms_per_call": 4.213283923296776,
+          "sql_elapsed_ms_per_second": 11.61963497501443,
+          "shared_hits_per_call": 90.90394265232975,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        },
+        {
+          "role": "anon",
+          "queryid": "7015753416304034681",
+          "calls": 3114,
+          "calls_per_second": 6.156248748461714,
+          "ms_per_call": 8.671429525693554,
+          "sql_elapsed_ms_per_second": 53.3834771649249,
+          "shared_hits_per_call": 1262.0504174694927,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        },
+        {
+          "role": "service_role",
+          "queryid": "7662297884612479569",
+          "calls": 13692,
+          "calls_per_second": 27.068515691694856,
+          "ms_per_call": 2.1582661017382656,
+          "sql_elapsed_ms_per_second": 58.42105984175533,
+          "shared_hits_per_call": 59.31704645048203,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        }
+      ]
+    },
+    "after": {
+      "from": "2026-11-03 09:29:55.057627+00",
+      "to": "2026-11-03 09:35:10.077539+00",
+      "seconds": 315.019912,
+      "deallocation_delta": 0,
+      "queries": [
+        {
+          "role": "aka_agent_chat_api",
+          "queryid": "909557992464752019",
+          "calls": 567,
+          "calls_per_second": 1.799886224334924,
+          "ms_per_call": 3.798349707229293,
+          "sql_elapsed_ms_per_second": 6.836597313248596,
+          "shared_hits_per_call": 69.11816578483246,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        },
+        {
+          "role": "anon",
+          "queryid": "7015753416304034681",
+          "calls": 1916,
+          "calls_per_second": 6.082155213096498,
+          "ms_per_call": 3.3450497280852964,
+          "sql_elapsed_ms_per_second": 20.34511164174101,
+          "shared_hits_per_call": 76.72390396659708,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        },
+        {
+          "role": "service_role",
+          "queryid": "7662297884612479569",
+          "calls": 9130,
+          "calls_per_second": 28.982294935057947,
+          "ms_per_call": 1.5801755957393158,
+          "sql_elapsed_ms_per_second": 45.79711516489775,
+          "shared_hits_per_call": 36.27513691128149,
+          "shared_reads_per_call": 0.0,
+          "rows_per_call": 1.0
+        }
+      ]
+    },
+    "reductions": [
+      {
+        "role": "aka_agent_chat_api",
+        "queryid": "909557992464752019",
+        "ms_per_call_reduction_percent": 9.848237707721541,
+        "shared_hits_per_call_reduction_percent": 23.965711752260233,
+        "sql_elapsed_ms_per_second_reduction_percent": 41.16340721589573
+      },
+      {
+        "role": "anon",
+        "queryid": "7015753416304034681",
+        "ms_per_call_reduction_percent": 61.42447196077796,
+        "shared_hits_per_call_reduction_percent": 93.92069422072422,
+        "sql_elapsed_ms_per_second_reduction_percent": 61.888747750758036
+      },
+      {
+        "role": "service_role",
+        "queryid": "7662297884612479569",
+        "ms_per_call_reduction_percent": 26.78495045320669,
+        "shared_hits_per_call_reduction_percent": 38.84534196832602,
+        "sql_elapsed_ms_per_second_reduction_percent": 21.608551284505907
+      }
+    ]
+  },
+  "hostMetrics": {
+    "before": {
+      "from": "2026-11-03T09:21:28.067147+00:00",
+      "to": "2026-11-03T09:28:06.928857+00:00",
+      "seconds": 398.86171,
+      "cpu_executing_percent": 72.9118288873444,
+      "cpu_modes_percent": {
+        "idle": 25.206288211833606,
+        "iowait": 1.8818829008219975,
+        "irq": 0.0,
+        "nice": 0.00031810055794831074,
+        "softirq": 2.9010770884890786,
+        "steal": 0.0,
+        "system": 6.71860188442735,
+        "user": 63.29183181387001
+      },
+      "ram_used_percent": 76.8155287513786,
+      "swap_in_pages_per_second": 0.0,
+      "swap_out_pages_per_second": 0.0,
+      "disks": {
+        "nvme0n1": {
+          "node_disk_reads_completed_total": 0.035099884619157855,
+          "node_disk_read_bytes_total": 287.53825480014115,
+          "node_disk_writes_completed_total": 6.094844250655195,
+          "node_disk_written_bytes_total": 415020.3939104608,
+          "node_disk_io_time_seconds_total": 0.004026458192744513
+        },
+        "nvme1n1": {
+          "node_disk_reads_completed_total": 221.09417321607532,
+          "node_disk_read_bytes_total": 2519974.995845051,
+          "node_disk_writes_completed_total": 441.7420764705642,
+          "node_disk_written_bytes_total": 6972494.60220185,
+          "node_disk_io_time_seconds_total": 0.3180601116110258
+        }
+      }
+    },
+    "after": {
+      "from": "2026-11-03T09:29:58.749068+00:00",
+      "to": "2026-11-03T09:35:12.124059+00:00",
+      "seconds": 313.374991,
+      "cpu_executing_percent": 77.95653310280207,
+      "cpu_modes_percent": {
+        "idle": 19.20505036288955,
+        "iowait": 2.8384165343083843,
+        "irq": 0.0,
+        "nice": 0.0008041979131062602,
+        "softirq": 2.8271577635258187,
+        "steal": 0.0,
+        "system": 8.464987233357757,
+        "user": 66.66358390800539
+      },
+      "ram_used_percent": 66.6568885148694,
+      "swap_in_pages_per_second": 0.0,
+      "swap_out_pages_per_second": 0.0,
+      "disks": {
+        "nvme0n1": {
+          "node_disk_io_time_seconds_total": 0.011526127175857407,
+          "node_disk_reads_completed_total": 15.09054690327857,
+          "node_disk_writes_completed_total": 6.018348796697691,
+          "node_disk_written_bytes_total": 301068.2623362245,
+          "node_disk_read_bytes_total": 510942.9297119628
+        },
+        "nvme1n1": {
+          "node_disk_io_time_seconds_total": 0.47393379901233895,
+          "node_disk_reads_completed_total": 778.3677925977188,
+          "node_disk_writes_completed_total": 467.13363926351093,
+          "node_disk_written_bytes_total": 6681456.823719542,
+          "node_disk_read_bytes_total": 8992496.22635011
+        }
+      }
+    }
+  },
+  "finalMetadataVerified": true,
+  "measurementCaveat": "Per-call SQL cost decreased; host CPU increased from 72.91% to 77.96% in different workload windows. SQL elapsed time is not CPU time; no claim of whole-database CPU reduction.",
+  "databaseCounters": {
+    "before": {
+      "pg_stat_database_deadlocks_total": 0.0,
+      "pg_stat_database_conflicts_total": 0.0,
+      "pg_stat_database_temp_files_total": 0.0,
+      "pg_stat_database_temp_bytes_total": 0.0,
+      "pg_stat_database_xact_commit_total": 445266.0,
+      "pg_stat_database_xact_rollback_total": 1242.0,
+      "pg_stat_database_blks_read_total": 113351.0,
+      "pg_stat_database_blks_hit_total": 116777147.0,
+      "transactions_per_second": 1119.4556629664953,
+      "blocks_read_per_second": 284.1862158190115
+    },
+    "after": {
+      "pg_stat_database_deadlocks_total": 0.0,
+      "pg_stat_database_conflicts_total": 0.0,
+      "pg_stat_database_temp_files_total": 1.0,
+      "pg_stat_database_temp_bytes_total": 19849216.0,
+      "pg_stat_database_xact_commit_total": 345639.0,
+      "pg_stat_database_xact_rollback_total": 844.0,
+      "pg_stat_database_blks_read_total": 315351.0,
+      "pg_stat_database_blks_hit_total": 98661852.0,
+      "transactions_per_second": 1105.649812368084,
+      "blocks_read_per_second": 1006.3055733761472
+    }
+  }
+}

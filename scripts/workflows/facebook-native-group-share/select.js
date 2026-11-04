@@ -3,7 +3,7 @@ const target = vars.groupShareTarget;
 if (!target || !target.name || !Array.isArray(target.keys) || !target.keys.length) throw new Error('Thiếu định danh nhóm để chia sẻ');
 const stepMs = Math.max(0, Number(vars.facebookStepMs) || 1000);
 const scoped = (root, xpath) => xpath.split('|').map(part => root + part.trim()).join(' | ');
-const shareXPath = scoped("//*[@role='dialog']", await helpers.element('fb_share_button_inner'));
+const shareXPath = await helpers.element('fb_share_button_inner');
 const toGroupXPath = await helpers.element('fb_share_to_group_button');
 const searchXPath = scoped("//*[@role='dialog']", await helpers.element('SearchAddGroupToPostInp'));
 const resultsXPath = await helpers.element('fb_share_group_result');

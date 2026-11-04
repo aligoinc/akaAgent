@@ -1,10 +1,15 @@
 # Nội dung chuyển từ AGENTS.md — 28/10/2026
 
+- [V454: indexable held lookup, Agent guard reuse và legacy run-control fast path; đã apply, giữ quyền/ACL/cleanup](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
+
 Các ghi nhận deployment trong tài liệu chuyển là lịch sử tại thời điểm ghi. Đọc [trạng thái hiện tại](CURRENT_STATE.md) trước khi áp dụng; các ràng buộc nghiệp vụ vẫn phải giữ trừ khi đã có quyết định mới hơn.
 
 Tìm tên RPC, file, action hoặc feature trong bảng và trong `docs/agents/reference/`/`history/`; chỉ đọc phần liên quan. Không nạp toàn bộ archive vào context.
 
 Đọc hướng dẫn đã đính chính trước các đoạn bảo toàn có liên quan:
+
+- [V453: bỏ riêng kiểm quyền akaAgent trong hook IP theo chỉ thị người dùng; đã apply, giữ IP/ACL và các guard khác](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md).
+- [V452: canonical identity ở status mark, local runtime registration và legacy reservation; DB đã apply, trạng thái API trong audit](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md).
 
 - [App-access held work, index V448, Chat API statement-scoped guards và runtime candidates; đã apply/deploy, không build lại app](../audits/app-access-split/PERFORMANCE_FIX_20261103.md).
 - [App-access V449: Chat sharing khi owner khóa/hết hạn, helper account_allowed; đã apply, không đổi auth/akaAgent/ACL hoặc cần build/deploy](../audits/app-access-split/SHARED_OWNER_FIX_20261103.md).

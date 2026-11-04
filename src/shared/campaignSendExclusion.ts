@@ -45,6 +45,7 @@ export const FILTER_EVALUATORS = new Set(['equals', 'not_equals', 'contains_any'
 const TYPES = new Set(['text', 'number', 'boolean', 'enum', 'set', 'date'])
 const OPTION_SOURCES = new Set(['none', 'static', 'friend_status', 'zalo_labels', 'akabiz_tags'])
 const values = (value: unknown): unknown[] => Array.isArray(value) ? value : value === null || value === undefined ? [] : [value]
+const validLabelId = (id: unknown): id is string | number => typeof id === 'string' && id.trim().length > 0 || typeof id === 'number' && Number.isFinite(id)
 const safePath = (path: unknown): path is string[] => Array.isArray(path) && path.length > 0 && path.length <= 8 && path.every(key => typeof key === 'string' && /^[A-Za-z][A-Za-z0-9_]*$/.test(key) && !['constructor', 'prototype', '__proto__'].includes(key))
 export function ruleDefinition(catalog: ExclusionCatalog, rule: ExclusionRule) {
   const field = catalog.fields.find(item => item.id === rule.fieldId && item.isActive)
@@ -125,6 +126,7 @@ export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid
   validateExclusionGroup(snapshot.catalog, group)
   const sources = new Map<string, Promise<unknown>>()
   let unknown = false
+  let evaluatedRules = 0
   // Cheap DB facts precede optional Zalo reads. Ordering has no effect on three-valued logic.
   const rules = group.rules.filter(rule => rule.isEnabled).sort((a, b) => {
     const cost = (r: ExclusionRule) => ['akabiz_contact', 'campaign_delivery'].includes(ruleDefinition(snapshot.catalog, r).field.sourceKey) ? 0 : 1
@@ -136,13 +138,34 @@ export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid
     const data = await sources.get(field.sourceKey)
     checkActive()
     const available = data && typeof data === 'object' ? (data as {availableValues?: unknown[]}).availableValues : undefined
-    const missingOption = Array.isArray(available) && values(rule.value).some(value => !available.some(item => String(item) === String(value)))
-    const result = missingOption ? null : evaluateFilter(operator.evaluatorKey, readPath(data, field.sourceConfig.path), rule.value, field.dataType)
+    const actual = readPath(data, field.sourceConfig.path)
+    let result: FilterTruth
+    if (field.sourceKey === 'zalo_labels' && field.optionsSource === 'zalo_labels' &&
+      field.dataType === 'set' && ['contains_any', 'contains_none'].includes(operator.evaluatorKey)) {
+      // Only a complete, readable label response proves that a selected tag was deleted.
+      // Keep the saved run snapshot immutable; prune IDs for this evaluation only.
+      const validIds = (ids: unknown): ids is (string | number)[] => Array.isArray(ids) &&
+        ids.every(validLabelId)
+      if (!validIds(available) || !validIds(actual)) {
+        result = null
+      } else {
+        const remaining = values(rule.value).filter(value => available.some(item => String(item) === String(value)))
+        // An emptied tag condition is disabled, including "does not contain".
+        // Otherwise its empty set could accidentally exclude every recipient.
+        if (remaining.length === 0) continue
+        result = evaluateFilter(operator.evaluatorKey, actual, remaining, field.dataType)
+      }
+    } else {
+      const missingOption = Array.isArray(available) && values(rule.value).some(value => !available.some(item => String(item) === String(value)))
+      result = missingOption ? null : evaluateFilter(operator.evaluatorKey, actual, rule.value, field.dataType)
+    }
+    evaluatedRules += 1
     if (result === true && group.matchMode === 'or') return {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”: ${field.name}.`}
     if (result === false && group.matchMode === 'and') return {decision: 'allowed', note: ''}
     if (result === null) unknown = true
   }
   if (unknown) return {decision: 'unknown', note: `Chưa đủ dữ liệu để kiểm tra nhóm “${group.name}”.`}
+  if (evaluatedRules === 0) return {decision: 'allowed', note: ''}
   return group.matchMode === 'and' ? {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”.`} : {decision: 'allowed', note: ''}
 }
 /** Both findUser and getUserInfo envelopes expose the same profile properties to definitions. */
@@ -169,7 +192,7 @@ export function readFriendship(raw: unknown): {status: string} | null {
 export interface LabelSnapshot { labelData: Array<{id: number | string; text?: string; conversations: string[]; [key: string]: unknown}>; version: number; lastUpdateTime?: number }
 export function validateLabelSnapshot(raw: unknown): LabelSnapshot {
   const r = raw as LabelSnapshot | null
-  if (!r || !Number.isFinite(r.version) || !Array.isArray(r.labelData) || r.labelData.some(label => !label || !label.id || !Array.isArray(label.conversations) || label.conversations.some(id => typeof id !== 'string'))) throw new Error('Không xác minh được dữ liệu tag Zalo.')
+  if (!r || !Number.isFinite(r.version) || !Array.isArray(r.labelData) || r.labelData.some(label => !label || !label.id || !validLabelId(label.id) || !Array.isArray(label.conversations) || label.conversations.some(id => typeof id !== 'string'))) throw new Error('Không xác minh được dữ liệu tag Zalo.')
   return r
 }
 /** Single-flight read, including errors. Mutation responses advance the working version. */

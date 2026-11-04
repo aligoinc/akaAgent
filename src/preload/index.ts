@@ -4,6 +4,9 @@ import { AGENT_DATA_IPC, type AgentDataFile, type AgentDataUpload, type AgentDat
 import type { CampaignSupportImage } from '../shared/campaignSupport'
 import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
+import type { NotificationCenterResult, NotificationDetail, NotificationDeviceRemoval, NotificationListPage, NotificationListQuery,
+  NotificationReadRequest, NotificationReadResult, NotificationSettings, NotificationTestChannel, NotificationTestResult,
+  NotificationVerificationResult, SaveNotificationSettingsRequest } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
 import { CAMPAIGN_EXCLUSION_AI_IPC, type ExclusionAiRequest, type ExclusionAiResult } from '../shared/campaignExclusionAi'
@@ -20,7 +23,7 @@ import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, t
 import type { BrowserPreview } from '../shared/browserPreview'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
-import type { ChatWebState, CrmWebDescriptor, LoginScreenContent } from '../shared/types'
+import type { AuthRenewalRecheckResult, AuthRenewalRequired, ChatWebState, CrmWebDescriptor, LoginScreenContent, RenewalWebDescriptor, RenewalWebState } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimitsResult } from '../shared/browserRunLimits'
@@ -161,6 +164,23 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, user: AuthUser) => callback(user)
     ipcRenderer.on(IPC_EVENTS.AUTH_USER_UPDATED, handler)
     return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_USER_UPDATED, handler)
+  },
+
+  // Màn Gia hạn: không có mật khẩu hay link ký số đi qua renderer.
+  recheckRenewal: (): Promise<AuthRenewalRecheckResult> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_RECHECK),
+  cancelRenewal: (): Promise<void> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_CANCEL),
+  openRenewalExternal: (): Promise<{ signed: boolean }> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_OPEN_EXTERNAL),
+  prepareRenewalWeb: (): Promise<RenewalWebDescriptor> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_WEB_PREPARE),
+  reloadRenewalWeb: (): Promise<RenewalWebState> => ipcRenderer.invoke(IPC_EVENTS.AUTH_RENEWAL_WEB_RELOAD),
+  onRenewalWebState: (callback: (state: RenewalWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: RenewalWebState) => callback(state)
+    ipcRenderer.on(IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, handler)
+  },
+  onRenewalRequired: (callback: (renewal: AuthRenewalRequired) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, renewal: AuthRenewalRequired) => callback(renewal)
+    ipcRenderer.on(IPC_EVENTS.AUTH_RENEWAL_REQUIRED, handler)
+    return () => ipcRenderer.removeListener(IPC_EVENTS.AUTH_RENEWAL_REQUIRED, handler)
   },
 
   onZaloRuntimeRestartRequired: (callback: (payload: ZaloRuntimeRestartRequiredPayload) => void): (() => void) => {
@@ -548,6 +568,30 @@ const electronAPI = {
 
   saveEmailNotificationSettings: (settings: Partial<EmailNotificationSettings>): Promise<EmailNotificationSettings> =>
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
+
+  // Notification center (V457). Every call resolves to { ok, data } | { ok: false, code, message }.
+  notificationCenter: {
+    getSettings: (): Promise<NotificationCenterResult<NotificationSettings>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_SETTINGS_GET),
+    saveSettings: (request: SaveNotificationSettingsRequest): Promise<NotificationCenterResult<NotificationSettings>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_SETTINGS_SAVE, request),
+    test: (channel: NotificationTestChannel): Promise<NotificationCenterResult<NotificationTestResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_TEST, channel),
+    resendVerification: (email: string): Promise<NotificationCenterResult<NotificationVerificationResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_RESEND_VERIFICATION, email),
+    list: (query?: NotificationListQuery): Promise<NotificationCenterResult<NotificationListPage>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_LIST, query ?? {}),
+    detail: (id: number): Promise<NotificationCenterResult<NotificationDetail>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DETAIL, id),
+    markRead: (request: NotificationReadRequest): Promise<NotificationCenterResult<NotificationReadResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_MARK_READ, request),
+    unreadCount: (): Promise<NotificationCenterResult<number>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_UNREAD_COUNT),
+    setDeviceEnabled: (deviceId: number, enabled: boolean): Promise<NotificationCenterResult<null>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DEVICE_SET_ENABLED, deviceId, enabled),
+    unregisterDevice: (deviceId: number): Promise<NotificationCenterResult<NotificationDeviceRemoval>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DEVICE_UNREGISTER, deviceId)
+  },
 
   getDesktopCampaignConfig: (id: number): Promise<CampaignConfig | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignConfig, id),
   getDesktopCampaignLogs: (id: number, query?: CampaignHistoryQuery): Promise<CampaignHistoryPage | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignLogs, id, query),

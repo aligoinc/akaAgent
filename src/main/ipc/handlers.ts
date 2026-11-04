@@ -8,7 +8,7 @@ import { accountOperationRegistry } from '../services/accountOperationRegistry'
 import { devicePresence } from '../services/devicePresenceService'
 import { desktopSession } from '../data/supabaseClient'
 import { app, ipcMain, BrowserWindow, powerMonitor } from 'electron'
-import { AuthEntitlements, AuthUser, IPC_EVENTS, ZaloLoginQrEvent } from '../../shared/types'
+import { AuthEntitlements, AuthRenewalRequired, AuthUser, IPC_EVENTS, SavedLoginCredentials, ZaloLoginQrEvent } from '../../shared/types'
 import { WebviewRegistry } from '../playwright/webviewController'
 import { PageControllerRegistry } from '../v2/runtime/pageController'
 import { SupabaseService } from '../services/supabase'
@@ -39,7 +39,8 @@ import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandler
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
-import { registerAuthHandlers } from './handlers/authHandlers'
+import { registerAuthHandlers, type AuthRenewalControl } from './handlers/authHandlers'
+import { registerRenewalWebHandlers } from './handlers/renewalWebHandlers'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
@@ -65,6 +66,7 @@ import { registerReportHandlers } from './handlers/reportHandlers'
 import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutCustomerHandlers'
 import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHandlers'
 import { registerCampaignTypeVisibilityHandlers } from './handlers/campaignTypeVisibilityHandlers'
+import { registerNotificationCenterHandlers } from './handlers/notificationCenterHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -179,6 +181,7 @@ export function registerIpcHandlers(
   registerMessageOptOutCustomerHandlers(mainWindow)
   registerBrowserRunLimitsHandlers(mainWindow)
   registerCampaignTypeVisibilityHandlers(mainWindow)
+  registerNotificationCenterHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -782,7 +785,13 @@ export function registerIpcHandlers(
     }
   }
 
-  const expireCurrentSession = async (reason: 'login' | 'daily' | 'runtime' | 'token'): Promise<void> => {
+  // Gán khi đăng ký auth handlers bên dưới; dùng để mở màn Gia hạn khi phiên hết vì hết gói.
+  let authRenewal: AuthRenewalControl | null = null
+
+  const expireCurrentSession = async (
+    reason: 'login' | 'daily' | 'runtime' | 'token',
+    renewalCredentials: SavedLoginCredentials | null = null
+  ): Promise<void> => {
     const user = getCurrentUser()
     if (!user) return
 
@@ -819,6 +828,12 @@ export function registerIpcHandlers(
       setCurrentUserCredentials(null)
       setCurrentUser(null)
       notifyRendererSessionExpired(reason === 'token' ? 'Phiên truy cập dữ liệu không còn hợp lệ. Vui lòng đăng nhập lại.' : undefined)
+      if (renewalCredentials) {
+        // Tổ chức hết gói: kiểm lại bằng endpoint đăng nhập rồi mở màn Gia hạn.
+        void authRenewal?.offerSessionRenewal(renewalCredentials).catch(() => {
+          console.warn('[AuthSessionExpiry] Chưa mở được màn Gia hạn; khách đăng nhập lại như cũ.')
+        })
+      }
     }
   }
 
@@ -876,7 +891,10 @@ export function registerIpcHandlers(
       const liveAdminFlag = liveStaffAccess?.isAdmin === true
 
       if (!hasAnyEntitlement(liveEntitlements)) {
-        await expireCurrentSession(reason)
+        // Chỉ hết gói mới mở màn Gia hạn; khoá/hết hạn nhân viên ở nhánh trên giữ câu báo cũ.
+        await expireCurrentSession(reason, checkedCredentials
+          ? { username: checkedCredentials.username, password: checkedCredentials.password }
+          : null)
         return
       }
 
@@ -1309,7 +1327,14 @@ export function registerIpcHandlers(
   })
 
   // Register domain handlers
-  registerAuthHandlers({
+  const renewalControl = registerAuthHandlers({
+    notifyRenewalRequired: (renewal: AuthRenewalRequired) => {
+      try {
+        if (!mainWindow.isDestroyed()) mainWindow.webContents.send(IPC_EVENTS.AUTH_RENEWAL_REQUIRED, renewal)
+      } catch {
+        // Window may be closed
+      }
+    },
     afterLogin: async ({ username, password }) => {
       campaignDiagnostics.stop()
       campaignFormAi.stop()
@@ -1438,6 +1463,8 @@ export function registerIpcHandlers(
       if (user) startZaloRemoteClients(user, runtimeCredentials.username, newPassword)
     }
   })
+  authRenewal = renewalControl
+  registerRenewalWebHandlers(mainWindow, renewalControl)
   registerUpdateHandlers(mainWindow)
   registerAiHandlers()
   registerAkaBizIntegrationHandlers()

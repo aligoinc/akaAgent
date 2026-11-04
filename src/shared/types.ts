@@ -2783,6 +2783,196 @@ export interface EmailNotificationSettings {
   updatedAt?: string
 }
 
+// ============================================
+// Notification center (DB V457, RPC aka_agent_notification_center)
+// Mirrors akaAgentWebApp packages/control-api/src/notifications.ts; helpers live in
+// shared/notificationCenter.ts. Old DBs without V457 fall back to EmailNotificationSettings.
+// ============================================
+
+export type NotificationEventType =
+  | 'campaign.status_changed'
+  | 'account.status_changed'
+  | 'report.scheduled'
+  | 'data_group.membership_changed'
+  | 'system.test'
+export type NotificationCampaignStatus = 'hoàn thành' | 'tạm dừng' | 'đang chạy' | 'chờ xử lý'
+export type NotificationLoginEvent = 'logout' | 'checkpoint' | 'login'
+export type NotificationAccountRunStatus = 'chờ xử lý' | 'đang chạy' | 'tạm dừng'
+export type NotificationGroupAction = 'added' | 'removed'
+export type NotificationSeverity = 'info' | 'warning' | 'critical'
+export type NotificationChannelState = 'none' | 'pending' | 'sent' | 'partial' | 'failed' | 'skipped'
+export type NotificationDeliveryMode = 'dry_run' | 'live'
+export type NotificationTestChannel = 'email' | 'push'
+
+export interface NotificationSubscriptionBase {
+  enabled: boolean
+  email: boolean
+  push: boolean
+  cooldownMinutes: number | null
+}
+
+export interface CampaignStatusSubscription extends NotificationSubscriptionBase {
+  toStatuses: NotificationCampaignStatus[]
+  campaignIds: number[] | null
+}
+
+export interface AccountStatusSubscription extends NotificationSubscriptionBase {
+  loginEvents: NotificationLoginEvent[]
+  runStatuses: NotificationAccountRunStatus[]
+  accountIds: number[] | null
+}
+
+export interface ScheduledReportSubscription extends NotificationSubscriptionBase {
+  /** 1 = Thứ Hai … 7 = Chủ nhật */
+  weekDays: number[]
+  /** "HH:MM", 1–6 mốc, giờ Việt Nam */
+  times: string[]
+  skipWhenIdle: boolean
+  nextRunAt?: string | null
+}
+
+export interface DataGroupMembershipSubscription extends NotificationSubscriptionBase {
+  groupIds: number[] | null
+  actions: NotificationGroupAction[]
+  bucketMinutes: number
+  includeSharedGroups: boolean
+}
+
+export interface NotificationSubscriptions {
+  campaignStatus: CampaignStatusSubscription
+  accountStatus: AccountStatusSubscription
+  scheduledReport: ScheduledReportSubscription
+  dataGroupMembership: DataGroupMembershipSubscription
+}
+
+export interface NotificationDevice {
+  id: number
+  name: string | null
+  model: string | null
+  osVersion: string | null
+  appVersion: string | null
+  enabled: boolean
+  hasToken: boolean
+  permissionStatus: 'granted' | 'denied' | 'undetermined' | 'provisional' | null
+  lastRegisteredAt: string
+  lastSuccessAt: string | null
+  isCurrentDevice: boolean
+}
+
+export interface NotificationSettings {
+  revision: number
+  timezone: string
+  updatedAt: string | null
+  updatedByClient: string | null
+  centerEnabled: boolean
+  deliveryMode: NotificationDeliveryMode
+  channels: {
+    email: { enabled: boolean; recipients: string[]; unverified: string[] }
+    push: { enabled: boolean; devices: NotificationDevice[] }
+  }
+  subscriptions: NotificationSubscriptions
+}
+
+export interface SaveNotificationSettingsRequest {
+  revision: number
+  channels?: {
+    email?: { enabled?: boolean; recipients?: string[] }
+    push?: { enabled?: boolean }
+  }
+  subscriptions?: Partial<{
+    campaignStatus: CampaignStatusSubscription
+    accountStatus: AccountStatusSubscription
+    scheduledReport: Omit<ScheduledReportSubscription, 'nextRunAt'>
+    dataGroupMembership: DataGroupMembershipSubscription
+  }>
+}
+
+export interface NotificationListItem {
+  id: number
+  eventType: NotificationEventType
+  severity: NotificationSeverity
+  title: string | null
+  body: string | null
+  occurredAt: string
+  createdAt: string
+  readAt: string | null
+  emailState: NotificationChannelState
+  pushState: NotificationChannelState
+  campaignId: number | null
+  accountId: number | null
+  dataGroupId: number | null
+  entityKey: string
+}
+
+export interface NotificationCursor { createdAt: string; id: number }
+
+export interface NotificationListQuery {
+  cursor?: NotificationCursor | null
+  limit?: number
+  type?: NotificationEventType | null
+  unreadOnly?: boolean
+}
+
+export interface NotificationListPage {
+  items: NotificationListItem[]
+  nextCursor: NotificationCursor | null
+  unreadCount: number
+}
+
+export interface NotificationDeliverySummary {
+  channel: 'email' | 'push'
+  status: 'pending' | 'sending' | 'retrying' | 'sent' | 'failed' | 'skipped' | 'cancelled'
+  sentAt: string | null
+  attempts: number
+  errorCode: string | null
+  /** Email đã che bớt hoặc tên iPhone */
+  destination: string
+}
+
+export interface NotificationContentSection {
+  title: string
+  tone?: 'activity' | 'result' | 'issue' | 'info'
+  rows?: Array<{ label: string; value: string; tone?: 'ok' | 'warn' | 'bad' | 'muted' }>
+  table?: { columns: string[]; rows: string[][] }
+  note?: string
+}
+
+/** Dữ liệu đã chốt lúc dựng (contentSnapshot); email và chi tiết trong app cùng dùng. */
+export interface NotificationContent {
+  kind: 'campaign' | 'account' | 'report' | 'data_group' | 'test' | 'verify_email'
+  headline: string
+  countedAt?: string | null
+  sections: NotificationContentSection[]
+  links?: Array<{ label: string; url: string }>
+}
+
+export interface NotificationDetail extends Omit<NotificationListItem, 'body' | 'title'> {
+  title: string | null
+  body: string | null
+  emailSubject: string | null
+  content: NotificationContent | null
+  templateVersion: number | null
+  suppressedCount: number
+  mergedCount: number
+  deliveries: NotificationDeliverySummary[]
+}
+
+/** `upToId`: mục mới nhất đang hiện; `type` chỉ đánh dấu một loại (khi đang lọc). Server đánh dấu theo thứ tự hộp thư (created_at, id). */
+export type NotificationReadRequest = { ids: number[] } | { upToId: number; type?: NotificationEventType }
+export interface NotificationReadResult { ok: true; updated: number; unreadCount: number }
+export interface NotificationTestResult { ok: true; id: number; deliveryMode: NotificationDeliveryMode }
+export interface NotificationVerificationResult { ok: true; requested: boolean }
+export interface NotificationDeviceRemoval { ok: true; updated: number }
+
+/**
+ * IPC result of every notification-center call. Errors are returned (not thrown) so the
+ * renderer can branch on `code`; `notification_center_not_ready` means the DB has no V457
+ * RPC yet and the legacy email form must be shown. `message` is always Vietnamese UI text.
+ */
+export type NotificationCenterResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; code: string; message: string }
+
 export type AppNotificationLevel = 'info' | 'success' | 'warning' | 'error'
 
 export interface AppNotification {
@@ -2804,6 +2994,10 @@ export interface LoginScreenContent {
     userGuide: string | null
     upgradePayment: string | null
     contactUs: string | null
+    /** Trang Lấy lại tài khoản của cổng gia hạn CRM (email + SĐT đã đăng ký). */
+    recoverAccount: string | null
+    /** Trang Đăng ký dùng thử của cổng gia hạn CRM. */
+    trialSignup: string | null
   }
 }
 
@@ -2911,10 +3105,55 @@ export interface AuthUser {
   deviceLastSeenAt?: string | null
 }
 
+/** Loại trang gia hạn CRM cần mở khi tổ chức không còn sản phẩm akaAgent còn hạn. */
+export type AuthRenewalKind = 'trial_expired' | 'package_expired' | 'no_package'
+
+export interface AuthRenewalProduct {
+  productId: number
+  displayName: string
+  isTrial: boolean
+  expirationDate: string | null
+}
+
+/**
+ * Thông tin hiển thị màn Gia hạn. Không chứa mật khẩu, token hay link ký số;
+ * main giữ thông tin đăng nhập và mã sản phẩm cần gia hạn.
+ */
+export interface AuthRenewalRequired {
+  kind: AuthRenewalKind
+  username: string
+  focusProduct: AuthRenewalProduct | null
+  products: AuthRenewalProduct[]
+}
+
 export type AuthLoginResult =
   | { status: 'authenticated'; user: AuthUser; loginState?: AuthLocalState; automaticLoginAllowed?: boolean }
   | { status: 'manual_login_required'; loginState?: AuthLocalState }
   | { status: 'policy_required' }
+  | { status: 'renewal_required'; renewal: AuthRenewalRequired }
+
+/**
+ * Kết quả kiểm lại ở màn Gia hạn. `renewal_ended`: phiên gia hạn đã kết thúc
+ * (gói đã còn hạn nhưng đăng nhập vướng bước khác, hoặc quá thời gian chờ) —
+ * renderer về màn đăng nhập kèm câu báo.
+ */
+export type AuthRenewalRecheckResult = AuthLoginResult | { status: 'renewal_ended'; message: string }
+
+/** Webview màn Gia hạn: renderer gắn `about:blank`, main tự nạp link ký số. */
+export interface RenewalWebDescriptor {
+  partition: string
+  url: string
+}
+
+export interface RenewalWebState {
+  revision: number
+  status: 'loading' | 'ready' | 'error'
+  /** false: không lấy được link ký số, khách đăng nhập cổng bằng mật khẩu. */
+  signed: boolean
+  /** Trang CRM báo đơn đã kích hoạt; renderer kiểm tra lại để vào phần mềm. */
+  orderCompleted: boolean
+  message?: string
+}
 
 export interface ChatWebState {
   sessionId: string
@@ -2953,6 +3192,8 @@ export interface AuthLocalState {
 export interface AuthBootstrapResult extends AuthLocalState {
   user: AuthUser | null
   policyAcceptanceRequired?: boolean
+  /** Tự đăng nhập lúc mở app gặp tài khoản hết hạn: mở thẳng màn Gia hạn. */
+  renewal?: AuthRenewalRequired | null
   errorMessage?: string | null
 }
 
@@ -3143,6 +3384,14 @@ export const IPC_EVENTS = {
   AUTH_SESSION_EXPIRED: 'auth:session-expired',
   AUTH_USER_UPDATED: 'auth:user-updated',
   AUTH_ZALO_RUNTIME_RESTART_REQUIRED: 'auth:zalo-runtime-restart-required',
+  // Màn Gia hạn (cổng CRM /gia-han) khi tổ chức hết hạn gói/dùng thử
+  AUTH_RENEWAL_REQUIRED: 'auth:renewal-required',
+  AUTH_RENEWAL_RECHECK: 'auth:renewal-recheck',
+  AUTH_RENEWAL_CANCEL: 'auth:renewal-cancel',
+  AUTH_RENEWAL_OPEN_EXTERNAL: 'auth:renewal-open-external',
+  AUTH_RENEWAL_WEB_PREPARE: 'auth:renewal-web-prepare',
+  AUTH_RENEWAL_WEB_RELOAD: 'auth:renewal-web-reload',
+  AUTH_RENEWAL_WEB_STATE: 'auth:renewal-web-state',
 
   CHAT_WEB_PREPARE: 'chat-web:prepare',
   CHAT_WEB_RELOAD: 'chat-web:reload',
@@ -3279,6 +3528,18 @@ export const IPC_EVENTS = {
   // Email Notifications
   EMAIL_NOTIFICATION_SETTINGS_GET: 'email-notification-settings:get',
   EMAIL_NOTIFICATION_SETTINGS_SAVE: 'email-notification-settings:save',
+
+  // Notification center (V457)
+  NOTIFICATION_CENTER_SETTINGS_GET: 'notification-center:settings:get',
+  NOTIFICATION_CENTER_SETTINGS_SAVE: 'notification-center:settings:save',
+  NOTIFICATION_CENTER_TEST: 'notification-center:test',
+  NOTIFICATION_CENTER_RESEND_VERIFICATION: 'notification-center:resend-verification',
+  NOTIFICATION_CENTER_LIST: 'notification-center:list',
+  NOTIFICATION_CENTER_DETAIL: 'notification-center:detail',
+  NOTIFICATION_CENTER_MARK_READ: 'notification-center:mark-read',
+  NOTIFICATION_CENTER_UNREAD_COUNT: 'notification-center:unread-count',
+  NOTIFICATION_CENTER_DEVICE_SET_ENABLED: 'notification-center:device:set-enabled',
+  NOTIFICATION_CENTER_DEVICE_UNREGISTER: 'notification-center:device:unregister',
 
   // App Notifications
   APP_NOTIFICATION_GET_ACTIVE: 'app-notification:get-active',

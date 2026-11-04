@@ -1,0 +1,91 @@
+{
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "signature": "aka_agent_block_denied_ip_request()",
+  "source": {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "cost": 100,
+    "leakproof": false,
+    "md5": "3d14fd34e0b35dac896876b9e6ec1604",
+    "owner": "postgres",
+    "parallel": "u",
+    "rows": 0,
+    "security_definer": false,
+    "signature": "aka_agent_block_denied_ip_request()",
+    "strict": false,
+    "volatility": "s"
+  },
+  "target": {
+    "acl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+    "config": [
+      "search_path=pg_catalog"
+    ],
+    "cost": 100,
+    "leakproof": false,
+    "md5": "ecfc014981c5058f9cd84e0e8e504bed",
+    "owner": "postgres",
+    "parallel": "u",
+    "rows": 0,
+    "security_definer": false,
+    "signature": "aka_agent_block_denied_ip_request()",
+    "strict": false,
+    "volatility": "s"
+  },
+  "caseCount": 64,
+  "dependencyCount": 31,
+  "removedLines": 1,
+  "schemaCacheReload": "none requested; existing DDL triggers unchanged",
+  "customerRowsChanged": false,
+  "appliedAt": "2026-11-03T05:16:02.880Z",
+  "ledger": {
+    "version": "20261103051602",
+    "name": "remove_aka_agent_access_from_ip_hook_v453"
+  },
+  "canonicalPrivateDirectory": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/remove-app-access-20261103-u_c7j6ta",
+  "canonicalPrivateMigration": "migration_v453_remove_app_access_from_ip_hook.sql",
+  "migrationSha256": "de21b3bd813a4cd9e410e6b65d109317a1b1afc74425294121b89c41cdc40577",
+  "trial": {
+    "cases": 64,
+    "status": "passed",
+    "rollback": "passed",
+    "benchmarks": {
+      "after": {
+        "calls": 1000,
+        "executionMs": 12.883,
+        "hitBlocks": 17,
+        "readBlocks": 0
+      },
+      "before": {
+        "calls": 1000,
+        "executionMs": 925.671,
+        "hitBlocks": 57080,
+        "readBlocks": 0
+      }
+    }
+  },
+  "postcheck": {
+    "cases": 64,
+    "status": "passed"
+  },
+  "securityAdvisors": {
+    "before": 9,
+    "after": 9,
+    "new": 0
+  },
+  "explicitNotifyInRecordedMigration": false,
+  "limitations": [
+    "Database role/header smoke tests; no customer login, QR scan, provider request or campaign run.",
+    "aka_agent_chat_api EXECUTE remains false, checked through catalog; Management API session cannot SET ROLE to it.",
+    "Benchmark is one representative Desktop context, not total workload or whole-database CPU."
+  ],
+  "rollout": {
+    "database": "applied",
+    "edgeDeploy": "not required",
+    "apiWebDeploy": "not required",
+    "desktopServerBuild": "not required",
+    "crm": "unchanged"
+  },
+  "userDecision": "Remove only request-wide akaAgent access evaluation from IP pre-request hook. Current Desktop rechecks on full restart/login; do not promise immediate revocation for existing sessions or revocation solely on JWT expiration."
+}

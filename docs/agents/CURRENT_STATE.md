@@ -1,4 +1,48 @@
-# Trạng thái đã xác nhận — cập nhật 03/11/2026
+# Trạng thái đã xác nhận — cập nhật 04/11/2026
+
+[Bộ lọc tag Zalo đã xóa](../audits/zalo-deleted-tag-filters-20261104/README.md):
+**Chat runtime/worker đã deploy 22:50–22:51 VN, 04/11/2026; Desktop/legacy Server
+chưa phát hành.** Desktop/legacy Server và Chat bỏ tag
+đã xác nhận không còn trong danh sách Zalo khỏi điều kiện đang xét; bỏ cả điều
+kiện khi hết tag. Lỗi mạng/API hoặc dữ liệu tag không đọc được vẫn giữ unknown/
+tạm dừng. Không ghi lại nhóm hoặc tự chạy lại input đã tạm dừng; giữ các bộ lọc
+khác và cache/phiên hiện có. Chỉ đổi image trên hai máy hiện có; API giữ nguyên,
+không migration/tăng tài nguyên. Health/checksum đạt; quan sát 22:58 VN có
+184 tài khoản ready / 53 lỗi đăng nhập, thiếu baseline để phân loại lỗi mới/cũ.
+Hàng đợi sau khởi động đang giảm; xem receipt, không coi attach là ready.
+Kết quả kiểm chứng và giới hạn xem audit.
+
+[V459: không mở được composer khi đăng nhóm](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md):
+**Đã apply 15:55:32 VN, 04/11/2026**, ledger `20261104085532`.
+Block 27 trả mã riêng cho `fb_post_group`; policy mới 122 chuyển thành Bỏ qua,
+không tăng/reset chuỗi lỗi hoặc tính hạn mức, giữ log nguyên nhân. Policy 94 cho
+đăng cá nhân nguyên vẹn; XPath/workflow/app không sửa. 55 ca local, trial ROLLBACK
+và hậu kiểm checksum đạt; hai typecheck/build local đạt. Khách cần thoát/mở lại
+app để nạp catalog mới, không cần cài bản mới; tiến trình vẫn có chữ Lỗi theo
+lựa chọn của người dùng. Không apply lại hoặc tự bật campaign đã tạm dừng.
+
+[V458: nhật ký vào/rời nhóm data](../NOTIFICATION_CENTER.md#v458--nhật-ký-vàorời-nhóm-data-candidate-chưa-apply): **Candidate, chưa apply,
+cần V457 trước.** Sửa hàm bộ lọc động từ bản live (md5 `d40d1a23…`) đúng 3 chỗ, ghi sự kiện và gộp thông báo theo khung;
+mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với bản cũ) và preflight live READ ONLY đạt.
+
+[V457: trung tâm thông báo (giai đoạn 1)](../NOTIFICATION_CENTER.md): **Candidate, chưa apply.** 5 bảng, trigger
+chiến dịch/tài khoản/phiên, cầu nối cài đặt cũ, điều phối trong tick 30 giây, RPC worker/số liệu/cài đặt;
+công tắc mặc định tắt + `dry_run`. 108 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
+
+[V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
+**Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token
+Desktop trên hai bảng email thông báo; không đổi ACL/hàm. Thử production ROLLBACK, hậu kiểm role
+thật và 21 ca PG17 đạt; không apply lại. Worker email cũ lọc chi tiết theo staff, đã deploy version 7
+lúc 12:25:35 VN (`verify_jwt=false` giữ nguyên); đoạn sửa chạy thật lần đầu ở lượt 16:15 VN.
+
+[V454: tối ưu staff access và Zalo Server control](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md):
+**Đã apply 16:28:58 VN, 03/11/2026** (`20261103092858`); dùng index sẵn có cho held lookup, loại kiểm quyền
+trùng và bỏ account helper ở nhánh control đã dừng/legacy đã xác minh owner.
+Giữ EXECUTE boundary, quyền/tenant/Chat owner V449 và claim/cleanup.
+574 ca PG17; parity production trước/sau và metadata/rollback đạt.
+Không thêm index/pool/polling, không deploy service/build bộ cài; không apply lại.
+Staff/control giảm 61,4%/26,8% thời gian mỗi lượt; CPU toàn DB 72,91% → 77,96%
+trong hai cửa sổ khác tải, chưa chứng minh giảm CPU chung. Số đo và ledger xem [receipt](../audits/app-access-split/guard-performance-v454-receipt.json).
 
 Đây là chỉ mục dựa trên receipt/audit đã có, không phải lệnh triển khai.
 Lần tổ chức tài liệu không query hoặc thay đổi production. Trước thay đổi DB phải
@@ -6,15 +50,31 @@ Lần tổ chức tài liệu không query hoặc thay đổi production. Trư�
 
 ## Tách quyền akaChat/akaAgent — V447 đã kích hoạt
 
+[V453 hook IP](../audits/app-access-split/IP_HOOK_ACCESS_REMOVAL_20261103.md):
+**Đã apply 12:16:02 VN ngày 03/11/2026**, ledger `20261103051602`. Người dùng
+yêu cầu bỏ kiểm quyền akaAgent chung trên từng request; giữ IP block, hook config,
+ACL và 31 helper/auth functions. 64 ca trial + 64 ca hậu kiểm đạt; không deploy/build.
+Không tự gắn lại lời gọi app-access trong hook. Phiên Desktop đăng nhập lại vẫn
+kiểm quyền; không bảo đảm thu hồi tức thời trên mọi đường của phiên đang mở.
+V453 là private migration, manifest giữ số phiên bản; không apply lại.
+
+[V452 runtime identity](../audits/app-access-split/RUNTIME_IDENTITY_FIX_20261103.md):
+**DB đã apply 11:54:14 VN ngày 03/11/2026**, ledger `20261103045414`. Sửa hai nhánh
+DB dùng ID legacy trong audit V451; Chat API đăng ký local đã deploy **11:58:23 VN**
+từ repo chính, source `83d2736`. Health/live-ready đạt, 9 runtime/228 account phục hồi;
+worker/runtime image/config/instance giữ nguyên, không build bộ cài.
+270 ca PG17 (40 mới), typecheck/build, production trial và hậu kiểm ROLLBACK đạt.
+Không apply lại; trạng thái API/giới hạn full test xem audit. P2 lock-order riêng còn hoãn.
+
 [V451 canonical Chat identity](../audits/app-access-split/CANONICAL_IDENTITY_FIX_20261103.md):
 **Đã apply 11:15:06 VN ngày 03/11/2026**, ledger `20261103041506`; sửa false conflict khi bật Chat từ ID legacy đã đăng xuất.
 230 ca PG17 (42 mới), hai typecheck akaAgent/build Chat API và trial production
 ROLLBACK và hậu kiểm đạt; chỉ hai hàm đổi đúng checksum, flags/bindings/ACL và các hàm khác giữ nguyên.
 Không deploy/build app hoặc tự bật account; giữ V449/V450. Không apply lại V451.
 [Receipt apply](../audits/app-access-split/canonical-identity-apply-receipt-20261103.json).
-[Audit tiếp theo](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md): còn
-login-status trigger/local registration/duplicate legacy đã hoãn dùng ID cũ;
-bốn repro local xác nhận, chưa sửa. Live 11:20:53: không có bound UID mismatch
+[Audit lịch sử sau V451](../audits/app-access-split/IDENTITY_CHECK_AUDIT_20261103.md):
+ba nhóm login-status trigger/local registration/duplicate legacy từng dùng ID cũ;
+bốn repro local xác nhận, nay đã sửa bằng V452 nêu trên. Live 11:20:53: không có bound UID mismatch
 hay duplicate candidate đang bật; ba Server unbound logged-out còn ID cũ, Chat=false.
 
 [Cấp lại Chat Server khi chủ khóa/hết hạn — V450](../audits/app-access-split/SHARED_OWNER_GRANT_FIX_20261103.md):
@@ -67,6 +127,7 @@ Chat API/worker/Server runtime, Chat Web và WebApp/API đã [deploy từ repo c
 | Tên/Tên gốc Zalo trong Quét data — V441 | `20261102064947` đã apply lúc 13:49:47 VN, 02/11/2026: chỉ thêm projection JSON và filter `zaloOriginalName` ở hai reader, không đổi tên/field cũ, ACL, timeout, connection hoặc business rows. Trial ROLLBACK, guarded rollback và 10 ca hậu kiểm service_role/Desktop đạt. Source app build local, chưa đóng gói/phát hành; không apply lại | [hợp đồng và audit](../ZALO_SCAN_NAMES_V441.md), [receipt](../../migrations/snapshots/zalo-scan-names/apply-receipt.json) |
 | DeepSeek setting | `20261027182912` đã apply: Desktop không đọc/ghi/đổi tên dòng `ai.deepseek.api_key`; backend và settings khác giữ nguyên | [DeepSeek block](../DESKTOP_DEEPSEEK_SETTING_BLOCK.md) |
 | Block/workflow definitions | `20261027191229` đã apply: Desktop kể cả admin mất quyền ghi `auto_blocks`/`auto_workflows`, giữ SELECT/backend; không suy rộng sang element/XPath/legacy | [receipt](../../migrations/snapshots/desktop-block-workflow-readonly/apply-receipt.json) |
+| XPath Chia sẻ bài viết/Reel — 257, block 36/2835 | Hotfix DB đã áp dụng 03/11/2026 lúc 17:20:26 VN: element 257 giữ nguyên XPath đầy đủ với nhánh Reel ngoài dialog; hai block dùng trực tiếp. Source đồng bộ 04/11, V455 bỏ qua row đã đúng và chặn drift; chưa apply/đăng ký ledger V455 trong lượt PR. Trial production ROLLBACK giữ nguyên cả ba row/timestamp; kiểm chứng PostgreSQL, DOM/React, hồi quy native, hai typecheck và build local đạt. App cần khởi động lại để nạp cache | [Hợp đồng, checksum và kiểm chứng](../FACEBOOK_NATIVE_GROUP_SHARE.md#share-xpath-20261103) |
 | XPath mở bình luận Facebook | Element 13 `fb_comment_box_at_n`: 01/11 thêm `contains(@aria-label,'Comment')`; 02/11/2026 lúc 09:27:03 VN bổ sung `contains(@aria-label,'Bình luận về')` sau khi người dùng kiểm tra trình duyệt. Chỉ đổi xpath/updated_at; trial ROLLBACK và đọc lại DB đạt, checksum các element khác/block/workflow giữ nguyên. Chưa xác minh campaign sau bản sửa 02/11. Process đang mở cần thoát hẳn app rồi mở lại để nạp cache; không reload PostgREST/build/deploy | [audit](../CUSTOMER_REPORTS_ZALO_ALBUM_FB_GROUP_20261101.md#b-comment-sau-đăng-nhóm-gãy-toàn-fleet-từ-3010), [receipt 01/11](../audits/facebook-comment-box-xpath-20261101/receipt.json), [receipt 02/11](../audits/facebook-comment-box-xpath-20261101/vietnamese-label-20261102/receipt.json) |
 | Nút bình luận newsfeed và quét data | Element 1692/1489: 01/11 thêm `contains(@aria-label,'Comment')`; 02/11/2026 lúc 09:29:38 VN bổ sung `contains(@aria-label,'Bình luận về')` theo yêu cầu rà các nút cùng chức năng. Giữ parent/root/role và điều kiện cũ. 1517/1693/1694 đã bao phủ nhãn mới; 14 không thấy consumer nên giữ nguyên. Trial ROLLBACK/hậu kiểm DB đạt, checksum các element khác/block/workflow không đổi; chưa test Facebook thật. App đang mở cần khởi động lại để nạp cache; không reload PostgREST/build/deploy | [audit](../CUSTOMER_REPORTS_ZALO_ALBUM_FB_GROUP_20261101.md#b-comment-sau-đăng-nhóm-gãy-toàn-fleet-từ-3010), [receipt 01/11](../audits/facebook-comment-buttons-xpath-20261101/receipt.json), [receipt 02/11](../audits/facebook-comment-buttons-xpath-20261101/vietnamese-label-20261102/receipt.json) |
 | Nút Like newsfeed và dialog bài viết | 01/11/2026 lúc 13:49:07 VN đã thêm `contains(@aria-label,'Bày tỏ cảm xúc Thích')` vào element 1691/1132 theo yêu cầu người dùng. Giữ điều kiện cũ, parent/root, block/workflow và element Chia sẻ 257. Trial ROLLBACK/hậu kiểm DB đạt; chưa chạy Like thật. App đang mở cần thoát hẳn rồi mở lại để nạp cache; không reload PostgREST/build/deploy | [audit](../CUSTOMER_REPORTS_ZALO_ALBUM_FB_GROUP_20261101.md#b-comment-sau-đăng-nhóm-gãy-toàn-fleet-từ-3010), [receipt](../audits/facebook-like-buttons-xpath-20261101/receipt.json) |
@@ -81,8 +142,10 @@ Chat API/worker/Server runtime, Chat Web và WebApp/API đã [deploy từ repo c
 | UI đồng bộ theo tổ chức — V440 | `20261030085919` đã apply 15:59:19 VN, 30/10/2026; chỉ org 1 bật `zalo_message_sync_enabled`. API/Web deploy 16:00–16:01 VN, mốc 7/30/90/360/720/Tuỳ chọn (UI tối đa 720). PR111/API và PR73/Web đã merge/sync, worktree đã dọn. Bản sửa giữ khoảng ngày deploy riêng Web từ repo chính `7772ed6` lúc 16:48 VN; 158 file source API live khớp `a16cfc4`. Health/hash JS đạt; API/worker/runtime giữ nguyên instance. Không apply lại DB, đổi backend date limit, quyền hoặc pool/tài nguyên | [audit liên repo và nguồn canonical](../ZALO_MESSAGE_SYNC_UI_V440_20261030.md) |
 | Context từ lịch sử Zalo — V439 | `20261030081324` đã apply lúc 15:13:24 VN, 30/10/2026: trigger bỏ qua `sync_source='old'` trước khi gọi Context. Giữ realtime/API, job hiện có và function/ACL; không thêm job bù sau đồng bộ. Không deploy/restart service hoặc tăng connection | [hợp đồng, rollback và hậu kiểm](../CONTEXT_ZALO_HISTORY_TRIGGER_V439_20261030.md) |
 | Nhập trích dẫn lịch sử theo lô | System-worker đã deploy từ repo chính Chat API `dev`/`09fe12a` lúc 15:26 VN, 30/10/2026 sau PR110. Chỉ đổi image sole worker; API/runtime giữ config và instance, ChatWeb không deploy. V437–V439 hậu kiểm đạt, không apply lại; 1.731 test và 13 ca PostgreSQL đạt. Pilot tốc độ đồng bộ mới chờ user test | [phạm vi liên repo](../ZALO_MESSAGE_SYNC_V437_20261030.md) |
+| Cooldown tra người nhận — 28/10/2026 | `20261028045419 / cooldown_recipient_indexes` và `20261028051045 / cooldown_recipient_query` đã apply akachat lúc 12:10:45 VN: Zalo UID/SĐT và SMS tra input bằng hai index hash chuẩn hóa rồi đọc detail theo input. Giữ Facebook/Email V431, lịch sử xóa mềm, guard Desktop, ACL/timeout và 1.254 hàm khác. Không cần update/restart app, không apply lại; đổi `normalize_phone` phải rebuild index SĐT. 66 ca PG17, benchmark 300k và hai lượt smoke rollback production đạt tại thời điểm apply; checksum/snapshot/rollback ở audit feature và kho ngoài Git | [phạm vi, checksum và số đo](../COOLDOWN_HISTORY_V431.md#tra-người-nhận-trước-lịch-sử-ngày-28-tháng-10) |
 | Device identity v3 | `20261027085744` đã apply; credential/CAS/receipt, giữ recovery proof/journal. Ghi chú “chưa bật C” là trước V435 | [device v3](../DEVICE_IDENTITY_V3.md), [V435](../DESKTOP_PERMISSION_CUTOVER_V435.md) |
 | Source chặn IP | Source Edge/migration IP/hồ sơ/full capture riêng đã chuyển ngoài Git; production giữ quy tắc đang triển khai | [README source riêng](../../supabase/functions/aka-agent-desktop-session/README.md) |
+| Màn Gia hạn / link cổng CRM — 04/11/2026 | DML đã áp 15:42 VN (người dùng duyệt): `auto_system_settings` id 43 `akabiz.links.upgrade_payment` `https://akabiz.net/` → `https://crm.akabiz.net/gia-han`, mọi bản Desktop nhận ngay. V460 (2 link Lấy lại tài khoản/Đăng ký dùng thử) **chưa apply**: live giữ md5 `997f54ddf67f808a1b3ac47596981036`, thử tự huỷ cho đích `8ac766131b581f03fcf21faf31809356`. Edge `renewal_link` hoãn theo quyết định 04/11 (khách gõ lại mật khẩu trên cổng); Desktop nhánh `dev_auto_nang_cap` chưa build/phát hành | [hợp đồng và bản vá Edge](../RENEWAL_PORTAL_DESKTOP.md) |
 
 Không apply lại các mốc trên. Không chạy B/C cũ hoặc rollback mở quyền nếu chưa có
 chỉ thị riêng. File canonical có thể mang timestamp khác ledger; đối chiếu

@@ -28,7 +28,35 @@ After a successful claim, the scheduler reads one configuration snapshot per run
 
 Runtime snapshot validation checks only the account currently executing. A deleted group/list selected by another account does not stop this account; missing or invalid current-account configuration still fails closed. Saving campaign configuration continues to validate every account entry.
 
-Only the next input/share batch is evaluated. Cheap DB facts run before optional Zalo sources; three-valued AND/OR short-circuits when the result is conclusive. Missing/failed data stays unknown, and a removed selected native tag is unknown rather than an empty set. Unknown or matching targets pause via CAS and receive a reason; they do not send, run auxiliary actions, create send results, or consume send quota. Successful phone lookup is recorded first and retains its quota. Existing session/rate-limit side effects remain applicable without creating a filter-result detail.
+Only the next input/share batch is evaluated. Cheap DB facts run before optional Zalo sources; three-valued AND/OR short-circuits when the result is conclusive. Missing/failed data stays unknown. Native Zalo tags confirmed deleted by a successful, complete label read are removed from the effective condition as described below. Unknown or matching targets pause via CAS and receive a reason; they do not send, run auxiliary actions, create send results, or consume send quota. Successful phone lookup is recorded first and retains its quota. Existing session/rate-limit side effects remain applicable without creating a filter-result detail.
+
+### Deleted native Zalo tags — source change 04/11/2026
+
+The user replaced the old "removed tag means unknown" behavior. For native Zalo
+tag membership (`zalo_labels`, `contains_any` / `contains_none`), intersect the
+selected IDs with the complete `availableValues` returned by the current label
+context. A deleted ID no longer participates in the filter. Retained IDs still
+use the selected operator. If none remain, skip that condition entirely for
+both AND and OR; keep other rules, and allow when no effective rules remain.
+In particular, an emptied "does not contain" condition must not exclude everyone.
+
+Require readable recipient membership and a valid complete label catalogue
+before interpreting any absence as deletion. Network/API errors, malformed or
+missing catalogue/membership, and session invalidation keep the existing
+unknown/pause and lifecycle behavior. An authoritative empty label list is
+valid; a missing list is not. Missing akaBiz tags and other sources retain their
+existing behavior. Blocklists, opt-out, cooldown, quota and cleanup are unchanged.
+
+This pruning is per evaluation and does not mutate the saved group/revision or
+the run snapshot, add a DB write/request, or resume previously paused inputs.
+The Desktop/legacy Server shared source and Chat runtime-protocol must remain
+identical. The group editor may still display saved deleted IDs for manual
+cleanup; they no longer block execution after a valid label read.
+See the [local verification record](audits/zalo-deleted-tag-filters-20261104/README.md)
+for build/test status. Chat runtime and worker were deployed on 04/11/2026 at
+22:50–22:51 Vietnam time; Desktop/legacy Server installers remain unreleased.
+Deployment health, account readiness and backlog observations are separate in
+the receipt; attaching accounts does not establish successful Zalo login.
 
 Desktop/legacy Server defer a phone exclusion-gate failure until the successful lookup milestone/quota has been recorded. The workflow receives no target, so sending and auxiliary actions stop. The scheduler bypasses generic input/error-policy writes and pauses the campaign through existing token-checked failure cleanup. A pause committed before a lost response stays paused; an input still running follows existing cleanup's terminal uncertainty handling and is not automatically requeued. Lifecycle shutdown/handoff guards retain precedence.
 

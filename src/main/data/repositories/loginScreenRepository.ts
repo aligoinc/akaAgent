@@ -22,7 +22,10 @@ export async function getLoginScreenContent(): Promise<LoginScreenContent> {
       website: normalizePublicLinkUrl(settings.get('akabiz.links.website')?.value),
       userGuide: normalizePublicLinkUrl(settings.get('akabiz.links.user_guide')?.value),
       upgradePayment: normalizePublicLinkUrl(settings.get('akabiz.links.upgrade_payment')?.value),
-      contactUs: normalizePublicLinkUrl(settings.get('akabiz.links.contact_us')?.value)
+      contactUs: normalizePublicLinkUrl(settings.get('akabiz.links.contact_us')?.value),
+      // Hai key mới đọc được sau migration v460; chưa có thì renderer dùng link mặc định của cổng gia hạn.
+      recoverAccount: normalizePublicLinkUrl(settings.get('akabiz.links.recover_account')?.value),
+      trialSignup: normalizePublicLinkUrl(settings.get('akabiz.links.trial_signup')?.value)
     }
   }
 }

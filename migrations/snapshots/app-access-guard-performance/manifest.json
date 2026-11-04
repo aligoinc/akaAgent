@@ -1,0 +1,20 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "changedFunctions": [
+    {
+      "signature": "private.app_access_held(text,bigint)",
+      "sourceMd5": "091b58186a65975e5faf5e620569feac",
+      "targetMd5": "b181b7ce926f8bf4b07cc6233ac4380a"
+    },
+    {
+      "signature": "aka_agent_app_access_account_allowed(bigint,text)",
+      "sourceMd5": "daf197a1cc419fd29030338e2ef2c936",
+      "targetMd5": "410005b7e2720a1db565acfcd8c7e197"
+    },
+    {
+      "signature": "aka_agent_get_zalo_server_run_control_state(bigint,bigint,bigint)",
+      "sourceMd5": "532019b253e648044dd46821a3c4cec6",
+      "targetMd5": "16505c0962e7a9a9d304d280400bfda1"
+    }
+  ]
+}

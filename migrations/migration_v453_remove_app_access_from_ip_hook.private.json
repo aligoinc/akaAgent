@@ -1,0 +1,16 @@
+{
+  "version": 453,
+  "projectRef": "cgjbsmqtfhqvttudyjzq",
+  "ledger": {
+    "version": "20261103051602",
+    "name": "remove_aka_agent_access_from_ip_hook_v453"
+  },
+  "status": "applied; do not reapply",
+  "canonicalPrivateDirectory": "/Users/lequangnhut/.codex/incident-recovery/akaAgent-ip-block/remove-app-access-20261103-u_c7j6ta",
+  "canonicalPrivateMigration": "migration_v453_remove_app_access_from_ip_hook.sql",
+  "migrationSha256": "de21b3bd813a4cd9e410e6b65d109317a1b1afc74425294121b89c41cdc40577",
+  "sourceMd5": "3d14fd34e0b35dac896876b9e6ec1604",
+  "targetMd5": "ecfc014981c5058f9cd84e0e8e504bed",
+  "receipt": "../docs/audits/app-access-split/ip-hook-access-removal-receipt-20261103.json",
+  "reason": "Private IP/auth source must remain outside Git. This manifest reserves V453; it is not executable SQL."
+}

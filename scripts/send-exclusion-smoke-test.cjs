@@ -20,11 +20,45 @@ async function main(){
  const friend=rule('zalo_friend_status','equals','friend'),tag=rule('zalo_tag','contains',['7']),aka=rule('akabiz_tag','contains',['8'])
  calls=[]; assert.equal((await run(snapshot([tag,aka]),{akabiz_contact:{ids:[]}})).decision,'allowed');assert.deepEqual(calls,['akabiz_contact'])
  calls=[]; assert.equal((await run(snapshot([tag,aka],'or'),{akabiz_contact:{ids:['8']}})).decision,'excluded');assert.deepEqual(calls,['akabiz_contact'])
- assert.equal((await run(snapshot([friend,tag]),{zalo_friendship:null,zalo_labels:{ids:[]}})).decision,'allowed')
- assert.equal((await run(snapshot([friend,tag],'or'),{zalo_friendship:null,zalo_labels:{ids:['7']}})).decision,'excluded')
- assert.equal((await run(snapshot([friend,tag],'or'),{zalo_friendship:null,zalo_labels:{ids:[]}})).decision,'unknown')
+ assert.equal((await run(snapshot([friend,tag]),{zalo_friendship:null,zalo_labels:{ids:[],availableValues:['7']}})).decision,'allowed')
+ assert.equal((await run(snapshot([friend,tag],'or'),{zalo_friendship:null,zalo_labels:{ids:['7'],availableValues:['7']}})).decision,'excluded')
+ assert.equal((await run(snapshot([friend,tag],'or'),{zalo_friendship:null,zalo_labels:{ids:[],availableValues:['7']}})).decision,'unknown')
  assert.equal((await run(snapshot([rule('zalo_tag','not_contains',['7'])]),{zalo_labels:{ids:[],availableValues:['7']}})).decision,'excluded')
- assert.equal((await run(snapshot([rule('zalo_tag','not_contains',['7'])]),{zalo_labels:{ids:[],availableValues:[]}})).decision,'unknown')
+ assert.equal((await run(snapshot([rule('zalo_tag','not_contains',['7'])]),{zalo_labels:{ids:[],availableValues:[]}})).decision,'allowed')
+ // Confirmed deletion removes only native Zalo tag operands, without mutating the saved group.
+ for(const operator of ['contains','not_contains']){
+  const selected=snapshot([rule('zalo_tag',operator,['7','deleted'])]),before=structuredClone(selected)
+  for(const [ids,expected] of [[['7'],operator==='contains'?'excluded':'allowed'],[[],operator==='contains'?'allowed':'excluded']]){
+   assert.equal((await run(selected,{zalo_labels:{ids,availableValues:[7]}})).decision,expected)
+  }
+  assert.deepEqual(selected,before)
+  for(const mode of ['and','or']){
+   for(const availableValues of [[],['8']]){
+    assert.equal((await run(snapshot([rule('zalo_tag',operator,['deleted'])],mode),{zalo_labels:{ids:[],availableValues}})).decision,'allowed')
+   }
+   // Removing the entire tag condition preserves the other conditions and their unknown state.
+   for(const [status,expected] of [['friend','excluded'],['stranger','allowed'],[null,'unknown']]){
+    assert.equal((await run(snapshot([rule('zalo_tag',operator,['deleted']),friend],mode),{
+     zalo_labels:{ids:[],availableValues:[]},zalo_friendship:status===null?null:{status}
+    })).decision,expected)
+   }
+  }
+ }
+ for(const facts of [null,undefined,new Error('offline'),{ids:[]},{ids:[],availableValues:null},{availableValues:[]},{ids:null,availableValues:[]},{ids:[],availableValues:[{}]},{ids:[{}],availableValues:[]},{ids:[],availableValues:['']}]){
+  assert.equal((await run(snapshot([tag]),{zalo_labels:facts})).decision,'unknown')
+ }
+ assert.equal((await run(snapshot([aka]),{akabiz_contact:{ids:[],availableValues:[]}})).decision,'unknown','Missing akaBiz tags retain their existing semantics')
+ const noLabels=new core.CampaignLabelContext(async()=>({version:1,labelData:[]}))
+ assert.equal((await core.evaluateSendExclusion(snapshot([tag]),'u1',()=>noLabels.ids('u1'))).decision,'allowed')
+ const unreadableLabels=new core.CampaignLabelContext(async()=>({version:1,labelData:null}))
+ assert.equal((await core.evaluateSendExclusion(snapshot([tag]),'u1',()=>unreadableLabels.ids('u1'))).decision,'unknown')
+ for(const id of [{},[],true,' ',NaN,Infinity]){
+  const malformedLabels=new core.CampaignLabelContext(async()=>({version:1,labelData:[{id,conversations:[]}]}))
+  assert.equal((await core.evaluateSendExclusion(snapshot([tag]),'u1',()=>malformedLabels.ids('u1'))).decision,'unknown','Malformed tag IDs cannot prove a selected tag was deleted')
+ }
+ const sourceErrors=[]
+ assert.equal((await core.evaluateSendExclusion(snapshot([tag]),'u1',async()=>{throw new Error('HTTP 429')},()=>{},async(source,error)=>sourceErrors.push([source,error.message]))).decision,'unknown')
+ assert.deepEqual(sourceErrors,[['zalo_labels','HTTP 429']])
  calls=[];assert.equal((await run(snapshot([tag],'and',['u1']),{})).decision,'excluded');assert.equal(calls.length,0)
  for (const [key,actual,expected] of [['text_contains','hello world',true],['text_not_contains','world',true],['text_starts_with','hello',true],['text_not_starts_with','world',true]]) assert.equal(core.evaluateFilter(key,actual,'hello'),expected)
  assert.equal(core.evaluateFilter('lt','2026-09-28','2026-09-29','date'),true)
