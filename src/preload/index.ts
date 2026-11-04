@@ -4,6 +4,9 @@ import { AGENT_DATA_IPC, type AgentDataFile, type AgentDataUpload, type AgentDat
 import type { CampaignSupportImage } from '../shared/campaignSupport'
 import type { CampaignAccountActionScope, CampaignAccountActionSnapshot } from '../shared/campaignAccountActionSnapshot'
 import type { DataColumnReadRequest, DataColumnReadResult } from '../shared/types'
+import type { NotificationCenterResult, NotificationDetail, NotificationDeviceRemoval, NotificationListPage, NotificationListQuery,
+  NotificationReadRequest, NotificationReadResult, NotificationSettings, NotificationTestChannel, NotificationTestResult,
+  NotificationVerificationResult, SaveNotificationSettingsRequest } from '../shared/types'
 import type { ImportImageSource, ImportTableSource } from '../shared/campaignImportVerification'
 import { CAMPAIGN_CONTENT_AI_IPC, type ContentAiRequest, type ContentAiResult } from '../shared/campaignContentAi'
 import { CAMPAIGN_EXCLUSION_AI_IPC, type ExclusionAiRequest, type ExclusionAiResult } from '../shared/campaignExclusionAi'
@@ -548,6 +551,30 @@ const electronAPI = {
 
   saveEmailNotificationSettings: (settings: Partial<EmailNotificationSettings>): Promise<EmailNotificationSettings> =>
     ipcRenderer.invoke(IPC_EVENTS.EMAIL_NOTIFICATION_SETTINGS_SAVE, settings),
+
+  // Notification center (V457). Every call resolves to { ok, data } | { ok: false, code, message }.
+  notificationCenter: {
+    getSettings: (): Promise<NotificationCenterResult<NotificationSettings>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_SETTINGS_GET),
+    saveSettings: (request: SaveNotificationSettingsRequest): Promise<NotificationCenterResult<NotificationSettings>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_SETTINGS_SAVE, request),
+    test: (channel: NotificationTestChannel): Promise<NotificationCenterResult<NotificationTestResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_TEST, channel),
+    resendVerification: (email: string): Promise<NotificationCenterResult<NotificationVerificationResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_RESEND_VERIFICATION, email),
+    list: (query?: NotificationListQuery): Promise<NotificationCenterResult<NotificationListPage>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_LIST, query ?? {}),
+    detail: (id: number): Promise<NotificationCenterResult<NotificationDetail>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DETAIL, id),
+    markRead: (request: NotificationReadRequest): Promise<NotificationCenterResult<NotificationReadResult>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_MARK_READ, request),
+    unreadCount: (): Promise<NotificationCenterResult<number>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_UNREAD_COUNT),
+    setDeviceEnabled: (deviceId: number, enabled: boolean): Promise<NotificationCenterResult<null>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DEVICE_SET_ENABLED, deviceId, enabled),
+    unregisterDevice: (deviceId: number): Promise<NotificationCenterResult<NotificationDeviceRemoval>> =>
+      ipcRenderer.invoke(IPC_EVENTS.NOTIFICATION_CENTER_DEVICE_UNREGISTER, deviceId)
+  },
 
   getDesktopCampaignConfig: (id: number): Promise<CampaignConfig | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignConfig, id),
   getDesktopCampaignLogs: (id: number, query?: CampaignHistoryQuery): Promise<CampaignHistoryPage | null> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignLogs, id, query),
