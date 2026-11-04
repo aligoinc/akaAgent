@@ -15,6 +15,7 @@ import ZaloFriendBlocklistSettings from './ZaloFriendBlocklistSettings'
 import MessageOptOutCustomersSettings from './MessageOptOutCustomersSettings'
 import BrowserRunLimitsSettings from './BrowserRunLimitsSettings'
 import DesktopCampaignTypeVisibilitySettings from './DesktopCampaignTypeVisibilitySettings'
+import NotificationCenterSettings from './NotificationCenterSettings'
 import { Grid2X2 } from 'lucide-react'
 
 export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers' | 'browserRunLimits' | 'campaignTypeVisibility'
@@ -129,7 +130,8 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
   const [blocklistBusy, setBlocklistBusy] = useState(false)
   const [browserRunLimitsBusy, setBrowserRunLimitsBusy] = useState(false)
   const [campaignVisibilityBusy, setCampaignVisibilityBusy] = useState(false)
-  const mutationPending = campaignVisibilityBusy || browserRunLimitsBusy || blocklistBusy || akabizTagBusy || emailSettingsBusy || busyKind !== null
+  const [notificationCenterBusy, setNotificationCenterBusy] = useState(false)
+  const mutationPending = campaignVisibilityBusy || browserRunLimitsBusy || blocklistBusy || akabizTagBusy || emailSettingsBusy || notificationCenterBusy || busyKind !== null
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -788,7 +790,10 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
                   )
                 })}
               </div>
-            )) : activeMenu === 'akabizTags' ? renderAkaBizTagsContent() : activeMenu === 'emailNotifications' ? renderEmailNotificationContent() : <ZaloFriendBlocklistSettings initialAccountId={initialAccountId} onBusyChange={setBlocklistBusy} />}
+            )) : activeMenu === 'akabizTags' ? renderAkaBizTagsContent() : activeMenu === 'emailNotifications' ? (
+              <NotificationCenterSettings key={`${user?.organizationId}:${user?.staffId}`} legacyContent={renderEmailNotificationContent()}
+                onBusyChange={setNotificationCenterBusy} />
+            ) : <ZaloFriendBlocklistSettings initialAccountId={initialAccountId} onBusyChange={setBlocklistBusy} />}
           </section>
         </div>
       </div>

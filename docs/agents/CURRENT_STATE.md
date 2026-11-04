@@ -1,4 +1,27 @@
-# Trạng thái đã xác nhận — cập nhật 03/11/2026
+# Trạng thái đã xác nhận — cập nhật 04/11/2026
+
+[V459: không mở được composer khi đăng nhóm](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md):
+**Đã apply 15:55:32 VN, 04/11/2026**, ledger `20261104085532`.
+Block 27 trả mã riêng cho `fb_post_group`; policy mới 122 chuyển thành Bỏ qua,
+không tăng/reset chuỗi lỗi hoặc tính hạn mức, giữ log nguyên nhân. Policy 94 cho
+đăng cá nhân nguyên vẹn; XPath/workflow/app không sửa. 55 ca local, trial ROLLBACK
+và hậu kiểm checksum đạt; hai typecheck/build local đạt. Khách cần thoát/mở lại
+app để nạp catalog mới, không cần cài bản mới; tiến trình vẫn có chữ Lỗi theo
+lựa chọn của người dùng. Không apply lại hoặc tự bật campaign đã tạm dừng.
+
+[V458: nhật ký vào/rời nhóm data](../NOTIFICATION_CENTER.md#v458--nhật-ký-vàorời-nhóm-data-candidate-chưa-apply): **Candidate, chưa apply,
+cần V457 trước.** Sửa hàm bộ lọc động từ bản live (md5 `d40d1a23…`) đúng 3 chỗ, ghi sự kiện và gộp thông báo theo khung;
+mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với bản cũ) và preflight live READ ONLY đạt.
+
+[V457: trung tâm thông báo (giai đoạn 1)](../NOTIFICATION_CENTER.md): **Candidate, chưa apply.** 5 bảng, trigger
+chiến dịch/tài khoản/phiên, cầu nối cài đặt cũ, điều phối trong tick 30 giây, RPC worker/số liệu/cài đặt;
+công tắc mặc định tắt + `dry_run`. 108 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
+
+[V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
+**Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token
+Desktop trên hai bảng email thông báo; không đổi ACL/hàm. Thử production ROLLBACK, hậu kiểm role
+thật và 21 ca PG17 đạt; không apply lại. Worker email cũ lọc chi tiết theo staff, đã deploy version 7
+lúc 12:25:35 VN (`verify_jwt=false` giữ nguyên); đoạn sửa chạy thật lần đầu ở lượt 16:15 VN.
 
 [V454: tối ưu staff access và Zalo Server control](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md):
 **Đã apply 16:28:58 VN, 03/11/2026** (`20261103092858`); dùng index sẵn có cho held lookup, loại kiểm quyền

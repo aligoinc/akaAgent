@@ -285,9 +285,12 @@ async function findDailyCampaigns(staffId: number, startIso: string, endIso: str
     .limit(500)
   if (runError) throw runError
 
+  // Scope to the staff's campaigns: an unscoped day scan read every tenant's
+  // details and let other staff's rows consume the 2,000-row limit.
   const { data: todayDetails, error: detailsError } = await supabase
     .from('auto_campaign_details')
-    .select('campaign_id')
+    .select('campaign_id, auto_campaigns!auto_campaign_details_campaign_id_fkey!inner(staff_id)')
+    .eq('auto_campaigns.staff_id', staffId)
     .eq('is_delete', false)
     .gte('created_at', startIso)
     .lt('created_at', endIso)

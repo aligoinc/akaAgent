@@ -1,0 +1,64 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "migration": {
+    "version": "20261104052006",
+    "name": "migration_v456_email_notification_owner_rls",
+    "file": "migrations/migration_v456_email_notification_owner_rls.sql",
+    "sha256": "f2bda26473b3c5a2e050e82cf85cb7fca1cbf7e7152d64fc69bf59b7f2a087b3",
+    "ledgerStatementsSha256": "f2bda26473b3c5a2e050e82cf85cb7fca1cbf7e7152d64fc69bf59b7f2a087b3"
+  },
+  "method": "Supabase MCP execute_sql; migration and supabase_migrations.schema_migrations INSERT in one transaction, guarded against an existing migration_v456_% row",
+  "appliedAt": "2026-11-04T05:21:05.573Z",
+  "verifiedAt": "2026-11-04T05:21:23.125511Z",
+  "loadAtApply": {
+    "vnTime": "2026-11-04 12:16-12:21",
+    "onCpuBackends": "0-4 of 8 vCPU",
+    "postgrestSchemaReload": false
+  },
+  "productionTrial": {
+    "transaction": "ROLLBACK; no rows written, trial policies gone afterwards",
+    "settingsRows": 18,
+    "desktopTokenVisibleBefore": 18,
+    "desktopTokenVisibleAfter": 1,
+    "desktopTokenOnlyOwnRows": true,
+    "desktopUpdateOtherStaffRows": 0,
+    "desktopInsertOtherStaffOutbox": "denied 42501",
+    "unknownDesktopTokenVisible": 0,
+    "ranAt": "2026-11-04T05:19:42.519Z"
+  },
+  "postApply": {
+    "policies": [
+      "auto_email_notification_settings: v456_desktop_owner RESTRICTIVE FOR ALL TO aka_agent_desktop USING/WITH CHECK (staff_id = (SELECT private.aka_agent_staff_scope_for_request()))",
+      "auto_email_notification_deliveries: v456_desktop_owner RESTRICTIVE FOR ALL TO aka_agent_desktop USING/WITH CHECK (staff_id = (SELECT private.aka_agent_staff_scope_for_request()))"
+    ],
+    "policyCountOnBothTables": 4,
+    "tableAclUnchanged": {
+      "auto_email_notification_settings": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=r/postgres,aka_agent_desktop=r/postgres}",
+      "auto_email_notification_deliveries": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=ar/postgres}"
+    },
+    "columnAclEntriesUnchanged": 13,
+    "rlsEnabledUnchanged": true,
+    "functionsChanged": 0,
+    "desktopTokenVisible": 1,
+    "desktopTokenOnlyOwnRows": true,
+    "unknownDesktopTokenVisible": 0,
+    "serviceRoleVisible": 18
+  },
+  "trafficCheck": {
+    "window": "2026-11-03T05:30Z..2026-11-04T05:30Z",
+    "callers": [
+      "Edge worker (service_role): GET settings 280/day, POST deliveries on_conflict=dedupe_key 425/day, PATCH deliveries",
+      "WebApp API (service_role): GET settings 13/day",
+      "Desktop (aka_agent_desktop): GET settings filtered by own staff_id, a few per day; no POST/PATCH in the window"
+    ],
+    "errorsBefore": 0
+  },
+  "localPostgres": {
+    "version": 17,
+    "script": "scripts/email-notification-rls/smoke.sh",
+    "passed": 21,
+    "failed": 0
+  },
+  "rollback": "migrations/rollback_v456_email_notification_owner_rls.sql (manual; reopens the leak)",
+  "appliedAtVietnam": "2026-11-04 12:21:05"
+}
