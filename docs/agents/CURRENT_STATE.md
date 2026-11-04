@@ -1,5 +1,17 @@
 # Trạng thái đã xác nhận — cập nhật 04/11/2026
 
+[Bộ lọc tag Zalo đã xóa](../audits/zalo-deleted-tag-filters-20261104/README.md):
+**Chat runtime/worker đã deploy 22:50–22:51 VN, 04/11/2026; Desktop/legacy Server
+chưa phát hành.** Desktop/legacy Server và Chat bỏ tag
+đã xác nhận không còn trong danh sách Zalo khỏi điều kiện đang xét; bỏ cả điều
+kiện khi hết tag. Lỗi mạng/API hoặc dữ liệu tag không đọc được vẫn giữ unknown/
+tạm dừng. Không ghi lại nhóm hoặc tự chạy lại input đã tạm dừng; giữ các bộ lọc
+khác và cache/phiên hiện có. Chỉ đổi image trên hai máy hiện có; API giữ nguyên,
+không migration/tăng tài nguyên. Health/checksum đạt; quan sát 22:58 VN có
+184 tài khoản ready / 53 lỗi đăng nhập, thiếu baseline để phân loại lỗi mới/cũ.
+Hàng đợi sau khởi động đang giảm; xem receipt, không coi attach là ready.
+Kết quả kiểm chứng và giới hạn xem audit.
+
 [V459: không mở được composer khi đăng nhóm](../FACEBOOK_GROUP_COMPOSER_POLICY_V459.md):
 **Đã apply 15:55:32 VN, 04/11/2026**, ledger `20261104085532`.
 Block 27 trả mã riêng cho `fb_post_group`; policy mới 122 chuyển thành Bỏ qua,
