@@ -1,35 +1,28 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, CheckCheck, Mail, RefreshCw, Smartphone, X } from 'lucide-react'
-import type {
-  NotificationContent,
-  NotificationContentSection,
-  NotificationDeliverySummary,
-  NotificationDetail,
-  NotificationEventType,
-  NotificationListItem
-} from '../../../../shared/types'
+import { Bell, CheckCheck, RefreshCw, X } from 'lucide-react'
+import type { NotificationEventType, NotificationListItem } from '../../../../shared/types'
 import {
-  NOTIFICATION_DELIVERY_STATUS_LABELS,
   NOTIFICATION_EVENT_LABELS,
   NOTIFICATION_EVENT_TYPES,
   NOTIFICATION_PAGE_SIZE,
-  NOTIFICATION_UNREAD_CAP,
-  notificationDeliveryReason,
   notificationEventLabel
 } from '../../../../shared/notificationCenter'
 import { useUiStore } from '../../stores/uiStore'
+import { useNotificationCenterStore } from '../../stores/notificationCenterStore'
+import {
+  formatUnreadCount,
+  NotificationDetailBody,
+  NotificationDetailTags,
+  notificationDisplayTitle,
+  useNotificationDetail,
+  type NotificationReadHandler
+} from '../Notifications/NotificationDetailView'
 import { createNotificationTimeFormat, type NotificationTimeFormat } from './notificationTimeFormat'
 
-type ReadHandler = (id: number, readAt: string, unreadCount: number | null) => void
-
-export function formatUnreadCount(count: number): string {
-  return count >= NOTIFICATION_UNREAD_CAP ? `${NOTIFICATION_UNREAD_CAP - 1}+` : String(count)
-}
-
 /**
- * Hộp thư "Thông báo gần đây" của Desktop (chưa có chuông). Chỉ tải khi mục cài đặt mở hoặc
- * người dùng bấm tải lại; không poll, không hẹn giờ.
+ * Hộp thư "Thông báo gần đây" trong Cài đặt chung (trang Thông báo đầy đủ mở từ chuông ở thanh
+ * bên). Chỉ tải khi mục cài đặt mở hoặc người dùng bấm tải lại; không poll, không hẹn giờ.
  */
 export default function NotificationInbox({ timezone }: { timezone: string }) {
   const showAlert = useUiStore(state => state.showAlert)
@@ -58,6 +51,7 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
         }
         setItems(result.data.items)
         setUnreadCount(result.data.unreadCount)
+        useNotificationCenterStore.getState().setUnreadCount(result.data.unreadCount)
       })
       .catch(() => { if (request === listRequest.current) setError('Không thể tải thông báo. Vui lòng thử lại.') })
       .finally(() => { if (request === listRequest.current) setLoading(false) })
@@ -66,7 +60,7 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
 
   const reload = () => setReloadKey(value => value + 1)
 
-  const handleRead = useCallback<ReadHandler>((id, readAt, count) => {
+  const handleRead = useCallback<NotificationReadHandler>((id, readAt, count) => {
     setItems(previous => previous.map(item => (item.id === id && !item.readAt ? { ...item, readAt } : item)))
     if (count !== null) setUnreadCount(count)
   }, [])
@@ -87,6 +81,7 @@ export default function NotificationInbox({ timezone }: { timezone: string }) {
       const readAt = new Date().toISOString()
       setItems(previous => previous.map(item => (!item.readAt ? { ...item, readAt } : item)))
       setUnreadCount(result.data.unreadCount)
+      useNotificationCenterStore.getState().setUnreadCount(result.data.unreadCount)
     } catch {
       showAlert('Không thể đánh dấu đã đọc. Vui lòng thử lại.', 'error')
     } finally {
@@ -164,11 +159,9 @@ function NotificationDetailModal({ item, format, onClose, onRead }: {
   item: NotificationListItem
   format: NotificationTimeFormat
   onClose: () => void
-  onRead: ReadHandler
+  onRead: NotificationReadHandler
 }) {
-  const [detail, setDetail] = useState<NotificationDetail | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { detail, loading, error } = useNotificationDetail(item.id, onRead)
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
@@ -180,37 +173,6 @@ function NotificationDetailModal({ item, format, onClose, onRead }: {
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true })
     }
   }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    const api = window.electronAPI.notificationCenter
-    api.detail(item.id)
-      .then(async result => {
-        if (cancelled) return
-        if (!result.ok) {
-          setError(result.message)
-          return
-        }
-        setDetail(result.data)
-        if (result.data.readAt) {
-          onRead(item.id, result.data.readAt, null)
-          return
-        }
-        // Mở chi tiết là đã đọc; cập nhật danh sách cả khi hộp thoại đã đóng. Lỗi đánh dấu
-        // không che nội dung đang xem: thông báo vẫn chưa đọc và được đánh dấu ở lần mở sau.
-        try {
-          const read = await api.markRead({ ids: [item.id] })
-          if (read.ok) onRead(item.id, new Date().toISOString(), read.data.unreadCount)
-        } catch {
-          // Giữ trạng thái chưa đọc.
-        }
-      })
-      .catch(() => { if (!cancelled) setError('Không thể tải chi tiết thông báo. Vui lòng thử lại.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [item.id, onRead])
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -235,8 +197,7 @@ function NotificationDetailModal({ item, format, onClose, onRead }: {
     }
   }
 
-  const title = detail?.title || detail?.content?.headline || item.title || notificationEventLabel(item.eventType)
-  const severity = detail?.severity ?? item.severity
+  const title = notificationDisplayTitle(item, detail)
 
   return createPortal(
     <div className="modal-overlay nc-detail-overlay" onClick={event => { event.stopPropagation(); onClose() }}>
@@ -244,12 +205,7 @@ function NotificationDetailModal({ item, format, onClose, onRead }: {
         onClick={event => event.stopPropagation()} onKeyDown={handleKeyDown}>
         <div className="nc-detail-header">
           <div className="nc-detail-heading">
-            <div className="nc-detail-tags">
-              <span className="nc-type-tag">{notificationEventLabel(detail?.eventType ?? item.eventType)}</span>
-              {severity === 'critical' && <span className="nc-badge bad">Quan trọng</span>}
-              {severity === 'warning' && <span className="nc-badge warn">Cần chú ý</span>}
-              <time dateTime={detail?.occurredAt ?? item.occurredAt}>{format.dateTime(detail?.occurredAt ?? item.occurredAt)}</time>
-            </div>
+            <NotificationDetailTags item={item} detail={detail} format={format} />
             <h3 id={titleId}>{title}</h3>
           </div>
           <button ref={closeRef} type="button" className="btn-icon" title="Đóng" aria-label="Đóng" onClick={onClose}>
@@ -257,134 +213,10 @@ function NotificationDetailModal({ item, format, onClose, onRead }: {
           </button>
         </div>
         <div className="nc-detail-body">
-          {loading ? (
-            <p className="nc-empty" role="status">Đang tải...</p>
-          ) : error ? (
-            <p className="nc-empty" role="alert">{error}</p>
-          ) : detail ? (
-            <>
-              {detail.content ? (
-                <NotificationContentView content={detail.content} format={format} title={title} />
-              ) : (
-                <>
-                  <p className="nc-detail-fallback">{detail.body || 'Thông báo này không có nội dung chi tiết.'}</p>
-                  {detail.eventType === 'report.scheduled' && (
-                    <p className="nc-hint">Nội dung chi tiết của báo cáo chỉ được lưu trong 30 ngày.</p>
-                  )}
-                </>
-              )}
-              {detail.mergedCount > 1 && (
-                <p className="nc-hint">Thông báo này gộp {detail.mergedCount} thay đổi xảy ra cùng lúc.</p>
-              )}
-              <DeliverySummary deliveries={detail.deliveries} format={format} />
-            </>
-          ) : null}
+          <NotificationDetailBody detail={detail} loading={loading} error={error} format={format} title={title} />
         </div>
       </div>
     </div>,
     document.body
-  )
-}
-
-function NotificationContentView({ content, format, title }: { content: NotificationContent; format: NotificationTimeFormat; title: string }) {
-  return (
-    <div className="nc-content">
-      {content.headline && content.headline !== title && <div className="nc-content-headline">{content.headline}</div>}
-      {content.countedAt && <div className="nc-content-counted">Số liệu lúc {format.time(content.countedAt)}</div>}
-      {content.sections.map((section, index) => (
-        <section key={`${index}:${section.title}`} className={`nc-detail-section tone-${section.tone ?? 'info'}`}>
-          {section.title && <h4>{section.title}</h4>}
-          {section.rows && section.rows.length > 0 && (
-            <dl className="nc-detail-rows">
-              {section.rows.map((row, rowIndex) => (
-                <div key={rowIndex} className={`nc-detail-row ${row.tone ? `tone-${row.tone}` : ''}`}>
-                  <dt>{row.label}</dt>
-                  <dd>{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          {section.table && <ContentTable table={section.table} />}
-          {section.note && <p className="nc-detail-note">{section.note}</p>}
-        </section>
-      ))}
-    </div>
-  )
-}
-
-/** Bảng có cột đầu trống và nhãn kỳ ở đầu mỗi dòng (Hôm nay / Lũy kế) hiển thị thành thẻ số liệu. */
-function ContentTable({ table }: { table: NonNullable<NotificationContentSection['table']> }) {
-  const periodCards = table.columns.length > 1 && table.columns[0] === '' && table.rows.length > 0 && table.rows.every(row => row[0])
-  if (periodCards) {
-    return (
-      <div className="nc-period-cards">
-        {table.rows.map((row, rowIndex) => {
-          const label = row[0]
-          const period = label === 'Hôm nay' ? 'is-today' : label === 'Lũy kế' ? 'is-total' : rowIndex === 0 ? 'is-today' : 'is-total'
-          return (
-            <div key={rowIndex} className={`nc-period-card ${period}`}>
-              <div className="nc-period-title">{label}</div>
-              <dl>
-                {table.columns.slice(1).map((column, columnIndex) => (
-                  <div key={columnIndex}>
-                    <dt>{column}</dt>
-                    <dd>{row[columnIndex + 1] ?? ''}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-  return (
-    <div className="nc-table-wrap">
-      <table className="nc-table">
-        {table.columns.length > 0 && (
-          <thead>
-            <tr>{table.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr>
-          </thead>
-        )}
-        <tbody>
-          {table.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>{row.map((value, index) => <td key={index}>{value}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function DeliverySummary({ deliveries, format }: { deliveries: NotificationDeliverySummary[]; format: NotificationTimeFormat }) {
-  return (
-    <section className="nc-detail-section nc-deliveries">
-      <h4>Gửi đi</h4>
-      {deliveries.length === 0 ? (
-        <p className="nc-hint">Thông báo chỉ lưu trong ứng dụng, không gửi qua email hoặc iPhone.</p>
-      ) : (
-        <ul>
-          {deliveries.map((delivery, index) => {
-            const reason = notificationDeliveryReason(delivery.errorCode)
-            const details = [
-              NOTIFICATION_DELIVERY_STATUS_LABELS[delivery.status],
-              reason,
-              delivery.sentAt ? `lúc ${format.dateTime(delivery.sentAt)}` : null,
-              delivery.attempts > 1 ? `${delivery.attempts} lần thử` : null
-            ].filter(Boolean).join(' · ')
-            return (
-              <li key={index} className={`nc-delivery status-${delivery.status}`}>
-                <span className="nc-delivery-channel">
-                  {delivery.channel === 'email' ? <Mail size={13} aria-hidden="true" /> : <Smartphone size={13} aria-hidden="true" />}
-                  {delivery.channel === 'email' ? 'Email' : 'iPhone'}
-                </span>
-                <span className="nc-delivery-destination" title={delivery.destination}>{delivery.destination || '—'}</span>
-                <span className="nc-delivery-status">{details}</span>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </section>
   )
 }

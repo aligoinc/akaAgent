@@ -115,9 +115,20 @@ kiểu/nhãn/lỗi chép từ WebApp `packages/control-api/src/notifications.ts`
   cột tương ứng nhưng giữ lựa chọn; mỗi loại bật khi có ít nhất một kênh. "Đã chọn" chiến dịch/tài khoản dùng dữ liệu
   store sẵn có; nhóm data chỉ liệt kê nhóm tự tạo (danh sách Desktop không phân biệt chia sẻ toàn tổ chức với chia sẻ
   đích danh, mà `notification_ids_not_owned` chỉ nhận nhóm sở hữu hoặc có dòng người nhận).
-- "Thông báo gần đây" (Desktop chưa có chuông): 20 thông báo mới nhất, lọc loại, đánh dấu đã đọc tất cả (`upToId` =
-  thông báo mới nhất đã thấy), chi tiết dựng từ `content.sections` + lượt gửi và đánh dấu đã đọc. Chỉ tải khi mở mục
-  hoặc bấm tải lại; không poll, không hẹn giờ.
+- "Thông báo gần đây" trong cài đặt: 20 thông báo mới nhất, lọc loại, đánh dấu đã đọc tất cả (`upToId` = thông báo
+  mới nhất đã thấy), chi tiết dựng từ `content.sections` + lượt gửi và đánh dấu đã đọc. Chỉ tải khi mở mục hoặc bấm tải
+  lại; không poll, không hẹn giờ.
+- **Chuông trên thanh bên** ([NotificationBell](../src/renderer/src/components/Notifications/NotificationBell.tsx)): số
+  chưa đọc ở [notificationCenterStore](../src/renderer/src/stores/notificationCenterStore.ts), đọc bằng `unread_count`
+  khi đăng nhập, khi cửa sổ được focus lại và khi đổi trang (tối đa 1 lần/phút), cập nhật thêm từ danh sách và lượt đánh
+  dấu đã đọc. Không hẹn giờ. RPC chưa có thì ẩn chuông, hỏi lại sau 10 phút. Bấm chuông đọc 6 thông báo mới nhất.
+- **Trang Thông báo** ([NotificationsPage](../src/renderer/src/pages/NotificationsPage.tsx)), giống `/notifications`
+  của Web: chip loại (Tất cả, Chiến dịch, Tài khoản, Báo cáo, Nhóm data), "Chỉ chưa đọc", "Tải thêm" theo con trỏ
+  `(createdAt, id)` 20 dòng/lần, đánh dấu đã đọc tất cả theo loại đang lọc, chi tiết bên phải.
+- **Mở nhanh** ([notificationTargets](../src/renderer/src/components/Notifications/notificationTargets.ts)), cùng quy
+  tắc với Web: chiến dịch mở ở trang Chiến dịch (dùng yêu cầu điều hướng có sẵn của Nhóm data), tài khoản lọc chiến
+  dịch theo tài khoản và mở Thông tin tài khoản, nhóm data mở hộp Nhóm data đúng nhóm. Bấm mở nhanh cũng đánh dấu đã
+  đọc. Báo cáo và gửi thử chỉ xem chi tiết.
 
 ## Cấu hình
 
