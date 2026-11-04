@@ -787,7 +787,7 @@ export class CampaignScheduler {
   private dispatching = false
   private wakeRequested = false
   private activeAccountRuns = new Set<number>()
-  /** Chỉ cho heartbeat Desktop (v455): chiến dịch đang chạy theo tài khoản, tài khoản của tick gần nhất. */
+  /** Chỉ cho heartbeat Desktop (v461): chiến dịch đang chạy theo tài khoản, tài khoản của tick gần nhất. */
   private runtimeCampaignByAccount = new Map<number, number>()
   private lastTickAccounts: AutoAccount[] = []
   private activeZaloAccountRuns = new Set<number>()
@@ -1094,7 +1094,7 @@ export class CampaignScheduler {
     return this.running
   }
 
-  /** Ảnh chụp chỉ đọc RAM cho heartbeat Desktop (v455); không đọc DB. */
+  /** Ảnh chụp chỉ đọc RAM cho heartbeat Desktop (v461); không đọc DB. */
   getRuntimeSnapshotSource(): DesktopRuntimeSnapshotSource {
     return {
       running: this.running,

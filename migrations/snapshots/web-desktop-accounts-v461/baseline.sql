@@ -1,4 +1,4 @@
--- Định nghĩa live trước v455 (12 hàm), tái tạo từ repo + các bản vá orphan-repair/v287/v288.
+-- Định nghĩa live trước v461 (12 hàm), tái tạo từ repo + các bản vá orphan-repair/v287/v288.
 -- md5(pg_get_functiondef) khớp production akachat ngày 03/11/2026, xem baseline.json.
 -- Dùng cho test cục bộ và rollback; CREATE OR REPLACE giữ owner/ACL hiện có.
 

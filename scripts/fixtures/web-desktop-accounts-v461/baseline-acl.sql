@@ -1,4 +1,4 @@
--- ACL giống production cho 12 hàm baseline và kiểm baseline đúng bản live trước v455.
+-- ACL giống production cho 12 hàm baseline và kiểm baseline đúng bản live trước v461.
 DO $acl$
 DECLARE
   spec record;

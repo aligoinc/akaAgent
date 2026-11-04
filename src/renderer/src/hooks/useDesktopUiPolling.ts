@@ -16,7 +16,7 @@ export function useDesktopUiPolling(scope: string | null, active: boolean, hasSe
     let campaignsRunning = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let accountEventDue = 0
-    // Web có thể sửa tài khoản Desktop (v455). Không thêm polling nền: chỉ đọc lại khi
+    // Web có thể sửa tài khoản Desktop (v461). Không thêm polling nền: chỉ đọc lại khi
     // người dùng quay lại cửa sổ và lần đọc trước đã cũ hơn chu kỳ tài khoản.
     let focusRefreshDue = 0
     const visible = () => document.visibilityState === 'visible'

@@ -1,4 +1,4 @@
-// Offline smoke for the v455 Desktop runtime snapshot: RAM only, no DB/RPC/network.
+// Offline smoke for the v461 Desktop runtime snapshot: RAM only, no DB/RPC/network.
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')

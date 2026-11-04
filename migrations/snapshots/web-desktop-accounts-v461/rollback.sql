@@ -1,5 +1,5 @@
--- Rollback v455: khôi phục 10 định nghĩa live trước v455, bỏ hàm mới, cột runtime và khóa cấu hình.
--- Chỉ chạy khi các hàm đang ở đúng bản v455 (hoặc đã về baseline); lệch thì dừng.
+-- Rollback v461: khôi phục 10 định nghĩa live trước v461, bỏ hàm mới, cột runtime và khóa cấu hình.
+-- Chỉ chạy khi các hàm đang ở đúng bản v461 (hoặc đã về baseline); lệch thì dừng.
 -- Trước khi chạy: tắt 'web.desktop_accounts' hoặc deploy lại Control API cũ để Web không gọi hàm mới.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
@@ -22,7 +22,7 @@ BEGIN
   ) AS x(signature, source_md5, target_md5) LOOP
     checksum := md5(pg_get_functiondef(r.signature::regprocedure));
     IF checksum NOT IN (r.source_md5, r.target_md5) THEN
-      RAISE EXCEPTION 'v455_rollback_unexpected_definition:%:%', r.signature, checksum;
+      RAISE EXCEPTION 'v461_rollback_unexpected_definition:%:%', r.signature, checksum;
     END IF;
   END LOOP;
 END
@@ -1473,7 +1473,7 @@ BEGIN
     ('public.aka_agent_device_presence(text,text,uuid,jsonb,boolean)', 'b504f4928a9dd271dec783796a7a0374', '478aa4281c683686437f31947bb760b1')
   ) AS x(signature, source_md5, target_md5) LOOP
     IF md5(pg_get_functiondef(r.signature::regprocedure)) IS DISTINCT FROM r.source_md5 THEN
-      RAISE EXCEPTION 'v455_rollback_postflight:%', r.signature;
+      RAISE EXCEPTION 'v461_rollback_postflight:%', r.signature;
     END IF;
   END LOOP;
 END

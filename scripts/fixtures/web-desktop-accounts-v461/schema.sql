@@ -1,4 +1,4 @@
--- Schema tối thiểu cho test v455 trên PostgreSQL cục bộ dùng một lần.
+-- Schema tối thiểu cho test v461 trên PostgreSQL cục bộ dùng một lần.
 -- Cột đúng tên/kiểu production cho các bảng mà 12 hàm baseline + hàm mới chạm tới.
 -- Hàm phụ thuộc ngoài phạm vi được thay bằng stub tối giản, không có dữ liệu thật.
 SET client_min_messages = warning;
