@@ -1,5 +1,5 @@
--- Rollback V456: đưa public.aka_agent_desktop_login_content() về đúng bản live trước V456
--- (md5 997f54ddf67f808a1b3ac47596981036). Chỉ chạy khi hàm đang là bản V456 (md5 8ac766131b581f03fcf21faf31809356).
+-- Rollback V460: đưa public.aka_agent_desktop_login_content() về đúng bản live trước V460
+-- (md5 997f54ddf67f808a1b3ac47596981036). Chỉ chạy khi hàm đang là bản V460 (md5 8ac766131b581f03fcf21faf31809356).
 -- Hai row link đã seed chỉ bị xoá khi giá trị còn nguyên như lúc seed; row đã được chỉnh tay giữ lại
 -- (hàm cũ không đọc 2 key này nên Desktop dùng link mặc định).
 -- CREATE OR REPLACE làm PostgREST nạp lại schema khi COMMIT: chạy ngoài giờ cao điểm.
@@ -19,7 +19,7 @@ BEGIN
     OR f.provolatile IS DISTINCT FROM 's'
     OR f.proparallel IS DISTINCT FROM 'u'
     OR f.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']::text[] THEN
-    RAISE EXCEPTION 'login_content_v456_rollback_preflight_drift';
+    RAISE EXCEPTION 'login_content_v460_rollback_preflight_drift';
   END IF;
 END
 $preflight$;
@@ -51,7 +51,7 @@ BEGIN
     OR md5(pg_get_functiondef(f.oid)) IS DISTINCT FROM '997f54ddf67f808a1b3ac47596981036'
     OR f.proacl::text IS DISTINCT FROM '{postgres=X/postgres,anon=X/postgres,service_role=X/postgres}'
     OR f.prosecdef IS DISTINCT FROM true THEN
-    RAISE EXCEPTION 'login_content_v456_rollback_postflight_drift';
+    RAISE EXCEPTION 'login_content_v460_rollback_postflight_drift';
   END IF;
 END
 $postflight$;

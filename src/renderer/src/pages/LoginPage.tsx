@@ -221,7 +221,7 @@ export default function LoginPage() {
     manualLoginRequired
   } = useAuthStore()
   const loginContent = useLoginScreenContent()
-  // Cổng gia hạn CRM; auto_system_settings ghi đè được sau migration v456.
+  // Cổng gia hạn CRM; auto_system_settings ghi đè được sau migration v460.
   const recoverAccountUrl = loginContent.links.recoverAccount ?? DEFAULT_RECOVER_ACCOUNT_URL
   const trialSignupUrl = loginContent.links.trialSignup ?? DEFAULT_TRIAL_SIGNUP_URL
   const usernameEdited = useRef(false)

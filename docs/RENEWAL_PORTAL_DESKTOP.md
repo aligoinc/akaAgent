@@ -120,14 +120,16 @@ Kiểm chéo không cần deploy: `CRM_REPO=<checkout SqlServerDashboard đã np
 - **Đã đổi 04/11/2026 15:42 VN** (được duyệt trực tiếp): `auto_system_settings` id 43
   `akabiz.links.upgrade_payment` `https://akabiz.net/` → `https://crm.akabiz.net/gia-han`. Key dùng chung cho mọi
   sản phẩm; card "Nâng cấp và thanh toán" của mọi bản Desktop nhận ngay. Hoàn tác: đặt lại value cũ.
-- **[V456](../migrations/migration_v456_desktop_login_renewal_links.sql) — chưa apply.** Thêm
+- **[V460](../migrations/migration_v460_desktop_login_renewal_links.sql) — chưa apply.** Thêm
   `akabiz.links.recover_account`, `akabiz.links.trial_signup` vào `aka_agent_desktop_login_content()` và seed 2 row.
   Live trước: md5 `997f54ddf67f808a1b3ac47596981036` (owner postgres, SECURITY DEFINER, STABLE,
   `search_path=pg_catalog`, ACL postgres/anon/service_role). Đích: `8ac766131b581f03fcf21faf31809356`. Thử trong
   transaction tự huỷ trên production 04/11: đích đúng md5, ACL giữ nguyên, RPC trả 2 key mới; áp rồi
-  [rollback](../migrations/rollback_v456_desktop_login_renewal_links.sql) trả về đúng md5 cũ; sau thử live vẫn md5 cũ,
+  [rollback](../migrations/rollback_v460_desktop_login_renewal_links.sql) trả về đúng md5 cũ; sau thử live vẫn md5 cũ,
   0 row mới. Chưa apply thì Desktop dùng link mặc định trong `src/shared/renewalPortal.ts`. Apply ngoài 14–16h VN vì
-  `CREATE OR REPLACE` làm PostgREST nạp lại schema.
+  `CREATE OR REPLACE` làm PostgREST nạp lại schema. Lúc thử còn đánh số V456; đổi sang V460 ngày 04/11 vì V456–V459
+  đã được dùng trên `dev_3` (V456 email đã apply). Kiểm lại live trước khi merge: md5, owner, ACL, cấu hình như trên,
+  0 row seed.
 
 ## CRM (SqlServerDashboard, nhánh `dev_auto_nang_cap`)
 
@@ -142,9 +144,9 @@ Kiểm chéo không cần deploy: `CRM_REPO=<checkout SqlServerDashboard đã np
 
 Đã chạy 04/11/2026: hai typecheck Desktop, `npm run build`, contract test 12 PASS (gồm xác minh bằng `jsonwebtoken`
 của CRM), token Edge qua đúng `verifyRenewalLinkToken` của CRM (sai khóa bị từ chối), test CRM
-`renewal-portal.test.ts` 28 PASS, thử V456/rollback tự huỷ trên production.
+`renewal-portal.test.ts` 28 PASS, thử V460/rollback tự huỷ trên production.
 
-Chưa làm: chạy Electron với tài khoản hết hạn thật, deploy Edge `renewal_link` (hoãn, xem mục Edge), apply V456, deploy CRM, đặt biến
+Chưa làm: chạy Electron với tài khoản hết hạn thật, deploy Edge `renewal_link` (hoãn, xem mục Edge), apply V460, deploy CRM, đặt biến
 môi trường Fly, thanh toán thật, đóng gói/phát hành Desktop, kiểm Windows/Mac thật.
 
 Dữ liệu 04/11: 595 tổ chức chỉ còn dùng thử hết hạn (69 mở app trong 30 ngày), 173 tổ chức hết hạn gói (21 mở app

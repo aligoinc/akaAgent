@@ -9,11 +9,11 @@ Quản trị tại bảng **`public.auto_system_settings`**, tìm row theo cột
 | `akabiz.links.user_guide` | Hướng dẫn sử dụng | `https://www.youtube.com/@akabizai` |
 | `akabiz.links.upgrade_payment` | Nâng cấp và thanh toán | `NULL`; từ 04/11/2026 15:42 VN là `https://crm.akabiz.net/gia-han` (cổng gia hạn CRM) |
 | `akabiz.links.contact_us` | Liên hệ với akaBiz | `NULL` |
-| `akabiz.links.recover_account` | Link **Lấy lại tài khoản** trong form đăng nhập | `https://crm.akabiz.net/gia-han/lay-lai-tai-khoan` (seed bởi V456, chưa apply) |
-| `akabiz.links.trial_signup` | Link **Đăng ký dùng thử** dưới nút Đăng nhập | `https://crm.akabiz.net/gia-han/dang-ky-dung-thu` (seed bởi V456, chưa apply) |
+| `akabiz.links.recover_account` | Link **Lấy lại tài khoản** trong form đăng nhập | `https://crm.akabiz.net/gia-han/lay-lai-tai-khoan` (seed bởi V460, chưa apply) |
+| `akabiz.links.trial_signup` | Link **Đăng ký dùng thử** dưới nút Đăng nhập | `https://crm.akabiz.net/gia-han/dang-ky-dung-thu` (seed bởi V460, chưa apply) |
 
 Bốn key `akabiz.links.*` đầu là cấu hình dùng chung cho mọi sản phẩm. Hai key cuối chỉ được RPC
-`aka_agent_desktop_login_content()` đọc sau [V456](../migrations/migration_v456_desktop_login_renewal_links.sql); thiếu,
+`aka_agent_desktop_login_content()` đọc sau [V460](../migrations/migration_v460_desktop_login_renewal_links.sql); thiếu,
 trống, không hợp lệ hoặc tắt thì Desktop dùng link mặc định trong `src/shared/renewalPortal.ts` (không ẩn). Màn Gia hạn
 sau đăng nhập: [RENEWAL_PORTAL_DESKTOP](RENEWAL_PORTAL_DESKTOP.md). Đặt `is_active=true`, `is_secret=false` để hiển thị. Với bốn key dùng chung, link phải là URL HTTP/HTTPS; thiếu row, trống, không hợp lệ hoặc `is_active=false` thì ẩn. Nhập URL vào hai row đang `NULL` để hiện thêm liên kết tương ứng. Mọi link mở bằng trình duyệt ngoài.
 

@@ -1,4 +1,4 @@
--- V456: màn đăng nhập Desktop đọc thêm 2 link công khai của cổng gia hạn CRM
+-- V460: màn đăng nhập Desktop đọc thêm 2 link công khai của cổng gia hạn CRM
 -- (`akabiz.links.recover_account` = Lấy lại tài khoản, `akabiz.links.trial_signup` = Đăng ký dùng thử).
 -- Dựng từ live capture 04/11/2026 của public.aka_agent_desktop_login_content()
 -- (md5 997f54ddf67f808a1b3ac47596981036, owner postgres, SECURITY DEFINER, STABLE,
@@ -7,7 +7,7 @@
 -- Không đổi bảng, policy, quyền hay connection. CREATE OR REPLACE làm PostgREST nạp lại
 -- schema khi COMMIT: chỉ apply ngoài giờ cao điểm (14–16h VN).
 -- Desktop có link mặc định nên chưa apply vẫn hoạt động; migration này cho phép đổi link không cần phát hành app.
--- Rollback: migrations/rollback_v456_desktop_login_renewal_links.sql.
+-- Rollback: migrations/rollback_v460_desktop_login_renewal_links.sql.
 BEGIN;
 SET LOCAL lock_timeout='5s';
 SET LOCAL statement_timeout='20s';
@@ -24,7 +24,7 @@ BEGIN
     OR f.provolatile IS DISTINCT FROM 's'
     OR f.proparallel IS DISTINCT FROM 'u'
     OR f.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']::text[] THEN
-    RAISE EXCEPTION 'login_content_v456_preflight_drift';
+    RAISE EXCEPTION 'login_content_v460_preflight_drift';
   END IF;
 END
 $preflight$;
@@ -66,7 +66,7 @@ BEGIN
     OR f.provolatile IS DISTINCT FROM 's'
     OR f.proparallel IS DISTINCT FROM 'u'
     OR f.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']::text[] THEN
-    RAISE EXCEPTION 'login_content_v456_postflight_drift';
+    RAISE EXCEPTION 'login_content_v460_postflight_drift';
   END IF;
   SELECT coalesce(array_agg(e->>'key' ORDER BY e->>'key'), '{}') INTO keys
   FROM jsonb_array_elements(public.aka_agent_desktop_login_content()) e;
@@ -76,7 +76,7 @@ BEGIN
     OR EXISTS (SELECT 1 FROM public.auto_system_settings s
       WHERE s.key IN ('akabiz.links.recover_account','akabiz.links.trial_signup')
         AND s.is_active AND NOT s.is_secret AND NOT s.key = ANY(keys)) THEN
-    RAISE EXCEPTION 'login_content_v456_postflight_keys: %', keys;
+    RAISE EXCEPTION 'login_content_v460_postflight_keys: %', keys;
   END IF;
 END
 $postflight$;
