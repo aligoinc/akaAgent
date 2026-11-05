@@ -4,6 +4,8 @@ import { AccountActionReportDetailQuery, AccountActionReportQuery, IPC_EVENTS } 
 import { SupabaseService } from '../../services/supabase'
 import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest } from '../../../shared/effectivenessIpc'
 import { handleEffectivenessRequest } from '../../services/effectivenessReportService'
+import { DATA_REPORT_IPC, type DataReportIpcRequest } from '../../../shared/dataReportIpc'
+import { handleDataReportRequest } from '../../services/dataReportService'
 
 export function registerReportHandlers(supabase: SupabaseService): void {
   ipcMain.handle(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_SUMMARY, async (_, query: AccountActionReportQuery) => {
@@ -22,4 +24,7 @@ export function registerReportHandlers(supabase: SupabaseService): void {
 
   // Báo cáo hiệu quả: one channel, never throws ({ok,data} | {ok:false,code,message}).
   ipcMain.handle(EFFECTIVENESS_IPC, (_, request: EffectivenessIpcRequest) => handleEffectivenessRequest(request))
+
+  // Báo cáo dữ liệu: nightly snapshot (V465) and one customer's journey; same envelope, never throws.
+  ipcMain.handle(DATA_REPORT_IPC, (_, request: DataReportIpcRequest) => handleDataReportRequest(request))
 }
