@@ -29,11 +29,23 @@ SMS mang nhãn **Web**.
 - Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
   (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
-## V464 — app iOS cho tổ chức chỉ có gói Desktop (candidate, chưa apply)
+## V464 — app iOS cho tổ chức chỉ có gói Desktop — ĐÃ APPLY akachat 05/11/2026 17:54:39 VN
 
-Đổi số từ v462 ngày 05/11/2026 vì V462/V463 đã dùng cho báo cáo hiệu quả chiến dịch (dev_3, PR #598,
-cũng chưa apply); hai bên không đụng cùng hàm nên thứ tự apply không quan trọng. Client iOS:
-akaAgentWebApp PR #151.
+- `20261105105439 / migration_v464_native_desktop_only_login` (apply_migration qua Supabase MCP, người dùng
+  bấm xác nhận). **Không apply lại** (file tự bỏ qua khi hàm đã ở md5 đích).
+- Đổi số từ v462 vì V462/V463 thuộc báo cáo hiệu quả chiến dịch (dev_3, PR #598). Hai migration đó được
+  một phiên khác apply trước lúc 17:43:19 / 17:44:27 VN cùng ngày; không đụng hàm này, md5 nguồn vẫn đúng.
+  Client iOS: akaAgentWebApp PR #151.
+- Trước apply (17:51 VN): tải bình thường (edge 15 phút p50 50–57 ms, p99 186–492 ms, 0 lỗi 503; 1,6 tiến
+  trình dùng CPU/8 vCPU); hàm ở md5 nguồn `de8f93ee…`; owner `postgres`, SECURITY DEFINER,
+  `search_path=public`, ACL `{postgres=X/postgres,service_role=X/postgres}`; chính sách tắt; chưa có v464 trên
+  production lẫn dev_3.
+- Hậu kiểm (17:54–17:56 VN): md5 đích `2c10aa78ac5e4ab8069c741b356e88c8`, có cổng `'native'`; owner/SECURITY
+  DEFINER/search_path/ACL giữ nguyên; chính sách vẫn `{"enabled":false,"organizationIds":null,"desktopOnlyLogin":false}`.
+  Gọi thử với token không tồn tại trả `invalid_session` (không ghi gì). PostgREST nạp lại schema
+  10:54:39 → 10:54:51 UTC (truy vấn schema 10,5 giây); phút đó p99 1,6 giây, 0 lỗi 5xx/503; RPC xác thực 0 lỗi.
+- Chính sách vẫn tắt nên khách chưa thấy gì thay đổi. Bật `desktopOnlyLogin` chỉ sau khi API của
+  akaAgentWebApp PR #151 đã deploy (API đó trả 401 cũ cho bản iOS không gửi header Desktop).
 
 - `migrations/migration_v464_native_desktop_only_login.sql`: chỉ sửa cổng trong
   `aka_agent_authenticate_control_session(text)`, thêm `'native'` vào `client_type IN ('web', 'pwa')`
