@@ -36,13 +36,15 @@ CREATE TABLE public.auto_campaign_details (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, campaign_id bigint, action_name text, action_code text, status text, report_group text,
   is_delete boolean DEFAULT false, created_at timestamptz DEFAULT now());
 CREATE INDEX idx_campaign_details_page ON public.auto_campaign_details (campaign_id, created_at, id) WHERE is_delete = false;
+CREATE INDEX idx_auto_campaign_details_automation_status ON public.auto_campaign_details (campaign_id, status, action_code, created_at DESC) WHERE is_delete = false;
 CREATE TABLE public.auto_control_sessions (
   id uuid PRIMARY KEY, staff_id bigint, organization_id bigint, client_type text, created_at timestamptz DEFAULT now(),
   expires_at timestamptz, revoked_at timestamptz);
 CREATE TABLE public.chat_zalo_account_organization (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, auto_account_id bigint, session_last_error text,
   socket_last_close_reason text, socket_last_close_code integer, last_socket_disconnected_at timestamptz, updated_at timestamptz DEFAULT now());
 CREATE TABLE public.auto_account_logs (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at timestamptz DEFAULT now(), account_id bigint,
-  source text, event_type text, message text);
+  campaign_id bigint, login_status text, account_status text, source text, event_type text, message text, details jsonb);
+CREATE INDEX idx_auto_account_logs_account_time ON public.auto_account_logs (account_id, created_at DESC);
 CREATE TABLE public.auto_staff_device_presence (instance_id uuid PRIMARY KEY, staff_id bigint, device_label text, app_version text,
   last_seen_at timestamptz, ended_at timestamptz);
 CREATE TABLE public.auto_account_contact_groups (id bigint PRIMARY KEY, name text, staff_id bigint, is_delete boolean DEFAULT false);
