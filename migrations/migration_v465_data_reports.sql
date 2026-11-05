@@ -11,9 +11,11 @@
 --   * public.aka_agent_read_data_report: EXECUTE for service_role (WebApp backend singleton) and
 --     aka_agent_desktop (Desktop token + automation credentials) through public.auto_assert_automation_identity,
 --     like V462. Modes: snapshot (one row by primary key) and journey (one phone, indexed reads).
---   * pg_cron job aka-agent-data-report-nightly: every 5 minutes from 01:00 to 04:55 Vietnam time
---     (18:00-21:55 UTC), one backend, each run bounded to 240 s by its own deadline and serialized by an
---     advisory lock. Each run first catches up four id-ordered sweeps (zalo_users, auto_account_contacts,
+--   * pg_cron job aka-agent-data-report-nightly: every 2 minutes from 01:00 to 04:58 Vietnam time
+--     (18:00-21:58 UTC), one backend, each run bounded to about 90 s (hard cap 100 s) by its own deadline and
+--     serialized by an advisory lock. The platform statement_timeout of 120 s applies to cron jobs too: a run
+--     over it would be cancelled with all of its work, so the budget stays well below it.
+--     Each run first catches up four id-ordered sweeps (zalo_users, auto_account_contacts,
 --     auto_campaign_input_data, auto_campaign_details; batches of 20.000 rows), then engagement marks, then
 --     builds snapshots for active staff whose snapshot is older than yesterday. The first nights backfill
 --     the history; until a staff has a snapshot the API answers "đang chuẩn bị".
@@ -367,6 +369,7 @@ BEGIN
         (SELECT private.aka_agent_data_report_person_hash(zu.global_id, zu.account_id, zu.zalo_uid)
          FROM public.zalo_users zu WHERE zu.id = ct.zalo_user_id),
         private.aka_agent_data_report_person_hash(NULL, ct.account_id, ct.uid)) END AS person_hash
+    OFFSET 0 -- evaluated once per row (the WHERE clause also reads k)
   ) k
   LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = ct.staff_id AND l.phone_hash = k.phone_hash
   WHERE ct.id > v_from AND ct.id <= v_to AND ct.staff_id IS NOT NULL
@@ -411,6 +414,7 @@ BEGIN
         (SELECT private.aka_agent_data_report_person_hash(zu.global_id, zu.account_id, zu.zalo_uid)
          FROM public.zalo_users zu WHERE zu.account_id = c.account_id AND zu.zalo_uid = btrim(i.uid) LIMIT 1),
         private.aka_agent_data_report_person_hash(NULL, c.account_id, i.uid)) END AS person_hash
+    OFFSET 0 -- evaluated once per row (the WHERE clause also reads k)
   ) k
   LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
   WHERE i.id > v_from AND i.id <= v_to AND coalesce(i.is_delete, false) = false AND c.staff_id IS NOT NULL
@@ -942,7 +946,9 @@ RETURNS jsonb LANGUAGE plpgsql SET search_path = pg_catalog, public SET lock_tim
 AS $fn$
 DECLARE
   v_started timestamptz := clock_timestamp();
-  v_deadline timestamptz := clock_timestamp() + make_interval(secs => least(greatest(coalesce(p_budget_seconds, 240), 10), 280));
+  -- Hard cap 100 s: the platform statement_timeout (120 s, platform-defaults.conf) also applies to pg_cron jobs and
+  -- would cancel the whole run, losing all of its work. 90 s plus one batch stays well below it.
+  v_deadline timestamptz := clock_timestamp() + make_interval(secs => least(greatest(coalesce(p_budget_seconds, 90), 10), 100));
   v_batch constant integer := 20000;
   v_report_date date := timezone('Asia/Ho_Chi_Minh', now())::date - 1;
   v_sweep text;
@@ -1144,7 +1150,9 @@ REVOKE ALL ON FUNCTION private.aka_agent_data_report_sweep_engagement(timestampt
 REVOKE ALL ON FUNCTION private.aka_agent_data_report_build(bigint,date) FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 REVOKE ALL ON FUNCTION private.aka_agent_data_report_run(integer) FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 
-SELECT cron.schedule('aka-agent-data-report-nightly', '*/5 18-21 * * *', 'SELECT private.aka_agent_data_report_run(240);');
+-- Every 2 minutes from 01:00 to 04:59 Vietnam time (cron.timezone is GMT); each run stops after about 90 s and one
+-- run at a time holds the advisory lock, so the first catch-up keeps going without overlapping runs.
+SELECT cron.schedule('aka-agent-data-report-nightly', '*/2 18-21 * * *', 'SELECT private.aka_agent_data_report_run(90);');
 
 DO $postflight$
 BEGIN
@@ -1163,8 +1171,8 @@ BEGIN
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM cron.job
-    WHERE jobname = 'aka-agent-data-report-nightly' AND schedule = '*/5 18-21 * * *'
-      AND command = 'SELECT private.aka_agent_data_report_run(240);' AND active = true
+    WHERE jobname = 'aka-agent-data-report-nightly' AND schedule = '*/2 18-21 * * *'
+      AND command = 'SELECT private.aka_agent_data_report_run(90);' AND active = true
   ) THEN
     RAISE EXCEPTION 'v465_cron_contract_mismatch';
   END IF;
