@@ -207,3 +207,25 @@ hoạt động, metadata hàm lõi và checksum khớp.
 `created_at` của thông báo là lúc nó vào hộp thư (được đặt lại khi `complete_render` chuyển sang `ready`); thời điểm sự kiện
 nằm ở `occurred_at`. Nhờ vậy thông báo gộp theo khung (tạo từ đầu khung, dựng sau khi khung đóng) hiện lên đầu danh sách,
 và "Đánh dấu đã đọc tất cả" (`upToId` theo `(created_at, id)`) không đánh dấu thông báo dựng sau lúc người dùng xem.
+
+## V466 — đồng hồ chạy trên Fly (candidate, chưa apply)
+
+Theo yêu cầu 05/11/2026: Supabase không hẹn giờ hay gọi ra ngoài cho thông báo nữa.
+`migration_v466_notification_fly_scheduler.sql` thêm công tắc `notifications.dispatch_mode`:
+
+- `pg_net` (mặc định, apply xong không đổi hành vi): như mục Điều phối ở trên.
+- `fly`: `aka_agent_notification_dispatch()` trả `{enabled:true, mode:'fly'}` ngay, không lập lịch, không dọn,
+  không `net.http_post`. API WebApp trên Fly gọi `aka_agent_notification_tick()` (chỉ `service_role`) mỗi ~30 giây:
+  lập lịch báo cáo, dọn hằng giờ, kiểm việc rồi nhận khóa thuê 60 giây trong `dispatch_state` (cùng khóa với đường
+  pg_net, `last_request_id` = NULL); trả `run:true` thì worker chạy ngay trong tiến trình và gọi `release` khi xong.
+  Ở `pg_net` RPC tick trả `run:false`.
+
+Preflight: dispatch phải đúng bản V457 (`6b4f5464803f8b528072e44703ef94de`), chưa có RPC tick/khóa cài đặt.
+Postcheck: dispatch mới `7c255da3419f913f3cc8c64d5ed89fb8`, tick `18973d977bbdc8519a0e36148d5ada91`, background tick
+giữ `10a2465bf8273b269ed5123344cff4db`, quyền tick chỉ `service_role`, dispatch vẫn không cho `service_role`.
+Rollback (`rollback_v466_notification_fly_scheduler.sql`) trả dispatch về bản V457 theo checksum, xóa RPC tick và khóa
+cài đặt; rollback nhanh hơn chỉ cần đặt lại `pg_net`. Không đổi worker/snapshot/capture/schedule_reports nên độc lập
+V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V466 31 phép kiểm, bộ V457 103 phép kiểm trên
+V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Phía Fly (đồng hồ, SMTP từ secrets, luôn 1 máy) và thứ tự
+triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
+
