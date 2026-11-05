@@ -216,6 +216,22 @@
 .eff-banner > div { flex: 1; min-width: 0; font-size: 14px; }
 .eff-banner span { color: var(--text-secondary); }
 
+.eff-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.eff-window-select { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: var(--text-secondary); font-size: 13px; }
+.eff-window-select span { white-space: nowrap; }
+.eff-window-select select {
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .eff-badge {
   flex-shrink: 0;
   padding: 4px 10px;
@@ -389,6 +405,7 @@
   .eff-banner { flex-wrap: wrap; align-items: flex-start; }
   .eff-banner > div { flex: 1 1 calc(100% - 32px); }
   .eff-badge { margin-left: 30px; }
+  .eff-banner .eff-window-select { margin-left: 30px; }
   .eff-bar-label { white-space: normal; overflow: visible; line-height: 1.25; }
   .eff-empty { flex-direction: column; align-items: flex-start; }
   .eff-search input { min-width: 0; width: 100%; }
