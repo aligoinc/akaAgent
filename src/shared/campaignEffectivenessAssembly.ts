@@ -8,8 +8,8 @@ import {
   type EffectivenessAccountStages, type GoldenHourSlot,
   type EffectivenessActivityPoint, type EffectivenessCounts, type EffectivenessCustomerRow, type EffectivenessDailyPoint,
   type EffectivenessHourCell, type EffectivenessHours,
-  type EffectivenessLifetime, type EffectivenessLifetimeMonth, type EffectivenessListStage,
-  type EffectivenessOverview, type EffectivenessQuery, type EngagementStage
+  type EffectivenessLifetime, type EffectivenessLifetimeMonth, type EffectivenessLifetimeWindow, type EffectivenessListStage,
+  type EffectivenessOverview, type EffectivenessQuery, type EngagementStage, type ReportRange
 } from './campaignEffectiveness'
 
 /**
@@ -233,7 +233,10 @@ export function shiftEffectivenessMonthKey(dateKey: string, months: number): str
   return date.toISOString().slice(0, 7)
 }
 
-export function buildLifetime(result: EffectivenessLifetimeResult, startKey: string, today: string, rangeStartIso: string, now: Date): EffectivenessLifetime {
+/** "Lũy kế" for one window: month buckets from the window start to today, totals, milestones and time saved. */
+export function buildLifetime(result: EffectivenessLifetimeResult, window: EffectivenessLifetimeWindow, range: ReportRange, now: Date): EffectivenessLifetime {
+  const startKey = vietnamDateKey(range.startIso)
+  const today = vietnamDateKey(now)
   const months = new Map<string, EffectivenessLifetimeMonth>()
   for (let key = startKey.slice(0, 7); key <= today.slice(0, 7); key = shiftEffectivenessMonthKey(`${key}-01`, 1)) {
     months.set(key, { month: key, reached: 0, seen: 0, interacted: 0, friended: 0, success: 0 })
@@ -256,7 +259,7 @@ export function buildLifetime(result: EffectivenessLifetimeResult, startKey: str
   }), { reached: 0, seen: 0, interacted: 0, friended: 0, success: 0 })
   const uniqueReached = result.unique ? Number(result.unique.reached) : null
   return {
-    since: result.firstCampaignAt, rangeStartIso, monthly,
+    window, since: result.firstCampaignAt, rangeStartIso: range.startIso, monthly,
     totals: { ...totals, uniqueReached },
     milestones: reachMilestones(uniqueReached ?? totals.reached),
     timeSavedSeconds: estimateTimeSavedSeconds(success),

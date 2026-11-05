@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart3, ChevronDown, RefreshCw } from 'lucide-react'
 import {
-  REPORT_RANGE_PRESETS, buildVietnamReportRange, vietnamDateKey,
-  type EffectivenessPlatform, type EffectivenessQuery, type ReportRangePreset
+  DEFAULT_EFFECTIVENESS_LIFETIME_WINDOW, REPORT_RANGE_PRESETS, buildVietnamReportRange, vietnamDateKey,
+  type EffectivenessLifetimeWindow, type EffectivenessPlatform, type EffectivenessQuery, type ReportRangePreset
 } from '../../../../shared/campaignEffectiveness'
 import type { AutoAccount } from '../../../../shared/types'
 import { useAuthStore } from '../../stores/authStore'
@@ -47,13 +47,16 @@ export interface EffectivenessTabProps {
   query: EffectivenessQuery
   /** Changes with login, refresh, platform, accounts and period. */
   queryKey: string
-  /** Login + refresh + platform/accounts (period-independent reads such as the 12-month journey). */
+  /** Login + refresh + platform/accounts (period-independent reads such as the lũy kế journey). */
   scopeKey: string
   /** Login + refresh only (data assets). */
   authKey: string
   compare: boolean
   cache: Map<string, unknown>
   rangeLabel: string
+  /** "Lũy kế" window of the journey banner/card; starts at 7 days. */
+  lifetimeWindow: EffectivenessLifetimeWindow
+  onLifetimeWindowChange: (window: EffectivenessLifetimeWindow) => void
   onOpenAccountDetails: () => void
   onNavigate: (target: EffectivenessNavigation) => void
 }
@@ -77,6 +80,8 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
   const [draft, setDraft] = useState<FilterState>(initial)
   const [applied, setApplied] = useState<FilterState>(initial)
   const [revision, setRevision] = useState(0)
+  // Not stored: a longer window is an explicit choice, so a fresh start reads only 7 days.
+  const [lifetimeWindow, setLifetimeWindow] = useState<EffectivenessLifetimeWindow>(DEFAULT_EFFECTIVENESS_LIFETIME_WINDOW)
   // A new login or a manual refresh never reuses earlier numbers.
   const cache = useMemo(() => new Map<string, unknown>(), [authScope, revision])
   const [openMenu, setOpenMenu] = useState<'platform' | 'accounts' | 'range' | null>(null)
@@ -162,6 +167,7 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
   const platformOptions: PlatformFilter[] = ['all', ...platforms]
   const tabProps: EffectivenessTabProps = {
     query, queryKey, scopeKey, authKey, compare: applied.compare, cache, rangeLabel,
+    lifetimeWindow, onLifetimeWindowChange: setLifetimeWindow,
     onOpenAccountDetails: () => setTab('accounts'), onNavigate
   }
 

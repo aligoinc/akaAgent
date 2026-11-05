@@ -3,8 +3,8 @@ import {
   Clock, Eye, Heart, Lightbulb, MessageCircleHeart, MessagesSquare, PenSquare, Rocket, Send, Trophy, UserPlus, Users, UsersRound
 } from 'lucide-react'
 import {
-  COMMUNITY_ACTIVITY_LABELS, communityActivity, describeTimeSaved, effectivenessRate, formatEffectivenessNumber,
-  formatEffectivenessRate, growthBadge, selectEffectivenessSuggestions,
+  COMMUNITY_ACTIVITY_LABELS, communityActivity, describeTimeSaved, effectivenessLifetimeWindowTitle, effectivenessRate,
+  formatEffectivenessNumber, formatEffectivenessRate, growthBadge, selectEffectivenessSuggestions,
   type CommunityActivity, type EffectivenessHours, type EffectivenessLifetime, type EffectivenessListStage, type EffectivenessOverview
 } from '../../../../shared/campaignEffectiveness'
 import { effectivenessRequest } from './effectivenessApi'
@@ -12,6 +12,7 @@ import { BarList, DailyTrend, KpiTile } from './EffectivenessCharts'
 import { EffectivenessCustomersDialog } from './EffectivenessCustomersDialog'
 import { EffectivenessAiSummary } from './EffectivenessAiSummary'
 import { suggestionNavigation } from './effectivenessPaths'
+import { LifetimeWindowSelect } from './LifetimeWindowSelect'
 import { useEffectivenessData } from './useEffectivenessData'
 import type { EffectivenessTabProps } from './EffectivenessReportsHub'
 
@@ -22,12 +23,12 @@ const ACTIVITY_ICONS: Record<keyof CommunityActivity, ReactElement> = {
 
 /** "Thành quả": achievements first, then a few positive suggestions and next opportunities. */
 export function AchievementsTab(props: EffectivenessTabProps) {
-  const { query, queryKey, scopeKey, compare, cache, rangeLabel, onNavigate } = props
+  const { query, queryKey, scopeKey, compare, cache, rangeLabel, lifetimeWindow, onLifetimeWindowChange, onNavigate } = props
   const [customers, setCustomers] = useState<{ stage: EffectivenessListStage; title: string } | null>(null)
   const overview = useEffectivenessData<EffectivenessOverview>(`overview|${queryKey}|${compare}`,
     signal => effectivenessRequest({ kind: 'overview', query, compare }, signal), cache)
-  const lifetime = useEffectivenessData<EffectivenessLifetime>(`lifetime|${scopeKey}`,
-    signal => effectivenessRequest({ kind: 'lifetime', flatformType: query.flatformType, accountIds: query.accountIds }, signal), cache)
+  const lifetime = useEffectivenessData<EffectivenessLifetime>(`lifetime|${scopeKey}|${lifetimeWindow}`,
+    signal => effectivenessRequest({ kind: 'lifetime', flatformType: query.flatformType, accountIds: query.accountIds, window: lifetimeWindow }, signal), cache)
   const hours = cache.get(`hours|${queryKey}`) as EffectivenessHours | undefined
 
   if (overview.status === 'loading' || overview.status === 'idle') return <div className="eff-state" role="status">Đang tổng hợp thành quả…</div>
@@ -59,17 +60,26 @@ export function AchievementsTab(props: EffectivenessTabProps) {
   const lifeReached = life ? life.totals.uniqueReached ?? life.totals.reached : null
   const sinceDays = life?.since ? Math.max(1, Math.round((Date.now() - Date.parse(life.since)) / 86_400_000)) : null
   const nothingYet = data.totals.success === 0 && data.totals.pending === 0
+  const lifeTitle = effectivenessLifetimeWindowTitle(lifetimeWindow)
+  // Shown while a picked window loads (so the picker stays put) and whenever there is something to celebrate.
+  const showJourney = life ? (lifeReached ?? 0) > 0 || sinceDays !== null : lifetime.status === 'error' || !nothingYet
 
   return <div className="eff-tab" aria-live="polite">
-    {life && lifeReached !== null && lifeReached > 0 && <section className="eff-banner" aria-label="Hành trình cùng akaBiz">
+    {showJourney && <section className="eff-banner" aria-label="Hành trình cùng akaBiz">
       <Trophy size={18} aria-hidden="true" />
       <div>
-        <strong>12 tháng qua cùng akaBiz: {formatEffectivenessNumber(lifeReached)} khách đã được tiếp cận</strong>
-        <span>{life.totals.friended > 0 ? ` · ${formatEffectivenessNumber(life.totals.friended)} bạn mới` : ''}
-          {life.totals.interacted > 0 ? ` · ${formatEffectivenessNumber(life.totals.interacted)} lượt khách tương tác` : ''}
-          {sinceDays ? ` · ${formatEffectivenessNumber(sinceDays)} ngày đồng hành` : ''}</span>
+        {lifetime.status === 'error' ? <span role="alert">{lifetime.error}{' '}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={lifetime.reload}>Thử lại</button></span>
+          : !life ? <span role="status">Đang tổng hợp lũy kế {lifeTitle}…</span>
+          : lifeReached !== null && lifeReached > 0 ? <>
+            <strong>{lifeTitle} cùng akaBiz: {formatEffectivenessNumber(lifeReached)} khách đã được tiếp cận</strong>
+            <span>{life.totals.friended > 0 ? ` · ${formatEffectivenessNumber(life.totals.friended)} bạn mới` : ''}
+              {life.totals.interacted > 0 ? ` · ${formatEffectivenessNumber(life.totals.interacted)} lượt khách tương tác` : ''}
+              {sinceDays ? ` · ${formatEffectivenessNumber(sinceDays)} ngày đồng hành` : ''}</span>
+          </> : <strong>{formatEffectivenessNumber(sinceDays ?? 1)} ngày đồng hành cùng akaBiz</strong>}
       </div>
-      {life.milestones.achieved.length > 0 && <span className="eff-badge">Huy hiệu {formatEffectivenessNumber(life.milestones.achieved.at(-1)!)} khách</span>}
+      {life && life.milestones.achieved.length > 0 && <span className="eff-badge">Huy hiệu {formatEffectivenessNumber(life.milestones.achieved.at(-1)!)} khách</span>}
+      <LifetimeWindowSelect value={lifetimeWindow} onChange={onLifetimeWindowChange} />
     </section>}
 
     {nothingYet ? <section className="eff-card eff-empty">
