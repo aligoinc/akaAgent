@@ -5,7 +5,8 @@ import TopBar, { type AppPage } from './components/TopBar/TopBar'
 import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
-import ReportPage from './pages/ReportPage'
+import EffectivenessReportsHub from './components/EffectivenessReports/EffectivenessReportsHub'
+import type { EffectivenessNavigation } from './components/EffectivenessReports/effectivenessApi'
 import AutomationPage from './pages/AutomationPage'
 import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
@@ -163,6 +164,22 @@ export default function App() {
     }
     setDataGroupInitialId(target.id)
     setShowDataGroups(true)
+  }, [])
+
+  // Nút trong Báo cáo hiệu quả: mở chiến dịch, Quét data (kiểm tra SĐT), Nhóm data hoặc Mẫu nội dung.
+  const navigateFromReport = useCallback((target: EffectivenessNavigation) => {
+    if (target.kind === 'campaign') {
+      setActivePage('campaigns')
+      setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'open', campaignId: target.campaignId })
+      return
+    }
+    if (target.kind === 'dataScan') { setShowDataScan(true); return }
+    if (target.kind === 'dataGroups') {
+      setDataGroupInitialId(null)
+      setShowDataGroups(true)
+      return
+    }
+    setActivePage(target.kind === 'contentTemplates' ? 'content-templates' : 'campaigns')
   }, [])
 
   useEffect(() => {
@@ -509,7 +526,7 @@ export default function App() {
           </div>
 
           <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <ReportPage isActive={activePage === 'reports'} />
+            <EffectivenessReportsHub isActive={activePage === 'reports'} onNavigate={navigateFromReport} />
           </div>
 
           <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>

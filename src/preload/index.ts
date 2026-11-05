@@ -14,6 +14,7 @@ import type { CampaignHistoryQuery, CampaignHistoryPage } from '../shared/campai
 import type { CampaignConfigSaveFailure } from '../shared/campaignConfigSave'
 import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEvent, type ZaloPhoneCheckResult, type ZaloPhoneCheckUsage } from '../shared/zaloPhoneCheck'
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
+import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcResponses, type EffectivenessIpcResult } from '../shared/effectivenessIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
@@ -644,6 +645,9 @@ const electronAPI = {
 
   getAccountActionReportDetails: (query: AccountActionReportDetailQuery): Promise<AccountActionReportDetailResult> =>
     ipcRenderer.invoke(IPC_EVENTS.REPORT_ACCOUNT_ACTION_DETAILS, query),
+
+  effectivenessReport: <R extends EffectivenessIpcRequest>(request: R): Promise<EffectivenessIpcResult<EffectivenessIpcResponses[R['kind']]>> =>
+    ipcRenderer.invoke(EFFECTIVENESS_IPC, request),
 
   // Campaign result automations
   listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>
