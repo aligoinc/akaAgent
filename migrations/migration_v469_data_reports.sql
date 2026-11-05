@@ -1165,7 +1165,7 @@ BEGIN
   END IF;
   IF EXISTS (
     SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace, aclexplode(c.relacl) a
-    WHERE n.nspname = 'private' AND c.relname LIKE 'aka\_agent\_data\_report\_%' AND a.grantee <> c.relowner
+    WHERE n.nspname = 'private' AND c.relname LIKE 'auto\_report\_%' AND a.grantee <> c.relowner
   ) THEN
     RAISE EXCEPTION 'v469_private_table_acl_unexpected';
   END IF;
