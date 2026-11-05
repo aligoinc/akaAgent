@@ -5,7 +5,7 @@
 --
 -- New objects only. No existing table, column, index, policy, function, role or timeout is changed.
 --   * private tables (not exposed by PostgREST, no grants to API roles):
---       aka_agent_data_report_state, _staff, _customers (ledger), _phone_links, _contact_keys, _daily,
+--       auto_report_state, _staff, _customers (ledger), _phone_links, _contact_keys, _daily,
 --       _group_daily, _groups, _snapshots, _runs and the UNLOGGED working table _stage.
 --   * private functions run by postgres only (sweeps, merge, build, run).
 --   * public.aka_agent_read_data_report: EXECUTE for service_role (WebApp backend singleton) and
@@ -33,7 +33,7 @@ SET LOCAL lock_timeout = '5s';
 
 DO $preflight$
 BEGIN
-  IF to_regclass('private.aka_agent_data_report_customers') IS NOT NULL
+  IF to_regclass('private.auto_report_customers') IS NOT NULL
      OR to_regprocedure('public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb)') IS NOT NULL
      OR to_regprocedure('private.aka_agent_data_report_run(integer)') IS NOT NULL THEN
     RAISE EXCEPTION 'v465_target_already_exists_do_not_overwrite';
@@ -76,17 +76,17 @@ $preflight$;
 -- ---------------------------------------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------------------------------------
-CREATE TABLE private.aka_agent_data_report_state (
+CREATE TABLE private.auto_report_state (
   name text PRIMARY KEY,
   watermark bigint NOT NULL DEFAULT 0,
   watermark_at timestamptz,
   rows_total bigint NOT NULL DEFAULT 0,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-INSERT INTO private.aka_agent_data_report_state (name)
+INSERT INTO private.auto_report_state (name)
 VALUES ('people'), ('contacts'), ('inputs'), ('details'), ('engagement');
 
-CREATE TABLE private.aka_agent_data_report_staff (
+CREATE TABLE private.auto_report_staff (
   staff_id bigint PRIMARY KEY,
   organization_id bigint,
   failed_on date,
@@ -96,7 +96,7 @@ CREATE TABLE private.aka_agent_data_report_staff (
 
 -- One row per (staff, customer). kind: 1 Zalo person, 2 phone only.
 -- source (first way the customer entered the store): 1 Zalo member/person, 2 phone number, 3 Zalo friend.
-CREATE TABLE private.aka_agent_data_report_customers (
+CREATE TABLE private.auto_report_customers (
   staff_id bigint NOT NULL,
   key_hash bigint NOT NULL,
   kind smallint NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE private.aka_agent_data_report_customers (
   PRIMARY KEY (staff_id, key_hash)
 );
 
-CREATE TABLE private.aka_agent_data_report_phone_links (
+CREATE TABLE private.auto_report_phone_links (
   staff_id bigint NOT NULL,
   phone_hash bigint NOT NULL,
   person_hash bigint NOT NULL,
@@ -121,17 +121,17 @@ CREATE TABLE private.aka_agent_data_report_phone_links (
 );
 
 -- Customer key of each contact row (phone contacts keep the phone hash; read through phone_links).
-CREATE TABLE private.aka_agent_data_report_contact_keys (
+CREATE TABLE private.auto_report_contact_keys (
   contact_id bigint PRIMARY KEY,
   staff_id bigint NOT NULL,
   key_hash bigint NOT NULL,
   kind smallint NOT NULL
 );
-CREATE INDEX idx_aka_agent_data_report_contact_keys_staff_key
-  ON private.aka_agent_data_report_contact_keys (staff_id, key_hash);
+CREATE INDEX idx_auto_report_contact_keys_staff_key
+  ON private.auto_report_contact_keys (staff_id, key_hash);
 
 -- Additive counters per (staff, Vietnam day, account); engagement columns are recomputed, not added.
-CREATE TABLE private.aka_agent_data_report_daily (
+CREATE TABLE private.auto_report_daily (
   staff_id bigint NOT NULL,
   day date NOT NULL,
   account_id bigint NOT NULL,
@@ -148,7 +148,7 @@ CREATE TABLE private.aka_agent_data_report_daily (
   PRIMARY KEY (staff_id, day, account_id)
 );
 
-CREATE TABLE private.aka_agent_data_report_group_daily (
+CREATE TABLE private.auto_report_group_daily (
   staff_id bigint NOT NULL,
   day date NOT NULL,
   group_hash bigint NOT NULL,
@@ -156,14 +156,14 @@ CREATE TABLE private.aka_agent_data_report_group_daily (
   PRIMARY KEY (staff_id, day, group_hash)
 );
 
-CREATE TABLE private.aka_agent_data_report_groups (
+CREATE TABLE private.auto_report_groups (
   staff_id bigint NOT NULL,
   group_hash bigint NOT NULL,
   name text,
   PRIMARY KEY (staff_id, group_hash)
 );
 
-CREATE TABLE private.aka_agent_data_report_snapshots (
+CREATE TABLE private.auto_report_snapshots (
   staff_id bigint PRIMARY KEY,
   organization_id bigint NOT NULL,
   report_date date NOT NULL,
@@ -172,7 +172,7 @@ CREATE TABLE private.aka_agent_data_report_snapshots (
   payload jsonb NOT NULL
 );
 
-CREATE TABLE private.aka_agent_data_report_runs (
+CREATE TABLE private.auto_report_runs (
   id bigserial PRIMARY KEY,
   started_at timestamptz NOT NULL,
   finished_at timestamptz,
@@ -180,7 +180,7 @@ CREATE TABLE private.aka_agent_data_report_runs (
 );
 
 -- Working rows of one sweep batch (single writer under the run's advisory lock).
-CREATE UNLOGGED TABLE private.aka_agent_data_report_stage (
+CREATE UNLOGGED TABLE private.auto_report_stage (
   staff_id bigint NOT NULL,
   organization_id bigint,
   account_id bigint,
@@ -200,12 +200,12 @@ CREATE UNLOGGED TABLE private.aka_agent_data_report_stage (
 );
 
 REVOKE ALL ON TABLE
-  private.aka_agent_data_report_state, private.aka_agent_data_report_staff, private.aka_agent_data_report_customers,
-  private.aka_agent_data_report_phone_links, private.aka_agent_data_report_contact_keys, private.aka_agent_data_report_daily,
-  private.aka_agent_data_report_group_daily, private.aka_agent_data_report_groups, private.aka_agent_data_report_snapshots,
-  private.aka_agent_data_report_runs, private.aka_agent_data_report_stage
+  private.auto_report_state, private.auto_report_staff, private.auto_report_customers,
+  private.auto_report_phone_links, private.auto_report_contact_keys, private.auto_report_daily,
+  private.auto_report_group_daily, private.auto_report_groups, private.auto_report_snapshots,
+  private.auto_report_runs, private.auto_report_stage
   FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
-REVOKE ALL ON SEQUENCE private.aka_agent_data_report_runs_id_seq FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
+REVOKE ALL ON SEQUENCE private.auto_report_runs_id_seq FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- Keys
@@ -236,16 +236,16 @@ DECLARE v_merged integer;
 BEGIN
   WITH found AS (
     SELECT DISTINCT ON (s.staff_id, s.phone_hash) s.staff_id, s.phone_hash, s.person_hash
-    FROM private.aka_agent_data_report_stage s
+    FROM private.auto_report_stage s
     WHERE s.phone_hash IS NOT NULL AND s.person_hash IS NOT NULL
     ORDER BY s.staff_id, s.phone_hash, s.row_id
   ), inserted AS (
-    INSERT INTO private.aka_agent_data_report_phone_links (staff_id, phone_hash, person_hash)
+    INSERT INTO private.auto_report_phone_links (staff_id, phone_hash, person_hash)
     SELECT staff_id, phone_hash, person_hash FROM found
     ON CONFLICT (staff_id, phone_hash) DO NOTHING
     RETURNING staff_id, phone_hash, person_hash
   ), moved AS (
-    DELETE FROM private.aka_agent_data_report_customers c
+    DELETE FROM private.auto_report_customers c
     USING inserted i
     WHERE c.staff_id = i.staff_id AND c.key_hash = i.phone_hash
     RETURNING c.staff_id, i.person_hash, c.source, c.first_seen_on, c.first_cared_on, c.last_cared_on, c.care_count,
@@ -256,7 +256,7 @@ BEGIN
       min(verified_on) AS verified_on, min(seen_on) AS seen_on, min(interacted_on) AS interacted_on, min(friended_on) AS friended_on
     FROM moved GROUP BY staff_id, person_hash
   )
-  INSERT INTO private.aka_agent_data_report_customers AS c
+  INSERT INTO private.auto_report_customers AS c
     (staff_id, key_hash, kind, source, first_seen_on, first_cared_on, last_cared_on, care_count, verified_on, seen_on,
      interacted_on, friended_on)
   SELECT staff_id, person_hash, 1, source, first_seen_on, first_cared_on, last_cared_on, care_count, verified_on, seen_on,
@@ -275,9 +275,9 @@ BEGIN
     friended_on = least(c.friended_on, excluded.friended_on);
   GET DIAGNOSTICS v_merged = ROW_COUNT;
 
-  UPDATE private.aka_agent_data_report_stage s
+  UPDATE private.auto_report_stage s
   SET key_hash = l.person_hash, kind = 1
-  FROM private.aka_agent_data_report_phone_links l
+  FROM private.auto_report_phone_links l
   WHERE s.person_hash IS NULL AND s.phone_hash IS NOT NULL
     AND l.staff_id = s.staff_id AND l.phone_hash = s.phone_hash
     AND s.key_hash IS DISTINCT FROM l.person_hash;
@@ -290,9 +290,9 @@ CREATE FUNCTION private.aka_agent_data_report_store_known()
 RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 BEGIN
-  INSERT INTO private.aka_agent_data_report_customers AS c (staff_id, key_hash, kind, source, first_seen_on)
+  INSERT INTO private.auto_report_customers AS c (staff_id, key_hash, kind, source, first_seen_on)
   SELECT staff_id, key_hash, min(kind)::smallint, (array_agg(source ORDER BY day, row_id))[1], min(day)
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   WHERE key_hash IS NOT NULL
   GROUP BY staff_id, key_hash
   ON CONFLICT (staff_id, key_hash) DO UPDATE SET
@@ -300,9 +300,9 @@ BEGIN
     source = CASE WHEN excluded.first_seen_on < c.first_seen_on THEN excluded.source ELSE c.source END,
     first_seen_on = least(c.first_seen_on, excluded.first_seen_on);
 
-  INSERT INTO private.aka_agent_data_report_staff (staff_id, organization_id)
+  INSERT INTO private.auto_report_staff (staff_id, organization_id)
   SELECT DISTINCT ON (staff_id) staff_id, organization_id
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   ORDER BY staff_id, row_id DESC
   ON CONFLICT (staff_id) DO NOTHING;
 END
@@ -316,13 +316,13 @@ RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 DECLARE v_from bigint; v_to bigint; v_n integer;
 BEGIN
-  SELECT watermark INTO v_from FROM private.aka_agent_data_report_state WHERE name = 'people';
+  SELECT watermark INTO v_from FROM private.auto_report_state WHERE name = 'people';
   SELECT max(id), count(*) INTO v_to, v_n
   FROM (SELECT zu.id FROM public.zalo_users zu WHERE zu.id > v_from ORDER BY zu.id LIMIT p_limit) s;
   IF coalesce(v_n, 0) = 0 THEN RETURN 0; END IF;
 
-  TRUNCATE private.aka_agent_data_report_stage;
-  INSERT INTO private.aka_agent_data_report_stage
+  TRUNCATE private.auto_report_stage;
+  INSERT INTO private.auto_report_stage
     (staff_id, organization_id, account_id, day, row_id, action_class, phone_hash, person_hash, key_hash, kind, source)
   SELECT zu.staff_id, zu.organization_id, zu.account_id,
     timezone('Asia/Ho_Chi_Minh', coalesce(zu.created_at, now()))::date, zu.id, 0,
@@ -336,7 +336,7 @@ BEGIN
 
   PERFORM private.aka_agent_data_report_merge_links();
   PERFORM private.aka_agent_data_report_store_known();
-  UPDATE private.aka_agent_data_report_state
+  UPDATE private.auto_report_state
   SET watermark = v_to, rows_total = rows_total + v_n, updated_at = now() WHERE name = 'people';
   RETURN v_n;
 END
@@ -347,13 +347,13 @@ RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 DECLARE v_from bigint; v_to bigint; v_n integer;
 BEGIN
-  SELECT watermark INTO v_from FROM private.aka_agent_data_report_state WHERE name = 'contacts';
+  SELECT watermark INTO v_from FROM private.auto_report_state WHERE name = 'contacts';
   SELECT max(id), count(*) INTO v_to, v_n
   FROM (SELECT ct.id FROM public.auto_account_contacts ct WHERE ct.id > v_from ORDER BY ct.id LIMIT p_limit) s;
   IF coalesce(v_n, 0) = 0 THEN RETURN 0; END IF;
 
-  TRUNCATE private.aka_agent_data_report_stage;
-  INSERT INTO private.aka_agent_data_report_stage
+  TRUNCATE private.auto_report_stage;
+  INSERT INTO private.auto_report_stage
     (staff_id, organization_id, account_id, day, row_id, action_class, phone_hash, person_hash, key_hash, kind, source)
   SELECT ct.staff_id, ct.organization_id, ct.account_id,
     timezone('Asia/Ho_Chi_Minh', coalesce(ct.created_at, now()))::date, ct.id, 0,
@@ -371,17 +371,17 @@ BEGIN
         private.aka_agent_data_report_person_hash(NULL, ct.account_id, ct.uid)) END AS person_hash
     OFFSET 0 -- evaluated once per row (the WHERE clause also reads k)
   ) k
-  LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = ct.staff_id AND l.phone_hash = k.phone_hash
+  LEFT JOIN private.auto_report_phone_links l ON l.staff_id = ct.staff_id AND l.phone_hash = k.phone_hash
   WHERE ct.id > v_from AND ct.id <= v_to AND ct.staff_id IS NOT NULL
     AND (k.phone_hash IS NOT NULL OR k.person_hash IS NOT NULL);
 
-  INSERT INTO private.aka_agent_data_report_contact_keys AS t (contact_id, staff_id, key_hash, kind)
+  INSERT INTO private.auto_report_contact_keys AS t (contact_id, staff_id, key_hash, kind)
   SELECT row_id, staff_id, coalesce(person_hash, phone_hash), CASE WHEN person_hash IS NOT NULL THEN 1 ELSE 2 END
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   ON CONFLICT (contact_id) DO UPDATE SET staff_id = excluded.staff_id, key_hash = excluded.key_hash, kind = excluded.kind;
 
   PERFORM private.aka_agent_data_report_store_known();
-  UPDATE private.aka_agent_data_report_state
+  UPDATE private.auto_report_state
   SET watermark = v_to, rows_total = rows_total + v_n, updated_at = now() WHERE name = 'contacts';
   RETURN v_n;
 END
@@ -392,13 +392,13 @@ RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 DECLARE v_from bigint; v_to bigint; v_n integer;
 BEGIN
-  SELECT watermark INTO v_from FROM private.aka_agent_data_report_state WHERE name = 'inputs';
+  SELECT watermark INTO v_from FROM private.auto_report_state WHERE name = 'inputs';
   SELECT max(id), count(*) INTO v_to, v_n
   FROM (SELECT i.id FROM public.auto_campaign_input_data i WHERE i.id > v_from ORDER BY i.id LIMIT p_limit) s;
   IF coalesce(v_n, 0) = 0 THEN RETURN 0; END IF;
 
-  TRUNCATE private.aka_agent_data_report_stage;
-  INSERT INTO private.aka_agent_data_report_stage
+  TRUNCATE private.auto_report_stage;
+  INSERT INTO private.auto_report_stage
     (staff_id, organization_id, account_id, day, campaign_id, row_id, action_class, phone_hash, person_hash, key_hash, kind, source)
   SELECT c.staff_id, c.organization_id, c.account_id,
     timezone('Asia/Ho_Chi_Minh', coalesce(i.created_at, c.created_at, now()))::date, i.campaign_id, i.id, 0,
@@ -416,7 +416,7 @@ BEGIN
         private.aka_agent_data_report_person_hash(NULL, c.account_id, i.uid)) END AS person_hash
     OFFSET 0 -- evaluated once per row (the WHERE clause also reads k)
   ) k
-  LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
+  LEFT JOIN private.auto_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
   WHERE i.id > v_from AND i.id <= v_to AND coalesce(i.is_delete, false) = false AND c.staff_id IS NOT NULL
     AND c.action_id IN ('zalo_message_phone', 'zalo_message_friend', 'zalo_message_birthday', 'zalo_message_friend_recommendation',
       'zalo_message_group_member', 'zalo_message_group_realtime', 'zalo_message_remarketing_customer', 'zalo_add_group_member',
@@ -425,7 +425,7 @@ BEGIN
 
   PERFORM private.aka_agent_data_report_merge_links();
   PERFORM private.aka_agent_data_report_store_known();
-  UPDATE private.aka_agent_data_report_state
+  UPDATE private.auto_report_state
   SET watermark = v_to, rows_total = rows_total + v_n, updated_at = now() WHERE name = 'inputs';
   RETURN v_n;
 END
@@ -436,13 +436,13 @@ RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 DECLARE v_from bigint; v_to bigint; v_n integer;
 BEGIN
-  SELECT watermark INTO v_from FROM private.aka_agent_data_report_state WHERE name = 'details';
+  SELECT watermark INTO v_from FROM private.auto_report_state WHERE name = 'details';
   SELECT max(id), count(*) INTO v_to, v_n
   FROM (SELECT d.id FROM public.auto_campaign_details d WHERE d.id > v_from ORDER BY d.id LIMIT p_limit) s;
   IF coalesce(v_n, 0) = 0 THEN RETURN 0; END IF;
 
-  TRUNCATE private.aka_agent_data_report_stage;
-  INSERT INTO private.aka_agent_data_report_stage
+  TRUNCATE private.auto_report_stage;
+  INSERT INTO private.auto_report_stage
     (staff_id, organization_id, account_id, day, campaign_id, row_id, action_class, phone_hash, person_hash, key_hash, kind, source,
      touch, group_hash, group_name)
   SELECT c.staff_id, c.organization_id, d.account_id, x.day, d.campaign_id, d.id, x.action_class,
@@ -471,7 +471,7 @@ BEGIN
          FROM public.zalo_users zu WHERE zu.account_id = d.account_id AND zu.zalo_uid = btrim(i.uid) LIMIT 1),
         private.aka_agent_data_report_person_hash(NULL, d.account_id, i.uid)) END AS person_hash
   ) k
-  LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
+  LEFT JOIN private.auto_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
   WHERE d.id > v_from AND d.id <= v_to AND d.is_delete = false AND c.staff_id IS NOT NULL
     AND d.action_code IN ('zalo_message_stranger', 'zalo_message_friend', 'zalo_add_friend', 'sms_send', 'voice_call',
       'zalo_find_phone_user', 'zalo_message_group')
@@ -491,11 +491,11 @@ BEGIN
       (array_agg(touch ORDER BY row_id) FILTER (WHERE action_class BETWEEN 1 AND 4))[1] AS first_touch,
       (array_agg(touch ORDER BY row_id DESC) FILTER (WHERE action_class BETWEEN 1 AND 4))[1] AS last_touch,
       min(day) FILTER (WHERE action_class = 5) AS verified
-    FROM private.aka_agent_data_report_stage
+    FROM private.auto_report_stage
     WHERE key_hash IS NOT NULL AND action_class BETWEEN 1 AND 5
     GROUP BY staff_id, key_hash
   ), upd AS (
-    UPDATE private.aka_agent_data_report_customers c SET
+    UPDATE private.auto_report_customers c SET
       kind = least(c.kind, a.kind),
       source = CASE WHEN a.first_day < c.first_seen_on THEN a.source ELSE c.source END,
       first_seen_on = least(c.first_seen_on, a.first_day),
@@ -509,47 +509,47 @@ BEGIN
     WHERE c.staff_id = a.staff_id AND c.key_hash = a.key_hash
     RETURNING c.staff_id, c.key_hash
   )
-  INSERT INTO private.aka_agent_data_report_customers
+  INSERT INTO private.auto_report_customers
     (staff_id, key_hash, kind, source, first_seen_on, first_cared_on, last_cared_on, care_count, last_touch, verified_on)
   SELECT a.staff_id, a.key_hash, a.kind, a.source, a.first_day, a.first_care, a.last_care, a.touches, a.last_touch, a.verified
   FROM agg a
   WHERE NOT EXISTS (SELECT 1 FROM upd u WHERE u.staff_id = a.staff_id AND u.key_hash = a.key_hash);
 
-  INSERT INTO private.aka_agent_data_report_daily AS t
+  INSERT INTO private.auto_report_daily AS t
     (staff_id, day, account_id, care_actions, messages, invites, sms, calls, lookups, group_messages)
   SELECT staff_id, day, coalesce(account_id, 0),
     count(*) FILTER (WHERE action_class BETWEEN 1 AND 4), count(*) FILTER (WHERE action_class = 1),
     count(*) FILTER (WHERE action_class = 2), count(*) FILTER (WHERE action_class = 3),
     count(*) FILTER (WHERE action_class = 4), count(*) FILTER (WHERE action_class = 5),
     count(*) FILTER (WHERE action_class = 6)
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   GROUP BY staff_id, day, coalesce(account_id, 0)
   ON CONFLICT (staff_id, day, account_id) DO UPDATE SET
     care_actions = t.care_actions + excluded.care_actions, messages = t.messages + excluded.messages,
     invites = t.invites + excluded.invites, sms = t.sms + excluded.sms, calls = t.calls + excluded.calls,
     lookups = t.lookups + excluded.lookups, group_messages = t.group_messages + excluded.group_messages;
 
-  INSERT INTO private.aka_agent_data_report_group_daily AS t (staff_id, day, group_hash, messages)
+  INSERT INTO private.auto_report_group_daily AS t (staff_id, day, group_hash, messages)
   SELECT staff_id, day, group_hash, count(*)
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   WHERE action_class = 6 AND group_hash IS NOT NULL
   GROUP BY staff_id, day, group_hash
   ON CONFLICT (staff_id, day, group_hash) DO UPDATE SET messages = t.messages + excluded.messages;
 
-  INSERT INTO private.aka_agent_data_report_groups AS g (staff_id, group_hash, name)
+  INSERT INTO private.auto_report_groups AS g (staff_id, group_hash, name)
   SELECT DISTINCT ON (staff_id, group_hash) staff_id, group_hash, group_name
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   WHERE action_class = 6 AND group_hash IS NOT NULL AND group_name IS NOT NULL
   ORDER BY staff_id, group_hash, row_id DESC
   ON CONFLICT (staff_id, group_hash) DO UPDATE SET name = excluded.name;
 
-  INSERT INTO private.aka_agent_data_report_staff (staff_id, organization_id)
+  INSERT INTO private.auto_report_staff (staff_id, organization_id)
   SELECT DISTINCT ON (staff_id) staff_id, organization_id
-  FROM private.aka_agent_data_report_stage
+  FROM private.auto_report_stage
   ORDER BY staff_id, row_id DESC
   ON CONFLICT (staff_id) DO NOTHING;
 
-  UPDATE private.aka_agent_data_report_state
+  UPDATE private.auto_report_state
   SET watermark = v_to, rows_total = rows_total + v_n, updated_at = now() WHERE name = 'details';
   RETURN v_n;
 END
@@ -563,7 +563,7 @@ RETURNS integer LANGUAGE plpgsql SET search_path = pg_catalog, public
 AS $fn$
 DECLARE v_from timestamptz; v_to timestamptz; v_n integer;
 BEGIN
-  SELECT watermark_at INTO v_from FROM private.aka_agent_data_report_state WHERE name = 'engagement';
+  SELECT watermark_at INTO v_from FROM private.auto_report_state WHERE name = 'engagement';
   SELECT max(e.updated_at), count(*) INTO v_to, v_n
   FROM public.auto_campaign_detail_zalo_engagement e
   WHERE e.updated_at > coalesce(v_from, '-infinity'::timestamptz) AND e.updated_at <= p_until;
@@ -590,10 +590,10 @@ BEGIN
            FROM public.zalo_users zu WHERE zu.account_id = d.account_id AND zu.zalo_uid = btrim(i.uid) LIMIT 1),
           private.aka_agent_data_report_person_hash(NULL, d.account_id, i.uid)) END AS person_hash
     ) k
-    LEFT JOIN private.aka_agent_data_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
+    LEFT JOIN private.auto_report_phone_links l ON l.staff_id = c.staff_id AND l.phone_hash = k.phone_hash
     WHERE c.staff_id IS NOT NULL
   )
-  UPDATE private.aka_agent_data_report_customers c SET
+  UPDATE private.auto_report_customers c SET
     seen_on = least(c.seen_on, m.seen_day),
     interacted_on = least(c.interacted_on, m.interacted_day),
     friended_on = least(c.friended_on, m.friended_day)
@@ -623,12 +623,12 @@ BEGIN
     JOIN public.auto_campaign_detail_zalo_engagement e ON e.campaign_detail_id = d.id
     GROUP BY a.staff_id, a.day, a.account_id
   )
-  UPDATE private.aka_agent_data_report_daily t
+  UPDATE private.auto_report_daily t
   SET seen = x.seen, interacted = x.interacted, friended = x.friended
   FROM counts x
   WHERE t.staff_id = x.staff_id AND t.day = x.day AND t.account_id = x.account_id;
 
-  UPDATE private.aka_agent_data_report_state
+  UPDATE private.auto_report_state
   SET watermark_at = v_to, rows_total = rows_total + v_n, updated_at = now() WHERE name = 'engagement';
   RETURN v_n;
 END
@@ -672,7 +672,7 @@ BEGIN
     'firstSeenOn', min(first_seen_on),
     'firstCaredOn', min(first_cared_on) FILTER (WHERE first_cared_on <= v_rd))
   INTO v_base
-  FROM private.aka_agent_data_report_customers
+  FROM private.auto_report_customers
   WHERE staff_id = p_staff_id AND first_seen_on <= v_rd;
 
   FOR v_label, v_start IN SELECT * FROM (VALUES ('7', v_rd - 6), ('30', v_rd - 29), ('90', v_rd - 89)) p(label, start) LOOP
@@ -701,14 +701,14 @@ BEGIN
           'member', count(*) FILTER (WHERE source = 1 AND interacted_on BETWEEN v_start AND v_rd),
           'phone', count(*) FILTER (WHERE source = 2 AND interacted_on BETWEEN v_start AND v_rd),
           'friend', count(*) FILTER (WHERE source = 3 AND interacted_on BETWEEN v_start AND v_rd)))
-      FROM private.aka_agent_data_report_customers
+      FROM private.auto_report_customers
       WHERE staff_id = p_staff_id AND first_seen_on <= v_rd));
   END LOOP;
 
   -- Store growth by week (13 Mondays, cumulative, by first source).
   WITH b AS (
     SELECT greatest(date_trunc('week', first_seen_on)::date, v_week0) AS wk, source, count(*) AS n
-    FROM private.aka_agent_data_report_customers
+    FROM private.auto_report_customers
     WHERE staff_id = p_staff_id AND first_seen_on <= v_rd
     GROUP BY 1, 2
   )
@@ -721,7 +721,7 @@ BEGIN
 
   -- Store milestones: the day the store first reached each size.
   WITH d AS (
-    SELECT first_seen_on AS day, count(*) AS n FROM private.aka_agent_data_report_customers
+    SELECT first_seen_on AS day, count(*) AS n FROM private.auto_report_customers
     WHERE staff_id = p_staff_id AND first_seen_on <= v_rd GROUP BY 1
   ), c AS (SELECT day, sum(n) OVER (ORDER BY day) AS cum FROM d)
   SELECT jsonb_agg(jsonb_build_object('value', t, 'reachedOn', (SELECT min(c.day) FROM c WHERE c.cum >= t)) ORDER BY t)
@@ -749,7 +749,7 @@ BEGIN
       'seen', coalesce(sum(seen) FILTER (WHERE day >= v_rd - 89), 0), 'interacted', coalesce(sum(interacted) FILTER (WHERE day >= v_rd - 89), 0),
       'friended', coalesce(sum(friended) FILTER (WHERE day >= v_rd - 89), 0)))
   INTO v_activity
-  FROM private.aka_agent_data_report_daily
+  FROM private.auto_report_daily
   WHERE staff_id = p_staff_id AND day <= v_rd;
 
   -- Friends and joined Zalo groups per account (current rows; growth by the day the row appeared).
@@ -805,7 +805,7 @@ BEGIN
       '90', jsonb_build_object('careActions', coalesce(sum(dl.care_actions) FILTER (WHERE dl.day >= v_rd - 89), 0),
         'lookups', coalesce(sum(dl.lookups) FILTER (WHERE dl.day >= v_rd - 89), 0),
         'interacted', coalesce(sum(dl.interacted) FILTER (WHERE dl.day >= v_rd - 89), 0))) AS periods
-    FROM private.aka_agent_data_report_daily dl
+    FROM private.auto_report_daily dl
     WHERE dl.staff_id = p_staff_id AND dl.account_id = a.id AND dl.day BETWEEN v_rd - 89 AND v_rd
   ) act ON true
   WHERE a.id = ANY(v_zalo_accounts);
@@ -844,9 +844,9 @@ BEGIN
       count(*) FILTER (WHERE c.interacted_on BETWEEN v_rd - 29 AND v_rd) AS i30,
       count(*) FILTER (WHERE c.interacted_on BETWEEN v_rd - 89 AND v_rd) AS i90
     FROM public.auto_account_contact_group_members m
-    LEFT JOIN private.aka_agent_data_report_contact_keys ck ON ck.contact_id = m.contact_id
-    LEFT JOIN private.aka_agent_data_report_phone_links l ON ck.kind = 2 AND l.staff_id = p_staff_id AND l.phone_hash = ck.key_hash
-    LEFT JOIN private.aka_agent_data_report_customers c ON c.staff_id = p_staff_id AND c.key_hash = coalesce(l.person_hash, ck.key_hash)
+    LEFT JOIN private.auto_report_contact_keys ck ON ck.contact_id = m.contact_id
+    LEFT JOIN private.auto_report_phone_links l ON ck.kind = 2 AND l.staff_id = p_staff_id AND l.phone_hash = ck.key_hash
+    LEFT JOIN private.auto_report_customers c ON c.staff_id = p_staff_id AND c.key_hash = coalesce(l.person_hash, ck.key_hash)
     WHERE m.group_id = ANY(coalesce(v_top_groups, '{}')) AND m.is_delete = false
     GROUP BY m.group_id
   ) x
@@ -876,9 +876,9 @@ BEGIN
       count(*) FILTER (WHERE c.interacted_on BETWEEN v_rd - 29 AND v_rd) AS i30,
       count(*) FILTER (WHERE c.interacted_on BETWEEN v_rd - 89 AND v_rd) AS i90
     FROM public.auto_account_contacts_dataset_members dm
-    LEFT JOIN private.aka_agent_data_report_contact_keys ck ON ck.contact_id = dm.contact_id
-    LEFT JOIN private.aka_agent_data_report_phone_links l ON ck.kind = 2 AND l.staff_id = p_staff_id AND l.phone_hash = ck.key_hash
-    LEFT JOIN private.aka_agent_data_report_customers c ON c.staff_id = p_staff_id AND c.key_hash = coalesce(l.person_hash, ck.key_hash)
+    LEFT JOIN private.auto_report_contact_keys ck ON ck.contact_id = dm.contact_id
+    LEFT JOIN private.auto_report_phone_links l ON ck.kind = 2 AND l.staff_id = p_staff_id AND l.phone_hash = ck.key_hash
+    LEFT JOIN private.auto_report_customers c ON c.staff_id = p_staff_id AND c.key_hash = coalesce(l.person_hash, ck.key_hash)
     WHERE dm.dataset_id = ANY(coalesce(v_top_scans, '{}') || coalesce(v_top_uploads, '{}')) AND dm.is_current = true
     GROUP BY dm.dataset_id
   )
@@ -903,12 +903,12 @@ BEGIN
     '90', jsonb_build_object('groups', count(DISTINCT group_hash) FILTER (WHERE day >= v_rd - 89),
       'messages', coalesce(sum(messages) FILTER (WHERE day >= v_rd - 89), 0)),
     'top30', (SELECT coalesce(jsonb_agg(jsonb_build_object('name', coalesce(gr.name, ''), 'messages', t.messages) ORDER BY t.messages DESC, t.group_hash), '[]'::jsonb)
-      FROM (SELECT gd.group_hash, sum(gd.messages) AS messages FROM private.aka_agent_data_report_group_daily gd
+      FROM (SELECT gd.group_hash, sum(gd.messages) AS messages FROM private.auto_report_group_daily gd
             WHERE gd.staff_id = p_staff_id AND gd.day BETWEEN v_rd - 29 AND v_rd
             GROUP BY gd.group_hash ORDER BY 2 DESC, 1 LIMIT 5) t
-      LEFT JOIN private.aka_agent_data_report_groups gr ON gr.staff_id = p_staff_id AND gr.group_hash = t.group_hash))
+      LEFT JOIN private.auto_report_groups gr ON gr.staff_id = p_staff_id AND gr.group_hash = t.group_hash))
   INTO v_cadence
-  FROM private.aka_agent_data_report_group_daily
+  FROM private.auto_report_group_daily
   WHERE staff_id = p_staff_id AND day BETWEEN v_rd - 89 AND v_rd;
 
   -- Repeat sends the cooldown option paused instead of sending again (all campaigns of the staff).
@@ -1000,9 +1000,9 @@ BEGIN
 
     FOR v_staff IN
       SELECT s.staff_id, st.organization_id
-      FROM private.aka_agent_data_report_staff s
+      FROM private.auto_report_staff s
       JOIN public.org_staff st ON st.id = s.staff_id AND st.is_active = true
-      LEFT JOIN private.aka_agent_data_report_snapshots sn ON sn.staff_id = s.staff_id
+      LEFT JOIN private.auto_report_snapshots sn ON sn.staff_id = s.staff_id
       WHERE (sn.staff_id IS NULL OR sn.report_date < v_report_date OR sn.organization_id IS DISTINCT FROM st.organization_id)
         AND (s.failed_on IS NULL OR s.failed_on < v_report_date)
       ORDER BY s.staff_id
@@ -1011,7 +1011,7 @@ BEGIN
       v_t := clock_timestamp();
       BEGIN
         v_payload := private.aka_agent_data_report_build(v_staff.staff_id, v_report_date);
-        INSERT INTO private.aka_agent_data_report_snapshots AS sn (staff_id, organization_id, report_date, built_at, build_ms, payload)
+        INSERT INTO private.auto_report_snapshots AS sn (staff_id, organization_id, report_date, built_at, build_ms, payload)
         VALUES (v_staff.staff_id, v_staff.organization_id, v_report_date, clock_timestamp(),
           (extract(epoch FROM clock_timestamp() - v_t) * 1000)::integer, v_payload)
         ON CONFLICT (staff_id) DO UPDATE SET organization_id = excluded.organization_id, report_date = excluded.report_date,
@@ -1019,7 +1019,7 @@ BEGIN
         v_built := v_built + 1;
       EXCEPTION WHEN OTHERS THEN
         v_errors := v_errors || jsonb_build_array(jsonb_build_object('staff', v_staff.staff_id, 'error', left(SQLERRM, 300)));
-        UPDATE private.aka_agent_data_report_staff SET failed_on = v_report_date, last_error = left(SQLERRM, 300)
+        UPDATE private.auto_report_staff SET failed_on = v_report_date, last_error = left(SQLERRM, 300)
         WHERE staff_id = v_staff.staff_id;
       END;
     END LOOP;
@@ -1027,8 +1027,8 @@ BEGIN
 
   v_result := jsonb_build_object('reportDate', v_report_date, 'caughtUp', v_caught_up, 'rows', v_counts,
     'snapshots', v_built, 'errors', v_errors, 'ms', (extract(epoch FROM clock_timestamp() - v_started) * 1000)::integer);
-  INSERT INTO private.aka_agent_data_report_runs (started_at, finished_at, result) VALUES (v_started, clock_timestamp(), v_result);
-  DELETE FROM private.aka_agent_data_report_runs WHERE started_at < now() - interval '30 days';
+  INSERT INTO private.auto_report_runs (started_at, finished_at, result) VALUES (v_started, clock_timestamp(), v_result);
+  DELETE FROM private.auto_report_runs WHERE started_at < now() - interval '30 days';
   RETURN v_result;
 END
 $fn$;
@@ -1066,7 +1066,7 @@ BEGIN
 
   IF v_mode = 'snapshot' THEN
     SELECT jsonb_build_object('reportDate', s.report_date, 'builtAt', s.built_at, 'payload', s.payload) INTO v_result
-    FROM private.aka_agent_data_report_snapshots s
+    FROM private.auto_report_snapshots s
     WHERE s.staff_id = p_staff_id AND s.organization_id = p_organization_id;
     RETURN coalesce(v_result, jsonb_build_object('reportDate', NULL, 'builtAt', NULL, 'payload', NULL));
   END IF;
@@ -1080,14 +1080,14 @@ BEGIN
     RETURN jsonb_build_object('found', false, 'phone', NULL);
   END IF;
   v_phone_hash := pg_catalog.hashtextextended('p:' || v_phone, 0);
-  v_key := coalesce((SELECT l.person_hash FROM private.aka_agent_data_report_phone_links l
+  v_key := coalesce((SELECT l.person_hash FROM private.auto_report_phone_links l
     WHERE l.staff_id = p_staff_id AND l.phone_hash = v_phone_hash), v_phone_hash);
 
   SELECT jsonb_build_object('firstSeenOn', c.first_seen_on, 'firstCaredOn', c.first_cared_on, 'lastCaredOn', c.last_cared_on,
       'careCount', c.care_count, 'verifiedOn', c.verified_on, 'seenOn', c.seen_on, 'interactedOn', c.interacted_on,
       'friendedOn', c.friended_on, 'source', c.source)
   INTO v_customer
-  FROM private.aka_agent_data_report_customers c
+  FROM private.auto_report_customers c
   WHERE c.staff_id = p_staff_id AND c.key_hash = v_key;
 
   WITH inputs AS MATERIALIZED (
@@ -1120,7 +1120,7 @@ BEGIN
 
   SELECT coalesce(jsonb_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name)), '[]'::jsonb)
   INTO v_groups
-  FROM private.aka_agent_data_report_contact_keys ck
+  FROM private.auto_report_contact_keys ck
   JOIN public.auto_account_contact_group_members m ON m.contact_id = ck.contact_id AND m.is_delete = false
   JOIN public.auto_account_contact_groups g ON g.id = m.group_id AND g.purpose = 'data_group' AND g.is_delete = false
     AND g.staff_id = p_staff_id AND g.organization_id = p_organization_id
