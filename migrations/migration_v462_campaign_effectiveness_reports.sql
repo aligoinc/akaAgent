@@ -1,9 +1,11 @@
--- V462: read-only campaign effectiveness aggregates for WebApp reports
+-- V462: read-only campaign effectiveness aggregates for the WebApp, iOS and Desktop reports
 -- (Thành quả, Theo chiến dịch, Bí quyết hiệu quả, Tài sản của bạn).
 --
 -- Adds two NEW functions only. No table, column, index, policy, existing-function,
--- role/global timeout, pool or connection change. The reader is service_role only
--- (WebApp backend singleton); the scope helper lives in `private` and is not exposed.
+-- role/global timeout, pool or connection change. The reader follows aka_agent_read_report_page:
+-- service_role (WebApp backend singleton, credentials NULL) and aka_agent_desktop (Desktop token bound
+-- to the same staff + automation credentials) through public.auto_assert_automation_identity.
+-- The scope helper lives in `private` and is not exposed.
 -- Engagement marks are read, never written; execution status is never changed.
 -- Rollback: migrations/rollback_v462_campaign_effectiveness_reports.sql
 BEGIN;
@@ -21,7 +23,9 @@ BEGIN
     OR to_regclass('public.auto_campaign_detail_zalo_engagement') IS NULL
     OR to_regclass('public.auto_campaign_input_origins') IS NULL
     OR to_regclass('public.auto_campaign_input_data') IS NULL
-    OR to_regclass('public.auto_account_contact_groups') IS NULL THEN
+    OR to_regclass('public.auto_account_contact_groups') IS NULL
+    OR to_regprocedure('public.auto_assert_automation_identity(bigint,bigint,text,text)') IS NULL
+    OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aka_agent_desktop') THEN
     RAISE EXCEPTION 'v462_dependency_missing';
   END IF;
   -- The account/action/time index drives every read; stop instead of planning full scans.
@@ -69,7 +73,7 @@ REVOKE ALL ON FUNCTION private.aka_agent_campaign_effectiveness_scope(bigint,big
   FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.aka_agent_read_campaign_effectiveness(
-  p_staff_id bigint, p_organization_id bigint, p_query jsonb
+  p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_query jsonb
 ) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -80,7 +84,9 @@ DECLARE
   v_tz constant text := 'Asia/Ho_Chi_Minh';
   v_message constant text[] := ARRAY['zalo_message_friend','zalo_message_stranger'];
   v_tracked_actions constant text[] := ARRAY['zalo_message_friend','zalo_message_stranger','zalo_add_friend'];
-  v_reach constant text[] := ARRAY['zalo_message_friend','zalo_message_stranger','zalo_add_friend','sms_send'];
+  -- Default "customers reached" codes (shared contract REACH_ACTIONS); callers may pass reachActionCodes.
+  v_reach text[] := ARRAY['zalo_message_friend','zalo_message_stranger','zalo_add_friend','sms_send','voice_call','email_send',
+    'fb_message_friend','fb_message_stranger','fb_message_page_inbox_customer','fb_add_friend'];
   v_from timestamptz;
   v_to timestamptz;
   v_limit integer;
@@ -98,6 +104,8 @@ DECLARE
   v_total bigint;
   v_result jsonb;
 BEGIN
+  -- Desktop token must belong to p_staff_id and carry the automation credentials; service_role passes.
+  PERFORM public.auto_assert_automation_identity(p_staff_id, p_organization_id, p_auth_username, p_auth_password);
   IF p_staff_id IS NULL OR p_organization_id IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.org_staff WHERE id = p_staff_id AND organization_id = p_organization_id AND is_active = true
   ) THEN RAISE EXCEPTION 'report_access_denied' USING ERRCODE = '42501'; END IF;
@@ -108,7 +116,9 @@ BEGIN
     OR jsonb_typeof(p_query->'actionCodes') IS DISTINCT FROM 'array' OR jsonb_array_length(p_query->'actionCodes') > 200
     OR (p_query ? 'campaignIds' AND (jsonb_typeof(p_query->'campaignIds') IS DISTINCT FROM 'array'
       OR jsonb_array_length(p_query->'campaignIds') > 1000))
-    OR (p_query ? 'legacy' AND jsonb_typeof(p_query->'legacy') IS DISTINCT FROM 'object') THEN
+    OR (p_query ? 'legacy' AND jsonb_typeof(p_query->'legacy') IS DISTINCT FROM 'object')
+    OR (p_query ? 'reachActionCodes' AND (jsonb_typeof(p_query->'reachActionCodes') IS DISTINCT FROM 'array'
+      OR jsonb_array_length(p_query->'reachActionCodes') > 50)) THEN
     RAISE EXCEPTION 'invalid_report_query' USING ERRCODE = '22023';
   END IF;
   BEGIN
@@ -124,6 +134,9 @@ BEGIN
     SELECT coalesce(array_agg(value), '{}') INTO v_success FROM jsonb_array_elements_text(coalesce(p_query#>'{legacy,success}', '[]'));
     SELECT coalesce(array_agg(value), '{}') INTO v_skipped FROM jsonb_array_elements_text(coalesce(p_query#>'{legacy,skipped}', '[]'));
     SELECT coalesce(array_agg(value), '{}') INTO v_failure FROM jsonb_array_elements_text(coalesce(p_query#>'{legacy,failure}', '[]'));
+    IF p_query ? 'reachActionCodes' THEN
+      SELECT coalesce(array_agg(DISTINCT value), '{}') INTO v_reach FROM jsonb_array_elements_text(p_query->'reachActionCodes');
+    END IF;
   EXCEPTION WHEN others THEN
     RAISE EXCEPTION 'invalid_report_query' USING ERRCODE = '22023';
   END;
@@ -371,21 +384,26 @@ BEGIN
     'firstCampaignAt', (SELECT min(created_at) FROM public.auto_campaigns WHERE staff_id = p_staff_id AND organization_id = p_organization_id));
 END;
 $function$;
-ALTER FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,jsonb) OWNER TO postgres;
+ALTER FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) OWNER TO postgres;
 -- Default ACL in public grants EXECUTE to anon/authenticated: revoke them directly.
-REVOKE ALL ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,jsonb) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,jsonb) TO service_role;
-COMMENT ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,jsonb) IS
-  'V462 read-only campaign effectiveness aggregates (summary, campaigns, hours, data_groups, list, lifetime) for WebApp reports. service_role only; 60s per call; reads engagement marks, never writes.';
+REVOKE ALL ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) TO aka_agent_desktop;
+COMMENT ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) IS
+  'V462 read-only campaign effectiveness aggregates (summary, campaigns, hours, data_groups, list, lifetime) for WebApp/iOS/Desktop reports. service_role, or aka_agent_desktop bound to the same staff with automation credentials; 60s per call; reads engagement marks, never writes.';
 
 DO $postflight$
 DECLARE v_reader text; v_scope text;
 BEGIN
   SELECT proacl::text INTO v_reader FROM pg_proc
-    WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,jsonb)');
+    WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)');
   SELECT coalesce(proacl::text, '') INTO v_scope FROM pg_proc
     WHERE oid = to_regprocedure('private.aka_agent_campaign_effectiveness_scope(bigint,bigint,bigint[],text[],bigint[],timestamptz,timestamptz,text[],text[],text[])');
-  IF v_reader IS DISTINCT FROM '{postgres=X/postgres,service_role=X/postgres}' THEN
+  IF (SELECT array_agg(g ORDER BY g) FROM (
+        SELECT DISTINCT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS g
+        FROM pg_proc pr, aclexplode(pr.proacl) a
+        WHERE pr.oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)')) x)
+     IS DISTINCT FROM ARRAY['aka_agent_desktop','postgres','service_role'] THEN
     RAISE EXCEPTION 'v462_reader_acl_unexpected: %', v_reader;
   END IF;
   IF v_scope ~ '(^|[{,])(anon|authenticated|service_role)?=' THEN
