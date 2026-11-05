@@ -1,0 +1,158 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-05 (apply V462 and V463)",
+  "migrations": [
+    {
+      "version": "20261105104319",
+      "name": "migration_v462_campaign_effectiveness_reports",
+      "file": "migrations/migration_v462_campaign_effectiveness_reports.sql",
+      "md5": "a95368ebdd602d6759d932a19172dcc0",
+      "sha256": "614b73de4656babf275c295c5d74cf2dcab84d5fa5b50ea53dd1431537db8fc9",
+      "bytes": 27723,
+      "ledgerStatementsMd5": "a95368ebdd602d6759d932a19172dcc0",
+      "appliedAt": "2026-11-05T10:43:19Z"
+    },
+    {
+      "version": "20261105104427",
+      "name": "migration_v463_report_effectiveness_ai_summary",
+      "file": "migrations/migration_v463_report_effectiveness_ai_summary.sql",
+      "md5": "e50fc85f0a654affc3f9ca018329b823",
+      "sha256": "f1c0eb603d24d4739198babfb652b668191829d72dc0dd1e68acb06e3edbf4ea",
+      "bytes": 5941,
+      "ledgerStatementsMd5": "e50fc85f0a654affc3f9ca018329b823",
+      "appliedAt": "2026-11-05T10:44:27Z",
+      "note": "Version with identity ids (PR aligoinc/akaAgent#599); the merged V463 (md5 4715cb18c09878a0fe9a2c91edfc45ab) failed its production trial with 428C9 because ai_prompt.id / ai_using.id are GENERATED ALWAYS."
+    }
+  ],
+  "method": "Supabase MCP execute_sql. One DO block per migration embeds the exact file text, refuses on md5/byte mismatch or an existing migration_v46x_% ledger row, EXECUTEs the file with its BEGIN/COMMIT lines commented out and inserts supabase_migrations.schema_migrations (statements = file text) in the same transaction. The wrapper was validated on local PostgreSQL 16 first (fixture suite, corrupted-content refusal, ledger guard, identity ids, sequence-behind guard).",
+  "loadAtApply": {
+    "vnTime": "2026-11-05 17:23-17:44",
+    "activeBackendsBefore": 3,
+    "onCpuBefore": "1-2 of 8 vCPU"
+  },
+  "productionTrials": {
+    "v462": {
+      "ranAt": "2026-11-05T10:32:49Z",
+      "transaction": "aborted on purpose by a final RAISE; nothing kept",
+      "functionSourceMd5MatchesLocal": {
+        "reader": "bac1ca83f7b5cab19c0aa026ad75ea3b",
+        "scope": "52f8efb80527f7f9f381c3bb671bf8d4"
+      },
+      "readerAcl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "scopeAcl": "{postgres=X/postgres}",
+      "serviceRoleCalls": {
+        "staff": 347,
+        "org": 328,
+        "accounts": 34,
+        "msColdCache": {
+          "summary7d": 5645,
+          "campaigns7d": 74,
+          "hours7d": 31,
+          "dataGroups7d": 59,
+          "list7d": 58,
+          "lifetime12m": 33558
+        }
+      },
+      "denied": {
+        "desktopUnknownToken": "42501 desktop_staff_scope_denied",
+        "desktopOwnTokenNoCredentials": "P0001 automation_auth_required",
+        "anon": "42501 permission denied for function aka_agent_read_campaign_effectiveness"
+      }
+    },
+    "v463First": {
+      "result": "428C9 cannot insert a non-DEFAULT value into column id (GENERATED ALWAYS); transaction rolled back, nothing kept"
+    },
+    "v463Fixed": {
+      "ranAt": "2026-11-05T10:41:35Z",
+      "result": "ok, aborted on purpose; trial consumed identity values 56/54"
+    }
+  },
+  "performanceFinding": {
+    "summary": "12-month lifetime (and, less so, 7-day unique counts) are I/O bound on cold pages: staff 347 lifetime 33.6 s in the trial, staff 385 (50 accounts) still reading data files after 60 s (EXPLAIN cancelled). The same queries on warm pages: monthly 245 ms, unique 79 ms.",
+    "consequence": "Do not deploy the API/Web or release Desktop until the lifetime read is reworked (rollup or narrower/lazier read); the functions are idle until then."
+  },
+  "postApply": {
+    "ledger": [
+      "20261105104319 migration_v462_campaign_effectiveness_reports",
+      "20261105104427 migration_v463_report_effectiveness_ai_summary"
+    ],
+    "reader": {
+      "owner": "postgres",
+      "securityDefiner": true,
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "anonCanExecute": false,
+      "authenticatedCanExecute": false
+    },
+    "scope": {
+      "owner": "postgres",
+      "securityDefiner": false,
+      "acl": "{postgres=X/postgres}"
+    },
+    "aiConfig": {
+      "promptId": 57,
+      "usingId": 55,
+      "modelId": 21,
+      "active": true,
+      "system": true,
+      "organizationId": null,
+      "sequencesAfter": {
+        "ai_prompt": "57/57",
+        "ai_using": "55/55"
+      }
+    },
+    "postgrestSchemaReload": {
+      "reloadReceivedAt": "2026-11-05T10:43:19.466Z",
+      "schemaCacheReadyAt": "2026-11-05T10:43:24.595Z",
+      "schemaCacheQueriedMs": 3651.5,
+      "schemaCacheLoadedMs": 14.7,
+      "relations": 467,
+      "relationships": 277,
+      "functions": 744,
+      "edgeP50MsBaseline": "49-56 (10:30-10:41 UTC, per minute)",
+      "edgeP50MsBy10s": {
+        "10:43:20": 63,
+        "10:43:30": 271,
+        "10:43:40": 96,
+        "10:43:50": 60,
+        "10:44:00": 241,
+        "10:44:10": 228,
+        "10:44:20": 53,
+        "10:44:30": 52
+      },
+      "edgeOver1sAt10:43:30": 78,
+      "edgeP50MsAfter": "50-52 (10:45-10:48 UTC, per minute)",
+      "errorsAfterReload": [
+        "10:43:38 500 rpc/akachat_ingest_messages_v2 57014 (8 s statement timeout)",
+        "10:45:02 500 rpc/aka_agent_claim_account_operation 57014 (aka_agent_desktop)"
+      ],
+      "http503": 0,
+      "pgrst002Or003": 0,
+      "note": "p50 rose to 271 ms in the 10 s after the cache came back and recovered by 10:43:50. The 10:44:00-10:44:20 rise (p50 about 230 ms) came before the V463 transaction started (10:44:27) and has no identified cause. A 57014 burst on chat/CRM routes at 10:42:40-10:43:19 predates the apply; the same pattern was seen at 10:12, 10:24 and 10:36 UTC."
+    },
+    "rollbackChecks": {
+      "dropSignaturesResolve": {
+        "reader": true,
+        "scope": true
+      },
+      "v463RollbackColumnsPresent": [
+        "ai_log.prompt_id",
+        "ai_log.using_id",
+        "ai_prompt.is_active",
+        "ai_prompt.updated_at",
+        "ai_using.is_active",
+        "ai_using.prompt_id",
+        "ai_using.updated_at"
+      ],
+      "aiLogRowsForNewConfig": 0,
+      "checkedAt": "2026-11-05T10:48:07Z"
+    }
+  },
+  "rollback": [
+    "migrations/rollback_v463_report_effectiveness_ai_summary.sql",
+    "migrations/rollback_v462_campaign_effectiveness_reports.sql"
+  ]
+}
