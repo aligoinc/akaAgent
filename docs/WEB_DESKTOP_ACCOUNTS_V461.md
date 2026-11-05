@@ -29,6 +29,22 @@ SMS mang nhãn **Web**.
 - Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
   (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
+## V462 — app iOS cho tổ chức chỉ có gói Desktop (candidate, chưa apply)
+
+- `migrations/migration_v462_native_desktop_only_login.sql`: chỉ sửa cổng trong
+  `aka_agent_authenticate_control_session(text)`, thêm `'native'` vào `client_type IN ('web', 'pwa')`
+  của nhánh tổ chức chỉ có gói Zalo Desktop, kèm một dòng chú thích. Nguồn md5
+  `de8f93ee545bca94a199b2dffb9fe324` (bản đích V461, đã kiểm trên production 05/11/2026 13:38 VN) →
+  đích `2c10aa78ac5e4ab8069c741b356e88c8`. Không đổi bảng, dữ liệu, ACL, owner, SECURITY DEFINER, search_path.
+- Chính sách đang tắt nên apply không đổi hành vi: phiên iOS vẫn bị từ chối (và thu hồi) cho tới khi bật
+  `desktopOnlyLogin`. **Trước khi bật** phải deploy API chặn phiên iOS không gửi header
+  `x-aka-desktop-accounts` (bản iOS cũ), nếu không bản cũ sẽ vào một app trống.
+- Là `CREATE OR REPLACE FUNCTION` nên PostgREST nạp lại schema: apply ngoài giờ cao điểm.
+- Rollback: `migrations/rollback_v462_native_desktop_only_login.sql` (guard md5, về đúng bản V461).
+- Test local `scripts/test-native-desktop-only-login-sql.sh` (fixtures V461 → V461 → v462): md5 đích, quyền
+  giữ nguyên; chính sách tắt thì native vẫn bị chặn và thu hồi; Web/PWA và tổ chức có Server không đổi; bật
+  `desktopOnlyLogin` thì native qua; áp lại bỏ qua; rollback về V461; hàm nguồn lệch thì từ chối, không đổi gì.
+
 ## Bật/tắt
 
 `auto_system_settings` key `web.desktop_accounts` (seed bởi migration):
