@@ -1,4 +1,4 @@
--- v462: app iOS (phiên client_type 'native') của tổ chức chỉ có gói Zalo Desktop qua được cổng
+-- v464: app iOS (phiên client_type 'native') của tổ chức chỉ có gói Zalo Desktop qua được cổng
 -- xác thực phiên giống Web/PWA, khi chính sách web.desktop_accounts bật desktopOnlyLogin (V461).
 --
 -- Chỉ sửa public.aka_agent_authenticate_control_session(text): thêm 'native' vào danh sách
@@ -11,13 +11,15 @@
 --
 -- Nguồn: bản đích của V461, md5 de8f93ee545bca94a199b2dffb9fe324.
 -- Đích: md5 2c10aa78ac5e4ab8069c741b356e88c8 (tính trên định nghĩa production ngày 05/11/2026).
--- Rollback: migrations/rollback_v462_native_desktop_only_login.sql.
+-- Số V462/V463 đã dùng cho báo cáo hiệu quả chiến dịch (dev_3, PR #598) nên candidate này mang số V464;
+-- hai migration độc lập, không đụng cùng hàm, apply theo thứ tự nào cũng được.
+-- Rollback: migrations/rollback_v464_native_desktop_only_login.sql.
 -- Test local: scripts/test-native-desktop-only-login-sql.sh.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
-DO $v462$
+DO $v464$
 DECLARE
   f constant regprocedure := 'public.aka_agent_authenticate_control_session(text)'::regprocedure;
   c_source constant text := 'de8f93ee545bca94a199b2dffb9fe324';
@@ -31,15 +33,15 @@ DECLARE
 BEGIN
   d := pg_get_functiondef(f);
   IF md5(d) = c_target THEN
-    RAISE NOTICE 'v462 đã được apply trước đó, không đổi gì';
+    RAISE NOTICE 'v464 đã được apply trước đó, không đổi gì';
     RETURN;
   END IF;
   IF md5(d) IS DISTINCT FROM c_source THEN
-    RAISE EXCEPTION 'v462_unexpected_definition:%', md5(d);
+    RAISE EXCEPTION 'v464_unexpected_definition:%', md5(d);
   END IF;
   IF length(d) - length(replace(d, c_gate_old, '')) <> length(c_gate_old)
      OR length(d) - length(replace(d, c_note_old, '')) <> length(c_note_old) THEN
-    RAISE EXCEPTION 'v462_anchor_not_unique';
+    RAISE EXCEPTION 'v464_anchor_not_unique';
   END IF;
 
   SELECT jsonb_build_object('owner', p.proowner::regrole::text, 'secdef', p.prosecdef,
@@ -49,22 +51,22 @@ BEGIN
 
   d := replace(replace(d, c_gate_old, c_gate_new), c_note_old, c_note_new);
   IF md5(d) IS DISTINCT FROM c_target THEN
-    RAISE EXCEPTION 'v462_target_checksum_mismatch:%', md5(d);
+    RAISE EXCEPTION 'v464_target_checksum_mismatch:%', md5(d);
   END IF;
   EXECUTE d;
 
   -- Postflight: đúng bản đích, thuộc tính và quyền giữ nguyên.
   IF md5(pg_get_functiondef(f)) IS DISTINCT FROM c_target THEN
-    RAISE EXCEPTION 'v462_postflight_checksum:%', md5(pg_get_functiondef(f));
+    RAISE EXCEPTION 'v464_postflight_checksum:%', md5(pg_get_functiondef(f));
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_proc p WHERE p.oid = f
       AND jsonb_build_object('owner', p.proowner::regrole::text, 'secdef', p.prosecdef,
             'volatile', p.provolatile, 'config', p.proconfig, 'acl', p.proacl::text) = attrs
   ) THEN
-    RAISE EXCEPTION 'v462_attributes_changed';
+    RAISE EXCEPTION 'v464_attributes_changed';
   END IF;
 END
-$v462$;
+$v464$;
 
 COMMIT;
