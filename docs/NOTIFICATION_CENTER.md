@@ -226,6 +226,7 @@ giữ `10a2465bf8273b269ed5123344cff4db`, quyền tick chỉ `service_role`, dis
 Rollback (`rollback_v466_notification_fly_scheduler.sql`) trả dispatch về bản V457 theo checksum, xóa RPC tick và khóa
 cài đặt; rollback nhanh hơn chỉ cần đặt lại `pg_net`. Không đổi worker/snapshot/capture/schedule_reports nên độc lập
 V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V466 31 phép kiểm, bộ V457 103 phép kiểm trên
-V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Phía Fly (đồng hồ, SMTP từ secrets, luôn 1 máy) và thứ tự
-triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
+V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Tài khoản gửi email không đổi: worker vẫn đọc qua action
+`sender` theo `notifications.email.sender_account_id` (đổi email gửi = trỏ khóa này sang tài khoản email khác). Phía Fly
+(đồng hồ, luôn 1 máy) và thứ tự triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
 
