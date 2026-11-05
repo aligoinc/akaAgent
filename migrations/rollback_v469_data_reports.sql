@@ -1,5 +1,5 @@
--- Rollback V465: removes the nightly job, the data report functions and the private data report tables.
--- No existing table, index, function or permission was changed by V465, so nothing else is restored.
+-- Rollback V469: removes the nightly job, the data report functions and the private data report tables.
+-- No existing table, index, function or permission was changed by V469, so nothing else is restored.
 -- WebApp API and Desktop treat a missing reader as "đang được cập nhật" and hide the data report.
 BEGIN;
 SET LOCAL lock_timeout = '5s';

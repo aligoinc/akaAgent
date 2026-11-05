@@ -4,7 +4,7 @@
  * Báo cáo dữ liệu (data reports): shared contract for the WebApp API, Web, iOS and the akaAgent Desktop.
  * Desktop copies this file verbatim to src/shared/dataReports.ts: change it here first, then copy it.
  *
- * The database builds one snapshot per staff every night (akaAgent V465). Clients read that snapshot once
+ * The database builds one snapshot per staff every night (akaAgent V469). Clients read that snapshot once
  * and build every view from it, so switching the period never reads the database again.
  *
  * Positive-only rule (business requirement): the report never shows a number that reads as a loss.
@@ -40,7 +40,7 @@ export const DATA_REPORT_MIN_RUNWAY_DAYS = 14
 export const DATA_REPORT_MILESTONES: readonly number[] = [1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000]
 
 // ---------------------------------------------------------------------------
-// Snapshot as stored by V465 (payload version 1)
+// Snapshot as stored by V469 (payload version 1)
 // ---------------------------------------------------------------------------
 
 export type DataReportSource = 'member' | 'phone' | 'friend'
@@ -320,7 +320,7 @@ export function parseDataReportPayload(value: unknown): DataReportPayload | null
   }
 }
 
-/** Reader answer (V465 snapshot mode) → snapshot. A missing payload means the first night has not run yet. */
+/** Reader answer (V469 snapshot mode) → snapshot. A missing payload means the first night has not run yet. */
 export function parseDataReportSnapshot(value: unknown): DataReportSnapshot {
   const source = record(value)
   const payload = parseDataReportPayload(source.payload)

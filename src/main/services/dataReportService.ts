@@ -7,7 +7,7 @@ import { ReportReadFlights, reportFlightKey } from '../domain/reports/reportRead
 import { REPORT_READ_TIMEOUT_MS } from '../domain/reports/reportReadRpc'
 
 /**
- * "Báo cáo dữ liệu" on Desktop. Reads the V465 nightly snapshot through the logged-in Desktop token (no new
+ * "Báo cáo dữ liệu" on Desktop. Reads the V469 nightly snapshot through the logged-in Desktop token (no new
  * client/pool/timer). Own flights (at most two distinct reads, so it never blocks the other reports); the snapshot
  * changes once a night and is reused for 10 minutes, a journey for 15 seconds. Numbers are built in the renderer
  * by the shared contract (identical to WebApp/iOS).

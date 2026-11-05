@@ -1,6 +1,6 @@
--- Rollback V464: restores the V462 body of public.aka_agent_read_campaign_effectiveness (unique customers keyed
+-- Rollback V468: restores the V462 body of public.aka_agent_read_campaign_effectiveness (unique customers keyed
 -- by engagement UID, then canonical key, then result id). Signature, attributes and ACL are unchanged by either
--- version. Refuses unless the live body is exactly V464 (prosrc md5 cead5384a60003570db2f2d6a907519f).
+-- version. Refuses unless the live body is exactly V468 (prosrc md5 b9b969f07cf187fd586b1c97e19b2536).
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
@@ -9,7 +9,7 @@ DECLARE v_md5 text;
 BEGIN
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc
     WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)');
-  IF v_md5 IS DISTINCT FROM 'cead5384a60003570db2f2d6a907519f' THEN RAISE EXCEPTION 'rollback_v464_reader_not_v464: %', v_md5; END IF;
+  IF v_md5 IS DISTINCT FROM 'b9b969f07cf187fd586b1c97e19b2536' THEN RAISE EXCEPTION 'rollback_v468_reader_not_v468: %', v_md5; END IF;
 END
 $preflight$;
 
@@ -333,19 +333,19 @@ BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc
       WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)'))
      IS DISTINCT FROM 'bac1ca83f7b5cab19c0aa026ad75ea3b' THEN
-    RAISE EXCEPTION 'rollback_v464_checksum_mismatch';
+    RAISE EXCEPTION 'rollback_v468_checksum_mismatch';
   END IF;
   IF (SELECT array_agg(g ORDER BY g) FROM (
         SELECT DISTINCT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS g
         FROM pg_proc pr, aclexplode(pr.proacl) a
         WHERE pr.oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)')) x)
      IS DISTINCT FROM ARRAY['aka_agent_desktop','postgres','service_role'] THEN
-    RAISE EXCEPTION 'rollback_v464_reader_acl_unexpected';
+    RAISE EXCEPTION 'rollback_v468_reader_acl_unexpected';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)')
       AND prosecdef AND provolatile = 's' AND proowner = 'postgres'::regrole
       AND proconfig = ARRAY['search_path=pg_catalog, public', 'statement_timeout=60s']) THEN
-    RAISE EXCEPTION 'rollback_v464_reader_attributes_unexpected';
+    RAISE EXCEPTION 'rollback_v468_reader_attributes_unexpected';
   END IF;
 END
 $postflight$;

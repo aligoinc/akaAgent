@@ -1,4 +1,4 @@
--- V464: "khách không trùng" counts real customers, not sends.
+-- V468: "khách không trùng" counts real customers, not sends.
 --
 -- Replaces ONLY the body of public.aka_agent_read_campaign_effectiveness (V462). V462 keyed a customer by the
 -- Zalo UID read from the engagement table, then canonical_target_key, then the result id. Engagement tracking
@@ -10,7 +10,7 @@
 -- change; every other mode, the signature, owner, SECURITY DEFINER, search_path, 60s timeout and the
 -- ACL (postgres, service_role, aka_agent_desktop) stay as V462 left them. No table/index/role change.
 -- Preflight refuses unless the live body is exactly V462 (prosrc md5 bac1ca83f7b5cab19c0aa026ad75ea3b).
--- Rollback: migrations/rollback_v464_effectiveness_unique_customers.sql (restores the V462 body).
+-- Rollback: migrations/rollback_v468_effectiveness_unique_customers.sql (restores the V462 body).
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
@@ -19,10 +19,10 @@ DECLARE v_md5 text;
 BEGIN
   SELECT md5(prosrc) INTO v_md5 FROM pg_proc
     WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)');
-  IF v_md5 IS NULL THEN RAISE EXCEPTION 'v464_reader_missing'; END IF;
-  IF v_md5 = 'cead5384a60003570db2f2d6a907519f' THEN RAISE EXCEPTION 'v464_already_applied_do_not_reapply'; END IF;
-  IF v_md5 IS DISTINCT FROM 'bac1ca83f7b5cab19c0aa026ad75ea3b' THEN RAISE EXCEPTION 'v464_reader_changed_since_v462: %', v_md5; END IF;
-  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'v464_dependency_missing'; END IF;
+  IF v_md5 IS NULL THEN RAISE EXCEPTION 'v468_reader_missing'; END IF;
+  IF v_md5 = 'b9b969f07cf187fd586b1c97e19b2536' THEN RAISE EXCEPTION 'v468_already_applied_do_not_reapply'; END IF;
+  IF v_md5 IS DISTINCT FROM 'bac1ca83f7b5cab19c0aa026ad75ea3b' THEN RAISE EXCEPTION 'v468_reader_changed_since_v462: %', v_md5; END IF;
+  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'v468_dependency_missing'; END IF;
 END
 $preflight$;
 
@@ -145,7 +145,7 @@ BEGIN
     FROM public.auto_status st
     WHERE st.id IN (SELECT DISTINCT (r->>'statusId')::bigint FROM jsonb_array_elements(v_rows) r WHERE r->>'statusId' IS NOT NULL);
     IF coalesce((p_query->>'includeUnique')::boolean, false) THEN
-      -- V464: one customer = normalized phone, else Facebook UID, else (Zalo account, UID) because Zalo UIDs
+      -- V468: one customer = normalized phone, else Facebook UID, else (Zalo account, UID) because Zalo UIDs
       -- are account-scoped, else email, else canonical key; only rows without any identity count by detail.
       SELECT jsonb_build_object('reached', count(*), 'seen', count(*) FILTER (WHERE u.seen),
           'interacted', count(*) FILTER (WHERE u.interacted), 'friended', count(*) FILTER (WHERE u.friended))
@@ -347,26 +347,26 @@ BEGIN
 END;
 $function$;
 COMMENT ON FUNCTION public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb) IS
-  'V462/V464 read-only campaign effectiveness aggregates (summary, campaigns, hours, data_groups, list, lifetime) for WebApp/iOS/Desktop reports. service_role, or aka_agent_desktop bound to the same staff with automation credentials; 60s per call; reads engagement marks, never writes. V464: unique customers by phone, then account+UID.';
+  'V462/V468 read-only campaign effectiveness aggregates (summary, campaigns, hours, data_groups, list, lifetime) for WebApp/iOS/Desktop reports. service_role, or aka_agent_desktop bound to the same staff with automation credentials; 60s per call; reads engagement marks, never writes. V468: unique customers by phone, then account+UID.';
 
 DO $postflight$
 BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc
       WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)'))
-     IS DISTINCT FROM 'cead5384a60003570db2f2d6a907519f' THEN
-    RAISE EXCEPTION 'v464_reader_checksum_mismatch';
+     IS DISTINCT FROM 'b9b969f07cf187fd586b1c97e19b2536' THEN
+    RAISE EXCEPTION 'v468_reader_checksum_mismatch';
   END IF;
   IF (SELECT array_agg(g ORDER BY g) FROM (
         SELECT DISTINCT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS g
         FROM pg_proc pr, aclexplode(pr.proacl) a
         WHERE pr.oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)')) x)
      IS DISTINCT FROM ARRAY['aka_agent_desktop','postgres','service_role'] THEN
-    RAISE EXCEPTION 'v464_reader_acl_unexpected';
+    RAISE EXCEPTION 'v468_reader_acl_unexpected';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid = to_regprocedure('public.aka_agent_read_campaign_effectiveness(bigint,bigint,text,text,jsonb)')
       AND prosecdef AND provolatile = 's' AND proowner = 'postgres'::regrole
       AND proconfig = ARRAY['search_path=pg_catalog, public', 'statement_timeout=60s']) THEN
-    RAISE EXCEPTION 'v464_reader_attributes_unexpected';
+    RAISE EXCEPTION 'v468_reader_attributes_unexpected';
   END IF;
 END
 $postflight$;

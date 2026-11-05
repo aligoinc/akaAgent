@@ -25,7 +25,7 @@ function readError(error: { code?: string; message?: string }): DataReportReadEr
 }
 
 /**
- * V465 reader (snapshot of the nightly build, or one phone's journey) with the logged-in Desktop token and the
+ * V469 reader (snapshot of the nightly build, or one phone's journey) with the logged-in Desktop token and the
  * automation credentials, the same identity rule as the effectiveness and report pages. Read-only.
  */
 export async function readDataReport(query: Record<string, unknown>, signal: AbortSignal): Promise<unknown> {

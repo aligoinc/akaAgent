@@ -1,4 +1,4 @@
--- V465: Báo cáo dữ liệu (data reports) for the WebApp, iOS and Desktop.
+-- V469: Báo cáo dữ liệu (data reports) for the WebApp, iOS and Desktop.
 --
 -- A nightly job keeps a customer ledger per staff and writes one report snapshot per staff; opening the report
 -- reads that snapshot by primary key, so no large table is scanned while a customer waits.
@@ -26,8 +26,8 @@
 -- under the phone alone is merged into the person.
 -- Only Zalo people and phone numbers are counted (plan phase 1); Facebook and email stay out.
 --
--- Optional companion: migration_v466_zalo_users_friend_index.sql (CREATE INDEX CONCURRENTLY, run alone).
--- Rollback: migrations/rollback_v465_data_reports.sql
+-- Optional companion: migration_v470_zalo_users_friend_index.sql (CREATE INDEX CONCURRENTLY, run alone).
+-- Rollback: migrations/rollback_v469_data_reports.sql
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 
@@ -36,7 +36,7 @@ BEGIN
   IF to_regclass('private.auto_report_customers') IS NOT NULL
      OR to_regprocedure('public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb)') IS NOT NULL
      OR to_regprocedure('private.aka_agent_data_report_run(integer)') IS NOT NULL THEN
-    RAISE EXCEPTION 'v465_target_already_exists_do_not_overwrite';
+    RAISE EXCEPTION 'v469_target_already_exists_do_not_overwrite';
   END IF;
   IF to_regnamespace('private') IS NULL
      OR to_regclass('public.zalo_users') IS NULL
@@ -52,23 +52,23 @@ BEGIN
      OR to_regprocedure('public.aka_agent_internal_normalize_phone(text)') IS NULL
      OR to_regprocedure('public.normalize_phone(text)') IS NULL
      OR NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aka_agent_desktop') THEN
-    RAISE EXCEPTION 'v465_dependency_missing';
+    RAISE EXCEPTION 'v469_dependency_missing';
   END IF;
   IF to_regclass('cron.job') IS NULL OR to_regprocedure('cron.schedule(text,text,text)') IS NULL THEN
-    RAISE EXCEPTION 'v465_pg_cron_missing';
+    RAISE EXCEPTION 'v469_pg_cron_missing';
   END IF;
   IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'aka-agent-data-report-nightly') THEN
-    RAISE EXCEPTION 'v465_cron_job_already_exists';
+    RAISE EXCEPTION 'v469_cron_job_already_exists';
   END IF;
   IF coalesce(current_setting('cron.timezone', true), '') NOT IN ('GMT', 'UTC') THEN
-    RAISE EXCEPTION 'v465_cron_timezone_not_utc';
+    RAISE EXCEPTION 'v469_cron_timezone_not_utc';
   END IF;
   -- Sweeps and the journey read rely on these existing indexes; stop instead of planning full scans.
   IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_zalo_users_account_uid')
      OR NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_campaign_input_cooldown_phone')
      OR NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_campaign_details_input_data_id')
      OR NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_auto_account_contact_group_members_contact') THEN
-    RAISE EXCEPTION 'v465_expected_index_missing';
+    RAISE EXCEPTION 'v469_expected_index_missing';
   END IF;
 END
 $preflight$;
@@ -1136,7 +1136,7 @@ REVOKE ALL ON FUNCTION public.aka_agent_read_data_report(bigint,bigint,text,text
 GRANT EXECUTE ON FUNCTION public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb) TO aka_agent_desktop;
 COMMENT ON FUNCTION public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb) IS
-  'V465 Báo cáo dữ liệu reader: snapshot (nightly per-staff report, primary key read) and journey (one phone). service_role, or aka_agent_desktop bound to the same staff with automation credentials; 30s per call; read-only.';
+  'V469 Báo cáo dữ liệu reader: snapshot (nightly per-staff report, primary key read) and journey (one phone). service_role, or aka_agent_desktop bound to the same staff with automation credentials; 30s per call; read-only.';
 
 REVOKE ALL ON FUNCTION private.aka_agent_data_report_person_hash(text,bigint,text) FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 REVOKE ALL ON FUNCTION private.aka_agent_data_report_phone_hash(text) FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
@@ -1161,20 +1161,20 @@ BEGIN
         FROM pg_proc pr, aclexplode(pr.proacl) a
         WHERE pr.oid = to_regprocedure('public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb)')) x)
      IS DISTINCT FROM ARRAY['aka_agent_desktop', 'postgres', 'service_role'] THEN
-    RAISE EXCEPTION 'v465_reader_acl_unexpected';
+    RAISE EXCEPTION 'v469_reader_acl_unexpected';
   END IF;
   IF EXISTS (
     SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace, aclexplode(c.relacl) a
     WHERE n.nspname = 'private' AND c.relname LIKE 'aka\_agent\_data\_report\_%' AND a.grantee <> c.relowner
   ) THEN
-    RAISE EXCEPTION 'v465_private_table_acl_unexpected';
+    RAISE EXCEPTION 'v469_private_table_acl_unexpected';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM cron.job
     WHERE jobname = 'aka-agent-data-report-nightly' AND schedule = '*/2 18-21 * * *'
       AND command = 'SELECT private.aka_agent_data_report_run(90);' AND active = true
   ) THEN
-    RAISE EXCEPTION 'v465_cron_contract_mismatch';
+    RAISE EXCEPTION 'v469_cron_contract_mismatch';
   END IF;
 END
 $postflight$;

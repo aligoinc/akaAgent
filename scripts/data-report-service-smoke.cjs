@@ -34,7 +34,7 @@ async function main() {
       }]
     })
     const service = require(path.join(dir, 'service.cjs'))
-    // Minimal V465 shapes; the shared contract fills the rest with zeros.
+    // Minimal V469 shapes; the shared contract fills the rest with zeros.
     const payload = { version: 1, reportDate: '2026-10-31', store: { store: 8, bySource: { member: 2, phone: 4, friend: 2 } } }
     const journey = { found: true, phone: '0987654321', name: 'Khoa', customer: { careCount: 2 }, events: [], dataGroups: [] }
     const calls = []

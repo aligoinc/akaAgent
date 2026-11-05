@@ -25,6 +25,6 @@ export function registerReportHandlers(supabase: SupabaseService): void {
   // Báo cáo hiệu quả: one channel, never throws ({ok,data} | {ok:false,code,message}).
   ipcMain.handle(EFFECTIVENESS_IPC, (_, request: EffectivenessIpcRequest) => handleEffectivenessRequest(request))
 
-  // Báo cáo dữ liệu: nightly snapshot (V465) and one customer's journey; same envelope, never throws.
+  // Báo cáo dữ liệu: nightly snapshot (V469) and one customer's journey; same envelope, never throws.
   ipcMain.handle(DATA_REPORT_IPC, (_, request: DataReportIpcRequest) => handleDataReportRequest(request))
 }
