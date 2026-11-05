@@ -225,8 +225,24 @@ Postcheck: dispatch mới `7c255da3419f913f3cc8c64d5ed89fb8`, tick `18973d977bbd
 giữ `10a2465bf8273b269ed5123344cff4db`, quyền tick chỉ `service_role`, dispatch vẫn không cho `service_role`.
 Rollback (`rollback_v466_notification_fly_scheduler.sql`) trả dispatch về bản V457 theo checksum, xóa RPC tick và khóa
 cài đặt; rollback nhanh hơn chỉ cần đặt lại `pg_net`. Không đổi worker/snapshot/capture/schedule_reports nên độc lập
-V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V466 31 phép kiểm, bộ V457 103 phép kiểm trên
-V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Tài khoản gửi email không đổi: worker vẫn đọc qua action
-`sender` theo `notifications.email.sender_account_id` (đổi email gửi = trỏ khóa này sang tài khoản email khác). Phía Fly
+V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V466 27 phép kiểm, bộ V457 103 phép kiểm trên
+V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Tài khoản gửi email vẫn đọc từ DB (xem V467 bên dưới). Phía Fly
 (đồng hồ, luôn 1 máy) và thứ tự triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
+
+## V467 — cờ chọn email gửi thông báo (candidate, chưa apply)
+
+`migration_v467_notification_sender_flag.sql`: thêm `auto_accounts.is_send_noti_akabiz boolean NOT NULL DEFAULT false`.
+Bật cờ ở tài khoản email nào thì worker gửi bằng tài khoản đó; trigger `trg_aka_agent_notification_sender_exclusive`
+(AFTER INSERT/UPDATE OF cột này, chỉ khi bật) tắt cờ ở mọi tài khoản khác nên luôn chỉ một tài khoản gửi.
+RPC `aka_agent_notification_sender()` (chỉ `service_role`, cùng dạng kết quả với action `sender` + `source`): tài khoản
+bật cờ là loại email, đang bật, chưa xóa, đủ host/email gửi/mật khẩu (`source:'flag'`); không có thì tài khoản theo khóa
+`notifications.email.sender_account_id` (`source:'setting'`); không có cả hai thì `{configured:false}`. Action `sender` của
+V457 giữ nguyên. Apply tự bật cờ cho tài khoản đang ở khóa cài đặt (9742) nên không đổi hành vi.
+
+An toàn bảng nóng: ADD COLUMN có DEFAULT hằng (chỉ metadata), `lock_timeout` 3 giây, apply ngoài giờ cao điểm. Preflight
+chặn nếu `aka_agent_desktop` có quyền INSERT/UPDATE cấp bảng trên `auto_accounts` (production chỉ cấp theo cột); postcheck
+kiểm Desktop không ghi được cờ nhưng vẫn đọc được (SELECT cấp bảng, `select=*` không vỡ), checksum RPC
+`757b286e28d52497aabc81d45fe9fef8`, hàm trigger `9937edb0d6b26dca7d2407365c60b8d9`. Rollback xóa trigger, hai hàm và cột;
+API WebApp mới khi gặp `PGRST202` tự dùng lại action `sender`. Kiểm chứng: `scripts/notification-center/smoke_v467.sh`
+(bộ V467 24 phép kiểm, bộ V457 103 phép kiểm, V466 + V467, rollback, apply lại).
 
