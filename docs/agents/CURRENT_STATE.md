@@ -1,4 +1,14 @@
-# Trạng thái đã xác nhận — cập nhật 04/11/2026
+# Trạng thái đã xác nhận — cập nhật 05/11/2026
+
+[Build akaAgent 9.3.0](../audits/akaagent-9.3.0-20261105/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 và App Server Windows x64 nội bộ
+lúc 00:00–00:05 VN ngày 05/11/2026; chưa upload/phát hành/feed.** Nguồn repo chính tại
+`646ddd98` (base `c332ecf5`), chỉ đổi ba file version. Hai typecheck, bốn package,
+payload/version/kiến trúc/checksum và native SQLite đạt; giữ 105 installer cũ và native host.
+Mac ký ad-hoc, chưa notarize; Windows chưa ký/chưa chạy máy thật, Intel thử qua Rosetta.
+Server giữ riêng, không đưa credential/bộ cài vào PR hoặc Desktop. Không DB/deploy service/mobile.
+[Receipt và giới hạn](../audits/akaagent-9.3.0-20261105/build-receipt.json).
+
 
 [Bộ lọc tag Zalo đã xóa](../audits/zalo-deleted-tag-filters-20261104/README.md):
 **Chat runtime/worker đã deploy 22:50–22:51 VN, 04/11/2026; Desktop/legacy Server
@@ -21,13 +31,21 @@ và hậu kiểm checksum đạt; hai typecheck/build local đạt. Khách cần
 app để nạp catalog mới, không cần cài bản mới; tiến trình vẫn có chữ Lỗi theo
 lựa chọn của người dùng. Không apply lại hoặc tự bật campaign đã tạm dừng.
 
-[V458: nhật ký vào/rời nhóm data](../NOTIFICATION_CENTER.md#v458--nhật-ký-vàorời-nhóm-data-candidate-chưa-apply): **Candidate, chưa apply,
-cần V457 trước.** Sửa hàm bộ lọc động từ bản live (md5 `d40d1a23…`) đúng 3 chỗ, ghi sự kiện và gộp thông báo theo khung;
-mặc định không ghi gì. 40 ca PG17 (gồm kiểm chứng song song với bản cũ) và preflight live READ ONLY đạt.
-
-[V457: trung tâm thông báo (giai đoạn 1)](../NOTIFICATION_CENTER.md): **Candidate, chưa apply.** 5 bảng, trigger
-chiến dịch/tài khoản/phiên, cầu nối cài đặt cũ, điều phối trong tick 30 giây, RPC worker/số liệu/cài đặt;
-công tắc mặc định tắt + `dry_run`. 108 ca PG17 và preflight live READ ONLY đạt. Apply cần duyệt riêng, ngoài cao điểm.
+[V457/V458: trung tâm thông báo và nhật ký nhóm data](../audits/notification-center-20261104/README.md):
+**Đã apply 23:19–23:20 VN, 04/11/2026**, ledger `20261104161948` / `20261104162008`.
+Web/API mới nhất `3281a40` (PR #149) đã deploy **23:50:10–23:50:33 VN** trên machine Fly cũ,
+chỉ đổi image, giữ 2 CPU/2 GB và connection; thay bản `8da46d6` deploy lúc 23:22.
+Secrets điều phối Fly/Vault đã cấu hình; bật `notifications.enabled=true` lúc 23:24:47 VN,
+**chuyển `delivery_mode=live` lúc 23:39:22 VN** theo yêu cầu người dùng. Cùng transaction đã tắt
+trigger email chiến dịch cũ và cron 21/22; tick 66 vẫn chạy. 43 hàm khớp trial, quyền và cài đặt
+email cũ giữ nguyên. Canary 23:51 VN: API tạo `system.test` → cron/pg_net → render/fanout → worker →
+email `akabizzm@gmail.com` đạt; 1 render/1 gửi/0 retry/0 lỗi, người dùng xác nhận đã nhận thư.
+List/detail/me/web-entry/read/logout production đạt, số chưa đọc 1 → 0; cấu hình/phiên tạm đã dọn.
+Typecheck 7 workspace, build và 264 test đạt; chưa thử UI production hoặc sự kiện campaign thật.
+Không apply lại. Desktop/mobile/APNs để sau; không apply V460.
+[Receipt deploy](../audits/notification-center-20261104/receipt.json),
+[receipt chuyển live](../audits/notification-center-20261104/live-receipt.json),
+[receipt deploy mới và end-to-end](../audits/notification-center-20261104/e2e-receipt.json).
 
 [V456: cài đặt/outbox thông báo email theo chủ sở hữu](../EMAIL_NOTIFICATION_RLS_V456.md):
 **Đã apply 12:21:05 VN, 04/11/2026** (`20261104052006`); RESTRICTIVE policy theo staff token

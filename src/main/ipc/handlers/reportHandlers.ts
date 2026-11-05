@@ -2,6 +2,8 @@ import type { AccountActionStatusReportDetailQuery } from '../../../shared/actio
 import { ipcMain } from 'electron'
 import { AccountActionReportDetailQuery, AccountActionReportQuery, IPC_EVENTS } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
+import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest } from '../../../shared/effectivenessIpc'
+import { handleEffectivenessRequest } from '../../services/effectivenessReportService'
 
 export function registerReportHandlers(supabase: SupabaseService): void {
   ipcMain.handle(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_SUMMARY, async (_, query: AccountActionReportQuery) => {
@@ -17,4 +19,7 @@ export function registerReportHandlers(supabase: SupabaseService): void {
   ipcMain.handle(IPC_EVENTS.REPORT_ACCOUNT_ACTION_DETAILS, async (_, query: AccountActionReportDetailQuery) => {
     return supabase.getAccountActionReportDetails(query)
   })
+
+  // Báo cáo hiệu quả: one channel, never throws ({ok,data} | {ok:false,code,message}).
+  ipcMain.handle(EFFECTIVENESS_IPC, (_, request: EffectivenessIpcRequest) => handleEffectivenessRequest(request))
 }
