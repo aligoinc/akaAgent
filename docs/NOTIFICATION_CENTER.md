@@ -208,7 +208,12 @@ hoạt động, metadata hàm lõi và checksum khớp.
 nằm ở `occurred_at`. Nhờ vậy thông báo gộp theo khung (tạo từ đầu khung, dựng sau khi khung đóng) hiện lên đầu danh sách,
 và "Đánh dấu đã đọc tất cả" (`upToId` theo `(created_at, id)`) không đánh dấu thông báo dựng sau lúc người dùng xem.
 
-## V466 — đồng hồ chạy trên Fly (candidate, chưa apply)
+## V466 — đồng hồ chạy trên Fly (đã apply 05/11/2026 20:52:12 VN, công tắc vẫn `pg_net`)
+
+Ledger `20261105135212 / migration_v466_notification_fly_scheduler`; không apply lại. Hậu kiểm production: checksum dispatch
+`7c255da3…`/tick `18973d97…`/background tick giữ `10a2465b…`, công tắc `pg_net`, tick chỉ `service_role`, cron 66 chạy tiếp
+bình thường. PostgREST nạp lại schema 5,3 giây, 0 lỗi 5xx/503 (phút đó p99 1,2 giây). Chưa đổi sang `fly` vì API WebApp chưa
+deploy bản có đồng hồ.
 
 Theo yêu cầu 05/11/2026: Supabase không hẹn giờ hay gọi ra ngoài cho thông báo nữa.
 `migration_v466_notification_fly_scheduler.sql` thêm công tắc `notifications.dispatch_mode`:
@@ -229,7 +234,12 @@ V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V4
 V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Tài khoản gửi email vẫn đọc từ DB (xem V467 bên dưới). Phía Fly
 (đồng hồ, luôn 1 máy) và thứ tự triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
 
-## V467 — cờ chọn email gửi thông báo (candidate, chưa apply)
+## V467 — cờ chọn email gửi thông báo (đã apply 05/11/2026 20:53:08 VN)
+
+Ledger `20261105135308 / migration_v467_notification_sender_flag`; không apply lại. Hậu kiểm production: chỉ 9742 bật cờ
+(9.673 tài khoản), RPC trả 9742 `source:flag` (smtp.gmail.com:587, `akabizzm@gmail.com`, trả lời `support@akabiz.net`; mật
+khẩu không đọc ra), action `sender` V457 vẫn trả 9742, Desktop đọc được nhưng không ghi được cờ và không gọi được RPC, 13 trigger
+trên `auto_accounts`. PostgREST nạp lại schema 2,4 giây, 0 lỗi 5xx/503.
 
 `migration_v467_notification_sender_flag.sql`: thêm `auto_accounts.is_send_noti_akabiz boolean NOT NULL DEFAULT false`.
 Bật cờ ở tài khoản email nào thì worker gửi bằng tài khoản đó; trigger `trg_aka_agent_notification_sender_exclusive`
