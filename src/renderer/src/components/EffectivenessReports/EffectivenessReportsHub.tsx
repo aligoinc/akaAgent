@@ -12,6 +12,7 @@ import { AchievementsTab } from './AchievementsTab'
 import { CampaignEffectivenessTab } from './CampaignEffectivenessTab'
 import { InsightsTab } from './InsightsTab'
 import { AssetsTab } from './AssetsTab'
+import { DataReportsPage } from './DataReportsPage'
 import './effectivenessReports.css'
 
 export type ReportHubTab = 'achievements' | 'campaigns' | 'insights' | 'assets' | 'accounts'
@@ -25,6 +26,8 @@ const TABS: ReadonlyArray<{ value: ReportHubTab; label: string }> = [
   { value: 'accounts', label: 'Chi tiết theo tài khoản' }
 ]
 const TAB_STORAGE_KEY = 'aka.reports.tab'
+const VIEW_STORAGE_KEY = 'aka.reports.view'
+type ReportView = 'effectiveness' | 'data'
 const PLATFORM_LABELS: Record<PlatformFilter, string> = { all: 'Tất cả', facebook: 'Facebook', zalo: 'Zalo', email: 'Email', sms: 'SMS' }
 
 function readStoredTab(): ReportHubTab {
@@ -32,6 +35,10 @@ function readStoredTab(): ReportHubTab {
     const value = window.localStorage.getItem(TAB_STORAGE_KEY)
     return TABS.some(tab => tab.value === value) ? value as ReportHubTab : 'achievements'
   } catch { return 'achievements' }
+}
+
+function readStoredView(): ReportView {
+  try { return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'data' ? 'data' : 'effectiveness' } catch { return 'effectiveness' }
 }
 
 interface FilterState {
@@ -71,6 +78,9 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
 }) {
   const authScope = useAuthStore(state => state.user ? `${state.user.organizationId}:${state.user.staffId}:${state.user.chatWebSessionId || ''}` : '')
   const [tab, setTab] = useState<ReportHubTab>(readStoredTab)
+  // "Hiệu quả chiến dịch | Báo cáo dữ liệu"; the data report is for Zalo or SMS (same rule as the main process).
+  const [view, setView] = useState<ReportView>(readStoredView)
+  const [platformsLoaded, setPlatformsLoaded] = useState(false)
   const [activatedScope, setActivatedScope] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<AutoAccount[]>([])
   const [platforms, setPlatforms] = useState<EffectivenessPlatform[]>([])
@@ -98,6 +108,7 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
     setApplied(initial)
     setAccounts([])
     setPlatforms([])
+    setPlatformsLoaded(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authScope])
 
@@ -108,15 +119,24 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
     Promise.all([effectivenessRequest({ kind: 'platforms' }), window.electronAPI.listAccounts()]).then(([allowed, list]) => {
       if (!active) return
       setPlatforms(allowed)
+      setPlatformsLoaded(true)
       setAccounts(list.filter(account => (allowed as string[]).includes(account.flatformType))
         .sort((a, b) => a.name.localeCompare(b.name, 'vi')))
-    }).catch(error => { if (active) setOptionsError(error instanceof Error ? error.message : 'Không thể tải tài khoản.') })
+    }).catch(error => {
+      if (!active) return
+      setOptionsError(error instanceof Error ? error.message : 'Không thể tải tài khoản.')
+      setPlatformsLoaded(true)
+    })
     return () => { active = false }
   }, [activated, authScope])
 
   useEffect(() => {
     try { window.localStorage.setItem(TAB_STORAGE_KEY, tab) } catch { /* storage may be unavailable */ }
   }, [tab])
+
+  useEffect(() => {
+    try { window.localStorage.setItem(VIEW_STORAGE_KEY, view) } catch { /* storage may be unavailable */ }
+  }, [view])
 
   useEffect(() => {
     if (!openMenu) return
@@ -171,7 +191,20 @@ export default function EffectivenessReportsHub({ isActive, onNavigate }: {
     onOpenAccountDetails: () => setTab('accounts'), onNavigate
   }
 
+  const dataAllowed = platforms.includes('zalo') || platforms.includes('sms')
+  const switcher = dataAllowed && <nav className="report-switcher" aria-label="Chọn báo cáo">
+    <button type="button" aria-pressed={view !== 'data'} onClick={() => setView('effectiveness')}>Hiệu quả chiến dịch</button>
+    <button type="button" aria-pressed={view === 'data'} onClick={() => setView('data')}>Báo cáo dữ liệu</button>
+  </nav>
+  // A remembered data view waits for the platforms read instead of starting the effectiveness reads first.
+  if (view === 'data' && activated && !platformsLoaded) return <div className="report-hub" />
+  if (view === 'data' && activated && dataAllowed) return <div className="report-hub">
+    {switcher}
+    <DataReportsPage authScope={authScope} onNavigate={onNavigate} />
+  </div>
+
   return <div className="report-hub">
+    {switcher}
     <div className="report-hub-tabs" role="tablist" aria-label="Loại báo cáo">
       {TABS.map(item => <button key={item.value} type="button" role="tab" id={`report-hub-tab-${item.value}`}
         aria-selected={tab === item.value} aria-controls="report-hub-panel" onClick={() => setTab(item.value)}>{item.label}</button>)}
