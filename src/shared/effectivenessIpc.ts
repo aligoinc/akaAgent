@@ -1,8 +1,8 @@
 // Báo cáo hiệu quả trên Desktop: một kênh IPC, kết quả {ok,data} | {ok:false,code,message} như trung tâm thông báo.
 import type {
   CampaignEffectivenessDetail, CampaignEffectivenessList, EffectivenessAiSummary, EffectivenessAssets, EffectivenessCustomerPage,
-  EffectivenessDataGroups, EffectivenessHours, EffectivenessLifetime, EffectivenessListStage, EffectivenessOverview,
-  EffectivenessPlatform
+  EffectivenessDataGroups, EffectivenessHours, EffectivenessLifetime, EffectivenessLifetimeWindow, EffectivenessListStage,
+  EffectivenessOverview, EffectivenessPlatform
 } from './campaignEffectiveness'
 
 export const EFFECTIVENESS_IPC = 'report:effectiveness' as const
@@ -22,7 +22,7 @@ export type EffectivenessIpcRequest =
   | { kind: 'hours'; query: EffectivenessIpcQuery }
   | { kind: 'dataGroups'; query: EffectivenessIpcQuery }
   | { kind: 'customers'; query: EffectivenessIpcQuery; stage: EffectivenessListStage; page?: number; pageSize?: number; campaignId?: number }
-  | { kind: 'lifetime'; flatformType?: EffectivenessPlatform; accountIds?: number[] }
+  | { kind: 'lifetime'; flatformType?: EffectivenessPlatform; accountIds?: number[]; window?: EffectivenessLifetimeWindow }
   | { kind: 'assets' }
   | { kind: 'aiSummary'; query: EffectivenessIpcQuery }
 

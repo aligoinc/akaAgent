@@ -38,6 +38,31 @@ export const REPORT_RANGE_PRESETS: ReadonlyArray<{ value: ReportRangePreset; lab
   { value: 'custom', label: 'Tùy chọn' }
 ]
 
+/**
+ * "Lũy kế" window of the journey banner (Thành quả) and the "Hành trình cùng akaBiz" card (Tài sản). Short by
+ * default so opening the report only reads a week; the twelve-month read runs only when the viewer picks it
+ * (cold pages made it take 30-60+ seconds for large staff on production, 05/11/2026).
+ */
+export type EffectivenessLifetimeWindow = '7_days' | '30_days' | '3_months' | '12_months'
+
+export const EFFECTIVENESS_LIFETIME_WINDOWS: ReadonlyArray<{ value: EffectivenessLifetimeWindow; label: string; title: string }> = [
+  { value: '7_days', label: '7 ngày', title: '7 ngày qua' },
+  { value: '30_days', label: '30 ngày', title: '30 ngày qua' },
+  { value: '3_months', label: '3 tháng', title: '3 tháng qua' },
+  { value: '12_months', label: '12 tháng', title: '12 tháng qua' }
+]
+
+export const DEFAULT_EFFECTIVENESS_LIFETIME_WINDOW: EffectivenessLifetimeWindow = '7_days'
+
+export function isEffectivenessLifetimeWindow(value: unknown): value is EffectivenessLifetimeWindow {
+  return EFFECTIVENESS_LIFETIME_WINDOWS.some(item => item.value === value)
+}
+
+/** "7 ngày qua", "12 tháng qua", ... */
+export function effectivenessLifetimeWindowTitle(window: EffectivenessLifetimeWindow): string {
+  return EFFECTIVENESS_LIFETIME_WINDOWS.find(item => item.value === window)?.title || ''
+}
+
 const DATE_KEY = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /** YYYY-MM-DD of an instant in Vietnam. */
@@ -120,6 +145,16 @@ export function previousReportRange(range: ReportRange): ReportRange {
   const start = Date.parse(range.startIso)
   const end = Date.parse(range.endIso)
   return { startIso: new Date(start - (end - start)).toISOString(), endIso: range.startIso }
+}
+
+/**
+ * Range of a "lũy kế" window, always up to the end of today (Vietnam). Day windows match the report presets;
+ * twelve months starts on the first day of the month eleven months back, so the monthly chart has 12 full buckets.
+ */
+export function effectivenessLifetimeRange(window: EffectivenessLifetimeWindow, now: Date = new Date()): ReportRange {
+  if (window !== '12_months') return buildVietnamReportRange(window, undefined, undefined, now)
+  const today = vietnamDateKey(now)
+  return { startIso: vietnamDayStartIso(monthKey(today, -11)), endIso: vietnamDayStartIso(shiftDateKey(today, 1)) }
 }
 
 /** Every Vietnam calendar day touched by [startIso, endIso). */
@@ -726,6 +761,8 @@ export interface EffectivenessCustomerPage {
 export interface EffectivenessLifetimeMonth { month: string; reached: number; seen: number; interacted: number; friended: number; success: number }
 
 export interface EffectivenessLifetime {
+  /** The "lũy kế" window these totals cover (see EFFECTIVENESS_LIFETIME_WINDOWS). */
+  window: EffectivenessLifetimeWindow
   /** First campaign of this staff member (any time), for "ngày đồng hành". */
   since: string | null
   rangeStartIso: string

@@ -1,19 +1,20 @@
 import { BookOpen, Clock, Contact, Layers, MessageCircleHeart, Tags, Trophy, UserPlus, Users } from 'lucide-react'
 import {
-  REACH_MILESTONES, describeTimeSaved, formatEffectivenessNumber,
+  REACH_MILESTONES, describeTimeSaved, effectivenessLifetimeWindowTitle, formatEffectivenessNumber,
   type EffectivenessAssets, type EffectivenessLifetime
 } from '../../../../shared/campaignEffectiveness'
 import { effectivenessRequest } from './effectivenessApi'
 import { CumulativeLine, KpiTile } from './EffectivenessCharts'
+import { LifetimeWindowSelect } from './LifetimeWindowSelect'
 import { useEffectivenessData } from './useEffectivenessData'
 import type { EffectivenessTabProps } from './EffectivenessReportsHub'
 
 const monthLabel = (month: string) => `${month.slice(5, 7)}/${month.slice(0, 4)}`
 
 /** "Tài sản của bạn": what the customer has accumulated in the software (always growing). */
-export function AssetsTab({ query, scopeKey, authKey, cache, onNavigate }: EffectivenessTabProps) {
-  const lifetime = useEffectivenessData<EffectivenessLifetime>(`lifetime|${scopeKey}`,
-    signal => effectivenessRequest({ kind: 'lifetime', flatformType: query.flatformType, accountIds: query.accountIds }, signal), cache)
+export function AssetsTab({ query, scopeKey, authKey, cache, lifetimeWindow, onLifetimeWindowChange, onNavigate }: EffectivenessTabProps) {
+  const lifetime = useEffectivenessData<EffectivenessLifetime>(`lifetime|${scopeKey}|${lifetimeWindow}`,
+    signal => effectivenessRequest({ kind: 'lifetime', flatformType: query.flatformType, accountIds: query.accountIds, window: lifetimeWindow }, signal), cache)
   const assets = useEffectivenessData<EffectivenessAssets>(`assets|${authKey}`, signal => effectivenessRequest({ kind: 'assets' }, signal), cache)
   const life = lifetime.data
   const reached = life ? life.totals.uniqueReached ?? life.totals.reached : 0
@@ -22,7 +23,10 @@ export function AssetsTab({ query, scopeKey, authKey, cache, onNavigate }: Effec
 
   return <div className="eff-tab">
     <section className="eff-card" aria-labelledby="eff-journey-life">
-      <h3 id="eff-journey-life"><Trophy size={16} aria-hidden="true" /> Hành trình cùng akaBiz · 12 tháng gần nhất</h3>
+      <div className="eff-card-head">
+        <h3 id="eff-journey-life"><Trophy size={16} aria-hidden="true" /> Hành trình cùng akaBiz · {effectivenessLifetimeWindowTitle(lifetimeWindow)}</h3>
+        <LifetimeWindowSelect value={lifetimeWindow} onChange={onLifetimeWindowChange} />
+      </div>
       {lifetime.status === 'error' ? <p role="alert">{lifetime.error} <button type="button" className="btn btn-ghost btn-sm" onClick={lifetime.reload}>Thử lại</button></p>
         : !life ? <p role="status">Đang tổng hợp hành trình…</p> : <>
           <div className="eff-kpis">
@@ -34,7 +38,9 @@ export function AssetsTab({ query, scopeKey, authKey, cache, onNavigate }: Effec
             {sinceDays && <KpiTile icon={<Trophy size={16} />} label="Ngày đồng hành" value={formatEffectivenessNumber(sinceDays)}
               note={`Từ ${new Date(life.since!).toLocaleDateString('vi-VN')}`} />}
           </div>
-          <CumulativeLine ariaLabel="Khách tiếp cận cộng dồn theo tháng" points={life.monthly.map(month => ({ label: monthLabel(month.month), value: month.reached }))} />
+          {/* Month buckets only tell a story from three months on; shorter windows keep the totals and milestones. */}
+          {life.monthly.length >= 3 && <CumulativeLine ariaLabel="Khách tiếp cận cộng dồn theo tháng"
+            points={life.monthly.map(month => ({ label: monthLabel(month.month), value: month.reached }))} />}
           <div className="eff-milestones" aria-label="Cột mốc">
             {REACH_MILESTONES.map(value => <span key={value} className={`eff-milestone${life.milestones.achieved.includes(value) ? ' is-achieved' : ''}`}>
               {formatEffectivenessNumber(value)} khách

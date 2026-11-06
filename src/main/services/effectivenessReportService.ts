@@ -1,13 +1,14 @@
 import {
-  EFFECTIVENESS_AI_SUMMARY_SCHEMA, EFFECTIVENESS_SUGGESTION_TARGETS, REACH_ACTIONS, REPORT_SUMMARY_AI_CODE, REPORT_SUMMARY_AI_MODEL,
-  previousReportRange, sanitizeEffectivenessAiSummary, shiftDateKey, vietnamDateKey, vietnamDayStartIso,
+  DEFAULT_EFFECTIVENESS_LIFETIME_WINDOW, EFFECTIVENESS_AI_SUMMARY_SCHEMA, EFFECTIVENESS_SUGGESTION_TARGETS, REACH_ACTIONS,
+  REPORT_SUMMARY_AI_CODE, REPORT_SUMMARY_AI_MODEL, effectivenessLifetimeRange, isEffectivenessLifetimeWindow,
+  previousReportRange, sanitizeEffectivenessAiSummary, vietnamDateKey,
   type CampaignEffectivenessDetail, type CampaignEffectivenessList, type EffectivenessAiSummary, type EffectivenessAssets,
   type EffectivenessCustomerPage, type EffectivenessDataGroups, type EffectivenessHours, type EffectivenessLifetime,
   type EffectivenessListStage, type EffectivenessOverview, type EffectivenessPlatform, type EffectivenessQuery
 } from '../../shared/campaignEffectiveness'
 import {
   EFFECTIVENESS_HOURS_MAX_RANGE_MS, EFFECTIVENESS_LEGACY_STATUSES, EFFECTIVENESS_LIST_STAGES, EFFECTIVENESS_LONG_CACHE_MS, buildCampaignDetail, buildCampaignRows,
-  buildCustomerRows, buildEffectivenessAiContext, buildEffectivenessOverview, buildHoursReport, buildLifetime, shiftEffectivenessMonthKey,
+  buildCustomerRows, buildEffectivenessAiContext, buildEffectivenessOverview, buildHoursReport, buildLifetime,
   type EffectivenessCampaignResultRow, type EffectivenessHoursResult, type EffectivenessLifetimeResult, type EffectivenessListRow,
   type EffectivenessSummaryResult
 } from '../../shared/campaignEffectivenessAssembly'
@@ -184,19 +185,21 @@ export function customers(query: EffectivenessQuery, input: { stage: unknown; pa
   })
 }
 
-export function lifetime(raw: { flatformType?: unknown; accountIds?: unknown }): Promise<EffectivenessLifetime> {
+/** "Lũy kế" for the window the viewer picked: 7 days by default, 12 months only on request. */
+export function lifetime(raw: { flatformType?: unknown; accountIds?: unknown; window?: unknown }): Promise<EffectivenessLifetime> {
+  const window = raw.window === undefined ? DEFAULT_EFFECTIVENESS_LIFETIME_WINDOW : raw.window
+  if (!isEffectivenessLifetimeWindow(window)) throw invalid()
   const now = new Date()
   const today = vietnamDateKey(now)
-  const startKey = `${shiftEffectivenessMonthKey(today, -11)}-01`
-  const range = { startIso: vietnamDayStartIso(startKey), endIso: vietnamDayStartIso(shiftDateKey(today, 1)) }
-  const query = normalizeQuery({ ...raw, ...range })
-  return cached('lifetime', { ...query, today }, EFFECTIVENESS_LONG_CACHE_MS, async signal => {
+  const range = effectivenessLifetimeRange(window, now)
+  const query = normalizeQuery({ flatformType: raw.flatformType, accountIds: raw.accountIds, ...range })
+  return cached('lifetime', { ...query, today, window }, EFFECTIVENESS_LONG_CACHE_MS, async signal => {
     const { accounts, actions } = await repo.loadEffectivenessScope(query.flatformType, query.accountIds, signal)
     const result: EffectivenessLifetimeResult = accounts.length && actions.length
       ? await repo.readCampaignEffectiveness<EffectivenessLifetimeResult>(
           { ...rpcBase(accounts, actions.map(action => action.code)), mode: 'lifetime', includeUnique: true, ...range }, signal)
       : { monthly: [], unique: null, firstCampaignAt: null }
-    return buildLifetime(result, startKey, today, range.startIso, now)
+    return buildLifetime(result, window, range, now)
   })
 }
 
@@ -255,7 +258,7 @@ async function dispatch(request: EffectivenessIpcRequest): Promise<unknown> {
     case 'hours': return hours(normalizeQuery(request.query))
     case 'dataGroups': return dataGroups(normalizeQuery(request.query))
     case 'customers': return customers(normalizeQuery(request.query), request)
-    case 'lifetime': return lifetime({ flatformType: request.flatformType, accountIds: request.accountIds })
+    case 'lifetime': return lifetime({ flatformType: request.flatformType, accountIds: request.accountIds, window: request.window })
     case 'assets': return assets()
     case 'aiSummary': return aiSummary(normalizeQuery(request.query))
     default: throw invalid()
