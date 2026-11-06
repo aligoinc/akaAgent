@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { desktopRuntimeSnapshot } from '../services/desktopRuntimeSnapshot'
 import { registerZaloPhoneCheckHandlers } from './handlers/zaloPhoneCheckHandlers'
 import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
 import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
@@ -311,18 +312,24 @@ export function registerIpcHandlers(
         await options.beforeDailyMaintenance(dateKey, signal)
         return
       }
-      await waitForDailyMaintenanceGate(
-        dateKey,
-        () => supabase.checkDailyMaintenanceBarrier('desktop', dateKey),
-        {
-          signal,
-          onWaiting: runningCampaignCount => {
-            console.info(
-              `[ScheduleMaintenance] waiting for ${runningCampaignCount} old-day campaign(s) to settle.`
-            )
+      try {
+        await waitForDailyMaintenanceGate(
+          dateKey,
+          () => supabase.checkDailyMaintenanceBarrier('desktop', dateKey),
+          {
+            signal,
+            onWaiting: runningCampaignCount => {
+              // Web hiển thị app Desktop đang chờ, kèm hướng dẫn khi chờ quá lâu.
+              desktopRuntimeSnapshot.markMaintenanceWaiting(true)
+              console.info(
+                `[ScheduleMaintenance] waiting for ${runningCampaignCount} old-day campaign(s) to settle.`
+              )
+            }
           }
-        }
-      )
+        )
+      } finally {
+        desktopRuntimeSnapshot.markMaintenanceWaiting(false)
+      }
     },
     scopeKey: () => {
       const user = getCurrentUser()
@@ -330,6 +337,8 @@ export function registerIpcHandlers(
       return `${user.staffId}:desktop-owned`
     }
   })
+  desktopRuntimeSnapshot.reset()
+  desktopRuntimeSnapshot.attach(() => campaignScheduler.getRuntimeSnapshotSource())
   const campaignScheduler = new CampaignScheduler(
     supabase,
     webviewRegistry,
