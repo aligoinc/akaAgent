@@ -25,7 +25,7 @@ SMS mang nhãn **Web**.
   production (BEGIN/ROLLBACK, `service_role`) đạt; 63 heartbeat trong 60 giây sau apply, 66 máy online
   (85 lúc 22:26, giảm theo giờ khuya). PostgREST nạp lại schema 3,0 s, 0 lỗi 503/5xx; phút apply p99
   283 ms rồi về ~105 ms.
-- Chính sách bật cho tổ chức 1 lúc 11:09:43 VN, rồi **cho mọi tổ chức** lúc 11:27:53 VN ngày 06/11/2026 (xem mục canary bên dưới). **Chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
+- Chính sách bật cho tổ chức 1 lúc 11:09:43 VN, rồi **cho mọi tổ chức** lúc 11:27:53 VN ngày 06/11/2026 (xem mục canary bên dưới). **API/Web đã deploy** (người dùng tự deploy từ akaAgentWebApp `dev`, bản mới chạy khoảng 12:15–12:22 VN 06/11; hậu kiểm ở mục canary). **Chưa** phát hành Desktop/mobile.
 - Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
   (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
@@ -174,6 +174,16 @@ lọc bỏ (fail closed).
   không phải Server (1.365 tài khoản) sẽ thấy dòng Desktop nếu gói có quyền QR/trình duyệt.
 - `desktopOnlyLogin` vẫn tắt: tổ chức chỉ có gói Desktop chưa đăng nhập được Web/iOS. Chỉ bật sau khi API mới đã
   chạy (API cũ không có phạm vi Desktop nên tổ chức đó sẽ vào một app trống).
+- **Hậu kiểm production sau deploy API/Web (06/11/2026, 12:15–13:43 VN)**:
+  - Web: bundle `index-DkxFdYif.js` giống từng byte bản build local từ `dev` `a9501e5` (sha256 `4e0325b9…`), có header
+    `x-aka-desktop-accounts`; `/healthz` 200; route control không đăng nhập trả 401.
+  - API: `aka_agent_control_desktop_activity` lần đầu được gọi lúc 12:22:05 VN (trước đó chưa bao giờ), 256 lượt tới
+    13:42. Từ IP API WebApp `167.88.158.106`: xác thực 6.649, snapshot tài khoản 2.260, trang chiến dịch 1.605,
+    tiến trình Desktop 252, chính sách 6 — 100% HTTP 200, p50 15–22 ms, p95 ≤ 235 ms, 0 lỗi.
+  - Hai cụm 5xx cùng khoảng thời gian **không do Web/API**: 12:14–12:17 VN (~110, hết thời gian chờ 3 s/8 s khi
+    gateway chat cập nhật cùng dòng `contacts` trùng cron 12:15 `zalo-customer-phone-capture-v1` +
+    `aka-order-org-status-reconcile` 17 s); 13:36 VN (~27, backend CRM ghi `org_organization_product` giữ khoá
+    `aka-agent-zalo-runtime-entitlement-mutation` ~8 s nên claim chiến dịch Desktop hết 3 s).
 
 ## Rollout
 
