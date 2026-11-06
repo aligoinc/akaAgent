@@ -207,3 +207,72 @@ hoạt động, metadata hàm lõi và checksum khớp.
 `created_at` của thông báo là lúc nó vào hộp thư (được đặt lại khi `complete_render` chuyển sang `ready`); thời điểm sự kiện
 nằm ở `occurred_at`. Nhờ vậy thông báo gộp theo khung (tạo từ đầu khung, dựng sau khi khung đóng) hiện lên đầu danh sách,
 và "Đánh dấu đã đọc tất cả" (`upToId` theo `(created_at, id)`) không đánh dấu thông báo dựng sau lúc người dùng xem.
+
+## V465 — chất lượng thông báo sau phát lại lịch sử thật (đã apply 05/11/2026 22:26:07 VN)
+
+Ledger `20261105152607 / migration_v465_notification_quality`; không apply lại. V465 thay 5 hàm V457, mỗi hàm khóa md5 trước và sau
+(capture `4a5e881e…`, schedule `801b8ea2…`, fanout `461b803b…`, worker `60eb06ec…`, snapshot `c67d59fa…`). Nó thêm:
+
+- 2 index `idx_auto_notifications_digest` và `idx_auto_notification_deliveries_email_cap`;
+- 2 cấu hình `notifications.digest_minutes.campaign` = 10 và `notifications.email.hourly_cap` = 20.
+
+Nội dung sửa:
+
+- snapshot chiến dịch đếm qua index;
+- gom thông báo chiến dịch theo mốc 10 phút, worker gộp từ 2 thông báo;
+- trần 20 email sự kiện/giờ;
+- báo cáo tính SMS theo máy;
+- không tạo báo cáo cho nhân viên đã ngừng;
+- snapshot tài khoản thêm `loginLog`/`warnLog`.
+
+V465 được apply trước khi deploy renderer WebApp mới. Bản đang chạy vẫn đọc được, chỉ phần chữ (lý do tài khoản, ghi chú) chờ
+deploy. Lỗi, số liệu phát lại, hậu kiểm và rollback ở [NOTIFICATION_REPLAY_20261105.md](NOTIFICATION_REPLAY_20261105.md).
+
+## V466 — đồng hồ chạy trên Fly (đã apply 05/11/2026 20:52:12 VN, công tắc vẫn `pg_net`)
+
+Ledger `20261105135212 / migration_v466_notification_fly_scheduler`; không apply lại. Hậu kiểm production: checksum dispatch
+`7c255da3…`/tick `18973d97…`/background tick giữ `10a2465b…`, công tắc `pg_net`, tick chỉ `service_role`, cron 66 chạy tiếp
+bình thường. PostgREST nạp lại schema 5,3 giây, 0 lỗi 5xx/503 (phút đó p99 1,2 giây). Chưa đổi sang `fly` vì API WebApp chưa
+deploy bản có đồng hồ.
+
+Theo yêu cầu 05/11/2026: Supabase không hẹn giờ hay gọi ra ngoài cho thông báo nữa.
+`migration_v466_notification_fly_scheduler.sql` thêm công tắc `notifications.dispatch_mode`:
+
+- `pg_net` (mặc định, apply xong không đổi hành vi): như mục Điều phối ở trên.
+- `fly`: `aka_agent_notification_dispatch()` trả `{enabled:true, mode:'fly'}` ngay, không lập lịch, không dọn,
+  không `net.http_post`. API WebApp trên Fly gọi `aka_agent_notification_tick()` (chỉ `service_role`) mỗi ~30 giây:
+  lập lịch báo cáo, dọn hằng giờ, kiểm việc rồi nhận khóa thuê 60 giây trong `dispatch_state` (cùng khóa với đường
+  pg_net, `last_request_id` = NULL); trả `run:true` thì worker chạy ngay trong tiến trình và gọi `release` khi xong.
+  Ở `pg_net` RPC tick trả `run:false`.
+
+Preflight: dispatch phải đúng bản V457 (`6b4f5464803f8b528072e44703ef94de`), chưa có RPC tick/khóa cài đặt.
+Postcheck: dispatch mới `7c255da3419f913f3cc8c64d5ed89fb8`, tick `18973d977bbdc8519a0e36148d5ada91`, background tick
+giữ `10a2465bf8273b269ed5123344cff4db`, quyền tick chỉ `service_role`, dispatch vẫn không cho `service_role`.
+Rollback (`rollback_v466_notification_fly_scheduler.sql`) trả dispatch về bản V457 theo checksum, xóa RPC tick và khóa
+cài đặt; rollback nhanh hơn chỉ cần đặt lại `pg_net`. Không đổi worker/snapshot/capture/schedule_reports nên độc lập
+V465. Kiểm chứng local: `scripts/notification-center/smoke_v466.sh` (bộ V466 27 phép kiểm, bộ V457 103 phép kiểm trên
+V466, V465 + V466 hai thứ tự, apply lại bị chặn, rollback). Tài khoản gửi email vẫn đọc từ DB (xem V467 bên dưới). Phía Fly
+(đồng hồ, luôn 1 máy) và thứ tự triển khai: akaAgentWebApp `docs/NOTIFICATIONS_FLY_SCHEDULER.md`.
+
+## V467 — cờ chọn email gửi thông báo (đã apply 05/11/2026 20:53:08 VN)
+
+Ledger `20261105135308 / migration_v467_notification_sender_flag`; không apply lại. Hậu kiểm production: chỉ 9742 bật cờ
+(9.673 tài khoản), RPC trả 9742 `source:flag` (smtp.gmail.com:587, `akabizzm@gmail.com`, trả lời `support@akabiz.net`; mật
+khẩu không đọc ra), action `sender` V457 vẫn trả 9742, Desktop đọc được nhưng không ghi được cờ và không gọi được RPC, 13 trigger
+trên `auto_accounts`. PostgREST nạp lại schema 2,4 giây, 0 lỗi 5xx/503.
+
+`migration_v467_notification_sender_flag.sql`: thêm `auto_accounts.is_send_noti_akabiz boolean NOT NULL DEFAULT false`.
+Bật cờ ở tài khoản email nào thì worker gửi bằng tài khoản đó; trigger `trg_aka_agent_notification_sender_exclusive`
+(AFTER INSERT/UPDATE OF cột này, chỉ khi bật) tắt cờ ở mọi tài khoản khác nên luôn chỉ một tài khoản gửi.
+RPC `aka_agent_notification_sender()` (chỉ `service_role`, cùng dạng kết quả với action `sender` + `source`): tài khoản
+bật cờ là loại email, đang bật, chưa xóa, đủ host/email gửi/mật khẩu (`source:'flag'`); không có thì tài khoản theo khóa
+`notifications.email.sender_account_id` (`source:'setting'`); không có cả hai thì `{configured:false}`. Action `sender` của
+V457 giữ nguyên. Apply tự bật cờ cho tài khoản đang ở khóa cài đặt (9742) nên không đổi hành vi.
+
+An toàn bảng nóng: ADD COLUMN có DEFAULT hằng (chỉ metadata), `lock_timeout` 3 giây, apply ngoài giờ cao điểm. Preflight
+chặn nếu `aka_agent_desktop` có quyền INSERT/UPDATE cấp bảng trên `auto_accounts` (production chỉ cấp theo cột); postcheck
+kiểm Desktop không ghi được cờ nhưng vẫn đọc được (SELECT cấp bảng, `select=*` không vỡ), checksum RPC
+`757b286e28d52497aabc81d45fe9fef8`, hàm trigger `9937edb0d6b26dca7d2407365c60b8d9`. Rollback xóa trigger, hai hàm và cột;
+API WebApp mới khi gặp `PGRST202` tự dùng lại action `sender`. Kiểm chứng: `scripts/notification-center/smoke_v467.sh`
+(bộ V467 24 phép kiểm, bộ V457 103 phép kiểm, V466 + V467, rollback, apply lại).
+
