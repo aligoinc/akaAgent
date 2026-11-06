@@ -25,7 +25,7 @@ SMS mang nhãn **Web**.
   production (BEGIN/ROLLBACK, `service_role`) đạt; 63 heartbeat trong 60 giây sau apply, 66 máy online
   (85 lúc 22:26, giảm theo giờ khuya). PostgREST nạp lại schema 3,0 s, 0 lỗi 503/5xx; phút apply p99
   283 ms rồi về ~105 ms.
-- Chính sách bật cho tổ chức 1 (akaBiz) lúc 11:09:43 VN ngày 06/11/2026 (xem mục canary bên dưới). **Chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
+- Chính sách bật cho tổ chức 1 lúc 11:09:43 VN, rồi **cho mọi tổ chức** lúc 11:27:53 VN ngày 06/11/2026 (xem mục canary bên dưới). **Chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
 - Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
   (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
@@ -167,6 +167,13 @@ lọc bỏ (fail closed).
   deploy API/Web từ akaAgentWebApp `dev` (PR #151 đã merge, `a9501e5`): API đang chạy là bản cũ, không đọc chính
   sách (0 lượt gọi RPC chính sách trong edge log).
 - Tắt: đặt lại `{"enabled":false,"organizationIds":null,"desktopOnlyLogin":false}`, không cần deploy.
+- **Mở cho mọi tổ chức lúc 11:27:53 VN** theo yêu cầu người dùng (bỏ bước canary):
+  `{"enabled":true,"organizationIds":[1],...}` → `{"enabled":true,"organizationIds":null,"desktopOnlyLogin":false}`
+  (UPDATE có guard giá trị cũ). Hậu kiểm: hàm chính sách trả `enabled:true` cho 1/2/26/358/990, `false` cho 0/NULL,
+  `desktopOnlyLogin` false; hàm xác thực vẫn md5 `2c10aa78…`. Sau khi deploy API/Web, 437 tổ chức có tài khoản Zalo
+  không phải Server (1.365 tài khoản) sẽ thấy dòng Desktop nếu gói có quyền QR/trình duyệt.
+- `desktopOnlyLogin` vẫn tắt: tổ chức chỉ có gói Desktop chưa đăng nhập được Web/iOS. Chỉ bật sau khi API mới đã
+  chạy (API cũ không có phạm vi Desktop nên tổ chức đó sẽ vào một app trống).
 
 ## Rollout
 
