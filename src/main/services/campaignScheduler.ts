@@ -1,3 +1,4 @@
+import type { DesktopRuntimeSnapshotSource } from './desktopRuntimeSnapshot'
 import {
   isNativeGroupPostShare, validateGroupPostShareLinks, GROUP_POST_SHARE_WORKFLOW_VERSION
 } from '../../shared/facebookGroupPostShare'
@@ -786,6 +787,9 @@ export class CampaignScheduler {
   private dispatching = false
   private wakeRequested = false
   private activeAccountRuns = new Set<number>()
+  /** Chỉ cho heartbeat Desktop (v461): chiến dịch đang chạy theo tài khoản, tài khoản của tick gần nhất. */
+  private runtimeCampaignByAccount = new Map<number, number>()
+  private lastTickAccounts: AutoAccount[] = []
   private activeZaloAccountRuns = new Set<number>()
   private externalAccountRuns = new Map<number, string>()
   private activeV2Aborts = new Map<number, AbortController>()
@@ -983,6 +987,7 @@ export class CampaignScheduler {
   start(options: SchedulerStartOptions = {}): void {
     if (this.running) return
     this.running = true
+    this.lastTickAccounts = []
     this.schedulerConnectivityIssueActive = false
     const initialDelayMs = Math.max(0, options.initialDelayMs ?? 0)
     if (initialDelayMs > 0) {
@@ -1002,6 +1007,7 @@ export class CampaignScheduler {
 
   stop(): void {
     cancelFacebookRandomAi()
+    this.lastTickAccounts = []
     this.webEnrichment?.stop()
     this.requestZaloRuntimeStop('shutdown')
     this.cancelFailureCleanups()
@@ -1086,6 +1092,17 @@ export class CampaignScheduler {
 
   isRunning(): boolean {
     return this.running
+  }
+
+  /** Ảnh chụp chỉ đọc RAM cho heartbeat Desktop (v461); không đọc DB. */
+  getRuntimeSnapshotSource(): DesktopRuntimeSnapshotSource {
+    return {
+      running: this.running,
+      accounts: this.lastTickAccounts,
+      activeAccountIds: [...this.activeAccountRuns],
+      runningCampaigns: new Map(this.runtimeCampaignByAccount),
+      isBrowserTabOpen: accountId => this.webviewRegistry.isRegistered(accountId)
+    }
   }
 
   blockZaloRuntimeForRestart(
@@ -1612,6 +1629,7 @@ export class CampaignScheduler {
 
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
+      this.lastTickAccounts = accounts
       // Cache-only scheduling of optional work; background loads never delay campaigns.
       this.webEnrichment?.observe(accounts)
 
@@ -1947,7 +1965,13 @@ export class CampaignScheduler {
         continue
       }
       if (!this.running) break
-      const outcome = await this.executeCampaign(account, currentCampaign)
+      this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
+      let outcome: Awaited<ReturnType<typeof this.executeCampaign>>
+      try {
+        outcome = await this.executeCampaign(account, currentCampaign)
+      } finally {
+        if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
+      }
       if (outcome === 'concurrency_wait') break
       if (this.boundaryStoppedAccountQueues.delete(account.id) || this.hasFailedAccountRun(account.id)) break
       if (!this.activeCampaignRunUnits.has(campaign.id)) {

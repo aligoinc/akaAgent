@@ -1,0 +1,27 @@
+{
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "applied_at_vn": "2026-11-06 12:12:35",
+ "history": {
+  "version": "20261106051235",
+  "name": "migration_v472_fb_comment_post_unavailable",
+  "statements_md5": "4e4c516060eed77603b85a0fd25cd451"
+ },
+ "migration_md5": "4e4c516060eed77603b85a0fd25cd451",
+ "migration_sha256": "3e5f0afcc65a3d8d4aedf571c04afffaf2af3c536aa9871ae2f6fc602c902e20",
+ "rollback_sha256": "98c22c8a0fad7521a7ea84da0c54c1a33d2f8159b50b680ee033c51fc8a81a29",
+ "preflight_read_only_vn": "2026-11-06 12:06:32 — block/workflow/74-77 checksums khớp snapshot, sequence 126 = max(id), không có producer khác",
+ "rehearsal": "Chạy nguyên file + ghi lịch sử rồi ROLLBACK: đạt kiểm tra trước/sau; sau ROLLBACK block bản cũ, 74-77 NULL, không có mã mới/lịch sử; tiêu 1 số sequence (127)",
+ "result": {
+  "block_2616_md5": "83bcdb4081685f2c858f4e0937348767",
+  "detail_mode_74_77": {
+   "74": "inherit",
+   "75": "inherit",
+   "76": "inherit",
+   "77": "inherit"
+  },
+  "new_error_id": 128,
+  "new_error_code": "err_fb_comment_box_not_found",
+  "sequence_last_value": 128
+ },
+ "post_apply_check": "auto_error 108 dòng: chỉ 74-77 đổi detail_mode và thêm id 128; 103 dòng khác giữ nguyên (so toàn dòng trừ updated_at với before.json)"
+}
