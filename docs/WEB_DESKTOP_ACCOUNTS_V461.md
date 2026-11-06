@@ -25,7 +25,7 @@ SMS mang nhãn **Web**.
   production (BEGIN/ROLLBACK, `service_role`) đạt; 63 heartbeat trong 60 giây sau apply, 66 máy online
   (85 lúc 22:26, giảm theo giờ khuya). PostgREST nạp lại schema 3,0 s, 0 lỗi 503/5xx; phút apply p99
   283 ms rồi về ~105 ms.
-- **Chưa** bật chính sách, **chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
+- Chính sách bật cho tổ chức 1 (akaBiz) lúc 11:09:43 VN ngày 06/11/2026 (xem mục canary bên dưới). **Chưa** deploy API/Web, **chưa** phát hành Desktop/mobile.
 - Đường dự phòng khi không bấm được thẻ MCP: `migrations/tests/migration_v461_web_desktop_accounts_guarded_apply.sql`
   (xem Rollout). Không dùng cho v461 nữa vì đã apply (script tự từ chối khi chạy lại).
 
@@ -152,6 +152,21 @@ lọc bỏ (fail closed).
   `scripts/test-web-desktop-accounts-guarded-apply.sh`: chạy một thông điệp như SQL Editor, trạng thái
   cuối giống hệt áp file migration thường (fingerprint hàm/cột/constraint/cấu hình), chạy lại bị chặn,
   hàm nguồn lệch thì dừng mà không đổi gì.
+
+## Canary tổ chức 1 (akaBiz) — 06/11/2026 11:09:43 VN
+
+- `auto_system_settings` id 93: `{"enabled":false,"organizationIds":null,"desktopOnlyLogin":false}` →
+  `{"enabled":true,"organizationIds":[1],"desktopOnlyLogin":false}` (UPDATE có guard giá trị cũ, một dòng, không
+  DDL nên PostgREST không nạp lại schema). `organizationIds` phải là số (`[1]`); chuỗi `["1"]` không khớp.
+- Hậu kiểm: `aka_agent_control_web_desktop_accounts_policy` trả `enabled:true` cho tổ chức 1, `enabled:false` cho
+  2/26/358/990/0/NULL; `desktopOnlyLogin` false ở mọi tổ chức. Một dòng khoá, `is_secret` false, ACL hàm giữ
+  `{postgres=X/postgres,service_role=X/postgres}`. `aka_agent_authenticate_control_session` chỉ đọc chính sách cho
+  `desktopOnlyLogin` (vẫn md5 `2c10aa78…`), tổ chức 1 có gói Server/SMS nên đăng nhập không đổi. Edge 04:00–04:10
+  UTC: 0 lỗi 5xx, RPC xác thực 0 lỗi; không lỗi Postgres nào liên quan.
+- Tổ chức 1 có 28 tài khoản Zalo không phải Server, gói QR + trình duyệt. Người dùng **chưa thấy gì** cho tới khi
+  deploy API/Web từ akaAgentWebApp `dev` (PR #151 đã merge, `a9501e5`): API đang chạy là bản cũ, không đọc chính
+  sách (0 lượt gọi RPC chính sách trong edge log).
+- Tắt: đặt lại `{"enabled":false,"organizationIds":null,"desktopOnlyLogin":false}`, không cần deploy.
 
 ## Rollout
 
