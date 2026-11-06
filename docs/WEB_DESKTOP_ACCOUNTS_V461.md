@@ -184,6 +184,12 @@ lọc bỏ (fail closed).
     gateway chat cập nhật cùng dòng `contacts` trùng cron 12:15 `zalo-customer-phone-capture-v1` +
     `aka-order-org-status-reconcile` 17 s); 13:36 VN (~27, backend CRM ghi `org_organization_product` giữ khoá
     `aka-agent-zalo-runtime-entitlement-mutation` ~8 s nên claim chiến dịch Desktop hết 3 s).
+- **Bật `desktopOnlyLogin` lúc 13:46:24 VN 06/11/2026** theo yêu cầu người dùng, sau khi API mới đã chạy:
+  `{"enabled":true,"organizationIds":null,"desktopOnlyLogin":true}` (UPDATE có guard giá trị cũ, không DDL). Hàm chính
+  sách trả `desktopOnlyLogin:true` cho tổ chức >0, `false` cho 0/NULL; hàm xác thực vẫn md5 `2c10aa78…`. Mở đăng nhập
+  Web/PWA và iOS bản mới (gửi header Desktop) cho **261 tổ chức** có Zalo mã QR nhưng không có Zalo Server/SMS (261 nhân
+  viên đang hoạt động); iOS bản cũ không gửi header vẫn nhận 401 như trước (API kiểm). Tắt riêng cờ này: đặt
+  `desktopOnlyLogin:false`, không cần deploy.
 
 ## Rollout
 
