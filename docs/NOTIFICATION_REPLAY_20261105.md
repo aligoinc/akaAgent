@@ -40,7 +40,8 @@ hỏng UPDATE của khách (đếm production = 0).
 
 ## Sửa
 
-- **akaAgent V465** (`migrations/migration_v465_notification_quality.sql`, CANDIDATE, chưa apply): sinh từ đúng thân hàm V457, chỉ thay 5 hàm
+- **akaAgent V465** (`migrations/migration_v465_notification_quality.sql`, **đã apply akachat 05/11/2026 22:26:07 VN**, ledger
+  `20261105152607`; xem mục Triển khai): sinh từ đúng thân hàm V457, chỉ thay 5 hàm
   (md5 trước/sau khóa cứng), thêm 2 index nhỏ trên bảng thông báo và 2 cấu hình:
   - F1: đếm kết quả theo `(action_code, status)` chỉ đọc index `idx_auto_campaign_details_automation_status`, tên hành động/nhóm kết quả lấy
     từ 1 dòng gần nhất mỗi nhóm (200 nghìn dòng production: `report_group` luôn suy được từ `(action_code, status)`, `action_code` NULL 0,06%).
@@ -86,13 +87,56 @@ sạch), typecheck 7 workspace. Production chỉ đọc: logic SMS mới trên 4
 9 báo cáo 18:00 tạo lúc 18:00:26, render xong 18:00:33, 8 email gửi 18:00:36–43, staff 5 (đã ngừng) bỏ qua đúng — khớp dự đoán phát lại.
 17 người đăng ký "Hoàn thành" chưa có chiến dịch nào hoàn thành kể từ khi live (chỉ có cập nhật bảo trì 00:00 không đổi trạng thái).
 
-## Triển khai (cần đồng ý riêng) và rollback
+## Triển khai và rollback
 
-1. Deploy WebApp renderer trước (đọc được cả snapshot V457).
-2. Apply V465 ngoài giờ cao điểm: `CREATE OR REPLACE FUNCTION` làm PostgREST nạp lại schema; tạo index giữ khóa SHARE ngắn trên
-   `auto_notifications` (bảng nhỏ) tới hết giao dịch. **Số V464 đã dùng** (`migration_v464_native_desktop_only_login`): kiểm lại số trước khi apply.
-3. Rollback: `migrations/rollback_v465_notification_quality.sql` (khôi phục đúng 5 hàm V457, bỏ 2 index/2 cấu hình, không đụng dữ liệu
-   thông báo); WebApp quay về image trước.
+Kế hoạch ban đầu là deploy renderer trước. Ngày 05/11/2026 người dùng yêu cầu apply V465 trước, khi WebApp chưa deploy.
+
+**Apply V465: 22:26:07 VN** (`20261105152607 / migration_v465_notification_quality`; không apply lại).
+
+- **Tương thích bản WebApp đang chạy** (`3281a40`), đối chiếu mã trước khi apply:
+  - renderer đọc snapshot lỏng (`obj/arr/int/str`) nên bỏ qua trường mới `loginLog`/`warnLog`/`chatSession.updatedAt`;
+  - `lastLog` giữ nguyên câu V457, và snapshot chiến dịch cùng cấu trúc;
+  - cảnh báo "Chưa gắn máy SMS…" dùng mã cũ `account_logged_out_with_campaigns`, hiện nguyên câu;
+  - gộp từ 2 thông báo dùng cùng `merged`, mà renderer cũ xử lý mọi `merged.length > 1`;
+  - email vượt trần được đánh `skipped/hourly_cap`, worker cũ không nhận.
+- **Có hiệu lực ngay**:
+  - F1: snapshot chiến dịch lớn;
+  - F2/F9: gom 10 phút và trần 20 email/giờ;
+  - F6: đếm SMS theo máy, kèm cảnh báo "Chưa gắn máy SMS…";
+  - F7: báo cáo ưu tiên chiến dịch có hoạt động hôm nay;
+  - F8: không tạo báo cáo cho nhân viên đã ngừng.
+- **Chỉ có sau khi deploy WebApp từ `dev`**:
+  - F3: lý do đăng xuất/checkpoint đúng ngữ cảnh;
+  - F4: ghi chú bỏ XPath/mã lỗi;
+  - F5: thông báo đăng nhập không ghi "bị ảnh hưởng";
+  - báo cáo ghi "từ DD/MM HH:MM" và chỉ liệt kê chiến dịch có kết quả hôm nay;
+  - gửi bằng dữ liệu sự kiện khi snapshot lỗi từ lần thử thứ 3.
+- **Kiểm trước khi apply (production, chỉ đọc)**:
+  - 22:23 VN, 2 tiến trình đang chạy;
+  - 5 hàm đúng md5 V457 mà preflight chờ, chưa có V465 trong lịch sử migration (V464 đã dùng số);
+  - đủ index `idx_auto_campaign_details_automation_status` và cột `auto_account_logs.details/login_status`;
+  - không có thông báo đang chờ, 90 phút tới không có báo cáo.
+- **Hậu kiểm**:
+  - 5 hàm đúng md5 sau;
+  - hàm V466 (dispatch/tick) và V467 (sender) giữ nguyên md5;
+  - 2 index hợp lệ;
+  - cấu hình `digest_minutes.campaign=10`, `email.hourly_cap=20`;
+  - worker/snapshot chỉ `postgres` + `service_role`, `stats` chạy được;
+  - cron 66 `succeeded` liên tục;
+  - PostgREST nạp lại schema lúc 22:26:08 (truy vấn 2,6 giây); 22:22–22:29 không có lỗi 5xx/503, trung bình 48–60 ms;
+  - lỗi `permission denied` của client anon cũ giữ nhịp như trước apply (285–470 lần/5 phút, có từ V435).
+- **Chạy thử chỉ đọc**:
+  - snapshot chiến dịch 11980 (63.636 dòng chi tiết): lần đầu 8.432 ms (cache lạnh), lần sau 78 ms. V457 mất 36,8 giây mỗi lần.
+    Lần đầu có thể vượt trần 8 giây của PostgREST, khi đó worker thử lại sau 1 phút và lúc ấy cache đã ấm.
+  - snapshot báo cáo 39 ms; 3 snapshot tài khoản tổng 111 ms (`loginLog` có ở cả 3);
+  - EXPLAIN câu gom mới của capture dùng `idx_auto_notifications_digest`;
+  - trigger capture không có khối bắt lỗi. Lần đổi trạng thái đầu tiên sau apply (chiến dịch của người đăng ký "Hoàn thành") vẫn
+    UPDATE thành công.
+
+**Còn lại**: deploy WebApp (`dev`) để có phần renderer; theo dõi thông báo/báo cáo thật đầu tiên đi qua V465.
+
+**Rollback**: `migrations/rollback_v465_notification_quality.sql` khôi phục đúng 5 hàm V457, bỏ 2 index và 2 cấu hình, không đụng
+dữ liệu thông báo. Renderer mới đọc được cả snapshot V457, nên rollback DB không cần quay lại image WebApp.
 
 ## Chưa làm
 

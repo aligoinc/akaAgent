@@ -208,6 +208,26 @@ hoạt động, metadata hàm lõi và checksum khớp.
 nằm ở `occurred_at`. Nhờ vậy thông báo gộp theo khung (tạo từ đầu khung, dựng sau khi khung đóng) hiện lên đầu danh sách,
 và "Đánh dấu đã đọc tất cả" (`upToId` theo `(created_at, id)`) không đánh dấu thông báo dựng sau lúc người dùng xem.
 
+## V465 — chất lượng thông báo sau phát lại lịch sử thật (đã apply 05/11/2026 22:26:07 VN)
+
+Ledger `20261105152607 / migration_v465_notification_quality`; không apply lại. V465 thay 5 hàm V457, mỗi hàm khóa md5 trước và sau
+(capture `4a5e881e…`, schedule `801b8ea2…`, fanout `461b803b…`, worker `60eb06ec…`, snapshot `c67d59fa…`). Nó thêm:
+
+- 2 index `idx_auto_notifications_digest` và `idx_auto_notification_deliveries_email_cap`;
+- 2 cấu hình `notifications.digest_minutes.campaign` = 10 và `notifications.email.hourly_cap` = 20.
+
+Nội dung sửa:
+
+- snapshot chiến dịch đếm qua index;
+- gom thông báo chiến dịch theo mốc 10 phút, worker gộp từ 2 thông báo;
+- trần 20 email sự kiện/giờ;
+- báo cáo tính SMS theo máy;
+- không tạo báo cáo cho nhân viên đã ngừng;
+- snapshot tài khoản thêm `loginLog`/`warnLog`.
+
+V465 được apply trước khi deploy renderer WebApp mới. Bản đang chạy vẫn đọc được, chỉ phần chữ (lý do tài khoản, ghi chú) chờ
+deploy. Lỗi, số liệu phát lại, hậu kiểm và rollback ở [NOTIFICATION_REPLAY_20261105.md](NOTIFICATION_REPLAY_20261105.md).
+
 ## V466 — đồng hồ chạy trên Fly (đã apply 05/11/2026 20:52:12 VN, công tắc vẫn `pg_net`)
 
 Ledger `20261105135212 / migration_v466_notification_fly_scheduler`; không apply lại. Hậu kiểm production: checksum dispatch
