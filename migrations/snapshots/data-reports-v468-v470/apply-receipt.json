@@ -1,0 +1,95 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-05/06 (approved running the SQL then merging; V469/V470 confirmed in the Supabase MCP prompt)",
+  "migrations": [
+    {
+      "version": "20261105154926",
+      "name": "migration_v468_effectiveness_unique_customers",
+      "file": "migrations/migration_v468_effectiveness_unique_customers.sql",
+      "md5": "2ccdc7bbcff0a75c2afdf8a5f6f2190a",
+      "sha256": "10ac2d0475fdc780bf5a4d81f4b8c09cc54e147127b9c82930f7a87793693532",
+      "bytes": 25375,
+      "ledgerStatementsMd5": "2ccdc7bbcff0a75c2afdf8a5f6f2190a",
+      "appliedAt": "2026-11-05T15:49:26Z"
+    },
+    {
+      "version": "20261106155434",
+      "name": "migration_v469_data_reports",
+      "file": "migrations/migration_v469_data_reports.sql",
+      "md5": "e81b96b36ded3cf3563b758430f5633d",
+      "sha256": "8e40b818deaf7f5dffacf0eac913c348a7fc0a5d5c41480e828a290fb99ea7dd",
+      "bytes": 68980,
+      "ledgerStatementsMd5": "e81b96b36ded3cf3563b758430f5633d",
+      "appliedAt": "2026-11-06T15:54:34Z"
+    },
+    {
+      "version": "20261106155735",
+      "name": "migration_v470_zalo_users_friend_index",
+      "file": "migrations/migration_v470_zalo_users_friend_index.sql",
+      "md5": "80baff4e1fe5b101373de064024396c2",
+      "sha256": "b7f22bc115a4d1fe6511304215d4fc55d83b04a58c9cdb16f46d0634734dcce5",
+      "bytes": 698,
+      "ledgerStatementsMd5": "80baff4e1fe5b101373de064024396c2",
+      "appliedAt": "2026-11-06T15:57:35Z",
+      "note": "Index built first by running the file alone (CREATE INDEX CONCURRENTLY), then the ledger row was written by a DO block that refuses unless the index is valid/ready with the expected definition."
+    }
+  ],
+  "method": "Supabase MCP execute_sql. V468/V469: one DO block per migration embeds the exact file text, refuses on md5/byte mismatch or an existing ledger row, comments out the file's BEGIN/COMMIT, EXECUTEs it and inserts the ledger row in the same transaction. V470: the file alone, then a guarded ledger DO block. Wrapper checks rehearsed on local Postgres 16 before apply.",
+  "attempts": {
+    "v469PromptExpired": 5,
+    "detail": "The Supabase MCP confirmation prompt expired unanswered five times (2026-11-05 evening, then about 11:34, 17:29, 17:39 and 17:45 VN on 2026-11-06); each time nothing ran and the read-only state was checked again before resending. The sixth send at 22:54 VN was approved.",
+    "v470ClientTimeout": "The MCP client stopped waiting after 60 s; the server kept building (pg_stat_progress_create_index: index validation 84% at 70 s) and finished at about 100 s. Checked before writing the ledger row."
+  },
+  "loadAtApply": {
+    "vnTime": "2026-11-06 22:53-22:58",
+    "edgeP50MsByMinute": {"15:53Z": 47, "15:54Z": 47, "15:55Z": 48, "15:56Z": 47, "15:57Z": 47},
+    "edgeP99MsByMinute": {"15:53Z": 107, "15:54Z": 304, "15:55Z": 125, "15:56Z": 124, "15:57Z": 105},
+    "http5xx": 0,
+    "http503": 0
+  },
+  "postApply": {
+    "v468": {
+      "readerBodyMd5": "b9b969f07cf187fd586b1c97e19b2536",
+      "readerAcl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "readerConfig": ["search_path=pg_catalog, public", "statement_timeout=60s"],
+      "staff1108Last30Days": {"uniqueReached": 8648, "successfulReachSends": 13665, "ms": 16600}
+    },
+    "v469": {
+      "tables": ["auto_report_contact_keys", "auto_report_customers", "auto_report_daily", "auto_report_group_daily", "auto_report_groups", "auto_report_phone_links", "auto_report_runs", "auto_report_snapshots", "auto_report_staff", "auto_report_stage (unlogged)", "auto_report_state"],
+      "tableGrantsBeyondOwner": 0,
+      "stateRows": ["contacts", "details", "engagement", "inputs", "people"],
+      "reader": {
+        "signature": "public.aka_agent_read_data_report(bigint,bigint,text,text,jsonb)",
+        "owner": "postgres",
+        "securityDefiner": true,
+        "volatility": "stable",
+        "config": ["search_path=pg_catalog, public", "statement_timeout=30s"],
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+        "anonCanExecute": false,
+        "authenticatedCanExecute": false
+      },
+      "privateFunctions": "11 private.aka_agent_data_report_* functions, EXECUTE postgres only",
+      "cron": {"jobid": 111, "name": "aka-agent-data-report-nightly", "schedule": "*/2 18-21 * * *", "command": "SELECT private.aka_agent_data_report_run(90);", "active": true, "username": "postgres", "cronTimezone": "GMT"},
+      "serviceRoleCall": {
+        "how": "set local role service_role + request.jwt.claims {\"role\":\"service_role\"}, rolled back",
+        "snapshotStaff1108": {"reportDate": null, "builtAt": null, "payload": null},
+        "journeyInvalidPhone": {"found": false, "phone": null},
+        "serviceRoleReadsLedgerDirectly": false
+      },
+      "firstNight": "Runs every 2 minutes from 2026-11-06T18:00Z (01:00 VN on 07/11); snapshots appear once the four sweeps catch up (expected after 1-2 nights)."
+    },
+    "v470": {
+      "index": "CREATE INDEX idx_zalo_users_friends_account_created ON public.zalo_users USING btree (account_id, created_at) WHERE (is_fr = 1)",
+      "valid": true,
+      "ready": true,
+      "size": "3192 kB",
+      "invalidIndexesOnZaloUsersAfter": 0
+    }
+  },
+  "monitoring": "akaAgentWebApp docs/DATA_REPORTS.md section 7 (auto_report_runs, auto_report_state, auto_report_snapshots, cron.job_run_details for jobid 111).",
+  "rollback": [
+    "V469: migrations/rollback_v469_data_reports.sql (unschedules the job, drops private tables/functions and the reader; source data untouched).",
+    "V468: migrations/rollback_v468_effectiveness_unique_customers.sql (restores the V462 body).",
+    "V470: DROP INDEX CONCURRENTLY IF EXISTS public.idx_zalo_users_friends_account_created; (alone)."
+  ]
+}
