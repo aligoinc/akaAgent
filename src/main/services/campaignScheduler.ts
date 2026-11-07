@@ -1854,7 +1854,14 @@ export class CampaignScheduler {
         }
         this.facebookRandomTurns.set(campaign.id, { ...planned })
         try {
-          const outcome = await this.executeCampaign(currentAccount, campaign)
+          // Ảnh chụp runtime (Web) biết chiến dịch của lượt ngẫu nhiên, như hàng đợi thường.
+          this.runtimeCampaignByAccount.set(account.id, campaign.id)
+          let outcome: Awaited<ReturnType<typeof this.executeCampaign>>
+          try {
+            outcome = await this.executeCampaign(currentAccount, campaign)
+          } finally {
+            if (this.runtimeCampaignByAccount.get(account.id) === campaign.id) this.runtimeCampaignByAccount.delete(account.id)
+          }
           if (outcome === 'concurrency_wait') return
           if (this.hasFailedAccountRun(account.id) || this.activeCampaignRunUnits.has(campaign.id)) return
           let turn = this.facebookRandomTurns.get(campaign.id)!

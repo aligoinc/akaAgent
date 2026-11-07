@@ -1,0 +1,80 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-07: \"Apply V476:\" (compare script through Supabase MCP execute_sql, then apply_migration)",
+  "migration": {
+    "version": "20261107155041",
+    "name": "migration_v476_web_facebook_campaigns",
+    "file": "migrations/migration_v476_web_facebook_campaigns.sql",
+    "md5": "df9f6f311e4ae0ddb71b1c24768a57e2",
+    "sha256": "c668a902d365aadc1aa30b3f6312cb47a081c0f971c3bc1e8ab06430ea1892d1",
+    "bytes": 19083,
+    "ledgerStatements": 1,
+    "ledgerStatementsMd5": "df9f6f311e4ae0ddb71b1c24768a57e2",
+    "appliedAt": "2026-11-07T15:50:41Z",
+    "commit": "e5efec3a"
+  },
+  "rollback": {
+    "file": "migrations/snapshots/web-facebook-campaigns-v476/rollback.sql",
+    "md5": "01118b1e8f3e6de8fa21e9f93cf76db5",
+    "sha256": "f95ae8461ec4bd3a75c99788aff6404fdb5b79250d000d116094756fdcdca480",
+    "bytes": 40089,
+    "effect": "Restores the 6 pre-V476 bodies (md5 guard: source or target), drops the 2 new policy functions and the web.facebook_campaigns setting; re-runnable. Not run on production. The WebApp API treats a missing policy RPC as disabled, so no API redeploy is needed before a rollback."
+  },
+  "change": {
+    "functions": [
+      {"signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])", "before": "a2bc3f7cae264e647ac576c9895e840f", "after": "367cf7ba9d72aff72c4907586cf1c3ba"},
+      {"signature": "public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)", "before": "6b148777006903e4830925c55616820b", "after": "db8942b09904e535987b94745b159ca3"},
+      {"signature": "public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)", "before": "214999ca7a2830b2a0b85389a0325fbf", "after": "6030f0d9c8429e36955a405920f751f9"},
+      {"signature": "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)", "before": "ea05f7ca98ceb9c8794c447abe79dc7c", "after": "87f7002ac924f647896a7635663562b5"},
+      {"signature": "public.delete_control_campaign_atomic(bigint,bigint,bigint)", "before": "4cfcad941c3acf22e674a77b203d086d", "after": "2af929cc5e02683e5e9dc16a48cc9bac"},
+      {"signature": "public.aka_agent_authenticate_control_session(text)", "before": "2c10aa78ac5e4ab8069c741b356e88c8", "after": "692e2a068ce51377f6bd71fec20a8b0c"}
+    ],
+    "newFunctions": [
+      {"signature": "private.aka_agent_web_facebook_campaigns_policy(bigint)", "md5": "592f487518ef14f3bef6f0c7177f2ab5", "acl": "{postgres=X/postgres}"},
+      {"signature": "public.aka_agent_control_web_facebook_campaigns_policy(bigint)", "md5": "7f487421358f987502dc2bc6405dae0b", "acl": "{postgres=X/postgres,service_role=X/postgres}"}
+    ],
+    "setting": "web.facebook_campaigns = {\"enabled\":false,\"organizationIds\":null,\"facebookOnlyLogin\":false}, is_active=true, is_secret=false",
+    "keptAttributes": "Owner postgres; security, volatility, config and ACL of the 6 functions unchanged (checked inside the migration and after apply; authenticate_control_session ACL {postgres=X/postgres,service_role=X/postgres})."
+  },
+  "preflight": {
+    "vnTime": "2026-11-07 22:45",
+    "readOnly": true,
+    "sourceMd5Match": "6/6",
+    "newFunctionsAbsent": true,
+    "settingAbsent": true,
+    "ledgerLatest": "20261107131803 / migration_v475_journey_campaign_notifications",
+    "otherBranchesUsingV476": "none (git log --all after git fetch --all)",
+    "activeBackends": 1,
+    "lockWaits": 0,
+    "compare": {
+      "file": "migrations/tests/migration_v476_web_facebook_campaigns_compare.sql",
+      "md5": "7fd17ce6c63a40fe32964d6be568c54e",
+      "patchDryRun": "6/6",
+      "legacySame": "40/40: staff 724/701, 137/118, 1334/1231 (most Facebook campaigns: 935, 902, 574) and 385/365, 645/623 (most Zalo/SMS campaigns); scopes legacy and desktop; page, snapshot, catalog, activity",
+      "facebookPaths": "3/3 staff: page 7.8-10.6 ms, snapshot 3.9-5.6 ms, activity 1.3-2.6 ms",
+      "timing": "Old and new equal within noise on every check; activity_desktop for staff 385 was 324 ms old vs 7 ms new only because the old function ran first on a cold cache."
+    }
+  },
+  "loadAtApply": {
+    "vnTime": "2026-11-07 22:50 (Saturday evening)",
+    "edgeRequestsPerMinute": "24.7k-26.9k",
+    "edgeAvgMs": "45-50",
+    "edgeP99Ms": "98-119; 142 in the apply minute (15:50Z)",
+    "http5xx": 0,
+    "http503": 0,
+    "postgrestSchemaReload": {"at": "15:50:41.18Z", "queriedMs": 2541.4, "loadedAt": "15:50:43.90Z", "functions": 752}
+  },
+  "postApply": {
+    "vnTime": "2026-11-07 22:51-22:55",
+    "ledgerMatchesFile": true,
+    "targetMd5Match": "6/6, plus both new functions",
+    "policy": "aka_agent_control_web_facebook_campaigns_policy(1) = {\"enabled\": false, \"facebookOnlyLogin\": false}",
+    "smoke": "migrations/tests/migration_v476_web_facebook_campaigns_smoke.sql (md5 c4bfd4a1e0cea30a5a1e2eb434613dfc) in BEGIN ... ROLLBACK as service_role: passed for 5 staff with Facebook accounts (legacy page has no Facebook rows, page totals add up, Facebook page only Facebook, presence only for the Facebook scope, activity only Facebook, ACL of the new functions); role back to postgres after ROLLBACK.",
+    "postgresLogs": "Same error kinds and rates before and after (42501 from old Desktop builds on revoked grants, about 42 per minute; staff_client_auth_invalid once, 1-7 per hour earlier today from V446). No error from the patched functions."
+  },
+  "notDone": [
+    "API/Web deploy (akaAgentWebApp branch claude/vibrant-goodall-gn084w)",
+    "enabling web.facebook_campaigns (still false)",
+    "iOS build; Desktop release with Facebook accounts in the runtime snapshot"
+  ]
+}
