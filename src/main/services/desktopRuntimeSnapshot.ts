@@ -5,10 +5,12 @@ import type { AutoAccount } from '../../shared/types'
  * thị app Desktop đang chạy/đứng chờ và tài khoản nào chưa sẵn sàng. Chỉ đọc RAM của
  * scheduler: không thêm truy vấn DB, timer hay kết nối. Hợp đồng JSON khớp
  * `normalizeDesktopRuntimeState` ở akaAgentWebApp (packages/control-api).
+ * Gồm tài khoản Zalo mã QR/trình duyệt (v461) và tài khoản Facebook (v476, Web quản lý
+ * chiến dịch Facebook); Zalo luôn đứng trước nên phần Zalo giữ nguyên như bản cũ.
  */
 export type DesktopSchedulerState = 'running' | 'idle' | 'stopped' | 'blocked_daily_maintenance'
 
-export type DesktopAccountReadinessReason = 'inactive' | 'paused' | 'not_logged_in' | 'browser_tab_closed'
+export type DesktopAccountReadinessReason = 'inactive' | 'paused' | 'checkpoint' | 'not_logged_in' | 'browser_tab_closed'
 
 export interface DesktopRuntimeSnapshotSource {
   running: boolean
@@ -34,8 +36,11 @@ export interface DesktopRuntimeSnapshotPayload {
 /** RPC giới hạn 32 KB; 200 tài khoản ~20 KB. */
 export const MAX_DESKTOP_RUNTIME_ACCOUNTS = 200
 
+const platformOf = (account: AutoAccount): string => String(account.flatformType || '').trim().toLowerCase()
 const isDesktopZaloAccount = (account: AutoAccount): boolean =>
-  String(account.flatformType || '').trim().toLowerCase() === 'zalo' && account.isZaloServer !== true
+  platformOf(account) === 'zalo' && account.isZaloServer !== true
+/** Facebook luôn chạy trên app Desktop, trong tab trình duyệt (webview) của tài khoản. */
+const isFacebookAccount = (account: AutoAccount): boolean => platformOf(account) === 'facebook'
 
 export function desktopAccountReadiness(
   account: AutoAccount,
@@ -43,10 +48,20 @@ export function desktopAccountReadiness(
 ): DesktopAccountReadinessReason | null {
   if (!account.isActive) return 'inactive'
   if (account.status === 'tạm dừng') return 'paused'
+  const facebook = isFacebookAccount(account)
+  // Chỉ Facebook tách checkpoint; Zalo giữ lý do cũ để Web đang chạy hiển thị như trước.
+  if (facebook && account.loginStatus === 'checkpoint') return 'checkpoint'
   if (account.loginStatus !== 'đã đăng nhập') return 'not_logged_in'
-  // Tài khoản trình duyệt chỉ chạy khi tab Zalo Web đã được mở trong app (giống scheduler).
-  if (account.isZaloShowWeb && !isBrowserTabOpen(account.id)) return 'browser_tab_closed'
+  // Tài khoản trình duyệt chỉ chạy khi tab đã được mở trong app (giống điều kiện tick của
+  // scheduler): mọi tài khoản Facebook và tài khoản Zalo Web.
+  if ((facebook || account.isZaloShowWeb) && !isBrowserTabOpen(account.id)) return 'browser_tab_closed'
   return null
+}
+
+/** Zalo Desktop trước (đúng thứ tự và phần đầu payload như v461), rồi Facebook; chung trần 200. */
+export function desktopRuntimeAccounts(accounts: readonly AutoAccount[]): AutoAccount[] {
+  return [...accounts.filter(isDesktopZaloAccount), ...accounts.filter(isFacebookAccount)]
+    .slice(0, MAX_DESKTOP_RUNTIME_ACCOUNTS)
 }
 
 export class DesktopRuntimeSnapshot {
@@ -87,7 +102,7 @@ export class DesktopRuntimeSnapshot {
         ? this.maintenanceWaitingSince
         : this.now().toISOString()
     }
-    const accounts = source.running ? source.accounts.filter(isDesktopZaloAccount).slice(0, MAX_DESKTOP_RUNTIME_ACCOUNTS) : []
+    const accounts = source.running ? desktopRuntimeAccounts(source.accounts) : []
     return {
       v: 1,
       scheduler: { state, since: this.lastStateSince || this.now().toISOString() },
