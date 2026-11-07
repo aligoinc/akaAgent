@@ -276,3 +276,22 @@ kiểm Desktop không ghi được cờ nhưng vẫn đọc được (SELECT c�
 API WebApp mới khi gặp `PGRST202` tự dùng lại action `sender`. Kiểm chứng: `scripts/notification-center/smoke_v467.sh`
 (bộ V467 24 phép kiểm, bộ V457 103 phép kiểm, V466 + V467, rollback, apply lại).
 
+## V475 — chiến dịch do Quy trình quản lý (đã apply 07/11/2026 20:18:03 VN)
+
+`migrations/migration_v475_journey_campaign_notifications.sql` (`20261107131803`, không apply lại) chỉ thay
+`private.aka_agent_notification_capture_campaign()` từ đúng bản V465 (md5 `4a5e881eb85efc1cc2280e8cf0c10721` →
+`71cdeb0842f00fafaf8492366bf9e8dc`; chủ sở hữu, `SECURITY DEFINER`, `search_path`, ACL giữ nguyên). Bộ máy Quy trình
+(V473) mở lại chiến dịch của bước gửi mỗi khi có khách tới bước, nên chiến dịch `[Quy trình] …` "hoàn thành" nhiều lần mỗi
+ngày. Sau các bộ lọc trạng thái/chiến dịch của người nhận, chiến dịch nằm trong `auto_journey_step_campaigns` của quy trình
+`is_delete = false` và `status` `active`/`paused` chỉ được ghi thông báo `tạm dừng`/`lỗi`; quy trình đã dừng/xóa, chiến dịch
+thường và chiến dịch của bước "Dùng chiến dịch có sẵn" như cũ. Thiếu bảng quy trình (gỡ V473) thì như cũ, kể cả khi kế
+hoạch truy vấn đã nằm trong cache của phiên. Đường email cũ `trg_aka_agent_enqueue_campaign_completed_email` đã tắt từ
+04/11 23:39 VN nên V475 không sửa hàm của nó; nếu bật lại trigger này (gỡ Trung tâm thông báo), chiến dịch của quy trình lại
+gửi một email cho mỗi lần hoàn thành.
+
+Kiểm thử `scripts/notification-center/smoke_v475.sh` (cụm tạm theo thứ tự production V457 → V466 → V467 → V465 → bảng V473
+→ V475): chỉ hàm trên đổi; bộ V457/V465/V466/V467 giữ nguyên số ca (103/20/27/24); 27 ca V475 gồm quy trình đang chạy,
+tạm dừng, đã dừng, đã xóa, nháp, chiến dịch của bản cũ, gọi từ Desktop/Chat API/Server và bảng quy trình bị xóa trong cùng
+phiên; chạy lại và rollback lần hai bị từ chối; rollback khôi phục V465. Sau apply: 0 lỗi 5xx/503, nạp lại schema 4,8 s.
+Phép thử tự rollback trên production chưa chạy vì hộp xác nhận hết hạn. Gỡ: `rollback_v475_journey_campaign_notifications.sql`.
+Biên nhận: `migrations/snapshots/journey-campaign-notifications-v475/apply-receipt.json`.
