@@ -1,0 +1,76 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-07: \"Làm V475 đi / Làm luôn và hoàn thiện\" (apply_migration confirmed in the Supabase MCP prompt)",
+  "migration": {
+    "version": "20261107131803",
+    "name": "migration_v475_journey_campaign_notifications",
+    "file": "migrations/migration_v475_journey_campaign_notifications.sql",
+    "md5": "643d9fb53aa01daece44d4453e644766",
+    "sha256": "ce67c0063e308c36b9875708e0c103170cb101219b3dea389bb84b1f8e22a288",
+    "bytes": 9040,
+    "ledgerStatements": 1,
+    "ledgerStatementsMd5": "643d9fb53aa01daece44d4453e644766",
+    "appliedAt": "2026-11-07T13:18:03Z",
+    "commit": "a4058cc5"
+  },
+  "rollback": {
+    "file": "migrations/rollback_v475_journey_campaign_notifications.sql",
+    "md5": "224d52a0bed1468b3ae75da69b8d1b0f",
+    "sha256": "0ccb7b97284003c6ce9e39238affdb716d95b71375350b357be55de73f058dac",
+    "bytes": 5602,
+    "effect": "Restores the V465 body of private.aka_agent_notification_capture_campaign() verbatim (md5 4a5e881eb85efc1cc2280e8cf0c10721); refuses unless the V475 body is live. Not run on production."
+  },
+  "change": {
+    "function": "private.aka_agent_notification_capture_campaign()",
+    "before": {"functiondefMd5": "4a5e881eb85efc1cc2280e8cf0c10721", "prosrcMd5": "24a780c80887f520b78be3db794e0c5b", "source": "V465 (read live 2026-11-07, identical to migrations/migration_v465_notification_quality.sql)"},
+    "after": {"functiondefMd5": "71cdeb0842f00fafaf8492366bf9e8dc", "prosrcMd5": "6e7b852c41ba7565622db56dbb8ec057"},
+    "keptAttributes": {"owner": "postgres", "securityDefiner": true, "config": ["search_path=pg_catalog, public"], "acl": "{postgres=X/postgres}"},
+    "rule": "After the subscription, toStatuses and campaignIds filters: if the new status is not 'tạm dừng'/'lỗi' and the campaign is in auto_journey_step_campaigns of a journey with is_delete = false and status in ('active','paused'), no notification row is written. Missing journey tables (V473 rolled back) = previous behaviour.",
+    "unchanged": [
+      "ordinary campaigns",
+      "campaigns used by the 'Dùng chiến dịch có sẵn' step (not in auto_journey_step_campaigns)",
+      "campaigns of stopped or deleted journeys",
+      "V465 cooldown, digest and hourly email cap",
+      "tables, triggers, grants, other notification functions",
+      "trg_aka_agent_enqueue_campaign_completed_email: disabled since 2026-11-04 23:39 VN (notification center live), function md5 0523c07b0878e3aaa53efb0bc97a74b8 untouched"
+    ]
+  },
+  "preflight": {
+    "vnTime": "2026-11-07 20:02 and again 20:09 (after a worker restart, before sending)",
+    "readOnly": true,
+    "captureMd5": "4a5e881eb85efc1cc2280e8cf0c10721",
+    "captureTriggerEnabled": true,
+    "journeyTablesColumnsUniqueIndex": true,
+    "ledgerV475Absent": true,
+    "journeysOnProduction": 0,
+    "stepCampaignsOnProduction": 0,
+    "campaignStatusSubscribers": 17,
+    "activeBackends": "4-5"
+  },
+  "loadAtApply": {
+    "vnTime": "2026-11-07 20:18 (Saturday evening)",
+    "edgeRequestsPer5Min": "148k-175k",
+    "edgeP50Ms": "45-46 in every 5-minute bucket 13:00-13:25Z",
+    "http5xx": 0,
+    "http503": 0,
+    "postgrestSchemaReload": {"at": "13:18:03.9Z", "queriedMs": 4838.6, "loadedAt": "13:18:09Z", "functions": 751}
+  },
+  "postApply": {
+    "vnTime": "2026-11-07 20:19",
+    "ledgerMatchesFile": true,
+    "captureMd5": "71cdeb0842f00fafaf8492366bf9e8dc",
+    "attributesAndAclKept": true,
+    "captureTriggerEnabled": true,
+    "oldEmailTrigger": "still disabled (D), function unchanged",
+    "postgresLogs": "Only V475 line is the migration statement itself (LOG, mgmt-api). 42501 background stayed 487-516 per 5 minutes before and after (old Desktop builds using revoked grants); other errors 0-7 per 5 minutes, same kinds as before."
+  },
+  "tests": {
+    "local": "scripts/notification-center/smoke_v475.sh on PostgreSQL 16 (production order setup → V457 → V466 → V467 → V465 → V473 journey tables → V475): local V465 checksum equals production; only the capture function changes (ACL, other functions, triggers identical); V457 suite 103, V465 20, V466 27, V467 24 checks, same counts as without V475; 27 V475 checks (running/paused/stopped/deleted/draft journeys, older-version step campaign, Desktop/Chat API/Server callers, journey tables dropped in the same session); re-apply and second rollback refused; rollback restores V465 and the old behaviour; refused without journey tables or with the capture trigger disabled.",
+    "productionRolledBackSmoke": "Not run: the Supabase MCP confirmation for the self-rolling-back check (temp table + fake campaign id, ends with RAISE) expired after 230 s without an answer, so nothing executed. Re-run when someone is at the screen to press Allow."
+  },
+  "notDone": [
+    "production rolled-back smoke (see tests)",
+    "journey-level notifications (stage 2: new to-do tasks, blocked steps)",
+    "API/Web deploy and enabling web.journeys"
+  ]
+}
