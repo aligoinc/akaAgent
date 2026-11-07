@@ -1,0 +1,119 @@
+{
+  "migration": "migration_v476_web_facebook_campaigns",
+  "captured": "2026-11-07",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "method": "md5(pg_get_functiondef) và ACL/owner đọc chỉ đọc trên production 07/11/2026; định nghĩa dựng lại cục bộ từ fixtures V461 + migration V461 + V464 và khớp từng md5. Ledger lúc đọc: mới nhất 20261107131803 migration_v475_journey_campaign_notifications; số v476 chưa có ở git --all (591 nhánh) lẫn ledger.",
+  "functions": [
+    {
+      "signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+      "source": "a2bc3f7cae264e647ac576c9895e840f",
+      "target": "367cf7ba9d72aff72c4907586cf1c3ba",
+      "source_from": "V461",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "stable",
+      "config": [
+        "search_path=public, pg_temp",
+        "statement_timeout=20s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)",
+      "source": "6b148777006903e4830925c55616820b",
+      "target": "db8942b09904e535987b94745b159ca3",
+      "source_from": "V461",
+      "owner": "postgres",
+      "security_definer": false,
+      "volatility": "stable",
+      "config": [
+        "search_path=public, pg_temp",
+        "statement_timeout=20s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)",
+      "source": "214999ca7a2830b2a0b85389a0325fbf",
+      "target": "6030f0d9c8429e36955a405920f751f9",
+      "source_from": "V461",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "stable",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)",
+      "source": "ea05f7ca98ceb9c8794c447abe79dc7c",
+      "target": "87f7002ac924f647896a7635663562b5",
+      "source_from": "V461",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "volatile",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=5s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.delete_control_campaign_atomic(bigint,bigint,bigint)",
+      "source": "4cfcad941c3acf22e674a77b203d086d",
+      "target": "2af929cc5e02683e5e9dc16a48cc9bac",
+      "source_from": "V461",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "volatile",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_authenticate_control_session(text)",
+      "source": "2c10aa78ac5e4ab8069c741b356e88c8",
+      "target": "692e2a068ce51377f6bd71fec20a8b0c",
+      "source_from": "V464",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "volatile",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  ],
+  "new_functions": [
+    {
+      "signature": "private.aka_agent_web_facebook_campaigns_policy(bigint)",
+      "md5": "592f487518ef14f3bef6f0c7177f2ab5",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_web_facebook_campaigns_policy(bigint)",
+      "md5": "7f487421358f987502dc2bc6405dae0b",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  ],
+  "setting": {
+    "key": "web.facebook_campaigns",
+    "value": {
+      "enabled": false,
+      "organizationIds": null,
+      "facebookOnlyLogin": false
+    },
+    "is_secret": false,
+    "is_active": true
+  },
+  "production_notes": {
+    "default_acl_public_functions": "postgres tạo hàm public: anon, authenticated, service_role (nên hàm Control mới REVOKE trực tiếp anon/authenticated)",
+    "default_acl_private_functions": "không có",
+    "facebook_accounts": "1.589 chưa xoá; 0 có cờ is_zalo_server/is_zalo_show_web; 0 có zalo_session (has_zalo_session luôn false, không cần vá); 17 checkpoint",
+    "active_control_sessions_by_client_type": "web 1.070, native 215, pwa 30",
+    "expiration_date_type": "timestamp with time zone"
+  }
+}
