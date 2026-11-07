@@ -78,13 +78,34 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_campaign_details_input_data_id')
      OR NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'uq_auto_campaign_input_data_control_append')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
-                    AND table_name = 'auto_campaign_input_data' AND column_name = 'control_append_idempotency_key') THEN
+                    AND table_name = 'auto_campaign_input_data' AND column_name = 'control_append_idempotency_key')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                    AND table_name = 'auto_accounts' AND column_name = 'mobile_device_id') THEN
     RAISE EXCEPTION 'v473_dependency_missing';
   END IF;
 END
 $preflight$;
 
 CREATE SCHEMA IF NOT EXISTS private;
+
+-- Tài khoản gửi sẵn sàng. SMS: máy đã đăng ký điện thoại (login_status của tài khoản SMS luôn 'chưa đăng nhập' trên
+-- production, 1.968/1.968 ngày 07/11/2026); kênh khác: đã đăng nhập. Dùng chung cho bộ máy và cảnh báo sức khỏe.
+CREATE FUNCTION private.aka_agent_journey_account_ready(p_platform text, p_login_status text, p_device_id text,
+  p_is_delete boolean, p_is_active boolean, p_status text) RETURNS boolean
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $function$
+  SELECT p_is_delete IS NOT TRUE AND p_is_active IS NOT FALSE AND p_status IS DISTINCT FROM 'tạm dừng'
+    AND CASE WHEN p_platform = 'sms' THEN nullif(btrim(coalesce(p_device_id, '')), '') IS NOT NULL
+             ELSE p_login_status = 'đã đăng nhập' END
+$function$;
+
+-- Hành động chiến dịch có mục tiêu KHÔNG phải một người (nhóm/trang/bài viết/từ khóa): khách vào quy trình từ kết quả
+-- của các chiến dịch này mang targetKind = 'group' và không được gửi tin cá nhân (journey-core NON_PERSON_TARGET_ACTIONS).
+CREATE FUNCTION private.aka_agent_journey_non_person_action(p_action_id text) RETURNS boolean
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $function$
+  SELECT coalesce(p_action_id, '') = ANY (ARRAY['zalo_message_group', 'zalo_join_group_link', 'facebook_group_post',
+    'facebook_join_group', 'facebook_find_data_group', 'facebook_find_data_search', 'facebook_comment_seeding',
+    'facebook_comment_seeding_post', 'facebook_page_post', 'facebook_timeline_post', 'facebook_newsfeed_interaction'])
+$function$;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- Tables (new only)
@@ -204,6 +225,7 @@ CREATE TABLE public.auto_journey_enrollments (
   zalo_uids jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(zalo_uids) = 'object'),
   zalo_status text NOT NULL DEFAULT 'unknown' CHECK (zalo_status IN ('unknown', 'has_zalo', 'no_zalo')),
   attempts integer NOT NULL DEFAULT 0,
+  defer_code text CHECK (defer_code IS NULL OR char_length(defer_code) BETWEEN 1 AND 40),
   step_entered_at timestamptz,
   is_test boolean NOT NULL DEFAULT false,
   entered_at timestamptz NOT NULL DEFAULT now(),
@@ -573,8 +595,8 @@ BEGIN
     FROM private.aka_agent_journey_graph_refs(v.graph) r
     LEFT JOIN public.auto_accounts a ON a.id = r.ref_id
     WHERE r.kind = 'account'
-      AND (a.id IS NULL OR a.is_delete IS TRUE OR a.is_active IS FALSE OR a.status = 'tạm dừng'
-        OR a.login_status IS DISTINCT FROM 'đã đăng nhập' OR a.staff_id IS DISTINCT FROM j.staff_id);
+      AND (a.id IS NULL OR a.staff_id IS DISTINCT FROM j.staff_id
+        OR NOT private.aka_agent_journey_account_ready(a.flatform_type, a.login_status, a.mobile_device_id, a.is_delete, a.is_active, a.status));
     SELECT count(*) INTO v_queued
     FROM public.auto_journey_enrollments e
     WHERE e.journey_id = j.id AND e.status = 'active' AND e.phase = 'ready' AND e.attempts > 0
@@ -680,8 +702,8 @@ BEGIN
       FROM private.aka_agent_journey_graph_refs(v.graph) r
       LEFT JOIN public.auto_accounts a ON a.id = r.ref_id
       WHERE r.kind = 'account'
-        AND (a.id IS NULL OR a.is_delete IS TRUE OR a.is_active IS FALSE OR a.status = 'tạm dừng'
-          OR a.login_status IS DISTINCT FROM 'đã đăng nhập' OR a.staff_id IS DISTINCT FROM j.staff_id)
+        AND (a.id IS NULL OR a.staff_id IS DISTINCT FROM j.staff_id
+          OR NOT private.aka_agent_journey_account_ready(a.flatform_type, a.login_status, a.mobile_device_id, a.is_delete, a.is_active, a.status))
     ) x;
 
     SELECT v_health || coalesce(jsonb_agg(jsonb_build_object('code', 'queued_long', 'stepId', q.step_id, 'count', q.n)
@@ -1207,7 +1229,7 @@ BEGIN
       SET step_id = nx.target, phase = 'ready',
           next_run_at = CASE WHEN v_paused THEN NULL ELSE now() END,
           paused_next_run_at = CASE WHEN v_paused THEN now() ELSE NULL END,
-          attempts = 0, step_entered_at = now(), pending_outcome = NULL, pending_reason = NULL,
+          attempts = 0, defer_code = NULL, step_entered_at = now(), pending_outcome = NULL, pending_reason = NULL,
           lease_token = NULL, lease_until = NULL, version_id = v_version_id, updated_at = now()
       FROM (SELECT n.key AS old_step, n.value #>> '{}' AS target FROM jsonb_each(v_next) n WHERE jsonb_typeof(n.value) = 'string') nx
       WHERE e.journey_id = j.id AND e.status = 'active' AND e.step_id = nx.old_step AND NOT (e.step_id = ANY(v_steps))
@@ -1485,7 +1507,7 @@ BEGIN
     RETURN jsonb_build_object('enrollmentId', v_id, 'created', false);
   END IF;
   INSERT INTO public.auto_journey_events (journey_id, enrollment_id, step_id, kind, message)
-  VALUES (j.id, v_id, NULL, 'enter', 'Chạy thử với 1 khách: tin gửi thật, mỗi bước Chờ rút còn 1 phút.');
+  VALUES (j.id, v_id, NULL, 'enter', 'Chạy thử với 1 khách: tin gửi thật trong giờ gửi, mỗi bước Chờ rút còn 1 phút, không tính trần tin mỗi ngày.');
   v_stats := private.aka_agent_journey_stat_add(v_stats, j.id, '*', 'enrolled', 1);
   PERFORM private.aka_agent_journey_stats_flush(v_stats);
   RETURN jsonb_build_object('enrollmentId', v_id, 'created', true);
@@ -1750,6 +1772,7 @@ DECLARE
   v_last_ts timestamptz;
   v_last_id bigint;
   v_source_name text;
+  v_source_group_target boolean;
   r record;
   v_key text;
   v_candidate boolean;
@@ -1803,6 +1826,7 @@ BEGIN
 
     IF src.kind = 'data_group' THEN
       SELECT g.name INTO v_source_name FROM public.auto_account_contact_groups g WHERE g.id = src.group_id;
+      v_source_group_target := false;
       SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.row_ts, x.row_id), '[]'::jsonb) INTO v_batch
       FROM (
         SELECT m.updated_at AS row_ts, m.id AS row_id, m.id AS ref,
@@ -1826,7 +1850,8 @@ BEGIN
         LIMIT v_limit
       ) x;
     ELSE
-      SELECT c.name INTO v_source_name FROM public.auto_campaigns c WHERE c.id = src.campaign_id;
+      SELECT c.name, private.aka_agent_journey_non_person_action(c.action_id) INTO v_source_name, v_source_group_target
+      FROM public.auto_campaigns c WHERE c.id = src.campaign_id;
       SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x.row_ts, x.row_id), '[]'::jsonb) INTO v_batch
       FROM (
         SELECT p.created_at AS row_ts, p.id AS row_id, d.id AS ref,
@@ -1913,7 +1938,8 @@ BEGIN
             source_kind, source_ref, source_group_id, source_campaign_id, status, phase, next_run_at)
           VALUES (j.id, j.active_version_id, j.staff_id, j.organization_id, v_key,
             private.aka_agent_journey_contact(r.name, r.phone, r.uid, r.email, r.info1, r.info2, r.info3, r.info4, r.info5,
-              r.carrier, r.account_id),
+              r.carrier, r.account_id)
+              || CASE WHEN v_source_group_target IS TRUE THEN '{"targetKind":"group"}'::jsonb ELSE '{}'::jsonb END,
             src.kind, r.ref, src.group_id, src.campaign_id, 'active', 'ready', now())
           ON CONFLICT (journey_id, contact_key) WHERE status = 'active' DO NOTHING
           RETURNING id INTO v_new_id;
@@ -2169,7 +2195,7 @@ BEGIN
         'staffId', e.staff_id, 'organizationId', e.organization_id, 'contactKey', e.contact_key, 'contact', e.contact,
         'stepId', e.step_id, 'phase', e.phase, 'pendingOutcome', e.pending_outcome, 'pendingReason', e.pending_reason,
         'stickyAccountId', e.sticky_account_id, 'zaloUids', e.zalo_uids, 'zaloStatus', e.zalo_status, 'attempts', e.attempts,
-        'stepEnteredAt', e.step_entered_at, 'isTest', e.is_test) ORDER BY e.next_run_at, e.id), '[]'::jsonb) FROM e),
+        'deferCode', e.defer_code, 'stepEnteredAt', e.step_entered_at, 'isTest', e.is_test) ORDER BY e.next_run_at, e.id), '[]'::jsonb) FROM e),
     'versions', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', v.id, 'journeyId', v.journey_id, 'graph', v.graph,
         'settings', v.settings) ORDER BY v.id), '[]'::jsonb) FROM v),
     'facts', (SELECT coalesce(jsonb_object_agg(e.id::text, jsonb_build_object(
@@ -2191,8 +2217,7 @@ BEGIN
           '[]'::jsonb))), '{}'::jsonb)
       FROM e JOIN vg ON vg.version_id = e.version_id),
     'accounts', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'platform', a.flatform_type,
-        'usable', a.is_delete IS NOT TRUE AND a.is_active IS NOT FALSE AND a.login_status = 'đã đăng nhập'
-          AND a.status IS DISTINCT FROM 'tạm dừng',
+        'usable', private.aka_agent_journey_account_ready(a.flatform_type, a.login_status, a.mobile_device_id, a.is_delete, a.is_active, a.status),
         'isServer', coalesce(a.is_zalo_server, false),
         'dispatchedToday', (SELECT count(*) FROM public.auto_journey_step_runs r
           WHERE r.account_id = a.id AND r.dispatched_at >= v_day_start)) ORDER BY a.id), '[]'::jsonb)
@@ -2317,6 +2342,7 @@ DECLARE
   v_step text;
   v_next timestamptz;
   v_attempts integer;
+  v_defer_last text;
   v_sticky bigint;
   v_zalo text;
   v_step_entered timestamptz;
@@ -2386,6 +2412,8 @@ BEGIN
       v_next := (res ->> 'nextRunAt')::timestamptz;
       v_step_entered := (res ->> 'stepEnteredAt')::timestamptz;
       v_attempts := least(coalesce(private.aka_agent_journey_bigint(res -> 'attempts'), 0), 100000)::integer;
+      -- Mã lý do hoãn gần nhất của bước: dòng thời gian ghi thêm khi lý do đổi (ngoài giờ gửi → tài khoản chưa sẵn sàng).
+      v_defer_last := CASE WHEN char_length(res ->> 'deferCode') BETWEEN 1 AND 40 THEN res ->> 'deferCode' END;
       v_sticky := private.aka_agent_journey_bigint(res -> 'stickyAccountId');
       v_zalo := coalesce(res ->> 'zaloStatus', e.zalo_status);
       IF v_zalo NOT IN ('unknown', 'has_zalo', 'no_zalo') THEN
@@ -2491,9 +2519,12 @@ BEGIN
         IF v_mode = 'defer' THEN
           IF v_attempts = 0 THEN
             v_local_stats := private.aka_agent_journey_stat_add(v_local_stats, e.journey_id, v_d_step, 'deferred', 1);
+          END IF;
+          IF v_attempts = 0 OR v_defer_last IS DISTINCT FROM v_defer_code THEN
             v_extra_events := jsonb_build_array(jsonb_build_object('stepId', v_d_step, 'kind', 'defer', 'message', v_defer_reason,
               'data', jsonb_build_object('code', v_defer_code, 'until', v_defer_until)));
           END IF;
+          v_defer_last := v_defer_code;
           v_attempts := v_attempts + 1;
           v_phase := 'ready';
           v_next := v_defer_until;
@@ -2515,7 +2546,9 @@ BEGIN
           paused_next_run_at = NULL,
           pending_outcome = CASE WHEN v_status = 'active' AND v_phase = 'result' THEN v_pending_outcome END,
           pending_reason = CASE WHEN v_status = 'active' AND v_phase = 'result' THEN v_pending_reason END,
-          sticky_account_id = v_sticky, zalo_status = v_zalo, attempts = v_attempts, step_entered_at = v_step_entered,
+          sticky_account_id = v_sticky, zalo_status = v_zalo, attempts = v_attempts,
+          defer_code = CASE WHEN v_status = 'active' AND v_attempts > 0 THEN v_defer_last END,
+          step_entered_at = v_step_entered,
           exit_code = CASE WHEN v_status <> 'active' THEN left(res ->> 'exitCode', 100) END,
           exit_reason = CASE WHEN v_status <> 'active' THEN left(res ->> 'exitReason', 1000) END,
           finished_at = CASE WHEN v_status <> 'active' THEN now() END,
