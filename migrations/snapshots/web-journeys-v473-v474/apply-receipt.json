@@ -1,0 +1,134 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-07: \"Apply V473 rồi V474 lên akachat đi\" (each apply_migration confirmed in the Supabase MCP prompt)",
+  "migrations": [
+    {
+      "version": "20261107114825",
+      "name": "migration_v473_web_journeys_p1",
+      "file": "migrations/migration_v473_web_journeys_p1.sql",
+      "md5": "c8ef8132010d40b7a375cd5fe1adf03b",
+      "sha256": "2c38b5e6204912359c696b307b85dba4e69db81558d2f6ee74363acaa5ba9f14",
+      "bytes": 44787,
+      "ledgerStatementsMd5": "c8ef8132010d40b7a375cd5fe1adf03b",
+      "appliedAt": "2026-11-07T11:48:25Z"
+    },
+    {
+      "version": "20261107115357",
+      "name": "migration_v473_web_journeys_p2",
+      "file": "migrations/migration_v473_web_journeys_p2.sql",
+      "md5": "db38fa35228036301e0409a8613ac32f",
+      "sha256": "66ceaf6009e805c55d5b1780ccc2e22b6b0840eef4321c199eaf82a8b2a8a068",
+      "bytes": 48195,
+      "ledgerStatementsMd5": "db38fa35228036301e0409a8613ac32f",
+      "appliedAt": "2026-11-07T11:53:57Z"
+    },
+    {
+      "version": "20261107120855",
+      "name": "migration_v473_web_journeys_p3",
+      "file": "migrations/migration_v473_web_journeys_p3.sql",
+      "md5": "b74071a7f1e9b0bcd4ccc4ca030fabb1",
+      "sha256": "8cec608848d7da8af1963eb8600a8c99636b79f463d8b27983bd5c5280088692",
+      "bytes": 43621,
+      "ledgerStatementsMd5": "b74071a7f1e9b0bcd4ccc4ca030fabb1",
+      "appliedAt": "2026-11-07T12:08:55Z"
+    },
+    {
+      "version": "20261107121221",
+      "name": "migration_v473_web_journeys_p4",
+      "file": "migrations/migration_v473_web_journeys_p4.sql",
+      "md5": "eb3e08a9a82af5d9a6ede46da02cddf9",
+      "sha256": "10fc51f0daaf4c9295bdb0257457941f113488e384ee19dcd70b9436eec12935",
+      "bytes": 26468,
+      "ledgerStatementsMd5": "eb3e08a9a82af5d9a6ede46da02cddf9",
+      "appliedAt": "2026-11-07T12:12:21Z"
+    },
+    {
+      "version": "20261107122015",
+      "name": "migration_v474_journey_ai_config",
+      "file": "migrations/migration_v474_journey_ai_config.sql",
+      "md5": "edcffe4a9752a699d3ee7c050e9182a4",
+      "sha256": "f983e0b3887a75df7a81b324fdbd60b0150fee4a0c5f647322bef082d77f2332",
+      "bytes": 11829,
+      "ledgerStatementsMd5": "edcffe4a9752a699d3ee7c050e9182a4",
+      "appliedAt": "2026-11-07T12:20:15Z"
+    }
+  ],
+  "method": "Supabase MCP apply_migration, one call per file with the exact file text (the ledger stores it as statements[1]). The single-file V473 (153,732 bytes) was too large for one tool call, so it was split into four transactions in the original order (akaAgent commit 4866c2c1); the four bodies concatenate byte for byte to the tested single-file body (md5 78dfc12218a51046912f376ef0d6d5e9). Parts 2-4 refuse to run unless the previous part committed and refuse to run twice; parts 1-3 revoke EXECUTE on every private.aka_agent_journey_* function inside their own transaction because schema private grants USAGE to anon, authenticated, aka_agent_desktop and aka_agent_chat_api.",
+  "preflight": {
+    "vnTime": "2026-11-07 18:28",
+    "readOnly": true,
+    "targetsAbsent": true,
+    "dependenciesPresent": true,
+    "deepseekModel2": "active, deepseek_default, chat/completions, api_key set",
+    "identitySequences": {"ai_prompt": "max 57 / last_value 57", "ai_using": "max 55 / last_value 55"},
+    "activeBackends": 3,
+    "lockWaiters": 0
+  },
+  "loadAtApply": {
+    "vnTime": "2026-11-07 18:40-19:25 (Saturday evening)",
+    "edgeRequestsPer5Min": "140k-215k",
+    "edgeP50Ms": "44-45 in every 5-minute bucket",
+    "edgeP99MsBy5Min": {"11:40Z": 110, "11:45Z": 245.3, "11:50Z": 138, "11:55Z": 119, "12:00Z": 123, "12:05Z": 142, "12:10Z": 131, "12:15Z": 111, "12:20Z": 107.1},
+    "http503": 0,
+    "http5xx": 1,
+    "http5xxNote": "One HTTP 500 at 12:15:46Z: rpc/aka_agent_list_contact_datasets hit the 3 s anon statement timeout (existing RPC, no DDL at that minute); unrelated to V473/V474.",
+    "postgrestSchemaReloads": [
+      {"at": "11:48:25Z", "queriedMs": 2167.0},
+      {"at": "11:53:58Z", "queriedMs": 5503.0},
+      {"at": "12:08:55Z", "queriedMs": 4095.2},
+      {"at": "12:12:21Z", "queriedMs": 3229.9, "functionsBefore": 749, "functionsAfter": 751}
+    ],
+    "pgrstErrors": 0
+  },
+  "postApply": {
+    "tables": 11,
+    "tablesWithRls": 11,
+    "tableOrSequenceGrantsToApiRoles": 0,
+    "privateFunctions": {"count": 50, "grantsToPublicOrApiRoles": 0, "owner": "postgres"},
+    "publicRpcs": {
+      "public.aka_agent_journey_control(bigint,bigint,text,jsonb)": {"acl": "{postgres=X/postgres,service_role=X/postgres}", "securityDefiner": true, "config": ["search_path=public", "statement_timeout=15s"]},
+      "public.aka_agent_journey_engine(text,jsonb)": {"acl": "{postgres=X/postgres,service_role=X/postgres}", "securityDefiner": true, "config": ["search_path=public", "statement_timeout=20s"]},
+      "anonOrAuthenticatedOrDesktopCanExecute": false
+    },
+    "fingerprintsVsLocalTestBuild": {
+      "functions": {"count": 52, "md5": "1d2cf0fbaceb818b790486c14d89ef3a", "how": "md5(string_agg(regprocedure::text || ':' || prosrc || ':' || proconfig || ':' || prosecdef ORDER BY regprocedure::text COLLATE \"C\")); identical on production and on local Postgres 16 built from the four files. The production default collation en_US.UTF-8 orders the rows differently and gives 3e8d9b1050d2d702ae46566409e015d7 without COLLATE \"C\"."},
+      "columns": {"count": 147, "md5": "1b7590b2db145f94ab1a050b2ae4988e"},
+      "indexes": {"count": 35, "md5": "debb9b683a6c78726d4c722c061e29bb"}
+    },
+    "settings": {"journeys.engine_enabled": "{\"enabled\":true}", "web.journeys": "{\"enabled\":false,\"organizationIds\":[]}"},
+    "engineState": "one row id 1, lease/tick/run/cleanup all NULL",
+    "v474": {
+      "aiPromptId": 58,
+      "aiUsingId": 56,
+      "modelId": 2,
+      "requestOptions": {"max_tokens": 16000, "response_format": {"type": "json_object"}, "reasoning_effort": "medium"},
+      "timeoutMs": 120000,
+      "promptSystemMd5": "d00043036b0bf6c37b46df3ce49582c4",
+      "promptSystemChars": 6602,
+      "promptUser": "{{journeyContext}}",
+      "isActive": true
+    },
+    "serviceRoleSmoke": {
+      "how": "One transaction: set local role service_role + request.jwt.claims {\"role\":\"service_role\"}; a DO block ran the RPCs below, then RAISE EXCEPTION 'DRYRUN_SUMMARY ...' rolled everything back. Staff 4 / organization 1, data groups 1497 (148 members) and 1878 (3 members), steps wait + staff_task (no sends).",
+      "ms": {"create": 9, "get": 25, "publish_prepare": 2, "publish": 21, "list": 4, "catalog_campaigns": 7, "tick": 2, "ingest": 140, "collect": 1, "claim": 33, "cleanup": 2, "release": 1, "enrollments": 4, "tasks": 2, "pause": 8, "tick_after_pause": 0},
+      "results": {
+        "create": {"id": 1},
+        "publish": {"versionId": 1, "versionNo": 1},
+        "tick": {"run": true, "enabled": true, "active": 1, "cleanupDue": true},
+        "ingest": {"scanned": 151, "enrolled": 151, "stopped": 0, "marked": 0, "skipped": 0},
+        "claim": {"count": 151, "keyKinds": {"zalo": 148, "phone": 3}, "keys": ["accounts", "enrollments", "facts", "smsCampaigns", "stepCampaigns", "userCampaigns", "versions"]},
+        "collect": {"checked": 0, "settled": 0, "reopened": 0},
+        "cleanup": {"events": 0, "runs": 0, "enrollments": 0},
+        "release": {"ok": true},
+        "enrollmentsPage": {"count": 50, "statuses": {"active": 50}},
+        "pause": {"status": "paused", "campaignIds": []},
+        "tickAfterPause": {"run": false, "enabled": true, "active": 0}
+      },
+      "afterRollback": "all eleven journey tables 0 rows; engine_state unchanged. Identity sequences keep the values the trial used (first real journey gets id 2)."
+    }
+  },
+  "notDone": [
+    "API/Web with the journeys module not deployed yet (WebApp PR aligoinc/akaAgentWebApp#166 not merged); nothing calls the two RPCs.",
+    "web.journeys is still disabled for every organization; journeys.engine_enabled is on, so the engine runs as soon as the API is deployed (only a tick while no journey is active)."
+  ]
+}
