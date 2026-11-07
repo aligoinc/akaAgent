@@ -1,6 +1,6 @@
 # V476 — Web/PWA và app iOS quản lý chiến dịch Facebook
 
-Ngày 07/11/2026 · **Trạng thái: candidate, CHƯA apply production, Desktop chưa phát hành.** Phương án đầy đủ (API, Web, iOS) ở akaAgentWebApp `docs/FACEBOOK_CAMPAIGNS_PLAN.md`; tài liệu này chỉ phần akaAgent: migration V476 và ảnh chụp runtime của app Desktop.
+Ngày 07/11/2026 · **Trạng thái: ĐÃ apply akachat lúc 22:50:41 VN 07/11/2026 (`20261107155041 / migration_v476_web_facebook_campaigns`), không apply lại; chính sách `web.facebook_campaigns` vẫn tắt; CHƯA deploy API/Web; Desktop chưa phát hành.** Biên nhận: [apply-receipt.json](../migrations/snapshots/web-facebook-campaigns-v476/apply-receipt.json). Phương án đầy đủ (API, Web, iOS) ở akaAgentWebApp `docs/FACEBOOK_CAMPAIGNS_PLAN.md`; tài liệu này chỉ phần akaAgent: migration V476 và ảnh chụp runtime của app Desktop.
 
 App Desktop vẫn là nơi chạy duy nhất của chiến dịch Facebook. Web/iOS chỉ đọc DB và đổi trạng thái qua RPC có guard, đúng mô hình V461 của Zalo mã QR/trình duyệt ([WEB_DESKTOP_ACCOUNTS_V461.md](WEB_DESKTOP_ACCOUNTS_V461.md)). Không tạo/sửa chiến dịch Facebook từ Web: các RPC tạo/sửa/thêm data/đổi trạng thái dòng không đổi và vẫn từ chối Facebook.
 
@@ -100,7 +100,7 @@ Owner `postgres`, security/volatility/config/ACL `{postgres=X/postgres,service_r
 
 - `PG_TEST_BINDIR=/usr/lib/postgresql/16/bin scripts/test-web-facebook-campaigns-sql.sh` (PG16, ~2 giây): nền dựng từ fixtures V461 + V461 + V464 và kiểm đúng 6 md5 + ACL production; **123 lời gọi caller cũ** (trang/snapshot ba view/tiến trình với 6 bộ token × lọc, chọn tất cả, `p_selected_id`, `p_ids`; dừng/tiếp tục và xoá Zalo Desktop/Server/SMS; xác thực 11 phiên) giống hệt trước apply, sau apply, sau rollback và sau apply lại; assertions Facebook (đọc, dừng/tiếp tục, xoá, đường ghi vẫn chặn, xác thực theo gói/ngày Việt Nam/loại client/chính sách, chính sách lỗi đóng, quyền); apply lại không đổi gì và giữ giá trị chính sách; rollback chạy lại được; nguồn lệch dừng không đổi gì; script so sánh 6/6 `patch_dry_run` và 40 dòng `*_same` đạt mà không đổi DB; script áp một lần dán cho trạng thái giống hệt migration thường, chạy lại bị chặn, nguồn lệch dừng; smoke production đạt.
 - Desktop: `node scripts/desktop-runtime-snapshot-smoke.cjs` và hai typecheck (kết quả ở báo cáo commit).
-- **Chưa chạy trên production**: script so sánh chỉ đọc cần phiên được tạo bảng/hàm `pg_temp` (Supabase MCP sẽ hỏi xác nhận), nên để tới lúc apply; script áp một lần dán tự chạy phần so sánh này và dừng nếu lệch.
+- **Production 07/11/2026 22:45–22:55 VN:** script so sánh trên dữ liệu thật 6/6 `patch_dry_run` và 40/40 `*_same` (5 nhân viên lớn nhất, gồm 3 người nhiều chiến dịch Facebook nhất: 935/902/574), đường Facebook 3/3, thời gian cũ ≈ mới; apply bằng `apply_migration`, md5 sổ ledger = md5 file `df9f6f31…`; 6 hàm ở md5 đích, 2 hàm mới đúng md5/ACL, chính sách tắt; smoke `BEGIN … ROLLBACK` đạt 5 nhân viên; PostgREST nạp lại schema 2,5 giây, 0 lỗi 5xx/503, lỗi Postgres sau apply giống hệt trước (nền 42501 của Desktop cũ).
 
 ## Triển khai
 
