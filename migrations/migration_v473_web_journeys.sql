@@ -1840,7 +1840,9 @@ BEGIN
           coalesce(c.extra_data ->> 'phone_carrier', c.extra_data ->> 'carrier') AS carrier,
           c.account_id, 'contact:' || c.id::text AS fallback_key,
           (c.is_delete IS TRUE OR c.organization_id IS DISTINCT FROM j.organization_id) AS invalid,
-          NULL::text AS detail_status
+          NULL::text AS detail_status,
+          -- Nhóm data có thể chứa nhóm/trang Facebook hoặc tag Zalo: không phải một người.
+          coalesce(c.contact_type IN ('group', 'page', 'zalo_tag'), false) AS group_target
         FROM public.auto_account_contact_group_members m
         JOIN public.auto_account_contacts c ON c.id = m.contact_id
         WHERE m.group_id = src.group_id AND m.is_delete = false
@@ -1871,7 +1873,7 @@ BEGIN
     FOR r IN
       SELECT * FROM jsonb_to_recordset(v_batch) AS x(row_ts timestamptz, row_id bigint, ref bigint, phone text, uid text,
         email text, name text, info1 text, info2 text, info3 text, info4 text, info5 text, carrier text, account_id bigint,
-        fallback_key text, invalid boolean, detail_status text)
+        fallback_key text, invalid boolean, detail_status text, group_target boolean)
       ORDER BY x.row_ts, x.row_id
     LOOP
       v_key := private.aka_agent_journey_contact_key(r.phone, r.uid, r.account_id, r.email, r.fallback_key);
@@ -1939,7 +1941,7 @@ BEGIN
           VALUES (j.id, j.active_version_id, j.staff_id, j.organization_id, v_key,
             private.aka_agent_journey_contact(r.name, r.phone, r.uid, r.email, r.info1, r.info2, r.info3, r.info4, r.info5,
               r.carrier, r.account_id)
-              || CASE WHEN v_source_group_target IS TRUE THEN '{"targetKind":"group"}'::jsonb ELSE '{}'::jsonb END,
+              || CASE WHEN v_source_group_target IS TRUE OR r.group_target IS TRUE THEN '{"targetKind":"group"}'::jsonb ELSE '{}'::jsonb END,
             src.kind, r.ref, src.group_id, src.campaign_id, 'active', 'ready', now())
           ON CONFLICT (journey_id, contact_key) WHERE status = 'active' DO NOTHING
           RETURNING id INTO v_new_id;
