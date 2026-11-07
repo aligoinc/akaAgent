@@ -1,4 +1,5 @@
--- Rollback V473 (Quy trình tự động trên Web). Candidate, production cgjbsmqtfhqvttudyjzq only.
+-- Rollback V473 (Quy trình tự động trên Web, bốn phần migration_v473_web_journeys_p1…p4), production cgjbsmqtfhqvttudyjzq only.
+-- Chạy được cả khi mới apply một phần (mọi lệnh đều IF EXISTS / theo tên hàm).
 -- Gỡ hai RPC, mọi hàm phụ private.aka_agent_journey_*, 11 bảng auto_journey* (kèm toàn bộ dữ liệu quy trình,
 -- khách trong quy trình, dòng thời gian, bộ đếm, việc cần làm) và hai dòng cài đặt journeys.engine_enabled / web.journeys.
 -- V473 không đổi bảng, index, hàm hay quyền có sẵn nên không có gì khác cần khôi phục.

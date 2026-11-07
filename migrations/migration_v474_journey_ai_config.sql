@@ -1,10 +1,10 @@
--- Candidate V474, production cgjbsmqtfhqvttudyjzq only. NOT APPLIED. Data only (no DDL/ACL): cấu hình trợ lý AI dựng
+-- V474, production cgjbsmqtfhqvttudyjzq only. Data only (no DDL/ACL): cấu hình trợ lý AI dựng
 -- Quy trình tự động bằng ai_prompt + ai_using (code 'app_journey_draft'), model DeepSeek dùng chung ai_model id 2
 -- 'deepseek_default' (chat/completions). DeepSeek chỉ có chế độ json_object (không ép schema) nên:
 --   * request_options của ai_using bật response_format json_object (ghi đè 'text' trong default_body của model);
 --   * API WebApp chèn JSON Schema journey-core JOURNEY_AI_SCHEMA vào {{journeySchema}}, ngữ cảnh vào {{journeyContext}};
 --   * journey-core parseJourneyAiOutput chuẩn hóa kiểu rồi kiểm tra toàn bộ bản nháp (id thật, cấu trúc cây, giới hạn).
--- Không đụng model, prompt hay cấu hình AI khác; không dùng ai_form_configs. Apply SAU V473.
+-- Không đụng model, prompt hay cấu hình AI khác; không dùng ai_form_configs. Apply SAU V473 (đủ p1–p4).
 -- Không apply lại: đã có code 'app_journey_draft' thì dừng. id là identity GENERATED ALWAYS: không chèn id tường minh.
 -- Rollback: migrations/rollback_v474_journey_ai_config.sql (chỉ tắt is_active; không DELETE vì ai_log có FK tới hai bảng).
 BEGIN;
