@@ -105,7 +105,7 @@ Owner `postgres`, security/volatility/config/ACL `{postgres=X/postgres,service_r
 ## Triển khai
 
 1. Apply V476 **ngoài giờ cao điểm** (10:00–11:30 và 14:00–16:00 VN là khung nặng nhất): `CREATE OR REPLACE` làm PostgREST nạp lại schema. Cách ưu tiên: chạy `..._compare.sql` (đọc kết quả) rồi `apply_migration` với nguyên file migration; không bấm được thẻ xác nhận MCP thì dán `..._guarded_apply.sql` vào SQL Editor (dòng cuối `applied`). Sau đó chạy `..._smoke.sql` trong `BEGIN … ROLLBACK`. Chính sách vẫn tắt nên khách chưa thấy gì.
-2. Deploy API (akaAgentWebApp), rồi Web. API mới chạy được với Web cũ.
+2. Deploy API (akaAgentWebApp, nhánh `claude/vibrant-goodall-gn084w`; tài liệu `docs/FACEBOOK_CAMPAIGNS.md`), rồi Web. API mới chạy được với Web cũ. Thứ tự với bước 1 không bắt buộc: thiếu V476 thì RPC chính sách không có và phiên không có `web_facebook_campaigns`, API coi như tắt.
 3. Canary: `organizationIds` = 1–2 tổ chức có cả Facebook và Zalo/SMS, có chiến dịch Facebook trên app 9.4.0.
 4. `organizationIds: null` cho mọi tổ chức.
 5. Bật `facebookOnlyLogin` (198 tổ chức chỉ có Facebook) sau khi menu rút gọn đã chạy.
@@ -114,4 +114,4 @@ Owner `postgres`, security/volatility/config/ACL `{postgres=X/postgres,service_r
 ## Rollback
 
 - Nhanh: `enabled=false` hoặc `facebookOnlyLogin=false`, không cần deploy.
-- Đầy đủ: tắt chính sách, deploy API không gọi `aka_agent_control_web_facebook_campaigns_policy`, rồi chạy `migrations/snapshots/web-facebook-campaigns-v476/rollback.sql` (guard md5, khôi phục 6 thân trước V476, bỏ 2 hàm mới, xoá khoá cấu hình; chạy lại được). Cũng là DDL nên chọn lúc DB dịu.
+- Đầy đủ: tắt chính sách rồi chạy `migrations/snapshots/web-facebook-campaigns-v476/rollback.sql` (guard md5, khôi phục 6 thân trước V476, bỏ 2 hàm mới, xoá khoá cấu hình; chạy lại được). Cũng là DDL nên chọn lúc DB dịu. API WebApp không cần deploy lại: lỗi gọi RPC chính sách (kể cả `PGRST202` khi hàm đã bỏ) được coi là tắt.
