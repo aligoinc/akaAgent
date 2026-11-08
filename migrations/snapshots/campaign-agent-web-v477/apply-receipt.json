@@ -1,0 +1,44 @@
+{
+  "migration": "migration_v477_campaign_agent_web_model",
+  "project": "cgjbsmqtfhqvttudyjzq (akachat)",
+  "ledgerVersion": "20261108032519",
+  "appliedAtVietnam": "2026-11-08 10:25:19",
+  "appliedVia": "Supabase MCP apply_migration (data only, one DO block, one transaction)",
+  "file": "migrations/migration_v477_campaign_agent_web_model.sql",
+  "fileMd5": "1089d99baa3239e2fb5f604eaa43f711",
+  "ledgerStatementMd5": "1089d99baa3239e2fb5f604eaa43f711",
+  "rollback": "migrations/rollback_v477_campaign_agent_web_model.sql",
+  "preflightProduction": {
+    "targetExists": 0,
+    "sourceModel21": "openai_campaign_diagnostics_sol61, openai, gpt-6.1-sol, https://api.openai.com/v1/responses, organization_id NULL, active, key present",
+    "aiModelIdSequenceLastValue": 24,
+    "aiModelMaxId": 24,
+    "ledgerV477Rows": 0
+  },
+  "result": {
+    "aiModelId": 25,
+    "code": "openai_campaign_agent_web_terra",
+    "provider": "openai",
+    "model": "gpt-6.1-terra",
+    "endpoint": "https://api.openai.com/v1/responses",
+    "defaultBody": { "model": "gpt-6.1-terra", "store": false, "reasoning": { "effort": "medium" } },
+    "organizationId": null,
+    "isSystem": true,
+    "isActive": true,
+    "apiKeyCopiedFromModel21": true,
+    "aiFormConfigsUsingModel": 0,
+    "aiUsingUsingModel": 0,
+    "totalAiModels": 15,
+    "otherModels": "14 existing rows unchanged and active (ids 1, 2, 7, 8, 10, 11, 12, 13, 14, 16, 17, 18, 21, 24)"
+  },
+  "localVerificationPostgres16": [
+    "apply creates id 25 with key copied from source row",
+    "re-apply refused: V477: target model already exists",
+    "rollback refused while an active ai_form_configs row uses the model",
+    "rollback after disabling that config sets is_active=false",
+    "source model drift refused: V477: source model 21 changed or has no active key"
+  ],
+  "notVerified": "No OpenAI call was made with gpt-6.1-terra yet. The model name and Structured Outputs support are confirmed by the first provider call (canary) of the Web Agent API.",
+  "secretHandling": "The API key was copied inside SQL and never selected, printed or stored in this repository.",
+  "doNotReapply": true
+}
