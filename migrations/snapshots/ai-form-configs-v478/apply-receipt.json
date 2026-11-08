@@ -1,0 +1,23 @@
+{
+  "migration": "migration_v478_ai_form_configs_nguyen_tac_bo_sung",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261108050744",
+  "applied_at_vn": "2026-11-08T12:07:44+07:00",
+  "applied_via": "Supabase MCP apply_migration (người dùng bấm Allow)",
+  "file_md5": "f05ac08d252e9fadbd05c681666aebd2",
+  "ledger_statements_md5": "f05ac08d252e9fadbd05c681666aebd2",
+  "preflight": {
+    "rows": 12,
+    "row_fingerprint_md5": "b4370e771a565a4f74073344affcb94d",
+    "db_load_before_apply": "1 tiến trình hoạt động, 0 khoá trên ai_form_configs (Chủ nhật 12:07 VN)"
+  },
+  "postflight": {
+    "column": "nguyen_tac_bo_sung text NULL, CHECK char_length <= 8000",
+    "non_null_rows": 0,
+    "old_columns_fingerprint_md5": "b4370e771a565a4f74073344affcb94d",
+    "aka_agent_desktop": { "select_new_column": true, "update_new_column": false }
+  },
+  "local_test": "scripts/test-v478-nguyen-tac-bo-sung.sh — PostgreSQL 16 UTF8, 16/16 đạt",
+  "rollback": "migrations/rollback_v478_ai_form_configs_nguyen_tac_bo_sung.sql (mức 1 xoá nội dung, mức 2 bỏ cột)",
+  "notes": "Không ghi sẵn nguyên tắc nào. Không đổi quyền, không đổi dòng cấu hình nào. Desktop chưa đọc cột."
+}
