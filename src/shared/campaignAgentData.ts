@@ -27,11 +27,16 @@ export const validAgentDataImport = (value: unknown): value is AgentDataImport =
 const recipient = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|\+?84(?:[ ().-]?\d){9,10}(?!\d)|0(?:[ ().-]?\d){9}(?!\d)|\b\d{7,20}\b/gi
 const fold = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase()
 const unprefixed = (value: string) => fold(value.trim()).replace(/^(?:(?:toi muon|toi can|hay|giup toi|vui long)\s+)+/, '')
-const contentIntent = (value: string) => /^(?:(?:viet|soan|sua|viet lai|rut gon|them|doi|chen)\b.*\b(?:noi dung|email|tin nhan|bai viet|loi nhan)|(?:noi dung|content|tieu de|chu ky)\s*:)/.test(unprefixed(value))
+// Tiêu đề phần nội dung: "Nội dung:", "Nội dung tin nhắn, giữ nguyên văn:", "Tin nhắn:". Phần mô tả trước dấu hai chấm
+// không có chữ số/@ để danh sách người nhận ("Tin nhắn gửi 0901…:") không bị coi là nội dung (kiểm thử phát lại 08/11/2026).
+const CONTENT_HEADING = String.raw`(?:noi dung|content|tieu de|chu ky|tin nhan)(?:\s[^:\n\d@]{0,80})?\s*:`
+const CONTENT_INTENT = new RegExp(String.raw`^(?:(?:viet|soan|sua|viet lai|rut gon|them|doi|chen)\b.*\b(?:noi dung|email|tin nhan|bai viet|loi nhan)|${CONTENT_HEADING})`)
+const contentIntent = (value: string) => CONTENT_INTENT.test(unprefixed(value))
 const dataIntent = (value: string) => /^(?:(?:nhap|them|import|thay|thay the)\s+(?:danh sach|data|du lieu|nguoi nhan)|(?:danh sach|data|du lieu|nguoi nhan)\s*:)/.test(unprefixed(value))
 const recipientIntent = (value: string) => /^(?:(?:gui|nhan)(?:\s+tin(?: nhan)?)?\s+(?:toi|den|cho)|(?:nhap|them)\s+(?:sdt|so dien thoai|email|uid)(?:\s+(?:vao danh sach|nguoi nhan))?)\s*:?\s*$/.test(unprefixed(value))
 const separatorsOnly = (value: string) => /^[\s,;|()\[\]"'“”‘’•*:-]*$/.test(value)
-const contentBoundary = (value: string) => /\b(?:noi dung|content|tin nhan)\s*:/.test(fold(value))
+const CONTENT_BOUNDARY = new RegExp(String.raw`\b${CONTENT_HEADING}`)
+const contentBoundary = (value: string) => CONTENT_BOUNDARY.test(fold(value))
 const recipientCell = new RegExp(`^(?:${recipient.source}|https?:\\/\\/\\S+)$`, 'i')
 const csvInstruction = (value: string) => contentIntent(value) || dataIntent(value)
   || /^(?:ten chien dich|campaign name|email subject|tieu de email)\b/.test(unprefixed(value))

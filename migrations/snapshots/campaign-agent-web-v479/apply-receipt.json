@@ -1,0 +1,40 @@
+{
+  "migration": "migration_v479_campaign_agent_web_config",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261108072148",
+  "applied_at_vn": "2026-11-08T14:21:48+07:00",
+  "applied_via": "Supabase MCP apply_migration",
+  "file_md5": "da3923641b4d93d096885d97dd3f10cd",
+  "ledger_statements_md5": "da3923641b4d93d096885d97dd3f10cd",
+  "preflight": {
+    "agent_config_rows": 0,
+    "agent_setting_rows": 0,
+    "ai_form_configs_rows": 12,
+    "row_fingerprint_md5_without_rules_and_updated_at": "6e38cf9c6f8c49c49fcd9c4c0d41636b",
+    "ai_model_25": "gpt-6.1-terra, active, organization_id NULL",
+    "sequences": { "ai_form_configs": { "last_value": 23, "max_id": 23 }, "auto_system_settings": { "last_value": 99, "max_id": 99 } },
+    "ddl": "không có (chỉ INSERT), PostgREST không nạp lại schema"
+  },
+  "postflight": {
+    "ai_form_configs": {
+      "id": 24, "code": "app_campaign_agent_web", "web_section_id": "campaign.agent",
+      "desktop_section_id": null, "mobile_section_id": null, "model_id": 25, "campaign_scope": "all",
+      "is_active": true, "timeout_ms": 120000, "request_options": { "store": false },
+      "prompt_system_md5": "ce237722c4312cf31bd0327ecd158a0a", "nguyen_tac_bo_sung": null,
+      "output_schema": "bằng CAMPAIGN_AGENT_SCHEMA của akaAgentWebApp packages/campaign-core/src/campaignAgent.ts (so trước khi apply)"
+    },
+    "auto_system_settings": { "id": 100, "key": "web.campaign_agent", "value": "{\"audience\":\"admin_akabiz\"}", "is_active": true, "is_secret": false },
+    "old_rows_fingerprint_md5": "6e38cf9c6f8c49c49fcd9c4c0d41636b",
+    "ai_form_configs_rows": 13,
+    "ai_log_rows_for_new_config": 0
+  },
+  "compatibility": [
+    "API/Web đang chạy: listFormAiAvailability bỏ section lạ (formAiAvailability chỉ nhận 5 section form AI).",
+    "Desktop: lọc desktop_section_id NOT NULL nên không thấy dòng này.",
+    "Chưa có code đọc web.campaign_agent trên production cho tới khi deploy API/Web nhánh claude/intelligent-carson-3d5pn5."
+  ],
+  "local_test": "scripts/test-v479-campaign-agent-web.sh — PostgreSQL 16, 15/15 đạt",
+  "rollback": "migrations/rollback_v479_campaign_agent_web_config.sql (is_active=false cho dòng 24, công tắc off; không DELETE)",
+  "notes": "Chưa gọi thật gpt-6.1-terra; canary bằng admin akaBiz sau khi deploy API/Web. Mở cho mọi khách: UPDATE auto_system_settings SET value='{\"audience\":\"all\"}' WHERE key='web.campaign_agent'.",
+  "followup_20261108": "Sau apply (ghi chú notes ở trên là lúc apply): đã gọi thật gpt-6.1-terra (ai_model 25, key đọc từ DB lúc chạy, không lưu) qua đúng đường API ControlCampaignFormAiService.agent() với Supabase giả và prompt khớp md5 production — akaAgentWebApp apps/api/src/modules/aka-agent-control/campaignAgent.eval.test.ts: 53/53 ca đạt, trung vị 3,2 s/lượt (p90 4,8 s; cả form một câu 6,6–8,3 s), token vào trung vị 12.916 (~71% cache). Không ghi ai_log, không tạo chiến dịch. Còn lại: deploy API/Web, canary giao diện bằng admin akaBiz."
+}
