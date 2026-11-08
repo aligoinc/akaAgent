@@ -80,6 +80,8 @@ npx tsc --noEmit -p tsconfig.web.json    # Renderer
 
 Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smoke test. Sau migration_v4 (drop engine v1) typecheck phải sạch 0 errors — bất kỳ error nào là regression.
 
+Sales Kit gửi khách (08/11/2026): [marketing/zalo-sales-kit/](marketing/zalo-sales-kit/README.md) — ảnh, PDF, video, landing page, tin nhắn mẫu dựng từ một nguồn `nguon/noi-dung.cjs` + `nguon/tin-nhan-mau.cjs` (`node nguon/xay-dung.cjs tat-ca`, `node nguon/quay-tat-ca-video.cjs`, `node nguon/xuat-tin-nhan.cjs`; Playwright + ffmpeg). Đổi tính năng Zalo thì cập nhật bảng "Căn cứ tính năng" và mục "Không nói với khách" trong README của kit.
+
 ## Architecture
 
 **Electron 33 + React 19 desktop app** cho automation Facebook (group post / timeline post / message friend / kết bạn). Build qua `electron-vite`. State Zustand. Canvas `@xyflow/react`. DB Supabase. Code editor Monaco.
