@@ -71,6 +71,11 @@ async function main(){try{
  assert.equal(m.splitAgentDataMessage('https://facebook.com/groups/123456789').description,'https://facebook.com/groups/123456789')
  assert.equal(m.splitAgentDataMessage('Gửi tới test@example.com').data,'test@example.com')
  assert.equal(m.splitAgentDataMessage('Fullname\tMobile\nNguyễn An\t0901234567').data,'Fullname\tMobile\nNguyễn An\t0901234567')
+ // Tiêu đề nội dung có mô tả ("Nội dung tin nhắn, giữ nguyên văn:") giữ số liên hệ trong nội dung (Web, kiểm thử phát lại 08/11/2026).
+ const verbatim='Nội dung tin nhắn, giữ nguyên văn từng chữ, không sửa:\nVay theo lương nhận ngay trong ngày\n0901112223|\nHỗ trợ vay tín chấp\nZalo 0912345678'
+ assert.deepEqual(m.splitAgentDataMessage(verbatim),{description:verbatim,data:''})
+ for(const heading of ['Tin nhắn:','Nội dung gửi khách:','Content:'])assert.deepEqual(m.splitAgentDataMessage(heading+'\nLiên hệ 0901234567'),{description:heading+'\nLiên hệ 0901234567',data:''})
+ assert.deepEqual(m.splitAgentDataMessage('Gửi tới 0901234567, 0987654321 tin nhắn: chào anh'),{description:'Gửi tới [data đính kèm] tin nhắn: chào anh',data:'0901234567\n0987654321'})
  // Excel clipboard records can span several lines inside quoted TSV cells.
  for(const tsv of [
    'Tên\tSĐT\tInfo1\nAn\t0901234567\t"Ghi chú\nkhách VIP"\nBình\t0987654321\tOK',

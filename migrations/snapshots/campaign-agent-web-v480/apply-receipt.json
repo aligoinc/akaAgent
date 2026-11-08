@@ -1,0 +1,42 @@
+{
+  "migration": "migration_v480_campaign_agent_web_prompt",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261108105355",
+  "applied_at_vn": "2026-11-08T17:53:55+07:00",
+  "applied_via": "Supabase MCP apply_migration",
+  "file_md5": "e9e562a16638606c100f4f072e091c28",
+  "ledger_statements_md5": "e9e562a16638606c100f4f072e091c28",
+  "preflight": {
+    "ai_form_configs_rows": 13,
+    "agent_prompt_md5": "ce237722c4312cf31bd0327ecd158a0a",
+    "agent_row_without_prompt_rules_updated_at_md5": "d0d95df6071ea97fb729b0538d4cd02e",
+    "other_12_rows_md5_without_rules_and_updated_at": "6e38cf9c6f8c49c49fcd9c4c0d41636b",
+    "nguyen_tac_bo_sung": "13/13 NULL"
+  },
+  "postflight": {
+    "agent_prompt_md5": "13f90ab0e8c6be56221d7a17c0cdce42",
+    "agent_prompt_chars": 5456,
+    "agent_row_without_prompt_rules_updated_at_md5": "d0d95df6071ea97fb729b0538d4cd02e",
+    "other_12_rows_md5_without_rules_and_updated_at": "6e38cf9c6f8c49c49fcd9c4c0d41636b",
+    "ai_form_configs_rows": 13,
+    "agent_is_active": true,
+    "agent_updated_at_vn": "2026-11-08 17:53:55",
+    "web.campaign_agent": "{\"audience\":\"admin_akabiz\"} (không đổi)",
+    "ai_log_agent_web_24h": 0
+  },
+  "compatibility": [
+    "Chỉ dữ liệu (UPDATE một dòng), không DDL, không nạp lại schema PostgREST, không đổi quyền.",
+    "Desktop không đọc dòng 24 (desktop_section_id NULL); 12 dòng prompt từng phần dùng chung Desktop giữ nguyên md5.",
+    "API/Web Agent chưa deploy: prompt mới đi cùng code WebApp campaign-core nhánh claude/intelligent-carson-3d5pn5 (supportsDataImport, limitCapabilities, chốt nguyên văn, tách biến thể)."
+  ],
+  "local_test": "scripts/test-v480-campaign-agent-web-prompt.sh — PostgreSQL 16, 16/16 đạt",
+  "rollback": "migrations/rollback_v480_campaign_agent_web_prompt.sql (đặt lại prompt V479 md5 ce237722…, guard md5 V480)",
+  "verification": {
+    "replay_real_campaigns_30d": "5 vòng, vòng cuối 13/13 (lô 4 mới 10/10): 0 ngoại lệ, 0 lỗi, luồng dữ liệu đúng (akaAgentWebApp docs/CAMPAIGN_AGENT_WEB.md, mục Kiểm thử phát lại)",
+    "eval_gate": "58/58 với gpt-6.1-terra (53 ca cũ + 5 ca rút từ phát lại); trung vị 3,4 s/lượt, p90 4,9 s"
+  },
+  "notes": [
+    "Prompt kiểm thử nạp qua CAMPAIGN_AGENT_REPLAY_AGENT_PROMPT/CAMPAIGN_AGENT_EVAL_PROMPTS với đúng văn bản đã apply (md5 13f90ab0…).",
+    "File SQL sinh từ văn bản prompt đã kiểm thử, không gõ tay; sau khi apply không sửa file (sổ migration lưu nguyên văn)."
+  ]
+}
