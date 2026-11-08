@@ -35,5 +35,6 @@
   ],
   "local_test": "scripts/test-v479-campaign-agent-web.sh — PostgreSQL 16, 15/15 đạt",
   "rollback": "migrations/rollback_v479_campaign_agent_web_config.sql (is_active=false cho dòng 24, công tắc off; không DELETE)",
-  "notes": "Chưa gọi thật gpt-6.1-terra; canary bằng admin akaBiz sau khi deploy API/Web. Mở cho mọi khách: UPDATE auto_system_settings SET value='{\"audience\":\"all\"}' WHERE key='web.campaign_agent'."
+  "notes": "Chưa gọi thật gpt-6.1-terra; canary bằng admin akaBiz sau khi deploy API/Web. Mở cho mọi khách: UPDATE auto_system_settings SET value='{\"audience\":\"all\"}' WHERE key='web.campaign_agent'.",
+  "followup_20261108": "Sau apply (ghi chú notes ở trên là lúc apply): đã gọi thật gpt-6.1-terra (ai_model 25, key đọc từ DB lúc chạy, không lưu) qua đúng đường API ControlCampaignFormAiService.agent() với Supabase giả và prompt khớp md5 production — akaAgentWebApp apps/api/src/modules/aka-agent-control/campaignAgent.eval.test.ts: 53/53 ca đạt, trung vị 3,2 s/lượt (p90 4,8 s; cả form một câu 6,6–8,3 s), token vào trung vị 12.916 (~71% cache). Không ghi ai_log, không tạo chiến dịch. Còn lại: deploy API/Web, canary giao diện bằng admin akaBiz."
 }
