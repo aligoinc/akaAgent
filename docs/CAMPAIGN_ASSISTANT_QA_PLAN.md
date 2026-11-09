@@ -1,6 +1,7 @@
 # Trợ lý aka: hỏi đáp chiến dịch — phần Desktop
 
-> **Trạng thái:** phương án ngày 09/11/2026. **Chưa code, chưa migration, chưa áp gì lên production.**
+> **Trạng thái:** phương án ngày 09/11/2026, **đã duyệt toàn bộ cùng ngày** (quyết định ở mục 17 của tài liệu chính).
+> **Chưa code, chưa migration, chưa áp gì lên production.**
 > Tài liệu chính (kiến trúc, 15 API ngữ cảnh, prompt 2 lớp, danh mục nguyên nhân, cổng 95%, câu hỏi cần chốt):
 > akaAgentWebApp [`docs/CAMPAIGN_ASSISTANT_QA_PLAN.md`](https://github.com/aligoinc/akaAgentWebApp/blob/claude/wonderful-shannon-dyxnwf/docs/CAMPAIGN_ASSISTANT_QA_PLAN.md).
 > File này chỉ ghi phần việc của Desktop và các phát hiện khi khảo sát mã Desktop/App Server.
@@ -15,14 +16,15 @@
 
 | Việc | Chỗ sửa | Ghi chú |
 |---|---|---|
-| Menu 2 câu hỏi mới | `src/renderer/src/components/CampaignPanels/CampaignAssistantMenu.tsx`, `src/shared/campaignSupport.ts` (`CampaignAssistantMode`) | Thay `campaign_support` / `campaign_support_dsh` (agent ngoài `aka10000.fly.dev`) sau khi luồng mới qua cổng, theo quyết định của anh/chị |
+| Menu 2 câu hỏi mới | `src/renderer/src/components/CampaignPanels/CampaignAssistantMenu.tsx`, `src/shared/campaignSupport.ts` (`CampaignAssistantMode`) | Đã chốt: thay `campaign_support` / `campaign_support_dsh` (agent ngoài `aka10000.fly.dev`) khi luồng mới qua cổng. Menu vẽ theo bảng câu hỏi `auto_campaign_assistant_question` qua route config (đọc một lần khi mở trang); đọc lỗi thì dùng 2 câu hỏi cài sẵn |
 | Tab trả lời | Component mới cạnh `CampaignAssistantTab.tsx` | 5 phần, nhãn Chắc chắn/Gợi ý, nút, Kiểm tra lại, 👍/👎, ô hỏi tiếp có ảnh |
 | IPC + service main | `src/main/ipc/handlers/` + `src/main/services/` mới | `ai:campaign-assistant:{send,cancel,conversation,feedback}`; huỷ khi đổi chiến dịch/đăng xuất; không lưu nội dung hội thoại ra file |
 | Kiểm ảnh | Dùng lại `src/main/services/campaignSupportImageValidation.ts` | ≤ 5 ảnh, 5 MB/ảnh, 15 MB tổng; WebP giữ nguyên byte |
 | Hợp đồng dùng chung | `src/shared/campaignAssistant.ts` | Chép nguyên văn từ akaAgentWebApp `packages/control-api/src/campaignAssistant.ts`: khoá nút, mã nguyên nhân, kiểu dữ liệu |
 | Nối nút mở form | `CampaignPanel.tsx` (`handleDiagnosticAction`), `CampaignFormModal.tsx` | Nới kiểu `initialSection` (form đã nhận mọi id trong `STEPS`); thêm `accountActionsCampaign` (modal `AccountInfoModal` có `campaign`), `resumeAccount` (đang chỉ ở menu chuột phải AccountPanel), `blocklists` (`onOpenGeneralSettings('zaloBlocklists')`), `dataGroup` (prop đã có ở `App.tsx`), `exclusions` (thêm ref cho `CampaignSendExclusions`) |
-| Làm giàu heartbeat | `src/main/services/desktopRuntimeSnapshot.ts` | Thêm: phiên Zalo Web chưa xác minh, tài khoản bị giữ sau lượt lỗi, bảo trì ngày lỗi, cần tắt mở app vì đổi chế độ Zalo, tài khoản bận thao tác, bước đang chạy. Có lợi cho cả Web |
-| Ảnh chụp cho App Server | `src/server/main/zaloServerRuntimeManager.ts` | Hiện App Server không ghi `runtime_state`; trạng thái và lỗi khởi động chỉ ở RAM |
+| Heartbeat v2 | `src/main/services/desktopRuntimeSnapshot.ts` | Tăng `v` lên 2, giữ trường v1. Thêm: `scheduler.maintenance` (chờ từ lúc nào, lỗi bảo trì), `scheduler.zalo_mode_restart_required`, `accounts[].zalo_web_session`, `held_after_failure`, `operation`, `run` (chiến dịch, bước, từ lúc nào), và dòng cho tài khoản bị loại kèm `reason`. Không thêm request (mục 18.4 tài liệu chính) |
+| Ảnh chụp cho App Server | `src/server/main/zaloServerRuntimeManager.ts` + bảng mới `auto_server_runtime_state` | Hiện App Server không ghi `runtime_state`; trạng thái và lỗi khởi động chỉ ở RAM. Ghi khi trạng thái đổi, tối đa 5 phút/lần cho nhân viên đang có chiến dịch chạy/đến giờ (đo 09/11: 672 nhân viên, 1.770 tài khoản Zalo Server) |
+| Nút "Tại sao CD không chạy?" | `src/main/services/campaignPendingReasonService.ts` | Bản GĐ3 gọi route Desktop của Lớp 0 ở server (không AI); bản cũ giữ luật cục bộ |
 
 SQL chuẩn (15 hàm `public.aka_agent_campaign_ctx_*`, bảng lượt hỏi/kiến thức/sự cố, dòng `ai_prompt`/`ai_using`/`api_list`, công tắc) đặt ở `migrations/` của repo này như mọi migration khác; số `vN` chỉ đặt lúc code, sau khi kiểm sổ migration và các nhánh chưa merge. Thay đổi trên bảng của chatbot (`agent_domain`, CHECK `url`) đặt ở akaAgentChatApi.
 
@@ -38,7 +40,7 @@ Trạng thái chỉ có trong RAM (DB không thấy): phiên Zalo Web chưa xác
 
 Lấy quyền chạy thành công luôn đặt `auto_campaigns.note = NULL` (`migration_v397`), nên ghi chú chỉ còn khi chiến dịch vẫn đang bị chặn hoặc bộ chạy không chạy. Trợ lý phải kiểm lại điều ghi chú nói bằng dữ liệu hiện tại.
 
-Các điểm CLAUDE.md đang ghi khác code (đề xuất sửa, chưa sửa trong lượt này):
+Các điểm CLAUDE.md từng ghi khác code — **đã sửa ngày 09/11/2026** bằng ghi chú "[ĐÍNH CHÍNH 09/11/2026]" ngay tại chỗ:
 
 - Hạn mức: giới hạn ngày đọc `auto_account_action_status.count_action_in_day`; khung phút đếm `auto_campaign_details` theo `(account_id, action_code)` với `counts_toward_limit = true`, hoặc NULL có trạng thái `thành công`/`thất bại` (`campaignRepository.ts:876-907, 6424-6487`).
 - Không có `resetRunningStatuses` / `recoverStuckCampaignInputData` lúc mở app; phục hồi chạy lúc đăng nhập/đăng xuất/thoát (`handlers.ts:691-739`) và qua RPC dọn lượt (V392).
@@ -46,4 +48,4 @@ Các điểm CLAUDE.md đang ghi khác code (đề xuất sửa, chưa sửa tro
 - Cổng bảo trì nay hiện trong heartbeat; `daily_maintenance_required` áp cả chiến dịch tuần/tháng có lịch cũ (V340).
 - Zalo Web: có một lần tự tải lại tab khi còn cookie; kiểm thất bại khi còn cookie không hạ `login_status` (`accountPoller.ts:122-179`, `zaloRuntimeService.ts:990-996`).
 - `auto_account_error_state` không còn là nguồn tạm dừng (phần tăng đếm không còn nơi gọi).
-- Ngưỡng lỗi liên tiếp của `err_undefined` nằm trong DB (seed V15 là 5), không đọc được từ code.
+- Ngưỡng lỗi liên tiếp của `err_undefined` nằm trong DB (seed V15 là 5); production 09/11/2026 là **4** (`tạm dừng`), đúng như CLAUDE.md đang ghi nên không sửa.
