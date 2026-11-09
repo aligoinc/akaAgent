@@ -1,5 +1,6 @@
 // Dựng toàn bộ Sales Kit từ noi-dung.cjs.
 // Dùng: node xay-dung.cjs [anh|a4|bang-gia|landing|tat-ca]   (mặc định: anh + a4; ghép nhiều mục bằng dấu +)
+//       node xay-dung.cjs bang-gia <mã sản phẩm>   (vd zalo-web: chỉ dựng lại bảng giá đó + PDF tổng hợp)
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -61,7 +62,10 @@ if (want('a4')) {
 if (want('bang-gia')) {
   const g = require('./mau/bang-gia.cjs');
   const dir = path.join(KIT, 'anh', '06-bang-gia');
-  C.pricing.forEach((P) => {
+  // Chỉ dựng lại một sản phẩm: node xay-dung.cjs bang-gia zalo-web (PDF tổng hợp luôn dựng lại).
+  const only = process.argv[3];
+  if (only && !C.pricing.some((P) => P.id === only)) throw new Error(`Không có bảng giá "${only}". Có: ${C.pricing.map((P) => P.id).join(', ')}`);
+  C.pricing.filter((P) => !only || P.id === only).forEach((P) => {
     const base = `bang-gia-${P.id}`;
     [['vuong', g.vuong, 1080, 1080], ['doc', g.doc, 1080, 1350], ['story', g.story, 1080, 1920], ['ngang', g.ngang, 1200, 628]].forEach(([kind, fn, w, h]) => {
       jobs.push({ html: write(`anh/${base}-${kind}.html`, fn(P)), out: path.join(dir, `${base}-${kind}-${w}x${h}.png`), width: w, height: h });

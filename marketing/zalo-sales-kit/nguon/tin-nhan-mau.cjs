@@ -112,17 +112,20 @@ const macFaq = { q: 'Máy Mac dùng được không?', a: 'Dạ được ạ, b�
 const lifetimeFaq = { q: 'Gói vĩnh viễn khác gì gói năm?', a: 'Dạ gói vĩnh viễn mình thanh toán một lần, dùng lâu dài không cần gia hạn ạ; gói năm thì gia hạn theo năm. Mình dự định dùng bao lâu để em tư vấn gói phù hợp nhất nha?' };
 const moreFaq = (what) => ({ q: 'Có giảm thêm được không?', a: `Dạ bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, ${what} để em áp chương trình tốt nhất cho mình nha?` });
 
+// Mức giảm gói dài nhất của Zalo Web lấy từ noi-dung.cjs để câu trả lời không lệch bảng giá.
+const webDiscount = pricing.find((P) => P.id === 'zalo-web').plans.find((p) => p.discount).discount;
+
 const pricingText = {
   'zalo-web': {
     when: 'Khách hỏi giá bản Zalo Web (chạy trên trình duyệt, tắt máy vẫn chạy, dùng được Mac, iPad, điện thoại), hoặc đã dùng thử và muốn mua.',
     pitch: 'Gói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ.',
     faq: [
-      { q: 'Gói 3 năm trở lên giá bao nhiêu?', a: 'Dạ gói từ 3 năm trở lên bên em giảm 25% ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?' },
-      { q: 'Có giảm thêm được không?', a: 'Dạ ngoài gói từ 3 năm giảm 25%, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?' },
-      { q: 'Có gói vĩnh viễn không?', a: 'Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm 25% ạ, dùng càng lâu càng tiết kiệm. Mình cần gói vĩnh viễn thì bản Zalo Desktop có gói vĩnh viễn, em gửi bảng giá để mình so sánh nha?' },
+      { q: 'Gói 3 năm trở lên giá bao nhiêu?', a: `Dạ gói từ 3 năm trở lên bên em giảm ${webDiscount} ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?` },
+      { q: 'Có giảm thêm được không?', a: `Dạ ngoài gói từ 3 năm giảm ${webDiscount}, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?` },
+      { q: 'Có gói vĩnh viễn không?', a: `Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm ${webDiscount} ạ, dùng càng lâu càng tiết kiệm. Mình cần gói vĩnh viễn thì bản Zalo Desktop có gói vĩnh viễn, em gửi bảng giá để mình so sánh nha?` },
       trialFaq('Zalo'),
     ],
-    note: 'Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026.',
+    note: `Gói từ 3 năm chỉ ghi "giảm ${webDiscount}", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026.`,
   },
   'zalo-desktop': {
     when: 'Khách hỏi giá bản Zalo cài trên máy tính Windows hoặc Mac, hoặc đã dùng thử và muốn mua.',

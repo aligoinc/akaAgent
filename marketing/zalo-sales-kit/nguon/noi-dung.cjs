@@ -372,7 +372,7 @@ const pricing = [
       { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 700000, note: 'Gia hạn linh hoạt' },
       { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 3000000, badge: 'Khuyên dùng' },
       { id: '2-nam', name: 'Gói 2 năm', months: 24, vnd: 5000000 },
-      { id: '3-nam', name: 'Gói 3 năm trở lên', discount: '25%', line: 'Dành cho khách đồng hành lâu dài', ask: 'Nhắn tư vấn viên để nhận báo giá', askShort: 'Nhắn để nhận báo giá', premium: true },
+      { id: '3-nam', name: 'Gói 3 năm trở lên', discount: '15%', line: 'Dành cho khách đồng hành lâu dài', ask: 'Nhắn tư vấn viên để nhận báo giá', askShort: 'Nhắn để nhận báo giá', premium: true },
     ],
     includes: [
       'Chạy song song đến **5 tài khoản Zalo**',

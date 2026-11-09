@@ -223,14 +223,14 @@ Dạ em gửi anh/chị bảng giá akaAgent Zalo Web ạ:
 • Gói 2 tháng: 700.000đ
 • Gói 1 năm: 3.000.000đ (250.000đ/tháng)
 • Gói 2 năm: 5.000.000đ (khoảng 208.000đ/tháng)
-• Gói 3 năm trở lên: giảm 25%
+• Gói 3 năm trở lên: giảm 15%
 Gói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ. Ngoài ra bên em còn nhiều ưu đãi khác, mình dự định dùng khoảng bao lâu để em áp chương trình tốt nhất cho mình nha?
 ```
 
 **Tư vấn chọn gói**
 
 ```text
-Dạ mình dùng lâu dài thì gói 1 năm chỉ 250.000đ/tháng, tiết kiệm 1.200.000đ so với gia hạn gói 2 tháng liên tục ạ; gói 2 năm tiết kiệm tới 3.400.000đ. Gói 3 năm trở lên bên em giảm 25%. Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?
+Dạ mình dùng lâu dài thì gói 1 năm chỉ 250.000đ/tháng, tiết kiệm 1.200.000đ so với gia hạn gói 2 tháng liên tục ạ; gói 2 năm tiết kiệm tới 3.400.000đ. Gói 3 năm trở lên bên em giảm 15%. Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?
 ```
 
 **Chốt gói**
@@ -244,19 +244,19 @@ Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển k
 - *Gói 3 năm trở lên giá bao nhiêu?*
 
   ```text
-  Dạ gói từ 3 năm trở lên bên em giảm 25% ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?
+  Dạ gói từ 3 năm trở lên bên em giảm 15% ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?
   ```
 
 - *Có giảm thêm được không?*
 
   ```text
-  Dạ ngoài gói từ 3 năm giảm 25%, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?
+  Dạ ngoài gói từ 3 năm giảm 15%, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?
   ```
 
 - *Có gói vĩnh viễn không?*
 
   ```text
-  Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm 25% ạ, dùng càng lâu càng tiết kiệm. Mình cần gói vĩnh viễn thì bản Zalo Desktop có gói vĩnh viễn, em gửi bảng giá để mình so sánh nha?
+  Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm 15% ạ, dùng càng lâu càng tiết kiệm. Mình cần gói vĩnh viễn thì bản Zalo Desktop có gói vĩnh viễn, em gửi bảng giá để mình so sánh nha?
   ```
 
 - *Chưa chắc nên mua gói nào?*
@@ -265,7 +265,7 @@ Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển k
   Dạ mình dùng thử miễn phí 3 ngày, full tính năng trước ạ, chạy thử thật rồi chọn gói cũng chưa muộn. Mình gửi em số điện thoại chưa đăng ký akaBiz để em mở tài khoản Zalo dùng thử ngay nha?
   ```
 
-> **Lưu ý nội bộ:** Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026. Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.
+> **Lưu ý nội bộ:** Gói từ 3 năm chỉ ghi "giảm 15%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026. Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.
 
 ## 7. Báo giá akaAgent Zalo Desktop
 

@@ -70,7 +70,7 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
 | 2 tháng | 700.000đ | 500.000đ | 500.000đ | 500.000đ |
 | 1 năm, nhãn "Khuyên dùng" | 3.000.000đ | 2.000.000đ | 2.000.000đ | 2.000.000đ |
 | 2 năm | 5.000.000đ | | | |
-| 3 năm trở lên | Giảm 25% (chưa in số tiền) | | | |
+| 3 năm trở lên | Giảm 15% (chưa in số tiền) | | | |
 | 4 năm | | 4.000.000đ | 4.000.000đ | 4.000.000đ |
 | Vĩnh viễn | | 10.000.000đ | 10.000.000đ | |
 
@@ -82,7 +82,7 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
   - **Facebook Desktop**: đăng bài nhóm, trang cá nhân, fanpage; nhắn tin bạn bè, người lạ, khách inbox page; kết bạn, tham gia và mời vào nhóm (`src/shared/campaignActionDescriptors.ts`); fanpage dùng chung quyền Facebook (`src/shared/authProductCatalog.ts`, sản phẩm 3 và 10).
   - **SMS Mobile**: gửi bằng app SMS trên điện thoại Android đăng nhập tài khoản SMS (`AccountPanel.tsx`, mục đổi điện thoại), có dấu hoặc không dấu (`smsUseUnicode`), không gửi trùng theo số ngày, đặt lịch, nhập số từ Excel/Google Sheet (`CampaignFormModal.tsx`); cước SMS do nhà mạng tính (kịch bản bán hàng).
   - Không ghi lên bảng giá: số tài khoản mỗi gói Desktop, comment/seeding Facebook, gọi tự động qua SIM.
-- Đổi giá: sửa `pricing` rồi chạy `node xay-dung.cjs bang-gia` và `node xuat-tin-nhan.cjs` (tin báo giá lấy giá từ cùng nguồn).
+- Đổi giá: sửa `pricing` rồi chạy `node xay-dung.cjs bang-gia [mã sản phẩm]` và `node xuat-tin-nhan.cjs` (tin báo giá lấy giá từ cùng nguồn).
 
 ## Không nói với khách
 
@@ -98,8 +98,8 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
 
 - **Máy Mac**: repo có bản cài macOS (chip Apple và Intel), trong khi kịch bản bán hàng cũ hướng khách Mac sang bản chạy trên server. Tài liệu đang ghi trung tính "chạy trên máy tính hoặc trên server"; câu trả lời cho khách Mac nằm ở `nguon/tin-nhan-mau.cjs` (mục câu hỏi chung).
 - **Nhóm ẩn thành viên**: mã nguồn không có xử lý riêng cho chế độ ẩn danh sách thành viên; tài liệu mô tả qua hai cách có thật (quét bằng link nhóm và theo dõi nhóm theo thời gian thực). Trước khi hứa với khách về một nhóm cụ thể, quét thử link nhóm đó trên tài khoản demo.
-- **Gói 3 năm trở lên "giảm 25%"**: chưa rõ giảm trên giá nào (ví dụ 3 × giá 1 năm = 9.000.000đ thì còn 6.750.000đ), nên bảng giá chưa in số tiền. Chốt cách tính thì thêm `vnd`/`months` cho gói này để in giá cụ thể.
-- **Tính năng bản Web trên bảng giá**: "5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại" lấy từ kịch bản bán hàng 06/2026; xác nhận lại nếu gói đã đổi. Kịch bản đó còn ghi bản Web "không có gói vĩnh viễn, không áp ưu đãi giảm (trừ gom 5 user gói năm)"; nay có giảm 25% từ 3 năm, nên cập nhật kịch bản cho khớp.
+- **Gói 3 năm trở lên "giảm 15%"** (đổi từ 25% ngày 09/11/2026): chưa rõ giảm trên giá nào (ví dụ 3 × giá 1 năm = 9.000.000đ thì còn 7.650.000đ), nên bảng giá chưa in số tiền. Chốt cách tính thì thêm `vnd`/`months` cho gói này để in giá cụ thể.
+- **Tính năng bản Web trên bảng giá**: "5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại" lấy từ kịch bản bán hàng 06/2026; xác nhận lại nếu gói đã đổi. Kịch bản đó còn ghi bản Web "không có gói vĩnh viễn, không áp ưu đãi giảm (trừ gom 5 user gói năm)"; nay có giảm 15% từ 3 năm, nên cập nhật kịch bản cho khớp.
 - **Bảng giá mới khác kịch bản bán hàng 06/2026**: kịch bản ghi Desktop "2 tháng 500k, 1 năm 2tr, vĩnh viễn 4tr" và SMS "1 năm 1tr5, vĩnh viễn 3tr"; bảng giá 09/11 là Desktop 4 năm 4tr, vĩnh viễn 10tr và SMS 1 năm 2tr, 4 năm 4tr. Cập nhật kịch bản cho khớp.
 - **Số tài khoản mỗi gói Desktop/SMS**: bảng giá chưa ghi; tin mẫu hướng nhân viên hỏi nhu cầu rồi tư vấn.
 - **Phiên bản phát hành**: bản Desktop xác nhận trên kênh cập nhật là 9.1.0; các tính năng nêu trong bộ này đều có từ bản đó, trừ báo cáo hiệu quả trên Desktop (không đưa vào tài liệu).
@@ -111,7 +111,8 @@ Cần Node 22 và Chromium của Playwright (có sẵn trong môi trường clou
 ```bash
 cd marketing/zalo-sales-kit/nguon
 node xay-dung.cjs tat-ca        # ảnh (4 cỡ × 5 chủ đề), brochure + tờ PDF, bảng giá (4 sản phẩm × 4 ảnh + PDF, PDF tổng hợp), landing page
-node xay-dung.cjs bang-gia      # chỉ dựng lại bảng giá
+node xay-dung.cjs bang-gia      # chỉ dựng lại bảng giá (4 sản phẩm + PDF tổng hợp)
+node xay-dung.cjs bang-gia zalo-web   # chỉ một sản phẩm (zalo-web, zalo-desktop, facebook-desktop, sms-mobile) + PDF tổng hợp
 node quay-tat-ca-video.cjs      # 5 video 9:16 + caption (~1 phút/video); thêm số để quay riêng: node quay-tat-ca-video.cjs 3
 node xuat-tin-nhan.cjs          # cập nhật tin-nhan-mau.md
 ```
