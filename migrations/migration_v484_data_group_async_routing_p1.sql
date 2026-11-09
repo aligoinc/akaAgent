@@ -18,7 +18,8 @@
 -- Mỗi chỗ vá chỉ thêm nhánh: tổ chức ở 'async' thì ghi thành viên (hoặc cả nhóm cho bind/reactivate) vào hàng đợi thay
 -- vì gọi aka_agent_internal_route_data_group_member ngay; vòng cũ giữ nguyên từng byte trong nhánh còn lại.
 -- Worker: một runner, mỗi lượt <= workerBudgetMs (mặc định 4 s) và <= 32 đoạn; mỗi đoạn = 1 chiến dịch x <= 100
--- thành viên, gọi đúng hàm đẩy hiện có; chiến dịch đang chạy/chờ xử lý trước, tạm dừng sau; xoay vòng giữa các việc;
+-- thành viên, gọi đúng hàm đẩy hiện có; chiến dịch đang chạy/chờ xử lý trước, tạm dừng sau; xoay vòng giữa các nhóm,
+-- trong một nhóm làm đúng thứ tự tạo việc (data vào mỗi chiến dịch theo đúng thứ tự như khi đẩy ngay);
 -- lock_timeout 2 s; khoá bận/deadlock thử lại sau 5 s, lỗi khác thu nhỏ đoạn rồi bỏ đúng một cặp sau 3 lần.
 --
 -- Preflight kiểm md5 pg_get_functiondef của 7 hàm (chụp live 27/10/2026, không migration nào sửa sau đó) và md5 thân
@@ -121,6 +122,9 @@ CREATE INDEX idx_auto_data_group_route_jobs_finished
 CREATE INDEX idx_auto_data_group_route_jobs_batch
   ON private.auto_data_group_route_jobs (batch_id)
   WHERE batch_id IS NOT NULL;
+CREATE INDEX idx_auto_data_group_route_jobs_group_open
+  ON private.auto_data_group_route_jobs (group_id, id)
+  WHERE status IN ('pending', 'running');
 
 CREATE TABLE private.auto_data_group_route_job_members (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -546,10 +550,17 @@ BEGIN
 
   LOOP
     EXIT WHEN v_slices >= 32 OR clock_timestamp() >= v_deadline;
+    -- Xoay vòng giữa các nhóm; trong một nhóm làm đúng thứ tự tạo việc (data vào chiến dịch theo thứ tự như đẩy ngay).
     SELECT job.id INTO v_job_id
     FROM private.auto_data_group_route_jobs AS job
     WHERE job.status IN ('pending', 'running')
       AND (job.next_attempt_at IS NULL OR job.next_attempt_at <= clock_timestamp())
+      AND NOT EXISTS (
+        SELECT 1 FROM private.auto_data_group_route_jobs AS earlier
+        WHERE earlier.group_id = job.group_id
+          AND earlier.status IN ('pending', 'running')
+          AND earlier.id < job.id
+      )
     ORDER BY job.last_worked_at NULLS FIRST, job.id
     LIMIT 1
     FOR UPDATE SKIP LOCKED;

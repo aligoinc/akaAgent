@@ -52,6 +52,9 @@ CREATE INDEX idx_auto_data_group_route_jobs_finished
 CREATE INDEX idx_auto_data_group_route_jobs_batch
   ON private.auto_data_group_route_jobs (batch_id)
   WHERE batch_id IS NOT NULL;
+CREATE INDEX idx_auto_data_group_route_jobs_group_open
+  ON private.auto_data_group_route_jobs (group_id, id)
+  WHERE status IN ('pending', 'running');
 
 CREATE TABLE private.auto_data_group_route_job_members (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -477,10 +480,17 @@ BEGIN
 
   LOOP
     EXIT WHEN v_slices >= 32 OR clock_timestamp() >= v_deadline;
+    -- Xoay vòng giữa các nhóm; trong một nhóm làm đúng thứ tự tạo việc (data vào chiến dịch theo thứ tự như đẩy ngay).
     SELECT job.id INTO v_job_id
     FROM private.auto_data_group_route_jobs AS job
     WHERE job.status IN ('pending', 'running')
       AND (job.next_attempt_at IS NULL OR job.next_attempt_at <= clock_timestamp())
+      AND NOT EXISTS (
+        SELECT 1 FROM private.auto_data_group_route_jobs AS earlier
+        WHERE earlier.group_id = job.group_id
+          AND earlier.status IN ('pending', 'running')
+          AND earlier.id < job.id
+      )
     ORDER BY job.last_worked_at NULLS FIRST, job.id
     LIMIT 1
     FOR UPDATE SKIP LOCKED;
