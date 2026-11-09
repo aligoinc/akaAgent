@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Image as ImageIcon, Mail, MessageCircle, Send } from 'lucide-react'
-import type { ContentTemplateChannelName } from '../../../../shared/types'
+import type { CampaignMediaInput, ContentTemplateChannelName } from '../../../../shared/types'
+import {
+  RECIPIENT_SAMPLE,
+  recipientMessageVersions,
+  renderRecipientMessage,
+  type RecipientPreviewSource
+} from '../../../../shared/recipientPreview'
+import { RecipientPhone } from '../CampaignPanels/recipientPreview/RecipientPhone'
+import { DEFAULT_RECIPIENT_VIEW, recipientRenderContext } from '../CampaignPanels/recipientPreview/recipientPreviewModel'
+import '../CampaignPanels/recipientPreview/RecipientPreview.css'
 import { renderContentSpin } from '../../../../shared/contentSpin'
 import {
   escapeFormattedContentText,
@@ -80,7 +89,117 @@ function ChannelImagePreview({
   )
 }
 
-export default function ContentTemplatePreview({
+/** Giá trị khách mẫu dùng chung với mọi bản xem trước, để chú thích "Dữ liệu thay thế khi gửi" khớp hình. */
+export const CONTENT_TEMPLATE_SAMPLE_VALUES = [
+  ['#{FULL_NAME}', RECIPIENT_SAMPLE.displayName],
+  ['#{PHONE}', RECIPIENT_SAMPLE.row.phone]
+] as const
+
+/**
+ * Zalo nhắn tin và SMS: cùng luật và bộ vẽ với khung "Khách sẽ nhận" của form chiến dịch (media trước rồi chữ như
+ * runtime, điền biến khách mẫu). Mẫu chưa gắn chiến dịch nên dùng cách gửi mặc định: Zalo gửi thường, SMS giữ dấu
+ * và xuống dòng. Facebook và Email giữ bản xem trước theo kênh bên dưới.
+ */
+function RecipientTemplatePreview({
+  channel,
+  variants,
+  formatted = false,
+  imageUrls = [],
+  mediaMimeTypes = {},
+  showSampleData = true,
+  senderName,
+  activeVariantIndex,
+  onActiveVariantChange
+}: ContentTemplatePreviewProps) {
+  const [today] = useState(() => new Date())
+  const [internalVariantIndex, setInternalVariantIndex] = useState(0)
+  const sms = channel === 'sms'
+  // Khoá theo nội dung thay cho mảng mới mỗi lần render của nơi gọi.
+  const variantKey = variants.join('\u0000')
+  const mediaKey = sms ? '' : imageUrls.map(url => `${url}\u0001${mediaMimeTypes[url] || ''}`).join('\u0000')
+
+  useEffect(() => {
+    if (activeVariantIndex === undefined) setInternalVariantIndex(0)
+  }, [channel, variants.length])
+
+  const source = useMemo<RecipientPreviewSource>(() => {
+    const media: CampaignMediaInput[] = sms ? [] : imageUrls.map((url, index) => /^(https?:|data:)/i.test(url)
+      ? { name: `Media ${index + 1}`, cloudUrl: url, mimeType: mediaMimeTypes[url] || null }
+      : { name: url.split(/[\\/]/).pop() || `Media ${index + 1}`, localPath: url, mimeType: mediaMimeTypes[url] || null })
+    return {
+      actionCode: sms ? 'sms_send' : 'zalo_message_phone',
+      enableMessage: true,
+      enableAddFriend: false,
+      friendRequestMessage: '',
+      zaloMessageSendMode: 'normal',
+      formattedContentEnabled: formatted && !sms,
+      zaloOptOutLinkEnabled: false,
+      smsUseUnicode: true,
+      smsKeepNewLines: true,
+      rewriteContentEachRun: false,
+      // Mỗi biến thể của mẫu là một mục nguyên khối (không tách `|` lần nữa).
+      advanced: true,
+      advancedContentSource: 'manual',
+      content: '',
+      advancedItems: (variants.length ? variants : ['']).map((content, index) => ({
+        id: `variant-${index}`, content, mediaOption: media.length ? 'all' : 'none', mediaItems: media, randomMediaCount: 3
+      })),
+      media: [],
+      mediaOption: 'none',
+      randomCount: 3
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sms, formatted, variantKey, mediaKey])
+  const versions = useMemo(() => recipientMessageVersions(source), [source])
+  const ctx = useMemo(() => recipientRenderContext(
+    { source, rows: [], senders: [], sendDateIso: null, liveSource: false, savedRows: false },
+    { ...DEFAULT_RECIPIENT_VIEW, mode: showSampleData ? 'sample' : 'raw' },
+    today
+  ), [source, showSampleData, today])
+  const index = Math.max(0, Math.min(activeVariantIndex ?? internalVariantIndex, versions.length - 1))
+  const version = versions[index]
+  const message = useMemo(() => version ? renderRecipientMessage(version, ctx) : null, [version, ctx])
+
+  return (
+    <div className="ctw-preview-panel">
+      {versions.length > 1 && (
+        <div className="ctw-preview-variant-tabs" role="tablist" aria-label="Biến thể xem trước">
+          {versions.map(item => (
+            <button
+              type="button"
+              key={item.index}
+              className={index === item.index ? 'active' : ''}
+              onClick={() => {
+                if (activeVariantIndex === undefined) setInternalVariantIndex(item.index)
+                onActiveVariantChange?.(item.index)
+              }}
+            >
+              Nội dung {item.index + 1}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={`ctw-preview-stage ${channel}`}>
+        <RecipientPhone
+          channel={sms ? 'sms' : 'zalo'}
+          screen="message"
+          senderName={senderName || 'Tài khoản của bạn'}
+          groupName={RECIPIENT_SAMPLE.groupName}
+          stranger={false}
+          message={message}
+        />
+      </div>
+    </div>
+  )
+}
+
+export default function ContentTemplatePreview(props: ContentTemplatePreviewProps) {
+  return props.channel === 'zalo_message' || props.channel === 'sms'
+    ? <RecipientTemplatePreview {...props} />
+    : <ChannelTemplatePreview {...props} />
+}
+
+function ChannelTemplatePreview({
   channel,
   variants,
   formatted = false,

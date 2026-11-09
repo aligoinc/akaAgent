@@ -53,7 +53,7 @@ import {
   FormattedContentEditor,
   type FormattedContentEditorHandle
 } from '../CampaignPanels/EmailHtmlEditor'
-import ContentTemplatePreview from './ContentTemplatePreview'
+import ContentTemplatePreview, { CONTENT_TEMPLATE_SAMPLE_VALUES } from './ContentTemplatePreview'
 import './contentTemplateWorkspace.css'
 
 const CHANNELS = [
@@ -1307,7 +1307,7 @@ export default function ContentTemplateWorkspace({
                     showSampleData
                   />
                 </div>
-                <div className="ctw-manager-sample-data"><strong>DỮ LIỆU THAY THẾ KHI GỬI</strong><span><code>{'#{FULL_NAME}'}</code> Nguyễn Thị Lan</span><span><code>{'#{PHONE}'}</code> 0938 xxx 214</span></div>
+                <div className="ctw-manager-sample-data"><strong>DỮ LIỆU THAY THẾ KHI GỬI</strong>{CONTENT_TEMPLATE_SAMPLE_VALUES.map(([token, value]) => <span key={token}><code>{token}</code> {value}</span>)}</div>
               </>
             ) : (
               <div className="ctw-manager-preview-empty"><FileText size={32} /><strong>Chưa có mẫu để xem trước</strong><span>Tạo mẫu mới hoặc thay đổi bộ lọc.</span></div>
