@@ -1,0 +1,44 @@
+{
+  "migration": "migration_v481_web_campaign_form_version",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261109060428",
+  "applied_at_vn": "2026-11-09T13:04:28+07:00",
+  "applied_via": "Supabase MCP apply_migration (người dùng bấm Allow), theo lịch đã chọn \"Trưa nay 12:15\"",
+  "file_md5": "63b1e234e1e3a5e3292506910086de9e",
+  "ledger_statements_md5": "63b1e234e1e3a5e3292506910086de9e",
+  "source_commit": "d820e064 (nội dung file không đổi tới 5b4b986f)",
+  "preflight": {
+    "ledger_v481": 0,
+    "org_staff.web_campaign_form_version": "chưa có",
+    "web.campaign_form": "chưa có",
+    "auto_system_settings_id_seq_last_value": 100,
+    "auto_system_settings_max_id": 100,
+    "db_load_on_cpu_40_samples": "trung bình 3,63 / 8 vCPU, trung vị 3, đỉnh 14 (12:16 VN; lúc 10:47 là 10,7 / đỉnh 37 nên dời giờ)"
+  },
+  "postflight": {
+    "column": "text | NOT NULL=false | DEFAULT=false",
+    "check": "org_staff_web_campaign_form_version_check, convalidated=true, char_length <= 20 AND ~ '^[[:space:]]*([12][[:space:]]*(,[[:space:]]*[12][[:space:]]*)*)?$'",
+    "setting": "id 101 web.campaign_form = {\"defaultVersion\":1}, is_active=true, is_secret=false",
+    "staff_with_value_after_apply": 0,
+    "postgrest": "Received a schema cache reload message 06:04:28 UTC; không có PGRST002",
+    "edge_logs_rest_v1": "06:03–06:05 UTC: 0 lỗi 503, 0 lỗi 5xx (phút 06:04: 50.398 request, trung bình 258,6 ms, trung vị 149 ms)"
+  },
+  "data_change_after_apply": {
+    "statement": "UPDATE public.org_staff SET web_campaign_form_version = '1,2' WHERE organization_id = 1 AND web_campaign_form_version IS DISTINCT FROM '1,2'",
+    "requested_by_user": "org tổ chức là 1, áp dụng cho toàn bộ nhân viên của tổ chức này sử dụng cả 2 form",
+    "rows": 25,
+    "active": 19,
+    "inactive": 6,
+    "check_after": "chỉ tổ chức 1 có giá trị: 25 dòng '1,2'"
+  },
+  "compatibility": [
+    "API/Web đang chạy trên production không đọc cột/khóa này: chưa ai thấy thay đổi cho tới khi deploy API/Web từ nhánh claude/nifty-noether-x8vxjk của akaAgentWebApp.",
+    "Desktop không đọc cột này (SELECT cấp bảng nên select=* vẫn chạy).",
+    "V482 (auto_campaigns.web_campaign_form) chưa apply."
+  ],
+  "local_test": "scripts/test-v481-web-campaign-form-version.sh — PostgreSQL 16, 15/15 đạt",
+  "rollback": "migrations/rollback_v481_web_campaign_form_version.sql (bước 1 chỉ dữ liệu: mọi người về form 1, kể cả khi sửa chiến dịch đã ghi Form 2; bước 2 xoá cột/khóa)",
+  "notes": [
+    "Sau khi apply không sửa file migration (sổ migration lưu nguyên văn)."
+  ]
+}
