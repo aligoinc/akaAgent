@@ -16,17 +16,27 @@ function hub(C, S, opts) {
     return { t, n, base, sc, caption };
   });
 
-  const imgCard = (base, kind, label, use) => {
+  const imgCard = (base, kind, label, use, name) => {
     const size = { vuong: '1080x1080', doc: '1080x1350', story: '1080x1920', ngang: '1200x628' }[kind];
     const file = `${base}-${kind}-${size}.png`;
     return `<figure class="thumb ${kind}">
       <img src="thumb/${file.replace('.png', '.jpg')}" alt="${esc(label)}" loading="lazy">
       <figcaption><b>${esc(label)}</b><span>${esc(use)}</span>
-      <button type="button" class="btn dl" data-file="anh/${file}" data-name="akaAgent-Zalo-${file}">Tải ảnh</button></figcaption>
+      <button type="button" class="btn dl" data-file="anh/${file}" data-name="${esc(name || `akaAgent-Zalo-${file}`)}">Tải ảnh</button></figcaption>
     </figure>`;
   };
 
   const copyBlock = (id, text) => `<pre class="copytext" id="${id}">${esc(text)}</pre>`;
+  const msgsHtml = (key, messages) => messages.map((m, k) => `
+        <article class="msg">
+          <header><span class="step">${k + 1}</span><b>${esc(m.label)}</b><button type="button" class="btn ghost copy" data-target="m-${key}-${k}">Sao chép</button></header>
+          ${copyBlock(`m-${key}-${k}`, m.text)}
+        </article>`).join('');
+  const qasHtml = (key, faq) => faq.map((f, k) => `
+        <details class="qa"><summary>${esc(f.q)}</summary>
+          ${copyBlock(`q-${key}-${k}`, f.a)}
+          <button type="button" class="btn ghost copy" data-target="q-${key}-${k}">Sao chép câu trả lời</button>
+        </details>`).join('');
 
   const panels = topics.map(({ t, n, base, sc, caption }, i) => `
 <section class="panel" id="p-${t.id}" data-tab="${t.id}" role="tabpanel" aria-labelledby="tab-${t.id}"${i === 0 ? '' : ' hidden'}>
@@ -62,24 +72,58 @@ function hub(C, S, opts) {
     </div>
     <div class="col">
       <h3>Tin nhắn mẫu theo thứ tự</h3>
-      <div class="msgs">${sc.messages.map((m, k) => `
-        <article class="msg">
-          <header><span class="step">${k + 1}</span><b>${esc(m.label)}</b><button type="button" class="btn ghost copy" data-target="m-${t.id}-${k}">Sao chép</button></header>
-          ${copyBlock(`m-${t.id}-${k}`, m.text)}
-        </article>`).join('')}
+      <div class="msgs">${msgsHtml(t.id, sc.messages)}
       </div>
       <h3>Khách hỏi gì, trả lời gì</h3>
-      <div class="qas">${sc.faq.map((f, k) => `
-        <details class="qa"><summary>${esc(f.q)}</summary>
-          ${copyBlock(`q-${t.id}-${k}`, f.a)}
-          <button type="button" class="btn ghost copy" data-target="q-${t.id}-${k}">Sao chép câu trả lời</button>
-        </details>`).join('')}
+      <div class="qas">${qasHtml(t.id, sc.faq)}
       </div>
       ${sc.note ? `<p class="note"><b>Lưu ý nội bộ:</b> ${esc(sc.note)}</p>` : ''}
       <p class="attach"><b>Gửi kèm gợi ý:</b> ${esc(sc.attach.join(' · '))}</p>
     </div>
   </div>
 </section>`).join('');
+
+  const P = C.pricing;
+  const ps = S.pricing;
+  const gb = `06-${P.id}`;
+  const gName = (kind) => `akaAgent-Zalo-Web-bang-gia-${kind}.png`;
+  const pricingPdf = 'bang-gia-akaAgent-Zalo-Web-A4.pdf';
+  const pricing = `
+<section class="panel" id="p-bang-gia" data-tab="bang-gia" role="tabpanel" aria-labelledby="tab-bang-gia" hidden>
+  <div class="panel-head">
+    <span class="kicker">Bảng giá · ${esc(P.product)}</span>
+    <h2>${esc(ps.title)}</h2>
+    <p class="when"><b>Khi nào dùng:</b> ${esc(ps.when)}</p>
+  </div>
+  <div class="grid">
+    <div class="col">
+      <h3>Ảnh bảng giá</h3>
+      <div class="thumbs">
+        ${imgCard(gb, 'vuong', 'Ảnh vuông 1:1', 'Gửi cùng tin báo giá', gName('vuong'))}
+        ${imgCard(gb, 'doc', 'Ảnh dọc 4:5', 'Đủ 4 gói và tính năng đi kèm', gName('doc'))}
+        ${imgCard(gb, 'story', 'Ảnh story 9:16', 'Story Zalo, Facebook', gName('story'))}
+        ${imgCard(gb, 'ngang', 'Banner ngang 1200×628', 'Website, bài đăng có link', gName('ngang'))}
+      </div>
+      <h3>PDF</h3>
+      <div class="files">
+        <div class="file">
+          <div><b>Bảng giá A4 (PDF 1 trang)</b><span>Khách cần file để in, gửi kế toán; có thêm 3 bước đăng ký</span></div>
+          <button type="button" class="btn dl" data-file="pdf/${pricingPdf}" data-name="${pricingPdf}">Tải PDF</button>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <h3>Tin nhắn mẫu theo thứ tự</h3>
+      <div class="msgs">${msgsHtml('bang-gia', ps.messages)}
+      </div>
+      <h3>Khách hỏi gì, trả lời gì</h3>
+      <div class="qas">${qasHtml('bang-gia', ps.faq)}
+      </div>
+      <p class="note"><b>Lưu ý nội bộ:</b> ${esc(ps.note)}</p>
+      <p class="attach"><b>Gửi kèm gợi ý:</b> ${esc(ps.attach.join(' · '))}</p>
+    </div>
+  </div>
+</section>`;
 
   const common = `
 <section class="panel" id="p-hoi-chung" data-tab="hoi-chung" role="tabpanel" aria-labelledby="tab-hoi-chung" hidden>
@@ -103,6 +147,7 @@ function hub(C, S, opts) {
         <li><b>Khách hỏi cách làm:</b> tin giải thích + ảnh dọc 4:5 hoặc tờ PDF.</li>
         <li><b>Khách còn phân vân:</b> video 27 giây hoặc link trang giới thiệu.</li>
         <li><b>Chốt:</b> tin mời dùng thử, xin SĐT chưa đăng ký akaBiz.</li>
+        <li><b>Khách hỏi giá:</b> ảnh bảng giá + tin báo giá ở tab Bảng giá.</li>
       </ol>
     </div>
   </div>
@@ -110,7 +155,7 @@ function hub(C, S, opts) {
 
   const all = `
 <section class="panel" id="p-tron-bo" data-tab="tron-bo" role="tabpanel" aria-labelledby="tab-tron-bo" hidden>
-  <div class="panel-head"><span class="kicker">Trọn bộ</span><h2>Brochure, tờ giới thiệu, video, trang web</h2>
+  <div class="panel-head"><span class="kicker">Trọn bộ</span><h2>Brochure, tờ giới thiệu, bảng giá, video, trang web</h2>
   <p class="when">Brochure 8 trang giới thiệu đủ cả 4 kiểu chiến dịch, hợp gửi khách doanh nghiệp hoặc in ra khi gặp trực tiếp.</p></div>
   <div class="grid">
     <div class="col">
@@ -121,6 +166,8 @@ function hub(C, S, opts) {
     <div class="col">
       <h3>Tờ giới thiệu 1 trang</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>PDF A4</span></div><button type="button" class="btn dl" data-file="pdf/to-gioi-thieu-${base}.pdf" data-name="akaAgent-Zalo-to-gioi-thieu-${base}.pdf">Tải PDF</button></div>`).join('')}</div>
+      <h3>Bảng giá ${esc(P.product)}</h3>
+      <div class="files"><div class="file"><div><b>Bảng giá A4</b><span>PDF 1 trang · gửi riêng khi khách hỏi giá</span></div><button type="button" class="btn dl" data-file="pdf/${pricingPdf}" data-name="${pricingPdf}">Tải PDF</button></div></div>
       <h3>Video dọc</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>MP4 · 1080×1920 · 27 giây</span></div><button type="button" class="btn dl" data-file="video/${base}-9x16.mp4" data-name="akaAgent-Zalo-video-${base}.mp4">Tải video</button></div>`).join('')}</div>
       <h3>Slide thuyết trình</h3>
@@ -133,6 +180,7 @@ function hub(C, S, opts) {
 
   const tabs = [
     ...topics.map(({ t }, i) => ({ id: t.id, label: `${i + 1}. ${t.short}` })),
+    { id: 'bang-gia', label: 'Bảng giá' },
     { id: 'hoi-chung', label: 'Câu hỏi chung' },
     { id: 'tron-bo', label: 'Trọn bộ file' },
   ];
@@ -242,13 +290,14 @@ main.wrap{padding-block:26px 60px}
   <div class="brand"><img class="mark" src="thumb/akabiz-logo.png" alt="" width="34" height="34"><div>akaAgent Zalo<br><span>Sales Kit nội bộ</span></div></div>
   <h1>Bộ tài liệu gửi khách akaAgent Zalo</h1>
   <p>Chọn chủ đề khách đang quan tâm, tải ảnh hoặc PDF, sao chép tin nhắn mẫu và gửi qua Zalo. Trên điện thoại, nút Tải mở bảng chia sẻ để gửi thẳng vào Zalo.</p>
-  <div class="flow"><span><b>1</b>Tin mở đầu + ảnh vuông</span><span><b>2</b>Khách hỏi: ảnh dọc hoặc PDF</span><span><b>3</b>Phân vân: video hoặc trang giới thiệu</span><span><b>4</b>Chốt: mời dùng thử 3 ngày</span></div>
+  <div class="flow"><span><b>1</b>Tin mở đầu + ảnh vuông</span><span><b>2</b>Khách hỏi: ảnh dọc hoặc PDF</span><span><b>3</b>Phân vân: video hoặc trang giới thiệu</span><span><b>4</b>Chốt: mời dùng thử 3 ngày</span><span><b>5</b>Hỏi giá: ảnh bảng giá + tin báo giá</span></div>
 </div></header>
 <div class="tabs-bar"><div class="wrap"><div class="tabs" role="tablist" aria-label="Chủ đề">
   ${tabs.map((x, i) => `<button type="button" class="tab" role="tab" id="tab-${x.id}" aria-controls="p-${x.id}" aria-selected="${i === 0}" data-go="${x.id}">${esc(x.label)}</button>`).join('')}
 </div></div></div>
 <main class="wrap">
 ${panels}
+${pricing}
 ${common}
 ${all}
 </main>

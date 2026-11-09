@@ -6,6 +6,8 @@ const PW = 794, PH = 1123; // A4 ở 96 dpi
 
 const css = `
 @page{size:A4;margin:0;}
+/* Chromium in background-clip:text thành PDF còn viền mảnh quanh khung chữ ⇒ bản in dùng màu cam đặc. */
+@media print{.grad-text{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--flame);}}
 html,body{width:${PW}px;}
 body{background:#fff;}
 .page{position:relative;width:${PW}px;height:${PH}px;overflow:hidden;page-break-after:always;break-after:page;}

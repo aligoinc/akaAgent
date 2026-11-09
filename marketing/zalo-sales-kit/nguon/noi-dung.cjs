@@ -1,6 +1,7 @@
 // NGUỒN NỘI DUNG DUY NHẤT cho mọi định dạng của Sales Kit akaAgent Zalo.
 // Sửa chữ ở đây rồi chạy lại `node xay-dung.cjs tat-ca` để cập nhật ảnh, PDF, video.
-// Quy ước: **đậm**, ==tô màu cam==. Không dùng từ gợi rủi ro (khóa, bay, lỗi, mất...), không ghi giá.
+// Quy ước: **đậm**, ==tô màu cam==. Không dùng từ gợi rủi ro (khóa, bay, lỗi, mất...).
+// Giá chỉ nằm trong `pricing` (bảng giá nhân viên gửi riêng khi khách hỏi); ảnh chủ đề, video, landing page không ghi giá.
 // Mọi tính năng nêu ở đây đã đối chiếu với mã nguồn akaAgent (xem README.md, mục "Căn cứ tính năng").
 
 const brand = {
@@ -328,4 +329,43 @@ const back = {
   ],
 };
 
-module.exports = { brand, trial, topics, cover, safety, faq, back };
+// Bảng giá akaAgent Zalo Web. Giá do quản lý akaBiz chốt ngày 09/11/2026.
+// Giá tháng và số tiền tiết kiệm được tính tự động từ `vnd` + `months` (xem mau/bang-gia.cjs), không gõ tay.
+// Tiết kiệm = so với gia hạn gói 2 tháng liên tục trong cùng thời gian.
+// "includes" lấy theo kịch bản bán hàng bản Web (06/2026): tắt máy vẫn chạy, dùng trên Mac/iPad/điện thoại,
+// chạy song song đến 5 tài khoản Zalo. Đổi gói thì sửa ở đây rồi chạy `node xay-dung.cjs bang-gia`.
+const pricing = {
+  id: 'bang-gia',
+  tag: 'Bảng giá',
+  product: 'akaAgent Zalo Web',
+  title: 'Bảng giá ==akaAgent Zalo Web==',
+  sub: 'Nhắn tin & kết bạn Zalo tự động, dùng ngay trên trình duyệt.',
+  updated: '11/2026',
+  plans: [
+    { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 700000, note: 'Gia hạn linh hoạt' },
+    { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 3000000, badge: 'Khuyên dùng' },
+    { id: '2-nam', name: 'Gói 2 năm', months: 24, vnd: 5000000 },
+    { id: '3-nam', name: 'Gói 3 năm trở lên', discount: '25%', line: 'Dành cho khách đồng hành lâu dài', ask: 'Nhắn tư vấn viên để nhận báo giá', askShort: 'Nhắn để nhận báo giá' },
+  ],
+  includes: [
+    'Chạy song song đến **5 tài khoản Zalo**',
+    '**Tắt máy vẫn chạy**, không cần treo máy',
+    'Dùng được cả **Mac, iPad, điện thoại**',
+    '**4 kiểu chiến dịch** Zalo trong một app',
+    '**Tự tạm nghỉ** khi Zalo báo giới hạn',
+    '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
+  ],
+  includesShort: ['5 tài khoản Zalo song song', 'Tắt máy vẫn chạy', 'Dùng trên Mac, iPad, điện thoại', 'Hỗ trợ cài đặt 1:1'],
+  saveNote: 'Số tiền tiết kiệm so với gia hạn gói 2 tháng liên tục trong cùng thời gian.',
+  more: 'Ngoài ra còn ==nhiều ưu đãi khác==',
+  contact: 'Liên hệ nhân viên tư vấn để được hỗ trợ chương trình tốt nhất.',
+  cta: 'Nhắn tư vấn viên',
+  trial: 'Chưa chắc chọn gói nào? Dùng thử miễn phí 3 ngày, full tính năng.',
+  steps: [
+    { title: 'Nhắn tư vấn viên', desc: 'Chọn gói, nhận ưu đãi đang áp dụng.' },
+    { title: 'Chuyển khoản', desc: 'Gửi ảnh xác nhận cho tư vấn viên.' },
+    { title: 'Kích hoạt & cài đặt', desc: 'Tư vấn viên nâng cấp tài khoản và cài chiến dịch đầu tiên cùng bạn.' },
+  ],
+};
+
+module.exports = { brand, trial, topics, cover, safety, faq, back, pricing };

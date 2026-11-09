@@ -1,5 +1,5 @@
 // Dựng toàn bộ Sales Kit từ noi-dung.cjs.
-// Dùng: node xay-dung.cjs [anh|a4|video|tat-ca]   (mặc định: anh + a4)
+// Dùng: node xay-dung.cjs [anh|a4|bang-gia|landing|tat-ca]   (mặc định: anh + a4; ghép nhiều mục bằng dấu +)
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -57,6 +57,17 @@ if (want('a4')) {
   });
 }
 
+// Bảng giá akaAgent Zalo Web: 4 cỡ ảnh + tờ A4 (nhân viên gửi riêng khi khách hỏi giá)
+if (want('bang-gia')) {
+  const g = require('./mau/bang-gia.cjs');
+  const P = C.pricing;
+  const base = `06-${P.id}`;
+  const dir = path.join(KIT, 'anh', base);
+  [['vuong', g.vuong, 1080, 1080], ['doc', g.doc, 1080, 1350], ['story', g.story, 1080, 1920], ['ngang', g.ngang, 1200, 628]].forEach(([kind, fn, w, h]) => {
+    jobs.push({ html: write(`anh/${base}-${kind}.html`, fn(P)), out: path.join(dir, `${base}-${kind}-${w}x${h}.png`), width: w, height: h });
+  });
+  jobs.push({ html: write(`a4/${base}.html`, g.a4(P)), out: path.join(KIT, 'pdf', 'bang-gia-akaAgent-Zalo-Web-A4.pdf'), width: a4.PW, height: a4.PH, pdf: { format: 'A4' } });
+}
 
 // Landing page: bản tự host (landing/index.html) + bản đăng Artifact (_html/landing-artifact.html)
 if (want('landing')) {

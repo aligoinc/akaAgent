@@ -1,6 +1,8 @@
 // Tin nhắn mẫu cho nhân viên bán hàng / CSKH gửi khách qua Zalo, Facebook.
 // Giọng akaBiz: nói ngắn, mỗi tin kết bằng 1 lời mời hành động có mục đích, không dùng từ gợi rủi ro,
 // không "nhưng", không đáp cụt "không". [Tên] = tên nhân viên; anh/chị đổi theo khách.
+const { pricing } = require('./noi-dung.cjs');
+const { plansOf } = require('./mau/bang-gia.cjs');
 
 const scripts = [
   {
@@ -48,7 +50,7 @@ const scripts = [
       { q: 'Có lấy được số điện thoại thành viên không?', a: 'Dạ app lấy tên và Zalo ID của từng thành viên, đủ để nhắn tin và kết bạn trực tiếp luôn ạ, mình không cần tới số điện thoại. Mình muốn nhắn tin hay kết bạn trước để em cài đúng nha?' },
       { q: 'Nhắn cho người chưa kết bạn được không?', a: 'Dạ được ạ, app gửi tin theo Zalo ID nên không cần kết bạn trước; mình bật thêm kết bạn kèm lời chào để chăm lâu dài. Lời chào nhắc tới nhóm chung giúp khách dễ nhận ra mình. Em soạn giúp mình một mẫu lời chào nha?' },
     ],
-    note: 'Nội bộ: tính năng "theo dõi nhóm theo thời gian thực" dùng với tài khoản Zalo đăng nhập mã QR hoặc tài khoản chạy trên server (không dùng cho Zalo trình duyệt), app hoặc server phải đang chạy để ghi nhận; người được ghi nhận sẽ được nhắn vào hôm sau. Với nhóm cụ thể khách đưa, quét thử link nhóm trên tài khoản demo trước khi hứa số lượng thành viên.',
+    note: 'Tính năng "theo dõi nhóm theo thời gian thực" dùng với tài khoản Zalo đăng nhập mã QR hoặc tài khoản chạy trên server (không dùng cho Zalo trình duyệt), app hoặc server phải đang chạy để ghi nhận; người được ghi nhận sẽ được nhắn vào hôm sau. Với nhóm cụ thể khách đưa, quét thử link nhóm trên tài khoản demo trước khi hứa số lượng thành viên.',
   },
   {
     id: 'ban-be',
@@ -82,6 +84,33 @@ const scripts = [
   },
 ];
 
+// Báo giá akaAgent Zalo Web: giá và số tiền tiết kiệm lấy từ noi-dung.cjs (pricing), không gõ tay.
+// Câu tính năng trong tin "Báo giá" phải khớp pricing.includes.
+const plans = plansOf(pricing);
+const [p2m, p1y, p2y, p3y] = plans;
+const priceLines = plans.map((p) => (p.discount
+  ? `• ${p.name}: giảm ${p.discount}`
+  : `• ${p.name}: ${p.priceText}${p.months > 2 ? ` (${p.perMonthText})` : ''}`)).join('\n');
+
+const pricingScript = {
+  id: 'bang-gia',
+  title: 'Báo giá akaAgent Zalo Web',
+  when: 'Khách hỏi giá, hỏi gói, hoặc đã dùng thử và muốn mua bản Zalo Web (chạy trên trình duyệt, tắt máy vẫn chạy, dùng được Mac, iPad, điện thoại).',
+  attach: ['Ảnh bảng giá vuông hoặc dọc 4:5 (cùng tin báo giá)', 'PDF bảng giá A4 (khách cần file để in, gửi kế toán)', 'Story 9:16 (đăng story ưu đãi)'],
+  messages: [
+    { label: 'Báo giá', text: `Dạ em gửi anh/chị bảng giá ${pricing.product} ạ:\n${priceLines}\nGói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ. Ngoài ra bên em còn nhiều ưu đãi khác, mình dự định dùng khoảng bao lâu để em áp chương trình tốt nhất cho mình nha?` },
+    { label: 'Tư vấn chọn gói', text: `Dạ mình dùng lâu dài thì ${p1y.name.toLowerCase()} chỉ ${p1y.perMonthText}, tiết kiệm ${p1y.saveAmount} so với gia hạn ${p2m.name.toLowerCase()} liên tục ạ; ${p2y.name.toLowerCase()} tiết kiệm tới ${p2y.saveAmount}. Từ 3 năm trở lên bên em giảm ${p3y.discount}. Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?` },
+    { label: 'Chốt gói', text: 'Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển khoản xong mình chụp ảnh gửi em, em kích hoạt tài khoản và cài chiến dịch đầu tiên cùng mình luôn nha.' },
+  ],
+  faq: [
+    { q: 'Gói 3 năm trở lên giá bao nhiêu?', a: `Dạ gói từ 3 năm trở lên bên em giảm ${p3y.discount} ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?` },
+    { q: 'Có giảm thêm được không?', a: `Dạ ngoài gói từ 3 năm giảm ${p3y.discount}, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?` },
+    { q: 'Có gói vĩnh viễn không?', a: `Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm ${p3y.discount} ạ, dùng càng lâu càng tiết kiệm. Mình dự định dùng khoảng mấy năm để em báo giá chi tiết nha?` },
+    { q: 'Chưa chắc nên mua gói nào?', a: 'Dạ mình dùng thử miễn phí 3 ngày, full tính năng trước ạ, chạy thử trên tệp khách thật rồi chọn gói cũng chưa muộn. Mình gửi em số điện thoại chưa đăng ký akaBiz để em mở tài khoản ngay nha?' },
+  ],
+  note: 'Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026. Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.',
+};
+
 // Câu hỏi chung, dùng cho mọi chủ đề
 const common = [
   { q: 'Gửi nhiều có bị khoá Zalo không?', a: 'Dạ để tài khoản luôn an toàn & bền, app có giới hạn theo giờ, theo ngày, khoảng nghỉ giữa các lần gửi và tự tạm nghỉ khi Zalo báo chạm giới hạn ạ. Zalo dùng trên 1 năm chạy khoẻ 100–150 người mới mỗi ngày, em cài sẵn mức an toàn cho mình luôn. Mình gửi em SĐT để em mở tài khoản test chạy thử nha?' },
@@ -92,4 +121,4 @@ const common = [
   { q: 'Có giúp viết nội dung không?', a: 'Dạ có ạ, app có AI viết và viết lại nội dung, tạo nhiều mẫu câu khác nhau, em duyệt cùng mình trước khi chạy. Mình gửi em sản phẩm, ưu đãi đang muốn gửi để em soạn giúp nha?' },
 ];
 
-module.exports = { scripts, common };
+module.exports = { scripts, common, pricing: pricingScript };

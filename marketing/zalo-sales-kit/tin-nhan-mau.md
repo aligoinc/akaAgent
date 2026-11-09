@@ -1,6 +1,6 @@
 # Tin nhắn mẫu akaAgent Zalo
 
-Dành cho nhân viên bán hàng và CSKH. Mỗi chủ đề gồm: khi nào dùng, gửi kèm file nào, 3 tin theo thứ tự (mở đầu → giải thích → mời dùng thử) và câu hỏi thường gặp.
+Dành cho nhân viên bán hàng và CSKH. Mỗi chủ đề gồm: khi nào dùng, gửi kèm file nào, 3 tin theo thứ tự (mở đầu → giải thích → mời dùng thử) và câu hỏi thường gặp. Mục cuối là tin báo giá akaAgent Zalo Web, gửi kèm ảnh bảng giá.
 
 Quy tắc giọng akaBiz: nói ngắn, mỗi tin kết bằng một lời mời hành động có mục đích; không dùng từ gợi rủi ro (khoá, bay nick, lỗi...); không "nhưng", không đáp cụt "không". `[Tên]` là tên của bạn; đổi "anh/chị" theo khách.
 
@@ -132,7 +132,7 @@ Bản test miễn phí 3 ngày, full tính năng ạ. Mình gửi em số điệ
   Dạ được ạ, app gửi tin theo Zalo ID nên không cần kết bạn trước; mình bật thêm kết bạn kèm lời chào để chăm lâu dài. Lời chào nhắc tới nhóm chung giúp khách dễ nhận ra mình. Em soạn giúp mình một mẫu lời chào nha?
   ```
 
-> Nội bộ: tính năng "theo dõi nhóm theo thời gian thực" dùng với tài khoản Zalo đăng nhập mã QR hoặc tài khoản chạy trên server (không dùng cho Zalo trình duyệt), app hoặc server phải đang chạy để ghi nhận; người được ghi nhận sẽ được nhắn vào hôm sau. Với nhóm cụ thể khách đưa, quét thử link nhóm trên tài khoản demo trước khi hứa số lượng thành viên.
+> **Lưu ý nội bộ:** Tính năng "theo dõi nhóm theo thời gian thực" dùng với tài khoản Zalo đăng nhập mã QR hoặc tài khoản chạy trên server (không dùng cho Zalo trình duyệt), app hoặc server phải đang chạy để ghi nhận; người được ghi nhận sẽ được nhắn vào hôm sau. Với nhóm cụ thể khách đưa, quét thử link nhóm trên tài khoản demo trước khi hứa số lượng thành viên.
 
 ## 4. Gửi tin tới bạn bè Zalo
 
@@ -209,6 +209,63 @@ Bản test miễn phí 3 ngày, full tính năng ạ. Mình gửi em số điệ
   ```text
   Dạ app ghi nhận nhóm nào không cho gửi để mình loại ra, các nhóm khác vẫn chạy bình thường ạ. Mình ưu tiên nhóm cho phép đăng bán để bài được đón nhận tốt nhất nha.
   ```
+
+## 6. Báo giá akaAgent Zalo Web
+
+**Khi nào dùng:** Khách hỏi giá, hỏi gói, hoặc đã dùng thử và muốn mua bản Zalo Web (chạy trên trình duyệt, tắt máy vẫn chạy, dùng được Mac, iPad, điện thoại).
+
+**Gửi kèm:** Ảnh bảng giá vuông hoặc dọc 4:5 (cùng tin báo giá) · PDF bảng giá A4 (khách cần file để in, gửi kế toán) · Story 9:16 (đăng story ưu đãi)
+
+**Báo giá**
+
+```text
+Dạ em gửi anh/chị bảng giá akaAgent Zalo Web ạ:
+• Gói 2 tháng: 700.000đ
+• Gói 1 năm: 3.000.000đ (250.000đ/tháng)
+• Gói 2 năm: 5.000.000đ (~208.000đ/tháng)
+• Gói 3 năm trở lên: giảm 25%
+Gói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ. Ngoài ra bên em còn nhiều ưu đãi khác, mình dự định dùng khoảng bao lâu để em áp chương trình tốt nhất cho mình nha?
+```
+
+**Tư vấn chọn gói**
+
+```text
+Dạ mình dùng lâu dài thì gói 1 năm chỉ 250.000đ/tháng, tiết kiệm 1.200.000đ so với gia hạn gói 2 tháng liên tục ạ; gói 2 năm tiết kiệm tới 3.400.000đ. Từ 3 năm trở lên bên em giảm 25%. Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?
+```
+
+**Chốt gói**
+
+```text
+Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển khoản xong mình chụp ảnh gửi em, em kích hoạt tài khoản và cài chiến dịch đầu tiên cùng mình luôn nha.
+```
+
+**Câu hỏi thường gặp**
+
+- *Gói 3 năm trở lên giá bao nhiêu?*
+
+  ```text
+  Dạ gói từ 3 năm trở lên bên em giảm 25% ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?
+  ```
+
+- *Có giảm thêm được không?*
+
+  ```text
+  Dạ ngoài gói từ 3 năm giảm 25%, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?
+  ```
+
+- *Có gói vĩnh viễn không?*
+
+  ```text
+  Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm 25% ạ, dùng càng lâu càng tiết kiệm. Mình dự định dùng khoảng mấy năm để em báo giá chi tiết nha?
+  ```
+
+- *Chưa chắc nên mua gói nào?*
+
+  ```text
+  Dạ mình dùng thử miễn phí 3 ngày, full tính năng trước ạ, chạy thử trên tệp khách thật rồi chọn gói cũng chưa muộn. Mình gửi em số điện thoại chưa đăng ký akaBiz để em mở tài khoản ngay nha?
+  ```
+
+> **Lưu ý nội bộ:** Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026. Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.
 
 ## Câu hỏi chung
 
