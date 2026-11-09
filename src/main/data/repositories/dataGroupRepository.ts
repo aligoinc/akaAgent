@@ -3,8 +3,10 @@ import {
   dataGroupIngestProgressNote,
   dataGroupIngestRootError,
   dataGroupIngestTimeoutMessage,
+  dataGroupUploadTypeRows,
   mergeDataGroupIngestResults,
-  runChunkedDataGroupIngest
+  runChunkedDataGroupIngest,
+  runDataGroupUpload
 } from '../../../shared/dataGroupIngestChunks'
 import { isFacebookGroupTarget, normalizeFacebookGroupMetadata } from '../../../shared/facebookGroupExport'
 import type { GroupSharing } from '../../../shared/groupSharing'
@@ -304,7 +306,11 @@ function throwRpcError(prefix: string, error: { message?: string } | null): neve
     data_group_campaign_semantic_type_incompatible: 'Nhóm data không tương thích với loại dữ liệu của chiến dịch.',
     automation_data_group_semantic_type_mismatch: 'Nhóm data không đúng loại dữ liệu của tự động hóa.',
     zalo_add_group_member_upload_requires_phone: 'Upload trực tiếp cho chiến dịch thêm thành viên Zalo chỉ nhận số điện thoại.',
-    facebook_comment_seeding_upload_must_be_unrestricted: 'Upload cho comment seeding phải dùng nhóm Mọi loại dữ liệu.'
+    facebook_comment_seeding_upload_must_be_unrestricted: 'Upload cho comment seeding phải dùng nhóm Mọi loại dữ liệu.',
+    data_group_upload_session_not_found: 'Không tìm thấy phiên nhập file. Vui lòng nhập lại file.',
+    data_group_upload_session_closed: 'File này đã được nhập lại ở nơi khác hoặc phiên nhập đã hết hạn. Vui lòng nhập lại file.',
+    data_group_upload_part_conflict: 'Phần dữ liệu gửi lên không khớp phần đã nhận. Vui lòng nhập lại file.',
+    data_group_upload_incomplete: 'Chưa nhận đủ dữ liệu của file, vui lòng thử lại.'
   }
   if (rawMessage.includes('data_group_bound_members_mismatch:')) {
     const count = rawMessage.match(/data_group_bound_members_mismatch:(\d+)/)?.[1]
@@ -533,8 +539,60 @@ export async function ingestDataGroup(request: DataGroupIngestRequest): Promise<
   // Một chỗ chung cho mọi đường thêm data vào nhóm (quét, thủ công, kiểm tra SĐT, danh bạ, chiến dịch tìm data).
   // Hàm DB đẩy từng dòng vào mọi chiến dịch đang bật "nhận data mới từ nhóm" trong một giao dịch trần 60 giây,
   // nên kiểu nạp cộng dồn được chia lô; DB (V483) báo PT413 kèm ước tính khi một lần gửi chắc chắn quá trần.
-  // 'upload' vẫn gửi một lần: mỗi lần gọi là ảnh chụp toàn bộ file, chia nhỏ thì lần sau gỡ data của lần trước.
+  // 'upload' là ảnh chụp toàn bộ file (chia kiểu cộng dồn thì lần sau gỡ data của lần trước): file lớn đi phiên
+  // nhập nhiều phần của DB V485 (append chỉ cộng thêm, finish chốt ảnh chụp một lần); DB chưa có V485 thì gửi một lần.
   try {
+    if (request.kind === 'upload' && params.p_dataset_id === null) {
+      const identity = identityParams()
+      return await runDataGroupUpload<DbRow, DataGroupIngestResult>({
+        rows,
+        single: async all => {
+          const { data, error } = await client().rpc('aka_agent_ingest_data_group', {
+            ...params,
+            p_request_id: request.requestId,
+            p_rows: all,
+            p_payload_hash: payloadHash
+          })
+          if (error) throw error
+          return mapIngestResult(unwrapRpcRow(data), request.requestId, request.groupId)
+        },
+        begin: async totalRows => {
+          const { data, error } = await client().rpc('aka_agent_begin_data_group_upload', {
+            ...identity,
+            p_request_id: request.requestId,
+            p_group_id: request.groupId,
+            p_dataset_name: params.p_dataset_name,
+            p_import_source: params.p_import_source,
+            p_source_account_id: params.p_source_account_id,
+            p_source_name: params.p_source_name,
+            p_data_type_category_item_id: params.p_data_type_category_item_id,
+            p_type_rows: dataGroupUploadTypeRows(rows),
+            p_total_rows: totalRows
+          })
+          if (error) throw error
+          return data
+        },
+        append: async call => {
+          const { data, error } = await client().rpc('aka_agent_append_data_group_upload', {
+            ...identity,
+            p_session_id: call.sessionId,
+            p_part_offset: call.offset,
+            p_rows: call.rows,
+            p_payload_hash: payloadHash ? `${payloadHash}:${call.offset}+${call.rows.length}` : null
+          })
+          if (error) throw error
+          return data
+        },
+        finish: async sessionId => {
+          const { data, error } = await client().rpc('aka_agent_finish_data_group_upload', {
+            ...identity,
+            p_session_id: sessionId
+          })
+          if (error) throw error
+          return mapIngestResult(unwrapRpcRow(data), request.requestId, request.groupId)
+        }
+      })
+    }
     return await runChunkedDataGroupIngest<DbRow, DataGroupIngestResult>({
       kind: request.kind,
       rows,
