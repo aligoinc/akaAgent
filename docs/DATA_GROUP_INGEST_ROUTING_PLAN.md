@@ -1,7 +1,10 @@
 # Phương án sửa gốc hàm nạp nhóm data (09/11/2026)
 
-**Trạng thái:** phương án, chưa làm. Đi sau bản chia lô phía app (aligoinc/akaAgent#612,
-aligoinc/akaAgentWebApp#175) và V483.
+**Trạng thái (09/11/2026):** đã làm cả ba phần, **chưa apply production**: Phần 1 + 1b = V484, Phần 2 = V485 (+ client
+Desktop/API Web), Phần 3 = V486 (plan chung cho kiểm quyền đọc nhóm chia sẻ, thay cho viết lại theo tập: đo thấy 52%
+thời gian đẩy là lập kế hoạch lại hàm kiểm quyền). Hợp đồng, thứ tự apply, bật/tắt, theo dõi, rollback:
+[DATA_GROUP_ASYNC_ROUTING_V484.md](DATA_GROUP_ASYNC_ROUTING_V484.md). Đi sau bản chia lô phía app
+(aligoinc/akaAgent#612, aligoinc/akaAgentWebApp#175) và V483.
 Bối cảnh sự cố: akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 
 ## Tóm tắt
@@ -25,8 +28,9 @@ Bối cảnh sự cố: akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 - Mọi lối vào cùng đi qua `aka_agent_ingest_data_group_v186_internal`: wrapper Desktop 14/15 tham số, hàm lõi
   12/13 tham số (Web, API công khai, iOS), Google Sheet worker (`external_sync`) và bước "thêm vào nhóm" của quy
   trình tự động. Bản mới nhất trong repo:
-  [v297 L461–L1234](../migrations/migration_v297_data_group_google_sheet_sync.sql#L461-L1234), có
-  `SET statement_timeout '60s'`. Hàm lõi còn chặn quá 10.000 dòng/lần
+  [v297 L461–L1209](../migrations/migration_v297_data_group_google_sheet_sync.sql#L461-L1209). Bản thân hàm này chỉ có
+  `SET search_path TO 'public'`; trần 60 giây là `SET statement_timeout '60s'` của hàm lõi 12/13 tham số và 2 wrapper
+  Desktop mà PostgREST áp vào cả giao dịch. Hàm lõi còn chặn quá 10.000 dòng/lần
   ([v198 L48](../migrations/migration_v198_data_group_ingest_row_limit_guard.sql#L48)).
 - Trong hàm nạp:
   - Khoá dòng nhóm `FOR UPDATE` suốt giao dịch
