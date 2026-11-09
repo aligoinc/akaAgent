@@ -171,7 +171,7 @@ function hub(C, S, opts) {
       <h3>Video dọc</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>MP4 · 1080×1920 · 27 giây</span></div><button type="button" class="btn dl" data-file="video/${base}-9x16.mp4" data-name="akaAgent-Zalo-video-${base}.mp4">Tải video</button></div>`).join('')}</div>
       <h3>Slide thuyết trình</h3>
-      <div class="files"><div class="file"><div><b>Slide 16:9 · 13 trang, có ghi chú thuyết trình</b><span>Trình chiếu khi demo online, tải PPTX hoặc PDF từ trang slide.</span></div>${deckUrl ? `<a class="btn" href="${esc(deckUrl)}" target="_blank" rel="noopener">Mở slide</a>` : ''}</div></div>
+      <div class="files"><div class="file"><div><b>Slide 16:9 · 14 trang (có trang bảng giá), kèm ghi chú thuyết trình</b><span>Trình chiếu khi demo online, tải PPTX hoặc PDF từ trang slide.</span></div>${deckUrl ? `<a class="btn" href="${esc(deckUrl)}" target="_blank" rel="noopener">Mở slide</a>` : ''}</div></div>
       <h3>Trang giới thiệu (gửi link)</h3>
       <div class="files"><div class="file"><div><b>Trang web akaAgent Zalo</b><span>Mở cho khách xem trên điện thoại. Chủ tài khoản cần bật chia sẻ trong menu Share trước khi gửi.</span></div>${landingUrl ? `<a class="btn" href="${esc(landingUrl)}" target="_blank" rel="noopener">Mở trang</a>` : ''}</div></div>
     </div>

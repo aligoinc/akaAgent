@@ -18,7 +18,7 @@ Mọi định dạng dựng từ một nguồn nội dung duy nhất: [`nguon/no
 |---|---|---|
 | Sales Kit nội bộ | Nhân viên xem trước, tải ảnh/PDF/video/bảng giá, sao chép tin nhắn mẫu bằng một chạm (trên điện thoại, nút Tải mở bảng chia sẻ để gửi thẳng vào Zalo) | https://claude.ai/artifact/N1s6ZCBPiZb9oF7AqXt4kc |
 | Landing page cho khách | Gửi link cho khách đọc trên điện thoại | https://claude.ai/artifact/Jt9u4tyD4vyvwcAzRkXYH8 |
-| Slide thuyết trình 16:9 | Trình chiếu khi demo online; 13 trang có ghi chú thuyết trình; tải PPTX hoặc PDF trong trang slide | https://claude.ai/artifact/FuvhnesrgWoAF9YbPismdk |
+| Slide thuyết trình 16:9 | Trình chiếu khi demo online; 14 trang (trang 13 là bảng giá Zalo Web) có ghi chú thuyết trình; tải PPTX hoặc PDF trong trang slide | https://claude.ai/artifact/FuvhnesrgWoAF9YbPismdk |
 
 Ba trang đang riêng tư: người khác chỉ mở được sau khi chủ tài khoản bật chia sẻ trong menu **Share** của từng trang. Landing page cũng có bản HTML tự chứa ở [`landing/index.html`](landing/index.html) để đưa lên website riêng (ví dụ akabiz.net).
 
