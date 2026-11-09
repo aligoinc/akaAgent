@@ -1,6 +1,7 @@
 # Trợ lý aka: hỏi đáp chiến dịch — phần Desktop
 
 > **Trạng thái:** phương án ngày 09/11/2026, **đã duyệt toàn bộ cùng ngày** (quyết định ở mục 17 của tài liệu chính).
+> **Sửa lần 2 (09/11/2026):** không dùng chung bảng hay code với akaAgentChatApi; thêm bảng `ai_prompt_group` (nhóm **Trợ lý aka chiến dịch**); hai mục campaign-support (agent aka10000) chạy song song.
 > **Chưa code, chưa migration, chưa áp gì lên production.**
 > Tài liệu chính (kiến trúc, 15 API ngữ cảnh, prompt 2 lớp, danh mục nguyên nhân, cổng 95%, câu hỏi cần chốt):
 > akaAgentWebApp [`docs/CAMPAIGN_ASSISTANT_QA_PLAN.md`](https://github.com/aligoinc/akaAgentWebApp/blob/claude/wonderful-shannon-dyxnwf/docs/CAMPAIGN_ASSISTANT_QA_PLAN.md).
@@ -8,7 +9,7 @@
 
 ## 1. Desktop dùng bộ máy chung ở API Web
 
-- Menu **Trợ lý** thêm "Tại sao chiến dịch không chạy?" và "Chiến dịch đang bị lỗi gì?"; câu trả lời và ô hỏi tiếp nằm trong panel Trợ lý hiện có (`LogPanel.tsx`, chế độ `assistantMode`).
+- Menu **Trợ lý** thêm "Tại sao chiến dịch không chạy?" và "Chiến dịch đang bị lỗi gì?"; câu trả lời và ô hỏi tiếp nằm trong panel Trợ lý hiện có (`LogPanel.tsx`, chế độ `assistantMode`). Hai mục campaign-support (agent aka10000) giữ nguyên, chạy song song.
 - Desktop **không** tự dựng ngữ cảnh hay prompt. Main process gọi route Desktop mới của API Web, `…/api/aka-agent/desktop/v1/campaign-assistant/turns`, xác thực bằng JWT Desktop như proxy AI V434 (`desktop-ai.routes.ts`). Lý do: fleet chậm cập nhật (đo 09/11: 215 máy online, 4 bản 9.1.0–9.4.0); để logic ở server thì sửa prompt/API/luật có hiệu lực ngay, không cần phát hành.
 - Khi hỏi, Desktop gửi kèm ảnh chụp RAM mới nhất của bộ chạy (cùng cấu trúc `desktopRuntimeSnapshot.ts`); server ghi là dữ kiện "do app báo", không thay dữ liệu DB.
 
@@ -16,7 +17,7 @@
 
 | Việc | Chỗ sửa | Ghi chú |
 |---|---|---|
-| Menu 2 câu hỏi mới | `src/renderer/src/components/CampaignPanels/CampaignAssistantMenu.tsx`, `src/shared/campaignSupport.ts` (`CampaignAssistantMode`) | Đã chốt: thay `campaign_support` / `campaign_support_dsh` (agent ngoài `aka10000.fly.dev`) khi luồng mới qua cổng. Menu vẽ theo bảng câu hỏi `auto_campaign_assistant_question` qua route config (đọc một lần khi mở trang); đọc lỗi thì dùng 2 câu hỏi cài sẵn |
+| Menu 2 câu hỏi mới | `src/renderer/src/components/CampaignPanels/CampaignAssistantMenu.tsx` (đang cài cứng 4 mục, dòng 56–59), `src/shared/campaignSupport.ts` (`CampaignAssistantMode`) | Menu vẽ theo bảng câu hỏi `auto_campaign_assistant_question` qua route config (đọc một lần khi mở trang); đọc lỗi thì dùng các mục cài sẵn. `campaign_support` / `campaign_support_dsh` (agent `aka10000.fly.dev`) **không thay**: thành 2 dòng `kind = external_agent` mà admin akaBiz ẩn và đổi nhãn được; nhãn mặc định đổi khỏi "Tại sao chiến dịch không chạy?" để không trùng câu hỏi mới. Mặc định đưa phần menu đọc cấu hình vào bản phát hành gần nhất (chờ chốt) |
 | Tab trả lời | Component mới cạnh `CampaignAssistantTab.tsx` | 5 phần, nhãn Chắc chắn/Gợi ý, nút, Kiểm tra lại, 👍/👎, ô hỏi tiếp có ảnh |
 | IPC + service main | `src/main/ipc/handlers/` + `src/main/services/` mới | `ai:campaign-assistant:{send,cancel,conversation,feedback}`; huỷ khi đổi chiến dịch/đăng xuất; không lưu nội dung hội thoại ra file |
 | Kiểm ảnh | Dùng lại `src/main/services/campaignSupportImageValidation.ts` | ≤ 5 ảnh, 5 MB/ảnh, 15 MB tổng; WebP giữ nguyên byte |
@@ -26,7 +27,9 @@
 | Ảnh chụp cho App Server | `src/server/main/zaloServerRuntimeManager.ts` + bảng mới `auto_server_runtime_state` | Hiện App Server không ghi `runtime_state`; trạng thái và lỗi khởi động chỉ ở RAM. Ghi khi trạng thái đổi, tối đa 5 phút/lần cho nhân viên đang có chiến dịch chạy/đến giờ (đo 09/11: 672 nhân viên, 1.770 tài khoản Zalo Server) |
 | Nút "Tại sao CD không chạy?" | `src/main/services/campaignPendingReasonService.ts` | Bản GĐ3 gọi route Desktop của Lớp 0 ở server (không AI); bản cũ giữ luật cục bộ |
 
-SQL chuẩn (15 hàm `public.aka_agent_campaign_ctx_*`, bảng lượt hỏi/kiến thức/sự cố, dòng `ai_prompt`/`ai_using`/`api_list`, công tắc) đặt ở `migrations/` của repo này như mọi migration khác; số `vN` chỉ đặt lúc code, sau khi kiểm sổ migration và các nhánh chưa merge. Thay đổi trên bảng của chatbot (`agent_domain`, CHECK `url`) đặt ở akaAgentChatApi.
+Toàn bộ SQL đặt ở `migrations/` của repo này như mọi migration khác: bảng `ai_prompt_group` + cột `ai_prompt.group_id` (nhóm **Trợ lý aka chiến dịch**, phân nhóm cả prompt đang có), 15 hàm `public.aka_agent_campaign_ctx_*` + hàm gom 8 API gọi sẵn, bảng lượt hỏi/kiến thức/sự cố/câu hỏi/ca chấm, dòng `ai_prompt`/`ai_using`, công tắc. Số `vN` chỉ đặt lúc code, sau khi kiểm sổ migration và các nhánh chưa merge. **Không sửa gì ở akaAgentChatApi.**
+
+Desktop đọc `ai_prompt` bằng `select('*')` (`src/main/data/repositories/aiRepository.ts:113-117`) và có SELECT cấp bảng, nên thêm cột `group_id` không làm hỏng bản đang chạy. Thêm cột đổi md5 cả dòng `ai_prompt` mà các script rollback cũ trong `migrations/tests/` (V394, V395, V400, V403, V405) đang kiểm; quy ước mới: tính md5 dòng `ai_prompt` thì bỏ `group_id`.
 
 ## 3. Phát hiện khi khảo sát mã Desktop/App Server (09/11/2026)
 
