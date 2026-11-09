@@ -32,6 +32,9 @@ const ICONS = {
   filter: '<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z"/>',
   hand: '<circle cx="12" cy="12" r="9"/><path d="M5.7 5.7l12.6 12.6"/>',
   headset: '<path d="M4 14.5v-2.5a8 8 0 0 1 16 0v2.5"/><rect x="2.5" y="13.5" width="4.5" height="6.5" rx="1.8"/><rect x="17" y="13.5" width="4.5" height="6.5" rx="1.8"/><path d="M19.5 20c0 1-1.5 1.5-4 1.5h-2"/>',
+  history: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/>',
+  'users-plus': '<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M18.5 8v6M15.5 11h6"/>',
+  'user-x': '<circle cx="9.5" cy="8" r="3.5"/><path d="M3 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 8.5l4 4M21 8.5l-4 4"/>',
   gift: '<rect x="3" y="8" width="18" height="4.5" rx="1.2"/><path d="M4.5 12.5v8h15v-8"/><path d="M12 8v12.5"/><path d="M12 8C10.5 4.5 7.5 4 6.8 5.6 6.2 7 8.5 8 12 8zM12 8c1.5-3.5 4.5-4 5.2-2.4.6 1.4-1.7 2.4-5.2 2.4z"/>',
 };
 

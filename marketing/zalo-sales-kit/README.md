@@ -8,7 +8,7 @@ Bộ tài liệu để nhân viên bán hàng và CSKH gửi khách qua Zalo, Fa
 4. Gửi tin tới bạn bè Zalo
 5. Gửi tin vào nhóm Zalo
 
-Kèm **28 ảnh từng tính năng** (mỗi tính năng, chiến dịch hoặc thông tin một ảnh dọc 1080×1350 để gửi khách từng ảnh) và **bảng giá 4 sản phẩm**: akaAgent Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile (mỗi sản phẩm ảnh 4 cỡ + PDF A4 + tin báo giá, thêm một PDF tổng hợp); bảng giá nhân viên gửi riêng khi khách hỏi giá.
+Kèm **31 ảnh từng tính năng** (mỗi loại chiến dịch Zalo một ảnh, mỗi tính năng hoặc thông tin một ảnh dọc 1080×1350 để gửi khách từng ảnh) và **bảng giá 4 sản phẩm**: akaAgent Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile (mỗi sản phẩm ảnh 4 cỡ + PDF A4 + tin báo giá, thêm một PDF tổng hợp); bảng giá nhân viên gửi riêng khi khách hỏi giá.
 
 Mọi định dạng dựng từ một nguồn nội dung duy nhất: [`nguon/noi-dung.cjs`](nguon/noi-dung.cjs) (chữ trên ảnh, PDF, video, landing page) và [`nguon/tin-nhan-mau.cjs`](nguon/tin-nhan-mau.cjs) (tin nhắn mẫu). Sửa chữ ở đó rồi dựng lại, các định dạng tự khớp nhau.
 
@@ -19,7 +19,7 @@ Mọi định dạng dựng từ một nguồn nội dung duy nhất: [`nguon/no
 | Sales Kit nội bộ | Nhân viên xem trước, tải ảnh/PDF/video/bảng giá, sao chép tin nhắn mẫu bằng một chạm (trên điện thoại, nút Tải mở bảng chia sẻ để gửi thẳng vào Zalo) | https://claude.ai/artifact/N1s6ZCBPiZb9oF7AqXt4kc |
 | Landing page cho khách | Gửi link cho khách đọc trên điện thoại | https://claude.ai/artifact/Jt9u4tyD4vyvwcAzRkXYH8 |
 | Slide thuyết trình 16:9 | Trình chiếu khi demo online; 15 trang (trang 13–14 là bảng giá Zalo Desktop và Zalo Web) có ghi chú thuyết trình; tải PPTX hoặc PDF trong trang slide | https://claude.ai/artifact/FuvhnesrgWoAF9YbPismdk |
-| Ảnh từng tính năng | Xem 28 ảnh tính năng, lọc theo nhóm, mở cỡ lớn (trên điện thoại nhấn giữ ảnh để lưu rồi gửi Zalo) | https://claude.ai/artifact/5TMvQxZ9YVki6gP5NrnLnp |
+| Ảnh từng tính năng | Xem 31 ảnh tính năng, lọc theo nhóm, mở cỡ lớn (trên điện thoại nhấn giữ ảnh để lưu rồi gửi Zalo) | https://claude.ai/artifact/5TMvQxZ9YVki6gP5NrnLnp |
 
 Bốn trang đang riêng tư: người khác chỉ mở được sau khi chủ tài khoản bật chia sẻ trong menu **Share** của từng trang. Landing page cũng có bản HTML tự chứa ở [`landing/index.html`](landing/index.html) để đưa lên website riêng (ví dụ akabiz.net).
 
@@ -31,7 +31,7 @@ Bốn trang đang riêng tư: người khác chỉ mở được sau khi chủ t
 | Ảnh dọc infographic | `anh/<chủ đề>/*-doc-1080x1350.png` | 4:5 | Khách hỏi "làm thế nào": 4 bước + điểm nổi bật |
 | Ảnh story | `anh/<chủ đề>/*-story-1080x1920.png` | 9:16 | Story Zalo/Facebook/TikTok, ảnh dọc gửi chat |
 | Banner ngang | `anh/<chủ đề>/*-ngang-1200x628.png` | 1.91:1 | Bài đăng có link, ảnh bìa bài viết, website, quảng cáo |
-| Ảnh từng tính năng | `anh/07-tinh-nang/tinh-nang-NN-*-1080x1350.png` (28 ảnh) | 4:5 | Khách hỏi tính năng nào thì gửi đúng ảnh đó: giới thiệu 2, chiến dịch 9, tính năng 11, an toàn & bền 4, hỗ trợ 2. Không ghi giá |
+| Ảnh từng tính năng | `anh/07-tinh-nang/tinh-nang-NN-*-1080x1350.png` (31 ảnh) | 4:5 | Khách hỏi tính năng nào thì gửi đúng ảnh đó: giới thiệu 2, chiến dịch 11 (mỗi loại chiến dịch Zalo trong app một ảnh), tính năng 12, an toàn & bền 4, hỗ trợ 2. Không ghi giá |
 | Brochure | `pdf/akaAgent-Zalo-brochure-A4.pdf` | A4, 8 trang | Khách doanh nghiệp, gửi email, in khi gặp trực tiếp |
 | Tờ giới thiệu | `pdf/to-gioi-thieu-0N-*.pdf` | A4, 1 trang | Gửi file cho đúng chủ đề khách quan tâm, in được |
 | Video | `video/0N-*-9x16.mp4` (+ `*-caption.txt`) | 1080×1920, 27 giây | TikTok, Reels, story; khách thích xem video. Thêm nhạc thịnh hành khi đăng |
@@ -67,6 +67,10 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
 | Số chưa có Zalo nhận SMS: bật Gửi SMS trong chiến dịch SĐT, gửi từ điện thoại Android, cần gói akaAgent SMS | `src/shared/types.ts:622` (`internalSmsEnabled`); `src/shared/authProductCatalog.ts:26` |
 | Kết bạn với người Zalo gợi ý; nhắn lại khách đã từng gửi tin | `src/main/services/campaignScheduler.ts:15268` (`zalo_friend_recommendations`); `src/shared/types.ts:1116` (`zalo_message_remarketing_customer`) |
 | AI đặt lịch chạy bằng câu nói thường | `src/shared/campaignScheduleAi.ts` |
+| 11 loại chiến dịch Zalo (mỗi loại một ảnh): SĐT, thành viên nhóm, theo dõi nhóm, bạn bè, sinh nhật, gợi ý kết bạn, khách cũ, gửi vào nhóm, tham gia nhóm, thêm thành viên vào nhóm, huỷ lời mời kết bạn đã gửi | `src/shared/campaignActionDescriptors.ts:19-29`; tên trong DB ở `migrations/migration_v124`–`v135`, `v160` |
+| Thêm khách vào nhóm: danh sách SĐT, chọn nhóm tải từ Zalo, thêm hoặc mời vào nhóm, nhận biết người đã ở trong nhóm, tuỳ chọn gửi link nhóm | `CampaignDataUploadModal.tsx:139`; `zaloRuntimeService.ts:1684-1760`; `migrations/migration_v161_*` |
+| Huỷ lời mời kết bạn đã gửi: lấy danh sách lời mời từ Zalo, đặt số lời mời cần huỷ | `migrations/migration_v135_*`; `CampaignFormModal.tsx:10578`; `campaignScheduler.ts:3786` |
+| Khách cũ: chọn khách tài khoản đã từng gửi tin, nhắn tin và/hoặc kết bạn | `migrations/migration_v127_*`, `migration_v197_*`; `CampaignFormModal.tsx:16503` |
 
 ## Bảng giá
 
@@ -101,6 +105,8 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
 
 ## Cần chốt lại với đội kinh doanh
 
+- **"4 kiểu" hay "11 loại" chiến dịch**: ảnh từng tính năng (từ 09/11/2026) tách mỗi loại chiến dịch Zalo một ảnh và ghi "11 loại chiến dịch"; ảnh chủ đề, brochure, video, landing page, bảng giá và tin nhắn mẫu vẫn ghi "4 kiểu chiến dịch" (gom theo 4 nguồn khách). Chốt một cách gọi rồi sửa `noi-dung.cjs`/`tin-nhan-mau.cjs` và dựng lại.
+
 - **Máy Mac**: repo có bản cài macOS (chip Apple và Intel), trong khi kịch bản bán hàng cũ hướng khách Mac sang bản chạy trên server. Tài liệu đang ghi trung tính "chạy trên máy tính hoặc trên server"; câu trả lời cho khách Mac nằm ở `nguon/tin-nhan-mau.cjs` (mục câu hỏi chung).
 - **Nhóm ẩn thành viên**: mã nguồn không có xử lý riêng cho chế độ ẩn danh sách thành viên; tài liệu mô tả qua hai cách có thật (quét bằng link nhóm và theo dõi nhóm theo thời gian thực). Trước khi hứa với khách về một nhóm cụ thể, quét thử link nhóm đó trên tài khoản demo.
 - **Gói 3 năm trở lên "giảm 15%"** (đổi từ 25% ngày 09/11/2026): chưa rõ giảm trên giá nào (ví dụ 3 × giá 1 năm = 9.000.000đ thì còn 7.650.000đ), nên bảng giá chưa in số tiền. Chốt cách tính thì thêm `vnd`/`months` cho gói này để in giá cụ thể.
@@ -115,8 +121,8 @@ Cần Node 22 và Chromium của Playwright (có sẵn trong môi trường clou
 
 ```bash
 cd marketing/zalo-sales-kit/nguon
-node xay-dung.cjs tat-ca        # ảnh (4 cỡ × 5 chủ đề), brochure + tờ PDF, bảng giá (4 sản phẩm × 4 ảnh + PDF, PDF tổng hợp), 28 ảnh tính năng, landing page
-node xay-dung.cjs tinh-nang     # chỉ dựng lại 28 ảnh từng tính năng 1080×1350 (anh/07-tinh-nang/)
+node xay-dung.cjs tat-ca        # ảnh (4 cỡ × 5 chủ đề), brochure + tờ PDF, bảng giá (4 sản phẩm × 4 ảnh + PDF, PDF tổng hợp), 31 ảnh tính năng, landing page
+node xay-dung.cjs tinh-nang     # chỉ dựng lại 31 ảnh từng tính năng 1080×1350 (anh/07-tinh-nang/)
 node xay-dung.cjs bang-gia      # chỉ dựng lại bảng giá (4 sản phẩm + PDF tổng hợp)
 node xay-dung.cjs bang-gia zalo-web   # chỉ một sản phẩm (zalo-web, zalo-desktop, facebook-desktop, sms-mobile) + PDF tổng hợp
 node quay-tat-ca-video.cjs      # 5 video 9:16 + caption (~1 phút/video); thêm số để quay riêng: node quay-tat-ca-video.cjs 3
