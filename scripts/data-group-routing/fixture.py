@@ -5,6 +5,8 @@ Không chạm production. Nguồn:
   live 27/10/2026. Bản chụp không có default cột nên bù default chung cho cột NOT NULL và default nghiệp vụ cho các
   bảng nhóm data (lấy theo migration v186+).
 - Index unique mà ON CONFLICT trong đường nạp/đẩy cần (lấy nguyên văn từ migration).
+- migrations/snapshots/group-access-v486/live-functions.json: định nghĩa live 09/11/2026 của private.group_access (che tên
+  chủ nhóm cho phiên Desktop) và private.aka_agent_staff_scope_for_request, đè lên bản chụp 27/10.
 - Sau đó apply nguyên văn migration_v483 (đã kiểm md5 thân wrapper như production).
 
 Dùng làm module: `from fixture import Cluster`. PGBIN mặc định /usr/lib/postgresql/17/bin.
@@ -211,6 +213,12 @@ class Cluster:
         fn_sql = 'SET check_function_bodies = off;\n' + '\n'.join(f['definition'] + ';' for f in functions + private_functions)
         _, err = self.psql(fn_sql, stop_on_error=False)
         report['function_errors'] = [l for l in err.splitlines() if 'ERROR' in l]
+        # Định nghĩa live 09/11/2026 (đổi sau bản chụp 27/10); bảng phiên Desktop tối thiểu cho hàm phạm vi staff.
+        live = json.loads((ROOT / 'migrations/snapshots/group-access-v486/live-functions.json').read_text(encoding='utf-8'))
+        self.q("CREATE TABLE IF NOT EXISTS private.aka_agent_desktop_users (auth_user_id uuid PRIMARY KEY, staff_id bigint NOT NULL);")
+        self.psql('SET check_function_bodies = off;\n' + '\n'.join(f['definition'] + ';' for f in live['functions']))
+        private_functions = [f for f in private_functions if f['signature'] not in {g['signature'] for g in live['functions']}]
+        private_functions += live['functions']
 
         con_sql = '\n'.join(f'ALTER TABLE public."{c["relation"]}" ADD CONSTRAINT "{c["conname"]}" {c["definition"]};'
                             for c in constraints if not c['definition'].startswith('FOREIGN KEY'))
