@@ -110,10 +110,10 @@ q "UPDATE public.org_staff SET web_campaign_form_version = '1,2' WHERE id IN (1,
 q "UPDATE public.auto_system_settings SET value = '{\"defaultVersion\":\"1,2\"}' WHERE key = 'web.campaign_form'" >/dev/null
 run_file "$ROLLBACK" >/dev/null
 [ "$(q "SELECT count(*) FROM public.org_staff WHERE web_campaign_form_version IS NOT NULL")" = 0 ] || fail "rollback bước 1 còn nhân viên mang giá trị"
-[ "$(q "SELECT value FROM public.auto_system_settings WHERE key='web.campaign_form'")" = '{"defaultVersion":1}' ] || fail "rollback bước 1 không đặt lại mặc định"
+[ "$(q "SELECT value FROM public.auto_system_settings WHERE key='web.campaign_form'")" = '{"defaultVersion":1,"followCampaignForm":false}' ] || fail "rollback bước 1 không đặt lại mặc định"
 [ "$(q "SELECT count(*) FROM pg_attribute WHERE attrelid='public.org_staff'::regclass AND attname='web_campaign_form_version' AND NOT attisdropped")" = 1 ] \
   || fail "rollback bước 1 đổi schema"
-ok "rollback bước 1: mọi người về form 1, giữ schema"
+ok "rollback bước 1: mọi người về form 1 (cả khi sửa chiến dịch đã ghi Form 2), giữ schema"
 
 step2=$(copy_sql "$ROLLBACK" rollback_step2.sql)
 sed -n '/^-- BEGIN;/,/^-- COMMIT;/p' "$ROLLBACK" | sed 's/^-- //' > "$step2"

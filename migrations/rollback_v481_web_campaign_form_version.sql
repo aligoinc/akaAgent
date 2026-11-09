@@ -1,9 +1,10 @@
 -- Rollback V481 (Form chiến dịch 2 trên Web). Bước 1 chỉ dữ liệu: mọi người về form 1 ngay (kể cả nhân viên đang '2' hay '1,2'),
--- không đổi schema, không làm PostgREST nạp lại schema. Web/API bản mới vẫn chạy (đọc cột/khóa nhưng đều là form 1).
+-- kể cả khi sửa chiến dịch đã ghi Form 2 (followCampaignForm=false tắt khóa theo auto_campaigns.web_campaign_form của V482, giữ
+-- dữ liệu cột). Không đổi schema, không làm PostgREST nạp lại schema. Web/API bản mới vẫn chạy (đọc cột/khóa nhưng đều là form 1).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
-UPDATE public.auto_system_settings SET value = '{"defaultVersion":1}', updated_at = now()
-  WHERE key = 'web.campaign_form' AND value IS DISTINCT FROM '{"defaultVersion":1}';
+UPDATE public.auto_system_settings SET value = '{"defaultVersion":1,"followCampaignForm":false}', updated_at = now()
+  WHERE key = 'web.campaign_form' AND value IS DISTINCT FROM '{"defaultVersion":1,"followCampaignForm":false}';
 UPDATE public.org_staff SET web_campaign_form_version = NULL WHERE web_campaign_form_version IS NOT NULL;
 COMMIT;
 -- Bước 2 (chỉ khi gỡ hẳn tính năng, ngoài giờ cao điểm vì DDL làm PostgREST nạp lại schema).
