@@ -1,4 +1,11 @@
 import { invokeGroupSharing } from './groupSharingRepository'
+import {
+  dataGroupIngestProgressNote,
+  dataGroupIngestRootError,
+  dataGroupIngestTimeoutMessage,
+  mergeDataGroupIngestResults,
+  runChunkedDataGroupIngest
+} from '../../../shared/dataGroupIngestChunks'
 import { isFacebookGroupTarget, normalizeFacebookGroupMetadata } from '../../../shared/facebookGroupExport'
 import type { GroupSharing } from '../../../shared/groupSharing'
 import {
@@ -511,26 +518,49 @@ export async function ingestDataGroup(request: DataGroupIngestRequest): Promise<
     info5: row.info5 ?? null,
     extra_data: row.extraData || {}
   }))
-  const { data, error } = await client().rpc('aka_agent_ingest_data_group', {
+  const params = {
     ...identityParams(),
-    p_request_id: request.requestId,
     p_group_id: request.groupId,
     p_kind: request.kind,
-    p_rows: rows,
     p_dataset_id: request.datasetId ?? null,
     p_dataset_name: request.datasetName ?? null,
     p_import_source: request.importSource ?? null,
     p_source_account_id: request.sourceAccountId ?? null,
     p_source_name: request.sourceName ?? null,
-    p_payload_hash: request.payloadHash ?? null,
     p_data_type_category_item_id: request.dataTypeCategoryItemId ?? null
-  })
-  if (error) throwRpcError('Failed to ingest data group', error)
-  const row = unwrapRpcRow(data)
+  }
+  const payloadHash = request.payloadHash ?? null
+  // Một chỗ chung cho mọi đường thêm data vào nhóm (quét, thủ công, kiểm tra SĐT, danh bạ, chiến dịch tìm data).
+  // Hàm DB đẩy từng dòng vào mọi chiến dịch đang bật "nhận data mới từ nhóm" trong một giao dịch trần 60 giây,
+  // nên kiểu nạp cộng dồn được chia lô; DB (V483) báo PT413 kèm ước tính khi một lần gửi chắc chắn quá trần.
+  // 'upload' vẫn gửi một lần: mỗi lần gọi là ảnh chụp toàn bộ file, chia nhỏ thì lần sau gỡ data của lần trước.
+  try {
+    return await runChunkedDataGroupIngest<DbRow, DataGroupIngestResult>({
+      kind: request.kind,
+      rows,
+      requestId: request.requestId,
+      invoke: async call => {
+        const { data, error } = await client().rpc('aka_agent_ingest_data_group', {
+          ...params,
+          p_request_id: call.requestId,
+          p_rows: call.rows,
+          p_payload_hash: call.chunked && payloadHash ? `${payloadHash}:${call.offset}+${call.rows.length}` : payloadHash
+        })
+        if (error) throw error
+        return mapIngestResult(unwrapRpcRow(data), call.requestId, request.groupId)
+      },
+      merge: parts => mergeDataGroupIngestResults(parts, request.requestId)
+    })
+  } catch (error) {
+    throwIngestError(error)
+  }
+}
+
+function mapIngestResult(row: DbRow, requestId: string, groupId: number): DataGroupIngestResult {
   return {
-    requestId: asString(row.request_id, request.requestId),
+    requestId: asString(row.request_id, requestId),
     batchId: asNullableNumber(row.batch_id),
-    groupId: asNumber(row.group_id, request.groupId),
+    groupId: asNumber(row.group_id, groupId),
     groupRevision: asNumber(row.group_revision),
     insertedMembershipCount: asNumber(row.inserted_membership_count),
     reactivatedMembershipCount: asNumber(row.reactivated_membership_count),
@@ -541,6 +571,21 @@ export async function ingestDataGroup(request: DataGroupIngestRequest): Promise<
     conflictCount: asNumber(row.conflict_count),
     invalidCount: asNumber(row.invalid_count),
     conflicts: Array.isArray(row.conflicts) ? row.conflicts as DataGroupIngestResult['conflicts'] : []
+  }
+}
+
+/** Hết 60 giây/chặn sớm thành câu tiếng Việt; dừng giữa chừng thì báo số dòng đã lưu (thử lại chỉ thêm phần còn lại). */
+function throwIngestError(error: unknown): never {
+  const root = dataGroupIngestRootError(error)
+  const note = dataGroupIngestProgressNote(error)
+  const timeoutMessage = dataGroupIngestTimeoutMessage(root)
+  if (timeoutMessage) throw new Error(`${note}${timeoutMessage}`)
+  const rpcError = root && typeof root === 'object' ? root as { message?: string } : { message: String(root ?? '') }
+  try {
+    throwRpcError('Failed to ingest data group', rpcError)
+  } catch (mapped) {
+    if (!note) throw mapped
+    throw new Error(`${note}${mapped instanceof Error ? mapped.message : String(mapped)}`)
   }
 }
 
