@@ -8,7 +8,8 @@
  *
  * Chỉ chia kiểu nạp cộng dồn: quét, thủ công, API, tự động. KHÔNG chia 'upload'/'external_sync': DB coi mỗi lần
  * gọi là ảnh chụp toàn bộ của file/nguồn (đầu lần gọi đánh dấu dòng cũ "không còn", cuối lần gọi gỡ thành viên
- * không còn), nên chia nhỏ thì lần sau gỡ data của lần trước.
+ * không còn), nên chia nhỏ thì lần sau gỡ data của lần trước. Nhập file lớn dùng phiên nhiều phần của V485
+ * (`runDataGroupUpload` bên dưới): các phần chỉ cộng thêm, bước chốt làm phần ảnh chụp một lần cho cả file.
  *
  * Mỗi lô có mã yêu cầu cố định theo vị trí và độ dài, nên thử lại cùng mã gốc với cùng cách chia không nạp trùng;
  * chia khác đi thì dòng đã nạp chỉ thành "đã có" trong nhóm. Cỡ lô tự điều chỉnh theo thời gian chạy thật; DB
@@ -35,6 +36,30 @@ export function isChunkableDataGroupIngestKind(kind: string): boolean {
   return (DATA_GROUP_INGEST_CHUNKABLE_KINDS as readonly string[]).includes(kind)
 }
 
+/** Khoá `auto_system_settings` của công tắc đẩy data nhóm vào chiến dịch (DB V484). */
+export const DATA_GROUP_ROUTING_SETTING_KEY = 'data_groups.routing_mode'
+
+/**
+ * Tổ chức có đẩy data vào chiến dịch chạy nền không (DB V484, cùng luật `private.aka_agent_data_group_route_async`):
+ * `mode` = 'async' và `organizationIds` thiếu/null (mọi tổ chức) hoặc là mảng có id tổ chức. Khi đó lượt nạp không
+ * còn tốn thời gian theo số chiến dịch, ước tính cỡ lô chỉ tính phần ghi thành viên.
+ */
+export function isDataGroupRoutingAsync(value: unknown, organizationId: number): boolean {
+  let setting = value
+  if (typeof value === 'string') {
+    try {
+      setting = JSON.parse(value) as unknown
+    } catch {
+      return false
+    }
+  }
+  const record = errorRecord(setting)
+  if (!record || Array.isArray(setting) || record.mode !== 'async') return false
+  const ids = record.organizationIds
+  if (ids === undefined || ids === null) return true
+  return Array.isArray(ids) && ids.some(id => typeof id === 'number' && id === organizationId)
+}
+
 /** Ước tính thời gian mỗi dòng theo số chiến dịch đang bật "nhận data mới từ nhóm". */
 export function estimateDataGroupIngestRowMs(receivingCampaigns: number): number {
   const campaigns = Number.isFinite(receivingCampaigns) && receivingCampaigns > 0 ? Math.floor(receivingCampaigns) : 0
@@ -42,9 +67,13 @@ export function estimateDataGroupIngestRowMs(receivingCampaigns: number): number
 }
 
 /** Số dòng mỗi lần gọi để một lần chạy khoảng `targetMs`. */
-export function dataGroupIngestRowsForTarget(rowMs: number, targetMs = DATA_GROUP_INGEST_TARGET_CHUNK_MS): number {
-  if (!Number.isFinite(rowMs) || rowMs <= 0) return DATA_GROUP_INGEST_MAX_CHUNK_ROWS
-  return Math.max(1, Math.min(DATA_GROUP_INGEST_MAX_CHUNK_ROWS, Math.floor(targetMs / rowMs)))
+export function dataGroupIngestRowsForTarget(
+  rowMs: number,
+  targetMs = DATA_GROUP_INGEST_TARGET_CHUNK_MS,
+  maxRows = DATA_GROUP_INGEST_MAX_CHUNK_ROWS
+): number {
+  if (!Number.isFinite(rowMs) || rowMs <= 0) return maxRows
+  return Math.max(1, Math.min(maxRows, Math.floor(targetMs / rowMs)))
 }
 
 /** Mã yêu cầu của một lô: cố định theo mã gốc, vị trí bắt đầu và độ dài. */
@@ -275,4 +304,238 @@ export function mergeDataGroupIngestResults<Result extends DataGroupIngestResult
     }))
   }
   return merged
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Nhập file nhiều phần (DB V485): begin -> append x N -> finish
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * File trên số dòng này đi phiên nhiều phần ngay; nhỏ hơn thì gửi một lần như cũ và chỉ chuyển sang phiên khi bị chặn
+ * sớm (PT413) hoặc hết 60 giây. ~2.000 dòng x 8 ms = 16 giây, an toàn khi nhóm không cấp data cho chiến dịch nào.
+ */
+export const DATA_GROUP_UPLOAD_SESSION_MIN_ROWS = 2000
+/** Phần đầu khi chưa biết nhóm nặng hay nhẹ; sau đó tự điều chỉnh để mỗi phần khoảng 20 giây. */
+export const DATA_GROUP_UPLOAD_FIRST_PART_ROWS = 500
+export const DATA_GROUP_UPLOAD_MAX_PART_ROWS = 2000
+/** Trần của một phiên (DB kiểm lại). */
+export const DATA_GROUP_UPLOAD_MAX_ROWS = 100_000
+/** Trần của một lần nạp (đường cũ, cũng là trần khi DB chưa có V485). */
+export const DATA_GROUP_SINGLE_INGEST_MAX_ROWS = 10_000
+/** File nhỏ mà ước tính (nếu biết) quá số này thì cũng đi phiên ngay, khỏi chờ một lần gửi hết 60 giây. */
+export const DATA_GROUP_UPLOAD_SINGLE_MAX_ESTIMATED_MS = 45_000
+
+export interface DataGroupUploadTypeRow {
+  contact_type: string | null
+  flatform_type: string | null
+}
+
+function nullableText(value: unknown): string | null {
+  return value === undefined || value === null ? null : String(value)
+}
+
+/**
+ * Các cặp (contact_type, flatform_type) khác nhau của file, theo đúng dòng sẽ gửi (khoá snake_case như DB).
+ * Bước begin dùng chúng để chọn/tạo dataset giống hệt lần nhập một lần (loại/nền tảng của dataset tính trên cả file).
+ */
+export function dataGroupUploadTypeRows(rows: readonly unknown[]): DataGroupUploadTypeRow[] {
+  const seen = new Set<string>()
+  const result: DataGroupUploadTypeRow[] = []
+  for (const row of rows) {
+    const record = errorRecord(row)
+    if (!record) continue
+    const item = { contact_type: nullableText(record.contact_type), flatform_type: nullableText(record.flatform_type) }
+    const key = JSON.stringify([item.contact_type, item.flatform_type])
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+  }
+  return result
+}
+
+export interface DataGroupUploadSessionPart {
+  offset: number
+  rows: number
+}
+
+export interface DataGroupUploadSessionInfo {
+  sessionId: string
+  status: string
+  totalRows: number
+  receivedRows: number
+  parts: DataGroupUploadSessionPart[]
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+/** Đọc JSON phiên do DB trả (khoá snake_case hoặc camelCase). */
+export function parseDataGroupUploadSession(value: unknown): DataGroupUploadSessionInfo {
+  const record = errorRecord(Array.isArray(value) ? value[0] : value) ?? {}
+  const sessionId = String(record.session_id ?? record.sessionId ?? '').trim()
+  const totalRows = nonNegativeInteger(record.total_rows ?? record.totalRows)
+  if (!sessionId || totalRows === null) throw new Error('Phản hồi mở phiên nhập file không hợp lệ.')
+  const rawParts = Array.isArray(record.parts) ? record.parts : []
+  const parts: DataGroupUploadSessionPart[] = []
+  for (const raw of rawParts) {
+    const part = errorRecord(raw)
+    const offset = nonNegativeInteger(part?.offset)
+    const rows = nonNegativeInteger(part?.rows)
+    if (offset !== null && rows !== null && rows > 0) parts.push({ offset, rows })
+  }
+  parts.sort((a, b) => a.offset - b.offset)
+  return {
+    sessionId,
+    status: String(record.status ?? 'open'),
+    totalRows,
+    receivedRows: nonNegativeInteger(record.received_rows ?? record.receivedRows) ?? 0,
+    parts
+  }
+}
+
+/** Các đoạn [offset, offset + length) của file chưa có trong các phần DB đã nhận. */
+export function dataGroupUploadMissingRanges(
+  totalRows: number,
+  parts: readonly DataGroupUploadSessionPart[]
+): Array<{ offset: number; length: number }> {
+  const ranges: Array<{ offset: number; length: number }> = []
+  let cursor = 0
+  for (const part of [...parts].sort((a, b) => a.offset - b.offset)) {
+    if (part.offset > cursor) ranges.push({ offset: cursor, length: Math.min(part.offset, totalRows) - cursor })
+    cursor = Math.max(cursor, part.offset + part.rows)
+    if (cursor >= totalRows) break
+  }
+  if (cursor < totalRows) ranges.push({ offset: cursor, length: totalRows - cursor })
+  return ranges.filter(range => range.length > 0)
+}
+
+/** DB chưa có RPC phiên (chưa apply V485 hoặc đã gỡ): dùng lại cách gửi một lần. */
+export function isDataGroupUploadSessionUnavailable(error: unknown): boolean {
+  return errorChain(error).some(item => {
+    const code = String(item.code ?? '')
+    const message = String(item.message ?? '')
+    if (code === 'data_group_upload_session_unavailable' || code === 'PGRST202') return true
+    return code === '42883' && message.includes('data_group_upload')
+  })
+}
+
+export interface DataGroupUploadAppendCall<Row> {
+  sessionId: string
+  /** Vị trí dòng đầu của phần trong cả file (bắt đầu từ 0). */
+  offset: number
+  rows: Row[]
+}
+
+export interface RunDataGroupUploadOptions<Row, Result> {
+  rows: readonly Row[]
+  /** Gửi cả file một lần như trước V485. */
+  single: (rows: Row[]) => Promise<Result>
+  /** Mở phiên (gửi lại cùng mã yêu cầu thì DB trả phiên cũ kèm các phần đã nhận). Trả JSON phiên của DB. */
+  begin: (totalRows: number) => Promise<unknown>
+  append: (call: DataGroupUploadAppendCall<Row>) => Promise<unknown>
+  finish: (sessionId: string) => Promise<Result>
+  /** Ước tính ms mỗi dòng nếu biết số chiến dịch đang bật nhận data (0 chiến dịch khi tổ chức đẩy chạy nền). */
+  estimatedRowMs?: number | null
+  now?: () => number
+  onProgress?: (completedRows: number, totalRows: number) => void
+}
+
+function closedSessionError(status: string): Error & { code: string } {
+  const error = new Error(`data_group_upload_session_closed (${status})`) as Error & { code: string }
+  error.code = 'data_group_upload_session_closed'
+  return error
+}
+
+async function runDataGroupUploadSession<Row, Result>(
+  options: RunDataGroupUploadOptions<Row, Result>,
+  rows: Row[],
+  rowMs: number | null
+): Promise<Result> {
+  const total = rows.length
+  const now = options.now ?? (() => Date.now())
+  const session = parseDataGroupUploadSession(await options.begin(total))
+  if (session.totalRows !== total) throw new Error('Phiên nhập file không khớp số dòng.')
+  if (session.status === 'finished') {
+    const result = await options.finish(session.sessionId)
+    options.onProgress?.(total, total)
+    return result
+  }
+  if (session.status !== 'open') throw closedSessionError(session.status)
+  let received = Math.min(total, session.receivedRows)
+  if (received > 0) options.onProgress?.(received, total)
+  let size = rowMs
+    ? dataGroupIngestRowsForTarget(rowMs, DATA_GROUP_INGEST_TARGET_CHUNK_MS, DATA_GROUP_UPLOAD_MAX_PART_ROWS)
+    : DATA_GROUP_UPLOAD_FIRST_PART_ROWS
+  for (const range of dataGroupUploadMissingRanges(total, session.parts)) {
+    let offset = range.offset
+    const end = range.offset + range.length
+    let failuresAtOffset = 0
+    while (offset < end) {
+      const length = Math.max(1, Math.min(size, end - offset))
+      const started = now()
+      try {
+        await options.append({ sessionId: session.sessionId, offset, rows: rows.slice(offset, offset + length) })
+        offset += length
+        received = Math.min(total, received + length)
+        failuresAtOffset = 0
+        options.onProgress?.(received, total)
+        const elapsed = Math.max(1, now() - started)
+        const scaled = Math.floor(length * DATA_GROUP_INGEST_TARGET_CHUNK_MS / elapsed)
+        size = Math.max(1, Math.min(DATA_GROUP_UPLOAD_MAX_PART_ROWS, length * 2, scaled))
+      } catch (error) {
+        failuresAtOffset += 1
+        const guard = readDataGroupIngestGuard(error)
+        const timedOut = !guard && isDataGroupIngestStatementTimeout(error)
+        if ((!guard && !timedOut) || length <= 1 || failuresAtOffset >= MAX_FAILURES_AT_SAME_OFFSET) {
+          throw new DataGroupIngestChunkError(error, received, total)
+        }
+        const suggested = guard
+          ? (guard.rowMs
+            ? dataGroupIngestRowsForTarget(guard.rowMs, DATA_GROUP_INGEST_TARGET_CHUNK_MS, DATA_GROUP_UPLOAD_MAX_PART_ROWS)
+            : guard.maxRows)
+          : Math.floor(length / 4)
+        size = Math.max(1, Math.min(suggested, length - 1))
+      }
+    }
+  }
+  return options.finish(session.sessionId)
+}
+
+/**
+ * Nhập file ('upload') vào nhóm: file lớn đi phiên nhiều phần (V485), file nhỏ gửi một lần như cũ và chuyển sang
+ * phiên khi bị chặn sớm/hết giờ. DB chưa có V485 thì gửi một lần (trần 10.000 dòng như cũ).
+ * Lỗi giữa chừng ném `DataGroupIngestChunkError` với số dòng đã nhận; dòng đã nhận nằm trong nhóm nhưng data cũ
+ * chưa bị gỡ cho tới khi chốt. Gửi lại cùng mã yêu cầu (cùng file) thì DB trả các phần đã nhận và chỉ gửi phần còn thiếu.
+ */
+export async function runDataGroupUpload<Row, Result>(options: RunDataGroupUploadOptions<Row, Result>): Promise<Result> {
+  const rows = [...options.rows]
+  const total = rows.length
+  let rowMs = positiveNumber(options.estimatedRowMs)
+  const sendSingle = async (): Promise<Result> => {
+    const result = await options.single(rows)
+    options.onProgress?.(total, total)
+    return result
+  }
+  if (total <= DATA_GROUP_UPLOAD_SESSION_MIN_ROWS && (!rowMs || total * rowMs <= DATA_GROUP_UPLOAD_SINGLE_MAX_ESTIMATED_MS)) {
+    try {
+      return await sendSingle()
+    } catch (error) {
+      const guard = readDataGroupIngestGuard(error)
+      if (total <= 1 || (!guard && !isDataGroupIngestStatementTimeout(error))) throw error
+      if (guard?.rowMs) rowMs = guard.rowMs
+      try {
+        return await runDataGroupUploadSession(options, rows, rowMs)
+      } catch (sessionError) {
+        throw isDataGroupUploadSessionUnavailable(sessionError) ? error : sessionError
+      }
+    }
+  }
+  try {
+    return await runDataGroupUploadSession(options, rows, rowMs)
+  } catch (error) {
+    if (!isDataGroupUploadSessionUnavailable(error)) throw error
+    return sendSingle()
+  }
 }
