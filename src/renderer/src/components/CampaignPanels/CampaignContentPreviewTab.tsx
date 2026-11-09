@@ -33,14 +33,17 @@ import './campaignContentPreview.css'
 interface Props {
   campaign: CampaignConfig
   account: AutoAccount | null
-  preview: CampaignContentPreviewModel
+  /** Thẻ cũ của Facebook/Email. Zalo nhắn tin, SMS, gọi thoại không dùng (gọi thoại không có mẫu nội dung nên là null). */
+  preview: CampaignContentPreviewModel | null
 }
+
+type LegacyProps = Omit<Props, 'preview'> & { preview: CampaignContentPreviewModel }
 
 const INPUT_SAMPLE_LIMIT = 3
 const getMediaPath = (item: CampaignMediaInput) => typeof item === 'string' ? item : item.cloudUrl || item.localPath || ''
 const getMediaLabel = (item: CampaignMediaInput) => typeof item === 'string' ? item.split(/[\\/]/).pop() || 'File đính kèm' : item.name
 
-function PreviewCard({ item, index, campaign, account, preview, input, mode }: Props & {
+function PreviewCard({ item, index, campaign, account, preview, input, mode }: LegacyProps & {
   item: CampaignContentPreviewItem
   index: number
   input?: CampaignInputData
@@ -230,14 +233,13 @@ function RecipientContentPreviewTab({ campaign, account }: Pick<Props, 'campaign
   )
 }
 
-export default function CampaignContentPreviewTab(props: Props) {
-  return recipientPreviewChannel(props.campaign.actionId)
-    ? <RecipientContentPreviewTab campaign={props.campaign} account={props.account} />
-    : <LegacyCampaignContentPreviewTab {...props} />
+export default function CampaignContentPreviewTab({ campaign, account, preview }: Props) {
+  if (recipientPreviewChannel(campaign.actionId)) return <RecipientContentPreviewTab campaign={campaign} account={account} />
+  return preview ? <LegacyCampaignContentPreviewTab campaign={campaign} account={account} preview={preview} /> : null
 }
 
 /** Facebook và Email: thẻ xem trước theo mẫu nội dung như trước. */
-function LegacyCampaignContentPreviewTab({ campaign, account, preview }: Props) {
+function LegacyCampaignContentPreviewTab({ campaign, account, preview }: LegacyProps) {
   const [inputs, setInputs] = useState<CampaignInputData[]>([])
   const [inputTotal, setInputTotal] = useState(0)
   const [mode, setMode] = useState('auto')

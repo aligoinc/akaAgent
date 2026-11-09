@@ -101,6 +101,14 @@ const savedZaloCampaign: any = {
   extraSettings: { enableMessage: true, enableAddFriend: true, friendRequestMessage: 'Kết bạn với shop nhé #{FULL_NAME}', imageOption: 'all', randomImageCount: 3 }
 }
 
+/** Chiến dịch gọi tự động đã lưu: không có mẫu nội dung nên tab nhận mô hình thẻ cũ là null, như CampaignPanel. */
+const savedVoiceCampaign: any = {
+  id: 78, name: 'Gọi báo ưu đãi', actionId: 'voice_call', accountId: 31, staffId: 7, organizationId: 9,
+  schedule: '2035-01-01T02:00:00.000Z', updatedAt: '2035-01-01T02:00:00.000Z', status: 'tạm dừng', editReady: true,
+  content: 'Chào #{FULL_NAME}, shop An Nhiên gọi báo ưu đãi cuối tuần | Cảm ơn #{FULL_NAME} đã mua hàng ở shop',
+  images: [], extraSettings: {}
+}
+
 const scenarios: Record<string, () => any> = {
   zaloAdvanced: () => draft('zalo_message_phone', [21], {
     content: '', advancedContentEnabled: true, enableMessage: true, enableAddFriend: false,
@@ -142,6 +150,11 @@ function App() {
   if (view.scenario === 'tab') {
     return <div className="rp-smoke-tab" style={{ height: '100vh', overflow: 'auto', background: 'var(--bg-primary)' }}>
       <CampaignContentPreviewTab key={view.generation} campaign={savedZaloCampaign} account={accounts[0] as any} preview={buildCampaignContentPreview(savedZaloCampaign)!} />
+    </div>
+  }
+  if (view.scenario === 'voiceTab') {
+    return <div className="rp-smoke-tab" style={{ height: '100vh', overflow: 'auto', background: 'var(--bg-primary)' }}>
+      <CampaignContentPreviewTab key={view.generation} campaign={savedVoiceCampaign} account={accounts[2] as any} preview={buildCampaignContentPreview(savedVoiceCampaign)} />
     </div>
   }
   if (view.scenario === 'quick') {

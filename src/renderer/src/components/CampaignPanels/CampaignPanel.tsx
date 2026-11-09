@@ -74,6 +74,8 @@ import AccountInfoModal from './AccountInfoModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
 import { buildCampaignContentPreview } from './campaignContentPreview'
+import { recipientPreviewChannel, recipientPreviewScreens } from '../../../../shared/recipientPreview'
+import { recipientSourceFromCampaign, recipientVersionTotal } from './recipientPreview/recipientPreviewModel'
 import { getContentTemplateChannelForAction } from './contentTemplateCampaignUtils'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import AutomationFormModal from '../Automation/AutomationFormModal'
@@ -2624,7 +2626,17 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     () => selectedCampaignConfig ? buildCampaignContentPreview(selectedCampaignConfig) : null,
     [selectedCampaignConfig]
   )
+  // Zalo nhắn tin, SMS, gọi thoại: tab dùng khung "Khách sẽ nhận", đếm mọi phiên bản khách có thể nhận (cả lời mời
+  // kết bạn, cả cuộc gọi tự động vốn không có mẫu nội dung). Facebook/Email giữ thẻ cũ.
+  const selectedRecipientPreviewCount = useMemo(
+    () => selectedCampaignConfig && recipientPreviewChannel(selectedCampaignConfig.actionId)
+      ? recipientVersionTotal(recipientPreviewScreens(recipientSourceFromCampaign(selectedCampaignConfig)))
+      : null,
+    [selectedCampaignConfig]
+  )
+  const selectedContentPreviewCount = selectedRecipientPreviewCount ?? selectedContentPreview?.items.length ?? null
   const supportsContentPreview = !!getContentTemplateChannelForAction(selectedCampaignSummary?.actionId)
+    || !!recipientPreviewChannel(selectedCampaignSummary?.actionId)
   const selectedCampaignLog = selectedCampaignId ? campaignLogs[selectedCampaignId] : undefined
 
   useEffect(() => {
@@ -6672,7 +6684,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                     className={`detail-dock-tab ${detailTab === 'contentPreview' ? 'active' : ''}`}
                     onClick={() => setDetailTab('contentPreview')}
                   >
-                    Preview nội dung{selectedContentPreview ? ` (${selectedContentPreview.items.length})` : ''}
+                    Preview nội dung{selectedContentPreviewCount !== null ? ` (${selectedContentPreviewCount})` : ''}
                   </button>
                 )}
                 <button
@@ -6779,7 +6791,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               )}
 
               {detailTab === 'contentPreview' && (
-                selectedCampaignConfig && selectedContentPreview ? (
+                selectedCampaignConfig && (selectedContentPreview || selectedRecipientPreviewCount !== null) ? (
                   <CampaignContentPreviewTab
                     key={selectedCampaignConfig.id}
                     campaign={selectedCampaignConfig}

@@ -223,6 +223,14 @@ async function main() {
     await tab.locator('.rp-card').first().locator('.rp-album img').first().waitFor()
     await shot('desktop-detail-tab.png')
 
+    // 13b. Gọi tự động: không có mẫu nội dung (mô hình thẻ cũ là null) nhưng tab vẫn hiện màn cuộc gọi cho mọi phiên bản.
+    await page.evaluate(() => window.rpSmoke.open('voiceTab'))
+    const voiceTab = page.locator('.campaign-content-preview')
+    await voiceTab.locator('.rp-browser.is-inline').waitFor()
+    assert.match(flat(await voiceTab.locator('.campaign-content-preview-toolbar p').innerText()), /^2 phiên bản Cuộc gọi tự động khách có thể nhận/)
+    assert.equal(await voiceTab.locator('.rp-card').count(), 2)
+    assert.equal(await voiceTab.locator('.rp-card .rp-screen.is-voice').count(), 2)
+
     // 14. Sửa nhanh nội dung: ngăn kéo bên phải đọc state đang sửa; bấm trong ngăn kéo không đóng hộp.
     await page.evaluate(() => window.rpSmoke.close())
     await page.evaluate(() => window.rpSmoke.open('quick'))
