@@ -6,11 +6,11 @@ const { scripts, common, pricing } = require('./tin-nhan-mau.cjs');
 const lines = [];
 lines.push('# Tin nhắn mẫu akaAgent Zalo');
 lines.push('');
-lines.push('Dành cho nhân viên bán hàng và CSKH. Mỗi chủ đề gồm: khi nào dùng, gửi kèm file nào, 3 tin theo thứ tự (mở đầu → giải thích → mời dùng thử) và câu hỏi thường gặp. Mục cuối là tin báo giá akaAgent Zalo Web, gửi kèm ảnh bảng giá.');
+lines.push('Dành cho nhân viên bán hàng và CSKH. Mỗi chủ đề gồm: khi nào dùng, gửi kèm file nào, 3 tin theo thứ tự (mở đầu → giải thích → mời dùng thử) và câu hỏi thường gặp. Các mục cuối là tin báo giá từng sản phẩm (Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile), gửi kèm ảnh bảng giá.');
 lines.push('');
 lines.push('Quy tắc giọng akaBiz: nói ngắn, mỗi tin kết bằng một lời mời hành động có mục đích; không dùng từ gợi rủi ro (khoá, bay nick, lỗi...); không "nhưng", không đáp cụt "không". `[Tên]` là tên của bạn; đổi "anh/chị" theo khách.');
 lines.push('');
-[...scripts, pricing].forEach((s, i) => {
+[...scripts, ...pricing].forEach((s, i) => {
   lines.push(`## ${i + 1}. ${s.title}`);
   lines.push('');
   lines.push(`**Khi nào dùng:** ${s.when}`);

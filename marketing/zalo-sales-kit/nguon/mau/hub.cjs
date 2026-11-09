@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { esc } = require('./chung.cjs');
+const { fileStem } = require('./bang-gia.cjs');
 
 const KIT = path.resolve(__dirname, '..', '..');
 
@@ -83,44 +84,60 @@ function hub(C, S, opts) {
   </div>
 </section>`).join('');
 
-  const P = C.pricing;
-  const ps = S.pricing;
-  const gb = `06-${P.id}`;
-  const gName = (kind) => `akaAgent-Zalo-Web-bang-gia-${kind}.png`;
-  const pricingPdf = 'bang-gia-akaAgent-Zalo-Web-A4.pdf';
+  // Tab Bảng giá: mỗi sản phẩm một khối, chọn bằng nút sản phẩm (nhớ lựa chọn trong máy).
+  const gias = C.pricing.map((P) => ({
+    P,
+    sc: S.pricing.find((x) => x.productId === P.id),
+    base: `bang-gia-${P.id}`,
+    pdf: `bang-gia-${fileStem(P)}-A4.pdf`,
+    dl: (kind) => `${fileStem(P)}-bang-gia-${kind}.png`,
+  }));
+  const allPdf = 'bang-gia-akaAgent-tong-hop-A4.pdf';
+  const giaBlock = ({ P, sc, base, pdf, dl }, i) => `
+  <div class="gia" data-gia="${P.id}"${i === 0 ? '' : ' hidden'}>
+    <p class="when"><b>Khi nào dùng:</b> ${esc(sc.when)}</p>
+    <div class="grid">
+      <div class="col">
+        <h3>Ảnh bảng giá ${esc(P.short)}</h3>
+        <div class="thumbs">
+          ${imgCard(base, 'vuong', 'Ảnh vuông 1:1', 'Gửi cùng tin báo giá', dl('vuong'))}
+          ${imgCard(base, 'doc', 'Ảnh dọc 4:5', 'Đủ gói và tính năng đi kèm', dl('doc'))}
+          ${imgCard(base, 'story', 'Ảnh story 9:16', 'Story Zalo, Facebook', dl('story'))}
+          ${imgCard(base, 'ngang', 'Banner ngang 1200×628', 'Website, bài đăng có link', dl('ngang'))}
+        </div>
+        <h3>PDF</h3>
+        <div class="files">
+          <div class="file">
+            <div><b>Bảng giá ${esc(P.short)} (PDF A4)</b><span>Khách cần file để in, gửi kế toán; có 3 bước đăng ký</span></div>
+            <button type="button" class="btn dl" data-file="pdf/${pdf}" data-name="${pdf}">Tải PDF</button>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <h3>Tin nhắn mẫu theo thứ tự</h3>
+        <div class="msgs">${msgsHtml(`gia-${P.id}`, sc.messages)}
+        </div>
+        <h3>Khách hỏi gì, trả lời gì</h3>
+        <div class="qas">${qasHtml(`gia-${P.id}`, sc.faq)}
+        </div>
+        <p class="note"><b>Lưu ý nội bộ:</b> ${esc(sc.note)}</p>
+        <p class="attach"><b>Gửi kèm gợi ý:</b> ${esc(sc.attach.join(' · '))}</p>
+      </div>
+    </div>
+  </div>`;
   const pricing = `
 <section class="panel" id="p-bang-gia" data-tab="bang-gia" role="tabpanel" aria-labelledby="tab-bang-gia" hidden>
   <div class="panel-head">
-    <span class="kicker">Bảng giá · ${esc(P.product)}</span>
-    <h2>${esc(ps.title)}</h2>
-    <p class="when"><b>Khi nào dùng:</b> ${esc(ps.when)}</p>
+    <span class="kicker">Bảng giá · ${gias.length} sản phẩm</span>
+    <h2>Báo giá đúng sản phẩm khách hỏi</h2>
+    <p class="when">Chọn sản phẩm, gửi ảnh bảng giá kèm tin báo giá. Khách cần trọn bộ thì gửi PDF tổng hợp ở cuối trang.</p>
+    <div class="subtabs" role="tablist" aria-label="Sản phẩm">${gias.map(({ P }, i) => `<button type="button" class="subtab" role="tab" data-gia-go="${P.id}" aria-selected="${i === 0}">${esc(P.short)}</button>`).join('')}</div>
   </div>
-  <div class="grid">
-    <div class="col">
-      <h3>Ảnh bảng giá</h3>
-      <div class="thumbs">
-        ${imgCard(gb, 'vuong', 'Ảnh vuông 1:1', 'Gửi cùng tin báo giá', gName('vuong'))}
-        ${imgCard(gb, 'doc', 'Ảnh dọc 4:5', 'Đủ 4 gói và tính năng đi kèm', gName('doc'))}
-        ${imgCard(gb, 'story', 'Ảnh story 9:16', 'Story Zalo, Facebook', gName('story'))}
-        ${imgCard(gb, 'ngang', 'Banner ngang 1200×628', 'Website, bài đăng có link', gName('ngang'))}
-      </div>
-      <h3>PDF</h3>
-      <div class="files">
-        <div class="file">
-          <div><b>Bảng giá A4 (PDF 1 trang)</b><span>Khách cần file để in, gửi kế toán; có thêm 3 bước đăng ký</span></div>
-          <button type="button" class="btn dl" data-file="pdf/${pricingPdf}" data-name="${pricingPdf}">Tải PDF</button>
-        </div>
-      </div>
-    </div>
-    <div class="col">
-      <h3>Tin nhắn mẫu theo thứ tự</h3>
-      <div class="msgs">${msgsHtml('bang-gia', ps.messages)}
-      </div>
-      <h3>Khách hỏi gì, trả lời gì</h3>
-      <div class="qas">${qasHtml('bang-gia', ps.faq)}
-      </div>
-      <p class="note"><b>Lưu ý nội bộ:</b> ${esc(ps.note)}</p>
-      <p class="attach"><b>Gửi kèm gợi ý:</b> ${esc(ps.attach.join(' · '))}</p>
+  ${gias.map(giaBlock).join('')}
+  <div class="files all-gia">
+    <div class="file">
+      <div><b>Bảng giá tổng hợp (PDF A4, ${gias.length} trang)</b><span>${esc(gias.map(({ P }) => P.short).join(' · '))}</span></div>
+      <button type="button" class="btn dl" data-file="pdf/${allPdf}" data-name="${allPdf}">Tải PDF</button>
     </div>
   </div>
 </section>`;
@@ -166,12 +183,12 @@ function hub(C, S, opts) {
     <div class="col">
       <h3>Tờ giới thiệu 1 trang</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>PDF A4</span></div><button type="button" class="btn dl" data-file="pdf/to-gioi-thieu-${base}.pdf" data-name="akaAgent-Zalo-to-gioi-thieu-${base}.pdf">Tải PDF</button></div>`).join('')}</div>
-      <h3>Bảng giá ${esc(P.product)}</h3>
-      <div class="files"><div class="file"><div><b>Bảng giá A4</b><span>PDF 1 trang · gửi riêng khi khách hỏi giá</span></div><button type="button" class="btn dl" data-file="pdf/${pricingPdf}" data-name="${pricingPdf}">Tải PDF</button></div></div>
+      <h3>Bảng giá (gửi riêng khi khách hỏi giá)</h3>
+      <div class="files">${[{ name: `Tổng hợp ${gias.length} sản phẩm`, file: allPdf, sub: `PDF A4 · ${gias.length} trang` }, ...gias.map(({ P, pdf }) => ({ name: P.product, file: pdf, sub: 'PDF A4 · 1 trang' }))].map((x) => `<div class="file"><div><b>${esc(x.name)}</b><span>${esc(x.sub)}</span></div><button type="button" class="btn dl" data-file="pdf/${x.file}" data-name="${x.file}">Tải PDF</button></div>`).join('')}</div>
       <h3>Video dọc</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>MP4 · 1080×1920 · 27 giây</span></div><button type="button" class="btn dl" data-file="video/${base}-9x16.mp4" data-name="akaAgent-Zalo-video-${base}.mp4">Tải video</button></div>`).join('')}</div>
       <h3>Slide thuyết trình</h3>
-      <div class="files"><div class="file"><div><b>Slide 16:9 · 14 trang (có trang bảng giá), kèm ghi chú thuyết trình</b><span>Trình chiếu khi demo online, tải PPTX hoặc PDF từ trang slide.</span></div>${deckUrl ? `<a class="btn" href="${esc(deckUrl)}" target="_blank" rel="noopener">Mở slide</a>` : ''}</div></div>
+      <div class="files"><div class="file"><div><b>Slide 16:9 · 15 trang (có 2 trang bảng giá Zalo), kèm ghi chú thuyết trình</b><span>Trình chiếu khi demo online, tải PPTX hoặc PDF từ trang slide.</span></div>${deckUrl ? `<a class="btn" href="${esc(deckUrl)}" target="_blank" rel="noopener">Mở slide</a>` : ''}</div></div>
       <h3>Trang giới thiệu (gửi link)</h3>
       <div class="files"><div class="file"><div><b>Trang web akaAgent Zalo</b><span>Mở cho khách xem trên điện thoại. Chủ tài khoản cần bật chia sẻ trong menu Share trước khi gửi.</span></div>${landingUrl ? `<a class="btn" href="${esc(landingUrl)}" target="_blank" rel="noopener">Mở trang</a>` : ''}</div></div>
     </div>
@@ -279,6 +296,13 @@ main.wrap{padding-block:26px 60px}
 .attach{font-size:13.5px;color:var(--muted)}
 .attach b{color:var(--text)}
 .rules{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.subtabs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.subtab{border:0;cursor:pointer;font:inherit;font-weight:700;font-size:14px;padding:9px 14px;border-radius:12px;background:var(--surface);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
+.subtab[aria-selected="true"]{background:var(--accent);color:#fff;box-shadow:none}
+.subtab:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.gia{display:flex;flex-direction:column;gap:16px}
+.gia[hidden]{display:none}
+.all-gia{margin-top:24px}
 .rules li{line-height:1.55}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#0B1222;color:#fff;padding:10px 16px;border-radius:999px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:20;max-width:calc(100% - 32px)}
 @media (max-width:900px){.grid{grid-template-columns:1fr}}
@@ -321,6 +345,18 @@ ${all}
   var start = location.hash.slice(1);
   if (!start) { try { start = localStorage.getItem('saleskit-tab') || ''; } catch (e) {} }
   show(start);
+
+  // Chọn sản phẩm trong tab Bảng giá
+  function showGia(id){
+    var blocks = [].slice.call(document.querySelectorAll('.gia'));
+    if (!blocks.some(function(b){ return b.getAttribute('data-gia') === id; }) && blocks[0]) id = blocks[0].getAttribute('data-gia');
+    blocks.forEach(function(b){ b.hidden = b.getAttribute('data-gia') !== id; });
+    document.querySelectorAll('.subtab').forEach(function(t){ t.setAttribute('aria-selected', String(t.getAttribute('data-gia-go') === id)); });
+    try { localStorage.setItem('saleskit-gia', id); } catch (e) {}
+  }
+  document.querySelectorAll('.subtab').forEach(function(t){ t.addEventListener('click', function(){ showGia(t.getAttribute('data-gia-go')); }); });
+  var startGia = ''; try { startGia = localStorage.getItem('saleskit-gia') || ''; } catch (e) {}
+  showGia(startGia);
 
   // Sao chép tin nhắn
   function selectText(el){ var r = document.createRange(); r.selectNodeContents(el); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }

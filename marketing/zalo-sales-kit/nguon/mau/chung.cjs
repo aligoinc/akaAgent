@@ -20,10 +20,10 @@ ${css}
 <body class="${bodyClass}">${body}</body></html>`;
 }
 
-function lockup({ assetsRel = '../../assets', size = 34, sub = 'by akaBiz', onLight = false } = {}) {
+function lockup({ assetsRel = '../../assets', size = 34, sub = 'by akaBiz', onLight = false, product = 'Zalo' } = {}) {
   return `<div class="lockup" style="font-size:${size}px;color:${onLight ? 'var(--text-on-light)' : 'var(--text-on-dark)'}">
   <img src="${assetsRel}/akabiz-logo.png" alt="akaBiz">
-  <span class="name"><b>akaAgent <span>Zalo</span></b><small>${esc(sub)}</small></span>
+  <span class="name"><b>akaAgent <span>${esc(product)}</span></b><small>${esc(sub)}</small></span>
 </div>`;
 }
 

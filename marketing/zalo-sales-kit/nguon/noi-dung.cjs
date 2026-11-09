@@ -329,34 +329,15 @@ const back = {
   ],
 };
 
-// Bảng giá akaAgent Zalo Web. Giá do quản lý akaBiz chốt ngày 09/11/2026.
-// Giá tháng và số tiền tiết kiệm được tính tự động từ `vnd` + `months` (xem mau/bang-gia.cjs), không gõ tay.
-// Tiết kiệm = so với gia hạn gói 2 tháng liên tục trong cùng thời gian.
-// "includes" lấy theo kịch bản bán hàng bản Web (06/2026): tắt máy vẫn chạy, dùng trên Mac/iPad/điện thoại,
-// chạy song song đến 5 tài khoản Zalo. Đổi gói thì sửa ở đây rồi chạy `node xay-dung.cjs bang-gia`.
-const pricing = {
-  id: 'bang-gia',
-  tag: 'Bảng giá',
-  product: 'akaAgent Zalo Web',
-  title: 'Bảng giá ==akaAgent Zalo Web==',
-  sub: 'Nhắn tin & kết bạn Zalo tự động, dùng ngay trên trình duyệt.',
-  updated: '11/2026',
-  plans: [
-    { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 700000, note: 'Gia hạn linh hoạt' },
-    { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 3000000, badge: 'Khuyên dùng' },
-    { id: '2-nam', name: 'Gói 2 năm', months: 24, vnd: 5000000 },
-    { id: '3-nam', name: 'Gói 3 năm trở lên', discount: '25%', line: 'Dành cho khách đồng hành lâu dài', ask: 'Nhắn tư vấn viên để nhận báo giá', askShort: 'Nhắn để nhận báo giá' },
-  ],
-  includes: [
-    'Chạy song song đến **5 tài khoản Zalo**',
-    '**Tắt máy vẫn chạy**, không cần treo máy',
-    'Dùng được cả **Mac, iPad, điện thoại**',
-    '**4 kiểu chiến dịch** Zalo trong một app',
-    '**Tự tạm nghỉ** khi Zalo báo giới hạn',
-    '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
-  ],
-  includesShort: ['5 tài khoản Zalo song song', 'Tắt máy vẫn chạy', 'Dùng trên Mac, iPad, điện thoại', 'Hỗ trợ cài đặt 1:1'],
-  saveNote: 'Số tiền tiết kiệm so với gia hạn gói 2 tháng liên tục trong cùng thời gian.',
+// BẢNG GIÁ theo sản phẩm (nhân viên gửi riêng khi khách hỏi giá; không in lên video, landing page công khai).
+// Giá do quản lý akaBiz chốt ngày 09/11/2026. Giá tháng và số tiền tiết kiệm do mau/bang-gia.cjs tự tính
+// từ `vnd` + `months`, không gõ tay; tiết kiệm = so với gia hạn gói ngắn nhất liên tục trong cùng thời gian.
+// Gói không có `months` (vĩnh viễn, giảm %) không tính giá tháng. `premium` = thẻ nền xanh, `badge` = nhãn cam.
+// Tính năng trong `includes` đã đối chiếu mã nguồn (xem README, mục Bảng giá); riêng bản Web lấy theo kịch bản bán hàng 06/2026.
+// Đổi giá: sửa ở đây rồi chạy `node xay-dung.cjs bang-gia` và `node xuat-tin-nhan.cjs`.
+const priceCommon = {
+  kicker: 'Bảng giá',
+  saveNote: 'Tiết kiệm so với gia hạn gói 2 tháng liên tục.',
   more: 'Ngoài ra còn ==nhiều ưu đãi khác==',
   contact: 'Liên hệ nhân viên tư vấn để được hỗ trợ chương trình tốt nhất.',
   cta: 'Nhắn tư vấn viên',
@@ -366,6 +347,108 @@ const pricing = {
     { title: 'Chuyển khoản', desc: 'Gửi ảnh xác nhận cho tư vấn viên.' },
     { title: 'Kích hoạt & cài đặt', desc: 'Tư vấn viên nâng cấp tài khoản và cài chiến dịch đầu tiên cùng bạn.' },
   ],
+  updated: '11/2026',
 };
+
+// Zalo Desktop và Facebook Desktop dùng chung mức giá.
+const desktopPlans = [
+  { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 500000, note: 'Gia hạn linh hoạt' },
+  { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 2000000, badge: 'Khuyên dùng' },
+  { id: '4-nam', name: 'Gói 4 năm', months: 48, vnd: 4000000 },
+  { id: 'vinh-vien', name: 'Gói vĩnh viễn', vnd: 10000000, line: 'Thanh toán một lần', note: 'Không cần gia hạn', premium: true },
+];
+
+const pricing = [
+  {
+    ...priceCommon,
+    id: 'zalo-web',
+    brand: 'Zalo',
+    product: 'akaAgent Zalo Web',
+    short: 'Zalo Web',
+    platform: 'Bản Web',
+    title: 'akaAgent ==Zalo Web==',
+    sub: 'Nhắn tin & kết bạn Zalo tự động, dùng ngay trên trình duyệt.',
+    plans: [
+      { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 700000, note: 'Gia hạn linh hoạt' },
+      { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 3000000, badge: 'Khuyên dùng' },
+      { id: '2-nam', name: 'Gói 2 năm', months: 24, vnd: 5000000 },
+      { id: '3-nam', name: 'Gói 3 năm trở lên', discount: '25%', line: 'Dành cho khách đồng hành lâu dài', ask: 'Nhắn tư vấn viên để nhận báo giá', askShort: 'Nhắn để nhận báo giá', premium: true },
+    ],
+    includes: [
+      'Chạy song song đến **5 tài khoản Zalo**',
+      '**Tắt máy vẫn chạy**, không cần treo máy',
+      'Dùng được cả **Mac, iPad, điện thoại**',
+      '**4 kiểu chiến dịch** Zalo trong một app',
+      '**Tự tạm nghỉ** khi Zalo báo giới hạn',
+      '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
+    ],
+    includesShort: ['5 tài khoản Zalo song song', 'Tắt máy vẫn chạy', 'Dùng trên Mac, iPad, điện thoại', 'Hỗ trợ cài đặt 1:1'],
+  },
+  {
+    ...priceCommon,
+    id: 'zalo-desktop',
+    brand: 'Zalo',
+    product: 'akaAgent Zalo Desktop',
+    short: 'Zalo Desktop',
+    platform: 'Windows · Mac',
+    title: 'akaAgent ==Zalo Desktop==',
+    sub: 'Nhắn tin & kết bạn Zalo tự động ngay trên máy tính.',
+    plans: desktopPlans,
+    includes: [
+      'Cài trên **Windows và Mac**',
+      '**4 kiểu chiến dịch** Zalo trong một app',
+      '**Proxy riêng** cho từng tài khoản',
+      '**AI viết nội dung**, mẫu câu xoay vòng',
+      '**Tự tạm nghỉ** khi Zalo báo giới hạn',
+      '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
+    ],
+    includesShort: ['Windows và Mac', '4 kiểu chiến dịch Zalo', 'AI viết nội dung', 'Hỗ trợ cài đặt 1:1'],
+  },
+  {
+    ...priceCommon,
+    id: 'facebook-desktop',
+    brand: 'Facebook',
+    product: 'akaAgent Facebook Desktop',
+    short: 'Facebook Desktop',
+    platform: 'Windows · Mac',
+    title: 'akaAgent ==Facebook Desktop==',
+    sub: 'Đăng bài, nhắn tin, kết bạn Facebook tự động trên máy tính.',
+    plans: desktopPlans,
+    includes: [
+      'Cài trên **Windows và Mac**',
+      '**Đăng bài** nhóm, cá nhân, fanpage',
+      '**Nhắn tin** bạn bè, người lạ, inbox page',
+      '**Kết bạn**, tham gia, mời vào nhóm',
+      '**AI viết nội dung**, chạy theo lịch',
+      '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
+    ],
+    includesShort: ['Đăng bài nhóm, fanpage', 'Windows và Mac', 'Nhắn tin, kết bạn tự động', 'Hỗ trợ cài đặt 1:1'],
+  },
+  {
+    ...priceCommon,
+    id: 'sms-mobile',
+    brand: 'SMS',
+    product: 'akaAgent SMS Mobile',
+    short: 'SMS Mobile',
+    platform: 'Android',
+    title: 'akaAgent ==SMS Mobile==',
+    sub: 'Gửi SMS hàng loạt từ SIM trên điện thoại Android.',
+    extraNote: 'Cước SMS tính theo gói cước nhà mạng trên SIM của bạn.',
+    plans: [
+      { id: '2-thang', name: 'Gói 2 tháng', months: 2, vnd: 500000, note: 'Gia hạn linh hoạt' },
+      { id: '1-nam', name: 'Gói 1 năm', months: 12, vnd: 2000000, badge: 'Khuyên dùng' },
+      { id: '4-nam', name: 'Gói 4 năm', months: 48, vnd: 4000000, premium: true },
+    ],
+    includes: [
+      'Gửi từ **SIM điện thoại Android** của bạn',
+      'Gửi **tiếng Việt có dấu** hoặc không dấu',
+      '**Không gửi trùng** số đã nhận gần đây',
+      '**Đặt lịch** gửi tự động theo khung giờ',
+      'Nhập số từ **Excel, Google Sheet**',
+      '**Hỗ trợ cài đặt 1:1** cùng tư vấn viên',
+    ],
+    includesShort: ['Gửi từ SIM Android', 'Tiếng Việt có dấu', 'Không gửi trùng số', 'Hỗ trợ cài đặt 1:1'],
+  },
+];
 
 module.exports = { brand, trial, topics, cover, safety, faq, back, pricing };

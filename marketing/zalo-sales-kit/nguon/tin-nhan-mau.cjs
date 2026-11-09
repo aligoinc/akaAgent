@@ -84,32 +84,102 @@ const scripts = [
   },
 ];
 
-// Báo giá akaAgent Zalo Web: giá và số tiền tiết kiệm lấy từ noi-dung.cjs (pricing), không gõ tay.
-// Câu tính năng trong tin "Báo giá" phải khớp pricing.includes.
-const plans = plansOf(pricing);
-const [p2m, p1y, p2y, p3y] = plans;
-const priceLines = plans.map((p) => (p.discount
-  ? `• ${p.name}: giảm ${p.discount}`
-  : `• ${p.name}: ${p.priceText}${p.months > 2 ? ` (${p.perMonthText})` : ''}`)).join('\n');
-
-const pricingScript = {
-  id: 'bang-gia',
-  title: 'Báo giá akaAgent Zalo Web',
-  when: 'Khách hỏi giá, hỏi gói, hoặc đã dùng thử và muốn mua bản Zalo Web (chạy trên trình duyệt, tắt máy vẫn chạy, dùng được Mac, iPad, điện thoại).',
-  attach: ['Ảnh bảng giá vuông hoặc dọc 4:5 (cùng tin báo giá)', 'PDF bảng giá A4 (khách cần file để in, gửi kế toán)', 'Story 9:16 (đăng story ưu đãi)'],
-  messages: [
-    { label: 'Báo giá', text: `Dạ em gửi anh/chị bảng giá ${pricing.product} ạ:\n${priceLines}\nGói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ. Ngoài ra bên em còn nhiều ưu đãi khác, mình dự định dùng khoảng bao lâu để em áp chương trình tốt nhất cho mình nha?` },
-    { label: 'Tư vấn chọn gói', text: `Dạ mình dùng lâu dài thì ${p1y.name.toLowerCase()} chỉ ${p1y.perMonthText}, tiết kiệm ${p1y.saveAmount} so với gia hạn ${p2m.name.toLowerCase()} liên tục ạ; ${p2y.name.toLowerCase()} tiết kiệm tới ${p2y.saveAmount}. Từ 3 năm trở lên bên em giảm ${p3y.discount}. Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?` },
-    { label: 'Chốt gói', text: 'Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển khoản xong mình chụp ảnh gửi em, em kích hoạt tài khoản và cài chiến dịch đầu tiên cùng mình luôn nha.' },
-  ],
-  faq: [
-    { q: 'Gói 3 năm trở lên giá bao nhiêu?', a: `Dạ gói từ 3 năm trở lên bên em giảm ${p3y.discount} ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?` },
-    { q: 'Có giảm thêm được không?', a: `Dạ ngoài gói từ 3 năm giảm ${p3y.discount}, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?` },
-    { q: 'Có gói vĩnh viễn không?', a: `Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm ${p3y.discount} ạ, dùng càng lâu càng tiết kiệm. Mình dự định dùng khoảng mấy năm để em báo giá chi tiết nha?` },
-    { q: 'Chưa chắc nên mua gói nào?', a: 'Dạ mình dùng thử miễn phí 3 ngày, full tính năng trước ạ, chạy thử trên tệp khách thật rồi chọn gói cũng chưa muộn. Mình gửi em số điện thoại chưa đăng ký akaBiz để em mở tài khoản ngay nha?' },
-  ],
-  note: 'Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026. Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.',
+// Báo giá theo sản phẩm: giá và số tiền tiết kiệm lấy từ noi-dung.cjs (pricing), không gõ tay.
+// `pitch` là câu tính năng trong tin "Báo giá", phải khớp pricing[].includes của cùng sản phẩm.
+const perMonth = (p) => (p.perMonthText || '').replace(/^~/, 'khoảng ');
+const priceLine = (p) => {
+  if (p.discount) return `• ${p.name}: giảm ${p.discount}`;
+  if (!p.months) return `• ${p.name}: ${p.priceText}${p.line ? ` (${p.line.toLowerCase()})` : ''}`;
+  return `• ${p.name}: ${p.priceText}${p.months > 2 ? ` (${perMonth(p)})` : ''}`;
 };
+
+function adviceText(plans) {
+  const base = plans.find((p) => p.vnd && p.months);
+  const timed = plans.filter((p) => p.saveAmount);
+  const year = timed.find((p) => p.months === 12) || timed[0];
+  const longest = timed.reduce((a, b) => (b.months > a.months ? b : a), timed[0]);
+  const special = plans.find((p) => p.discount || (p.vnd && !p.months));
+  let t = `Dạ mình dùng lâu dài thì ${year.name.toLowerCase()} chỉ ${perMonth(year)}, tiết kiệm ${year.saveAmount} so với gia hạn ${base.name.toLowerCase()} liên tục ạ`;
+  if (longest !== year) t += `; ${longest.name.toLowerCase()} tiết kiệm tới ${longest.saveAmount}`;
+  t += '.';
+  if (special && special.discount) t += ` ${special.name} bên em giảm ${special.discount}.`;
+  else if (special) t += ` ${special.name} mình thanh toán một lần, không cần gia hạn.`;
+  return `${t} Mình muốn bắt đầu với gói nào để em giữ ưu đãi cho mình nha?`;
+}
+
+const trialFaq = (name) => ({ q: 'Chưa chắc nên mua gói nào?', a: `Dạ mình dùng thử miễn phí 3 ngày, full tính năng trước ạ, chạy thử thật rồi chọn gói cũng chưa muộn. Mình gửi em số điện thoại chưa đăng ký akaBiz để em mở tài khoản ${name} dùng thử ngay nha?` });
+const macFaq = { q: 'Máy Mac dùng được không?', a: 'Dạ được ạ, bản Desktop có bộ cài cho cả Windows và Mac (chip Apple và Intel). Mình đang dùng máy nào để em gửi đúng bộ cài nha?' };
+const lifetimeFaq = { q: 'Gói vĩnh viễn khác gì gói năm?', a: 'Dạ gói vĩnh viễn mình thanh toán một lần, dùng lâu dài không cần gia hạn ạ; gói năm thì gia hạn theo năm. Mình dự định dùng bao lâu để em tư vấn gói phù hợp nhất nha?' };
+const moreFaq = (what) => ({ q: 'Có giảm thêm được không?', a: `Dạ bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, ${what} để em áp chương trình tốt nhất cho mình nha?` });
+
+const pricingText = {
+  'zalo-web': {
+    when: 'Khách hỏi giá bản Zalo Web (chạy trên trình duyệt, tắt máy vẫn chạy, dùng được Mac, iPad, điện thoại), hoặc đã dùng thử và muốn mua.',
+    pitch: 'Gói nào cũng chạy song song đến 5 tài khoản Zalo, tắt máy vẫn chạy, dùng được cả Mac, iPad, điện thoại ạ.',
+    faq: [
+      { q: 'Gói 3 năm trở lên giá bao nhiêu?', a: 'Dạ gói từ 3 năm trở lên bên em giảm 25% ạ. Mình muốn dùng 3 năm hay lâu hơn để em báo giá chính xác, kèm ưu đãi đang áp dụng cho mình nha?' },
+      { q: 'Có giảm thêm được không?', a: 'Dạ ngoài gói từ 3 năm giảm 25%, bên em còn nhiều chương trình ưu đãi khác theo từng thời điểm ạ. Mình cho em biết dự định dùng bao lâu, mấy tài khoản Zalo để em áp chương trình tốt nhất cho mình nha?' },
+      { q: 'Có gói vĩnh viễn không?', a: 'Dạ bản Zalo Web có gói 2 tháng, 1 năm, 2 năm và gói từ 3 năm trở lên giảm 25% ạ, dùng càng lâu càng tiết kiệm. Mình cần gói vĩnh viễn thì bản Zalo Desktop có gói vĩnh viễn, em gửi bảng giá để mình so sánh nha?' },
+      trialFaq('Zalo'),
+    ],
+    note: 'Gói từ 3 năm chỉ ghi "giảm 25%", chưa in số tiền: báo khách theo chính sách hiện hành. Tính năng đi kèm (5 tài khoản Zalo song song, tắt máy vẫn chạy, dùng được Mac/iPad/điện thoại) lấy theo kịch bản bán hàng bản Web 06/2026.',
+  },
+  'zalo-desktop': {
+    when: 'Khách hỏi giá bản Zalo cài trên máy tính Windows hoặc Mac, hoặc đã dùng thử và muốn mua.',
+    pitch: 'Gói nào cũng đủ 4 kiểu chiến dịch Zalo, cài được cả Windows và Mac, có tư vấn viên cài đặt cùng mình ạ.',
+    faq: [
+      macFaq,
+      { q: 'Tắt máy tính có chạy không?', a: 'Dạ bản Desktop chạy khi app đang mở trên máy ạ. Mình muốn tắt máy vẫn chạy, dùng được cả trên điện thoại thì tham khảo thêm bản Zalo Web, em gửi bảng giá để mình so sánh nha?' },
+      lifetimeFaq,
+      moreFaq('mấy tài khoản Zalo'),
+      trialFaq('Zalo'),
+    ],
+    note: 'Bản Desktop chạy khi app đang mở trên máy; khách cần tắt máy vẫn chạy thì giới thiệu bản Zalo Web. Bảng giá không ghi số tài khoản Zalo mỗi gói: hỏi nhu cầu rồi tư vấn.',
+  },
+  'facebook-desktop': {
+    when: 'Khách hỏi giá phần mềm Facebook cài trên máy tính (đăng bài nhóm, nhắn tin, kết bạn), hoặc đã dùng thử và muốn mua.',
+    pitch: 'Gói nào cũng đủ đăng bài nhóm, trang cá nhân, fanpage, nhắn tin và kết bạn tự động, cài được cả Windows và Mac ạ.',
+    faq: [
+      { q: 'Phần mềm làm được những gì?', a: 'Dạ app đăng bài vào nhóm, trang cá nhân, fanpage; nhắn tin bạn bè, người lạ, khách đã inbox page; kết bạn, tham gia nhóm, mời bạn vào nhóm, chạy tự động theo lịch ạ. Mình đang cần đăng bài hay tìm khách để em tư vấn cách chạy nha?' },
+      macFaq,
+      lifetimeFaq,
+      moreFaq('mấy tài khoản Facebook'),
+      trialFaq('Facebook'),
+    ],
+    note: 'Bảng giá không ghi số tài khoản Facebook mỗi gói: hỏi nhu cầu rồi tư vấn. Khách dùng cả Zalo thì giới thiệu thêm bảng giá Zalo Desktop.',
+  },
+  'sms-mobile': {
+    when: 'Khách hỏi giá gửi SMS hàng loạt bằng điện thoại Android, hoặc cần gửi tin cho cả số chưa có Zalo.',
+    pitch: 'Mình cài app trên điện thoại Android và gửi SMS bằng chính SIM của mình ạ; cước tin nhắn tính theo gói cước nhà mạng.',
+    faq: [
+      { q: 'Cước tin nhắn tính thế nào?', a: 'Dạ giá gói là phí phần mềm ạ, còn cước SMS do nhà mạng tính theo SIM của mình. Mình đăng ký gói cước SMS của nhà mạng sẽ gửi tiết kiệm hơn, em hướng dẫn mình chọn gói cước nha?' },
+      { q: 'Cần điện thoại gì?', a: 'Dạ mình dùng điện thoại Android có lắp SIM ạ, cài app SMS bên em rồi đăng nhập tài khoản là gửi được. Mình đang có sẵn máy Android chưa để em hướng dẫn cài nha?' },
+      { q: 'Gửi tiếng Việt có dấu được không?', a: 'Dạ được ạ, mình chọn gửi có dấu hoặc không dấu tuỳ nhu cầu. Em soạn giúp mình mẫu tin ngắn gọn, dễ đọc nha?' },
+      moreFaq('mấy điện thoại gửi'),
+      trialFaq('SMS'),
+    ],
+    note: 'Cước SMS do nhà mạng tính theo SIM của khách, không nằm trong giá gói. Bản SMS Mobile không có gói vĩnh viễn.',
+  },
+};
+
+const pricingScripts = pricing.map((P) => {
+  const plans = plansOf(P);
+  const x = pricingText[P.id];
+  return {
+    id: `bang-gia-${P.id}`,
+    productId: P.id,
+    title: `Báo giá ${P.product}`,
+    when: x.when,
+    attach: ['Ảnh bảng giá vuông hoặc dọc 4:5 (cùng tin báo giá)', 'PDF bảng giá A4 (khách cần file để in, gửi kế toán)', 'Story 9:16 (đăng story ưu đãi)'],
+    messages: [
+      { label: 'Báo giá', text: `Dạ em gửi anh/chị bảng giá ${P.product} ạ:\n${plans.map(priceLine).join('\n')}\n${x.pitch} Ngoài ra bên em còn nhiều ưu đãi khác, mình dự định dùng khoảng bao lâu để em áp chương trình tốt nhất cho mình nha?` },
+      { label: 'Tư vấn chọn gói', text: adviceText(plans) },
+      { label: 'Chốt gói', text: 'Dạ mình chọn gói nào em gửi thông tin thanh toán ngay ạ. Chuyển khoản xong mình chụp ảnh gửi em, em kích hoạt tài khoản và cài chiến dịch đầu tiên cùng mình luôn nha.' },
+    ],
+    faq: x.faq,
+    note: `${x.note} Bảng giá chỉ gửi riêng khi khách hỏi, không đăng lên video hay trang giới thiệu công khai.`,
+  };
+});
 
 // Câu hỏi chung, dùng cho mọi chủ đề
 const common = [
@@ -121,4 +191,4 @@ const common = [
   { q: 'Có giúp viết nội dung không?', a: 'Dạ có ạ, app có AI viết và viết lại nội dung, tạo nhiều mẫu câu khác nhau, em duyệt cùng mình trước khi chạy. Mình gửi em sản phẩm, ưu đãi đang muốn gửi để em soạn giúp nha?' },
 ];
 
-module.exports = { scripts, common, pricing: pricingScript };
+module.exports = { scripts, common, pricing: pricingScripts };
