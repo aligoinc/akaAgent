@@ -8,7 +8,7 @@ Bộ tài liệu để nhân viên bán hàng và CSKH gửi khách qua Zalo, Fa
 4. Gửi tin tới bạn bè Zalo
 5. Gửi tin vào nhóm Zalo
 
-Kèm **bảng giá 4 sản phẩm**: akaAgent Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile (mỗi sản phẩm ảnh 4 cỡ + PDF A4 + tin báo giá, thêm một PDF tổng hợp), nhân viên gửi riêng khi khách hỏi giá.
+Kèm **28 ảnh từng tính năng** (mỗi tính năng, chiến dịch hoặc thông tin một ảnh dọc 1080×1350 để gửi khách từng ảnh) và **bảng giá 4 sản phẩm**: akaAgent Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile (mỗi sản phẩm ảnh 4 cỡ + PDF A4 + tin báo giá, thêm một PDF tổng hợp); bảng giá nhân viên gửi riêng khi khách hỏi giá.
 
 Mọi định dạng dựng từ một nguồn nội dung duy nhất: [`nguon/noi-dung.cjs`](nguon/noi-dung.cjs) (chữ trên ảnh, PDF, video, landing page) và [`nguon/tin-nhan-mau.cjs`](nguon/tin-nhan-mau.cjs) (tin nhắn mẫu). Sửa chữ ở đó rồi dựng lại, các định dạng tự khớp nhau.
 
@@ -30,6 +30,7 @@ Ba trang đang riêng tư: người khác chỉ mở được sau khi chủ tài
 | Ảnh dọc infographic | `anh/<chủ đề>/*-doc-1080x1350.png` | 4:5 | Khách hỏi "làm thế nào": 4 bước + điểm nổi bật |
 | Ảnh story | `anh/<chủ đề>/*-story-1080x1920.png` | 9:16 | Story Zalo/Facebook/TikTok, ảnh dọc gửi chat |
 | Banner ngang | `anh/<chủ đề>/*-ngang-1200x628.png` | 1.91:1 | Bài đăng có link, ảnh bìa bài viết, website, quảng cáo |
+| Ảnh từng tính năng | `anh/07-tinh-nang/tinh-nang-NN-*-1080x1350.png` (28 ảnh) | 4:5 | Khách hỏi tính năng nào thì gửi đúng ảnh đó: giới thiệu 2, chiến dịch 9, tính năng 11, an toàn & bền 4, hỗ trợ 2. Không ghi giá |
 | Brochure | `pdf/akaAgent-Zalo-brochure-A4.pdf` | A4, 8 trang | Khách doanh nghiệp, gửi email, in khi gặp trực tiếp |
 | Tờ giới thiệu | `pdf/to-gioi-thieu-0N-*.pdf` | A4, 1 trang | Gửi file cho đúng chủ đề khách quan tâm, in được |
 | Video | `video/0N-*-9x16.mp4` (+ `*-caption.txt`) | 1080×1920, 27 giây | TikTok, Reels, story; khách thích xem video. Thêm nhạc thịnh hành khi đăng |
@@ -38,7 +39,7 @@ Ba trang đang riêng tư: người khác chỉ mở được sau khi chủ tài
 | Bảng giá (ảnh) | `anh/06-bang-gia/bang-gia-<sản phẩm>-{vuong,doc,story,ngang}-*.png` | 1:1, 4:5, 9:16, 1.91:1 | Khách hỏi giá: gửi kèm tin báo giá |
 | Bảng giá (PDF) | `pdf/bang-gia-akaAgent-<Sản-Phẩm>-A4.pdf`; tổng hợp `pdf/bang-gia-akaAgent-tong-hop-A4.pdf` | A4, 1 trang; tổng hợp 4 trang | Khách cần file để in, gửi kế toán; có 3 bước đăng ký |
 
-Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + ảnh vuông; **khách hỏi cách làm** → tin giải thích + ảnh dọc hoặc tờ PDF; **khách phân vân** → video hoặc link landing page; **chốt** → tin mời dùng thử, xin số điện thoại chưa đăng ký akaBiz; **khách hỏi giá** → ảnh bảng giá + tin báo giá.
+Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + ảnh vuông; **khách hỏi cách làm** → tin giải thích + ảnh dọc hoặc tờ PDF; **khách hỏi một tính năng cụ thể** → ảnh tính năng tương ứng trong `anh/07-tinh-nang/`; **khách phân vân** → video hoặc link landing page; **chốt** → tin mời dùng thử, xin số điện thoại chưa đăng ký akaBiz; **khách hỏi giá** → ảnh bảng giá + tin báo giá.
 
 ## Căn cứ tính năng (đã đối chiếu mã nguồn ngày 08/11/2026)
 
@@ -62,6 +63,9 @@ Gợi ý gửi theo giai đoạn: **khách mới hỏi** → tin mở đầu + �
 | 3 loại tài khoản: mã QR, trình duyệt, chạy trên server (tắt máy vẫn chạy); proxy riêng | `AccountPanel.tsx:1170-1176`; `docs/ZALO_SERVER_VPS.md`; `ProxyManagerModal.tsx` |
 | Kết quả từng khách, xuất Excel, báo cáo, email báo cáo, trợ lý chẩn đoán | `CampaignPanel.tsx` (tab Kết quả chạy); `ReportPage.tsx`; `GeneralSettingsModal.tsx:458-509`; `CampaignAssistantMenu.tsx` |
 | Theo dõi, tạm dừng chiến dịch trên web | `docs/WEB_DESKTOP_ACCOUNTS_V461.md` |
+| Số chưa có Zalo nhận SMS: bật Gửi SMS trong chiến dịch SĐT, gửi từ điện thoại Android, cần gói akaAgent SMS | `src/shared/types.ts:622` (`internalSmsEnabled`); `src/shared/authProductCatalog.ts:26` |
+| Kết bạn với người Zalo gợi ý; nhắn lại khách đã từng gửi tin | `src/main/services/campaignScheduler.ts:15268` (`zalo_friend_recommendations`); `src/shared/types.ts:1116` (`zalo_message_remarketing_customer`) |
+| AI đặt lịch chạy bằng câu nói thường | `src/shared/campaignScheduleAi.ts` |
 
 ## Bảng giá
 
@@ -110,11 +114,12 @@ Cần Node 22 và Chromium của Playwright (có sẵn trong môi trường clou
 
 ```bash
 cd marketing/zalo-sales-kit/nguon
-node xay-dung.cjs tat-ca        # ảnh (4 cỡ × 5 chủ đề), brochure + tờ PDF, bảng giá (4 sản phẩm × 4 ảnh + PDF, PDF tổng hợp), landing page
+node xay-dung.cjs tat-ca        # ảnh (4 cỡ × 5 chủ đề), brochure + tờ PDF, bảng giá (4 sản phẩm × 4 ảnh + PDF, PDF tổng hợp), 28 ảnh tính năng, landing page
+node xay-dung.cjs tinh-nang     # chỉ dựng lại 28 ảnh từng tính năng 1080×1350 (anh/07-tinh-nang/)
 node xay-dung.cjs bang-gia      # chỉ dựng lại bảng giá (4 sản phẩm + PDF tổng hợp)
 node xay-dung.cjs bang-gia zalo-web   # chỉ một sản phẩm (zalo-web, zalo-desktop, facebook-desktop, sms-mobile) + PDF tổng hợp
 node quay-tat-ca-video.cjs      # 5 video 9:16 + caption (~1 phút/video); thêm số để quay riêng: node quay-tat-ca-video.cjs 3
 node xuat-tin-nhan.cjs          # cập nhật tin-nhan-mau.md
 ```
 
-Bản PDF dùng màu cam đặc thay cho chữ chuyển sắc (`@media print` trong `nguon/mau/a4.cjs`) vì Chromium in `background-clip:text` còn viền mảnh quanh khung chữ. `render.cjs` báo `TRAN` khi chữ tràn khung; sửa câu ngắn lại trong `noi-dung.cjs` rồi dựng lại. Mẫu thiết kế nằm trong `nguon/mau/`, màu và font trong `nguon/assets/base.css`. Font Be Vietnam Pro dùng giấy phép SIL OFL (`nguon/assets/fonts/OFL-LICENSE.txt`). Logo lấy từ `build/icon.png` của app.
+Bản PDF dùng màu cam đặc thay cho chữ chuyển sắc (`@media print` trong `nguon/mau/a4.cjs`) vì Chromium in `background-clip:text` còn viền mảnh quanh khung chữ. Ảnh từng tính năng lấy chữ từ mục `features` trong `noi-dung.cjs` (mẫu `nguon/mau/tinh-nang.cjs`): tiêu đề ngắt dòng bằng `\n` để không tách đôi từ ghép, mỗi ảnh 3–4 ý, ảnh không có ví dụ tin nhắn dùng chữ lớn hơn; thêm hoặc bớt một mục trong `features` thì số thứ tự tên file tự đổi theo. `render.cjs` báo `TRAN` khi chữ tràn khung; sửa câu ngắn lại trong `noi-dung.cjs` rồi dựng lại. Mẫu thiết kế nằm trong `nguon/mau/`, màu và font trong `nguon/assets/base.css`. Font Be Vietnam Pro dùng giấy phép SIL OFL (`nguon/assets/fonts/OFL-LICENSE.txt`). Logo lấy từ `build/icon.png` của app.

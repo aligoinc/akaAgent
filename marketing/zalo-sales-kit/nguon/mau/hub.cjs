@@ -4,11 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const { esc } = require('./chung.cjs');
 const { fileStem } = require('./bang-gia.cjs');
+const { CATS } = require('./tinh-nang.cjs');
 
 const KIT = path.resolve(__dirname, '..', '..');
 
 function hub(C, S, opts) {
-  const { landingUrl, deckUrl } = opts;
+  const { landingUrl, deckUrl, featuresZip } = opts;
   const topics = C.topics.map((t, i) => {
     const n = String(i + 1).padStart(2, '0');
     const base = `${n}-${t.id}`;
@@ -83,6 +84,30 @@ function hub(C, S, opts) {
     </div>
   </div>
 </section>`).join('');
+
+  // Tab ảnh từng tính năng: mỗi tính năng/chiến dịch một ảnh 1080×1350, nhóm theo loại.
+  const feats = C.features.map((f, i) => {
+    const n = String(i + 1).padStart(2, '0');
+    return { f, file: `tinh-nang-${n}-${f.id}-1080x1350.png`, plain: f.title.replace(/==/g, '').replace(/\n/g, ' ') };
+  });
+  const featCard = ({ file, plain }) => `<figure class="fcard">
+      <img src="thumb/${file.replace('.png', '.jpg')}" alt="${esc(plain)}" loading="lazy">
+      <figcaption><b>${esc(plain)}</b>
+      <button type="button" class="btn dl" data-file="anh/${file}" data-name="akaAgent-Zalo-${file.replace('-1080x1350', '')}">Tải ảnh</button></figcaption>
+    </figure>`;
+  const featuresPanel = `
+<section class="panel" id="p-tinh-nang" data-tab="tinh-nang" role="tabpanel" aria-labelledby="tab-tinh-nang" hidden>
+  <div class="panel-head">
+    <span class="kicker">Ảnh từng tính năng · ${feats.length} ảnh</span>
+    <h2>Mỗi ảnh một tính năng, gửi khách từng ảnh</h2>
+    <p class="when">Khách hỏi tính năng nào thì gửi đúng ảnh đó, kèm một câu hỏi mở về nhu cầu của khách. Chữ to, khách đọc ngay trên điện thoại.</p>
+    ${featuresZip ? `<div><button type="button" class="btn dl" data-file="${featuresZip}" data-name="akaAgent-Zalo-anh-tinh-nang.zip">Tải cả bộ ${feats.length} ảnh (ZIP)</button></div>` : ''}
+  </div>
+  ${Object.keys(CATS).map((c) => {
+    const items = feats.filter((x) => x.f.cat === c);
+    return items.length ? `<h3 class="fcat">${esc(CATS[c].label)} · ${items.length} ảnh</h3><div class="fgrid">${items.map(featCard).join('')}</div>` : '';
+  }).join('')}
+</section>`;
 
   // Tab Bảng giá: mỗi sản phẩm một khối, chọn bằng nút sản phẩm (nhớ lựa chọn trong máy).
   const gias = C.pricing.map((P) => ({
@@ -183,6 +208,8 @@ function hub(C, S, opts) {
     <div class="col">
       <h3>Tờ giới thiệu 1 trang</h3>
       <div class="files">${topics.map(({ t, base }) => `<div class="file"><div><b>${esc(t.short)}</b><span>PDF A4</span></div><button type="button" class="btn dl" data-file="pdf/to-gioi-thieu-${base}.pdf" data-name="akaAgent-Zalo-to-gioi-thieu-${base}.pdf">Tải PDF</button></div>`).join('')}</div>
+      ${featuresZip ? `<h3>Ảnh từng tính năng</h3>
+      <div class="files"><div class="file"><div><b>${feats.length} ảnh tính năng (ZIP)</b><span>PNG 1080×1350, mỗi ảnh một tính năng</span></div><button type="button" class="btn dl" data-file="${featuresZip}" data-name="akaAgent-Zalo-anh-tinh-nang.zip">Tải ZIP</button></div></div>` : ''}
       <h3>Bảng giá (gửi riêng khi khách hỏi giá)</h3>
       <div class="files">${[{ name: `Tổng hợp ${gias.length} sản phẩm`, file: allPdf, sub: `PDF A4 · ${gias.length} trang` }, ...gias.map(({ P, pdf }) => ({ name: P.product, file: pdf, sub: 'PDF A4 · 1 trang' }))].map((x) => `<div class="file"><div><b>${esc(x.name)}</b><span>${esc(x.sub)}</span></div><button type="button" class="btn dl" data-file="pdf/${x.file}" data-name="${x.file}">Tải PDF</button></div>`).join('')}</div>
       <h3>Video dọc</h3>
@@ -197,6 +224,7 @@ function hub(C, S, opts) {
 
   const tabs = [
     ...topics.map(({ t }, i) => ({ id: t.id, label: `${i + 1}. ${t.short}` })),
+    { id: 'tinh-nang', label: 'Ảnh từng tính năng' },
     { id: 'bang-gia', label: 'Bảng giá' },
     { id: 'hoi-chung', label: 'Câu hỏi chung' },
     { id: 'tron-bo', label: 'Trọn bộ file' },
@@ -303,6 +331,13 @@ main.wrap{padding-block:26px 60px}
 .gia{display:flex;flex-direction:column;gap:16px}
 .gia[hidden]{display:none}
 .all-gia{margin-top:24px}
+.fcat{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:24px 0 10px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.fcard{margin:0;background:var(--surface);border-radius:14px;box-shadow:inset 0 0 0 1px var(--line);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.fcard img{display:block;width:100%;height:auto;aspect-ratio:4/5;background:#0b1020}
+.fcard figcaption{display:flex;flex-direction:column;gap:8px;padding:10px 10px 12px;flex:1}
+.fcard figcaption b{font-size:13.5px;line-height:1.35;flex:1}
+@media (max-width:520px){.fgrid{grid-template-columns:1fr 1fr}}
 .rules li{line-height:1.55}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#0B1222;color:#fff;padding:10px 16px;border-radius:999px;font-weight:700;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:20;max-width:calc(100% - 32px)}
 @media (max-width:900px){.grid{grid-template-columns:1fr}}
@@ -321,6 +356,7 @@ main.wrap{padding-block:26px 60px}
 </div></div></div>
 <main class="wrap">
 ${panels}
+${featuresPanel}
 ${pricing}
 ${common}
 ${all}

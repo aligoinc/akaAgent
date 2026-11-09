@@ -80,7 +80,7 @@ npx tsc --noEmit -p tsconfig.web.json    # Renderer
 
 Project KHÔNG có test framework / lint config. Verify bằng tsc + manual smoke test. Sau migration_v4 (drop engine v1) typecheck phải sạch 0 errors — bất kỳ error nào là regression.
 
-Sales Kit gửi khách (08/11/2026; bảng giá Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile 09/11): [marketing/zalo-sales-kit/](marketing/zalo-sales-kit/README.md) — ảnh, PDF, video, landing page, bảng giá, tin nhắn mẫu dựng từ một nguồn `nguon/noi-dung.cjs` (giá chỉ ở mục `pricing`) + `nguon/tin-nhan-mau.cjs` (`node nguon/xay-dung.cjs tat-ca`, `node nguon/quay-tat-ca-video.cjs`, `node nguon/xuat-tin-nhan.cjs`; Playwright + ffmpeg). Đổi tính năng Zalo thì cập nhật bảng "Căn cứ tính năng" và mục "Không nói với khách" trong README của kit.
+Sales Kit gửi khách (08/11/2026; bảng giá Zalo Web, Zalo Desktop, Facebook Desktop, SMS Mobile và 28 ảnh từng tính năng 09/11): [marketing/zalo-sales-kit/](marketing/zalo-sales-kit/README.md) — ảnh, ảnh từng tính năng (mục `features`, `node nguon/xay-dung.cjs tinh-nang`), PDF, video, landing page, bảng giá, tin nhắn mẫu dựng từ một nguồn `nguon/noi-dung.cjs` (giá chỉ ở mục `pricing`) + `nguon/tin-nhan-mau.cjs` (`node nguon/xay-dung.cjs tat-ca`, `node nguon/quay-tat-ca-video.cjs`, `node nguon/xuat-tin-nhan.cjs`; Playwright + ffmpeg). Đổi tính năng Zalo thì cập nhật bảng "Căn cứ tính năng" và mục "Không nói với khách" trong README của kit.
 
 ## Architecture
 

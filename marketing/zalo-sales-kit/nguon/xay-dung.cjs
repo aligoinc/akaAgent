@@ -1,5 +1,5 @@
 // Dựng toàn bộ Sales Kit từ noi-dung.cjs.
-// Dùng: node xay-dung.cjs [anh|a4|bang-gia|landing|tat-ca]   (mặc định: anh + a4; ghép nhiều mục bằng dấu +)
+// Dùng: node xay-dung.cjs [anh|a4|bang-gia|tinh-nang|landing|tat-ca]   (mặc định: anh + a4; ghép nhiều mục bằng dấu +)
 //       node xay-dung.cjs bang-gia <mã sản phẩm>   (vd zalo-web: chỉ dựng lại bảng giá đó + PDF tổng hợp)
 const fs = require('fs');
 const path = require('path');
@@ -73,6 +73,16 @@ if (want('bang-gia')) {
     jobs.push({ html: write(`a4/${base}.html`, g.a4(P)), out: path.join(KIT, 'pdf', `bang-gia-${g.fileStem(P)}-A4.pdf`), width: a4.PW, height: a4.PH, pdf: { format: 'A4' } });
   });
   jobs.push({ html: write('a4/bang-gia-tong-hop.html', g.a4All(C.pricing)), out: path.join(KIT, 'pdf', 'bang-gia-akaAgent-tong-hop-A4.pdf'), width: a4.PW, height: a4.PH, pdf: { format: 'A4' } });
+}
+
+// Ảnh từng tính năng: mỗi tính năng/chiến dịch/thông tin một ảnh dọc 1080×1350 để gửi khách từng ảnh
+if (want('tinh-nang')) {
+  const tn = require('./mau/tinh-nang.cjs');
+  const dir = path.join(KIT, 'anh', '07-tinh-nang');
+  C.features.forEach((f, i) => {
+    const n = String(i + 1).padStart(2, '0');
+    jobs.push({ html: write(`anh/tinh-nang-${n}-${f.id}.html`, tn.card(f)), out: path.join(dir, `tinh-nang-${n}-${f.id}-${tn.W}x${tn.H}.png`), width: tn.W, height: tn.H });
+  });
 }
 
 // Landing page: bản tự host (landing/index.html) + bản đăng Artifact (_html/landing-artifact.html)
