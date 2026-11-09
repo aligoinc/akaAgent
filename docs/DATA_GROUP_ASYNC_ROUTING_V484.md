@@ -1,13 +1,18 @@
 # Sửa gốc hàm nạp nhóm data: V484, V485, V486 (09/11/2026)
 
-**Trạng thái (09/11/2026 21:55 VN): V483 và V484 (đủ 3 phần) đã apply akachat, không apply lại; V485/V486 CHƯA
-apply.** V483 `20261109120408` (19:04:08 VN), V484 p1 `20261109140318` (21:03:18), p2 `20261109141035` (21:10:35), p3
-`20261109142517` (21:25:17); md5 sổ migration khớp file từng phần, md5 hàm đích khớp postflight. Công tắc vẫn `sync`
-(chưa tổ chức nào chạy nền); job pg_cron 112 `aka-agent-data-group-route-worker` 10 giây/lượt, 173/173 lượt thành công
-(~7 ms khi hàng đợi rỗng); 20:55–21:55 VN 0 lỗi 5xx/503, độ trễ không đổi qua 3 lần DDL.
-[Biên nhận](../migrations/snapshots/data-group-routing-v483-v486/apply-receipt.json). V485 p1 gửi qua MCP lúc ~21:50 VN
-thì hộp xác nhận hết hạn không ai bấm nên không chạy (kiểm chỉ đọc 21:54 VN: chưa có bảng phiên, worker vẫn bản V484).
-Hai lần gửi V484 p1 đầu tiên (19:0x, 19:2x VN) cũng hết hạn như vậy trước khi được bấm.
+**Trạng thái (09/11/2026 23:42 VN): đã apply đủ V483, V484 (3 phần), V485 (2 phần), V486 lên akachat, không apply
+lại; công tắc `async` cho tổ chức 701 (staff 724) từ 23:39:34 VN, các tổ chức khác vẫn `sync`.** V483 `20261109120408`
+(19:04:08 VN), V484 p1 `20261109140318` (21:03:18), p2 `20261109141035` (21:10:35), p3 `20261109142517` (21:25:17) qua
+MCP `apply_migration`; V485 p1 `20261109163531` (23:35:31), p2 `20261109163859` (23:38:59), V486 `20261109163917`
+(23:39:17) dán SQL Editor bằng script guarded, vì hộp xác nhận MCP hết hạn 4 lần không ai bấm (~21:50, ~22:15, ~22:24,
+~23:02 VN; lần nào kiểm chỉ đọc cũng thấy không chạy gì). md5 sổ migration khớp file từng phần, md5 hàm đích khớp
+postflight (hàm nạp lõi `dc8ccc8c…`, worker `dda4a682…`, 3 hàm kiểm quyền plpgsql). Job pg_cron 112
+`aka-agent-data-group-route-worker` 10 giây/lượt, 816/816 lượt thành công tới 23:41 VN; 20:55–23:42 VN 0 lỗi 5xx/503
+(phút apply V485 p1 có 45 request quá 1 giây, phút sau về 45 ms). Dòng sổ do script guarded ghi có `created_by` NULL
+(dòng MCP ghi email). [Biên nhận](../migrations/snapshots/data-group-routing-v483-v486/apply-receipt.json).
+Lượt nạp thật đầu tiên sau đó (tổ chức 1750, `scan`, 23:46:20 VN) chạy hàm nạp bản V485 theo đường `sync`: 11 thành
+viên, 18 input. 3 RPC phiên nhập file chỉ được gọi bởi client mới (API WebApp sau akaAgentWebApp#177, Desktop bản sau);
+tới 23:46 VN chưa có lời gọi nào, client cũ vẫn gửi một lần như cũ.
 Phương án gốc: [DATA_GROUP_INGEST_ROUTING_PLAN.md](DATA_GROUP_INGEST_ROUTING_PLAN.md). Chia lô phía app (đã merge):
 akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 
@@ -15,8 +20,8 @@ akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 |---|---|---|---|
 | V483 (đã apply 09/11 19:04:08 VN) | Chặn sớm lần nạp chắc chắn quá 60 giây (PT413) ở 2 wrapper Desktop | 1 file | `bash scripts/test-v483-data-group-ingest-budget.sh` |
 | V484 (đã apply 09/11 21:03–21:25 VN) | Đẩy data nhóm vào chiến dịch chạy nền (hàng đợi + worker pg_cron), bật theo tổ chức | p1, p2, p3 | `python3 scripts/data-group-routing/test_v484.py` (67/67) |
-| V485 | Nhập file nhiều phần (begin → append × N → finish), tới 100.000 dòng | p1, p2 | `python3 scripts/data-group-routing/test_v485.py` (95/95) |
-| V486 | Kiểm quyền đọc nhóm chia sẻ dùng plan chung (đẩy nhanh ~2,4 lần) | 1 file | `python3 scripts/data-group-routing/test_v486.py` (33/33) |
+| V485 (đã apply 09/11 23:35–23:39 VN) | Nhập file nhiều phần (begin → append × N → finish), tới 100.000 dòng | p1, p2 | `python3 scripts/data-group-routing/test_v485.py` (95/95) |
+| V486 (đã apply 09/11 23:39:17 VN) | Kiểm quyền đọc nhóm chia sẻ dùng plan chung (đẩy nhanh ~2,4 lần) | 1 file | `python3 scripts/data-group-routing/test_v486.py` (33/33) |
 
 File sinh bằng `scripts/build-v484-sql.py`, `build-v485-sql.py`, `build-v486-sql.py` từ định nghĩa live đã chụp
 (kiểm checksum); đừng sửa tay. Mỗi chỗ vá là thay chuỗi nguyên văn, preflight kiểm md5 `pg_get_functiondef` của đúng
@@ -131,6 +136,8 @@ DDL làm PostgREST nạp lại schema: không chạy 10:00–11:30 và 14:00–1
    `cron.job_run_details` ở mục Theo dõi).
 
 ## Bật thử cho tổ chức của staff 724
+
+**Đã bật 09/11/2026 23:39:34 VN** cho tổ chức 701; lúc bật tổ chức có 12 nguồn nhóm data `active`, 908 `stopped`.
 
 ```sql
 UPDATE public.auto_system_settings
