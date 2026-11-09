@@ -17,6 +17,7 @@
 -- Chỉ form 1 / theo mặc định:       ... SET web_campaign_form_version = '1' ... / ... = NULL ...
 -- Mặc định cho mọi người chưa đặt riêng: UPDATE public.auto_system_settings SET value = '{"defaultVersion":2}', updated_at = now()
 --   WHERE key = 'web.campaign_form';   (cả hai form: '{"defaultVersion":"1,2"}')
+-- Sửa/Nhân bản mở đúng form đã tạo chiến dịch (auto_campaigns.web_campaign_form, V482); tắt khóa này: thêm "followCampaignForm":false.
 -- Rollback: migrations/rollback_v481_web_campaign_form_version.sql. Kiểm thử cục bộ: bash scripts/test-v481-web-campaign-form-version.sh
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -51,7 +52,7 @@ COMMENT ON COLUMN public.org_staff.web_campaign_form_version IS
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active)
 VALUES ('web.campaign_form', '{"defaultVersion":1}',
-  'Form chiến dịch Web cho nhân viên chưa đặt org_staff.web_campaign_form_version: {"defaultVersion":1} form hiện tại, {"defaultVersion":2} Form chiến dịch 2, {"defaultVersion":"1,2"} hiện cả hai (số đầu mở mặc định). Thiếu dòng/sai định dạng = 1. API đọc cùng lượt /settings/web-polling.',
+  'Form chiến dịch Web cho nhân viên chưa đặt org_staff.web_campaign_form_version: {"defaultVersion":1} form hiện tại, {"defaultVersion":2} Form chiến dịch 2, {"defaultVersion":"1,2"} hiện cả hai (số đầu mở mặc định). Thiếu dòng/sai định dạng = 1. Thêm "followCampaignForm":false để Sửa/Nhân bản không khóa theo form đã tạo chiến dịch (auto_campaigns.web_campaign_form, V482). API đọc cùng lượt /settings/web-polling.',
   false, true);
 
 DO $v481_postflight$
