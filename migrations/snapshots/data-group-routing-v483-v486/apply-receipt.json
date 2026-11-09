@@ -1,0 +1,60 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-09: \"Apply V483 → V484 (p1→p3) → V485 (p1→p2) → V486\", then \"Hãy sử dụng MCP để thực hiện hết tất cả mà không cần phải hỏi tôi\"",
+  "method": "Supabase MCP apply_migration with the exact file content; ledger md5(statements[1]) checked against the file after each part",
+  "applied": [
+    {
+      "version": "20261109120408",
+      "name": "migration_v483_data_group_ingest_budget_guard",
+      "file": "migrations/migration_v483_data_group_ingest_budget_guard.sql",
+      "md5": "e91cf43256683a018582bc90156c8b39",
+      "appliedAtVietnam": "2026-11-09 19:04:08",
+      "change": {"desktopWrappers": "d3ba6d79…/9a75506b… -> f3244345…/901b27e3…", "guardProsrc": "ff99a8564bb1ce517675419f03967eeb"}
+    },
+    {
+      "version": "20261109140318",
+      "name": "migration_v484_data_group_async_routing_p1",
+      "file": "migrations/migration_v484_data_group_async_routing_p1.sql",
+      "md5": "9e298117e55d918afde5f7bdabf73f82",
+      "appliedAtVietnam": "2026-11-09 21:03:18",
+      "change": "private.auto_data_group_route_jobs + _job_members (RLS on, no API role), 7 private functions, auto_system_settings data_groups.routing_mode = {\"mode\":\"sync\",\"organizationIds\":[],\"workerBudgetMs\":4000}"
+    },
+    {
+      "version": "20261109141035",
+      "name": "migration_v484_data_group_async_routing_p2",
+      "file": "migrations/migration_v484_data_group_async_routing_p2.sql",
+      "md5": "d2246d52749548bba10941b184dadb4e",
+      "appliedAtVietnam": "2026-11-09 21:10:35",
+      "functions": {
+        "public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)": {"before": "70abe6e3db930718a6472ce270b29b7a", "after": "0a0c9d1f870df7eac69ceaa20f6fb10a"},
+        "public.aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint)": {"before": "bf41a97876e47339e87545914e01bc1e", "after": "ce799127008afc8f72edd31ef2042a39"}
+      }
+    },
+    {
+      "version": "20261109142517",
+      "name": "migration_v484_data_group_async_routing_p3",
+      "file": "migrations/migration_v484_data_group_async_routing_p3.sql",
+      "md5": "04161754fea55942f1738898c7b2c9fa",
+      "appliedAtVietnam": "2026-11-09 21:25:17",
+      "functions": {
+        "public.aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text)": {"before": "9f4db1d1c78dfe0e1b00e37678e5852e", "after": "b185fd226aa469ae488c39f7e5344ab6"},
+        "public.aka_agent_move_data_group_members(bigint,bigint,text,bigint,bigint[],bigint)": {"before": "2a9b66655b905f56e44fe492096520bc", "after": "f408ef621e5a77f5c917288a5ee5c8ff"},
+        "public.aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)": {"before": "9215d6543aa1bb2627676f280465b8fa", "after": "4bf8a8bd00054e90e9d4bde54343c003"},
+        "public.aka_agent_sync_scan_dataset_group_origins()": {"before": "5164ca868e763bfabd830e2114deeff9", "after": "7ad7de9336833e9803344620594e4e5d"},
+        "private.copy_shared_group(bigint,bigint,text,bigint,jsonb)": {"before": "9b310ca079d192f4e809b9cf09d28740", "after": "a84ce82f3c830f23ffb6cb6c3ef288be"},
+        "private.aka_agent_assert_data_group_ingest_budget(bigint,bigint,text,jsonb) [prosrc]": {"before": "ff99a8564bb1ce517675419f03967eeb", "after": "4aa52e79124baf2cf94f7953f310c825"}
+      },
+      "cron": {"jobid": 112, "jobname": "aka-agent-data-group-route-worker", "schedule": "10 seconds", "command": "SELECT private.aka_agent_run_data_group_route_worker();"}
+    }
+  ],
+  "notApplied": [
+    {"name": "migration_v485_data_group_upload_sessions_p1", "reason": "MCP confirmation dialog expired with no answer at ~21:50 VN; read-only check 21:54 VN: no upload-session table, ledger ends at V484 p3, worker prosrc still 38cff7e0 (V484)"},
+    {"name": "migration_v485_data_group_upload_sessions_p2", "reason": "after p1"},
+    {"name": "migration_v486_group_access_plan_cache", "reason": "after V485; regenerated 09/11 from live group_access (file md5 93fde69a…)"}
+  ],
+  "postApply": {
+    "routingMode": "{\"mode\":\"sync\",\"organizationIds\":[],\"workerBudgetMs\":4000}",
+    "workerRuns": "173/173 succeeded by 21:54 VN, ~7 ms per run with an empty queue",
+    "edgeLogs": "20:55-21:55 VN: 0 HTTP 5xx, 0 HTTP 503, average origin time 46-54 ms per 5 minutes (unchanged across the three DDL commits); 1 ingest_data_group call at ~21:20 VN, no error"
+  }
+}

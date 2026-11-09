@@ -1,16 +1,20 @@
 # Sửa gốc hàm nạp nhóm data: V484, V485, V486 (09/11/2026)
 
-**Trạng thái (09/11/2026): V483 đã apply akachat lúc 19:04:08 VN (`20261109120408`, md5 sổ migration khớp file
-`e91cf432…`); V484/V485/V486 CHƯA apply.** Hai lần gửi V484 p1 qua Supabase MCP (19:0x và 19:2x VN) hộp xác nhận đều
-hết hạn không ai bấm nên không chạy (kiểm lại chỉ đọc: chưa có bảng hàng đợi, sổ dừng ở V483). Code đã xong và kiểm thử
-cục bộ trên Postgres 17 + pg_cron với hàm live thật.
+**Trạng thái (09/11/2026 21:55 VN): V483 và V484 (đủ 3 phần) đã apply akachat, không apply lại; V485/V486 CHƯA
+apply.** V483 `20261109120408` (19:04:08 VN), V484 p1 `20261109140318` (21:03:18), p2 `20261109141035` (21:10:35), p3
+`20261109142517` (21:25:17); md5 sổ migration khớp file từng phần, md5 hàm đích khớp postflight. Công tắc vẫn `sync`
+(chưa tổ chức nào chạy nền); job pg_cron 112 `aka-agent-data-group-route-worker` 10 giây/lượt, 173/173 lượt thành công
+(~7 ms khi hàng đợi rỗng); 20:55–21:55 VN 0 lỗi 5xx/503, độ trễ không đổi qua 3 lần DDL.
+[Biên nhận](../migrations/snapshots/data-group-routing-v483-v486/apply-receipt.json). V485 p1 gửi qua MCP lúc ~21:50 VN
+thì hộp xác nhận hết hạn không ai bấm nên không chạy (kiểm chỉ đọc 21:54 VN: chưa có bảng phiên, worker vẫn bản V484).
+Hai lần gửi V484 p1 đầu tiên (19:0x, 19:2x VN) cũng hết hạn như vậy trước khi được bấm.
 Phương án gốc: [DATA_GROUP_INGEST_ROUTING_PLAN.md](DATA_GROUP_INGEST_ROUTING_PLAN.md). Chia lô phía app (đã merge):
 akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 
 | Migration | Việc | Phần | Kiểm thử |
 |---|---|---|---|
 | V483 (đã apply 09/11 19:04:08 VN) | Chặn sớm lần nạp chắc chắn quá 60 giây (PT413) ở 2 wrapper Desktop | 1 file | `bash scripts/test-v483-data-group-ingest-budget.sh` |
-| V484 | Đẩy data nhóm vào chiến dịch chạy nền (hàng đợi + worker pg_cron), bật theo tổ chức | p1, p2, p3 | `python3 scripts/data-group-routing/test_v484.py` (67/67) |
+| V484 (đã apply 09/11 21:03–21:25 VN) | Đẩy data nhóm vào chiến dịch chạy nền (hàng đợi + worker pg_cron), bật theo tổ chức | p1, p2, p3 | `python3 scripts/data-group-routing/test_v484.py` (67/67) |
 | V485 | Nhập file nhiều phần (begin → append × N → finish), tới 100.000 dòng | p1, p2 | `python3 scripts/data-group-routing/test_v485.py` (95/95) |
 | V486 | Kiểm quyền đọc nhóm chia sẻ dùng plan chung (đẩy nhanh ~2,4 lần) | 1 file | `python3 scripts/data-group-routing/test_v486.py` (33/33) |
 
