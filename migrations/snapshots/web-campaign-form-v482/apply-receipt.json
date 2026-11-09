@@ -1,0 +1,41 @@
+{
+  "migration": "migration_v482_campaign_web_form",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261109101616",
+  "applied_at_vn": "2026-11-09T17:16:16+07:00",
+  "applied_via": "Supabase MCP apply_migration với nguyên văn file, theo yêu cầu \"Apply V482\" của người dùng",
+  "file_md5": "2e53fb7ba72a9988c95e8b083dcae9a9",
+  "ledger_statements_md5": "2e53fb7ba72a9988c95e8b083dcae9a9",
+  "source_commit": "d820e064 (nội dung file không đổi tới e628a82)",
+  "preflight": {
+    "ledger_v482": 0,
+    "ledger_latest": "20261109060428 / migration_v481_web_campaign_form_version",
+    "auto_campaigns.web_campaign_form": "chưa có (cả CHECK auto_campaigns_web_campaign_form_check)",
+    "create_control_campaign_v2": "md5(prosrc) b92f89114e063687609a3a08c89d9d55 (khớp bản đọc 09/11/2026); owner postgres, SECURITY DEFINER, VOLATILE, search_path=public + statement_timeout=60s, EXECUTE chỉ postgres/service_role",
+    "create_control_campaign_md5": "54eed9dbf6247b035a884ff9c08f6bfb",
+    "auto_campaigns": "51.828 dòng, heap 65 MB (tổng gồm index/TOAST 754 MB)",
+    "db_load_4_samples": "17:11:53–17:12:26 VN: 1/11/2/5 phiên active (trên CPU 1/6/1/3), 0 phiên chờ khóa, giao dịch dài nhất 1 giây, không phiên nào giữ khóa auto_campaigns quá 2 giây"
+  },
+  "postflight": {
+    "column": "text | NOT NULL=false | DEFAULT=false",
+    "check": "auto_campaigns_web_campaign_form_check, convalidated=false: CHECK (((web_campaign_form IS NULL) OR (web_campaign_form = ANY (ARRAY['form_1'::text, 'form_2'::text, 'agent_1'::text, 'agent_2'::text])))) NOT VALID",
+    "comment": "có (Form Web đã tạo chiến dịch (V482)…)",
+    "create_control_campaign_v2": "md5(prosrc) 51f354426f1e1a2b0500199fc08b14cf; owner/SECURITY DEFINER/cấu hình/quyền giữ nguyên",
+    "create_control_campaign": "md5 không đổi 54eed9dbf6247b035a884ff9c08f6bfb",
+    "rows_with_value_after_apply": 0,
+    "table_grants": "aka_agent_chat_api SELECT/UPDATE, aka_agent_desktop SELECT; anon/authenticated không có (không đổi)",
+    "postgrest": "Received a schema cache reload message 10:16:16 UTC; schema cache queried 4,5 s, loaded 10:16:24 UTC; không có PGRST002",
+    "edge_logs": "10:15–10:17 UTC: 0 lỗi 503, 0 lỗi 5xx (phút 10:16: 53.124 request, thời gian origin trung bình /rest/v1 137,6 ms so với 65,1 ms phút trước và 55,4 ms phút sau)",
+    "postgres_logs": "2 WARNING 'there is already a transaction in progress' (file có BEGIN trong giao dịch của apply_migration, như V481). Lỗi 'permission denied for table auto_campaigns' (~10/phút) và 'permission denied for function recover_stale_auto_automation_details' (~45/phút) từ authenticator/PostgREST có sẵn từ trước khi apply, tần suất không đổi"
+  },
+  "compatibility": [
+    "API/Web đang chạy trên production chưa gửi webCampaignForm: lớp bọc mới ghi NULL như trước (nhánh 'tạm dừng' vẫn một lệnh UPDATE), chiến dịch tạo tới khi deploy giữ NULL và Sửa theo danh sách form của nhân viên.",
+    "Desktop (SELECT cấp bảng) và Chat API (SELECT/UPDATE cấp bảng) đọc select * vẫn chạy; Desktop ghi theo cột nên không ghi cột này.",
+    "Không phụ thuộc V481 (đã apply 13:04:28 VN). Code WebApp nhánh claude/nifty-noether-x8vxjk (PR aligoinc/akaAgentWebApp#176) CHƯA deploy API/Web."
+  ],
+  "local_test": "scripts/test-v482-campaign-web-form.sh — PostgreSQL 16, 17/17 đạt",
+  "rollback": "migrations/rollback_v482_campaign_web_form.sql (chỉ dữ liệu: followCampaignForm=false, giữ cột); gỡ hẳn (khôi phục lớp bọc trước V482 rồi xoá cột): migrations/rollback_v482_campaign_web_form_remove.sql, ngoài giờ cao điểm",
+  "notes": [
+    "Sau khi apply không sửa file migration (sổ migration lưu nguyên văn)."
+  ]
+}
