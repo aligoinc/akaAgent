@@ -1,5 +1,5 @@
--- Rollback V481 (Form chiến dịch 2 trên Web). Bước 1 chỉ dữ liệu: mọi người về form 1 ngay, không đổi schema,
--- không làm PostgREST nạp lại schema. Web/API bản mới vẫn chạy (đọc cột/khóa nhưng đều là form 1).
+-- Rollback V481 (Form chiến dịch 2 trên Web). Bước 1 chỉ dữ liệu: mọi người về form 1 ngay (kể cả nhân viên đang '2' hay '1,2'),
+-- không đổi schema, không làm PostgREST nạp lại schema. Web/API bản mới vẫn chạy (đọc cột/khóa nhưng đều là form 1).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 UPDATE public.auto_system_settings SET value = '{"defaultVersion":1}', updated_at = now()
