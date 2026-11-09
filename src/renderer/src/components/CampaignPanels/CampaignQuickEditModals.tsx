@@ -2,7 +2,7 @@ import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignS
 import { supportsStopMessagesLink, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Copy, FileText, FolderOpen, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Copy, Eye, FileText, FolderOpen, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import type {
   ActionLimitConfig,
   CampaignAction,
@@ -42,7 +42,10 @@ import {
   getAccountActionDailySendLimit,
   getCampaignActionDailySendLimit
 } from '../../utils/entitlements'
-import { isZaloServerAccount } from '../../utils/accountLabels'
+import { isZaloServerAccount, isZaloWebAccount } from '../../utils/accountLabels'
+import { RECIPIENT_MESSAGE_OR_FRIEND_ACTIONS, recipientPreviewChannel } from '../../../../shared/recipientPreview'
+import { RecipientPreviewPanel } from './recipientPreview/RecipientPreviewPanel'
+import { recipientSourceFromCampaign, type RecipientPreviewInput } from './recipientPreview/recipientPreviewModel'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
 import EmailHtmlEditor from './EmailHtmlEditor'
@@ -504,6 +507,8 @@ function QuickEditShell({
   saving,
   saveDisabled = false,
   completionPending = false,
+  headerAction,
+  className = '',
   onClose,
   onSave,
   children
@@ -513,6 +518,10 @@ function QuickEditShell({
   saving: boolean
   saveDisabled?: boolean
   completionPending?: boolean
+  /** Nút thêm trên đầu hộp (Xem trước). */
+  headerAction?: ReactNode
+  /** Lớp thêm cho lớp phủ (chừa chỗ cho ngăn kéo Khách sẽ nhận). */
+  className?: string
   onClose: () => void
   onSave: () => void
   children: ReactNode
@@ -522,13 +531,14 @@ function QuickEditShell({
   }
 
   return (
-    <div className="modal-overlay campaign-quick-edit-overlay" style={{ zIndex: 2200 }} onMouseDown={handleBackdropMouseDown}>
+    <div className={`modal-overlay campaign-quick-edit-overlay${className ? ` ${className}` : ''}`} style={{ zIndex: 2200 }} onMouseDown={handleBackdropMouseDown}>
       <div className="campaign-quick-edit-modal stepper-modal" onMouseDown={event => event.stopPropagation()}>
         <div className="modal-header">
           <span className="modal-title campaign-quick-edit-title">
             {icon}
             <span>{title}</span>
           </span>
+          {headerAction}
           <button type="button" className="btn-icon" onClick={onClose} disabled={saving}>
             <X size={18} />
           </button>
@@ -902,6 +912,40 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
   const canUseAdvancedContentMode = showMainContentSection && !isVoiceCallCampaign && contentTemplateChannel !== undefined
   const isAdvancedContentMode = canUseAdvancedContentMode && formData.advancedContentEnabled
+  // "Khách sẽ nhận" của Sửa nhanh: chỉ đọc state đang sửa, không tải data (khách mẫu hoặc giữ nguyên biến).
+  // Bật Nhắn tin/Kết bạn không sửa ở đây nên đọc theo cấu hình đã lưu, đúng như runtime.
+  const [recipientPreviewOpen, setRecipientPreviewOpen] = useState(false)
+  const recipientSavedSource = useMemo(() => recipientSourceFromCampaign(campaign), [campaign])
+  const recipientPreviewAvailable = Boolean(recipientPreviewChannel(actionId)) && hasAnyEditableField
+    && (!RECIPIENT_MESSAGE_OR_FRIEND_ACTIONS.has(actionId) || recipientSavedSource.enableMessage || recipientSavedSource.enableAddFriend)
+  const recipientPreviewInput = useMemo<RecipientPreviewInput>(() => ({
+    source: {
+      ...recipientSavedSource,
+      friendRequestMessage: formData.friendRequestMessage,
+      zaloMessageSendMode: formData.zaloMessageSendMode === 'share' ? 'share' : 'normal',
+      formattedContentEnabled: isFormattedContentEnabled,
+      zaloOptOutLinkEnabled: formData.zaloOptOutLinkEnabled,
+      smsUseUnicode: formData.smsUseUnicode,
+      smsKeepNewLines: formData.smsKeepNewLines,
+      rewriteContentEachRun: formData.rewriteContentEachRun,
+      advanced: isAdvancedContentMode,
+      content: formData.content,
+      advancedItems: normalizeAdvancedContentItems(formData.advancedContentItems),
+      media: formData.images,
+      mediaOption: formData.imageOption,
+      randomCount: formData.randomImageCount
+    },
+    rows: [],
+    senders: [{
+      id: campaign.accountId,
+      name: campaignAccount?.name || 'Tài khoản của chiến dịch',
+      phone: campaignAccount?.zaloPhone || null,
+      zaloWeb: campaignAccount ? isZaloWebAccount(campaignAccount) : false
+    }],
+    sendDateIso: campaign.schedule || null,
+    liveSource: false,
+    savedRows: true
+  }), [recipientSavedSource, formData, isFormattedContentEnabled, isAdvancedContentMode, campaign.accountId, campaign.schedule, campaignAccount])
   const getAdvancedEmailSubject = (item: CampaignAdvancedContentItem): string => (
     item.emailSubject == null && !isGroupSnapshotSource
       ? formData.emailSubject
@@ -2094,6 +2138,11 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         saving={saving}
       completionPending={saveCompletion.pending}
         saveDisabled={!hasAnyEditableField}
+        className={recipientPreviewOpen && recipientPreviewAvailable ? 'has-recipient-preview' : ''}
+        headerAction={recipientPreviewAvailable && <button type="button" className="rp-toggle" aria-label="Xem trước khách sẽ nhận"
+          aria-pressed={recipientPreviewOpen} onClick={() => setRecipientPreviewOpen(open => !open)}>
+          <Eye size={15} aria-hidden="true" />Xem trước
+        </button>}
         onClose={onClose}
         onSave={handleSave}
       >
@@ -2426,6 +2475,14 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
         style={{ display: 'none' }}
         onChange={handleLocalMediaChange}
       />
+      {recipientPreviewOpen && recipientPreviewAvailable && <RecipientPreviewPanel
+        input={recipientPreviewInput}
+        followAvailable={false}
+        busy={saving || saveCompletion.pending}
+        layout="drawer"
+        onJump={() => setRecipientPreviewOpen(false)}
+        onClose={() => setRecipientPreviewOpen(false)}
+      />}
       {mediaPickerTarget && (
         <MediaLibraryModal
           pickerMode={getMediaSelectionMode(mediaPickerTarget)}

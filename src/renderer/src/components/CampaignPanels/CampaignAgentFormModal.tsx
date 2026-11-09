@@ -125,7 +125,22 @@ import ContentPreviewModal, {
   type ContentPreviewPlatform,
   type ContentPreviewSurface
 } from './ContentPreviewModal'
-import ContentTemplatePreview from '../ContentTemplates/ContentTemplatePreview'
+import ContentTemplatePreview, { CONTENT_TEMPLATE_SAMPLE_VALUES } from '../ContentTemplates/ContentTemplatePreview'
+import {
+  RECIPIENT_MESSAGE_OR_FRIEND_ACTIONS,
+  recipientPreviewChannel,
+  recipientVariantRange,
+  recipientVersionAtCaret,
+  type RecipientWarning
+} from '../../../../shared/recipientPreview'
+import { RecipientItemPreview } from './recipientPreview/RecipientItemPreview'
+import { RecipientPreviewLive, RecipientPreviewToggle } from './recipientPreview/RecipientPreviewPanel'
+import {
+  createRecipientCaretStore,
+  type RecipientPreviewFocus,
+  type RecipientPreviewInput,
+  type RecipientSender
+} from './recipientPreview/recipientPreviewModel'
 import {
   canUseCampaignAction,
   clampDailyLimitToEntitlement,
@@ -1210,6 +1225,9 @@ const getCampaignMediaStableKey = (item: CampaignMediaInput): string => {
 }
 
 const isDirectCampaignMediaPreviewUrl = (path: string): boolean => /^(https?:|data:)/i.test(path)
+
+// Khung "Khách sẽ nhận" của form Agent mặc định đóng (khung chat đã chiếm cột phải) và không nhớ lựa chọn.
+const recipientPreviewWide = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1280px)').matches
 
 const hashCampaignPreviewSeed = (value: string): number => {
   let hash = 2166136261
@@ -3862,6 +3880,106 @@ export default function CampaignAgentFormModal({
     () => details.slice(detailsPageStartIndex, detailsPageEndIndex),
     [details, detailsPageEndIndex, detailsPageStartIndex]
   )
+  // Khung "Khách sẽ nhận" (docs/CAMPAIGN_RECIPIENT_PREVIEW.md): chỉ đọc state form đang có, không tải thêm và
+  // không vào nháp/payload. Nội dung chính đọc qua contentStore ngay trong khung vì form không vẽ lại khi gõ.
+  const [recipientPreviewOpen, setRecipientPreviewOpen] = useState(false)
+  const [recipientPreviewFocus, setRecipientPreviewFocus] = useState<RecipientPreviewFocus | null>(null)
+  const recipientPreviewNonceRef = useRef(0)
+  const [recipientCaretStore] = useState(createRecipientCaretStore)
+  const recipientPreviewAvailable = Boolean(recipientPreviewChannel(formData.actionId))
+    && (!RECIPIENT_MESSAGE_OR_FRIEND_ACTIONS.has(formData.actionId) || formData.enableMessage || formData.enableAddFriend)
+  const recipientPreviewShown = recipientPreviewOpen && recipientPreviewAvailable
+  // Danh sách mục nâng cao hiển thị được dựng lại mỗi lần form vẽ: giữ tham chiếu theo nội dung. Form Agent tính
+  // cả khi khung đóng để nút Xem trước báo được thay đổi của Agent.
+  const recipientAdvancedKey = recipientPreviewAvailable && isAdvancedContentMode ? JSON.stringify(advancedContentDisplayItems) : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const recipientAdvancedItems = useMemo(() => recipientAdvancedKey ? advancedContentDisplayItems : [], [recipientAdvancedKey])
+  const recipientSenders = useMemo<RecipientSender[]>(() => formData.accountIds.flatMap(accountId => {
+    const account = accounts.find(item => item.id === accountId)
+    // Zalo chạy trên trình duyệt chỉ gửi được ảnh; Zalo QR và Zalo Server gửi đủ loại media.
+    return account ? [{ id: account.id, name: account.name, phone: account.zaloPhone || null, zaloWeb: isZaloWebAccount(account) }] : []
+  }), [accounts, formData.accountIds])
+  const recipientSendDateIso = scheduleVietnamToIso(formData.schedule) || null
+  const recipientRichContent = isAdvancedGroupSource ? groupSnapshotEffectiveRich : isFormattedContentEnabled
+  const recipientLiveSource = isDataGroupSource || hideDetailsSection
+  const recipientPreviewBase = useMemo<RecipientPreviewInput>(() => ({
+    source: {
+      actionCode: formData.actionId,
+      enableMessage: formData.enableMessage,
+      enableAddFriend: formData.enableAddFriend,
+      friendRequestMessage: formData.friendRequestMessage,
+      zaloMessageSendMode: formData.zaloMessageSendMode === 'share' ? 'share' : 'normal',
+      formattedContentEnabled: recipientRichContent,
+      zaloOptOutLinkEnabled: formData.zaloOptOutLinkEnabled,
+      smsUseUnicode: formData.smsUseUnicode,
+      smsKeepNewLines: formData.smsKeepNewLines,
+      rewriteContentEachRun: formData.rewriteContentEachRun,
+      advanced: isAdvancedContentMode,
+      advancedContentSource: isAdvancedGroupSource ? 'group_snapshot' : 'manual',
+      content: '',
+      advancedItems: recipientAdvancedItems,
+      media: formData.images,
+      mediaOption: formData.imageOption,
+      randomCount: formData.randomImageCount
+    },
+    rows: details,
+    senders: recipientSenders,
+    sendDateIso: recipientSendDateIso,
+    liveSource: recipientLiveSource,
+    savedRows: isEditingSavedCampaign
+  }), [formData.actionId, formData.enableMessage, formData.enableAddFriend, formData.friendRequestMessage, formData.zaloMessageSendMode,
+    recipientRichContent, formData.zaloOptOutLinkEnabled, formData.smsUseUnicode, formData.smsKeepNewLines, formData.rewriteContentEachRun,
+    isAdvancedContentMode, isAdvancedGroupSource, recipientAdvancedItems, formData.images, formData.imageOption, formData.randomImageCount,
+    details, recipientSenders, recipientSendDateIso, recipientLiveSource, isEditingSavedCampaign])
+  // Những gì khách nhận ngoài nội dung chính (nút Xem trước tự đọc nội dung chính từ contentStore).
+  const recipientFingerprint = recipientPreviewAvailable ? JSON.stringify([formData.actionId, formData.enableMessage, formData.enableAddFriend,
+    formData.friendRequestMessage, isAdvancedContentMode, formData.imageOption, formData.images.length, recipientAdvancedKey]) : ''
+  const toggleRecipientPreview = (open = !recipientPreviewOpen) => {
+    setRecipientPreviewOpen(open)
+    // Yêu cầu cũ (nút Xem trước, nút Sửa) không phát lại khi mở khung lần sau.
+    if (!open) setRecipientPreviewFocus(null)
+  }
+  const requestRecipientPreview = (screen: RecipientPreviewFocus['screen'], version?: number) => {
+    recipientPreviewNonceRef.current += 1
+    setRecipientPreviewFocus({ screen, version, nonce: recipientPreviewNonceRef.current })
+    if (!recipientPreviewOpen) toggleRecipientPreview(true)
+  }
+  /** Theo con trỏ chỉ ở ô nội dung thường (không nâng cao, không định dạng). */
+  const recipientFollowAvailable = !isAdvancedContentMode && !isRichContentEditorEnabled
+  const reportRecipientCaret = (textarea: HTMLTextAreaElement) => {
+    if (recipientPreviewShown && recipientFollowAvailable) recipientCaretStore.set(recipientVersionAtCaret(textarea.value, textarea.selectionStart))
+  }
+  const selectRecipientVariant = (textarea: HTMLTextAreaElement | null, version: number) => {
+    if (!textarea) return
+    textarea.focus({ preventScroll: true })
+    const range = recipientVariantRange(textarea.value, version)
+    if (range) textarea.setSelectionRange(range.start, range.end)
+  }
+  // Nút Sửa trong khung: về đúng phần và đúng phiên bản; cửa sổ hẹp thì đóng khung để thấy ô đang sửa.
+  const jumpFromRecipientPreview = (target: RecipientWarning['target']) => {
+    const { section } = target
+    const version = target.version ?? 0
+    setCollapsedSections(prev => prev[section] ? { ...prev, [section]: false } : prev)
+    scrollToSection(section)
+    if (section === 'content' && target.screen === 'message' && isAdvancedContentMode && !isAdvancedGroupSource) {
+      const item = normalizedAdvancedContentItems[version]
+      if (item) {
+        setManualAdvancedContentSelectedId(item.id)
+        setManualAdvancedContentModalOpen(true)
+      }
+    } else {
+      // Phần vừa mở ra cần một khung hình để gắn ô nhập trước khi đặt con trỏ.
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        if (target.screen === 'friend_request') {
+          selectRecipientVariant(friendRequestMessageTextareaRef.current, version)
+        } else if (section === 'content' && !isAdvancedContentMode) {
+          if (isRichContentEditorEnabled) emailHtmlEditorRef.current?.commands.focus()
+          else selectRecipientVariant(campaignContentTextareaRef.current, version)
+        }
+      }))
+    }
+    if (!recipientPreviewWide()) { setRecipientPreviewOpen(false); setRecipientPreviewFocus(null) }
+  }
   const [findDataSearchKeywordsText, setFindDataSearchKeywordsText] = useCampaignDraftField(draftPayload, draftValuesRef, 'findDataSearchKeywordsText', () =>
     initialIsFindDataSearchCampaign ? formatFindDataSearchKeywordsText(normalizeInitialDetails(initialDetails)) : ''
   )
@@ -5240,11 +5358,24 @@ export default function CampaignAgentFormModal({
     })
   }
 
+  const textareaCaretVersion = (textarea: HTMLTextAreaElement | null): number | undefined =>
+    textarea ? recipientVersionAtCaret(textarea.value, textarea.selectionStart) : undefined
+
   const renderContentPreviewButton = (target: ContentPreviewTarget, disabled = false) => (
     <button
       type="button"
       className="btn btn-ghost content-template-inline-button"
-      onClick={() => openContentPreview(target)}
+      onClick={() => {
+        // Zalo nhắn tin, SMS, gọi thoại: mở khung "Khách sẽ nhận" ở phiên bản con trỏ đang đứng.
+        // Facebook/Email giữ bản xem trước cũ.
+        if (recipientPreviewAvailable && target === 'content') {
+          requestRecipientPreview('message', recipientFollowAvailable ? textareaCaretVersion(campaignContentTextareaRef.current) : undefined)
+        } else if (recipientPreviewAvailable && target === 'friendRequestMessage') {
+          requestRecipientPreview('friend_request', textareaCaretVersion(friendRequestMessageTextareaRef.current))
+        } else {
+          openContentPreview(target)
+        }
+      }}
       disabled={disabled}
     >
       <Eye size={15} />
@@ -13483,6 +13614,7 @@ export default function CampaignAgentFormModal({
           placeholder={getCampaignContentPlaceholder()}
           value={formData.content} data-agent-field="content" data-agent-filled={agent.changed('content')}
           onChange={e => setFormData(p => ({ ...p, content: e.target.value }))}
+          onSelect={e => reportRecipientCaret(e.currentTarget)}
           rows={8}
         />
       )}
@@ -14428,7 +14560,6 @@ export default function CampaignAgentFormModal({
             createCampaignPreviewRng(`${previewSeed}:media`)
           )
         : selectedMediaItems
-    const smsCount = countSingleSmsContent(previewText, formData.smsUseUnicode)
     const isFacebookChat = advancedContentTargetChannel === 'facebook_message'
     const isFacebookComment = advancedContentTargetChannel === 'facebook_comment'
     const isZaloGroupChat = isZaloMessageGroupCampaign
@@ -14495,12 +14626,9 @@ export default function CampaignAgentFormModal({
               <div className="campaign-manual-preview-body">{previewContent}</div>
               {mediaItems.length > 0 && <div className="campaign-manual-preview-files">{mediaItems.map((media, index) => <span key={`${index}-${getCampaignMediaStableKey(media)}`}><FileText size={13} />{getCampaignMediaDisplayName(media)}</span>)}</div>}
             </div>
-          ) : isSmsCampaign ? (
-            <div className="campaign-manual-preview-card sms">
-              <div className="campaign-manual-preview-sms-head"><MessageCircle size={15} /><span><strong>AKABIZ</strong><small>Brandname · 0938 xxx 214</small></span></div>
-              <div className="campaign-manual-preview-sms-bubble">{previewContent}</div>
-              <div className="campaign-manual-preview-sms-meta">{smsCount.countChar} ký tự · {smsCount.countSms} tin · {formData.smsUseUnicode ? 'Unicode (70/tin)' : 'GSM (160/tin)'}</div>
-            </div>
+          ) : isSmsCampaign || isZaloMessageCampaign ? (
+            // Cùng luật và bộ vẽ với khung "Khách sẽ nhận": thứ tự media/chữ như runtime, điền biến, đếm tin SMS.
+            <RecipientItemPreview base={recipientPreviewBase} item={item} sampleData={manualAdvancedPreviewUsesSampleData} seed={manualAdvancedPreviewSeed} />
           ) : isFacebookComment ? (
             <div className="campaign-manual-preview-card comment">
               <div className="campaign-manual-preview-post-head"><span className="campaign-manual-preview-avatar">B</span><span><strong>Bài viết mẫu</strong><small>Vừa xong · Facebook</small></span></div>
@@ -14526,7 +14654,7 @@ export default function CampaignAgentFormModal({
                 <div className="campaign-manual-preview-reels-actions"><span><ThumbsUp size={16} />0</span><span><MessageCircle size={16} />0</span><span><Share2 size={16} /></span></div>
               </div>
             </div>
-          ) : isZaloMessageCampaign || isFacebookChat ? (
+          ) : isFacebookChat ? (
             <div className={`campaign-manual-preview-card chat${isFacebookChat ? ' facebook' : isZaloGroupChat ? ' zalo group' : ' zalo'}`}>
               <div className="campaign-manual-preview-chat-head">
                 <span className="campaign-manual-preview-avatar">{isFacebookChat ? 'f' : isZaloGroupChat ? <Users size={15} /> : 'Z'}</span>
@@ -15361,8 +15489,7 @@ export default function CampaignAgentFormModal({
                     </div>
                     <div className="content-template-picker-v2-sample-data">
                       <strong>DỮ LIỆU THAY THẾ KHI GỬI</strong>
-                      <span><code>{'#{FULL_NAME}'}</code> Nguyễn Thị Lan</span>
-                      <span><code>{'#{PHONE}'}</code> 0938 xxx 214</span>
+                      {CONTENT_TEMPLATE_SAMPLE_VALUES.map(([token, value]) => <span key={token}><code>{token}</code> {value}</span>)}
                     </div>
                   </>
                 ) : (
@@ -15963,6 +16090,7 @@ export default function CampaignAgentFormModal({
           <span className="modal-title">
             {persistentDraft ? 'Nháp chiến dịch bằng Agent' : 'Thêm chiến dịch bằng Agent'}
           </span>
+          {recipientPreviewAvailable && <RecipientPreviewToggle shown={recipientPreviewShown} contentStore={contentStore} fingerprint={recipientFingerprint} onToggle={() => toggleRecipientPreview()} />}
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => agent.setOpen(!agent.open)}><Sparkles size={14} /> {agent.open ? 'Thu gọn Agent' : 'Mở Agent'}</button>
           <button className="btn-icon" onClick={onClose} disabled={saveBusy} aria-label="Đóng">
             <X size={18} />
@@ -17792,6 +17920,17 @@ export default function CampaignAgentFormModal({
           </div>
 
           <CampaignAgentChat agent={agent} />
+          {recipientPreviewShown && <RecipientPreviewLive
+            base={recipientPreviewBase}
+            contentStore={contentStore}
+            caretStore={recipientCaretStore}
+            focus={recipientPreviewFocus}
+            followAvailable={recipientFollowAvailable}
+            busy={saveBusy || formAiBusy || saveCompletion.pending}
+            layout="overlay"
+            onJump={jumpFromRecipientPreview}
+            onClose={() => toggleRecipientPreview(false)}
+          />}
           </div>
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">

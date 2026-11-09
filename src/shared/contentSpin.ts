@@ -286,3 +286,105 @@ export function unescapeContentSpin(content: string | undefined | null): string 
 
   return output
 }
+
+/**
+ * Deterministic PRNG (mulberry32) so a preview keeps the same spin while the user types.
+ * Same as akaAgentWebApp campaign-core `seededRandom`; preview only, runtime keeps Math.random.
+ */
+export function seededRandom(seed: number): ContentSpinRng {
+  let state = (Math.floor(Number(seed) || 0) ^ 0x9e3779b9) >>> 0
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function countSpin(content: string, cap: number, depth: number): number {
+  if (depth > MAX_RENDER_DEPTH) return 1
+  let total = 1
+  for (let index = 0; index < content.length; index += 1) {
+    if (isEscapedSpecial(content, index)) {
+      index += 1
+      continue
+    }
+    const tokenEnd = findTemplateTokenEnd(content, index)
+    if (tokenEnd !== null) {
+      index = tokenEnd
+      continue
+    }
+    const spinEnd = findSpinGroupEnd(content, index)
+    if (spinEnd !== null) {
+      let options = 0
+      for (const option of splitTopLevelPipe(content.slice(index + 1, spinEnd), { trim: false, filterEmpty: false })) {
+        options = Math.min(cap, options + countSpin(option, cap, depth + 1))
+        if (options >= cap) break
+      }
+      total = Math.min(cap, total * Math.max(1, options))
+      index = spinEnd
+    }
+  }
+  return total
+}
+
+/** Number of ways `{a|b}` groups can render (nested groups included), capped. */
+export function countContentSpinOptions(content: string | undefined | null, cap = 10_001): number {
+  return countSpin(String(content || ''), Math.max(1, cap), 0)
+}
+
+function listSpin(content: string, limit: number, depth: number): string[] {
+  if (depth > MAX_RENDER_DEPTH) return [unescapeContentSpin(content)]
+  let results = ['']
+  let literal = ''
+  const flush = (): void => {
+    if (!literal) return
+    results = results.map(item => item + literal)
+    literal = ''
+  }
+  for (let index = 0; index < content.length; index += 1) {
+    if (isEscapedSpecial(content, index)) {
+      literal += content[index + 1]
+      index += 1
+      continue
+    }
+    const tokenEnd = findTemplateTokenEnd(content, index)
+    if (tokenEnd !== null) {
+      literal += content.slice(index, tokenEnd + 1)
+      index = tokenEnd
+      continue
+    }
+    const spinEnd = findSpinGroupEnd(content, index)
+    if (spinEnd !== null) {
+      flush()
+      const options: string[] = []
+      for (const option of splitTopLevelPipe(content.slice(index + 1, spinEnd), { trim: false, filterEmpty: false })) {
+        for (const rendered of listSpin(option, limit, depth + 1)) {
+          options.push(rendered)
+          if (options.length >= limit) break
+        }
+        if (options.length >= limit) break
+      }
+      const next: string[] = []
+      for (const prefix of results) {
+        for (const option of options.length ? options : ['']) {
+          next.push(prefix + option)
+          if (next.length >= limit) break
+        }
+        if (next.length >= limit) break
+      }
+      results = next
+      index = spinEnd
+      continue
+    }
+    literal += content[index]
+  }
+  flush()
+  return results
+}
+
+/** Every rendering of the spin groups in order, at most `limit` (for proofreading spintax). */
+export function listContentSpinOptions(content: string | undefined | null, limit = 200): string[] {
+  return listSpin(String(content || ''), Math.max(1, limit), 0)
+}
