@@ -1,6 +1,6 @@
 # Lọc trùng SĐT khi tải dữ liệu trên Desktop + V493
 
-Trạng thái (10/11/2026): code Desktop ở nhánh `claude/bold-hawking-4m2grp` (tách lại từ `dev_3` sau #633), **chưa merge, chưa build/phát hành**. **V493 ĐÃ apply akachat lúc 23:40:04 VN 10/11/2026** (`20261110164004 / migration_v493_campaign_input_duplicates_desktop`) theo yêu cầu "áp dụng cho desktop app akaAgent"; **không apply lại** (preflight từ chối khi Desktop đã có quyền); md5 sổ migration = md5 file `cbff0334481a6bec8758de67b86a0e96`. Biên nhận: [`migrations/snapshots/campaign-input-duplicates-desktop-v493/apply-receipt.json`](../migrations/snapshots/campaign-input-duplicates-desktop-v493/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn).
+Trạng thái (11/11/2026): code Desktop **đã merge `dev_3` qua #634** (nhánh `claude/bold-hawking-4m2grp`, tách lại từ `dev_3` sau #633), **chưa build/phát hành**. **V493 ĐÃ apply akachat lúc 23:40:04 VN 10/11/2026** (`20261110164004 / migration_v493_campaign_input_duplicates_desktop`) theo yêu cầu "áp dụng cho desktop app akaAgent"; **không apply lại** (preflight từ chối khi Desktop đã có quyền); md5 sổ migration = md5 file `cbff0334481a6bec8758de67b86a0e96`. Biên nhận: [`migrations/snapshots/campaign-input-duplicates-desktop-v493/apply-receipt.json`](../migrations/snapshots/campaign-input-duplicates-desktop-v493/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn).
 
 Bản Web (V491, hàm, quy tắc đối chiếu, số đo, công tắc): [CAMPAIGN_INPUT_DUPLICATES_V491.md](CAMPAIGN_INPUT_DUPLICATES_V491.md) và akaAgentWebApp `docs/CAMPAIGN_INPUT_DUPLICATES.md`. Desktop dùng **chung hàm V491 và chung công tắc** `web.campaign_input_duplicates` (đang `all`): đổi công tắc có hiệu lực cho cả hai, không cần phát hành lại.
 
@@ -121,5 +121,5 @@ Chưa thử được:
 
 ## Còn lại
 
-1. Merge nhánh vào `dev_3`, phát hành Desktop trong bản sau (V493 đã apply). Desktop cũ không có khung nên không gọi hàm.
+1. Phát hành Desktop trong bản sau (code đã merge `dev_3` #634, V493 đã apply). Desktop cũ không có khung nên không gọi hàm.
 2. Sau khi phát hành (và sau khi deploy API/Web): theo dõi `edge_logs` `rpc/aka_agent_read_campaign_input_duplicates` theo IP — lượt Desktop (IP khách) và Web (`167.88.158.106`): số lượt, thời gian, lỗi 57014/42501.
