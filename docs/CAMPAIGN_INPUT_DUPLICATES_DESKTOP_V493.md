@@ -74,6 +74,51 @@ Tải DB như Web: chỉ khi khách chọn lựa chọn 2/3 và bấm kiểm tra
 - `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `NODE_OPTIONS=--max-old-space-size=8192 npm run build`: đạt.
 - Chưa chạy: gọi RPC thật bằng phiên Desktop đăng nhập thật (mới thử quyền bằng role `aka_agent_desktop` ở hậu kiểm), Windows/macOS thật.
 
+### Kiểm thử bằng dữ liệu thật (00:05–00:17 VN 11/11/2026, chỉ đọc qua MCP)
+
+Mỗi lượt là một giao dịch `rollback`, chỉ SELECT (không bảng tạm, không ghi). Gọi đúng hàm V491 dưới `service_role` (cùng thân hàm Desktop gọi; Desktop chỉ khác bước xác thực). Mỗi lượt so với một truy vấn đối chứng đi theo chiến dịch (`idx_campaign_input_data_campaign_id`), không qua index md5 SĐT. Truy vấn đối chứng tính lại quy tắc: cùng loại, tài khoản trong danh sách, bỏ `staged`, bỏ chiến dịch loại trừ, dòng chưa xóa, trong N ngày VN, chiến dịch đã xóa chỉ tính dòng đã chạy. Số mẫu chọn ngẫu nhiên cố định theo md5. Tài liệu không ghi SĐT.
+
+| Lượt | Kết quả trả / đối chứng | Thiếu / thừa / lệch trường | Thời gian |
+|---|---|---|---|
+| Staff 1368, 30 ngày, 14 tài khoản Zalo, 238 mục (201 số hợp lệ khác nhau) theo nhóm | 86 / 86 | 0 / 0 / 0 | 469 ms |
+| Staff 1368, 7 ngày | 34 / 34 | 0 / 0 / 0 | 562 ms |
+| Staff 1368, chỉ tài khoản nhiều dữ liệu nhất | 31 / 31 | 0 / 0 / 0 | 9 ms |
+| Staff 1368, loại chiến dịch nhiều dữ liệu nhất (như "Thêm data") | 85 / 85 | 0 / 0 / 0 | 10 ms |
+| Staff 1368, 5.000 số (4.000 của staff + 1.000 của staff khác) chia 2.000/2.000/1.000 tuần tự như app | 3.643 / 3.643 | 0 / 0 / 0, không trùng giữa các lượt | 4,2 / 3,5 / 2,2 s |
+| Staff 917, theo nhóm | 68 / 68 | 0 / 0 / 0 | 307 ms |
+| Staff 756 (có chiến dịch "thêm thành viên nhóm" bằng SĐT), theo nhóm | 40 / 40 | 0 / 0 / 0 | 83 ms |
+| Staff 603 (155 nghìn dòng, phần lớn ở chiến dịch đã xóa chưa chạy), 2.000 số | 1.945 / 1.945 | 0 / 0 / 0 | **15,0 s nguội**, 1,5 s lặp lại |
+| Staff 385 (tổ chức lớn nhất, 76 tài khoản), 2.000 số | 1.706 mục | — | 1,2 s, 0,17 s lặp lại |
+
+Kết quả theo nhóm số (staff 1368/917/756):
+
+- Có ở ≥2 chiến dịch hoặc 1 chiến dịch: tìm thấy hết.
+- Chỉ có ở chiến dịch đã xóa: dòng đã chạy thì tìm thấy, "latest" ghi chiến dịch đã xóa (25/25, 6/6); dòng chưa chạy thì không tìm thấy (0/25, 0/25).
+- Chỉ cũ hơn 30 ngày: 0/25. Chỉ trong 7–30 ngày: thấy khi chọn 30 ngày, 0/30 khi chọn 7 ngày.
+- Số của nhân viên khác: 0/25. Số không có: 0/40.
+- Chỉ có ở loại chiến dịch khác (thêm thành viên nhóm): 0/20. Số có ở cả hai loại chỉ được đếm phần "Nhắn tin theo SĐT".
+- Khi loại một chiến dịch: số chỉ có ở chiến dịch đó không tìm thấy (0/30), và chiến dịch đó không bao giờ là "latest".
+- Khi chọn một tài khoản: số chỉ có ở tài khoản khác không tìm thấy (0/30).
+- `+84…` và `84 xxx xxx xxx` ra đúng số `0…`. `bad`, `123`, chuỗi rỗng bị bỏ (`phoneCount` = số hợp lệ khác nhau).
+
+Xác thực với dữ liệu thật:
+
+- Token Desktop của staff 1368 (ánh xạ qua `private.aka_agent_desktop_users`) qua được bước gắn nhân viên và dừng ở bước mật khẩu (`automation_auth_invalid`, app báo phiên không còn hợp lệ). Không dùng mật khẩu thật của khách.
+- Cùng token hỏi staff khác: `desktop_staff_scope_denied`. Tài khoản Zalo của nhân viên khác trong danh sách: `input_duplicates_account_scope_denied`.
+
+Dạng kết quả thật (3.849 mục của staff 603 + 1368):
+
+- Không mục nào thiếu SĐT, tên chiến dịch, tên tài khoản hay trạng thái. `processed` luôn boolean. Mốc thời gian có micro giây `+00:00`, `parseInputDuplicatesResult` và định dạng ngày/giờ đọc đúng.
+- `since` của DB (13/10/2026) trùng ngày `inputDuplicateWindowStart(30)` app hiện trước khi kiểm.
+- Trạng thái "tạm dừng" nhưng đã chạy hiện "Đã chạy".
+
+Chưa thử được:
+
+- `staged`: 6 nhân viên có chiến dịch `staged` nhưng 0 dòng data, chỉ kiểm ở bộ SQL cục bộ.
+- Bước mật khẩu thật của Desktop.
+
+**Rủi ro thời gian.** Một lượt 2.000 số phải đọc mọi dòng có cùng SĐT ở mọi tổ chức. Danh sách của staff 603 khớp 49.372 dòng ở 2.361 chiến dịch (27.756 dòng của chính staff). Khi bộ nhớ đệm nguội, lượt đó mất 15 s, gần trần 20 s của hàm; lặp lại chỉ 1,5 s. Quá 20 s thì app báo "quá thời gian" và "Thử lại" thường qua (lượt sau đã nóng). Muốn chắc hơn: renderer gửi 1.000 số mỗi lượt (giữ trần 2.000 ở API/DB), sửa hằng số chia lượt ở hợp đồng dùng chung WebApp rồi chép lại.
+
 ## Còn lại
 
 1. Merge nhánh vào `dev_3`, phát hành Desktop trong bản sau (V493 đã apply). Desktop cũ không có khung nên không gọi hàm.
