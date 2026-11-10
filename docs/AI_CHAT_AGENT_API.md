@@ -245,9 +245,11 @@ curl -s -X POST "$BASE/status" -H 'Content-Type: application/json' \
 
 ## Dành cho người vận hành
 
-- Mã nguồn: `supabase/functions/ai-chat-agent/` (`handler.ts` là toàn bộ logic, `index.ts` nối với Supabase). Hàm gọi RPC `aka_agent_ai_chat_worker` của V488 bằng `service_role`: `/list` → `list`, `/start` → `claim` kèm `messageId` và `stage: "working"`, `/answer` → `answer` kèm `complete: true`, `/status` → `fail` (`"dừng"` = `stopped`, `"chờ câu trả lời"` = `retryable`). Hàm không gửi `claimToken` nên RPC ghi theo `messageId`: chỉ nên chạy một agent, vì hai agent cùng giữ một `messageId` sẽ không bị chặn ghi đè nhau.
+Agent không cần đọc phần này.
+
+- Mã nguồn: `supabase/functions/ai-chat-agent/` (`handler.ts` là toàn bộ logic, `index.ts` nối với Supabase). Hàm gọi RPC `aka_agent_ai_chat_worker` của V488 bằng `service_role`: `/list` → `list`, `/start` → `claim` kèm `messageId` và `stage: "working"`, `/answer` → `answer` kèm `complete: true`, `/status` → `fail` (`"dừng"` = `stopped`, `"chờ câu trả lời"` = `retryable`). RPC ghi theo `messageId`, không có mã khóa theo từng agent: chỉ nên chạy một agent, vì hai agent cùng xử lý một `messageId` sẽ không bị chặn ghi đè nhau.
 - Điều kiện chạy: đã apply `migrations/migration_v488_ai_chat.sql`, rồi `supabase functions deploy ai-chat-agent --project-ref cgjbsmqtfhqvttudyjzq`. `verify_jwt = false` khai trong `supabase/config.toml`.
-- API đang mở theo yêu cầu: ai biết địa chỉ đều đọc được câu hỏi đang chờ và ghi được câu trả lời. Khóa lại không cần sửa code: `supabase secrets set AI_CHAT_AGENT_KEY=<chuỗi bí mật>`, từ đó mọi lời gọi phải gửi header `x-agent-key: <chuỗi bí mật>`.
+- API mở hoàn toàn theo yêu cầu (chỉ dùng nội bộ): ai biết địa chỉ đều đọc được câu hỏi đang chờ và ghi được câu trả lời. Mặc định không có bước xác thực nào. Chỉ khi sau này muốn khóa lại mới đặt secret `AI_CHAT_AGENT_KEY` trên Supabase (lúc đó lời gọi phải kèm header `x-agent-key`); không đặt thì không có gì thay đổi.
 - Tắt nhanh: `auto_system_settings` khóa `ai_chat.enabled = 'false'` (`/list` trả `enabled: false`), hoặc xóa function.
 - Hạn chờ 20 phút là `ai_project.timeout_seconds` của từng agent (30–3600 giây).
 - Kiểm thử cục bộ: `bash scripts/ai-chat/edge_agent_smoke.sh` (31 khẳng định, handler chạy với hàm SQL thật).
