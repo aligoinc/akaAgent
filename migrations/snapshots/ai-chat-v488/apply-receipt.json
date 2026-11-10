@@ -56,6 +56,9 @@
     "Chưa có câu hỏi thật nào trên production (API/Web WebApp chưa deploy) nên chưa chạy trọn vòng list → start → answer với dữ liệu thật; vòng này đã chạy trên PostgreSQL cục bộ (scripts/ai-chat/edge_agent_smoke.sh, 31 khẳng định).",
     "Edge Function mở không xác thực theo yêu cầu; secret AI_CHAT_AGENT_KEY chưa đặt."
   ],
+  "after_apply": [
+    "2026-11-10 13:19:23 VN: UPDATE ai_project SET audience='all' WHERE code='hoi-dap-chien-dich' AND audience='admin_akabiz' (1 dòng, theo yêu cầu); gọi thử action agents dưới service_role rồi ROLLBACK: staff 1, 724 (không phải admin akaBiz) và staff 4 (admin akaBiz) đều nhận 1 nhóm. Lúc đổi: 0 hội thoại, 0 câu đang chờ, ai_chat.enabled = true. Kèm version 1 → 2 theo quy trình ở akaAgentWebApp docs/AI_CHAT.md. Thu lại: audience = 'admin_akabiz'."
+  ],
   "local_test": "scripts/ai-chat/smoke_v488.sh 118 khẳng định + apply lại bị từ chối + rollback; stress_v488.sh 0 khóa chéo; edge_agent_smoke.sh 31 khẳng định",
   "rollback": "migrations/rollback_v488_ai_chat.sql (xóa toàn bộ hội thoại); tắt nhanh: ai_chat.enabled = 'false'; gỡ function: xóa ai-chat-agent"
 }

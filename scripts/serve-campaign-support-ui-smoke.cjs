@@ -6,7 +6,7 @@ const { buildSync } = require('esbuild')
 const directory = mkdtempSync(join(tmpdir(), 'akaagent-support-ui-'))
 buildSync({ entryPoints: [join(__dirname, 'campaign-support-ui-smoke.tsx')], outdir: directory,
   bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', target: 'chrome120',
-  define: { 'process.env.NODE_ENV': '"development"' }, logLevel: 'warning' })
+  define: { 'process.env.NODE_ENV': '"development"', __AKA_LEGACY_CAMPAIGN_ASSISTANT__: 'true' }, logLevel: 'warning' })
 writeFileSync(join(directory, 'index.html'), '<!doctype html><html lang="vi"><meta charset="utf-8"><title>Trợ lý AI — smoke</title><link rel="stylesheet" href="campaign-support-ui-smoke.css"><body><div id="root"></div><script src="campaign-support-ui-smoke.js"></script></body></html>')
 const allowed = { '/': ['index.html', 'text/html'], '/campaign-support-ui-smoke.css': ['campaign-support-ui-smoke.css', 'text/css'],
   '/campaign-support-ui-smoke.js': ['campaign-support-ui-smoke.js', 'text/javascript'] }
