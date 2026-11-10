@@ -26,6 +26,12 @@ cũ giữ checksum; native host khôi phục; log lệnh có thời điểm.
 Server không chạy Facebook/webview) hay không. 9.3.0 → 9.5.0: 3/166 file giao, chỉ dùng cho Desktop,
 nên không build lại.
 
+**Build riêng App Server.** Server cần thay đổi mà Desktop cùng số chưa có thì tăng bản vá
+(vd [9.5.1](../../audits/akaagent-server-9.5.1-20261110/README.md)); Server không có updater/feed.
+Chụp lại `dist-server/private/verification-before.json` (mọi `.exe` dưới `dist-server/` và native
+host) ngay trước build, vì `scripts/staff-rls/verify-private-server-build.cjs` so với file này.
+Dựng đồ thị bằng esbuild thì renderer Server vào từ `src/server/renderer/index.ts`.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

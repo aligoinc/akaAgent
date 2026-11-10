@@ -37,6 +37,7 @@ import { appAccessAPI } from './appAccessBridge'
 import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
+import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../shared/aiChatDesktop'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
@@ -49,6 +50,7 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
+import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -222,6 +224,9 @@ const electronAPI = {
 
   chatCampaignAssistant: (request: CampaignAssistantChatRequest): Promise<CampaignAssistantChatResponse> =>
     ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CHAT, request),
+
+  aiChatCall: (action: AiChatDesktopAction, payload: Record<string, unknown>): Promise<AiChatIpcResult> =>
+    ipcRenderer.invoke(AI_CHAT_IPC.call, action, payload),
 
   openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),
@@ -747,6 +752,10 @@ const electronAPI = {
 
   getAccountActionOverview: (accountId: number, actionCodes?: string[]): Promise<AccountActionOverview[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId, actionCodes),
+
+  /** Tab "Hành động" của chi tiết chiến dịch: chỉ đọc, không tạo/reset trạng thái hành động. */
+  getCampaignAccountActions: (campaignId: number): Promise<CampaignAccountActionsResult> =>
+    ipcRenderer.invoke(CAMPAIGN_ACCOUNT_ACTIONS_IPC, campaignId),
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),

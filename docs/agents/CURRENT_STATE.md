@@ -1,5 +1,16 @@
 # Trạng thái đã xác nhận — cập nhật 10/11/2026
 
+[Build akaAgent Zalo Server 9.5.1](../audits/akaagent-server-9.5.1-20261110/README.md):
+**Đã build local App Server Windows x64 nội bộ lúc 13:28:54–13:29:42 VN, 10/11/2026.
+Chưa cài lên VPS, chưa upload.** Nguồn repo chính, nhánh `claude/server-rest-request-reduction`
+(chưa push) `d1400ddb` trên `dev_3` `0700b2e4`: commit `8e35255e` giảm request REST của
+App Server (run control 15 giây khi nghỉ, `enable_due` 1 lần/30 giây, một câu đọc chiến dịch
+đến hạn cho cả tick, bỏ qua chiến dịch Zalo đang chặn hạn mức tối đa 5 phút) cộng commit
+version. Hai typecheck, smoke, manifest đầu vào 1.231 file, verifier private Server, version/PE,
+quét credential 162 file và native SQLite đạt. Chưa ký, chưa chạy Windows thật, chưa đo lại
+request sau cài. Desktop không build lại; Desktop 9.5.0 không có thay đổi này. Không DB/deploy service.
+[Receipt](../audits/akaagent-server-9.5.1-20261110/build-receipt.json).
+
 [Build akaAgent Desktop 9.5.0](../audits/akaagent-9.5.0-20261110/README.md):
 **Đã build local Windows x64, Mac ARM64 và Mac Intel x64 lúc 09:16–09:20 VN,
 10/11/2026. Chưa upload/phát hành/feed.**

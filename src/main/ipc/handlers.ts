@@ -37,6 +37,7 @@ import { registerCampaignHandlers } from './handlers/campaignHandlers'
 import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
 import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
+import { registerCampaignAccountActionsHandlers } from './handlers/campaignAccountActionsHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers, type AuthRenewalControl } from './handlers/authHandlers'
@@ -67,6 +68,7 @@ import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutC
 import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHandlers'
 import { registerCampaignTypeVisibilityHandlers } from './handlers/campaignTypeVisibilityHandlers'
 import { registerNotificationCenterHandlers } from './handlers/notificationCenterHandlers'
+import { registerAiChatHandlers } from './handlers/aiChatHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -182,6 +184,7 @@ export function registerIpcHandlers(
   registerBrowserRunLimitsHandlers(mainWindow)
   registerCampaignTypeVisibilityHandlers(mainWindow)
   registerNotificationCenterHandlers(mainWindow)
+  registerAiChatHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()
@@ -1497,6 +1500,7 @@ export function registerIpcHandlers(
     }
   })
   registerCampaignPendingReasonHandlers(mainWindow, campaignScheduler)
+  registerCampaignAccountActionsHandlers(mainWindow)
   registerCampaignHandlers(supabase, {
     requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)

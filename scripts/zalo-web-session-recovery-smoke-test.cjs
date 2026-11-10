@@ -422,9 +422,10 @@ async function runSchedulerChecks() {
   const parsed = ts.createSourceFile('scheduler.ts', read('src/main/services/campaignScheduler.ts'), ts.ScriptTarget.Latest, true)
   const klass = parsed.statements.find(node => ts.isClassDeclaration(node) && node.name.text === 'CampaignScheduler')
   const tick = klass.members.find(node => node.name?.getText(parsed) === 'tick')
+  const loadPending = klass.members.find(node => node.name?.getText(parsed) === 'loadPendingCampaignsForTick')
   const out = {}
-  vm.runInNewContext(compile(`export class SchedulerSubject { ${tick.getText(parsed)} }`), {
-    ...globals, exports: out, queueMicrotask,
+  vm.runInNewContext(compile(`export class SchedulerSubject { ${tick.getText(parsed)} ${loadPending.getText(parsed)} }`), {
+    ...globals, exports: out, queueMicrotask, claimEnableDueAccountActionsSlot: () => true,
     accountOperationRegistry: { has: () => false }, isSchedulerConnectivityError: () => false,
     getErrorMessage: error => { throw error }
   })
@@ -441,8 +442,10 @@ async function runSchedulerChecks() {
     getReadyRuntimeClock: async () => ({ dbNow: new Date().toISOString() }),
     supabase: {
       enableDueAccountActions: async () => {}, getEligibleAccounts: async () => accounts,
-      getPendingCampaigns: async id => [{ id, accountId: id }]
+      getPendingCampaigns: async () => assert.fail('tick reads all fixture accounts in one batch'),
+      getPendingCampaignsForAccounts: async ids => new Map(ids.map(id => [id, [{ id, accountId: id }]]))
     },
+    prunePreclaimLimitSkips: () => {},
     shouldProcessAccountForRuntime: () => true, isSmsAccount: () => false,
     isWithinCampaignDispatchSchedule: () => true, // All fixture campaigns are due; this tests the Web-session gate.
     finalizeDataGroupCampaignAtHardEnd: async () => false, isRealtimeCampaignDisabledForRuntime: () => false,

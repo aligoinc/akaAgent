@@ -5,6 +5,8 @@ import LogPanel from '../components/CampaignPanels/LogPanel'
 import type { OpenGeneralSettings } from '../components/Settings/GeneralSettingsModal'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../../shared/types'
 import type { CampaignAssistantMode, CampaignAssistantOpenRequest } from '../../../shared/campaignSupport'
+import { useAiChatAgents, useAiChatAttention } from '../components/AiChat/aiChatStore'
+import { useAuthStore } from '../stores/authStore'
 
 interface CampaignPageProps {
   isActive: boolean
@@ -81,9 +83,14 @@ export default function CampaignPage({ isActive, accountOpenRequest, onNavigateT
     handleOpenAccountInfo(accountOpenRequest.accountId)
   }, [accountOpenRequest?.accountId, accountOpenRequest?.requestId, handleOpenAccountInfo])
 
-  const handleAskAssistant = useCallback((campaignId: number, mode: CampaignAssistantMode) => {
-    setAssistantOpenRequest({ campaignId, mode, requestId: crypto.randomUUID() })
+  const handleAskAssistant = useCallback((campaignId: number, mode: CampaignAssistantMode, aiChat?: CampaignAssistantOpenRequest['aiChat']) => {
+    setAssistantOpenRequest({ campaignId, mode, requestId: crypto.randomUUID(), ...(aiChat ? { aiChat } : {}) })
   }, [])
+
+  // Hỏi đáp AI (V488): một lần tải danh sách agent và một bộ theo dõi "cần chú ý" cho cả trang, theo tài khoản đang đăng nhập.
+  const aiChatScope = useAuthStore(state => state.user ? `${state.user.organizationId}:${state.user.staffId}` : '')
+  const aiChatAgents = useAiChatAgents(aiChatScope)
+  useAiChatAttention({ scopeKey: aiChatScope, enabled: !!aiChatAgents && !!aiChatScope })
 
   const handleDiagnosticsChanged = useCallback(() => setDiagnosticsRevision(value => value + 1), [])
 
@@ -120,6 +127,7 @@ export default function CampaignPage({ isActive, accountOpenRequest, onNavigateT
           onOpenGeneralSettings={onOpenGeneralSettings}
           onOpenContentTemplates={onOpenContentTemplates}
           onAskAssistant={handleAskAssistant}
+          aiChatAgents={aiChatAgents}
           accountInfoOpenRequest={accountInfoOpenRequest}
           randomPlanRequest={randomPlanRequest}
           dataGroupCampaignRequest={dataGroupCampaignRequest}
@@ -135,7 +143,7 @@ export default function CampaignPage({ isActive, accountOpenRequest, onNavigateT
 
       {/* Log Panel */}
       <div className="campaign-page-panel" style={{ width: panelWidths[2], minWidth: 200 }}>
-        <LogPanel assistantOpenRequest={assistantOpenRequest} isActive={isActive} diagnosticsRevision={diagnosticsRevision}
+        <LogPanel assistantOpenRequest={assistantOpenRequest} isActive={isActive} diagnosticsRevision={diagnosticsRevision} aiChatEnabled={!!aiChatAgents}
           onDiagnosticAction={(campaign, action) => setDiagnosticActionRequest({ campaign, action, requestId: crypto.randomUUID() })} />
       </div>
     </div>

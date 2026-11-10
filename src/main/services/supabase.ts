@@ -336,6 +336,9 @@ export class SupabaseService {
     return campaignRepo.checkDailyMaintenanceBarrier(runtimeTarget, vietnamDateKey)
   }
   getPendingCampaigns(accountId: number, dbNow: string) { return campaignRepo.getPendingCampaigns(accountId, dbNow) }
+  getPendingCampaignsForAccounts(accountIds: number[], dbNow: string) {
+    return campaignRepo.getPendingCampaignsForAccounts(accountIds, dbNow)
+  }
   getDueMobileManagedCampaignsForLimitCheck(accountId: number, dbNow: string) {
     return campaignRepo.getDueMobileManagedCampaignsForLimitCheck(accountId, dbNow)
   }
