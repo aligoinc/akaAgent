@@ -24,3 +24,8 @@ verify_jwt = false
 # managed Auth user before registering or revoking a private session mapping.
 [functions.aka-agent-desktop-session]
 verify_jwt = false
+
+# Nội bộ, mở theo yêu cầu (10/11/2026): agent trả lời Hỏi đáp AI gọi không cần token.
+# Khóa lại bằng secret AI_CHAT_AGENT_KEY (header x-agent-key), xem docs/AI_CHAT_AGENT_API.md.
+[functions.ai-chat-agent]
+verify_jwt = false
