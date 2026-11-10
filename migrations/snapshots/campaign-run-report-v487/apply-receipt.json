@@ -1,0 +1,68 @@
+{
+  "migration": "migration_v487_campaign_run_report",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110013824",
+  "applied_at_vn": "2026-11-10T08:38:24+07:00",
+  "applied_via": "Supabase MCP apply_migration",
+  "file_md5": "55e0554a037ccc03496f042f402da018",
+  "ledger_statements_md5": "55e0554a037ccc03496f042f402da018",
+  "ledger_rows_named_v487": 1,
+  "preflight": {
+    "function_existed": false,
+    "ledger_had_v487": false,
+    "dependencies": "auto_campaigns, auto_campaign_details (report_group/status_id/sub_status_id/action_code/action_name/input_data_id), auto_campaign_input_data, auto_campaign_detail_zalo_engagement, auto_status (code/name/status_value), org_staff, auto_assert_automation_identity",
+    "indexes": ["idx_campaign_details_page", "idx_campaign_input_data_progress_live"]
+  },
+  "postflight": {
+    "signature": "public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb) returns jsonb",
+    "functiondef_md5": "69c9d1edc07766dbacffbad56beae73a",
+    "prosrc_md5": "4bd734ca25612bfdade631c779373d42",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "stable",
+    "config": ["search_path=pg_catalog, public", "statement_timeout=60s"],
+    "execute_grantees": ["postgres", "service_role"],
+    "no_execute": ["PUBLIC", "anon", "authenticated", "aka_agent_desktop"],
+    "smoke_service_role": "campaign 25238 ok"
+  },
+  "postgrest_reload": {
+    "window_utc": "2026-11-10T01:38:24Z..2026-11-10T01:38:37Z",
+    "schema_query_ms": 11800,
+    "minute_avg_latency_ms": 132.6,
+    "baseline_avg_latency_ms": "46-57",
+    "http_503": 0,
+    "http_500": "1, aka_agent_list_contact_datasets (Desktop, existing 3 s timeouts: 22 of ~91 calls in 24 h), unrelated"
+  },
+  "production_measurements": {
+    "cold_ms_per_result_row": "0.75-0.79",
+    "campaign_17773": { "results": 19008, "inputs": 8828, "cold_ms": 14560, "pages_read": 18047, "warm_ms": "165-421", "json_kb": 8.8 },
+    "campaign_25238": { "results": 11784, "cold_ms": 8550, "pages_read": 10770, "warm_ms": "103-245", "json_kb": 7.3 },
+    "campaign_11980": { "results": 63636, "cold_ms_estimate": 48000 },
+    "timeout_decision": "statement_timeout 20s -> 60s before apply (first dry run stopped with 57014 at 55 s on consecutive cold reads); WebApp API deadline 25s -> 65s"
+  },
+  "dry_run": [
+    "1: migration body in a transaction, rolled back by RAISE; stopped with 57014 at 55 s on consecutive cold reads of the largest campaigns",
+    "2: same with 60 s; 17773 and 25238 results.total = aka_agent_list_campaign_details_page_v2 total = sum(groups) = sum(timeline); inputs = aka_agent_control_campaign_progress input_total = sum(inputOutcomes); completed/failed = input_completed/input_failed"
+  ],
+  "post_apply_sample": {
+    "at_vn": "2026-11-10T09:08:15+07:00",
+    "campaigns": 10,
+    "by_account_kind": { "facebook": 3, "sms": 3, "zalo_qr": 1, "zalo_web": 3, "zalo_server": 1 },
+    "skipped_over_1500_results": 5,
+    "per_call_ms": "3.9-165.9",
+    "json_bytes": "1169-5498",
+    "invariants": "results.total = sum(groups) = sum(timeline); sum(inputs) = sum(inputOutcomes); 0 invalid group/outcome/id values; every statusId/subStatusId listed in statuses",
+    "webapp_contract": "51342 (facebook_group_post) and 52066 (zalo_message_phone) parsed by parseCampaignRunReportRpc and built by buildCampaignRunReport without error; totals match across actions, timeline and input matrix"
+  },
+  "compatibility": [
+    "Adds one function only; no table, column, index, policy, existing function, role timeout, pool or connection change.",
+    "No caller until WebApp API/Web is deployed (branch claude/loving-mccarthy-irdevx); Desktop does not call it.",
+    "DDL: PostgREST reloaded its schema once (13 s window above)."
+  ],
+  "local_test": "akaAgentWebApp scripts/test-campaign-run-report-sql.sh with AKA_AGENT_REPO pointing here — PostgreSQL 16, 36/36, re-apply refused, missing-index preflight stops",
+  "rollback": "migrations/rollback_v487_campaign_run_report.sql (DROP FUNCTION only; file md5 6e08c744fa393d4c723df3c2e8f9ea74)",
+  "notes": [
+    "Do not reapply; the preflight raises v487_target_already_exists_do_not_overwrite.",
+    "Do not edit the migration file after apply: the ledger stores its exact text."
+  ]
+}
