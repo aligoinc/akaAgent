@@ -6,6 +6,8 @@ import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest } from '../../../shared
 import { handleEffectivenessRequest } from '../../services/effectivenessReportService'
 import { DATA_REPORT_IPC, type DataReportIpcRequest } from '../../../shared/dataReportIpc'
 import { handleDataReportRequest } from '../../services/dataReportService'
+import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest } from '../../../shared/campaignRunReportIpc'
+import { handleCampaignRunReportRequest } from '../../services/campaignRunReportService'
 
 export function registerReportHandlers(supabase: SupabaseService): void {
   ipcMain.handle(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_SUMMARY, async (_, query: AccountActionReportQuery) => {
@@ -27,4 +29,7 @@ export function registerReportHandlers(supabase: SupabaseService): void {
 
   // Báo cáo dữ liệu: nightly snapshot (V469) and one customer's journey; same envelope, never throws.
   ipcMain.handle(DATA_REPORT_IPC, (_, request: DataReportIpcRequest) => handleDataReportRequest(request))
+
+  // Tab "Báo cáo" của chi tiết chiến dịch: one V487 read per open/refresh; same envelope, never throws.
+  ipcMain.handle(CAMPAIGN_RUN_REPORT_IPC, (_, request: CampaignRunReportIpcRequest) => handleCampaignRunReportRequest(request))
 }

@@ -77,6 +77,7 @@ import AccountInfoModal from './AccountInfoModal'
 import CampaignAccountActionsTab from './CampaignAccountActionsTab'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
+import { CampaignRunReportTab, type CampaignReportDrillTarget } from './CampaignRunReport/CampaignRunReportTab'
 import { buildCampaignContentPreview } from './campaignContentPreview'
 import { getContentTemplateChannelForAction } from './contentTemplateCampaignUtils'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
@@ -113,7 +114,7 @@ interface CampaignPanelProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'accountActions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'report' | 'accountActions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'findDataLogScope'
@@ -2475,6 +2476,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [navigationLoadCompletedRequestId, setNavigationLoadCompletedRequestId] = useState<number | null>(null)
   const [detailDockOpen, setDetailDockOpen] = useState(true)
   const [detailTab, setDetailTab] = useState<DetailTab>('info')
+  // Tab Báo cáo giữ nguyên số đã tải khi chuyển qua tab khác của cùng chiến dịch (như Web); đổi chiến dịch/đóng khung thì tải lại.
+  const [reportCampaignId, setReportCampaignId] = useState<number | null>(null)
+  // Mục menu "Xem báo cáo chi tiết" dựng lại tab Báo cáo (đọc số mới) như Web.
+  const [reportOpenRevision, setReportOpenRevision] = useState(0)
   const [randomPlanAccountId, setRandomPlanAccountId] = useState<number | null>(null)
   const randomPlanAccount = accounts.find(account => account.id === randomPlanAccountId)
   useEffect(() => {
@@ -2798,6 +2803,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   }, [detailTab, supportsContentPreview])
 
   const loadOlderHistory = useCampaignRunLog(selectedCampaignId, isActive && detailDockOpen && detailTab === 'runLog')
+
+  useEffect(() => {
+    if (detailTab === 'report' && selectedCampaignId) setReportCampaignId(selectedCampaignId)
+  }, [detailTab, selectedCampaignId])
 
   // Load only the data needed by the active campaign detail tab.
   useEffect(() => {
@@ -5156,6 +5165,24 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     void aiChatAttention.refresh()
   }
 
+  // Bấm một số ở tab Báo cáo: mở Data ban đầu/Kết quả chạy đã lọc đúng trạng thái trên toàn thời gian (null = bỏ lọc).
+  const openReportDrillTab = (target: CampaignReportDrillTarget, status: string | null) => {
+    if (target === 'data') {
+      setInputDataSearch('')
+      setDebouncedInputDataSearch('')
+      setInputDataOriginFilter('all')
+      setInputDataFilters({ ...createDefaultDetailFilters(), status: status || '' })
+      setInputDataPage(1)
+      setDetailTab('data')
+      return
+    }
+    setActionDetailSearch('')
+    setDebouncedActionDetailSearch('')
+    setActionDetailFilters({ ...createDefaultDetailFilters(), status: status || '' })
+    setActionDetailPage(1)
+    setDetailTab('actions')
+  }
+
   const openCampaignDetailTab = (campaign: CampaignListItem, tab: DetailTab) => {
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
@@ -6449,7 +6476,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                               className="campaign-action-menu-item"
                               onClick={() => {
                                 setOpenCampaignActionMenuId(null)
-                                openCampaignDetailTab(campaign, 'actions')
+                                setReportOpenRevision(value => value + 1)
+                                openCampaignDetailTab(campaign, 'report')
                               }}
                               role="menuitem"
                             >
@@ -6705,6 +6733,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 >
                   Kết quả chạy ({campaignDetailPageTotal})
                 </button>
+                <button
+                  className={`detail-dock-tab ${detailTab === 'report' ? 'active' : ''}`}
+                  onClick={() => setDetailTab('report')}
+                >
+                  Báo cáo
+                </button>
                 {supportsContentPreview && (
                   <button
                     className={`detail-dock-tab ${detailTab === 'contentPreview' ? 'active' : ''}`}
@@ -6796,6 +6830,19 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               </div>
 
               <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : ''}`}>
+              {/* Tab: Báo cáo (V487 qua IPC report:campaign-run); giữ đã tải khi chuyển tab trong cùng chiến dịch */}
+              {selectedCampaignSummary && reportCampaignId === selectedCampaignSummary.id && (
+                <div hidden={detailTab !== 'report'}>
+                  <CampaignRunReportTab
+                    key={`${selectedCampaignSummary.id}:${reportOpenRevision}`}
+                    campaign={selectedCampaignSummary}
+                    active={isActive && detailDockOpen && detailTab === 'report'}
+                    sessionKey={campaignSourceScope || ''}
+                    onOpenTab={openReportDrillTab}
+                    onAddData={campaign => void handleOpenAddDataToCurrentCampaignModal(campaign)}
+                  />
+                </div>
+              )}
               {/* Tab: Campaign info */}
               {detailTab === 'info' && (
                 selectedCampaignConfig ? (
