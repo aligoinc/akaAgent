@@ -4,8 +4,9 @@ Trạng thái: migration/tài liệu **đã merge `dev_3`** (PR #628, 18:17 VN).
 migration_v490_control_session_chat_scope`) theo yêu cầu của người dùng; **không apply lại** (preflight từ chối
 khi hàm đã có); md5 sổ migration = md5 tệp `def9660b54e21b590bd12f6206009eb7`. Biên nhận:
 [`migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json`](../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
-Sau khi apply không sửa tệp migration (sổ lưu nguyên văn). Caller: WebApp API (aligoinc/akaAgentWebApp#190,
-**chưa deploy**; xem `akaAgentWebApp/docs/IOS_PACKAGE_ACCESS.md`), app iOS chưa phát hành, nên chưa ai gọi hàm mới.
+Sau khi apply không sửa tệp migration (sổ lưu nguyên văn). Caller: WebApp API (aligoinc/akaAgentWebApp#190),
+**đã deploy 10/11/2026 20:28 VN** (Fly v100, `dev` `8c50d80`; xem `akaAgentWebApp/docs/WEB_APP_DEPLOY_20261110.md`). API chỉ gọi
+hàm mới cho request có `x-aka-chat-only: 1` của app iOS mới (chưa phát hành), nên vẫn chưa có lượt gọi thật.
 
 ## Vì sao
 
