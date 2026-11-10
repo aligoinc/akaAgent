@@ -1,15 +1,27 @@
 # Sửa gốc hàm nạp nhóm data: V484, V485, V486 (09/11/2026)
 
-**Trạng thái: CHƯA apply production.** Code đã xong và kiểm thử cục bộ trên Postgres 17 + pg_cron với hàm live thật.
+**Trạng thái (09/11/2026 23:42 VN): đã apply đủ V483, V484 (3 phần), V485 (2 phần), V486 lên akachat, không apply
+lại; công tắc `async` cho tổ chức 701 (staff 724) từ 23:39:34 VN, các tổ chức khác vẫn `sync`.** V483 `20261109120408`
+(19:04:08 VN), V484 p1 `20261109140318` (21:03:18), p2 `20261109141035` (21:10:35), p3 `20261109142517` (21:25:17) qua
+MCP `apply_migration`; V485 p1 `20261109163531` (23:35:31), p2 `20261109163859` (23:38:59), V486 `20261109163917`
+(23:39:17) dán SQL Editor bằng script guarded, vì hộp xác nhận MCP hết hạn 4 lần không ai bấm (~21:50, ~22:15, ~22:24,
+~23:02 VN; lần nào kiểm chỉ đọc cũng thấy không chạy gì). md5 sổ migration khớp file từng phần, md5 hàm đích khớp
+postflight (hàm nạp lõi `dc8ccc8c…`, worker `dda4a682…`, 3 hàm kiểm quyền plpgsql). Job pg_cron 112
+`aka-agent-data-group-route-worker` 10 giây/lượt, 816/816 lượt thành công tới 23:41 VN; 20:55–23:42 VN 0 lỗi 5xx/503
+(phút apply V485 p1 có 45 request quá 1 giây, phút sau về 45 ms). Dòng sổ do script guarded ghi có `created_by` NULL
+(dòng MCP ghi email). [Biên nhận](../migrations/snapshots/data-group-routing-v483-v486/apply-receipt.json).
+Lượt nạp thật đầu tiên sau đó (tổ chức 1750, `scan`, 23:46:20 VN) chạy hàm nạp bản V485 theo đường `sync`: 11 thành
+viên, 18 input. 3 RPC phiên nhập file chỉ được gọi bởi client mới (API WebApp sau akaAgentWebApp#177, Desktop bản sau);
+tới 23:46 VN chưa có lời gọi nào, client cũ vẫn gửi một lần như cũ.
 Phương án gốc: [DATA_GROUP_INGEST_ROUTING_PLAN.md](DATA_GROUP_INGEST_ROUTING_PLAN.md). Chia lô phía app (đã merge):
 akaAgentWebApp `docs/DATA_GROUP_INGEST_CHUNKING.md`.
 
 | Migration | Việc | Phần | Kiểm thử |
 |---|---|---|---|
-| V483 (đã có) | Chặn sớm lần nạp chắc chắn quá 60 giây (PT413) ở 2 wrapper Desktop | 1 file | `bash scripts/test-v483-data-group-ingest-budget.sh` |
-| V484 | Đẩy data nhóm vào chiến dịch chạy nền (hàng đợi + worker pg_cron), bật theo tổ chức | p1, p2, p3 | `python3 scripts/data-group-routing/test_v484.py` (67/67) |
-| V485 | Nhập file nhiều phần (begin → append × N → finish), tới 100.000 dòng | p1, p2 | `python3 scripts/data-group-routing/test_v485.py` (95/95) |
-| V486 | Kiểm quyền đọc nhóm chia sẻ dùng plan chung (đẩy nhanh ~2,4 lần) | 1 file | `python3 scripts/data-group-routing/test_v486.py` (30/30) |
+| V483 (đã apply 09/11 19:04:08 VN) | Chặn sớm lần nạp chắc chắn quá 60 giây (PT413) ở 2 wrapper Desktop | 1 file | `bash scripts/test-v483-data-group-ingest-budget.sh` |
+| V484 (đã apply 09/11 21:03–21:25 VN) | Đẩy data nhóm vào chiến dịch chạy nền (hàng đợi + worker pg_cron), bật theo tổ chức | p1, p2, p3 | `python3 scripts/data-group-routing/test_v484.py` (67/67) |
+| V485 (đã apply 09/11 23:35–23:39 VN) | Nhập file nhiều phần (begin → append × N → finish), tới 100.000 dòng | p1, p2 | `python3 scripts/data-group-routing/test_v485.py` (95/95) |
+| V486 (đã apply 09/11 23:39:17 VN) | Kiểm quyền đọc nhóm chia sẻ dùng plan chung (đẩy nhanh ~2,4 lần) | 1 file | `python3 scripts/data-group-routing/test_v486.py` (33/33) |
 
 File sinh bằng `scripts/build-v484-sql.py`, `build-v485-sql.py`, `build-v486-sql.py` từ định nghĩa live đã chụp
 (kiểm checksum); đừng sửa tay. Mỗi chỗ vá là thay chuỗi nguyên văn, preflight kiểm md5 `pg_get_functiondef` của đúng
@@ -96,6 +108,13 @@ vấn giữ nguyên), `group_access` thêm `SET plan_cache_mode = force_generic_
 nên lập kế hoạch lại mỗi lần gọi; mỗi cặp (thành viên, chiến dịch) gọi 2 lần ≈ 52% thời gian đẩy. Migration tự đối
 chiếu trên dữ liệu thật trong cùng giao dịch (≤ 500 nhóm × 6 người xem), lệch là huỷ. Độc lập V484/V485.
 
+Định nghĩa cũ lấy từ live 09/11/2026 (`migrations/snapshots/group-access-v486/live-functions.json`), không từ bản chụp
+27/10: `group_access` live đã che tên chủ nhóm (`ownerName` = `Nhân viên #<id>`) khi người gọi là phiên Desktop không
+phải chủ (`private.aka_agent_staff_scope_for_request()`, khớp checksum ghi trong plan V436). Bản V486 đầu tiên sinh từ
+bản 27/10 nên preflight sẽ dừng ở production; đã sinh lại, bước build kiểm câu truy vấn giữ nguyên từng chữ. md5
+`pg_get_functiondef`: `group_access` `d173eaf2…` → `4f7d34cd…`, `can_read_data_group` `c4716555…` → `8d5f08ca…`,
+`shared_data_member_owner` `529e0060…` → `0cf5471f…`; file migration md5 `93fde69a…`.
+
 ## Apply (ngoài giờ cao điểm, phiên có quyền DB)
 
 DDL làm PostgREST nạp lại schema: không chạy 10:00–11:30 và 14:00–16:00 VN.
@@ -103,14 +122,22 @@ DDL làm PostgREST nạp lại schema: không chạy 10:00–11:30 và 14:00–1
 1. Kiểm sổ migration và mọi nhánh trước (CLAUDE.md: số `vN` dùng chung): `git fetch --all`,
    `git log --all -- 'migrations/migration_v48*'`, `select version, name from supabase_migrations.schema_migrations
    order by version desc limit 20`. Nếu V483–V486 đã bị nhánh khác giữ số thì đổi số trong bộ sinh rồi sinh lại.
-2. Thứ tự: V483 → V484 p1 → p2 → p3 → V485 p1 → p2 → V486. Mỗi file một giao dịch, phần sau kiểm phần trước. V484 p2
-   ~60 KB: nếu công cụ apply không gửi nổi thì dán SQL Editor.
+2. Thứ tự: V483 → V484 p1 → p2 → p3 → V485 p1 → p2 → V486. Mỗi file một giao dịch, phần sau kiểm phần trước.
+   Qua Supabase MCP `apply_migration`: hộp xác nhận chỉ chờ ~230 giây và có thể không hiện trên app điện thoại, nên mở
+   phiên trên trình duyệt máy tính. Đường dự phòng: dán SQL Editor từng file
+   `migrations/tests/<tên migration>_guarded_apply.sql` (sinh bằng `scripts/build-data-group-routing-guarded-apply-sql.py`):
+   nguyên văn migration trong một giao dịch, chặn ngay sau `BEGIN` nếu tên đã có trong sổ hoặc phần trước chưa có, ghi
+   `supabase_migrations.schema_migrations` với `statements[1]` = đúng nội dung file (md5 khớp như `apply_migration`),
+   kiểm md5 trước `COMMIT`; thành công thì bảng kết quả có `status = 'applied'`, `md5_khop_file = true`. Lỗi thì không
+   đổi gì (nếu lần chạy sau báo `current transaction is aborted` thì chạy `ROLLBACK;` một lần).
 3. Sau mỗi file: `select md5(statements[1]) from supabase_migrations.schema_migrations order by version desc limit 1`
    phải bằng md5 file.
 4. Sau V484 p3: công tắc vẫn `sync`, job cron có và chạy (hàng đợi rỗng thì mỗi lượt worker trả `slices: 0`; xem
    `cron.job_run_details` ở mục Theo dõi).
 
 ## Bật thử cho tổ chức của staff 724
+
+**Đã bật 09/11/2026 23:39:34 VN** cho tổ chức 701; lúc bật tổ chức có 12 nguồn nhóm data `active`, 908 `stopped`.
 
 ```sql
 UPDATE public.auto_system_settings
@@ -151,6 +178,26 @@ Lỗi nạp còn lại đọc `edge_logs` của `/rest/v1/rpc/aka_agent_ingest_d
 (`response.status_code`, `response.origin_time`), đừng đo bằng `updated_at - created_at` của
 `auto_data_ingest_batches` (cùng `now()`). Theo dõi 7 ngày rồi mở rộng `organizationIds`.
 
+## Kiểm thử bằng dữ liệu thật (10/11/2026)
+
+Chép CHỈ ĐỌC từ production (SELECT qua MCP, không ghi gì) 10 nhóm data mẫu (gồm 1770), 910 chiến dịch, 79.599 input,
+95.716 origin, 7.150 contacts cùng định nghĩa 1.430 hàm, cột, index và trigger; dữ liệu nằm ở thư mục tạm, không commit.
+Ba cụm Postgres 17 cục bộ cùng dữ liệu: `old` (trước V484), `sync`, `async` (tổ chức 701). Chạy
+`python3 scripts/data-group-routing/test_realdata.py` (cần `REALDATA_DIR` đã chép bằng `extract_sql.py` + `save_bundle.py`).
+
+- Môi trường thử cũ (bản chụp 27/10) lệch production 81 hàm (có `aka_agent_lock_campaign_input_serialization`, lối vào
+  Desktop của bind/reactivate/stop) và thiếu 710 hàm chỉ có trên production (ví dụ
+  `private.aka_agent_assert_request_ownership`); bộ mới nạp đè định nghĩa production (`realload.py`, `drift_check.py`).
+- Nhóm 1770 (11 nguồn đang bật): nạp lại 85 thành viên (935 đã có), nạp 105 data thật mới từ nhóm anh em (1.133 input
+  mới, 22 đã có), nhập file 50 dòng, gửi lại đúng mã: trạng thái 11 bảng `old` = `sync` = `async` (sau worker) ở mọi
+  bước; kết quả lượt nạp async sau worker (`done`) = cách cũ. Thời gian một lời gọi: cũ 1,2–2,5 s, sync 0,5–1,05 s
+  (V486), async 0,09–0,12 s. 22/23 đạt.
+- Khác biệt tìm thấy: file có dòng trùng định danh (1 dòng) thì "đã có trong chiến dịch" của lượt nạp async ít hơn
+  cách cũ đúng số chiến dịch (539 so với 550): cách cũ đẩy dòng trùng hai lần, hàng đợi async gộp theo thành viên. Dữ
+  liệu giống hệt, chỉ khác con số báo cáo; chưa sửa.
+- Chưa thử: bật lại nguồn (10 nhóm mẫu không có nguồn tắt nào thuộc chiến dịch còn hiệu lực), nhập file nhiều phần
+  V485 và `group_access` V486 trên dữ liệu thật, kịch bản 630 chiến dịch cùng bật.
+
 ## Rollback (ngược thứ tự)
 
 1. V486: `rollback_v486_group_access_plan_cache.sql` (bất cứ lúc nào).
@@ -172,6 +219,10 @@ Mỗi rollback kiểm md5: hàm đang ở bản mới thì trả về nguyên v�
 - `test_v485.py` 95/95: nhập một lần trên V485 giống hệt V484; nhiều phần (sync và async + worker) giống nhập một lần
   trên 11 bảng; số đếm khớp; gửi lại phần, phần chồng, thiếu phần, phiên bị thay/hết hạn/bỏ dở; 12.000 dòng; Desktop
   (xác thực, PT413); quyền; lượt tổng async; thứ tự data vào chiến dịch; rollback/apply lại.
-- `test_v486.py` 30/30: 1.296 tổ hợp kiểm quyền giống hệt; V486 + V484 sync/async giống trước V484.
+- `test_v486.py` 33/33 (fixture dùng định nghĩa live 09/11 của `group_access`): 1.296 tổ hợp kiểm quyền giống hệt,
+  cả khi gọi từ phiên Desktop (nhánh che tên chủ nhóm) và khi một phiên xen hai kiểu gọi; V486 + V484 sync/async
+  giống trước V484. Bộ V484 (67/67) và V485 (95/95) chạy lại với fixture này vẫn đạt.
+- `test_guarded_apply.py` 24/24: dán sai thứ tự / dán lại bị chặn không đổi gì; dán đúng thứ tự thì sổ migration
+  md5 = file từng phần, hàm đúng md5 đích, vân tay hàm/bảng/cron/công tắc giống hệt khi apply thẳng file.
 - WebApp: control-api 25/25, API nhóm data 6 ca mới, toàn API 1.579 đạt (3 ca hỏng có sẵn từ trước ở columnFilters và
   desktop-ai, không liên quan), typecheck 8 workspace. Desktop: typecheck node + web sạch.

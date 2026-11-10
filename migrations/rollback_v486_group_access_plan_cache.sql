@@ -8,7 +8,7 @@ DO $v486_rb_block_1$
 DECLARE
   v_md5 text := md5(pg_get_functiondef(to_regprocedure('private.group_access(text,bigint,bigint,bigint)')));
 BEGIN
-  IF v_md5 = '7355d59e2b1a80dd601e30e68bb35eda' THEN
+  IF v_md5 = '4f7d34cd8bfa753d35a9ab9a0ec213b4' THEN
     EXECUTE $v486_rb_1$CREATE OR REPLACE FUNCTION private.group_access(p_kind text, p_group_id bigint, p_staff_id bigint, p_organization_id bigint)
  RETURNS jsonb
  LANGUAGE sql
@@ -25,7 +25,9 @@ AS $function$
     WHERE p_kind='content' AND id=p_group_id AND NOT is_delete
   )
   SELECT jsonb_build_object(
-    'ownerStaffId',g.staff_id,'ownerName',COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id),
+    'ownerStaffId',g.staff_id,'ownerName',CASE WHEN (SELECT private.aka_agent_staff_scope_for_request()) IS NOT NULL
+      AND owner.id IS DISTINCT FROM (SELECT private.aka_agent_staff_scope_for_request())
+      THEN 'Nhân viên #'||owner.id ELSE COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id) END,
     'role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END,
     'canManage',g.staff_id=p_staff_id,'canUse',true,'canCopy',true,
     'scope',g.sharing_scope,'revision',g.sharing_revision::text)
@@ -42,7 +44,7 @@ AS $function$
     ))
   );
 $function$$v486_rb_1$;
-  ELSIF v_md5 IS DISTINCT FROM '251162422553d81d432151554b5ea16a' THEN
+  ELSIF v_md5 IS DISTINCT FROM 'd173eaf22b0b6b6958a6f8f40cdaa82d' THEN
     RAISE EXCEPTION 'v486 rollback: % changed outside V486 (md5 %)', 'private.group_access(text,bigint,bigint,bigint)', v_md5;
   END IF;
 END
@@ -92,7 +94,7 @@ DO $v486_rb_postflight$
 DECLARE
   v_item record;
 BEGIN
-  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "251162422553d81d432151554b5ea16a", "private.can_read_data_group(bigint,bigint,bigint)": "c47165554f49d3099d1f95e7d136eae5", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "529e0060fe2e757a12e8674826137b65"}'::jsonb) LOOP
+  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "d173eaf22b0b6b6958a6f8f40cdaa82d", "private.can_read_data_group(bigint,bigint,bigint)": "c47165554f49d3099d1f95e7d136eae5", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "529e0060fe2e757a12e8674826137b65"}'::jsonb) LOOP
     IF md5(pg_get_functiondef(to_regprocedure(v_item.sig))) IS DISTINCT FROM v_item.expected THEN
       RAISE EXCEPTION 'v486 rollback: % not restored', v_item.sig;
     END IF;
