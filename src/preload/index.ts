@@ -17,6 +17,10 @@ import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQu
 import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcResponses, type EffectivenessIpcResult } from '../shared/effectivenessIpc'
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
 import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
+import {
+  CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
+  type CampaignInputDuplicatesIpcResult
+} from '../shared/campaignInputDuplicatesIpc'
 import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest, type FoundFacebookGroupCardsResult } from '../shared/foundFacebookGroupCardsIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -666,6 +670,10 @@ const electronAPI = {
 
   campaignRunReport: (request: CampaignRunReportIpcRequest): Promise<CampaignRunReportIpcResult> =>
     ipcRenderer.invoke(CAMPAIGN_RUN_REPORT_IPC, request),
+
+  // Upload dữ liệu → "Lọc trùng dữ liệu" (V491/V493): công tắc và một lượt đối chiếu ≤ 2.000 SĐT; không ném lỗi.
+  campaignInputDuplicates: <R extends CampaignInputDuplicatesIpcRequest>(request: R): Promise<CampaignInputDuplicatesIpcResult<CampaignInputDuplicatesIpcResponses[R['kind']]>> =>
+    ipcRenderer.invoke(CAMPAIGN_INPUT_DUPLICATES_IPC, request),
 
   // Campaign result automations
   listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>

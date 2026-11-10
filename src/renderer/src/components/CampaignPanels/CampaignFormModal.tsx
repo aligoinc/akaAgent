@@ -92,7 +92,9 @@ import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
-import CampaignDataUploadModal from './CampaignDataUploadModal'
+import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
+import { InputDuplicateFormNote } from './InputDuplicateFormNote'
+import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
 import { isImageMediaSource, isVideoMediaSource } from '../Media/mediaImage'
@@ -8306,6 +8308,14 @@ export default function CampaignFormModal({
     lockAccount?: boolean
   } | null>(null)
   const [isDataUploadModalOpen, setIsDataUploadModalOpen] = useState(false)
+  // Lọc trùng với chiến dịch khác của lần tải gần nhất (V491/V493); chỉ trong phiên form, không lưu vào nháp.
+  const [importDuplicateNote, setImportDuplicateNote] = useState<ImportDuplicateSummary | null>(null)
+  const inputDuplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => (
+    supportsInputDuplicateCheck(formData.actionId) && formData.accountIds.length > 0
+      ? { currentAccounts: formData.accountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}` })) }
+      : undefined
+  ), [formData.actionId, formData.accountIds.join(','), accounts])
+  useEffect(() => { if (!details.length) setImportDuplicateNote(null) }, [details.length])
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
     ? 'zalo'
@@ -8385,7 +8395,7 @@ export default function CampaignFormModal({
     setIsDataUploadModalOpen(true)
   }
 
-  const handleImportedDataRows = (rows: Partial<CampaignInputData>[]) => {
+  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary) => {
     if (rows.length === 0) {
       showAlert('Không có data hợp lệ để chèn.', 'error')
       return
@@ -8401,8 +8411,10 @@ export default function CampaignFormModal({
     }
 
     const addedCount = appendUniqueDetails(rows)
+    if (duplicates) setImportDuplicateNote(duplicates)
+    const skipped = duplicates?.skipped ? ` Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.` : ''
     showAlert(
-      addedCount > 0 ? `Đã thêm ${addedCount} data.` : 'Các data đã có trong danh sách.',
+      addedCount > 0 ? `Đã thêm ${addedCount} data.${skipped}` : 'Các data đã có trong danh sách.',
       addedCount > 0 ? 'success' : 'error'
     )
   }
@@ -16608,6 +16620,16 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
+                  {!isEditingSavedCampaign && importDuplicateNote && details.length > 0 && (
+                    <InputDuplicateFormNote
+                      note={importDuplicateNote}
+                      actionId={formData.actionId}
+                      accountIds={formData.accountIds}
+                      phones={() => details.map(row => row.phone)}
+                      removeRows={shouldRemove => setDetails(previous => previous.filter(row => !shouldRemove(row.phone)))}
+                      onNoteChange={setImportDuplicateNote}
+                    />
+                  )}
                   {!isEditingSavedCampaign && directDataGroupSnapshots.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10, marginBottom: 10 }}>
                       {directDataGroupSnapshots.map(snapshot => (
@@ -17618,9 +17640,10 @@ export default function CampaignFormModal({
           actionName={selectedCampaignAction?.name}
           accountIds={formData.accountIds}
           showDatasetName={false}
+          duplicateCheck={inputDuplicateCheck}
           onClose={() => setIsDataUploadModalOpen(false)}
-          onInsert={handleImportedDataRows}
-          onSubmitRows={({ rows }) => handleImportedDataRows(rows)}
+          onInsert={(rows, meta) => handleImportedDataRows(rows, meta?.duplicates)}
+          onSubmitRows={({ rows, duplicates }) => handleImportedDataRows(rows, duplicates)}
         />
       )}
 

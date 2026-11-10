@@ -1,0 +1,59 @@
+{
+  "migration": "migration_v493_campaign_input_duplicates_desktop",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110164004",
+  "applied_at_vn": "2026-11-10T23:40:04+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user request 'áp dụng cho desktop app akaAgent' (10/11/2026), after the V491 WebApp part was merged",
+  "file_md5": "cbff0334481a6bec8758de67b86a0e96",
+  "ledger_statements_md5": "cbff0334481a6bec8758de67b86a0e96",
+  "ledger_rows_named_v493": 1,
+  "rollback_file": "migrations/rollback_v493_campaign_input_duplicates_desktop.sql",
+  "rollback_md5": "aa8676fc96b437b5525bf635887ffff6",
+  "preflight_read_only_at_vn": "2026-11-10T23:39:36+07:00",
+  "preflight": {
+    "ledger_had_v493": false,
+    "ledger_last_version": "20261110152638 (V492 migration_v492_ai_chat_insert)",
+    "repo_branches_using_v493": "none (git fetch --all; migration_v49* files on every branch: v490, v491, v492)",
+    "signature": "public.aka_agent_read_campaign_input_duplicates(bigint,bigint,text,text,jsonb) returns jsonb",
+    "prosrc_md5": "fec350637de79d8d65e6cc1a9cbfc34f",
+    "functiondef_md5": "42754064a606f2e6b1655748b55c0c54",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "config": ["search_path=pg_catalog, public", "statement_timeout=20s"],
+    "security_definer": true,
+    "volatility": "stable",
+    "owner": "postgres",
+    "aka_agent_desktop_execute": false,
+    "switch_web_campaign_input_duplicates": "{\"audience\":\"all\",\"defaultDays\":30,\"maxDays\":365}",
+    "active_client_backends": 1
+  },
+  "postflight": {
+    "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+    "execute": { "aka_agent_desktop": true, "service_role": true, "anon": false, "authenticated": false },
+    "prosrc_md5_unchanged": "fec350637de79d8d65e6cc1a9cbfc34f",
+    "functiondef_md5_unchanged": "42754064a606f2e6b1655748b55c0c54",
+    "config_unchanged": ["search_path=pg_catalog, public", "statement_timeout=20s"],
+    "comment_unchanged": "V491 text still says 'service_role only' (COMMENT would reload the PostgREST schema)",
+    "desktop_role_smoke": "SET LOCAL ROLE aka_agent_desktop + claims {\"role\":\"aka_agent_desktop\"} without sub, valid zalo_message_phone query: the call enters the reader (line 20 PERFORM auto_assert_automation_identity) and is refused by private.aka_agent_assert_request_ownership with 42501 desktop_staff_scope_denied (not 'permission denied for function'); read only, transaction rolled back, nothing written",
+    "desktop_role_reads_switch": "same role reads auto_system_settings key web.campaign_input_duplicates (is_active, not secret): {\"audience\":\"all\",\"defaultDays\":30,\"maxDays\":365}"
+  },
+  "postgrest_reload": "none (GRANT does not fire pgrst_ddl_watch); postgrest_logs 16:30-16:44 UTC have no schema cache/PGRST/reload lines",
+  "edge_logs_16_34_16_41_utc": {
+    "requests_per_minute": "13,661-15,397 (16:41 partial when read)",
+    "apply_minute_16_40_utc": "14,200 requests, p50 46 ms, avg 48.3 ms",
+    "p50_ms": "45-46",
+    "avg_ms": "45.0-48.5",
+    "http_503": 0,
+    "http_5xx": 0
+  },
+  "observed_callers_of_v491": {
+    "window_utc": "2026-11-10T00:00:00Z..2026-11-10T16:45:00Z",
+    "calls": 0,
+    "meaning": "the WebApp API/Web with the feature (akaAgentWebApp #196, merged to dev) is not deployed yet and Desktop with the feature is not released, so nobody calls rpc/aka_agent_read_campaign_input_duplicates yet"
+  },
+  "compatibility": [
+    "Grant only: no function body, attribute, table, index, policy, setting, role/global timeout, pool or connection change.",
+    "Old Desktop builds do not have the dedup frame and never call the reader.",
+    "Rollback revokes only the Desktop grant; the WebApp API (service_role) keeps working and Desktop shows 'đang được cập nhật' for options 2/3 (in-file dedup unchanged)."
+  ]
+}

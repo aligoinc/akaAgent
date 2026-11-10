@@ -1,6 +1,6 @@
 # Lọc trùng SĐT khi tải dữ liệu — V491
 
-**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates`: V491 đặt `admin_akabiz`, **đổi sang `all` lúc 22:28:25 VN 10/11/2026 theo yêu cầu, trước khi deploy API/Web** (bản API đang chạy chưa đọc khóa này nên chưa ai thấy; deploy xong mọi khách thấy ngay sau khi tải lại trang, không qua bước admin akaBiz thử trước). API/Web: akaAgentWebApp #196 đã merge `dev`, **chưa deploy**. SQL và tài liệu này đã merge `dev_3` (#633). Desktop chưa làm. [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
+**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates`: V491 đặt `admin_akabiz`, **đổi sang `all` lúc 22:28:25 VN 10/11/2026 theo yêu cầu, trước khi deploy API/Web** (bản API đang chạy chưa đọc khóa này nên chưa ai thấy; deploy xong mọi khách thấy ngay sau khi tải lại trang, không qua bước admin akaBiz thử trước). API/Web: akaAgentWebApp #196 đã merge `dev`, **chưa deploy**. SQL và tài liệu này đã merge `dev_3` (#633). **Desktop: code ở nhánh `claude/bold-hawking-4m2grp` (chưa merge/phát hành), V493 (GRANT cho `aka_agent_desktop`) đã apply 23:40:04 VN 10/11** — xem [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md). [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
 
 ## Tính năng
 
@@ -44,6 +44,6 @@ Hiệu năng: chỉ đọc ứng viên qua `idx_campaign_input_cooldown_phone` (
 Thứ tự: DB (đã xong) → công tắc `all` (đã đổi 22:28:25 VN 10/11 theo yêu cầu, bằng `UPDATE auto_system_settings SET value = '{"audience":"all","defaultDays":30,"maxDays":365}', updated_at = now() WHERE key = 'web.campaign_input_duplicates' AND value = '<giá trị cũ>'`, không trigger nào của bảng xử lý khóa này) → merge `dev` (WebApp #196, xong) → deploy API/Web (còn lại) → theo dõi lượt gọi đầu tiên.
 Gỡ nhanh không DDL: đặt `audience` = `off` (Web ẩn lựa chọn 2/3). Gỡ hẳn: [rollback](../migrations/rollback_v491_campaign_input_duplicates.sql) (xóa hàm + dòng công tắc; không đụng dữ liệu).
 
-## Desktop (làm sau)
+## Desktop
 
-Chép nguyên văn akaAgentWebApp `packages/control-api/src/campaignInputDuplicates.ts` sang `src/shared/campaignInputDuplicates.ts`; IPC gọi cùng hàm bằng phiên Desktop; migration chỉ `GRANT EXECUTE … TO aka_agent_desktop` (như V489); port khung lọc trùng vào `CampaignDataUploadModal` Desktop.
+Đã làm theo đúng hướng: `src/shared/campaignInputDuplicates.ts` chép nguyên văn akaAgentWebApp `packages/control-api/src/campaignInputDuplicates.ts`; IPC `campaign:input-duplicates` gọi cùng hàm bằng token Desktop; V493 chỉ `GRANT EXECUTE … TO aka_agent_desktop` (như V489, đã apply 23:40:04 VN 10/11); khung lọc trùng, hộp chọn tài khoản, hộp xác nhận và ghi chú form port vào `CampaignDataUploadModal`/form Desktop. Hợp đồng, kiểm thử, gỡ: [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md).

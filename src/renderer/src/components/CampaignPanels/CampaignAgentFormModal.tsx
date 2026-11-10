@@ -104,6 +104,9 @@ import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignAgentDataImportModal from './CampaignAgentDataImportModal'
+import type { CampaignImportDuplicateCheck, ImportDuplicateSummary } from './CampaignDataUploadModal'
+import { InputDuplicateFormNote } from './InputDuplicateFormNote'
+import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
 import type { AgentDataImport } from '../../../../shared/campaignAgentData'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
@@ -8281,6 +8284,14 @@ export default function CampaignAgentFormModal({
     lockAccount?: boolean
   } | null>(null)
   const [isDataUploadModalOpen, setIsDataUploadModalOpen] = useState(false)
+  // Lọc trùng với chiến dịch khác của lần tải gần nhất (V491/V493); chỉ trong phiên form, không lưu vào nháp.
+  const [importDuplicateNote, setImportDuplicateNote] = useState<ImportDuplicateSummary | null>(null)
+  const inputDuplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => (
+    supportsInputDuplicateCheck(formData.actionId) && formData.accountIds.length > 0
+      ? { currentAccounts: formData.accountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}` })) }
+      : undefined
+  ), [formData.actionId, formData.accountIds.join(','), accounts])
+  useEffect(() => { if (!details.length) setImportDuplicateNote(null) }, [details.length])
   const [agentDataImport, setAgentDataImport] = useState<AgentDataImport>()
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
@@ -8361,7 +8372,7 @@ export default function CampaignAgentFormModal({
     setAgentDataImport(undefined); setIsDataUploadModalOpen(true)
   }
 
-  const handleImportedDataRows = (rows: Partial<CampaignInputData>[]) => {
+  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary) => {
     if (rows.length === 0) {
       showAlert('Không có data hợp lệ để chèn.', 'error')
       return
@@ -8377,8 +8388,10 @@ export default function CampaignAgentFormModal({
     }
 
     const addedCount = appendUniqueDetails(rows)
+    if (duplicates) setImportDuplicateNote(duplicates)
+    const skipped = duplicates?.skipped ? ` Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.` : ''
     showAlert(
-      addedCount > 0 ? `Đã thêm ${addedCount} data.` : 'Các data đã có trong danh sách.',
+      addedCount > 0 ? `Đã thêm ${addedCount} data.${skipped}` : 'Các data đã có trong danh sách.',
       addedCount > 0 ? 'success' : 'error'
     )
   }
@@ -16828,6 +16841,16 @@ export default function CampaignAgentFormModal({
                     </div>
                   )}
 
+                  {!isEditingSavedCampaign && importDuplicateNote && details.length > 0 && (
+                    <InputDuplicateFormNote
+                      note={importDuplicateNote}
+                      actionId={formData.actionId}
+                      accountIds={formData.accountIds}
+                      phones={() => details.map(row => row.phone)}
+                      removeRows={shouldRemove => setDetails(previous => previous.filter(row => !shouldRemove(row.phone)))}
+                      onNoteChange={setImportDuplicateNote}
+                    />
+                  )}
                   {!isEditingSavedCampaign && directDataGroupSnapshots.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10, marginBottom: 10 }}>
                       {directDataGroupSnapshots.map(snapshot => (
@@ -17854,8 +17877,9 @@ export default function CampaignAgentFormModal({
           actionId={formData.actionId}
           actionName={selectedCampaignAction?.name}
           accountIds={formData.accountIds}
+          duplicateCheck={inputDuplicateCheck}
           onClose={() => { setIsDataUploadModalOpen(false); setAgentDataImport(undefined) }}
-          onInsert={(rows, mode) => {
+          onInsert={(rows, mode, duplicates) => {
             if (agentDataImport && agentDataImport.actionId !== formData.actionId) throw new Error('Loại chiến dịch đã thay đổi. Hãy mở lại dữ liệu.')
             if (agentDataImport && !agentDirectDataAllowed(buildAgentSnapshot())) throw new Error(AGENT_AUTOMATIC_DATA_MESSAGE)
             if (mode === 'replace' && directDataGroupSnapshots.length || isDataGroupSource && directDataGroupSnapshots.length) throw new Error(AGENT_PENDING_GROUP_REPLACE_MESSAGE)
@@ -17864,7 +17888,9 @@ export default function CampaignAgentFormModal({
               if (isFindDataSearchCampaign) setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(rows))
               else setDetails(rows.map(row => ({ ...row, phoneCarrier: inferInputDataPhoneCarrier(row.phone, row.phoneCarrier) })))
               setDetailsPage(1)
-            } else handleImportedDataRows(rows)
+              setImportDuplicateNote(duplicates ?? null)
+              if (duplicates?.skipped) showAlert(`Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.`, 'info')
+            } else handleImportedDataRows(rows, duplicates)
             if (isDataGroupSource) setFormData(value => ({ ...value, dataTargetSourceMode: 'direct', dataGroupId: null }))
           }}
         />

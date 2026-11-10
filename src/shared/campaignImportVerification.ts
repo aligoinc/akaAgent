@@ -2,6 +2,7 @@ import { getCampaignInputDataRequirement, isValidEmailInputDataValue } from './t
 import type { CampaignImportDataRow, CampaignImportPlatform } from './types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone } from './phone'
 import { isZaloUidImportAction, normalizeZaloImportUid } from './zaloUidImport'
+import { formatVietnamDate, formatVietnamTime, inputDuplicateStatusLabel, type InputDuplicateItem } from './campaignInputDuplicates'
 
 export const IMPORT_MAX_ROWS = 10_000
 export const IMPORT_LIMIT_MESSAGE = 'Mỗi lần chỉ được nhập tối đa 10.000 dòng dữ liệu. Vui lòng chia nhỏ dữ liệu rồi thử lại.'
@@ -348,5 +349,45 @@ export function importExportMatrix(report: ImportVerificationResult, group: Impo
       entry.location.source, entry.location.sheet, String(entry.location.row), String(entry.location.item), entry.originalValue, entry.displayValue, entry.normalizedValue,
       ...(group === 'valid' ? [] : [entry.reason]), ...(group === 'duplicates' ? [entry.duplicateOf ? importLocationLabel(entry.duplicateOf) : ''] : [])
     ])
+  ]
+}
+
+/** Mục hợp lệ nhưng đã có ở chiến dịch khác (V491): nhóm thứ tư khi khách chọn lọc trùng với chiến dịch khác. Như WebApp campaign-core. */
+export interface ImportExistingEntry extends ImportVerificationEntry {
+  existing: InputDuplicateItem
+}
+
+/** Tách khỏi danh sách hợp lệ các SĐT máy chủ báo đã có; giữ thứ tự, không đổi nhóm lỗi/trùng trong file. */
+export function splitExistingImportEntries(report: ImportVerificationResult, items: readonly InputDuplicateItem[]):
+  { report: ImportVerificationResult; existing: ImportExistingEntry[] } {
+  const byPhone = new Map(items.map(item => [item.phone, item]))
+  const valid: ImportVerificationEntry[] = []
+  const existing: ImportExistingEntry[] = []
+  for (const entry of report.valid) {
+    const item = byPhone.get(entry.row.phone || entry.normalizedValue)
+    if (item) existing.push({ ...entry, reason: 'Đã có ở chiến dịch khác trong khoảng thời gian đã chọn.', existing: item })
+    else valid.push(entry)
+  }
+  return { report: { ...report, valid, limitExceeded: valid.length > IMPORT_MAX_ROWS }, existing }
+}
+
+/** File "Đã có ở chiến dịch khác": 9 cột template đầu (nhập lại được) + nơi đã có. */
+export function importExistingExportMatrix(entries: readonly ImportExistingEntry[]): string[][] {
+  return [
+    ['Fullname', 'Uid', 'Mobile', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5', 'Nguồn', 'Sheet', 'Dòng gốc', 'Mục trong dòng',
+      'Đã có ở chiến dịch (gần nhất)', 'Tài khoản', 'Ngày tải lên', 'Trạng thái', 'Số chiến dịch có số này', 'Số lần đã tải lên'],
+    ...entries.map(entry => {
+      const latest = entry.existing.latest
+      return [
+        ...IMPORT_FIELDS.map(field => importText(entry.row[field])),
+        entry.location.source, entry.location.sheet, String(entry.location.row), String(entry.location.item),
+        latest.campaignDeleted ? `${latest.campaignName} (đã xóa)` : latest.campaignName,
+        latest.accountName,
+        `${formatVietnamDate(latest.uploadedAt)} ${formatVietnamTime(latest.uploadedAt)}`.trim(),
+        inputDuplicateStatusLabel(latest),
+        String(entry.existing.campaignCount),
+        String(entry.existing.matchCount)
+      ]
+    })
   ]
 }
