@@ -57,7 +57,8 @@
     "Edge Function mở không xác thực theo yêu cầu; secret AI_CHAT_AGENT_KEY chưa đặt."
   ],
   "after_apply": [
-    "2026-11-10 13:19:23 VN: UPDATE ai_project SET audience='all' WHERE code='hoi-dap-chien-dich' AND audience='admin_akabiz' (1 dòng, theo yêu cầu); gọi thử action agents dưới service_role rồi ROLLBACK: staff 1, 724 (không phải admin akaBiz) và staff 4 (admin akaBiz) đều nhận 1 nhóm. Lúc đổi: 0 hội thoại, 0 câu đang chờ, ai_chat.enabled = true. Kèm version 1 → 2 theo quy trình ở akaAgentWebApp docs/AI_CHAT.md. Thu lại: audience = 'admin_akabiz'."
+    "2026-11-10 13:19:23 VN: UPDATE ai_project SET audience='all' WHERE code='hoi-dap-chien-dich' AND audience='admin_akabiz' (1 dòng, theo yêu cầu); gọi thử action agents dưới service_role rồi ROLLBACK: staff 1, 724 (không phải admin akaBiz) và staff 4 (admin akaBiz) đều nhận 1 nhóm. Lúc đổi: 0 hội thoại, 0 câu đang chờ, ai_chat.enabled = true. Kèm version 1 → 2 theo quy trình ở akaAgentWebApp docs/AI_CHAT.md. Thu lại: audience = 'admin_akabiz'.",
+    "2026-11-10 21:42:02 VN: INSERT ai_project_group (code 'akaagent-desktop', tên 'akaAgent Desktop', sort_order 20, is_active true) theo yêu cầu, id = 2; ON CONFLICT (code) DO NOTHING. Chưa có ai_project nào thuộc nhóm nên action agents không trả nhóm này (nhóm không có agent bị bỏ): Web/iOS/Desktop không đổi gì. Gỡ: DELETE FROM ai_project_group WHERE code = 'akaagent-desktop' khi chưa có agent, hoặc is_active = false."
   ],
   "local_test": "scripts/ai-chat/smoke_v488.sh 118 khẳng định + apply lại bị từ chối + rollback; stress_v488.sh 0 khóa chéo; edge_agent_smoke.sh 31 khẳng định",
   "rollback": "migrations/rollback_v488_ai_chat.sql (xóa toàn bộ hội thoại); tắt nhanh: ai_chat.enabled = 'false'; gỡ function: xóa ai-chat-agent"
