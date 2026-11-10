@@ -5,8 +5,8 @@
 md5 sổ = md5 tệp `def9660b…`; không apply lại; migration đã merge `dev_3` qua PR #628). Chỉ thêm `aka_agent_authenticate_control_session_chat_v2(text)`
 (EXECUTE chỉ `service_role`); hàm cũ giữ nguyên checksum/ACL. Thử rồi hủy trên production: 200 phiên thật giống
 hệt hàm cũ ngoài `app_scope`; nhân viên chỉ dùng Chat có thật → phiên native `app_scope = 'chat'`, phiên web vẫn
-bị từ chối. 0 lỗi 503/5xx quanh phút apply. Caller WebApp API (aligoinc/akaAgentWebApp#190) **chưa deploy**, iOS
-chưa phát hành. Sửa hàm cũ về sau thì phải sửa cả v2.
+bị từ chối. 0 lỗi 503/5xx quanh phút apply. Caller WebApp API (aligoinc/akaAgentWebApp#190) **đã deploy 10/11/2026 20:28 VN** (Fly v100), iOS
+chưa phát hành nên chưa có lượt gọi thật. Sửa hàm cũ về sau thì phải sửa cả v2.
 [Receipt](../../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
 
 [Build akaAgent Zalo Server 9.5.1](../audits/akaagent-server-9.5.1-20261110/README.md):
