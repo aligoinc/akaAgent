@@ -39,6 +39,8 @@
     "verify_jwt": false,
     "deployed_at_vn": "2026-11-10T22:28:06+07:00",
     "source_md5": { "index.ts": "2d43f581ff98bf52e227c2a5e93c095e", "handler.ts": "5e7cb72546c713db773e7d444a02dc15" },
+    "source_check": "Đọc lại mã nguồn bản 2 bằng get_edge_function rồi chép ra tệp để so: md5 và diff khớp hai tệp trong repo (1.104 và 13.119 byte). Đây là bản chép từ kết quả công cụ, không phải tải byte gốc, nên không loại trừ được khác biệt không nhìn thấy như dạng Unicode NFC/NFD.",
+    "cors": "Không bật: OPTIONS /ask trả 405, phản hồi không có header access-control-*; trang web trong trình duyệt chưa gọi thẳng được.",
     "url": "https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/ai-chat-agent/ask",
     "http_smoke_no_credentials": [
       "POST /ask thiếu question → 400 ai_chat_question_required",

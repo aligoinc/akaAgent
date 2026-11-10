@@ -119,6 +119,7 @@ Hỏi tiếp trong hội thoại đã có:
 - API này chỉ lưu câu hỏi. Câu trả lời do bộ trả lời ghi qua `/answer`, nhân viên đọc trong app. Hiện chưa có đường đọc câu trả lời theo `messageId`.
 - `source` chỉ được ghi khi tạo hội thoại mới. Hỏi tiếp không đổi nguồn của hội thoại.
 - `question` được cắt khoảng trắng hai đầu trước khi lưu.
+- Gọi được từ server, script, công cụ dòng lệnh và tiến trình chính của app Desktop. Trang web chạy trong trình duyệt chưa gọi thẳng được: API chưa bật CORS nên trình duyệt chặn ở bước kiểm tra trước (`OPTIONS` trả 405).
 
 ## Mã lỗi
 
