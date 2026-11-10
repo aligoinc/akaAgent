@@ -60,6 +60,18 @@ try {
   assert.deepEqual(rows([item('x', 'T', undefined, { postsPerDay: 7, postsText: '8' })])[1].slice(3, 7), [7, 'ngày', '', ''])
   assert.equal(rows([item('x', 'T', 'không phải ngày')])[1][13], '')
   console.log('PASS gộp nhóm trùng: thứ tự từ khóa/tài khoản theo thời gian tìm ra, thời gian sớm nhất, số bài/nguyên văn không lệch')
+
+  // Giá trị hiển thị dùng chung cho bảng ở tab và file Excel.
+  assert.deepEqual(h.describeFacebookGroup(h.applyFacebookGroupCard(english, card)), { memberCount: 8000, postsPerDay: 90, postsText: '90+',
+    privacy: 'Riêng tư', joinState: 'Chưa tham gia', memberSince: '', unreadPosts: undefined, friendMemberCount: 2 })
+  assert.deepEqual(h.describeFacebookGroup({ url: 'u', name: 'n', privacy: 'Public', postsPerDay: 7, postsText: '8', joinState: 'requested' }),
+    { memberCount: undefined, postsPerDay: 7, postsText: '', privacy: 'Công khai', joinState: 'Đã gửi yêu cầu', memberSince: '',
+      unreadPosts: undefined, friendMemberCount: undefined })
+  assert.deepEqual(h.describeFacebookGroup(undefined), { memberCount: undefined, postsPerDay: undefined, postsText: '', privacy: '',
+    joinState: '', memberSince: '', unreadPosts: undefined, friendMemberCount: undefined })
+  assert.equal(h.needsFacebookGroupCard(english), true)
+  assert.equal(h.needsFacebookGroupCard(stored), false)
+  console.log('PASS giá trị hiển thị chung bảng/Excel: riêng tư tiếng Việt, nguyên văn số bài chỉ khi khớp, nhãn trạng thái tham gia')
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }

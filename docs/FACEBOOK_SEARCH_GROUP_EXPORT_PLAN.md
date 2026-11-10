@@ -2,9 +2,11 @@
 
 ## Trạng thái — 10/11/2026
 
-- **Đã làm ở source Desktop** (nhánh `claude/festive-cannon-vpy9rt`): file Excel 14 cột; lúc bấm Xuất, app đọc lại
-  chữ gốc của thẻ nhóm trong log chạy để điền dữ liệu mà kết quả chạy chưa lưu. **Chưa build bộ cài, chưa phát hành.**
-  Không đổi DB, block hay workflow.
+- **Đã làm ở source Desktop** (nhánh `claude/festive-cannon-vpy9rt`): file Excel 14 cột; bảng trong tab có thêm cột
+  nhóm (thành viên, bài/ngày, riêng tư, tham gia, bài chưa đọc, tham gia từ, bạn bè trong nhóm), cột Link Facebook/Nguồn
+  cho SĐT/UID và cột Tài khoản (mục 3b). Khi mở tab (và lúc Xuất nếu chưa đọc), app đọc lại chữ gốc của thẻ nhóm trong
+  log chạy để điền dữ liệu mà kết quả chạy chưa lưu. **Chưa build bộ cài, chưa phát hành.** Không đổi DB, block hay
+  workflow.
 - **Chưa làm (việc riêng theo yêu cầu):** sửa block `fb_collect_search_groups` (2723) và
   `fb_find_search_data_summary` (2724) để lưu sẵn các trường ở mục 4 khi chạy. Bộ chạy chiến dịch và bản xuất đã nhận
   sẵn các trường đó (mục 4), nên việc sửa block chỉ cần một migration đổi dữ liệu `auto_blocks`.
@@ -16,7 +18,7 @@ Số liệu đo chỉ đọc trên akachat (`cgjbsmqtfhqvttudyjzq`) ngày 10/11/
 File tải từ tab **Data tìm được → Xuất Excel** của chiến dịch **Facebook - Tìm kiếm data bằng search**
 (`facebook_find_data_search`) phải có đủ dữ liệu nhóm: ít nhất các cột của file mẫu (`Tên, UID, Số thành viên, Số bài,
 Đơn vị bài, Privacy`) và mọi thông tin khác Facebook có hiện. Đây là tính năng tải dữ liệu: không thêm cột phân loại
-AI, không đổi điều kiện lọc hay bảng hiển thị trong tab.
+AI, không đổi điều kiện lọc. Yêu cầu sau (10/11): bảng trong tab cũng hiện đủ các thông tin đó (mục 3b).
 
 ## 2. Vì sao file trước đây thiếu dữ liệu
 
@@ -61,6 +63,24 @@ Sáu cột đầu giữ đúng tên và thứ tự của mẫu cũ; tám cột s
 - Sheet như cũ: chỉ chọn Link group Facebook → `Sheet1`; chọn lẫn loại khác → nhóm ở sheet `Group Facebook`, loại khác
   giữ mẫu 9 cột. Chiến dịch "Tìm data trong group" không đổi.
 
+## 3b. Bảng trong tab
+
+Cột hiện theo loại data có trong tab (không có loại đó thì không có cột):
+
+| Cột | Khi nào có | Giá trị |
+| --- | --- | --- |
+| Loại data, Giá trị, Tên | luôn | như cũ; tên nhóm sạch tiền tố, trống thì lấy từ thẻ |
+| Thành viên, Bài/ngày, Riêng tư, Tham gia, Bài chưa đọc, Tham gia từ, Bạn bè trong nhóm | có Link group Facebook | cùng quy tắc với cột C–K của file Excel ([`describeFacebookGroup`](../src/renderer/src/components/CampaignPanels/foundDataExport.ts)); Bài/ngày hiện nguyên văn (`90+`) khi khớp số bài; số định dạng `vi-VN` |
+| Link Facebook, Nguồn | có SĐT/UID mang link hoặc nơi tìm (`phoneProfiles`/`uidProfiles`/`groupMembers`) | link trang người đăng/bình luận/thành viên; Nguồn: Bài post, Comment, Tương tác mới, Thành viên group (mã khác để trống) |
+| Tài khoản | luôn | tài khoản của lượt tìm ra |
+| Từ khóa (chiến dịch search) / Group (tìm trong group) | luôn | như cột Group cũ |
+| Thời gian | luôn | như cũ |
+
+- Mỗi lượt tìm ra là một dòng như cũ (file Excel mới gộp nhóm trùng). Ô không có giá trị hiện `-` mờ; ô không áp dụng
+  cho loại data đó để trống.
+- Thanh chọn loại + nút Xuất đứng yên, bảng tự cuộn hai chiều, tiêu đề dính. Bảng rộng hơn khung (cửa sổ ~1.440 px khi
+  có cột nhóm) thì cuộn ngang.
+
 ## 4. Thiết kế
 
 - [facebookSearchGroupCard.ts](../src/shared/facebookSearchGroupCard.ts): bộ đọc thẻ tiếng Việt/tiếng Anh thuần TS
@@ -78,9 +98,15 @@ Sáu cột đầu giữ đúng tên và thứ tự của mẫu cũ; tám cột s
   trang quét lại mọi dòng mới hơn. Trần 60.000 dòng (lớn nhất hiện có 19.329 thẻ), hạn cả lượt 65 s; quá thì trả phần
   mới nhất đã đọc kèm `truncated`. Gộp lượt bấm trùng, không cache, không hẹn giờ.
 - [foundDataExport.ts](../src/renderer/src/components/CampaignPanels/foundDataExport.ts) +
-  [CampaignPanel](../src/renderer/src/components/CampaignPanels/CampaignPanel.tsx): nút Xuất chỉ gọi IPC khi chiến dịch
-  tìm bằng search có nhóm chưa lưu đủ trường thêm; trong lúc đọc nút hiện "Đang xuất..." và bị khoá. Không đọc được
-  log (lỗi, hết giờ, IPC hỏng) vẫn xuất phần đã có và báo "Chưa đọc được log chạy…"; đọc chưa hết báo log quá dài.
+  [useFoundFacebookGroupCards](../src/renderer/src/components/CampaignPanels/useFoundFacebookGroupCards.ts) +
+  [CampaignPanel](../src/renderer/src/components/CampaignPanels/CampaignPanel.tsx): chỉ gọi IPC khi chiến dịch tìm bằng
+  search có nhóm chưa lưu đủ trường thêm. Đọc một lần khi mở tab (sau khi nạp xong kết quả chạy của đúng chiến dịch),
+  nút Xuất dùng lại kết quả đó nếu đọc trong 2 phút hoặc đã đủ mọi nhóm, không thì đọc lại; đang đọc thì lượt sau chờ
+  cùng lượt. Mở lại tab sau 2 phút mà còn nhóm thiếu thẻ thì đọc lại. Không hẹn giờ; lỗi không tự đọc lại, chỉ đọc lại
+  khi mở lại tab, bấm "Thử lại" hoặc bấm Xuất. Giữ kết quả 6 chiến dịch gần nhất trong RAM của cửa sổ. Trong lúc đọc,
+  dưới thanh xuất hiện "Đang đọc thêm số liệu nhóm…", nút Xuất (nếu bấm) hiện "Đang xuất..." và bị khoá. Không đọc được
+  log (lỗi, hết giờ, IPC hỏng) thì bảng/file vẫn có phần đã lưu, báo "Chưa đọc được log chạy…"; đọc chưa hết báo log
+  quá dài.
 - **Hợp đồng cho việc sửa block:** mỗi phần tử `facebookGroups` có thể mang thêm `postsText` (`90+`), `unreadPosts`,
   `friendMemberCount`, `joinState` (`joined`/`not_joined`/`requested`), `memberSince` (`MM/YYYY`/`YYYY`/`Mới tham gia`)
   và `cardVersion: 2`; `postsPerDay` giữ nghĩa cũ (số bài/ngày khi Facebook hiện, còn lại 0). Block tổng kết 2724
@@ -95,7 +121,8 @@ Sáu cột đầu giữ đúng tên và thứ tự của mẫu cũ; tám cột s
 | `node scripts/facebook-search-groups/card-parser-smoke.cjs` | PASS: 385 thẻ thật đủ dạng ([mẫu đã thay tên](../scripts/facebook-search-groups/card-samples.json)), ca biên, làm sạch tên, khoá URL, gộp thẻ, trường thêm |
 | `node scripts/facebook-search-groups/card-service-smoke.cjs` | PASS: supabase-js thật + fetch giả: URL lọc (ngoặc kép, mã hoá `+`), 3 trang qua nhóm dòng trùng giờ, trần 60.000, quá hạn giữa chừng/từ đầu, lỗi DB không lộ SQL, quyền, gộp lượt trùng |
 | `node scripts/facebook-search-groups/export-logic-smoke.cjs` | PASS: trộn thẻ, gộp nhóm trùng, thứ tự từ khóa, số bài/nguyên văn không lệch |
-| `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/run-campaign-found-data-export-ui-smoke.cjs` | PASS: CampaignPanel thật trong Electron, đọc lại bytes `.xlsx`: 14 cột, số là số, khoá nút khi đang xuất, log lỗi vẫn xuất, mẫu cũ của loại khác/chiến dịch tìm trong group giữ nguyên |
+| `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/run-campaign-found-data-export-ui-smoke.cjs` | PASS: CampaignPanel thật trong Electron, đọc lại bytes `.xlsx`: 14 cột, số là số, khoá nút khi đang xuất, log lỗi vẫn xuất, mẫu cũ của loại khác/chiến dịch tìm trong group giữ nguyên; bảng: cột nhóm trước/sau khi đọc thẻ, đã lưu đủ không trộn thẻ, lỗi thì báo + Thử lại và không tự đọc lại, mở lại tab/xuất thì đọc lại, xuất lại không đọc log thêm, cột Link Facebook/Nguồn ở chiến dịch tìm trong group |
+| `run-campaign-data-sort-ui-smoke.cjs`, `run-campaign-account-actions-ui-smoke.cjs` | PASS khi thay bước chụp ảnh bằng no-op (chụp ảnh cửa sổ ẩn treo trong container, cả mã gốc) |
 | `node scripts/facebook-group-export/logic-smoke.cjs`, `…/ui-smoke.cjs` | PASS (Excel Nhóm data/Kết quả chạy không đổi) |
 | `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `npm run build` | PASS |
 

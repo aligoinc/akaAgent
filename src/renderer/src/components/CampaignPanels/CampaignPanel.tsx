@@ -58,9 +58,12 @@ import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import {
-  applyFacebookGroupCards, buildFoundDataWorkbook, needsFacebookGroupCards, toFacebookGroupList,
-  type FoundDataExportItem, type FoundDataKind, type FoundFacebookGroup
+  applyFacebookGroupCard, applyFacebookGroupCards, buildFoundDataWorkbook, describeFacebookGroup, needsFacebookGroupCard,
+  needsFacebookGroupCards, toFacebookGroupList,
+  type FacebookGroupDisplay, type FoundDataExportItem, type FoundDataKind, type FoundFacebookGroup
 } from './foundDataExport'
+import { useFoundFacebookGroupCards } from './useFoundFacebookGroupCards'
+import { facebookGroupUrlKey } from '../../../../shared/facebookSearchGroupCard'
 import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
 import CampaignAgentFormModal from './CampaignAgentFormModal'
@@ -212,9 +215,19 @@ interface FoundDataItem {
   value: string
   name?: string
   facebookGroup?: FoundFacebookGroup
+  /** Link Facebook của người có SĐT/UID (người đăng bài, bình luận, thành viên group). */
+  profileUrl?: string
+  /** Nơi tìm ra SĐT/UID: post | comment | new_interactor | group_member. */
+  source?: string
   groupUrl: string
   createdAt?: string
   accountId?: number
+}
+
+interface FoundDataRow {
+  item: FoundDataItem
+  name: string
+  group?: FacebookGroupDisplay
 }
 
 interface FindDataLogRow {
@@ -533,6 +546,18 @@ const POST_SEARCH_LOG_EXPORT_HEADERS = [
   'Kết quả AI',
   'Kiểm tra ý nghĩa AI'
 ]
+
+// Cùng tên với mục "Nơi tìm" trong form chiến dịch tìm data.
+const FOUND_DATA_SOURCE_LABELS: Record<string, string> = {
+  post: 'Bài post',
+  comment: 'Comment',
+  new_interactor: 'Tương tác mới',
+  group_member: 'Thành viên group'
+}
+
+const FOUND_DATA_EMPTY = <span className="find-data-empty">-</span>
+const foundDataText = (value: string | undefined) => value || FOUND_DATA_EMPTY
+const foundDataCount = (value: number | undefined) => value === undefined ? FOUND_DATA_EMPTY : value.toLocaleString('vi-VN')
 
 const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
@@ -4175,11 +4200,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       if (payload.total === 0) return []
       const groupUrl = payload.groupUrl || '-'
       const createdAt = detail.createdAt
-      const memberNameByUid = new Map(payload.groupMembers.map(member => [member.uid, member.name]))
+      const accountId = detail.accountId
+      const memberByUid = new Map(payload.groupMembers.map(member => [member.uid, member]))
       const memberUidSet = new Set(payload.groupMembers.map(member => member.uid))
-      const uidProfileNameByUid = new Map(payload.uidProfiles.map(profile => [profile.uid, profile.name]))
-      const phoneProfileNameByPhone = new Map(payload.phoneProfiles.map(profile => [profile.phone.toLowerCase(), profile.name]))
-      const uidItems = [
+      const uidProfileByUid = new Map(payload.uidProfiles.map(profile => [profile.uid, profile]))
+      const phoneProfileByPhone = new Map(payload.phoneProfiles.map(profile => [profile.phone.toLowerCase(), profile]))
+      const uidItems: FoundDataItem[] = [
         ...[...payload.groupMembers]
           .sort((a, b) => Number(!a.name) - Number(!b.name))
           .map((member, index) => ({
@@ -4188,38 +4214,54 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
             label: getFoundDataKindLabel('uid'),
             value: member.uid,
             name: member.name,
+            profileUrl: member.url || uidProfileByUid.get(member.uid)?.url || '',
+            source: 'group_member',
             groupUrl,
-            createdAt
+            createdAt,
+            accountId
           })),
         ...payload.uids
           .filter(value => !memberUidSet.has(value))
-          .map((value, index) => ({
-            key: `${detail.id}-uid-${index}`,
-            kind: 'uid' as const,
-            label: getFoundDataKindLabel('uid'),
-            value,
-            name: memberNameByUid.get(value) || uidProfileNameByUid.get(value) || '',
-            groupUrl,
-            createdAt
-          }))
+          .map((value, index) => {
+            const profile = uidProfileByUid.get(value)
+            return {
+              key: `${detail.id}-uid-${index}`,
+              kind: 'uid' as const,
+              label: getFoundDataKindLabel('uid'),
+              value,
+              name: memberByUid.get(value)?.name || profile?.name || '',
+              profileUrl: profile?.url || '',
+              source: profile?.source || '',
+              groupUrl,
+              createdAt,
+              accountId
+            }
+          })
       ]
       return [
-        ...payload.phones.map((value, index) => ({
-          key: `${detail.id}-phone-${index}`,
-          kind: 'phone' as const,
-          label: getFoundDataKindLabel('phone'),
-          value,
-          name: phoneProfileNameByPhone.get(value.toLowerCase()) || '',
-          groupUrl,
-          createdAt
-        })),
+        ...payload.phones.map((value, index) => {
+          const profile = phoneProfileByPhone.get(value.toLowerCase())
+          return {
+            key: `${detail.id}-phone-${index}`,
+            kind: 'phone' as const,
+            label: getFoundDataKindLabel('phone'),
+            value,
+            name: profile?.name || '',
+            profileUrl: profile?.url || '',
+            source: profile?.source || '',
+            groupUrl,
+            createdAt,
+            accountId
+          }
+        }),
         ...payload.linkGroupZalos.map((value, index) => ({
           key: `${detail.id}-zalo-${index}`,
           kind: 'zalo' as const,
           label: getFoundDataKindLabel('zalo'),
           value,
           groupUrl,
-          createdAt
+          createdAt,
+          accountId
         })),
         ...uidItems,
         ...payload.postLinks.map((value, index) => ({
@@ -4228,7 +4270,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           label: getFoundDataKindLabel('postLink'),
           value,
           groupUrl,
-          createdAt
+          createdAt,
+          accountId
         })),
         ...payload.facebookGroups.map((group, index) => ({
           key: `${detail.id}-facebook-group-${index}`,
@@ -4239,7 +4282,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           facebookGroup: group,
           groupUrl,
           createdAt,
-          accountId: detail.accountId
+          accountId
         }))
       ]
     })
@@ -4248,6 +4291,97 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const selectedFoundDataItems = useMemo(() => {
     return foundDataItems.filter(item => foundDataExportKinds.has(item.kind))
   }, [foundDataItems, foundDataExportKinds])
+
+  // Chiến dịch tìm group bằng search: kết quả cũ chưa lưu đủ số liệu nhóm thì đọc thêm thẻ nhóm trong log chạy
+  // (một lần khi mở tab, dùng lại cho nút Xuất Excel).
+  const isSelectedFindDataSearchCampaign = selectedCampaignSummary?.actionId === FIND_DATA_SEARCH_ACTION_ID
+  const foundGroupCardKeys = useMemo(() => {
+    if (!isSelectedFindDataSearchCampaign) return []
+    const keys = new Set<string>()
+    for (const item of foundDataItems) {
+      if (item.kind !== 'facebookGroup' || !item.facebookGroup || !needsFacebookGroupCard(item.facebookGroup)) continue
+      const key = facebookGroupUrlKey(item.value)
+      if (key) keys.add(key)
+    }
+    return Array.from(keys)
+  }, [foundDataItems, isSelectedFindDataSearchCampaign])
+  const foundDataDetailsReady = !loadingCampaignDetails &&
+    (campaignDetails[0]?.campaignId ?? selectedCampaignId) === selectedCampaignId
+  const {
+    snapshot: foundGroupCards,
+    status: foundGroupCardsStatus,
+    ensureCards: ensureFoundGroupCards,
+    retry: retryFoundGroupCards
+  } = useFoundFacebookGroupCards(selectedCampaignId, foundGroupCardKeys, detailTab === 'foundData' && foundDataDetailsReady)
+  // Danh sách tài khoản đổi tham chiếu mỗi lần cập nhật trạng thái đăng nhập; chỉ dựng lại khi tên đổi.
+  const foundDataAccountNames = useMemo(
+    () => JSON.stringify(accounts.map(account => [account.id, account.name])),
+    [accounts]
+  )
+  const foundDataAccountNameById = useMemo(
+    () => new Map<number, string>(JSON.parse(foundDataAccountNames) as Array<[number, string]>),
+    [foundDataAccountNames]
+  )
+  const foundDataRows = useMemo<FoundDataRow[]>(() => foundDataItems.map(item => {
+    if (item.kind !== 'facebookGroup' || !item.facebookGroup) return { item, name: item.name || '' }
+    const group = applyFacebookGroupCard(item.facebookGroup, foundGroupCards?.byKey.get(facebookGroupUrlKey(item.value)))
+    return { item, name: item.name || group.name || '', group: describeFacebookGroup(group) }
+  }), [foundDataItems, foundGroupCards])
+  const { showGroupColumns: foundDataShowsGroupColumns, showProfileColumns: foundDataShowsProfileColumns } = useMemo(() => ({
+    showGroupColumns: foundDataItems.some(item => item.kind === 'facebookGroup'),
+    showProfileColumns: foundDataItems.some(item =>
+      (item.kind === 'phone' || item.kind === 'uid') && Boolean(item.profileUrl || item.source))
+  }), [foundDataItems])
+  // Các dòng bảng ghi nhớ theo dữ liệu: khung chi tiết vẽ lại nhiều lần khi chiến dịch chạy, bảng có thể hàng nghìn dòng.
+  const foundDataTableRows = useMemo(() => detailTab !== 'foundData' ? [] : foundDataRows.map(({ item, name, group }) => {
+    const createdAtLabel = formatDisplayDateTime(item.createdAt)
+    const accountName = (item.accountId && foundDataAccountNameById.get(item.accountId)) || '-'
+    const isPerson = item.kind === 'phone' || item.kind === 'uid'
+    const sourceLabel = item.source ? FOUND_DATA_SOURCE_LABELS[item.source] : undefined
+    return (
+      <tr key={item.key}>
+        <td title={item.label}>
+          <span className={`find-data-kind find-data-kind-${item.kind}`}>
+            {item.label}
+          </span>
+        </td>
+        <td className="find-data-value-cell" title={item.value}>{item.value}</td>
+        <td className="find-data-name-cell" title={name || '-'}>{name || '-'}</td>
+        {foundDataShowsGroupColumns && (group ? (
+          <>
+            <td className="find-data-number-cell">{foundDataCount(group.memberCount)}</td>
+            <td className="find-data-number-cell" title={group.postsText ? `Facebook hiển thị ${group.postsText} bài viết/ngày` : undefined}>
+              {group.postsText || foundDataCount(group.postsPerDay)}
+            </td>
+            <td className="find-data-nowrap-cell">{foundDataText(group.privacy)}</td>
+            <td className={`find-data-nowrap-cell${group.joinState === 'Đã tham gia' ? ' find-data-joined' : ''}`}>
+              {foundDataText(group.joinState)}
+            </td>
+            <td className="find-data-number-cell">{foundDataCount(group.unreadPosts)}</td>
+            <td className="find-data-nowrap-cell">{foundDataText(group.memberSince)}</td>
+            <td className="find-data-number-cell">{foundDataCount(group.friendMemberCount)}</td>
+          </>
+        ) : <td colSpan={7} />)}
+        {foundDataShowsProfileColumns && (isPerson ? (
+          <>
+            <td className="find-data-value-cell" title={item.profileUrl || '-'}>
+              {item.profileUrl ? (
+                <a className="find-data-log-link" href={item.profileUrl} target="_blank" rel="noreferrer">
+                  {item.profileUrl}
+                </a>
+              ) : FOUND_DATA_EMPTY}
+            </td>
+            <td className="find-data-nowrap-cell">{foundDataText(sourceLabel)}</td>
+          </>
+        ) : <td colSpan={2} />)}
+        <td className="find-data-nowrap-cell" title={accountName}>{accountName}</td>
+        <td className="find-data-group-cell" title={item.groupUrl}>{item.groupUrl}</td>
+        <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
+          {createdAtLabel}
+        </td>
+      </tr>
+    )
+  }), [detailTab, foundDataRows, foundDataShowsGroupColumns, foundDataShowsProfileColumns, foundDataAccountNameById])
 
   const findDataLogRows = useMemo(() => (
     campaignRunEvents.map(buildFindDataLogRow)
@@ -4719,9 +4853,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     if (exportingFoundData) return
 
     const campaign = selectedCampaign
-    const accountNameById = new Map(accounts.map(account => [account.id, account.name]))
     let items: FoundDataExportItem[] = selectedFoundDataItems.map(item => {
-      const accountName = item.accountId ? accountNameById.get(item.accountId) : undefined
+      const accountName = item.accountId ? foundDataAccountNameById.get(item.accountId) : undefined
       return {
         kind: item.kind,
         value: item.value,
@@ -4734,19 +4867,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     })
     setExportingFoundData(true)
     try {
-      // Chiến dịch tìm bằng search: đọc lại chữ gốc của thẻ nhóm trong log chạy để file đủ dữ liệu
-      // (số bài giao diện tiếng Anh, trạng thái tham gia, bạn bè...). Không đọc được vẫn xuất phần đã có.
+      // Chiến dịch tìm bằng search: dùng thẻ nhóm trong log chạy (đã đọc khi mở tab, quá cũ thì đọc lại) để file đủ
+      // dữ liệu (số bài giao diện tiếng Anh, trạng thái tham gia, bạn bè...). Không đọc được vẫn xuất phần đã có.
       let note = ''
       if (campaign.actionId === FIND_DATA_SEARCH_ACTION_ID && needsFacebookGroupCards(items)) {
-        let result: Awaited<ReturnType<typeof window.electronAPI.getFoundFacebookGroupCards>> | null = null
-        try {
-          result = await window.electronAPI.getFoundFacebookGroupCards({ campaignId: campaign.id })
-        } catch (err) {
-          console.error('Failed to read found Facebook group cards:', err)
-        }
-        if (result && result.ok === true && Array.isArray(result.data?.cards)) {
-          items = applyFacebookGroupCards(items, result.data.cards)
-          if (result.data.truncated) note = ' Log chạy quá dài, một số nhóm cũ có thể thiếu cột thêm.'
+        const cards = await ensureFoundGroupCards(campaign.id, foundGroupCardKeys)
+        if (cards.ok) {
+          items = applyFacebookGroupCards(items, cards.snapshot.cards)
+          if (cards.snapshot.truncated) note = ' Log chạy quá dài, một số nhóm cũ có thể thiếu cột thêm.'
         } else {
           note = ' Chưa đọc được log chạy nên một số cột thêm của nhóm có thể trống.'
         }
@@ -6870,7 +6998,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 )}
               </div>
 
-              <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : ''}`}>
+              <div className={`detail-dock-tab-content ${detailTab === 'findDataLog' || detailTab === 'postSearchLog' ? 'find-data-log-tab-content' : detailTab === 'foundData' ? 'find-data-result-tab-content' : ''}`}>
               {/* Tab: Báo cáo (V487 qua IPC report:campaign-run); giữ đã tải khi chuyển tab trong cùng chiến dịch */}
               {selectedCampaignSummary && reportCampaignId === selectedCampaignSummary.id && (
                 <div hidden={detailTab !== 'report'}>
@@ -8041,42 +8169,64 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       <Download size={14} /> {exportingFoundData ? 'Đang xuất...' : 'Xuất Excel'}
                     </button>
                   </div>
+                  {!loadingCampaignDetails && foundGroupCardKeys.length > 0 && (
+                    foundGroupCardsStatus === 'loading' || foundGroupCardsStatus === 'failed' || foundGroupCards?.truncated
+                  ) && (
+                    <div className="find-data-cards-note" role="status">
+                      {foundGroupCardsStatus === 'loading'
+                        ? 'Đang đọc thêm số liệu nhóm (số bài, trạng thái tham gia, bạn bè trong nhóm) từ log chạy...'
+                        : foundGroupCardsStatus === 'failed'
+                          ? (
+                            <>
+                              Chưa đọc được log chạy nên một số cột của nhóm còn trống.
+                              <button type="button" className="find-data-cards-retry" onClick={retryFoundGroupCards}>Thử lại</button>
+                            </>
+                          )
+                          : 'Log chạy quá dài, một số nhóm cũ có thể thiếu số liệu.'}
+                    </div>
+                  )}
                   {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
                   ) : foundDataItems.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa tìm thấy data nào</div>
                   ) : (
-                    <table className="campaign-grid find-data-result-grid" style={{ fontSize: 12 }}>
+                    <div className="find-data-result-table-wrap">
+                    <table
+                      className={`campaign-grid find-data-result-grid${foundDataShowsGroupColumns || foundDataShowsProfileColumns ? ' find-data-result-grid-wide' : ''}`}
+                      style={{ fontSize: 12 }}
+                    >
                       <thead>
                         <tr>
                           <th>Loại data</th>
                           <th>Giá trị</th>
                           <th>Tên</th>
-                          <th>Group</th>
+                          {foundDataShowsGroupColumns && (
+                            <>
+                              <th className="find-data-number-cell" title="Số thành viên của nhóm">Thành viên</th>
+                              <th className="find-data-number-cell" title="Số bài viết mỗi ngày Facebook hiển thị">Bài/ngày</th>
+                              <th title="Nhóm công khai hay riêng tư">Riêng tư</th>
+                              <th title="Tài khoản tìm đã tham gia nhóm chưa">Tham gia</th>
+                              <th className="find-data-number-cell" title="Số bài viết chưa đọc trong nhóm đã tham gia">Bài chưa đọc</th>
+                              <th title="Tài khoản tìm là thành viên nhóm từ tháng">Tham gia từ</th>
+                              <th className="find-data-number-cell" title="Số bạn bè của tài khoản tìm là thành viên nhóm">Bạn bè trong nhóm</th>
+                            </>
+                          )}
+                          {foundDataShowsProfileColumns && (
+                            <>
+                              <th title="Trang Facebook của người đăng bài, bình luận hoặc thành viên group">Link Facebook</th>
+                              <th title="Nơi tìm ra data">Nguồn</th>
+                            </>
+                          )}
+                          <th>Tài khoản</th>
+                          <th>{isSelectedFindDataSearchCampaign ? 'Từ khóa' : 'Group'}</th>
                           <th>Thời gian</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {foundDataItems.map(item => {
-                          const createdAtLabel = formatDisplayDateTime(item.createdAt)
-                          return (
-                            <tr key={item.key}>
-                              <td title={item.label}>
-                                <span className={`find-data-kind find-data-kind-${item.kind}`}>
-                                  {item.label}
-                                </span>
-                              </td>
-                              <td className="find-data-value-cell" title={item.value}>{item.value}</td>
-                              <td title={item.name || '-'}>{item.name || '-'}</td>
-                              <td className="find-data-group-cell" title={item.groupUrl}>{item.groupUrl}</td>
-                              <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
-                                {createdAtLabel}
-                              </td>
-                            </tr>
-                          )
-                        })}
+                        {foundDataTableRows}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </>
               )}

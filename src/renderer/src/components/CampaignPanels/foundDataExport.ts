@@ -81,6 +81,9 @@ export const toFacebookGroupList = (value: unknown): FoundFacebookGroup[] => {
 
 const hasCardFields = (group: FoundFacebookGroup): boolean => (group.cardVersion ?? 0) >= 2
 
+/** Kết quả chạy cũ (chưa lưu trường thêm) cần đọc thẻ nhóm trong log chạy. */
+export const needsFacebookGroupCard = (group: FoundFacebookGroup): boolean => !hasCardFields(group)
+
 /**
  * Bổ sung dữ liệu từ chữ gốc của thẻ nhóm trong log chạy cho kết quả chạy cũ (chưa có `cardVersion` 2): số liệu lấy
  * theo thẻ (mỗi trường theo thẻ mới nhất có giá trị) để số bài và nguyên văn số bài cùng một lần đọc; thẻ thiếu trường
@@ -120,7 +123,37 @@ export const applyFacebookGroupCards = (
 
 /** Nhóm nào chưa mang trường thêm thì cần đọc thẻ trong log chạy. */
 export const needsFacebookGroupCards = (items: readonly FoundDataExportItem[]): boolean =>
-  items.some(item => item.kind === 'facebookGroup' && item.facebookGroup && !hasCardFields(item.facebookGroup))
+  items.some(item => item.kind === 'facebookGroup' && item.facebookGroup && needsFacebookGroupCard(item.facebookGroup))
+
+export interface FacebookGroupDisplay {
+  memberCount?: number
+  postsPerDay?: number
+  /** Nguyên văn số bài Facebook hiển thị ("90+"); rỗng khi không khớp số bài của cùng nhóm. */
+  postsText: string
+  privacy: string
+  joinState: string
+  memberSince: string
+  unreadPosts?: number
+  friendMemberCount?: number
+}
+
+/** Giá trị hiển thị của một nhóm, dùng chung cho bảng ở tab và file Excel. */
+export const describeFacebookGroup = (group: FoundFacebookGroup | undefined): FacebookGroupDisplay => {
+  const privacy = (group?.privacy || '').trim()
+  const postsPerDay = knownPostsPerDay(group?.postsPerDay)
+  return {
+    memberCount: group?.memberCount,
+    postsPerDay,
+    postsText: postsPerDay !== undefined && group?.postsText && Number.parseInt(group.postsText, 10) === postsPerDay
+      ? group.postsText
+      : '',
+    privacy: privacy.toLowerCase() === 'public' ? 'Công khai' : privacy.toLowerCase() === 'private' ? 'Riêng tư' : privacy,
+    joinState: group?.joinState ? JOIN_STATE_LABELS[group.joinState] : '',
+    memberSince: group?.memberSince || '',
+    unreadPosts: group?.unreadPosts,
+    friendMemberCount: group?.friendMemberCount
+  }
+}
 
 const mergeList = (first: readonly string[] | undefined, second: readonly string[] | undefined): string[] =>
   Array.from(new Set([...(first || []), ...(second || [])].map(value => value.trim()).filter(Boolean)))
@@ -199,25 +232,20 @@ const formatFoundAt = (value: string | undefined): string => {
 
 const groupRow = (item: FoundDataExportItem): Array<string | number> => {
   const group = item.facebookGroup
-  const privacy = group?.privacy || ''
-  const postsPerDay = knownPostsPerDay(group?.postsPerDay)
-  // Nguyên văn chỉ hiện khi khớp số bài của cùng dòng.
-  const postsText = postsPerDay !== undefined && group?.postsText && Number.parseInt(group.postsText, 10) === postsPerDay
-    ? group.postsText
-    : ''
+  const display = describeFacebookGroup(group)
   const keywords = mergeList(item.keywords, group?.keyword ? [group.keyword] : [])
   return [
     item.name || '',
     item.value,
-    group?.memberCount ?? '',
-    postsPerDay ?? '',
-    postsPerDay == null ? '' : 'ngày',
-    privacy.toLowerCase() === 'public' ? 'Công khai' : privacy.toLowerCase() === 'private' ? 'Riêng tư' : privacy,
-    postsText,
-    group?.unreadPosts ?? '',
-    group?.joinState ? JOIN_STATE_LABELS[group.joinState] : '',
-    group?.memberSince || '',
-    group?.friendMemberCount ?? '',
+    display.memberCount ?? '',
+    display.postsPerDay ?? '',
+    display.postsPerDay == null ? '' : 'ngày',
+    display.privacy,
+    display.postsText,
+    display.unreadPosts ?? '',
+    display.joinState,
+    display.memberSince,
+    display.friendMemberCount ?? '',
     keywords.join(', '),
     (item.accountNames || []).join(', '),
     formatFoundAt(item.foundAt)

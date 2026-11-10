@@ -25024,6 +25024,84 @@ body.theme-light :is(
   overflow-wrap: anywhere;
 }
 
+/* Tab Data tìm được: thanh xuất cố định, bảng tự cuộn hai chiều (nhiều cột) với tiêu đề dính. */
+.detail-dock-tab-content.find-data-result-tab-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.find-data-result-tab-content > .find-data-export-bar,
+.find-data-cards-note {
+  flex: 0 0 auto;
+}
+
+.find-data-result-table-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.find-data-result-grid th {
+  white-space: nowrap;
+}
+
+/* Nhiều cột: giữ link và từ khóa đủ rộng, thiếu chỗ thì bảng cuộn ngang. */
+.find-data-result-grid .find-data-value-cell {
+  min-width: 240px;
+}
+
+.find-data-result-grid .find-data-group-cell {
+  min-width: 110px;
+}
+
+.find-data-name-cell {
+  min-width: 220px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.campaign-grid .find-data-number-cell {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.find-data-nowrap-cell {
+  white-space: nowrap;
+}
+
+.find-data-joined {
+  color: var(--accent-success);
+}
+
+.find-data-empty {
+  color: var(--text-tertiary);
+}
+
+.find-data-cards-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 8px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.find-data-cards-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-info);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.find-data-cards-retry:hover {
+  text-decoration: underline;
+}
+
 /* =========== Browser Page =========== */
 .browser-page {
   display: flex;

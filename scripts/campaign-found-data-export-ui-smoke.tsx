@@ -51,7 +51,10 @@ const handlers: Record<string, any> = {
   getCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
   getDesktopCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
   listCampaignDetailsByCampaign: (id: number) => id === 91 ? details : [{
-    id: 3, campaignId: 92, data: { phones: ['0901234567'], uids: ['12345678901234567890'] }
+    id: 3, campaignId: 92, accountId: 41, data: { phones: ['0901234567'], uids: ['12345678901234567890'],
+      phoneProfiles: [{ phone: '0901234567', name: 'Người đăng', uid: '100000000000001', url: 'https://www.facebook.com/profile.php?id=100000000000001', source: 'post' }],
+      uidProfiles: [{ uid: '12345678901234567890', name: '', url: '', source: 'mystery_source' }],
+      groupMembers: [{ uid: '100000000000009', name: 'Thành viên mới', url: 'https://www.facebook.com/100000000000009' }] }
   }],
   getFoundFacebookGroupCards: async (request: any) => {
     state.cardCalls.push(request)
