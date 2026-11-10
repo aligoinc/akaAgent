@@ -110,5 +110,20 @@
     "edgeLogs": "20:55-23:42 VN: 0 HTTP 5xx, 0 HTTP 503; average origin time 44-54 ms per minute; minute of V485 p1 (23:35) 45 requests over 1 s, back to 45 ms the next minute; minutes of V485 p2 and V486 (23:38, 23:39) 2 and 0 requests over 1 s; data-group RPCs 26-32 per minute with 0 errors",
     "firstRealIngest": "organization 1750, kind scan, 23:46:20 VN, batch 23392: completed on the sync path with the V485 ingest function (11 members, 18 inputs); organization 1684 remove_members 23:42:55 and bind_source 23:46:02 completed",
     "clients": "the 3 upload-session RPCs are called only by new clients (WebApp API after akaAgentWebApp#177, next Desktop release); no call by 23:46 VN, older clients keep sending one call, unchanged"
-  }
+  },
+  "trialChecks": [
+    {
+      "checkedAtVietnam": "2026-11-10 11:15",
+      "by": "scheduled read-only check (SELECT and edge_logs only, nothing written)",
+      "routingSetting": "{\"mode\":\"async\",\"organizationIds\":[701],\"workerBudgetMs\":4000}, unchanged",
+      "worker": "cron job 112: 4,166/4,166 runs succeeded since the switch, average 0.01 s, p99 0.045 s, longest 1.09 s; 0 failed",
+      "routeJobs": "5 jobs, all kind baseline, status done, organization 701, staff 724, group 1770; 425 inputs inserted (85 per campaign), 0 errors, 0 retries; each job finished 1.1-9.6 s after it was created (waiting for the next 10-second worker run); 0 pending or running",
+      "organization701Activity": "since the switch only 5 bind_source on group 1770 (campaigns 52462-52465 at 07:39-07:41 VN, 52571 at 09:41 VN); no ingest yet, so adding data to a group has not run on the async path in production",
+      "parity": "each of the 5 async campaigns has 85 inputs and 85 distinct targets, inputs written 0.6-9.4 s after the bind; the 11 sync binds of group 1770 on 09/11 (same revision 18, facebook_group_post) also gave 85 inputs each",
+      "edgeLogs": "organization 701 (client IPs of staff 724): bind_source 5 calls, all HTTP 200, average 238 ms, longest 396 ms; on 09/11 before the switch 12 calls, average 946 ms, longest 1,615 ms; ingest on 09/11: 5 HTTP 500 at about 60.6 s (11:20-11:31 VN) and 3 HTTP 200 averaging 336 ms after the paused campaigns were stopped; no data-group RPC returned non-200 since the switch",
+      "allOrganizations": "since the switch: aka_agent_ingest_data_group 27 calls, all HTTP 200, average 266 ms, longest 1,057 ms, none over 30 s; bind_source 15 calls, all HTTP 200, longest 4,136 ms; no upload-session RPC call yet",
+      "uploadSessions": "none",
+      "verdict": "no error and no unusual delay; keep async for organization 701"
+    }
+  ]
 }
