@@ -2,7 +2,7 @@
 
 [V490 phiên app iOS chỉ dùng Chat](../CONTROL_SESSION_CHAT_SCOPE_V490.md):
 **Đã apply akachat lúc 18:21:17 VN, 10/11/2026** (`20261110112117 / migration_v490_control_session_chat_scope`;
-md5 sổ = md5 tệp `def9660b…`; không apply lại). Chỉ thêm `aka_agent_authenticate_control_session_chat_v2(text)`
+md5 sổ = md5 tệp `def9660b…`; không apply lại; migration đã merge `dev_3` qua PR #628). Chỉ thêm `aka_agent_authenticate_control_session_chat_v2(text)`
 (EXECUTE chỉ `service_role`); hàm cũ giữ nguyên checksum/ACL. Thử rồi hủy trên production: 200 phiên thật giống
 hệt hàm cũ ngoài `app_scope`; nhân viên chỉ dùng Chat có thật → phiên native `app_scope = 'chat'`, phiên web vẫn
 bị từ chối. 0 lỗi 503/5xx quanh phút apply. Caller WebApp API (aligoinc/akaAgentWebApp#190) **chưa deploy**, iOS

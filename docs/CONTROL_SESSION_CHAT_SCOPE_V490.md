@@ -1,6 +1,6 @@
 # V490 — Phiên iOS chỉ dùng Chat (10/11/2026)
 
-Trạng thái: **V490 ĐÃ apply akachat lúc 18:21:17 VN 10/11/2026** (`20261110112117 /
+Trạng thái: migration/tài liệu **đã merge `dev_3`** (PR #628, 18:17 VN). **V490 ĐÃ apply akachat lúc 18:21:17 VN 10/11/2026** (`20261110112117 /
 migration_v490_control_session_chat_scope`) theo yêu cầu của người dùng; **không apply lại** (preflight từ chối
 khi hàm đã có); md5 sổ migration = md5 tệp `def9660b54e21b590bd12f6206009eb7`. Biên nhận:
 [`migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json`](../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
