@@ -62,7 +62,7 @@
     }
   ],
   "notDone": [
-    "API/Web not deployed (WebApp branch claude/bold-hawking-4m2grp, merged dev up to #195, not merged into dev yet)",
+    "API/Web not deployed (WebApp #196 merged into dev; this SQL/docs merged into dev_3 via #633)",
     "Desktop not started (needs GRANT EXECUTE to aka_agent_desktop + IPC + UI)"
   ],
   "rollback": "migrations/rollback_v491_campaign_input_duplicates.sql (drop function + delete switch row); no-DDL alternative: set audience off"
