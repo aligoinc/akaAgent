@@ -7,9 +7,11 @@ Dùng: python3 scripts/data-group-routing/test_v486.py
 - Bước tự đối chiếu trong migration chạy được (dữ liệu fixture) và từ chối chạy lại.
 - Đo tốc độ đẩy data trước/sau; so sánh song song kịch bản V484 (sync và async) khi có V486 với trước V484.
 - Rollback trả nguyên văn.
+- Nhánh che tên chủ nhóm (gọi từ phiên Desktop không phải chủ) cho kết quả giống hệt trước V486.
 """
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
@@ -61,6 +63,36 @@ ORDER BY 1, 2, 3, 4, w.owner
 """
 
 
+DESKTOP_UUID = '00000000-0000-4000-8000-000000000725'
+DESKTOP_SQL = f"""
+INSERT INTO private.aka_agent_desktop_users (auth_user_id, staff_id) VALUES ('{DESKTOP_UUID}', 725);
+CREATE FUNCTION public.v486_test_combos() RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public' AS $f$
+  SELECT COALESCE(jsonb_agg(to_jsonb(r.*)), '[]'::jsonb) FROM ({COMBOS_SQL}) AS r
+$f$;
+GRANT EXECUTE ON FUNCTION public.v486_test_combos() TO aka_agent_desktop;
+"""
+DESKTOP_CALL = ("SET ROLE aka_agent_desktop; SELECT set_config('request.jwt.claims', "
+                f"'{{\"role\":\"aka_agent_desktop\",\"sub\":\"{DESKTOP_UUID}\"}}', false); "
+                "SELECT public.v486_test_combos();")
+
+
+def desktop_combos(c) -> list:
+    out = c.q(DESKTOP_CALL).splitlines()
+    return json.loads(out[-1])
+
+
+def mixed_session(c) -> dict:
+    """Một phiên: gọi thường -> phiên Desktop -> gọi thường (plan plpgsql giữ trong phiên không được giữ luôn kết quả che tên)."""
+    out = c.q("SELECT 'A:' || public.v486_test_combos()::text; SET ROLE aka_agent_desktop; "
+              "SELECT 'X:' || set_config('request.jwt.claims', "
+              f"'{{\"role\":\"aka_agent_desktop\",\"sub\":\"{DESKTOP_UUID}\"}}', false); "
+              "SELECT 'B:' || public.v486_test_combos()::text; RESET ROLE; "
+              "SELECT 'X:' || set_config('request.jwt.claims', '', false); "
+              "SELECT 'C:' || public.v486_test_combos()::text;")
+    return {line[0]: json.loads(line[2:]) for line in out.splitlines() if line[:2] in ('A:', 'B:', 'C:')}
+
+
 def worker_ms_per_pair(c) -> float:
     c.q(S.campaign_sql(1, 20, group=S.FB_GROUP, action='facebook_group_post', account=S.FB_ACCOUNT,
                        statuses=['tạm dừng', 'đang chạy']))
@@ -84,7 +116,13 @@ def main() -> None:
     c = T.new_cluster(with_v484=True)
     try:
         c.q(SHARING_SQL)
+        c.psql(DESKTOP_SQL)
         before = c.rows(COMBOS_SQL)
+        desktop_before = desktop_combos(c)
+        masked = [r for r in desktop_before if r['access'] and r['access']['ownerName'] == 'Nhân viên #724']
+        ok(len(masked) > 0 and all(r['access']['ownerName'] == 'Nhân viên thử' for r in before
+                                   if r['access'] and r['access']['ownerStaffId'] == 724),
+           f'phiên Desktop (staff 725) thấy tên chủ nhóm bị che ở {len(masked)} tổ hợp, gọi thường thấy tên thật')
         ok(any(r['access'] and r['access']['role'] == 'shared' for r in before)
            and any(r['access'] and r['access']['role'] == 'owner' for r in before)
            and any(r['access'] is None for r in before), 'tổ hợp kiểm quyền có đủ chủ nhóm / được chia sẻ / không có quyền')
@@ -92,6 +130,10 @@ def main() -> None:
         ok('identical before/after' in err, 'V486: bước tự đối chiếu trong migration chạy và đạt', err[-300:])
         after = c.rows(COMBOS_SQL)
         ok(after == before, f'V486: {len(before)} tổ hợp kiểm quyền giống hệt trước')
+        ok(desktop_combos(c) == desktop_before, f'V486: {len(desktop_before)} tổ hợp gọi từ phiên Desktop giống hệt trước')
+        mixed = mixed_session(c)
+        ok(mixed.get('A') == before and mixed.get('B') == desktop_before and mixed.get('C') == before,
+           'V486: cùng một phiên xen gọi thường / phiên Desktop / gọi thường, mỗi lượt đúng kết quả của nó')
         ok(c.q("SELECT string_agg(l.lanname, ',' ORDER BY p.proname) FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang "
                "WHERE p.oid IN ('private.group_access(text,bigint,bigint,bigint)'::regprocedure,"
                " 'private.can_read_data_group(bigint,bigint,bigint)'::regprocedure,"
@@ -105,7 +147,7 @@ def main() -> None:
         _, err = c.psql(V486.read_text(encoding='utf-8'), stop_on_error=False)
         ok('already applied' in err, 'chạy lại V486 bị chặn')
         c.psql(RB486.read_text(encoding='utf-8'))
-        ok(c.rows(COMBOS_SQL) == before and c.q(
+        ok(c.rows(COMBOS_SQL) == before and desktop_combos(c) == desktop_before and c.q(
             "SELECT l.lanname FROM pg_proc p JOIN pg_language l ON l.oid = p.prolang "
             "WHERE p.oid = 'private.group_access(text,bigint,bigint,bigint)'::regprocedure") == 'sql',
            'rollback V486 trả về hàm SQL cũ, kết quả vẫn giống')
