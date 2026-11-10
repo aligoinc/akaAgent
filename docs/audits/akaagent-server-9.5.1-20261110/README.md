@@ -47,4 +47,27 @@ Chưa ký Authenticode, chưa cài/chạy trên Windows thật, chưa cài lên 
 - `rpc/enable_due_auto_account_actions`
 - GET `/rest/v1/auto_campaigns`
 
+## Cài lên VPS và đo sau cài — 10/11/2026
+
+Người dùng báo đã cài bản này lên VPS. Theo `edge_logs` của IP VPS, tiến trình mới gửi request từ **13:41:50 VN** (câu đọc gộp `account_id=in.(…)`, `enable_due` 2 lần/phút). Agent không kiểm trực tiếp trên máy Windows.
+
+- Lúc tiến trình cũ tắt (13:41:16–24 VN) có 97 lỗi 406 `PATCH auto_campaigns … status=eq.đang chạy`. Loại lỗi này có sẵn ở bản cũ (1 lần lúc 09:58 và 1 lần lúc 12:39 cùng ngày). Từ khi bản mới chạy tới 13:48 VN: 0 lỗi 4xx/5xx từ VPS. Chiến dịch Server vẫn chạy: lúc 13:47 có 412 lượt ghi kết quả hành động/phút, trước khi cài ~220/phút (đang chạy bù).
+- 13:42–13:46 VN, p50 REST toàn hệ (cả client không phải VPS) từ ~60 ms lên ~580 ms rồi về 85 ms lúc 13:47. Postgres rảnh, nghẽn ở PostgREST. Khoảng này trùng đợt mọi tài khoản Zalo Server đăng nhập lại (`auto_account_logs` ~1.200/phút so với ~100). Lần sau nên cài ngoài giờ cao điểm.
+- Request VPS mỗi phút, phút 13:47 so với trung bình 13:36–13:41 VN:
+
+| Endpoint | Trước | Sau |
+| --- | ---: | ---: |
+| `enable_due_auto_account_actions` | 1.032 | 2 |
+| Đọc chiến dịch đến hạn (từng tài khoản → gộp) | 2.935 | 978 |
+| `auto_account_action_status` | 1.763 | 371 |
+| Run control | 3.168 | 2.054 |
+| `HEAD auto_campaign_details` | 1.258 | 985 |
+| `GET auto_accounts` | 2.319 | 3.439 |
+| `getCampaign` theo id | 3.266 | 3.517 |
+| **Tổng** | **~23.000** | **19.854** |
+
+Tổng mới giảm 14% vì Server đang chạy bù sau khi khởi động lại; chưa đo lúc ổn định.
+
+- Hệ quả hiển thị: note đếm ngược mã Zalo 127 ("tạm nghỉ gửi tin N phút") và dòng "⚠️ Chưa thể chạy chiến dịch" trong lịch sử chạy chỉ đổi ~5 phút/lần thay vì mỗi phút (108–203 dòng/10 phút trước khi cài, 38 dòng/6 phút sau). Giờ chạy lại, hạn mức, dữ liệu và tạm dừng/xoá trên Web không đổi. Đã sửa ở code nhánh `claude/preclaim-countdown-note`, chưa build/cài.
+
 [Receipt](build-receipt.json). Log, manifest và script kiểm chứng ở `/Users/lequangnhut/.codex/builds/akaagent-server-9.5.1-20261110T062619Z` (ngoài Git).
