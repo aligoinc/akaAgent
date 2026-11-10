@@ -53,9 +53,16 @@
     "rollbackThenReapply": true,
     "missingIndexRefused": true
   },
+  "laterChanges": [
+    {
+      "atVietnam": "2026-11-10 22:28:25",
+      "change": "web.campaign_input_duplicates audience admin_akabiz -> all (value {\"audience\":\"all\",\"defaultDays\":30,\"maxDays\":365}, updated_at = now())",
+      "why": "user request, before API/Web deploy; the running API does not read this key, so it takes effect when the new API/Web are deployed",
+      "via": "Supabase MCP execute_sql: UPDATE guarded by id 106 + old value + is_active, RETURNING; the 3 table triggers (desktop write guard, device-limit key, engagement key) do not act on this key"
+    }
+  ],
   "notDone": [
-    "API/Web not deployed (WebApp branch claude/bold-hawking-4m2grp)",
-    "switch stays admin_akabiz; open to everyone = UPDATE value audience all",
+    "API/Web not deployed (WebApp branch claude/bold-hawking-4m2grp, merged dev up to #195, not merged into dev yet)",
     "Desktop not started (needs GRANT EXECUTE to aka_agent_desktop + IPC + UI)"
   ],
   "rollback": "migrations/rollback_v491_campaign_input_duplicates.sql (drop function + delete switch row); no-DDL alternative: set audience off"

@@ -1,6 +1,6 @@
 # Lọc trùng SĐT khi tải dữ liệu — V491
 
-**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates` đang `admin_akabiz`. API/Web ở akaAgentWebApp nhánh `claude/bold-hawking-4m2grp`, **chưa deploy**. Desktop chưa làm. [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
+**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates`: V491 đặt `admin_akabiz`, **đổi sang `all` lúc 22:28:25 VN 10/11/2026 theo yêu cầu, trước khi deploy API/Web** (bản API đang chạy chưa đọc khóa này nên chưa ai thấy; deploy xong mọi khách thấy ngay sau khi tải lại trang, không qua bước admin akaBiz thử trước). API/Web ở akaAgentWebApp nhánh `claude/bold-hawking-4m2grp` (đã gộp `dev` tới #195), **chưa merge, chưa deploy**. Desktop chưa làm. [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
 
 ## Tính năng
 
@@ -41,7 +41,7 @@ Hiệu năng: chỉ đọc ứng viên qua `idx_campaign_input_cooldown_phone` (
 
 ## Triển khai và gỡ
 
-Thứ tự: DB (đã xong) → deploy API+Web → admin akaBiz thử thật → `UPDATE auto_system_settings SET value = '{"audience":"all","defaultDays":30,"maxDays":365}' WHERE key = 'web.campaign_input_duplicates'` (API đọc lại mỗi lượt, không cần deploy).
+Thứ tự: DB (đã xong) → công tắc `all` (đã đổi 22:28:25 VN 10/11 theo yêu cầu, bằng `UPDATE auto_system_settings SET value = '{"audience":"all","defaultDays":30,"maxDays":365}', updated_at = now() WHERE key = 'web.campaign_input_duplicates' AND value = '<giá trị cũ>'`, không trigger nào của bảng xử lý khóa này) → merge `dev` + deploy API/Web (còn lại) → theo dõi lượt gọi đầu tiên.
 Gỡ nhanh không DDL: đặt `audience` = `off` (Web ẩn lựa chọn 2/3). Gỡ hẳn: [rollback](../migrations/rollback_v491_campaign_input_duplicates.sql) (xóa hàm + dòng công tắc; không đụng dữ liệu).
 
 ## Desktop (làm sau)
