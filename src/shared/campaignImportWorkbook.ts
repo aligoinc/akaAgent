@@ -97,7 +97,11 @@ export function readImportWorkbook(bytes: Uint8Array, fileName = '', options: { 
 
 /** Store repeated long evidence once, in text chunks Excel can write without losing Unicode. */
 export function createImportExportWorkbook(report: ImportVerificationResult, group: ImportResultGroup): WorkBook {
-  const matrix = importExportMatrix(report, group)
+  return createImportMatrixWorkbook(importExportMatrix(report, group), group === 'valid' ? 'Hợp lệ' : group === 'rejected' ? 'Bị loại' : 'Trùng')
+}
+
+/** Một bảng bắt đầu bằng 9 cột template (nhập lại được), nội dung dài tách sang sheet riêng như các nhóm khác. */
+export function createImportMatrixWorkbook(matrix: string[][], sheetName: string): WorkBook {
   const longTexts = new Map<string, string>()
   const chunks: string[][] = [LONG_TEXT_HEADERS]
   const rows = matrix.map(row => row.map(value => {
@@ -122,7 +126,7 @@ export function createImportExportWorkbook(report: ImportVerificationResult, gro
   sheet['!cols'] = rows[0].map((_, index) => ({ wch: index < 9 ? 22 : 32 }))
   sheet['!autofilter'] = { ref: utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: rows[0].length - 1 } }) }
   const book = utils.book_new()
-  utils.book_append_sheet(book, sheet, group === 'valid' ? 'Hợp lệ' : group === 'rejected' ? 'Bị loại' : 'Trùng')
+  utils.book_append_sheet(book, sheet, sheetName)
   if (longTexts.size) {
     const evidence = utils.aoa_to_sheet(chunks)
     evidence['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 90 }, { wch: 12 }, { wch: 16 }]

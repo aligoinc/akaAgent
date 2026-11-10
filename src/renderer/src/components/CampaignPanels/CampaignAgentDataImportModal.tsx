@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import CampaignDataUploadModal from './CampaignDataUploadModal'
+import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
 import type { CampaignImportPlatform, CampaignInputData } from '../../../../shared/types'
 import type { AgentDataFile, AgentDataImport, AgentDataSource } from '../../../../shared/campaignAgentData'
 
-export default function CampaignAgentDataImportModal({ draftId, request, platform, actionId, actionName, accountIds, onClose, onInsert }: {
+export default function CampaignAgentDataImportModal({ draftId, request, platform, actionId, actionName, accountIds, duplicateCheck, onClose, onInsert }: {
   draftId: string; request?: AgentDataImport; platform: CampaignImportPlatform; actionId: string; actionName?: string; accountIds: number[];
-  onClose: () => void; onInsert: (rows: Partial<CampaignInputData>[], mode: 'append' | 'replace') => void
+  /** Lọc trùng với chiến dịch khác (V491/V493), như cửa sổ Upload của form thường. */
+  duplicateCheck?: CampaignImportDuplicateCheck
+  onClose: () => void; onInsert: (rows: Partial<CampaignInputData>[], mode: 'append' | 'replace', duplicates?: ImportDuplicateSummary) => void
 }) {
   const [index, setIndex] = useState(0), [source, setSource] = useState<AgentDataSource>(), [error, setError] = useState('')
   const [loading, setLoading] = useState(!!request?.files.length), [retry, setRetry] = useState(0)
@@ -44,7 +46,7 @@ export default function CampaignAgentDataImportModal({ draftId, request, platfor
   </div></div>, document.body)
   const mode = index === 0 ? request?.mode || 'append' : 'append'
   return <CampaignDataUploadModal key={`${file?.id || 'manual'}:${retry}`} platform={platform} actionId={actionId} actionName={actionName}
-    accountIds={accountIds} showDatasetName={false} initialSource={source} onClose={close} onInsert={() => {}}
+    accountIds={accountIds} showDatasetName={false} initialSource={source} duplicateCheck={duplicateCheck} onClose={close} onInsert={() => {}}
     contextSlot={<p className="text-muted">{file ? `File ${index + 1}/${request!.files.length}: ${file.name}. ` : ''}
       {mode === 'replace' ? 'Khi bấm chèn, danh sách hiện tại sẽ được thay bằng dữ liệu hợp lệ bên dưới.' : 'Kiểm tra dữ liệu trước khi chèn vào chiến dịch.'}</p>}
     submitLabel={mode === 'replace' ? 'Thay danh sách bằng dữ liệu này' : 'Chèn xuống chi tiết'}
@@ -57,5 +59,5 @@ export default function CampaignAgentDataImportModal({ draftId, request, platfor
       if (result.kind !== 'text') throw new Error('Không đọc được chữ trong ảnh.')
       return result.text
     }}
-    onSubmitRows={({ rows }) => { onInsert(rows, mode); inserted.current = true }} />
+    onSubmitRows={({ rows, duplicates }) => { onInsert(rows, mode, duplicates); inserted.current = true }} />
 }

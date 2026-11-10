@@ -14,6 +14,8 @@ import { requireCurrentUser } from '../../data/currentUser'
 import { callAiUsing } from '../../services/aiRuntimeService'
 import { imageImportRows, type ImportImageSource, type ImportTableSource } from '../../../shared/campaignImportVerification'
 import { importWorkbookTables, readImportWorkbook } from '../../../shared/campaignImportWorkbook'
+import { CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest } from '../../../shared/campaignInputDuplicatesIpc'
+import { handleCampaignInputDuplicatesRequest } from '../../services/campaignInputDuplicatesService'
 
 const IMPORT_IMAGE_AI_CODE = 'app_campaign_import_image_to_data'
 const SHEET_FETCH_TIMEOUT_MS = 30000
@@ -356,6 +358,8 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
 }
 
 export function registerCampaignImportHandlers(): void {
+  // "Lọc trùng dữ liệu" của cửa sổ Upload (V491/V493): công tắc + một lượt ≤ 2.000 SĐT; {ok,data}|{ok:false,code,message}, không ném lỗi.
+  ipcMain.handle(CAMPAIGN_INPUT_DUPLICATES_IPC, (_, request: CampaignInputDuplicatesIpcRequest) => handleCampaignInputDuplicatesRequest(request))
   ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, async (_, request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[] | ImportTableSource> => {
     requireCurrentUser()
     const platform = normalizePlatform(request?.platform)

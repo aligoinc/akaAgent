@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, X } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, Image as ImageIcon, RefreshCw, Upload, Users, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import { read, writeFile } from 'xlsx'
 import { CampaignImportDataRow, CampaignImportPlatform, CampaignInputData, ContactDatasetImportSource, getCampaignInputDataRequirement } from '../../../../shared/types'
@@ -8,12 +8,23 @@ import {
   IMPORT_LIMIT_MESSAGE, IMPORT_MAX_ROWS, detectImportColumns, hasImportTextHeader, importLocationLabel,
   importTargetField, mapImportTable, normalizeImportGroupLink, templateImportSchema, textImportRows, verifyImportRows,
   type ImportColumnMap, type ImportField, type ImportPhonePolicy, type ImportResultGroup, type ImportSourceKind,
-  type ImportSourceRow, type ImportTable, type ImportTableSource, type ImportVerificationResult
+  type ImportSourceRow, type ImportTable, type ImportTableSource, type ImportVerificationResult,
+  importExistingExportMatrix, splitExistingImportEntries, type ImportExistingEntry, type ImportVerificationEntry
 } from '../../../../shared/campaignImportVerification'
-import { createImportExportWorkbook, importWorkbookTables, readImportWorkbook } from '../../../../shared/campaignImportWorkbook'
+import { createImportExportWorkbook, createImportMatrixWorkbook, importWorkbookTables, readImportWorkbook } from '../../../../shared/campaignImportWorkbook'
+import {
+  INPUT_DUPLICATES_DAY_PRESETS, INPUT_DUPLICATES_DEFAULT_DAYS, INPUT_DUPLICATES_MAX_DAYS, chunkInputDuplicatePhones, formatVietnamDate,
+  formatVietnamTime, inputDuplicateScopeLabel, inputDuplicateStatusLabel, inputDuplicateWindowStart, inputDuplicatesVisible,
+  mergeInputDuplicateResults, supportsInputDuplicateCheck, type InputDuplicateScope, type InputDuplicatesCheckResult, type InputDuplicatesSetting
+} from '../../../../shared/campaignInputDuplicates'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useCampaignStore } from '../../stores/campaignStore'
+import { getAccountPlatformLabel } from '../../utils/accountLabels'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
 import type { AgentDataSource } from '../../../../shared/campaignAgentData'
+import { InputDuplicateAccountPicker, type InputDuplicateAccountOption } from './InputDuplicateAccountPicker'
+import './CampaignImportDuplicates.css'
 
 type ImportTab = ImportSourceKind
 type TableTab = 'excel' | 'akabizTemplate' | 'sheet' | 'textbox'
@@ -36,8 +47,10 @@ const waitForNextBrowserPaint = (): Promise<void> => new Promise(resolve => {
   window.requestAnimationFrame(() => window.setTimeout(resolve, 0))
 })
 const EMPTY_CONFIG = (): TableConfig => ({ index: 0, mapping: {}, skipHeader: false })
-const RESULT_GROUPS: { key: ImportResultGroup; label: string; shortLabel: string; file: string }[] = [
+type ResultGroupKey = ImportResultGroup | 'existing'
+const RESULT_GROUPS: { key: ResultGroupKey; label: string; shortLabel: string; file: string }[] = [
   { key: 'valid', label: 'Dữ liệu hợp lệ có thể sử dụng', shortLabel: 'Hợp lệ', file: 'du-lieu-hop-le' },
+  { key: 'existing', label: 'Dữ liệu đã có ở chiến dịch khác', shortLabel: 'Đã có ở chiến dịch khác', file: 'du-lieu-da-co-o-chien-dich-khac' },
   { key: 'rejected', label: 'Dữ liệu lỗi/bị loại', shortLabel: 'Lỗi/bị loại', file: 'du-lieu-bi-loai' },
   { key: 'duplicates', label: 'Dữ liệu trùng bị loại', shortLabel: 'Trùng', file: 'du-lieu-trung' }
 ]
@@ -51,7 +64,49 @@ export interface CampaignDataUploadSubmission {
   importSource: ContactDatasetImportSource
   sourceLink: string | null
   rows: Partial<CampaignInputData>[]
+  /** Có khi khách chọn lọc trùng với chiến dịch khác (V491/V493): phạm vi đã đối chiếu và số đã bỏ qua. */
+  duplicates?: ImportDuplicateSummary
 }
+
+/**
+ * Lọc trùng với chiến dịch khác (V491, Desktop gọi bằng token ở V493). Chỉ nơi gọi chiến dịch truyền; cửa sổ tự đọc
+ * công tắc `web.campaign_input_duplicates` và chỉ hiện khung khi loại chiến dịch hỗ trợ và công tắc mở cho phiên này.
+ */
+export interface CampaignImportDuplicateCheck {
+  /** Tài khoản đang chọn của chiến dịch: form tạo = mọi tài khoản đã tick; Thêm data = tài khoản của chiến dịch. */
+  currentAccounts: { id: number; name: string }[]
+  /** Chiến dịch đang nhận "Thêm data": không so với chính nó. */
+  excludeCampaignId?: number
+}
+
+export interface ImportDuplicateSummary {
+  scope: Exclude<InputDuplicateScope, 'file'>
+  days: number
+  accountIds: number[]
+  checkedAt: string
+  since: string
+  /** Số mục hợp lệ bị bỏ vì đã có ở chiến dịch khác. */
+  skipped: number
+}
+
+const readDuplicateMemory = (key: string): { days?: number; pickedIds?: number[] } => {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) || '{}')
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const record = parsed as Record<string, unknown>
+    return {
+      days: typeof record.days === 'number' && Number.isInteger(record.days) ? record.days : undefined,
+      pickedIds: Array.isArray(record.pickedIds)
+        ? record.pickedIds.filter((id): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) : undefined
+    }
+  } catch { return {} }
+}
+const writeDuplicateMemory = (key: string, patch: { days?: number; pickedIds?: number[] }): void => {
+  try { window.localStorage.setItem(key, JSON.stringify({ ...readDuplicateMemory(key), ...patch })) }
+  catch { /* Không lưu được: chỉ mất phần nhớ lựa chọn cho lần sau. */ }
+}
+const checkedMessage = (next: ImportVerificationResult, found: ImportExistingEntry[] | null): string =>
+  `Đã kiểm tra: ${next.valid.length} hợp lệ · ${next.rejected.length} lỗi/bị loại · ${next.duplicates.length} trùng${found ? ` · ${found.length} đã có ở chiến dịch khác` : ''}.`
 
 interface CampaignDataUploadModalProps {
   platform: CampaignImportPlatform
@@ -59,7 +114,9 @@ interface CampaignDataUploadModalProps {
   actionName?: string
   accountIds: number[]
   onClose: () => void
-  onInsert: (rows: Partial<CampaignInputData>[]) => void
+  onInsert: (rows: Partial<CampaignInputData>[], meta?: { duplicates?: ImportDuplicateSummary }) => void
+  /** Hiện khung "Lọc trùng dữ liệu" (V491/V493). Nhóm data, Kiểm tra SĐT và nơi gọi cũ không truyền: chỉ lọc trong file như trước. */
+  duplicateCheck?: CampaignImportDuplicateCheck
   /** Optional external sink used by Data Group; skips legacy account-scoped dataset persistence. */
   onSubmitRows?: (submission: CampaignDataUploadSubmission) => void | Promise<void>
   contextSlot?: ReactNode
@@ -188,9 +245,11 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
 export default function CampaignDataUploadModal({
   platform, actionId, actionName, accountIds, onClose, onInsert, onSubmitRows, contextSlot,
   title = 'Upload dữ liệu', datasetNameLabel = 'Tên nhóm dữ liệu', showDatasetName = true,
-  layout = 'default', submitLabel = 'Chèn xuống chi tiết', initialSource, readImageText
+  layout = 'default', submitLabel = 'Chèn xuống chi tiết', initialSource, readImageText, duplicateCheck
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
+  const authUser = useAuthStore(state => state.user)
+  const storeAccounts = useCampaignStore(state => state.accounts)
   const fields = useMemo(() => getFieldsForPlatform(platform, actionId), [platform, actionId])
   const [activeTab, setActiveTab] = useState<ImportTab>('textbox')
   const [datasetName, setDatasetName] = useState(createDefaultDataGroupName)
@@ -207,7 +266,7 @@ export default function CampaignDataUploadModal({
   const [templateStatus, setTemplateStatus] = useState<TemplateReadStatus>('idle')
   const [templateError, setTemplateError] = useState('')
   const [report, setReport] = useState<ImportVerificationResult | null>(null)
-  const [resultGroup, setResultGroup] = useState<ImportResultGroup>('valid')
+  const [resultGroup, setResultGroup] = useState<ResultGroupKey>('valid')
   const [previewPage, setPreviewPage] = useState(1)
   const [formattedImportSource, setFormattedImportSource] = useState<ImportTab | null>(null)
   const [formattedSourceLink, setFormattedSourceLink] = useState<string | null>(null)
@@ -217,6 +276,36 @@ export default function CampaignDataUploadModal({
   const asyncOperationRef = useRef(0)
   const insertInFlightRef = useRef(false)
   const templateFileInputRef = useRef<HTMLInputElement>(null)
+  // "Lọc trùng dữ liệu" (V491/V493). Mặc định "Chỉ trong file này"; số ngày và tài khoản đã chọn được nhớ trên máy.
+  const dupSupported = Boolean(duplicateCheck) && supportsInputDuplicateCheck(actionId)
+  const dupStorageKey = `aka.campaignImportDuplicates.v1:${authUser?.organizationId ?? ''}:${authUser?.staffId ?? ''}`
+  const dupConfigKey = duplicateCheck ? JSON.stringify([duplicateCheck.currentAccounts.map(account => account.id), duplicateCheck.excludeCampaignId ?? null]) : ''
+  const [dupSetting, setDupSetting] = useState<InputDuplicatesSetting | null>(null)
+  const dupEnabled = dupSupported && Boolean(dupSetting) && inputDuplicatesVisible(dupSetting ?? undefined, authUser?.isAdminAkabiz)
+  const dupMaxDays = dupSetting ? Math.max(1, Math.min(INPUT_DUPLICATES_MAX_DAYS, Math.floor(dupSetting.maxDays))) : INPUT_DUPLICATES_MAX_DAYS
+  const dayPresets = INPUT_DUPLICATES_DAY_PRESETS.filter(days => days <= dupMaxDays)
+  const [dupScope, setDupScope] = useState<InputDuplicateScope>('file')
+  const [dupDays, setDupDays] = useState(INPUT_DUPLICATES_DEFAULT_DAYS)
+  const [dupDaysText, setDupDaysText] = useState('')
+  const [pickedIds, setPickedIds] = useState<number[] | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [existing, setExisting] = useState<ImportExistingEntry[] | null>(null)
+  const [dupMeta, setDupMeta] = useState<Omit<ImportDuplicateSummary, 'skipped'> | null>(null)
+  const [dupProgress, setDupProgress] = useState<{ done: number; total: number } | null>(null)
+  const [dupFailure, setDupFailure] = useState<{ message: string; report: ImportVerificationResult; kind: ImportTab } | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  // IPC không hủy được: "Hủy kiểm tra" dừng trước lượt kế tiếp và bỏ kết quả của lượt đang chạy (mỗi lượt ≤ 20 s ở DB).
+  const dupRunRef = useRef<{ cancelled: boolean } | null>(null)
+  const dedupActive = dupEnabled && dupScope !== 'file'
+  const dupDaysInvalid = dupDaysText !== '' && !(Number.isInteger(Number(dupDaysText)) && Number(dupDaysText) >= 1 && Number(dupDaysText) <= dupMaxDays)
+  // Tài khoản Zalo của nhân viên (danh sách tài khoản của app đã theo nhân viên/tổ chức); DB kiểm lại từng tài khoản.
+  const zaloAccounts = useMemo<InputDuplicateAccountOption[]>(() => {
+    const currentIds = new Set(duplicateCheck?.currentAccounts.map(account => account.id) ?? [])
+    return storeAccounts.filter(account => account.flatformType === 'zalo' && !account.isDelete).map(account => ({
+      id: account.id, name: account.name || `Tài khoản ${account.id}`, groupName: account.accountGroupName?.trim() || '',
+      typeLabel: getAccountPlatformLabel(account), current: currentIds.has(account.id)
+    }))
+  }, [storeAccounts, dupConfigKey])
 
   useEffect(() => {
     sourceRevisionRef.current++
@@ -225,13 +314,34 @@ export default function CampaignDataUploadModal({
     setImageDataUrl(''); setImageSourceName(''); setSheetLink(''); setFiles({}); setSources({}); setConfigs({})
     setPhonePolicy('first'); setTemplateStatus('idle'); setTemplateError(''); setReport(null); setResultGroup('valid'); setPreviewPage(1)
     setFormattedImportSource(null); setFormattedSourceLink(null); setLoading(false); setSaving(false)
+    if (dupRunRef.current) dupRunRef.current.cancelled = true
+    dupRunRef.current = null
+    setDupScope('file'); setDupDaysText(''); setPickedIds(null); setPickerOpen(false)
+    setExisting(null); setDupMeta(null); setDupProgress(null); setDupFailure(null); setConfirmOpen(false)
     insertInFlightRef.current = false
-    return () => { sourceRevisionRef.current++; asyncOperationRef.current++ }
-  }, [platform, actionId])
+    return () => { sourceRevisionRef.current++; asyncOperationRef.current++; if (dupRunRef.current) dupRunRef.current.cancelled = true }
+  }, [platform, actionId, dupConfigKey, dupStorageKey])
+  // Công tắc chung với Web, đọc mỗi lần mở cửa sổ (một dòng); đọc lỗi thì ẩn khung như khi công tắc tắt.
+  useEffect(() => {
+    setDupSetting(null)
+    if (!dupSupported) return
+    let disposed = false
+    void window.electronAPI.campaignInputDuplicates({ kind: 'setting' }).then(result => {
+      if (disposed || !result.ok) return
+      const memory = readDuplicateMemory(dupStorageKey)
+      const maxDays = Math.max(1, Math.min(INPUT_DUPLICATES_MAX_DAYS, Math.floor(result.data.maxDays)))
+      setDupSetting(result.data)
+      setDupDays(memory.days && memory.days >= 1 && memory.days <= maxDays ? memory.days : Math.min(maxDays, result.data.defaultDays))
+    }).catch(() => { /* Chỉ lọc trong file như trước. */ })
+    return () => { disposed = true }
+  }, [dupSupported, actionId, dupStorageKey])
 
   const invalidateFormattedPreview = (): void => {
     sourceRevisionRef.current++
+    if (dupRunRef.current) dupRunRef.current.cancelled = true
+    dupRunRef.current = null
     setReport(null); setPreviewPage(1); setResultGroup('valid'); setFormattedImportSource(null); setFormattedSourceLink(null)
+    setExisting(null); setDupMeta(null); setDupProgress(null); setDupFailure(null); setConfirmOpen(false)
   }
   const acceptReport = (next: ImportVerificationResult, kind: ImportTab): void => {
     setReport(next); setPreviewPage(1); setResultGroup('valid'); setFormattedImportSource(kind)
@@ -242,11 +352,13 @@ export default function CampaignDataUploadModal({
       : files[kind]?.name || (kind === 'excel' ? 'File Excel/CSV' : 'Template akaBiz')
   const selectedTable = (kind: TableTab): ImportTable | undefined => sources[kind]?.tables[configs[kind]?.index || 0]
   const verify = (rows: ImportSourceRow[], kind: ImportTab, policy = phonePolicy) => verifyImportRows(rows, { platform, actionId, kind, phonePolicy: policy })
-  const verifyTemplate = (table: ImportTable, name: string, policy = phonePolicy): void => {
+  const verifyTemplate = (table: ImportTable, name: string, policy = phonePolicy, scope = dupScope): void => {
     try {
       const schema = templateImportSchema(table)
       if (!schema) throw new Error('File không đúng cấu trúc template akaBiz (Fullname, Uid, Mobile, Email, Info1…Info5). Hãy chuyển sang File Excel/CSV của khách hàng để chọn cột.')
-      acceptReport(verify(mapImportTable(table, schema.mapping, schema.headerIndex + 1, name), 'akabizTemplate', policy), 'akabizTemplate')
+      const next = verify(mapImportTable(table, schema.mapping, schema.headerIndex + 1, name), 'akabizTemplate', policy)
+      // Đối chiếu chiến dịch khác cần gọi máy chủ: chờ người dùng bấm "Kiểm tra dữ liệu" như các nguồn khác.
+      if (!dupEnabled || scope === 'file') acceptReport(next, 'akabizTemplate')
       setTemplateStatus('success'); setTemplateError('')
     } catch (error) {
       setTemplateStatus('error'); setTemplateError(error instanceof Error ? error.message : 'Không thể kiểm tra template.')
@@ -258,6 +370,102 @@ export default function CampaignDataUploadModal({
     const detected = detectImportColumns(table, platform, actionId)
     setConfigs(current => ({ ...current, [kind]: { index, mapping: detected.mapping, skipHeader: detected.hasHeader } }))
     if (kind === 'akabizTemplate') verifyTemplate(table, name)
+  }
+
+  const duplicateAccountIds = (scope: InputDuplicateScope): number[] => scope === 'current'
+    ? duplicateCheck?.currentAccounts.map(account => account.id) ?? []
+    : scope === 'picked' ? pickedIds ?? [] : []
+  /** Lựa chọn 2/3: đối chiếu số hợp lệ với máy chủ theo lượt 2.000 số (tuần tự, hủy được), rồi tách nhóm "Đã có ở chiến dịch khác". */
+  const finishReport = async (next: ImportVerificationResult, kind: ImportTab, revision: number, operation: number, scope = dupScope):
+    Promise<{ report: ImportVerificationResult; existing: ImportExistingEntry[] | null } | null> => {
+    if (!dupEnabled || !duplicateCheck || scope === 'file') { acceptReport(next, kind); return { report: next, existing: null } }
+    const accountIds = duplicateAccountIds(scope)
+    if (!accountIds.length) throw new Error(scope === 'picked' ? 'Vui lòng chọn ít nhất 1 tài khoản Zalo để đối chiếu.' : 'Chưa có tài khoản đang chọn để đối chiếu.')
+    const chunks = chunkInputDuplicatePhones(next.valid.map(entry => entry.row.phone || entry.normalizedValue))
+    const run = { cancelled: false }
+    if (dupRunRef.current) dupRunRef.current.cancelled = true
+    dupRunRef.current = run
+    const stale = () => run.cancelled || revision !== sourceRevisionRef.current || operation !== asyncOperationRef.current
+    const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    setDupFailure(null); setDupProgress({ done: 0, total })
+    const results: InputDuplicatesCheckResult[] = []
+    try {
+      let done = 0
+      for (const chunk of chunks) {
+        const result = await window.electronAPI.campaignInputDuplicates({ kind: 'check', request: {
+          actionId, accountIds, days: dupDays, phones: chunk, excludeCampaignId: duplicateCheck.excludeCampaignId ?? null
+        } })
+        if (stale()) return null
+        if (!result.ok) throw new Error(result.message)
+        results.push(result.data)
+        done += chunk.length
+        setDupProgress({ done, total })
+      }
+    } catch (error) {
+      if (stale()) return null
+      setDupFailure({ message: error instanceof Error ? error.message : 'Chưa đối chiếu được với dữ liệu đã tải lên.', report: next, kind })
+      return null
+    } finally {
+      if (dupRunRef.current === run) dupRunRef.current = null
+      if (!stale()) setDupProgress(null)
+    }
+    const merged = mergeInputDuplicateResults(results)
+    const split = splitExistingImportEntries(next, merged?.items ?? [])
+    acceptReport(split.report, kind)
+    setExisting(split.existing)
+    setDupMeta({ scope, days: dupDays, accountIds, checkedAt: merged?.checkedAt ?? new Date().toISOString(), since: merged?.since ?? '' })
+    if (split.existing.length) setResultGroup('existing')
+    return split
+  }
+  const cancelDuplicateCheck = (): void => {
+    asyncOperationRef.current++
+    if (dupRunRef.current) dupRunRef.current.cancelled = true
+    dupRunRef.current = null
+    setDupProgress(null); setLoading(false)
+  }
+  const retryDuplicateCheck = async (): Promise<void> => {
+    if (!dupFailure || loading || saving) return
+    const { report: next, kind } = dupFailure
+    const revision = sourceRevisionRef.current, operation = ++asyncOperationRef.current
+    setLoading(true)
+    try {
+      const done = await finishReport(next, kind, revision, operation)
+      if (done) showAlert(checkedMessage(done.report, done.existing), 'success')
+    } catch (error) {
+      if (revision === sourceRevisionRef.current && operation === asyncOperationRef.current) showAlert(error instanceof Error ? error.message : 'Chưa đối chiếu được với dữ liệu đã tải lên.', 'error')
+    } finally { if (operation === asyncOperationRef.current) setLoading(false) }
+  }
+  const filterInFileOnlyAfterFailure = (): void => {
+    if (!dupFailure) return
+    const { report: next, kind } = dupFailure
+    setDupFailure(null); setDupScope('file')
+    acceptReport(next, kind)
+    showAlert(checkedMessage(next, null), 'success')
+  }
+  const changeDupScope = (scope: InputDuplicateScope): void => {
+    if (scope === dupScope) return
+    invalidateFormattedPreview(); setDupScope(scope)
+    if (scope === 'picked' && pickedIds === null) {
+      // Lần đầu chọn hết; lần sau dùng lại lựa chọn đã nhớ (bỏ tài khoản không còn).
+      const available = new Set(zaloAccounts.map(account => account.id))
+      const remembered = (readDuplicateMemory(dupStorageKey).pickedIds ?? []).filter(id => available.has(id))
+      setPickedIds(remembered.length ? remembered : zaloAccounts.map(account => account.id))
+    }
+    const table = selectedTable('akabizTemplate')
+    if (activeTab === 'akabizTemplate' && table) verifyTemplate(table, sourceName('akabizTemplate'), phonePolicy, scope)
+  }
+  const changeDupDays = (days: number, text = ''): void => {
+    invalidateFormattedPreview(); setDupDays(days); setDupDaysText(text)
+    writeDuplicateMemory(dupStorageKey, { days })
+  }
+  const changeDupDaysText = (text: string): void => {
+    const days = Number(text)
+    if (text !== '' && Number.isInteger(days) && days >= 1 && days <= dupMaxDays) changeDupDays(days, text)
+    else { invalidateFormattedPreview(); setDupDaysText(text) }
+  }
+  const savePickedAccounts = (ids: number[]): void => {
+    invalidateFormattedPreview(); setPickedIds(ids); setPickerOpen(false)
+    writeDuplicateMemory(dupStorageKey, { pickedIds: ids })
   }
 
   const updateText = (content: string): void => {
@@ -356,7 +564,7 @@ export default function CampaignDataUploadModal({
     return mapImportTable(table, config.mapping, config.skipHeader ? 1 : 0, sourceName(kind))
   }
   const handleFormatData = async (): Promise<void> => {
-    if (loading || saving || activeTab === 'akabizTemplate') return
+    if (loading || saving || (activeTab === 'akabizTemplate' && !dedupActive)) return
     invalidateFormattedPreview()
     const revision = sourceRevisionRef.current, operation = ++asyncOperationRef.current, kind = activeTab
     setLoading(true)
@@ -366,6 +574,11 @@ export default function CampaignDataUploadModal({
       let rows: ImportSourceRow[]
       if (kind === 'textbox') rows = sources.textbox ? rowsFromTable('textbox') : textImportRows(textContent, platform, actionId, sourceName(kind), textSkipHeader)
       else if (kind === 'excel' || kind === 'sheet') rows = rowsFromTable(kind)
+      else if (kind === 'akabizTemplate') {
+        const table = selectedTable('akabizTemplate'), schema = table && templateImportSchema(table)
+        if (!table || !schema) throw new Error('Vui lòng tải file đúng template Excel akaBiz.')
+        rows = mapImportTable(table, schema.mapping, schema.headerIndex + 1, sourceName(kind))
+      }
       else {
         if (!imageDataUrl) throw new Error('Vui lòng tải hoặc dán ảnh.')
         const qr = isZaloJoinGroupLinkAction(actionId) ? normalizeZaloGroupInviteLink(await decodeQrDataFromDataUrl(imageDataUrl).catch(() => '')) : ''
@@ -385,8 +598,9 @@ export default function CampaignDataUploadModal({
       }
       const next = verify(rows, kind)
       if (revision !== sourceRevisionRef.current || operation !== asyncOperationRef.current) return
-      acceptReport(next, kind)
-      showAlert(`Đã kiểm tra: ${next.valid.length} hợp lệ · ${next.rejected.length} lỗi/bị loại · ${next.duplicates.length} trùng.`, 'success')
+      const done = await finishReport(next, kind, revision, operation)
+      if (!done) return
+      showAlert(checkedMessage(done.report, done.existing), 'success')
     } catch (error) {
       if (revision === sourceRevisionRef.current && operation === asyncOperationRef.current) showAlert(error instanceof Error ? error.message : 'Không thể kiểm tra dữ liệu.', 'error')
     } finally { if (operation === asyncOperationRef.current) setLoading(false) }
@@ -394,7 +608,8 @@ export default function CampaignDataUploadModal({
   const insertFormattedRows = async (
     rows: CampaignImportDataRow[],
     importSource: ImportTab,
-    sourceLink: string | null
+    sourceLink: string | null,
+    duplicates?: ImportDuplicateSummary
   ): Promise<void> => {
     if (rows.length > MAX_IMPORT_ROW_COUNT) {
       showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
@@ -438,7 +653,8 @@ export default function CampaignDataUploadModal({
           datasetName: normalizedName,
           importSource: importSource === 'akabizTemplate' ? 'excel' : importSource,
           sourceLink,
-          rows: normalizedRows
+          rows: normalizedRows,
+          ...(duplicates ? { duplicates } : {})
         })
         onClose()
       } catch (err) {
@@ -475,7 +691,7 @@ export default function CampaignDataUploadModal({
         ...row,
         note: '',
         status: 'chờ xử lý'
-      })))
+      })), duplicates ? { duplicates } : undefined)
       showAlert(
         `Đã lưu ${result.count} data vào ${result.datasets.length} nhóm dữ liệu.`,
         'success'
@@ -489,16 +705,22 @@ export default function CampaignDataUploadModal({
   }
 
 
-  const handleInsert = async (): Promise<void> => {
-    if (insertInFlightRef.current || loading || saving || !report || !formattedImportSource || report.limitExceeded || !report.valid.length) return
+  const handleInsert = async (confirmed = false): Promise<void> => {
+    if (insertInFlightRef.current || loading || saving || !report || !formattedImportSource || report.limitExceeded || !report.valid.length || dupFailure) return
+    // Đã đối chiếu chiến dịch khác: khách xác nhận lần cuối trước khi chèn.
+    if (existing && dupMeta && !confirmed) { setConfirmOpen(true); return }
+    setConfirmOpen(false)
     insertInFlightRef.current = true
-    try { await insertFormattedRows(report.valid.map(entry => entry.row), formattedImportSource, formattedSourceLink) }
+    const duplicates = existing && dupMeta ? { ...dupMeta, skipped: existing.length } : undefined
+    try { await insertFormattedRows(report.valid.map(entry => entry.row), formattedImportSource, formattedSourceLink, duplicates) }
     finally { insertInFlightRef.current = false }
   }
-  const exportGroup = (group: ImportResultGroup): void => {
-    if (!report || !report[group].length || loading || saving) return
+  const groupEntries = (group: ResultGroupKey): ImportVerificationEntry[] => group === 'existing' ? existing ?? [] : report?.[group] ?? []
+  const exportGroup = (group: ResultGroupKey): void => {
+    if (!report || !groupEntries(group).length || loading || saving) return
     try {
-      const book = createImportExportWorkbook(report, group)
+      const book = group === 'existing' ? createImportMatrixWorkbook(importExistingExportMatrix(existing ?? []), 'Đã có ở chiến dịch khác')
+        : createImportExportWorkbook(report, group)
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
       writeFile(book, `${RESULT_GROUPS.find(item => item.key === group)!.file}-${timestamp}.xlsx`)
     } catch (error) { showAlert(error instanceof Error ? error.message : 'Không thể xuất Excel.', 'error') }
@@ -551,18 +773,25 @@ export default function CampaignDataUploadModal({
       </div>
     </div>
   }
-  const entries = report?.[resultGroup] || []
+  const entries: ImportVerificationEntry[] = report ? groupEntries(resultGroup) : []
+  const visibleResultGroups = RESULT_GROUPS.filter(group => group.key !== 'existing' || existing !== null)
+  const showExistingDetails = Boolean(report) && resultGroup === 'existing'
   const pageCount = Math.max(1, Math.ceil(entries.length / IMPORT_PREVIEW_PAGE_SIZE))
   const page = Math.min(previewPage, pageCount), start = (page - 1) * IMPORT_PREVIEW_PAGE_SIZE
   const visible = entries.slice(start, start + IMPORT_PREVIEW_PAGE_SIZE)
-  const showSourceDetails = Boolean(report) && resultGroup !== 'valid'
-  const previewColumnCount = fields.length + 1 + (showSourceDetails ? (resultGroup === 'duplicates' ? 4 : 3) : 0)
+  const showSourceDetails = Boolean(report) && resultGroup !== 'valid' && resultGroup !== 'existing'
+  const previewColumnCount = fields.length + 1 + (showExistingDetails ? 4 : showSourceDetails ? (resultGroup === 'duplicates' ? 4 : 3) : 0)
   const layoutClass = layout === 'data-group' ? ' is-data-group' : ''
   const templateFile = files.akabizTemplate
   const busy = loading || saving
-  const closeDisabled = saving || loading && !readImageText
+  const closeDisabled = saving || loading && !readImageText && !dupProgress
+  const dupWindowText = (meta: Pick<ImportDuplicateSummary, 'since' | 'days'>) => meta.since ? formatVietnamDate(meta.since) : inputDuplicateWindowStart(meta.days)
+  const pickedNames = zaloAccounts.filter(account => pickedIds?.includes(account.id)).map(account => account.name)
+  const pickedSummary = pickedNames.length > 3 ? `${pickedNames.slice(0, 3).join(', ')} và ${pickedNames.length - 3} tài khoản khác` : pickedNames.join(', ')
+  const checkBlocked = dedupActive && (dupDaysInvalid || (dupScope === 'picked' && !pickedIds?.length))
+  const skippedTotal = report && existing ? existing.length + report.duplicates.length + report.rejected.length : 0
 
-  return createPortal(<div className={`modal-overlay campaign-import-modal-overlay${layoutClass}`} onMouseDown={event => {
+  return <>{createPortal(<div className={`modal-overlay campaign-import-modal-overlay${layoutClass}`} onMouseDown={event => {
     if (event.target === event.currentTarget && !closeDisabled) onClose()
   }}><div className={`modal campaign-import-modal${layoutClass}`} onMouseDown={event => event.stopPropagation()}>
     <div className="modal-header"><div className="modal-title">{title}</div><button className="btn-icon" onClick={onClose} title="Đóng" disabled={closeDisabled}><X size={18} /></button></div>
@@ -650,22 +879,98 @@ export default function CampaignDataUploadModal({
           <input type="radio" name="campaign-import-phone-policy" aria-label={label} value={value} checked={phonePolicy === value} onChange={() => changePhonePolicy(value)} /><span>{label}</span>
         </label>)}</div>
       </fieldset>}
-      {activeTab !== 'akabizTemplate' && <div className="campaign-import-format-row"><button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={busy}>
+      {dupEnabled && duplicateCheck && <fieldset className="campaign-import-dedup" disabled={busy}>
+        <legend>Lọc trùng dữ liệu</legend>
+        <div className="campaign-import-dedup-options">
+          <div className={`campaign-import-dedup-option${dupScope === 'file' ? ' active' : ''}`}>
+            <label><input type="radio" name="campaign-import-dedup-scope" checked={dupScope === 'file'} onChange={() => changeDupScope('file')} />
+              <span className="campaign-import-dedup-option-text">
+                <span className="campaign-import-dedup-option-title">Chỉ trong file này<span className="campaign-import-dedup-badge">Mặc định</span></span>
+                <span className="campaign-import-dedup-option-desc">Bỏ số lặp lại trong lần tải này. Không đối chiếu với dữ liệu đã tải lên trước đó.</span>
+              </span></label>
+          </div>
+          <div className={`campaign-import-dedup-option${dupScope === 'current' ? ' active' : ''}`}>
+            <label><input type="radio" name="campaign-import-dedup-scope" checked={dupScope === 'current'} onChange={() => changeDupScope('current')} />
+              <span className="campaign-import-dedup-option-text">
+                <span className="campaign-import-dedup-option-title">Với tài khoản đang chọn</span>
+                <span className="campaign-import-dedup-option-desc">Bỏ số đã có trong chiến dịch khác của tài khoản đang chọn cho chiến dịch này.</span>
+              </span></label>
+            {dupScope === 'current' && <div className="campaign-import-dedup-extra">{duplicateCheck.currentAccounts.map(account =>
+              <span key={account.id} className="campaign-import-dedup-chip">{account.name}</span>)}</div>}
+          </div>
+          <div className={`campaign-import-dedup-option${dupScope === 'picked' ? ' active' : ''}`}>
+            <label><input type="radio" name="campaign-import-dedup-scope" checked={dupScope === 'picked'} onChange={() => changeDupScope('picked')} />
+              <span className="campaign-import-dedup-option-text">
+                <span className="campaign-import-dedup-option-title">Với các tài khoản Zalo bạn chọn</span>
+                <span className="campaign-import-dedup-option-desc">Bỏ số đã có trong chiến dịch của các tài khoản bạn chọn. Chỉ gồm tài khoản Zalo của bạn trong tổ chức này.</span>
+              </span></label>
+            {dupScope === 'picked' && <div className="campaign-import-dedup-extra">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickerOpen(true)}><Users size={14} /> Chọn tài khoản · {(pickedIds?.length ?? 0).toLocaleString('vi-VN')}/{zaloAccounts.length.toLocaleString('vi-VN')}</button>
+              {pickedSummary && <span>{pickedSummary}</span>}
+            </div>}
+          </div>
+        </div>
+        {dupScope !== 'file' && <div className="campaign-import-dedup-window">
+          <div className="campaign-import-dedup-window-row" role="group" aria-label="Khoảng thời gian kiểm tra trùng">
+            <span className="campaign-import-dedup-window-label">Khoảng thời gian</span>
+            {dayPresets.map(days => <button key={days} type="button" className="campaign-import-dedup-preset" aria-pressed={dupDaysText === '' && dupDays === days}
+              onClick={() => changeDupDays(days)}>{days} ngày</button>)}
+            <label className="campaign-import-dedup-days">Khác
+              <input className="stepper-input" type="number" inputMode="numeric" min={1} max={dupMaxDays} step={1} aria-label="Số ngày kiểm tra trùng"
+                aria-invalid={dupDaysInvalid} value={dupDaysText !== '' ? dupDaysText : dayPresets.includes(dupDays) ? '' : String(dupDays)}
+                onChange={event => changeDupDaysText(event.target.value)} />ngày</label>
+          </div>
+          {dupDaysInvalid
+            ? <span className="campaign-import-dedup-field-error" role="alert">Số ngày phải từ 1 đến {dupMaxDays}.</span>
+            : <span>Đối chiếu dữ liệu tải lên từ <strong>{inputDuplicateWindowStart(dupDays)}</strong> đến hôm nay.</span>}
+          <span className="campaign-import-dedup-note">Chỉ đối chiếu chiến dịch cùng loại. Chiến dịch đã xóa chỉ tính các số đã chạy.{duplicateCheck.excludeCampaignId ? ' Không tính chính chiến dịch này.' : ''}</span>
+        </div>}
+      </fieldset>}
+      {dupProgress && <div className="campaign-import-dedup-progress" role="status">
+        <div className="campaign-import-dedup-progress-head">
+          <span>Đang đối chiếu với dữ liệu đã tải lên <strong>{dupProgress.done.toLocaleString('vi-VN')}/{dupProgress.total.toLocaleString('vi-VN')}</strong> số…</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={cancelDuplicateCheck}>Hủy kiểm tra</button>
+        </div>
+        <div className="campaign-import-dedup-progress-bar" role="progressbar" aria-label="Tiến độ đối chiếu" aria-valuemin={0} aria-valuemax={dupProgress.total} aria-valuenow={dupProgress.done}>
+          <span style={{ width: `${dupProgress.total ? Math.round(100 * dupProgress.done / dupProgress.total) : 0}%` }} />
+        </div>
+      </div>}
+      {dupFailure && !busy && <div className="campaign-import-dedup-error" role="alert">
+        <strong>Chưa đối chiếu được với dữ liệu đã tải lên</strong>
+        <span>{dupFailure.message} Chưa có dữ liệu nào được chèn.</span>
+        <div className="campaign-import-dedup-actions">
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => void retryDuplicateCheck()}>Thử lại</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={filterInFileOnlyAfterFailure}>Chỉ lọc trong file</button>
+        </div>
+        <span className="campaign-import-dedup-note">Chọn “Chỉ lọc trong file” thì các số có thể đã có ở chiến dịch khác vẫn được chèn.</span>
+      </div>}
+      {(activeTab !== 'akabizTemplate' || dedupActive) && <div className="campaign-import-format-row"><button className="btn btn-secondary" onClick={() => void handleFormatData()} disabled={busy || checkBlocked}>
         <RefreshCw size={14} className={loading ? 'spin' : ''} />Kiểm tra dữ liệu
       </button></div>}
       {report && <section className="campaign-import-results" aria-label="Kết quả kiểm tra dữ liệu">
-        <div className="campaign-import-preview-summary" role="status">Đã kiểm tra {report.sourceRowCount.toLocaleString('vi-VN')} dòng nguồn · {report.itemCount.toLocaleString('vi-VN')} mục sau tách. Trùng chỉ tính trong lần upload này.</div>
-        <div className="campaign-import-result-groups">{RESULT_GROUPS.map(group => <div key={group.key} className={`campaign-import-result-group${resultGroup === group.key ? ' active' : ''}`}>
-          <button type="button" aria-label={`${group.label}: ${report[group.key].length}`} title={group.label} aria-pressed={resultGroup === group.key} onClick={() => { setResultGroup(group.key); setPreviewPage(1) }}><span>{group.shortLabel}</span><strong>{report[group.key].length.toLocaleString('vi-VN')}</strong></button>
-          <button className="btn btn-secondary" disabled={busy || report[group.key].length === 0} onClick={() => exportGroup(group.key)} aria-label={`Tải Excel ${group.label}`} title={`Tải Excel ${group.label}`}><Download size={14} />Excel</button>
+        <div className="campaign-import-preview-summary" role="status">Đã kiểm tra {report.sourceRowCount.toLocaleString('vi-VN')} dòng nguồn · {report.itemCount.toLocaleString('vi-VN')} mục sau tách. {existing && dupMeta
+          ? `Đã đối chiếu với dữ liệu tải lên từ ${dupWindowText(dupMeta)} đến hôm nay của ${inputDuplicateScopeLabel(dupMeta.scope, dupMeta.accountIds.length)} lúc ${formatVietnamTime(dupMeta.checkedAt)}.`
+          : 'Trùng chỉ tính trong lần upload này.'}</div>
+        <div className={`campaign-import-result-groups${existing ? ' has-existing' : ''}`}>{visibleResultGroups.map(group => <div key={group.key} className={`campaign-import-result-group${group.key === 'existing' ? ' existing' : ''}${resultGroup === group.key ? ' active' : ''}`}>
+          <button type="button" aria-label={`${group.label}: ${groupEntries(group.key).length}`} title={group.label} aria-pressed={resultGroup === group.key} onClick={() => { setResultGroup(group.key); setPreviewPage(1) }}><span>{group.shortLabel}</span><strong>{groupEntries(group.key).length.toLocaleString('vi-VN')}</strong></button>
+          <button className="btn btn-secondary" disabled={busy || groupEntries(group.key).length === 0} onClick={() => exportGroup(group.key)} aria-label={`Tải Excel ${group.label}`} title={`Tải Excel ${group.label}`}><Download size={14} />Excel</button>
         </div>)}</div>
         <div className="campaign-import-hint">Hợp lệ để nhập theo hành động; chưa xác minh SĐT có Zalo hoặc email tồn tại, và chưa phải số dữ liệu đã lưu.</div>
         {report.limitExceeded && <div className="campaign-import-template-status error" role="alert">{IMPORT_ROW_LIMIT_MESSAGE}</div>}
       </section>}
-      <div className="campaign-import-preview-table"><table className="campaign-grid"><thead><tr><th>STT</th>{fields.map(field => <th key={field.key}>{field.label}</th>)}{showSourceDetails && <><th>Nguồn / dòng gốc</th><th>Giá trị chuẩn hóa</th><th>Lý do</th>{resultGroup === 'duplicates' && <th>Trùng với dòng</th>}</>}</tr></thead>
+      <div className="campaign-import-preview-table"><table className="campaign-grid"><thead><tr><th>STT</th>{fields.map(field => <th key={field.key}>{field.label}</th>)}{showSourceDetails && <><th>Nguồn / dòng gốc</th><th>Giá trị chuẩn hóa</th><th>Lý do</th>{resultGroup === 'duplicates' && <th>Trùng với dòng</th>}</>}{showExistingDetails && <><th>Đã có ở chiến dịch</th><th>Tài khoản</th><th>Ngày tải lên</th><th>Trạng thái</th></>}</tr></thead>
         <tbody>{visible.length === 0 ? <tr><td colSpan={previewColumnCount} className="text-center text-muted">{report ? 'Không có dữ liệu trong nhóm này' : 'Chưa có dữ liệu đã kiểm tra'}</td></tr> : visible.map((entry, index) => <tr key={entry.id}>
-          <td>{start + index + 1}</td>{fields.map(field => <td key={field.key}>{String((resultGroup === 'valid' ? entry.row : entry.original)[field.key] ?? '')}</td>)}
+          <td>{start + index + 1}</td>{fields.map(field => <td key={field.key}>{String((resultGroup === 'valid' || resultGroup === 'existing' ? entry.row : entry.original)[field.key] ?? '')}</td>)}
           {showSourceDetails && <><td>{importLocationLabel(entry.location)}</td><td>{entry.normalizedValue}</td><td>{entry.reason}</td>{resultGroup === 'duplicates' && <td>{entry.duplicateOf ? importLocationLabel(entry.duplicateOf) : ''}</td>}</>}
+          {showExistingDetails && (() => {
+            const item = (entry as ImportExistingEntry).existing, latest = item.latest
+            return <>
+              <td>{latest.campaignDeleted ? `${latest.campaignName} (đã xóa)` : latest.campaignName}{item.campaignCount > 1 ? ` · +${item.campaignCount - 1} chiến dịch` : ''}</td>
+              <td>{latest.accountName}</td>
+              <td>{formatVietnamDate(latest.uploadedAt)}</td>
+              <td><span className="campaign-import-status-pill">{inputDuplicateStatusLabel(latest)}</span></td>
+            </>
+          })()}
         </tr>)}</tbody>
       </table></div>
       {entries.length > IMPORT_PREVIEW_PAGE_SIZE && <div className="campaign-local-data-pager"><span>Hiển thị {start + 1}–{Math.min(start + IMPORT_PREVIEW_PAGE_SIZE, entries.length)} / {entries.length}. Tải Excel và chèn sử dụng toàn bộ kết quả.</span><div>
@@ -673,9 +978,34 @@ export default function CampaignDataUploadModal({
         <button className="btn-icon" title="Trang sau" disabled={page >= pageCount || busy} onClick={() => setPreviewPage(page + 1)}><ChevronRight size={14} /></button>
       </div></div>}
     </div>
-    <div className="modal-footer"><span className="campaign-import-submit-hint">{!report ? 'Kiểm tra dữ liệu để xem kết quả trước khi chèn.' : report.limitExceeded ? 'Dữ liệu vượt giới hạn. Vui lòng chia nhỏ trước khi chèn.' : !report.valid.length ? 'Không có dữ liệu hợp lệ để chèn. Bạn vẫn có thể tải kết quả bị loại.' : `Sẽ chèn ${report.valid.length.toLocaleString('vi-VN')} dữ liệu hợp lệ.`}</span>
-      <button className="btn btn-ghost" onClick={onClose} disabled={closeDisabled}>Hủy</button><button className="btn btn-primary" onClick={() => void handleInsert()} disabled={busy || !report?.valid.length || report.limitExceeded || !formattedImportSource}>
+    <div className="modal-footer"><span className="campaign-import-submit-hint">{dupFailure ? 'Chưa đối chiếu được với chiến dịch khác. Thử lại hoặc chọn “Chỉ lọc trong file”.' : !report ? 'Kiểm tra dữ liệu để xem kết quả trước khi chèn.' : report.limitExceeded ? 'Dữ liệu vượt giới hạn. Vui lòng chia nhỏ trước khi chèn.' : !report.valid.length ? (existing?.length ? 'Mọi số hợp lệ đều đã có ở chiến dịch khác. Bạn vẫn có thể tải danh sách.' : 'Không có dữ liệu hợp lệ để chèn. Bạn vẫn có thể tải kết quả bị loại.') : existing ? `Sẽ chèn ${report.valid.length.toLocaleString('vi-VN')} dữ liệu mới · bỏ qua ${existing.length.toLocaleString('vi-VN')} đã có ở chiến dịch khác.` : `Sẽ chèn ${report.valid.length.toLocaleString('vi-VN')} dữ liệu hợp lệ.`}</span>
+      <button className="btn btn-ghost" onClick={onClose} disabled={closeDisabled}>Hủy</button><button className="btn btn-primary" onClick={() => void handleInsert()} disabled={busy || !report?.valid.length || report.limitExceeded || !formattedImportSource || Boolean(dupFailure)}>
         {saving ? <><RefreshCw size={14} className="spin" /> Đang chèn...</> : submitLabel}
       </button></div>
-  </div></div>, document.body)
+  </div></div>, document.body)}
+  {confirmOpen && report && existing && dupMeta && createPortal(<div className="modal-overlay campaign-import-modal-overlay" style={{ zIndex: 5200 }} onMouseDown={event => {
+    if (event.target === event.currentTarget && !saving) setConfirmOpen(false)
+  }}><div className="modal campaign-import-confirm" role="alertdialog" aria-modal="true" aria-labelledby="campaign-import-confirm-title" aria-describedby="campaign-import-confirm-desc" onMouseDown={event => event.stopPropagation()}>
+    <div className="modal-header"><div className="modal-title" id="campaign-import-confirm-title">Xác nhận nhập dữ liệu</div>
+      <button type="button" className="btn-icon" onClick={() => setConfirmOpen(false)} title="Đóng" aria-label="Đóng" disabled={saving}><X size={18} /></button></div>
+    <div className="modal-body campaign-import-confirm-body">
+      <div id="campaign-import-confirm-desc" className="campaign-import-confirm-total"><strong>{report.valid.length.toLocaleString('vi-VN')}</strong><span>số mới sẽ được chèn vào danh sách.</span></div>
+      <div>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>Sẽ bỏ qua {skippedTotal.toLocaleString('vi-VN')} số</div>
+        <ul className="campaign-import-confirm-list">
+          <li><strong>{existing.length.toLocaleString('vi-VN')} số đã có ở chiến dịch khác</strong><span>Trong {dupMeta.days} ngày ({dupWindowText(dupMeta)} – hôm nay) · {inputDuplicateScopeLabel(dupMeta.scope, dupMeta.accountIds.length)}</span></li>
+          {report.duplicates.length > 0 && <li><strong>{report.duplicates.length.toLocaleString('vi-VN')} số trùng trong file</strong></li>}
+          {report.rejected.length > 0 && <li><strong>{report.rejected.length.toLocaleString('vi-VN')} dòng lỗi/bị loại</strong></li>}
+        </ul>
+      </div>
+      {existing.length > 0 && <button type="button" className="btn btn-secondary" style={{ justifySelf: 'start' }} disabled={saving} onClick={() => exportGroup('existing')}><Download size={14} /> Tải Excel số đã có ở chiến dịch khác</button>}
+      <p className="text-muted" style={{ margin: 0 }}>Kết quả đối chiếu lúc {formatVietnamTime(dupMeta.checkedAt)}. Số được tải lên ở chiến dịch khác sau thời điểm này chưa được tính.</p>
+    </div>
+    <div className="modal-footer">
+      <button type="button" className="btn btn-ghost" onClick={() => setConfirmOpen(false)} disabled={saving}>Quay lại</button>
+      <button type="button" className="btn btn-primary" onClick={() => void handleInsert(true)} disabled={saving}>{saving ? <><RefreshCw size={14} className="spin" /> Đang chèn...</> : `Nhập ${report.valid.length.toLocaleString('vi-VN')} số`}</button>
+    </div>
+  </div></div>, document.body)}
+  {pickerOpen && <InputDuplicateAccountPicker accounts={zaloAccounts} selectedIds={pickedIds ?? []} onClose={() => setPickerOpen(false)} onSave={savePickedAccounts} />}
+  </>
 }

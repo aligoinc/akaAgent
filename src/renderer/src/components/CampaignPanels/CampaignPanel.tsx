@@ -77,7 +77,8 @@ import { AiChatStartModal } from '../AiChat/AiChatStartModal'
 import { aiChatAttention, useAiChatAttention } from '../AiChat/aiChatStore'
 import { useCampaignDrafts } from './useCampaignDrafts'
 import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './CampaignQuickEditModals'
-import CampaignDataUploadModal from './CampaignDataUploadModal'
+import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
+import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import AccountInfoModal from './AccountInfoModal'
@@ -2015,9 +2016,14 @@ function AddDataToCurrentCampaignModal({
   const canSnapshotDataGroup = campaign.dataTargetSourceMode !== 'data_group'
     && actionSupportsDataGroup(campaign.actionId)
 
-  const appendRows = (nextRows: Partial<CampaignInputData>[]) => {
+  // Lọc trùng với chiến dịch khác (V491/V493): "tài khoản đang chọn" = tài khoản của chiến dịch; không so với chính chiến dịch này.
+  const duplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => account?.id && supportsInputDuplicateCheck(campaign.actionId)
+    ? { currentAccounts: [{ id: account.id, name: account.name || `Tài khoản ${account.id}` }], excludeCampaignId: campaign.id }
+    : undefined, [account?.id, account?.name, campaign.id, campaign.actionId])
+
+  const appendRows = (nextRows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary) => {
     if (nextRows.length === 0) {
-      showAlert('Không có data hợp lệ để thêm.', 'error')
+      showAlert(duplicates?.skipped ? `Mọi số hợp lệ đều đã có ở chiến dịch khác (${duplicates.skipped.toLocaleString('vi-VN')} số).` : 'Không có data hợp lệ để thêm.', 'error')
       return
     }
     setSelectedDataGroup(null)
@@ -2030,7 +2036,8 @@ function AddDataToCurrentCampaignModal({
         note: ''
       }))
     ])
-    showAlert(`Đã thêm ${nextRows.length} data vào danh sách chờ thêm.`, 'success')
+    const skipped = duplicates?.skipped ? ` Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.` : ''
+    showAlert(`Đã thêm ${nextRows.length} data vào danh sách chờ thêm.${skipped}`, 'success')
   }
 
   const selectDataGroup = (group: DataGroup) => {
@@ -2415,9 +2422,10 @@ function AddDataToCurrentCampaignModal({
             actionName={campaignAction?.name}
             accountIds={[account.id]}
             showDatasetName={false}
+            duplicateCheck={duplicateCheck}
             onClose={() => setShowDataUploadModal(false)}
-            onInsert={appendRows}
-            onSubmitRows={({ rows: importedRows }) => appendRows(importedRows)}
+            onInsert={(importedRows, meta) => appendRows(importedRows, meta?.duplicates)}
+            onSubmitRows={({ rows: importedRows, duplicates }) => appendRows(importedRows, duplicates)}
           />
         </div>
       )}

@@ -1,0 +1,183 @@
+/* "Lọc trùng dữ liệu" của cửa sổ Upload dữ liệu (V491/V493). Chép từ akaAgentWebApp apps/web/src/features/CampaignImportDuplicates.css; biến màu dùng chung. */
+.campaign-import-dedup {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.campaign-import-dedup legend { padding: 0 6px; font-weight: 600; }
+.campaign-import-dedup-options { display: grid; gap: 8px; }
+.campaign-import-dedup-option {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.campaign-import-dedup-option.active { border-color: var(--accent-primary); background: var(--bg-accent-subtle); }
+.campaign-import-dedup-option > label { display: flex; align-items: flex-start; gap: 10px; min-width: 0; cursor: pointer; }
+.campaign-import-dedup-option input[type="radio"] { flex-shrink: 0; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent-primary); }
+.campaign-import-dedup-option-text { display: grid; gap: 2px; min-width: 0; }
+.campaign-import-dedup-option-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); }
+.campaign-import-dedup-option-desc { color: var(--text-secondary); }
+.campaign-import-dedup-badge {
+  padding: 0 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.campaign-import-dedup-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding-left: 26px; color: var(--text-secondary); }
+.campaign-import-dedup-chip {
+  padding: 2px 10px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-accent-subtle);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.campaign-import-dedup-window { display: grid; gap: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-tertiary); }
+.campaign-import-dedup-window-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.campaign-import-dedup-window-label { margin-right: 4px; font-weight: 600; }
+.campaign-import-dedup-preset {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.campaign-import-dedup-preset[aria-pressed="true"] { border-color: var(--accent-primary-hover); background: var(--accent-primary-hover); color: #fff; }
+.campaign-import-dedup-preset:disabled { cursor: default; opacity: 0.6; }
+.campaign-import-dedup-days { display: inline-flex; align-items: center; gap: 6px; }
+.campaign-import-dedup-days input { width: 76px; }
+.campaign-import-dedup-days input[aria-invalid="true"] { border-color: var(--accent-error); }
+.campaign-import-dedup-note { color: var(--text-secondary); font-size: 12px; }
+.campaign-import-dedup-field-error { color: var(--accent-error); font-size: 12px; }
+.campaign-import-dedup-progress {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+}
+.campaign-import-dedup-progress-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.campaign-import-dedup-progress-bar { height: 8px; overflow: hidden; border-radius: var(--radius-full, 9999px); background: var(--bg-tertiary); }
+.campaign-import-dedup-progress-bar > span { display: block; height: 100%; background: var(--accent-primary); transition: width 0.2s ease; }
+.campaign-import-dedup-error {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-error);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-error) 8%, transparent);
+  font-size: 13px;
+}
+.campaign-import-dedup-error strong { color: var(--text-primary); }
+.campaign-import-dedup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.campaign-import-result-groups.has-existing { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.campaign-import-result-group.existing > button:first-child strong { color: var(--accent-warning); }
+@media (max-width: 900px) { .campaign-import-result-groups.has-existing { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 540px) { .campaign-import-result-groups.has-existing { grid-template-columns: 1fr; } }
+.campaign-import-status-pill {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+/* Hộp xác nhận lần cuối. */
+.campaign-import-confirm { width: min(540px, calc(100vw - 32px)); }
+.campaign-import-confirm-body { display: grid; gap: 14px; }
+.campaign-import-confirm-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-accent-subtle);
+}
+.campaign-import-confirm-total strong { font-size: 30px; line-height: 38px; }
+.campaign-import-confirm-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.campaign-import-confirm-list li { display: grid; gap: 2px; padding: 10px 12px; border-bottom: 1px solid var(--border-default); }
+.campaign-import-confirm-list li:last-child { border-bottom: 0; }
+.campaign-import-confirm-list span { color: var(--text-secondary); }
+
+/* Chọn tài khoản để đối chiếu. */
+.input-dup-picker { display: flex; flex-direction: column; width: min(680px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); }
+.input-dup-picker-body { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 10px; min-height: 0; overflow: hidden; }
+.input-dup-picker-search { position: relative; display: flex; align-items: center; }
+.input-dup-picker-search svg { position: absolute; left: 10px; color: var(--text-secondary); pointer-events: none; }
+.input-dup-picker-search input { width: 100%; padding-left: 34px; }
+.input-dup-picker-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.input-dup-picker-toolbar > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.input-dup-picker-list { min-height: 0; max-height: 460px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.input-dup-picker-group > label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+  font-weight: 600;
+  cursor: pointer;
+}
+.input-dup-picker-group > label span:first-of-type { flex: 1; }
+.input-dup-picker-account { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px 6px 32px; border-bottom: 1px solid var(--border-default); cursor: pointer; }
+.input-dup-picker-account:last-child { border-bottom: 0; }
+.input-dup-picker-account input, .input-dup-picker-group input { flex-shrink: 0; width: 16px; height: 16px; margin: 0; accent-color: var(--accent-primary); }
+.input-dup-picker-account-name { display: grid; flex: 1; min-width: 0; }
+.input-dup-picker-account-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.input-dup-picker-account-name span { color: var(--text-secondary); font-size: 12px; }
+.input-dup-picker-current {
+  padding: 0 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: color-mix(in srgb, var(--accent-warning) 16%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.input-dup-picker-empty { padding: 24px 12px; color: var(--text-secondary); text-align: center; }
+
+/* Ghi chú lọc trùng trong mục Dữ liệu của form chiến dịch. */
+.campaign-import-dedup-form-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-success) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.campaign-import-dedup-form-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-warning);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-warning) 10%, transparent);
+  font-size: 13px;
+}
+.campaign-import-dedup-form-warning > span { flex: 1 1 320px; }
