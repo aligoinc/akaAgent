@@ -1,0 +1,62 @@
+{
+  "migration": "migration_v491_campaign_input_duplicates",
+  "project": "akachat cgjbsmqtfhqvttudyjzq",
+  "appliedVersion": "20261110150801",
+  "appliedAtVietnam": "2026-11-10 22:08:01",
+  "appliedVia": "Supabase MCP apply_migration (one transaction, file content verbatim)",
+  "ledgerStatementsMd5": "26f5b154176cc3fa0ff12fb31c4e4403",
+  "fileMd5": "26f5b154176cc3fa0ff12fb31c4e4403",
+  "preflightLive": {
+    "functionAbsent": true,
+    "settingAbsent": true,
+    "settingSequenceLastValue": 105,
+    "settingMaxId": 105,
+    "idxCampaignInputCooldownPhoneValid": true,
+    "ledgerHadV491": false,
+    "activeClientBackends": 4
+  },
+  "target": {
+    "function": "public.aka_agent_read_campaign_input_duplicates(bigint,bigint,text,text,jsonb)",
+    "functionDefMd5": "42754064a606f2e6b1655748b55c0c54",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "STABLE",
+    "config": ["search_path=pg_catalog, public", "statement_timeout=20s"],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "setting": { "id": 106, "key": "web.campaign_input_duplicates", "value": "{\"audience\":\"admin_akabiz\",\"defaultDays\":30,\"maxDays\":365}", "isActive": true, "isSecret": false }
+  },
+  "postApplyLive": {
+    "serviceRoleCall": {
+      "staffId": 385,
+      "zaloAccounts": 76,
+      "phonesSent": 2000,
+      "days": 30,
+      "elapsedMs": 1336,
+      "duplicatesFound": 1995,
+      "foundInDeletedCampaignRun": 1,
+      "maxCampaignsPerPhone": 4,
+      "since": "2026-10-11T17:00:00+00:00",
+      "note": "Phones taken from the staff's own campaigns of the last 7 days, so nearly all must be found; read-only."
+    },
+    "negativeChecks": [
+      "account of another staff in accountIds -> 42501 input_duplicates_account_scope_denied",
+      "actionId sms_send -> 22023"
+    ],
+    "edgeLogs15h05to15h08Utc": { "e5xx": 0, "e503": 0, "p50MsPerMinute": [47, 48, 48, 49] }
+  },
+  "localTests": {
+    "command": "AKA_AGENT_REPO=<akaAgent> PG_TEST_BINDIR=/usr/lib/postgresql/16/bin sh scripts/test-campaign-input-duplicates-sql.sh (akaAgentWebApp)",
+    "postgres": "16",
+    "assertions": 46,
+    "planCheck": "auto_explain: 8/8 plans read idx_campaign_input_cooldown_phone (7 calls in one session + forced generic plan), 0 seq scans, 0 other input indexes, 200k extra rows",
+    "reapplyRefused": true,
+    "rollbackThenReapply": true,
+    "missingIndexRefused": true
+  },
+  "notDone": [
+    "API/Web not deployed (WebApp branch claude/bold-hawking-4m2grp)",
+    "switch stays admin_akabiz; open to everyone = UPDATE value audience all",
+    "Desktop not started (needs GRANT EXECUTE to aka_agent_desktop + IPC + UI)"
+  ],
+  "rollback": "migrations/rollback_v491_campaign_input_duplicates.sql (drop function + delete switch row); no-DDL alternative: set audience off"
+}
