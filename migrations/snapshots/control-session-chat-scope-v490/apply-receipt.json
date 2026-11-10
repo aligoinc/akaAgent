@@ -1,0 +1,81 @@
+{
+  "migration": "migration_v490_control_session_chat_scope",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110112117",
+  "applied_at_vn": "2026-11-10T18:21:17+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user request 'Apply V490' (10/11/2026), after PR aligoinc/akaAgent#628 was opened",
+  "file_md5": "def9660b54e21b590bd12f6206009eb7",
+  "ledger_statements_md5": "def9660b54e21b590bd12f6206009eb7",
+  "ledger_statement_count": 1,
+  "ledger_rows_named_v490": 1,
+  "rollback_file": "migrations/rollback_v490_control_session_chat_scope.sql",
+  "rollback_md5": "20f0976bd4a676a73c722d3f86628bba",
+  "preflight_read_only_at_vn": "2026-11-10T18:19:10+07:00",
+  "preflight": {
+    "ledger_had_v490": false,
+    "ledger_last_version": "20261110065525 (V489)",
+    "source_function": "public.aka_agent_authenticate_control_session(text)",
+    "source_prosrc_md5": "0ed750b83cb1188f8fd4ae2fd0898870",
+    "source_functiondef_md5": "692e2a068ce51377f6bd71fec20a8b0c",
+    "source_owner": "postgres",
+    "source_security_definer": true,
+    "source_volatility": "volatile",
+    "source_config": ["search_path=public"],
+    "source_acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "target_existed": false,
+    "helpers_present": true,
+    "line_diff_vs_live_source": "md5 per line of the new body against the live source body: only the chat-scope branches differ",
+    "session_table_triggers": "trg_aka_agent_notify_session_revoked (AFTER UPDATE OF revoked_at -> UPDATE auto_notification_devices; transactional)",
+    "active_client_backends": 118
+  },
+  "dry_run": "Whole file with the final COMMIT replaced by ROLLBACK (execute_sql) right before apply: preflight, CREATE, ACL and postflight (body md5 + attributes) passed; afterwards the target was absent, the ledger unchanged and the source md5 unchanged",
+  "postflight": {
+    "signature": "public.aka_agent_authenticate_control_session_chat_v2(text) returns jsonb",
+    "prosrc_md5": "5f88c1bf6cf4aac84bffc67ccd58c13c",
+    "functiondef_md5": "61e874b9b47b827d78e16c71bc9ef687",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "volatile",
+    "config": ["search_path=public"],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "execute": { "service_role": true, "anon": false, "authenticated": false },
+    "source_unchanged": {
+      "prosrc_md5": "0ed750b83cb1188f8fd4ae2fd0898870",
+      "functiondef_md5": "692e2a068ce51377f6bd71fec20a8b0c",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  },
+  "behaviour_smoke_rolled_back": {
+    "method": "One DO block on production: every function call ran in a subtransaction that was rolled back, and a final RAISE aborted the statement; 0 temporary 'v490 smoke' sessions remained afterwards",
+    "parity_on_live_sessions": {
+      "sessions": 200,
+      "selection": "200 most recently used unrevoked, unexpired sessions",
+      "by_client": { "web": 194, "pwa": 5, "native": 1 },
+      "identical_to_old_function_except_app_scope": 200,
+      "v2_scope_full": 200,
+      "v2_scope_chat": 0,
+      "differences": 0
+    },
+    "real_chat_only_staff": {
+      "found": true,
+      "native_session_v2": "authenticated, app_scope chat (organization without any campaign package: zalo_server/sms/facebook/zalo_qr all false)",
+      "same_native_session_old_function": "invalid_staff",
+      "web_session_v2": "invalid_staff (Web/PWA keep the old rules)"
+    }
+  },
+  "postgrest_reload": "Schema cache reload message 11:21:17.96 UTC, queried in 4,463 ms, loaded 11:21:22.82 UTC (497 relations, 760 functions); no error lines",
+  "edge_logs_11_15_11_24_utc": {
+    "requests_per_full_minute": "27,689-30,360",
+    "http_503": 0,
+    "http_5xx": 0,
+    "status_mix_11_18_11_24_utc": { "200": 133527, "201": 5787, "204": 5549, "401": 377, "406": 4, "400": 2 }
+  },
+  "callers": "None yet: the WebApp API that sends requests with x-aka-chat-only (aligoinc/akaAgentWebApp#190) is not deployed and the iOS build is not released",
+  "compatibility": [
+    "New function only: aka_agent_authenticate_control_session(text) is unchanged, so Web/PWA, older iOS builds and the deployed API behave exactly as before.",
+    "No table, index, policy, role, global timeout, pool or connection change.",
+    "Chat permission is evaluated only on the two revoke paths of the old function: full sessions cost the same as with the old function.",
+    "Rollback drops the new function; the WebApp API falls back to the old function on PGRST202/42883."
+  ]
+}

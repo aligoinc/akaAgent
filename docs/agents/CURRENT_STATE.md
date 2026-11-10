@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 10/11/2026
 
+[V490 phiên app iOS chỉ dùng Chat](../CONTROL_SESSION_CHAT_SCOPE_V490.md):
+**Đã apply akachat lúc 18:21:17 VN, 10/11/2026** (`20261110112117 / migration_v490_control_session_chat_scope`;
+md5 sổ = md5 tệp `def9660b…`; không apply lại). Chỉ thêm `aka_agent_authenticate_control_session_chat_v2(text)`
+(EXECUTE chỉ `service_role`); hàm cũ giữ nguyên checksum/ACL. Thử rồi hủy trên production: 200 phiên thật giống
+hệt hàm cũ ngoài `app_scope`; nhân viên chỉ dùng Chat có thật → phiên native `app_scope = 'chat'`, phiên web vẫn
+bị từ chối. 0 lỗi 503/5xx quanh phút apply. Caller WebApp API (aligoinc/akaAgentWebApp#190) **chưa deploy**, iOS
+chưa phát hành. Sửa hàm cũ về sau thì phải sửa cả v2.
+[Receipt](../../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
+
 [Build akaAgent Zalo Server 9.5.1](../audits/akaagent-server-9.5.1-20261110/README.md):
 **Đã build local App Server Windows x64 nội bộ lúc 13:28:54–13:29:42 VN, 10/11/2026;
 người dùng đã cài lên VPS, bản mới gửi request từ 13:41:50 VN. Chưa upload.** Nguồn repo chính
