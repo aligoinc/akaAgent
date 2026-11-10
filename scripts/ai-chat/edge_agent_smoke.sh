@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Edge Function ai-chat-agent (handler.ts) chạy trên Node với hàm SQL V488 thật, cluster PostgreSQL dùng một lần.
+# Edge Function ai-chat-agent (handler.ts) chạy trên Node với hàm SQL V488 + V492 thật, cluster PostgreSQL dùng một lần.
 # Usage: bash scripts/ai-chat/edge_agent_smoke.sh   (cần Node >= 22.18 để chạy thẳng tệp .ts)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -16,5 +16,6 @@ psql_() { "$BIN/psql" -X -h "$TMP" -p "$PORT" -U postgres -d postgres -v ON_ERRO
 psql_ -f "$ROOT/scripts/notification-center/setup.sql" >/dev/null
 psql_ -f "$ROOT/scripts/ai-chat/setup_v488.sql" >/dev/null
 psql_ -f "$ROOT/migrations/migration_v488_ai_chat.sql" >/dev/null
+psql_ -f "$ROOT/migrations/migration_v492_ai_chat_insert.sql" >/dev/null
 chmod 755 "$TMP"
 node "$ROOT/scripts/ai-chat/edge_agent_smoke.mjs" "$BIN/psql" "$TMP" "$PORT"

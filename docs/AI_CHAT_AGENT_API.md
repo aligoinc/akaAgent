@@ -2,6 +2,8 @@
 
 Tài liệu này dành cho agent (Claude Code hoặc bộ trả lời khác) nhận câu hỏi của khách trong tab Trợ lý và ghi câu trả lời về database. Agent chỉ cần đọc tệp này.
 
+Bên gửi câu hỏi dùng đường `/ask` của cùng địa chỉ, có tài liệu riêng: [AI_CHAT_ASK_API.md](AI_CHAT_ASK_API.md). Agent trả lời không cần đọc tệp đó.
+
 - **Địa chỉ gốc**: `https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/ai-chat-agent`
 - **Xác thực**: không có. Không token, không khóa, không header riêng. Gọi thẳng bằng URL và body.
 - **Định dạng**: gửi `Content-Type: application/json`, body là một JSON object. Mọi phản hồi là JSON có `ok: true` hoặc `ok: false` kèm `code` và `message` tiếng Việt.
@@ -34,7 +36,7 @@ Mỗi lần chỉ xử lý một câu: xong câu này mới `/start` câu kế t
 | `limit` | Số câu tối đa, 1–50, mặc định 20 |
 | `projectCodes` | Chỉ lấy câu hỏi của các agent có mã này. Bỏ trống = tất cả |
 
-Mã agent hiện có (10/11/2026): `hoi-dap-chien-dich` (câu hỏi gửi từ Web và iOS; bản Desktop trên `dev_3` hiện cũng gửi vào đây) và `hoi-dap-chien-dich-desktop` (nhóm `akaagent-desktop`: nhận câu hỏi từ app akaAgent Desktop kể từ bản Desktop đọc nhóm này, chưa phát hành). Hai agent cùng cấu trúc `answerJson`; mỗi câu hỏi trả về kèm `project.code` để biết thuộc agent nào.
+Mã agent hiện có (10/11/2026): `hoi-dap-chien-dich` (câu hỏi gửi từ Web và iOS) và `hoi-dap-chien-dich-desktop` (nhóm `akaagent-desktop`: câu hỏi gửi từ app akaAgent Desktop kể từ bản đã merge `dev_3` #632, chưa phát hành). Câu hỏi gửi qua `/ask` vào agent nào thì xuất hiện ở agent đó. Hai agent cùng cấu trúc `answerJson`; mỗi câu hỏi trả về kèm `project.code` để biết thuộc agent nào.
 
 **Phản hồi**:
 
@@ -250,8 +252,8 @@ curl -s -X POST "$BASE/status" -H 'Content-Type: application/json' \
 Agent không cần đọc phần này.
 
 - Mã nguồn: `supabase/functions/ai-chat-agent/` (`handler.ts` là toàn bộ logic, `index.ts` nối với Supabase). Hàm gọi RPC `aka_agent_ai_chat_worker` của V488 bằng `service_role`: `/list` → `list`, `/start` → `claim` kèm `messageId` và `stage: "working"`, `/answer` → `answer` kèm `complete: true`, `/status` → `fail` (`"dừng"` = `stopped`, `"chờ câu trả lời"` = `retryable`). RPC ghi theo `messageId`, không có mã khóa theo từng agent: chỉ nên chạy một agent, vì hai agent cùng xử lý một `messageId` sẽ không bị chặn ghi đè nhau.
-- Trạng thái: V488 đã apply lúc 12:15 VN ngày 10/11/2026, Edge Function đã deploy bản 1 lúc 12:19 VN cùng ngày và đã gọi thử qua địa chỉ thật. Deploy lại sau khi sửa code: `supabase functions deploy ai-chat-agent --project-ref cgjbsmqtfhqvttudyjzq` (`verify_jwt = false` khai trong `supabase/config.toml`).
+- Trạng thái: V488 đã apply lúc 12:15 VN ngày 10/11/2026, Edge Function đã deploy bản 1 lúc 12:19 VN cùng ngày và đã gọi thử qua địa chỉ thật. Bản 2 deploy lúc 22:28 VN cùng ngày thêm đường `/ask` (V492); bốn đường của agent giữ nguyên hành vi. Deploy lại sau khi sửa code: `supabase functions deploy ai-chat-agent --project-ref cgjbsmqtfhqvttudyjzq` (`verify_jwt = false` khai trong `supabase/config.toml`).
 - API mở hoàn toàn theo yêu cầu (chỉ dùng nội bộ): ai biết địa chỉ đều đọc được câu hỏi đang chờ và ghi được câu trả lời. Mặc định không có bước xác thực nào. Chỉ khi sau này muốn khóa lại mới đặt secret `AI_CHAT_AGENT_KEY` trên Supabase (lúc đó lời gọi phải kèm header `x-agent-key`); không đặt thì không có gì thay đổi.
 - Tắt nhanh: `auto_system_settings` khóa `ai_chat.enabled = 'false'` (`/list` trả `enabled: false`), hoặc xóa function.
 - Hạn chờ 20 phút là `ai_project.timeout_seconds` của từng agent (30–3600 giây).
-- Kiểm thử cục bộ: `bash scripts/ai-chat/edge_agent_smoke.sh` (31 khẳng định, handler chạy với hàm SQL thật).
+- Kiểm thử cục bộ: `bash scripts/ai-chat/edge_agent_smoke.sh` (56 khẳng định gồm cả `/ask`, handler chạy với hàm SQL thật).

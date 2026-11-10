@@ -13,6 +13,10 @@ const handler = createAiChatAgentHandler({
     const { data, error } = await supabase.rpc('aka_agent_ai_chat_worker', { p_action: action, p_payload: payload })
     return { data, error: error ? { code: error.code, message: error.message } : null }
   },
+  insert: async (payload) => {
+    const { data, error } = await supabase.rpc('aka_agent_ai_chat_insert', { p_payload: payload })
+    return { data, error: error ? { code: error.code, message: error.message } : null }
+  },
 })
 
 Deno.serve(handler)

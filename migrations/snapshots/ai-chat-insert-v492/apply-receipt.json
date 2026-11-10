@@ -1,0 +1,74 @@
+{
+  "migration": "migration_v492_ai_chat_insert",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110152638",
+  "applied_at_vn": "2026-11-10T22:26:38+07:00",
+  "applied_via": "Supabase MCP apply_migration (một lần gọi, 12.522 byte)",
+  "file_md5": "9fbaee6539d7feb39c93034cd995e18b",
+  "ledger_statements_md5": "9fbaee6539d7feb39c93034cd995e18b",
+  "scope": "Chỉ thêm hàm public.aka_agent_ai_chat_insert(jsonb). Không sửa bảng, hàm, quyền hay dữ liệu nào của V488.",
+  "preflight_vn_22_20": {
+    "function_free": true,
+    "core_prosrc_md5": "9354da9858283e1c98b021e91968b873 (private.aka_agent_ai_chat, khớp bản dựng từ file V488 trên PostgreSQL 16 cục bộ)",
+    "snapshot_prosrc_md5": "c5d40b3c3a49f3e830b85bd28924298a",
+    "thread_source_check_allows_api": true,
+    "last_migration": "20261110150801 migration_v491_campaign_input_duplicates",
+    "projects": "1 hoi-dap-chien-dich (audience all), 2 hoi-dap-chien-dich-desktop (audience all)"
+  },
+  "postflight": {
+    "function_prosrc_md5": "673739d0f0d543d5d1bc9931bd0a9ef9 (khớp thân hàm trong file)",
+    "security_definer": true,
+    "proconfig": "search_path=pg_catalog, public",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "execute": { "service_role": true, "anon": false, "authenticated": false, "aka_agent_desktop": false, "aka_agent_chat_api": false },
+    "v488_functions": 15,
+    "core_prosrc_md5_unchanged": "9354da9858283e1c98b021e91968b873",
+    "rows_before_and_after": "5 hội thoại / 5 câu hỏi (đều source web)"
+  },
+  "api_impact": {
+    "window_utc": "15:24–15:29",
+    "apply_minute_15_26": "p50 44 ms (các phút trước 44 ms), 0 lỗi 5xx, 0 lỗi 503, ~21 nghìn request /rest/v1 mỗi phút",
+    "minute_15_28": "3 dòng HTTP 500 đều là 3 lời gọi thử /ask của chính đợt kiểm này (agent, chiến dịch, hội thoại không tồn tại): PostgREST đổi SQLSTATE P0002 thành 500, Edge Function trả 404 cho nơi gọi"
+  },
+  "edge_function": {
+    "name": "ai-chat-agent",
+    "id": "5f51d3d8-09d9-44a1-bdd6-6b9abfb12e10",
+    "version": 2,
+    "status": "ACTIVE",
+    "verify_jwt": false,
+    "deployed_at_vn": "2026-11-10T22:28:06+07:00",
+    "source_md5": { "index.ts": "2d43f581ff98bf52e227c2a5e93c095e", "handler.ts": "5e7cb72546c713db773e7d444a02dc15" },
+    "url": "https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/ai-chat-agent/ask",
+    "http_smoke_no_credentials": [
+      "POST /ask thiếu question → 400 ai_chat_question_required",
+      "POST /ask thiếu projectCode → 400 ai_chat_project_required",
+      "POST /ask projectCode không tồn tại → 404 ai_chat_agent_not_found",
+      "POST /ask không có campaignId lẫn staffId → 400 ai_chat_staff_required",
+      "POST /ask chiến dịch không tồn tại → 404 ai_chat_campaign_not_found",
+      "POST /ask threadId không tồn tại → 404 ai_chat_thread_not_found",
+      "POST /ask source lạ → 400 ai_chat_invalid_source",
+      "GET /ask → 405 ai_chat_method_not_allowed",
+      "GET /list?limit=1 → 200 count 0",
+      "POST /khac → 404 ai_chat_route_not_found (thông báo có /ask)"
+    ]
+  },
+  "trial_rolled_back_vn_22_28": {
+    "how": "Một khối DO dưới role service_role gọi hàm 4 lần với chiến dịch thử 48605 của tài khoản admin akaBiz (staff 4, tổ chức 1) rồi RAISE EXCEPTION để hủy cả giao dịch.",
+    "insert": "ok true, inserted true, source api, staffId 4 + organizationId 1 lấy từ chủ chiến dịch, agent hoi-dap-chien-dich-desktop, trạng thái chờ câu trả lời, hạn trả lời +20 phút",
+    "second_question_same_campaign": "ok false, code ai_chat_message_pending, kèm threadId + messageId của câu đang chờ",
+    "retry_same_request_id": "inserted false, cùng messageId",
+    "follow_up_while_pending": "ai_chat_message_pending",
+    "worker_list_sees_question": true,
+    "rows_after": "5 hội thoại / 5 câu hỏi, không dòng nào của phép thử còn lại (id 6 của hai bảng bị bỏ qua trong sequence)"
+  },
+  "local_tests": [
+    "bash scripts/ai-chat/smoke_v492.sh: 54 khẳng định SQL, V492 từ chối khi chưa có V488, 15 hàm V488 giữ nguyên thân và quyền, apply lại bị từ chối, rollback giữ hội thoại",
+    "bash scripts/ai-chat/edge_agent_smoke.sh: 56 khẳng định (25 cho /ask)",
+    "bash scripts/ai-chat/smoke_v488.sh, seed_akaagent_desktop_smoke.sh, desktop_transport_smoke.sh: đạt"
+  ],
+  "not_verified": [
+    "Chưa có câu hỏi nào được lưu thật qua /ask trên production: đường ghi chỉ chạy trong giao dịch tự hủy (hàm SQL), còn qua URL thật chỉ gọi các ca không ghi dữ liệu.",
+    "Edge Function mở không xác thực theo yêu cầu; secret AI_CHAT_AGENT_KEY chưa đặt."
+  ]
+}

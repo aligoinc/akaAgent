@@ -1,13 +1,17 @@
-// API nội bộ cho agent trả lời "Hỏi đáp AI" (V488). Không phụ thuộc Deno: index.ts nối với Supabase,
+// API nội bộ của "Hỏi đáp AI". Không phụ thuộc Deno: index.ts nối với Supabase,
 // scripts/ai-chat/edge_agent_smoke.mjs chạy chính tệp này trên Node với hàm SQL thật.
-// Hợp đồng cho agent: docs/AI_CHAT_AGENT_API.md.
+// Bên trả lời (V488): /list, /start, /answer, /status, hợp đồng ở docs/AI_CHAT_AGENT_API.md.
+// Bên gửi câu hỏi (V492): /ask, hợp đồng ở docs/AI_CHAT_ASK_API.md.
 
 export type RpcError = { code?: string | null; message?: string | null }
 export type RpcResult = { data: unknown; error: RpcError | null }
 export type WorkerRpc = (action: string, payload: Record<string, unknown>) => Promise<RpcResult>
+export type InsertRpc = (payload: Record<string, unknown>) => Promise<RpcResult>
 
 export type AiChatAgentOptions = {
   rpc: WorkerRpc
+  /** Chèn câu hỏi: public.aka_agent_ai_chat_insert (V492). */
+  insert: InsertRpc
   /** Để trống = API mở (chế độ nội bộ). Có giá trị thì mọi lời gọi phải gửi header x-agent-key khớp. */
   agentKey?: string | null
 }
@@ -21,7 +25,43 @@ const ERROR_MESSAGES: Record<string, string> = {
     'answerJson không đúng cấu trúc của agent: phải là object và có đủ các khóa trong project.outputSchema.required (nhận được ở bước start).',
   ai_chat_worker_id_required: 'Thiếu tên agent.',
   ai_chat_invalid_action: 'Hành động không hợp lệ.',
+  // Bên gửi câu hỏi (/ask).
+  ai_chat_question_required: 'Thiếu câu hỏi: question phải là chuỗi không rỗng.',
+  ai_chat_question_too_long: 'Câu hỏi dài quá 4.000 ký tự.',
+  ai_chat_project_required: 'Thiếu agent: gửi projectCode (hoặc projectId), hoặc threadId để hỏi tiếp trong hội thoại có sẵn.',
+  ai_chat_agent_not_found: 'Không tìm thấy agent theo projectCode/projectId đã gửi.',
+  ai_chat_staff_required: 'Chưa biết câu hỏi của nhân viên nào: gửi campaignId (lấy chủ chiến dịch) hoặc staffId.',
+  ai_chat_invalid_source: 'source phải là "api", "web", "ios" hoặc "desktop".',
+  ai_chat_campaign_required: 'Agent này cần campaignId.',
+  ai_chat_campaign_not_found: 'Không tìm thấy chiến dịch, chiến dịch đã xóa, hoặc không thuộc nhân viên/tổ chức đã gửi.',
+  ai_chat_thread_not_found: 'Không tìm thấy hội thoại (threadId), hoặc hội thoại không thuộc nhân viên/tổ chức đã gửi.',
+  ai_chat_access_denied: 'Nhân viên không tồn tại, đã nghỉ, hoặc không thuộc tổ chức đã gửi.',
+  ai_chat_agent_unavailable: 'Agent đang tắt hoặc không mở cho nhân viên này.',
+  ai_chat_agent_not_applicable: 'Agent không áp dụng cho loại chiến dịch này.',
+  ai_chat_intake_required: 'Thiếu thông tin bắt buộc của agent (intake).',
+  ai_chat_message_pending: 'Đang có câu hỏi chờ trả lời cho đúng agent và chiến dịch (hoặc hội thoại) này. Chờ câu đó xong rồi gửi câu mới.',
+  ai_chat_thread_closed: 'Hội thoại đã đóng. Bỏ threadId để mở hội thoại mới.',
+  ai_chat_too_many_pending: 'Nhân viên này đang có quá nhiều câu hỏi chờ trả lời. Gửi lại khi đã có câu trả lời.',
+  ai_chat_daily_limit: 'Nhân viên này đã hết số câu hỏi trong ngày.',
+  ai_chat_disabled: 'Hỏi đáp AI đang tắt (ai_chat.enabled = false).',
 }
+
+/** Mã HTTP theo mã lỗi; mã không có ở đây là 400. */
+const ERROR_STATUS: Record<string, number> = {
+  ai_chat_access_denied: 403,
+  ai_chat_agent_unavailable: 403,
+  ai_chat_agent_not_found: 404,
+  ai_chat_campaign_not_found: 404,
+  ai_chat_thread_not_found: 404,
+  ai_chat_message_pending: 409,
+  ai_chat_thread_closed: 409,
+  ai_chat_disabled: 409,
+  ai_chat_too_many_pending: 429,
+  ai_chat_daily_limit: 429,
+}
+
+/** Các trường /ask chuyển nguyên cho hàm SQL; hàm SQL kiểm tra kiểu và giá trị. */
+const ASK_FIELDS = ['question', 'projectCode', 'projectId', 'threadId', 'campaignId', 'staffId', 'organizationId', 'source', 'requestId', 'intake']
 
 const REASON_MESSAGES: Record<string, string> = {
   not_waiting: 'Câu hỏi không còn ở trạng thái "chờ câu trả lời": agent khác đã nhận, khách đã hủy hoặc đã quá hạn.',
@@ -42,14 +82,14 @@ function fail(status: number, code: string, message: string): Response {
   return json(status, { ok: false, code, message })
 }
 
-function rpcFailure(error: RpcError): Response {
+function rpcFailure(error: RpcError, missing = 'aka_agent_ai_chat_worker (chưa apply migration V488)'): Response {
   const code = String(error.code ?? '')
   const message = String(error.message ?? '')
   if (code === 'PGRST202' || code === '42883') {
-    return fail(503, 'ai_chat_not_ready', 'Database chưa có hàm aka_agent_ai_chat_worker (chưa apply migration V488).')
+    return fail(503, 'ai_chat_not_ready', `Database chưa có hàm ${missing}.`)
   }
   if (message.startsWith('ai_chat_')) {
-    return fail(400, message, ERROR_MESSAGES[message] ?? 'Yêu cầu bị từ chối.')
+    return fail(ERROR_STATUS[message] ?? 400, message, ERROR_MESSAGES[message] ?? 'Yêu cầu bị từ chối.')
   }
   console.error('ai-chat-agent rpc error', code, message)
   return fail(502, 'ai_chat_upstream_error', 'Không gọi được database. Thử lại sau vài giây.')
@@ -112,8 +152,8 @@ export function createAiChatAgentHandler(options: AiChatAgentOptions): (req: Req
     if (agentKey !== '' && !sameKey(req.headers.get('x-agent-key') ?? '', agentKey)) {
       return fail(401, 'ai_chat_agent_key_invalid', 'Thiếu hoặc sai header x-agent-key.')
     }
-    if (!['list', 'start', 'answer', 'status'].includes(route)) {
-      return fail(404, 'ai_chat_route_not_found', 'Đường dẫn không tồn tại. Dùng /list, /start, /answer hoặc /status.')
+    if (!['list', 'start', 'answer', 'status', 'ask'].includes(route)) {
+      return fail(404, 'ai_chat_route_not_found', 'Đường dẫn không tồn tại. Dùng /list, /start, /answer, /status hoặc /ask.')
     }
     if (req.method !== 'POST' && !(route === 'list' && req.method === 'GET')) {
       return fail(405, 'ai_chat_method_not_allowed', 'Dùng phương thức POST (riêng /list nhận cả GET).')
@@ -131,6 +171,31 @@ export function createAiChatAgentHandler(options: AiChatAgentOptions): (req: Req
       const data = asObject(result.data)
       const items = asItems(data)
       return json(200, { ok: true, enabled: data.enabled !== false, count: items.length, questions: items, serverTime: data.serverTime ?? null })
+    }
+
+    if (route === 'ask') {
+      if (typeof body.question !== 'string' || body.question.trim() === '') {
+        return fail(400, 'ai_chat_question_required', ERROR_MESSAGES.ai_chat_question_required)
+      }
+      const payload: Record<string, unknown> = {}
+      for (const key of ASK_FIELDS) {
+        if (body[key] !== undefined && body[key] !== null) payload[key] = body[key]
+      }
+      const result = await options.insert(payload)
+      if (result.error) return rpcFailure(result.error, 'aka_agent_ai_chat_insert (chưa apply migration V492)')
+      const data = asObject(result.data)
+      if (data.ok !== true) {
+        // Không chèn: nhân viên đang có câu chờ trả lời với cùng agent + chiến dịch. Trả kèm câu đang chờ đó.
+        return json(409, {
+          ok: false,
+          code: 'ai_chat_message_pending',
+          message: ERROR_MESSAGES.ai_chat_message_pending,
+          threadId: data.threadId ?? null,
+          messageId: data.messageId ?? null,
+          status: data.status ?? null,
+        })
+      }
+      return json(200, data)
     }
 
     const messageId = messageIdOf(body)
