@@ -8,8 +8,10 @@ mỗi lần gọi: ~0,48 ms/lần, 52% thời gian đẩy. plpgsql giữ plan tr
 SET plan_cache_mode = force_generic_plan (không thì plpgsql chọn custom plan vì p_kind làm gọn được nhánh UNION,
 lại lập kế hoạch mỗi lần). Câu truy vấn giữ nguyên từng chữ; SELECT INTO lấy dòng đầu như hàm SQL trả dòng đầu.
 
-Nguồn định nghĩa cũ: snapshot desktop-session-rls (chụp live 27/10/2026, kiểm checksum); không migration nào sửa
-3 hàm này sau V409 (V435 chỉ đổi quyền). Định nghĩa mới: scripts/data-group-routing/v486_sharing_plpgsql.sql.
+Nguồn định nghĩa cũ: migrations/snapshots/group-access-v486/live-functions.json (chụp live 09/11/2026 bằng
+pg_get_functiondef, kiểm checksum). group_access đã khác bản chụp desktop-session-rls 27/10: ownerName che tên chủ nhóm
+khi người gọi là phiên Desktop không phải chủ (private.aka_agent_staff_scope_for_request, khớp checksum trong plan V436).
+Định nghĩa mới: scripts/data-group-routing/v486_sharing_plpgsql.sql; build kiểm câu truy vấn giữ nguyên từng chữ.
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SNAP = ROOT / 'migrations' / 'snapshots' / 'desktop-session-rls'
+SNAP = ROOT / 'migrations' / 'snapshots' / 'group-access-v486' / 'live-functions.json'
 NEW_SQL = ROOT / 'scripts' / 'data-group-routing' / 'v486_sharing_plpgsql.sql'
 OUT = ROOT / 'migrations' / 'migration_v486_group_access_plan_cache.sql'
 ROLLBACK = ROOT / 'migrations' / 'rollback_v486_group_access_plan_cache.sql'
@@ -35,8 +37,7 @@ def md5(s: str) -> str:
 
 
 def main() -> None:
-    schema = json.loads((SNAP / 'fixture-schema.json').read_text(encoding='utf-8'))
-    live = {f['signature']: f for f in schema['private_functions']}
+    live = {f['signature']: f for f in json.loads(SNAP.read_text(encoding='utf-8'))['functions']}
     old = {}
     for sig in SIGS:
         text = live[sig]['definition']
@@ -53,6 +54,19 @@ def main() -> None:
         if not block.startswith(f'CREATE OR REPLACE FUNCTION {name}('):
             raise SystemExit(f'order mismatch for {sig}')
         new[sig] = block + '\n'
+    # Câu truy vấn giữ nguyên từng chữ: hàm SQL "SELECT ...;" <-> plpgsql "... INTO v_access ...;" / "RETURN ...;".
+    def body(text: str) -> str:
+        return text.split('AS $function$\n', 1)[1].rsplit('$function$', 1)[0]
+    ga = SIGS[0]
+    old_q = body(old[ga]).strip()
+    new_q = body(new[ga]).split('BEGIN\n', 1)[1].split('  RETURN v_access;', 1)[0].replace('  INTO v_access\n', '', 1).strip()
+    if old_q != new_q:
+        raise SystemExit('group_access: query text differs from live definition')
+    for sig in SIGS[1:]:
+        old_e = body(old[sig]).strip()
+        new_e = body(new[sig]).split('BEGIN\n', 1)[1].split('\nEND;', 1)[0].strip()
+        if not (old_e.startswith('SELECT ') and new_e.startswith('RETURN ') and old_e[7:] == new_e[7:]):
+            raise SystemExit(f'{sig}: expression differs from live definition')
     old_md5 = {s: md5(t) for s, t in old.items()}
     new_md5 = {s: md5(t) for s, t in new.items()}
 
@@ -121,7 +135,7 @@ FROM viewers AS v;
 -- Tự đối chiếu trên dữ liệu thật trong cùng giao dịch: trước khi thay, tính kết quả của 3 hàm cho tối đa 500 nhóm
 -- (400 nhóm data mới nhất + 100 nhóm nội dung) x (chủ nhóm, 2 nhân viên khác cùng tổ chức, tối đa 2 người được chia sẻ,
 -- 1 nhân viên tổ chức khác); sau khi thay tính lại, lệch một dòng là huỷ cả giao dịch.
--- Preflight kiểm md5 pg_get_functiondef (chụp live 27/10/2026; V409 tạo, V435 chỉ đổi quyền).
+-- Preflight kiểm md5 pg_get_functiondef chụp live 09/11/2026 (group_access đã che tên chủ nhóm cho phiên Desktop).
 -- Rollback: migrations/rollback_v486_group_access_plan_cache.sql. Kiểm thử: python3 scripts/data-group-routing/test_v486.py
 BEGIN;
 SET LOCAL lock_timeout = '3s';

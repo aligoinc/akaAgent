@@ -10,7 +10,7 @@
 -- Tự đối chiếu trên dữ liệu thật trong cùng giao dịch: trước khi thay, tính kết quả của 3 hàm cho tối đa 500 nhóm
 -- (400 nhóm data mới nhất + 100 nhóm nội dung) x (chủ nhóm, 2 nhân viên khác cùng tổ chức, tối đa 2 người được chia sẻ,
 -- 1 nhân viên tổ chức khác); sau khi thay tính lại, lệch một dòng là huỷ cả giao dịch.
--- Preflight kiểm md5 pg_get_functiondef (chụp live 27/10/2026; V409 tạo, V435 chỉ đổi quyền).
+-- Preflight kiểm md5 pg_get_functiondef chụp live 09/11/2026 (group_access đã che tên chủ nhóm cho phiên Desktop).
 -- Rollback: migrations/rollback_v486_group_access_plan_cache.sql. Kiểm thử: python3 scripts/data-group-routing/test_v486.py
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -21,12 +21,12 @@ DECLARE
   v_item record;
   v_md5 text;
 BEGIN
-  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "251162422553d81d432151554b5ea16a", "private.can_read_data_group(bigint,bigint,bigint)": "c47165554f49d3099d1f95e7d136eae5", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "529e0060fe2e757a12e8674826137b65"}'::jsonb) LOOP
+  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "d173eaf22b0b6b6958a6f8f40cdaa82d", "private.can_read_data_group(bigint,bigint,bigint)": "c47165554f49d3099d1f95e7d136eae5", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "529e0060fe2e757a12e8674826137b65"}'::jsonb) LOOP
     IF to_regprocedure(v_item.sig) IS NULL THEN
       RAISE EXCEPTION 'v486: % missing', v_item.sig;
     END IF;
     v_md5 := md5(pg_get_functiondef(to_regprocedure(v_item.sig)));
-    IF v_md5 = ('{"private.group_access(text,bigint,bigint,bigint)": "7355d59e2b1a80dd601e30e68bb35eda", "private.can_read_data_group(bigint,bigint,bigint)": "8d5f08ca86d4f5a90e24f7c45a02da15", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "0cf5471fa64437cf4e99528e0c2e31c7"}'::jsonb ->> v_item.sig) THEN
+    IF v_md5 = ('{"private.group_access(text,bigint,bigint,bigint)": "4f7d34cd8bfa753d35a9ab9a0ec213b4", "private.can_read_data_group(bigint,bigint,bigint)": "8d5f08ca86d4f5a90e24f7c45a02da15", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "0cf5471fa64437cf4e99528e0c2e31c7"}'::jsonb ->> v_item.sig) THEN
       RAISE EXCEPTION 'v486: already applied (%)', v_item.sig;
     END IF;
     IF v_md5 IS DISTINCT FROM v_item.expected THEN
@@ -114,7 +114,9 @@ BEGIN
     WHERE p_kind='content' AND id=p_group_id AND NOT is_delete
   )
   SELECT jsonb_build_object(
-    'ownerStaffId',g.staff_id,'ownerName',COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id),
+    'ownerStaffId',g.staff_id,'ownerName',CASE WHEN (SELECT private.aka_agent_staff_scope_for_request()) IS NOT NULL
+      AND owner.id IS DISTINCT FROM (SELECT private.aka_agent_staff_scope_for_request())
+      THEN 'Nhân viên #'||owner.id ELSE COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id) END,
     'role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END,
     'canManage',g.staff_id=p_staff_id,'canUse',true,'canCopy',true,
     'scope',g.sharing_scope,'revision',g.sharing_revision::text)
@@ -166,7 +168,7 @@ DECLARE
   v_bad bigint;
   v_total bigint;
 BEGIN
-  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "7355d59e2b1a80dd601e30e68bb35eda", "private.can_read_data_group(bigint,bigint,bigint)": "8d5f08ca86d4f5a90e24f7c45a02da15", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "0cf5471fa64437cf4e99528e0c2e31c7"}'::jsonb) LOOP
+  FOR v_item IN SELECT key AS sig, value AS expected FROM jsonb_each_text('{"private.group_access(text,bigint,bigint,bigint)": "4f7d34cd8bfa753d35a9ab9a0ec213b4", "private.can_read_data_group(bigint,bigint,bigint)": "8d5f08ca86d4f5a90e24f7c45a02da15", "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": "0cf5471fa64437cf4e99528e0c2e31c7"}'::jsonb) LOOP
     v_md5 := md5(pg_get_functiondef(to_regprocedure(v_item.sig)));
     IF v_md5 IS DISTINCT FROM v_item.expected THEN
       RAISE EXCEPTION 'v486: % not as expected after apply (md5 %)', v_item.sig, v_md5;

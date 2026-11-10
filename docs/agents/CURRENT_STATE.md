@@ -1,4 +1,26 @@
-# Trạng thái đã xác nhận — cập nhật 05/11/2026
+# Trạng thái đã xác nhận — cập nhật 10/11/2026
+
+[Build akaAgent Desktop 9.5.0](../audits/akaagent-9.5.0-20261110/README.md):
+**Đã build local Windows x64, Mac ARM64 và Mac Intel x64 lúc 09:16–09:20 VN,
+10/11/2026. Chưa upload/phát hành/feed.**
+Nguồn repo chính `cf29bc19` (base `6769f91c`), chỉ đổi ba file version.
+Hai typecheck, smoke snapshot 12/12, ba package, payload/version/kiến trúc, DMG mount và
+native SQLite đạt; giữ 140 installer cũ và native host.
+Mac ký ad-hoc, chưa notarize; Windows chưa ký/chưa chạy máy thật, Intel thử qua Rosetta.
+**App Server không build lại** (không file nào trong gói Server đổi theo hướng chạy trên Server),
+giữ bộ nội bộ 9.3.0 ngày 05/11. Không DB/deploy service.
+[Receipt và giới hạn](../audits/akaagent-9.5.0-20261110/build-receipt.json).
+
+[Build akaAgent Desktop 9.4.0](../audits/akaagent-9.4.0-20261106/README.md):
+**Đã build local Windows x64, Mac ARM64 và Mac Intel x64 lúc 20:32–20:36 VN,
+06/11/2026; hậu kiểm hoàn tất 20:37 VN. Chưa upload/phát hành/feed.**
+Nguồn repo chính `247ec9aa` (base `57f8c0a1`), chỉ đổi ba file version.
+Hai typecheck, 8 ca snapshot offline, ba package, payload/version/kiến trúc và native
+SQLite đạt; giữ 111 installer cũ, native host và hai tài liệu local đang sửa.
+Mac ký ad-hoc, chưa notarize; Windows chưa ký/chưa chạy máy thật, Intel thử qua Rosetta.
+**App Server không build lại**, giữ bộ nội bộ 9.3.0 ngày 05/11. Không DB/deploy service.
+[Receipt và giới hạn](../audits/akaagent-9.4.0-20261106/build-receipt.json).
+
 
 [Build akaAgent 9.3.0](../audits/akaagent-9.3.0-20261105/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 và App Server Windows x64 nội bộ

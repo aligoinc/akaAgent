@@ -1,6 +1,8 @@
 -- V486: 3 hàm kiểm quyền đọc nhóm chia sẻ chuyển LANGUAGE sql -> plpgsql, giữ nguyên từng câu truy vấn và thuộc tính
 -- (STABLE, SECURITY DEFINER, search_path). Hàm SQL có SET không được inline nên mỗi lần gọi lập kế hoạch lại; plpgsql
 -- giữ plan trong phiên. Kết quả: SELECT INTO lấy dòng đầu như hàm SQL trả dòng đầu.
+-- Câu truy vấn của group_access chép từ định nghĩa live 09/11/2026 (ownerName che tên chủ nhóm khi người gọi là
+-- phiên Desktop không phải chủ): migrations/snapshots/group-access-v486/live-functions.json.
 CREATE OR REPLACE FUNCTION private.group_access(p_kind text, p_group_id bigint, p_staff_id bigint, p_organization_id bigint)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -21,7 +23,9 @@ BEGIN
     WHERE p_kind='content' AND id=p_group_id AND NOT is_delete
   )
   SELECT jsonb_build_object(
-    'ownerStaffId',g.staff_id,'ownerName',COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id),
+    'ownerStaffId',g.staff_id,'ownerName',CASE WHEN (SELECT private.aka_agent_staff_scope_for_request()) IS NOT NULL
+      AND owner.id IS DISTINCT FROM (SELECT private.aka_agent_staff_scope_for_request())
+      THEN 'Nhân viên #'||owner.id ELSE COALESCE(NULLIF(owner.name,''),'Nhân viên #'||owner.id) END,
     'role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END,
     'canManage',g.staff_id=p_staff_id,'canUse',true,'canCopy',true,
     'scope',g.sharing_scope,'revision',g.sharing_revision::text)

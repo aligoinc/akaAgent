@@ -1,0 +1,129 @@
+{
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "user, 2026-11-09: \"Apply V483 → V484 (p1→p3) → V485 (p1→p2) → V486\", then \"Hãy sử dụng MCP để thực hiện hết tất cả mà không cần phải hỏi tôi\"; trial for the organization of staff 724 approved earlier (\"Đồng ý cả 4\")",
+  "method": "V483 and V484 p1-p3: Supabase MCP apply_migration with the exact file content (ledger created_by = the MCP account). V485 p1-p2 and V486: the MCP confirmation card expired unanswered four times, so the user pasted migrations/tests/<name>_guarded_apply.sql in the Supabase SQL Editor, one Run per file (one transaction each; the script writes the ledger row itself, created_by NULL). After each part: ledger md5(statements[1]) and octet_length checked against the file, target function md5s checked.",
+  "mcpConfirmationExpired": [
+    {"migration": "migration_v484_data_group_async_routing_p1", "atVietnam": ["~19:0x", "~19:2x"], "outcome": "nothing ran; applied on the third send"},
+    {"migration": "migration_v485_data_group_upload_sessions_p1", "atVietnam": ["~21:50", "~22:15", "~22:24", "~23:02"], "outcome": "nothing ran (read-only checks 21:54, 22:20, 22:56, 23:06 VN); applied via the SQL Editor script instead"}
+  ],
+  "applied": [
+    {
+      "version": "20261109120408",
+      "name": "migration_v483_data_group_ingest_budget_guard",
+      "file": "migrations/migration_v483_data_group_ingest_budget_guard.sql",
+      "md5": "e91cf43256683a018582bc90156c8b39",
+      "appliedAtVietnam": "2026-11-09 19:04:08",
+      "via": "MCP apply_migration",
+      "change": {"desktopWrappers": "d3ba6d79…/9a75506b… -> f3244345…/901b27e3…", "guardProsrc": "ff99a8564bb1ce517675419f03967eeb"}
+    },
+    {
+      "version": "20261109140318",
+      "name": "migration_v484_data_group_async_routing_p1",
+      "file": "migrations/migration_v484_data_group_async_routing_p1.sql",
+      "md5": "9e298117e55d918afde5f7bdabf73f82",
+      "appliedAtVietnam": "2026-11-09 21:03:18",
+      "via": "MCP apply_migration",
+      "change": "private.auto_data_group_route_jobs + _job_members (RLS on, no API role), 7 private functions, auto_system_settings data_groups.routing_mode = {\"mode\":\"sync\",\"organizationIds\":[],\"workerBudgetMs\":4000}"
+    },
+    {
+      "version": "20261109141035",
+      "name": "migration_v484_data_group_async_routing_p2",
+      "file": "migrations/migration_v484_data_group_async_routing_p2.sql",
+      "md5": "d2246d52749548bba10941b184dadb4e",
+      "appliedAtVietnam": "2026-11-09 21:10:35",
+      "via": "MCP apply_migration",
+      "functions": {
+        "public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)": {"before": "70abe6e3db930718a6472ce270b29b7a", "after": "0a0c9d1f870df7eac69ceaa20f6fb10a"},
+        "public.aka_agent_bind_campaign_data_group_source(bigint,bigint,text,bigint,bigint,bigint)": {"before": "bf41a97876e47339e87545914e01bc1e", "after": "ce799127008afc8f72edd31ef2042a39"}
+      }
+    },
+    {
+      "version": "20261109142517",
+      "name": "migration_v484_data_group_async_routing_p3",
+      "file": "migrations/migration_v484_data_group_async_routing_p3.sql",
+      "md5": "04161754fea55942f1738898c7b2c9fa",
+      "appliedAtVietnam": "2026-11-09 21:25:17",
+      "via": "MCP apply_migration",
+      "functions": {
+        "public.aka_agent_reactivate_campaign_data_group_source(bigint,bigint,bigint,text,text)": {"before": "9f4db1d1c78dfe0e1b00e37678e5852e", "after": "b185fd226aa469ae488c39f7e5344ab6"},
+        "public.aka_agent_move_data_group_members(bigint,bigint,text,bigint,bigint[],bigint)": {"before": "2a9b66655b905f56e44fe492096520bc", "after": "f408ef621e5a77f5c917288a5ee5c8ff"},
+        "public.aka_agent_internal_sync_dataset_auto_group_member(bigint,bigint,boolean)": {"before": "9215d6543aa1bb2627676f280465b8fa", "after": "4bf8a8bd00054e90e9d4bde54343c003"},
+        "public.aka_agent_sync_scan_dataset_group_origins()": {"before": "5164ca868e763bfabd830e2114deeff9", "after": "7ad7de9336833e9803344620594e4e5d"},
+        "private.copy_shared_group(bigint,bigint,text,bigint,jsonb)": {"before": "9b310ca079d192f4e809b9cf09d28740", "after": "a84ce82f3c830f23ffb6cb6c3ef288be"},
+        "private.aka_agent_assert_data_group_ingest_budget(bigint,bigint,text,jsonb) [prosrc]": {"before": "ff99a8564bb1ce517675419f03967eeb", "after": "4aa52e79124baf2cf94f7953f310c825"}
+      },
+      "cron": {"jobid": 112, "jobname": "aka-agent-data-group-route-worker", "schedule": "10 seconds", "command": "SELECT private.aka_agent_run_data_group_route_worker();"}
+    },
+    {
+      "version": "20261109163531",
+      "name": "migration_v485_data_group_upload_sessions_p1",
+      "file": "migrations/migration_v485_data_group_upload_sessions_p1.sql",
+      "md5": "ddd28bfee213fdb695c124a50b0cf269",
+      "bytes": 43789,
+      "appliedAtVietnam": "2026-11-09 23:35:31",
+      "via": "SQL Editor, migrations/tests/migration_v485_data_group_upload_sessions_p1_guarded_apply.sql (a second Run was refused with 'P0001: migration_v485_data_group_upload_sessions_p1: đã có trong sổ migration, không chạy lại'; nothing changed)",
+      "change": "private.auto_data_group_upload_sessions + _session_parts (RLS on, no API role), 2 private functions, begin/append/finish core RPCs (service_role) + 3 Desktop wrappers (service_role, aka_agent_desktop)",
+      "functions": {
+        "private.aka_agent_run_data_group_route_worker(integer) [prosrc]": {"before": "38cff7e0b74ac9abba1283a6850f9185", "after": "dda4a682e5028469a1542e5c10efebd6"}
+      }
+    },
+    {
+      "version": "20261109163859",
+      "name": "migration_v485_data_group_upload_sessions_p2",
+      "file": "migrations/migration_v485_data_group_upload_sessions_p2.sql",
+      "md5": "cbce2e84b411ebb6959b100c6aac0ef6",
+      "bytes": 40919,
+      "appliedAtVietnam": "2026-11-09 23:38:59",
+      "via": "SQL Editor, migrations/tests/migration_v485_data_group_upload_sessions_p2_guarded_apply.sql",
+      "functions": {
+        "public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)": {"before": "0a0c9d1f870df7eac69ceaa20f6fb10a", "after": "dc8ccc8c8502ee0e463d911f71ee497e"}
+      }
+    },
+    {
+      "version": "20261109163917",
+      "name": "migration_v486_group_access_plan_cache",
+      "file": "migrations/migration_v486_group_access_plan_cache.sql",
+      "md5": "93fde69a6c4e9db0b5040a9de0434d38",
+      "bytes": 10341,
+      "appliedAtVietnam": "2026-11-09 23:39:17",
+      "via": "SQL Editor, migrations/tests/migration_v486_group_access_plan_cache_guarded_apply.sql",
+      "functions": {
+        "private.group_access(text,bigint,bigint,bigint)": {"before": "d173eaf22b0b6b6958a6f8f40cdaa82d", "after": "4f7d34cd8bfa753d35a9ab9a0ec213b4"},
+        "private.can_read_data_group(bigint,bigint,bigint)": {"before": "c47165554f49d3099d1f95e7d136eae5", "after": "8d5f08ca86d4f5a90e24f7c45a02da15"},
+        "private.shared_data_member_owner(bigint,bigint,bigint,bigint)": {"before": "529e0060fe2e757a12e8674826137b65", "after": "0cf5471fa64437cf4e99528e0c2e31c7"}
+      },
+      "note": "all three now LANGUAGE plpgsql; group_access has SET plan_cache_mode = force_generic_plan; the live group_access already masked the owner name for Desktop sessions, kept as is"
+    }
+  ],
+  "routingSwitch": {
+    "atVietnam": "2026-11-09 23:39:34",
+    "by": "user in the SQL Editor, approved plan: trial for the organization of staff 724",
+    "value": "{\"mode\":\"async\",\"organizationIds\":[701],\"workerBudgetMs\":4000}",
+    "readBack": "private.aka_agent_data_group_routing_settings() = {\"mode\":\"async\",\"workerBudgetMs\":4000,\"organizationIds\":[701]}",
+    "organization701AtSwitch": "12 active and 908 stopped campaign data-group sources; 0 ingest batches between the switch and 23:42 VN (last before it 21:50:38 VN)",
+    "offSwitch": "UPDATE public.auto_system_settings SET value = '{\"mode\":\"sync\",\"organizationIds\":[],\"workerBudgetMs\":4000}', updated_at = now() WHERE key = 'data_groups.routing_mode'; (no DDL; queued jobs are still drained by the worker)"
+  },
+  "postApply": {
+    "checkedAtVietnam": "2026-11-09 23:42",
+    "workerRuns": "816/816 succeeded by 23:41:31 VN (cron job 112), no failed run",
+    "queues": "private.auto_data_group_route_jobs empty, private.auto_data_group_upload_sessions empty",
+    "edgeLogs": "20:55-23:42 VN: 0 HTTP 5xx, 0 HTTP 503; average origin time 44-54 ms per minute; minute of V485 p1 (23:35) 45 requests over 1 s, back to 45 ms the next minute; minutes of V485 p2 and V486 (23:38, 23:39) 2 and 0 requests over 1 s; data-group RPCs 26-32 per minute with 0 errors",
+    "firstRealIngest": "organization 1750, kind scan, 23:46:20 VN, batch 23392: completed on the sync path with the V485 ingest function (11 members, 18 inputs); organization 1684 remove_members 23:42:55 and bind_source 23:46:02 completed",
+    "clients": "the 3 upload-session RPCs are called only by new clients (WebApp API after akaAgentWebApp#177, next Desktop release); no call by 23:46 VN, older clients keep sending one call, unchanged"
+  },
+  "trialChecks": [
+    {
+      "checkedAtVietnam": "2026-11-10 11:15",
+      "by": "scheduled read-only check (SELECT and edge_logs only, nothing written)",
+      "routingSetting": "{\"mode\":\"async\",\"organizationIds\":[701],\"workerBudgetMs\":4000}, unchanged",
+      "worker": "cron job 112: 4,166/4,166 runs succeeded since the switch, average 0.01 s, p99 0.045 s, longest 1.09 s; 0 failed",
+      "routeJobs": "5 jobs, all kind baseline, status done, organization 701, staff 724, group 1770; 425 inputs inserted (85 per campaign), 0 errors, 0 retries; each job finished 1.1-9.6 s after it was created (waiting for the next 10-second worker run); 0 pending or running",
+      "organization701Activity": "since the switch only 5 bind_source on group 1770 (campaigns 52462-52465 at 07:39-07:41 VN, 52571 at 09:41 VN); no ingest yet, so adding data to a group has not run on the async path in production",
+      "parity": "each of the 5 async campaigns has 85 inputs and 85 distinct targets, inputs written 0.6-9.4 s after the bind; the 11 sync binds of group 1770 on 09/11 (same revision 18, facebook_group_post) also gave 85 inputs each",
+      "edgeLogs": "organization 701 (client IPs of staff 724): bind_source 5 calls, all HTTP 200, average 238 ms, longest 396 ms; on 09/11 before the switch 12 calls, average 946 ms, longest 1,615 ms; ingest on 09/11: 5 HTTP 500 at about 60.6 s (11:20-11:31 VN) and 3 HTTP 200 averaging 336 ms after the paused campaigns were stopped; no data-group RPC returned non-200 since the switch",
+      "allOrganizations": "since the switch: aka_agent_ingest_data_group 27 calls, all HTTP 200, average 266 ms, longest 1,057 ms, none over 30 s; bind_source 15 calls, all HTTP 200, longest 4,136 ms; no upload-session RPC call yet",
+      "uploadSessions": "none",
+      "verdict": "no error and no unusual delay; keep async for organization 701"
+    }
+  ]
+}
