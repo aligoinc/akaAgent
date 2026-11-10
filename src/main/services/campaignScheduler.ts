@@ -3388,18 +3388,25 @@ export class CampaignScheduler {
    * A steady preclaim block (note already current) is recomputed every tick by
    * ~10 reads that cannot change the outcome before retryAfter. Zalo only:
    * Facebook queues also drive web enrichment from each executeCampaign return.
+   * A note that shows the remaining minutes is rechecked when that minute
+   * changes, so the note and its run-log line still update every minute.
    */
   private rememberPreclaimLimitSkip(
     account: AutoAccount,
     campaign: Campaign,
-    limitStatus: AccountActionLimitStatus
+    limitStatus: AccountActionLimitStatus,
+    showsRemainingMinutes = false
   ): void {
     if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo' || !campaign.updatedAt) return
     const retryAfterMs = limitStatus.retryAfterMs
     if (typeof retryAfterMs === 'number' && !(retryAfterMs > 0)) return
-    const waitMs = typeof retryAfterMs === 'number'
+    let waitMs = typeof retryAfterMs === 'number'
       ? Math.min(retryAfterMs, PRECLAIM_LIMIT_RECHECK_MAX_MS)
       : PRECLAIM_LIMIT_RECHECK_MAX_MS
+    if (showsRemainingMinutes && typeof retryAfterMs === 'number') {
+      // Time until Math.ceil(retryAfterMs / 60s), the shown minute, decreases.
+      waitMs = Math.min(waitMs, ((retryAfterMs - 1) % 60_000) + 1)
+    }
     this.preclaimLimitSkips.set(campaign.id, {
       accountId: account.id,
       campaignUpdatedAt: campaign.updatedAt,
@@ -3460,9 +3467,12 @@ export class CampaignScheduler {
         ? await this.getCampaignPreclaimLimitStatus(account, campaign, preclaimAction)
         : null
       if (preclaimLimitStatus) {
-        const preclaimLimitNote = await this.buildLimitPreflightNote(preclaimLimitStatus)
+        const {
+          note: preclaimLimitNote,
+          showsRemainingMinutes
+        } = await this.buildLimitPreflightNoteDetail(preclaimLimitStatus)
         if (String(campaign.note || '').trim() === preclaimLimitNote.trim()) {
-          this.rememberPreclaimLimitSkip(account, campaign, preclaimLimitStatus)
+          this.rememberPreclaimLimitSkip(account, campaign, preclaimLimitStatus, showsRemainingMinutes)
           return
         }
 
@@ -9794,15 +9804,47 @@ export class CampaignScheduler {
   }
 
   private async buildLimitPreflightNote(limitStatus: AccountActionLimitStatus): Promise<string> {
+    return (await this.buildLimitPreflightNoteDetail(limitStatus)).note
+  }
+
+  /**
+   * The limit note, and whether it shows the remaining minutes (e.g. Zalo 127
+   * "tạm nghỉ gửi tin [x] phút"); such a note changes every minute.
+   */
+  private async buildLimitPreflightNoteDetail(
+    limitStatus: AccountActionLimitStatus
+  ): Promise<{ note: string; showsRemainingMinutes: boolean }> {
     const replacements = this.buildLimitReplacements(limitStatus)
 
     if (limitStatus.errorCode) {
       const policy = await this.supabase.getErrorPolicy(limitStatus.errorCode)
-      const message = this.renderPolicyMessage(policy?.notiCampaign || policy?.notiRunningProcess, replacements)
-      if (message) return this.addActionContextToMessage(message, replacements)
+      const template = policy?.notiCampaign || policy?.notiRunningProcess
+      const message = this.renderPolicyMessage(template, replacements)
+      if (message) {
+        // Render the same template one minute later; a different text means
+        // it shows the remaining minutes ([t], or [x] when there is no count).
+        const nextMinuteMessage = limitStatus.retryAfterMs
+          ? this.renderPolicyMessage(template, this.buildLimitReplacements({
+            ...limitStatus,
+            retryAfterMs: Math.max(0, limitStatus.retryAfterMs - 60_000)
+          }))
+          : message
+        return {
+          note: this.addActionContextToMessage(message, replacements),
+          showsRemainingMinutes: nextMinuteMessage !== message
+        }
+      }
     }
 
-    return this.addActionContextToMessage(limitStatus.reason || 'Không đủ điều kiện chạy', replacements)
+    return {
+      note: this.addActionContextToMessage(limitStatus.reason || 'Không đủ điều kiện chạy', replacements),
+      // The disabled-action reason without a stored text embeds "còn khoảng N phút".
+      showsRemainingMinutes: Boolean(
+        limitStatus.isActionDisabled &&
+        limitStatus.retryAfterMs &&
+        !String(limitStatus.disabledReason || '').trim()
+      )
+    }
   }
 
   private buildLimitReplacements(limitStatus: AccountActionLimitStatus): Record<string, string | undefined> {

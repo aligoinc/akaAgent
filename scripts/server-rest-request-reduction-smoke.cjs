@@ -217,6 +217,78 @@ module.exports = Scheduler`, { Date: fake.Date })
     assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked({ id: 13 })), true)
   })
 
+  await check('note đếm ngược phút: chỉ bỏ qua tới lúc số phút hiển thị đổi', async () => {
+    const { fake, scheduler } = skipHarness()
+    // Còn 29 phút 20 giây: note ghi 30 phút, sau 20 giây thành 29 phút.
+    scheduler.rememberPreclaimLimitSkip(zaloAccount(), blocked(), { ok: false, retryAfterMs: 29 * 60_000 + 20_000 }, true)
+    fake.clock.now += 19_999
+    assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked()), true)
+    fake.clock.now += 1
+    assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked()), false)
+    // Đúng mốc phút: bỏ qua trọn 1 phút.
+    scheduler.rememberPreclaimLimitSkip(zaloAccount(), blocked(), { ok: false, retryAfterMs: 25 * 60_000 }, true)
+    fake.clock.now += 59_999
+    assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked()), true)
+    fake.clock.now += 1
+    assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked()), false)
+    // Không đếm ngược: vẫn 5 phút.
+    scheduler.rememberPreclaimLimitSkip(zaloAccount(), blocked(), { ok: false, retryAfterMs: 29 * 60_000 + 20_000 }, false)
+    fake.clock.now += 5 * 60_000 - 1
+    assert.equal(scheduler.shouldSkipPreclaimLimitedCampaign(zaloAccount(), blocked()), true)
+  })
+
+  function noteHarness(policies) {
+    const Scheduler = load(`class Scheduler {
+  ${method('buildLimitPreflightNote')}
+  ${method('buildLimitPreflightNoteDetail')}
+  ${method('buildLimitReplacements')}
+  ${method('getLimitActionName')}
+  ${method('addActionContextToMessage')}
+  ${method('renderPolicyMessage')}
+}
+module.exports = Scheduler`, {})
+    const reads = []
+    const scheduler = Object.assign(new Scheduler(), {
+      supabase: { getErrorPolicy: async code => { reads.push(code); return policies[code] || null } }
+    })
+    return { scheduler, reads }
+  }
+  const stranger = { ok: false, actionCode: 'zalo_message_stranger', actionName: 'Nhắn tin người lạ' }
+  const livePolicies = {
+    err_zalo_127_message_stranger: { notiCampaign: 'Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin [x] phút' },
+    error_limit_in_hour: { notiCampaign: 'Đạt giới hạn trong giờ là [x]', notiRunningProcess: 'Đạt giới hạn trong giờ là [x] tạm nghỉ [t] phút' },
+    error_limit_in_day: { notiCampaign: 'Đạt giới hạn trong ngày là [x]', notiRunningProcess: 'Đạt giới hạn trong ngày là [x]' },
+    err_zalo_802_message_stranger: { notiCampaign: 'Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.' },
+    only_running_process: { notiCampaign: null, notiRunningProcess: 'Tạm nghỉ [t] phút' }
+  }
+
+  await check('nhận ra note có số phút còn lại; nội dung note giữ nguyên như bản cũ', async () => {
+    const { scheduler, reads } = noteHarness(livePolicies)
+    const detail = status => scheduler.buildLimitPreflightNoteDetail({ ...stranger, ...status })
+    same(await detail({ errorCode: 'err_zalo_127_message_stranger', isActionDisabled: true, disabledReason: 'Zalo 127', retryAfterMs: 12 * 60_000 + 30_000 }),
+      { note: 'Nhắn tin người lạ: Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin 13 phút', showsRemainingMinutes: true })
+    same(await detail({ errorCode: 'err_zalo_127_message_stranger', isActionDisabled: true, disabledReason: 'Zalo 127', retryAfterMs: 40_000 }),
+      { note: 'Nhắn tin người lạ: Nội dung bị trùng lặp hoặc gửi quá nhanh, tạm nghỉ gửi tin 1 phút', showsRemainingMinutes: true })
+    same(await detail({ errorCode: 'error_limit_in_hour', currentCount: 10, limit: 10, retryAfterMs: 20 * 60_000 }),
+      { note: 'Nhắn tin người lạ: Đạt giới hạn trong giờ là 10', showsRemainingMinutes: false })
+    same(await detail({ errorCode: 'error_limit_in_day', currentCount: 30, limit: 30, isDailyLimit: true, retryAfterMs: 9 * 3_600_000 }),
+      { note: 'Nhắn tin người lạ: Đạt giới hạn trong ngày là 30', showsRemainingMinutes: false })
+    same(await detail({ errorCode: 'err_zalo_802_message_stranger', isActionDisabled: true, disabledReason: 'Zalo 802', retryAfterMs: 30 * 3_600_000 }),
+      { note: 'Nhắn tin người lạ: Zalo hạn chế nhắn người lạ (mã 802). Tạm khóa nhắn người lạ đến 09:45 ngày mốt.', showsRemainingMinutes: false })
+    same(await detail({ errorCode: 'only_running_process', retryAfterMs: 3 * 60_000 }),
+      { note: 'Nhắn tin người lạ: Tạm nghỉ 3 phút', showsRemainingMinutes: true })
+    // Không có chính sách: lý do khóa không lưu chữ thì có "còn khoảng N phút".
+    same(await detail({ isActionDisabled: true, disabledReason: null, retryAfterMs: 5 * 60_000, reason: 'Hành động "Nhắn tin người lạ" đang tạm dừng, còn khoảng 5 phút' }),
+      { note: 'Hành động "Nhắn tin người lạ" đang tạm dừng, còn khoảng 5 phút', showsRemainingMinutes: true })
+    same(await detail({ isActionDisabled: true, disabledReason: 'Zalo khóa', retryAfterMs: 5 * 60_000, reason: 'Zalo khóa' }),
+      { note: 'Nhắn tin người lạ: Zalo khóa', showsRemainingMinutes: false })
+    // Mỗi lần dựng note chỉ đọc chính sách một lần, như bản cũ.
+    assert.deepEqual(reads, ['err_zalo_127_message_stranger', 'err_zalo_127_message_stranger', 'error_limit_in_hour',
+      'error_limit_in_day', 'err_zalo_802_message_stranger', 'only_running_process'])
+    assert.equal(await scheduler.buildLimitPreflightNote({ ...stranger, errorCode: 'error_limit_in_hour', currentCount: 10, limit: 10, retryAfterMs: 60_000 }),
+      'Nhắn tin người lạ: Đạt giới hạn trong giờ là 10')
+  })
+
   await check('đồng hồ lùi hoặc hết hạn thì bỏ entry', async () => {
     const { fake, scheduler } = skipHarness()
     scheduler.rememberPreclaimLimitSkip(zaloAccount(), blocked(), { ok: false, retryAfterMs: 3_600_000 })
@@ -270,8 +342,9 @@ module.exports = Scheduler`, { Date: fake.Date })
 
   await check('chỉ ghi nhớ khi note hạn mức đã khớp (không lưu khi vừa ghi note mới)', async () => {
     const text = method('executeCampaignWithResultContext')
-    const steady = /if \(String\(campaign\.note \|\| ''\)\.trim\(\) === preclaimLimitNote\.trim\(\)\) \{\s*this\.rememberPreclaimLimitSkip\(account, campaign, preclaimLimitStatus\)\s*return\s*\}\s*await this\.updateUnclaimedCampaignPreflightNote\(campaign, preclaimLimitNote\)/
+    const steady = /if \(String\(campaign\.note \|\| ''\)\.trim\(\) === preclaimLimitNote\.trim\(\)\) \{\s*this\.rememberPreclaimLimitSkip\(account, campaign, preclaimLimitStatus, showsRemainingMinutes\)\s*return\s*\}\s*await this\.updateUnclaimedCampaignPreflightNote\(campaign, preclaimLimitNote\)/
     assert.match(text, steady)
+    assert.match(text, /note: preclaimLimitNote,\s*showsRemainingMinutes\s*\} = await this\.buildLimitPreflightNoteDetail\(preclaimLimitStatus\)/)
     assert.equal((text.match(/rememberPreclaimLimitSkip/g) || []).length, 1)
   })
 
