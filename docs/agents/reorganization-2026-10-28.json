@@ -69,7 +69,7 @@
       "last_line": 344,
       "source_sha256": "fab310f70760b77063dfdb26c3a8c00ed8bbc5c03a05c2e807f281512507e4be",
       "rebased_sha256": "fab310f70760b77063dfdb26c3a8c00ed8bbc5c03a05c2e807f281512507e4be",
-      "bytes": 4476
+      "bytes": 4994
     },
     {
       "path": "docs/agents/reference/architecture-01.md",
