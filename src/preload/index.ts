@@ -16,6 +16,7 @@ import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEv
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcResponses, type EffectivenessIpcResult } from '../shared/effectivenessIpc'
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
+import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
@@ -652,6 +653,9 @@ const electronAPI = {
 
   dataReport: <R extends DataReportIpcRequest>(request: R): Promise<DataReportIpcResult<DataReportIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(DATA_REPORT_IPC, request),
+
+  campaignRunReport: (request: CampaignRunReportIpcRequest): Promise<CampaignRunReportIpcResult> =>
+    ipcRenderer.invoke(CAMPAIGN_RUN_REPORT_IPC, request),
 
   // Campaign result automations
   listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>

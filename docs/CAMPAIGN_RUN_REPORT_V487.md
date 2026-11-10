@@ -2,7 +2,7 @@
 
 Trạng thái: **ĐÃ apply akachat lúc 08:38:24 VN 10/11/2026** (`20261110013824 / migration_v487_campaign_run_report`), theo đồng ý của người dùng. **Không apply lại**: preflight từ chối khi hàm đã có. md5 sổ migration (`statements[1]`) = md5 file `55e0554a037ccc03496f042f402da018`; md5 `pg_get_functiondef` `69c9d1edc07766dbacffbad56beae73a`, md5 `prosrc` `4bd734ca25612bfdade631c779373d42`. Biên nhận: [`migrations/snapshots/campaign-run-report-v487/apply-receipt.json`](../migrations/snapshots/campaign-run-report-v487/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn).
 
-**API/Web chưa deploy**, nên chưa caller nào gọi hàm. Desktop không dùng. Phía WebApp (API/Web, hợp đồng, kiểm thử): `aligoinc/akaAgentWebApp` #183 (nhánh `claude/loving-mccarthy-irdevx`, đã merge `dev`), tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
+**API/Web chưa deploy**, nên chưa caller nào gọi hàm. Desktop: tab Báo cáo (nhánh `claude/campaign-run-report-desktop`, chưa phát hành) gọi hàm này bằng token Desktop sau **V489** (chỉ GRANT EXECUTE cho `aka_agent_desktop`, **chưa apply**): [CAMPAIGN_RUN_REPORT_DESKTOP_V489.md](CAMPAIGN_RUN_REPORT_DESKTOP_V489.md). Phía WebApp (API/Web, hợp đồng, kiểm thử): `aligoinc/akaAgentWebApp` #183 (nhánh `claude/loving-mccarthy-irdevx`, đã merge `dev`), tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
 
 ## Thay đổi
 
@@ -12,7 +12,7 @@ Chỉ thêm **một hàm**:
 
 - Không thêm/sửa bảng, cột, index, policy, hàm cũ, timeout của role, pool hay kết nối.
 - `LANGUAGE plpgsql STABLE SECURITY DEFINER`, `search_path = pg_catalog, public`, `statement_timeout = 60s`, chủ sở hữu `postgres`. 60 s như các RPC báo cáo khác (V462, trang Kết quả chạy v2); PostgREST áp thiết lập của hàm cho lượt gọi. Bản viết đầu dùng 20 s, đã nâng **trước khi apply** sau số đo nguội (mục Tải DB).
-- Quyền: thu hồi trực tiếp `PUBLIC, anon, authenticated` (default ACL của `public` cấp riêng cho hai role này), chỉ `GRANT EXECUTE` cho `service_role`. Desktop chưa dùng nên chưa cấp `aka_agent_desktop`.
+- Quyền: thu hồi trực tiếp `PUBLIC, anon, authenticated` (default ACL của `public` cấp riêng cho hai role này), chỉ `GRANT EXECUTE` cho `service_role`. V487 chưa cấp `aka_agent_desktop`; V489 cấp riêng cho tab Báo cáo của Desktop.
 - Gọi `public.auto_assert_automation_identity` như V462, kiểm tra staff còn hoạt động, rồi chiến dịch `id = p_campaign_id AND staff_id AND organization_id AND is_delete = false`; không có thì lỗi `campaign_report_not_found` (SQLSTATE `P0002`).
 - `p_query` (đều tùy chọn; API WebApp gửi đủ): `legacy` (`success`/`skipped`/`failure`: danh sách chữ trạng thái cũ khi `report_group` NULL, giống V462), `auxiliaryActionCodes` (≤ 50: Tìm SĐT, Gắn tag, Đổi tên), `notFoundStatuses`/`notFoundStatusCodes` (≤ 20). Sai kiểu → `invalid_report_query` (`22023`).
 
