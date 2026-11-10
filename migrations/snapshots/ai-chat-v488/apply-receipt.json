@@ -1,0 +1,61 @@
+{
+  "migration": "migration_v488_ai_chat",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110051533",
+  "applied_at_vn": "2026-11-10T12:15:33+07:00",
+  "applied_via": "Supabase MCP apply_migration (một lần gọi, 63.323 byte)",
+  "file_md5": "aaa7399c70c960445f07bc0f2c938f23",
+  "ledger_statements_md5": "aaa7399c70c960445f07bc0f2c938f23",
+  "preflight_vn_12_07": {
+    "tables_free": true,
+    "functions_free": true,
+    "dependencies": "private.aka_agent_assert_request_ownership + public.auto_assert_automation_identity có sẵn, 5 role, 20 cột",
+    "ai_chat_settings_free": true,
+    "last_migration": "20261110013824 migration_v487_campaign_run_report",
+    "on_cpu": 1,
+    "waiting_lock": 0
+  },
+  "postflight": {
+    "tables_with_rls": 4,
+    "functions": 15,
+    "function_bodies_fingerprint": "35e61f117371beecaa5d588acec2104f (khớp bản dựng từ file trên PostgreSQL 16 cục bộ; md5 của string_agg(schema.name:md5(prosrc)) COLLATE \"C\")",
+    "ai_chat_settings": 3,
+    "seed_project": "hoi-dap-chien-dich | audience admin_akabiz | timeout 1200 giây",
+    "service_role_reads_table": false,
+    "anon_executes_worker": false,
+    "anon_executes_private_core": false,
+    "service_role_executes_worker": true,
+    "rpc_smoke_as_service_role": "list → items [] enabled true; claim messageId không tồn tại → items [] (chạy trong giao dịch rồi ROLLBACK)"
+  },
+  "api_impact": {
+    "window_utc": "05:10–05:19",
+    "apply_minute_05_15": "avg 250 ms, p50 143 ms, p99 2.241 ms, 0 lỗi 5xx, 0 lỗi 503",
+    "minute_after_05_16": "avg 114 ms, p99 440 ms",
+    "requests_per_minute": "~52–56 nghìn"
+  },
+  "edge_function": {
+    "name": "ai-chat-agent",
+    "id": "5f51d3d8-09d9-44a1-bdd6-6b9abfb12e10",
+    "version": 1,
+    "status": "ACTIVE",
+    "verify_jwt": false,
+    "deployed_at_vn": "2026-11-10T12:19+07:00",
+    "source_md5": { "index.ts": "3437cf8ee18985f61788a242e1335d26", "handler.ts": "86c6ffadcfe339f37f5056749b5692bc" },
+    "url": "https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/ai-chat-agent",
+    "http_smoke_no_credentials": [
+      "POST /list {} → 200 count 0",
+      "GET /list?limit=5 → 200 count 0",
+      "POST /start messageId không tồn tại → 409 not_waiting",
+      "POST /answer messageId không tồn tại → 404 not_found",
+      "POST /status messageId không tồn tại → 404 not_found",
+      "POST /status thiếu status → 400 ai_chat_invalid_status",
+      "POST /khac → 404 ai_chat_route_not_found"
+    ]
+  },
+  "not_verified": [
+    "Chưa có câu hỏi thật nào trên production (API/Web WebApp chưa deploy) nên chưa chạy trọn vòng list → start → answer với dữ liệu thật; vòng này đã chạy trên PostgreSQL cục bộ (scripts/ai-chat/edge_agent_smoke.sh, 31 khẳng định).",
+    "Edge Function mở không xác thực theo yêu cầu; secret AI_CHAT_AGENT_KEY chưa đặt."
+  ],
+  "local_test": "scripts/ai-chat/smoke_v488.sh 118 khẳng định + apply lại bị từ chối + rollback; stress_v488.sh 0 khóa chéo; edge_agent_smoke.sh 31 khẳng định",
+  "rollback": "migrations/rollback_v488_ai_chat.sql (xóa toàn bộ hội thoại); tắt nhanh: ai_chat.enabled = 'false'; gỡ function: xóa ai-chat-agent"
+}

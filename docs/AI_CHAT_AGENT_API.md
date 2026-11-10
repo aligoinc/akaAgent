@@ -248,7 +248,7 @@ curl -s -X POST "$BASE/status" -H 'Content-Type: application/json' \
 Agent không cần đọc phần này.
 
 - Mã nguồn: `supabase/functions/ai-chat-agent/` (`handler.ts` là toàn bộ logic, `index.ts` nối với Supabase). Hàm gọi RPC `aka_agent_ai_chat_worker` của V488 bằng `service_role`: `/list` → `list`, `/start` → `claim` kèm `messageId` và `stage: "working"`, `/answer` → `answer` kèm `complete: true`, `/status` → `fail` (`"dừng"` = `stopped`, `"chờ câu trả lời"` = `retryable`). RPC ghi theo `messageId`, không có mã khóa theo từng agent: chỉ nên chạy một agent, vì hai agent cùng xử lý một `messageId` sẽ không bị chặn ghi đè nhau.
-- Điều kiện chạy: đã apply `migrations/migration_v488_ai_chat.sql`, rồi `supabase functions deploy ai-chat-agent --project-ref cgjbsmqtfhqvttudyjzq`. `verify_jwt = false` khai trong `supabase/config.toml`.
+- Trạng thái: V488 đã apply lúc 12:15 VN ngày 10/11/2026, Edge Function đã deploy bản 1 lúc 12:19 VN cùng ngày và đã gọi thử qua địa chỉ thật. Deploy lại sau khi sửa code: `supabase functions deploy ai-chat-agent --project-ref cgjbsmqtfhqvttudyjzq` (`verify_jwt = false` khai trong `supabase/config.toml`).
 - API mở hoàn toàn theo yêu cầu (chỉ dùng nội bộ): ai biết địa chỉ đều đọc được câu hỏi đang chờ và ghi được câu trả lời. Mặc định không có bước xác thực nào. Chỉ khi sau này muốn khóa lại mới đặt secret `AI_CHAT_AGENT_KEY` trên Supabase (lúc đó lời gọi phải kèm header `x-agent-key`); không đặt thì không có gì thay đổi.
 - Tắt nhanh: `auto_system_settings` khóa `ai_chat.enabled = 'false'` (`/list` trả `enabled: false`), hoặc xóa function.
 - Hạn chờ 20 phút là `ai_project.timeout_seconds` của từng agent (30–3600 giây).
