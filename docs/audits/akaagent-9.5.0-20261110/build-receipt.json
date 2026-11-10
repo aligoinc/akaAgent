@@ -1,0 +1,143 @@
+{
+ "version": "9.5.0",
+ "source_root": "/Users/lequangnhut/Repos/akaAgent",
+ "source_branch": "codex/release-9.5.0",
+ "source_commit": "cf29bc19c5c65ca25fbfb91670e4b45a14dcb3ed",
+ "source_base_commit": "6769f91cdae6b9cf6c578f396fda4e44b1e041d8",
+ "worktree_used": false,
+ "uncommitted_local_files_kept": [
+  "CLAUDE.md"
+ ],
+ "build_window_vn": {
+  "win": "09:16:59-09:18:21",
+  "mac_arm64": "09:18:29-09:19:32",
+  "mac_intel": "09:19:35-09:20:46",
+  "date": "2026-11-10"
+ },
+ "app_server_rebuilt": false,
+ "app_server_reason": "Từ Server 9.3.0 (646ddd98) tới 6769f91c chỉ 3/166 file trong gói Server đổi (campaignScheduler snapshot Desktop, dataGroupRepository + dataGroupIngestChunks), không chạy trên đường Zalo Server",
+ "checks": {
+  "typecheck_node": "passed",
+  "typecheck_renderer": "passed",
+  "desktop_runtime_snapshot_smoke": {
+   "passed": true,
+   "checks": 12,
+   "network_used": false
+  },
+  "packaged_out_parity_across_platforms": true,
+  "contains_v485_upload_code": true,
+  "existing_installers_preserved": {
+   "count": 140,
+   "unchanged": true
+  },
+  "host_native_restored": {
+   "sha256": "ced697fcad5f7ba0b9599d0a95f552a22e9f1d05bdbebb0c3f4164c9990724a2",
+   "arch": "arm64",
+   "unchanged": true
+  },
+  "mac_intel_execution": "Electron x86_64 trong app đóng gói nạp better-sqlite3 qua Rosetta, SELECT 1 đạt (SQLite 3.53.1)"
+ },
+ "artifacts": [
+  {
+   "id": "win",
+   "platform": "Windows x64",
+   "archived_path": "dist/build-9.5.0/akaAgent-Setup-9.5.0.exe",
+   "bytes": 152730827,
+   "sha256": "5918043b84db2f8bf99d113a53d8aa08f98c721813dd36eaf0b57b037edd03db",
+   "package_version": "9.5.0",
+   "main": "./out/main/index.js",
+   "pe": {
+    "file_version": "9.5.0",
+    "product_version": "9.5.0.0",
+    "installer_machine": "14c",
+    "app_machine": "8664",
+    "authenticode": false
+   },
+   "installer_payload_parity": {
+    "files": [
+     "akaAgent.exe",
+     "resources/app.asar",
+     "better_sqlite3.node"
+    ],
+    "matched": true
+   },
+   "native_module": "PE32+ x86-64",
+   "app_asar_sha256_prefix": "5e408c9d81df21f4",
+   "credential_checks": {
+    "server_private_resource_absent": true,
+    "service_role_jwt_absent": true,
+    "anon_jwt_absent": true,
+    "supabase_secret_token_absent": true,
+    "scope": "115 file out/ trong app.asar"
+   },
+   "windows_execution_tested": false
+  },
+  {
+   "id": "mac_arm64",
+   "platform": "macOS ARM64",
+   "archived_path": "dist/build-9.5.0/akaAgent.dmg",
+   "bytes": 182776919,
+   "sha256": "eb8478767e0374950b8690afd8fa1e21958a3f8d479220ea0856a3ba90ea69b6",
+   "package_version": "9.5.0",
+   "bundle": {
+    "short_version": "9.5.0",
+    "identifier": "com.akabiz.auto"
+   },
+   "architecture": "arm64",
+   "native_module": "arm64",
+   "signature": "adhoc, codesign --verify --deep --strict đạt",
+   "notarized": false,
+   "dmg": {
+    "hdiutil_verify": true,
+    "mounted_readonly_payload_match": true
+   },
+   "sqlite_in_packaged_electron": "arm64 electron 33.4.11, SELECT 1 đạt",
+   "app_asar_sha256_prefix": "d4583ff7bf352664",
+   "credential_checks": {
+    "server_private_resource_absent": true,
+    "service_role_jwt_absent": true,
+    "anon_jwt_absent": true,
+    "supabase_secret_token_absent": true,
+    "scope": "115 file out/ trong app.asar"
+   }
+  },
+  {
+   "id": "mac_intel",
+   "platform": "macOS Intel x64",
+   "archived_path": "dist/build-9.5.0/akaAgentIntel.dmg",
+   "bytes": 189942026,
+   "sha256": "f1c70cceb9a758aff6abec7b3e0741bc289482dba0c7203056a7ac0ecd1c77a9",
+   "package_version": "9.5.0",
+   "bundle": {
+    "short_version": "9.5.0",
+    "identifier": "com.akabiz.auto"
+   },
+   "architecture": "x86_64",
+   "native_module": "x86_64",
+   "signature": "adhoc, codesign --verify --deep --strict đạt",
+   "notarized": false,
+   "dmg": {
+    "hdiutil_verify": true,
+    "mounted_readonly_payload_match": true
+   },
+   "sqlite_in_packaged_electron": "x64 qua Rosetta, electron 33.4.11, SELECT 1 đạt",
+   "real_intel_hardware_tested": false,
+   "app_asar_sha256_prefix": "46545c3fe0b83de3",
+   "credential_checks": {
+    "server_private_resource_absent": true,
+    "service_role_jwt_absent": true,
+    "anon_jwt_absent": true,
+    "supabase_secret_token_absent": true,
+    "scope": "115 file out/ trong app.asar"
+   }
+  }
+ ],
+ "not_done": [
+  "upload/phát hành/cập nhật feed",
+  "ký Authenticode Windows, chạy trên Windows thật",
+  "notarize Apple, chạy trên máy Intel thật",
+  "luồng đăng nhập/chiến dịch/Zalo thật"
+ ],
+ "database_changed": false,
+ "services_deployed": false
+}
