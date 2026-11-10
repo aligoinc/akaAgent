@@ -2,7 +2,7 @@
 
 Trạng thái: **ĐÃ apply akachat lúc 08:38:24 VN 10/11/2026** (`20261110013824 / migration_v487_campaign_run_report`), theo đồng ý của người dùng. **Không apply lại**: preflight từ chối khi hàm đã có. md5 sổ migration (`statements[1]`) = md5 file `55e0554a037ccc03496f042f402da018`; md5 `pg_get_functiondef` `69c9d1edc07766dbacffbad56beae73a`, md5 `prosrc` `4bd734ca25612bfdade631c779373d42`. Biên nhận: [`migrations/snapshots/campaign-run-report-v487/apply-receipt.json`](../migrations/snapshots/campaign-run-report-v487/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn).
 
-**API/Web chưa deploy**, nên chưa caller nào gọi hàm. Desktop không dùng. Phía WebApp (API/Web, hợp đồng, kiểm thử): nhánh `claude/loving-mccarthy-irdevx` của `aligoinc/akaAgentWebApp`, tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
+**API/Web chưa deploy**, nên chưa caller nào gọi hàm. Desktop không dùng. Phía WebApp (API/Web, hợp đồng, kiểm thử): `aligoinc/akaAgentWebApp` #183 (nhánh `claude/loving-mccarthy-irdevx`, đã merge `dev`), tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
 
 ## Thay đổi
 
