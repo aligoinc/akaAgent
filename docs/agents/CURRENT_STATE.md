@@ -207,6 +207,8 @@ receipt/signature/checksum, không dùng filename để kết luận “chưa ch
 
 ## Build và phát hành
 
+- 10/11/2026: source Excel tab **Data tìm được** (Facebook - Tìm kiếm data bằng search) ra 14 cột: 6 cột mẫu cũ + số bài Facebook hiển thị, bài chưa đọc, trạng thái tham gia, tham gia từ, bạn bè trong nhóm, từ khóa, tài khoản, thời gian tìm; lúc xuất app đọc chữ gốc thẻ nhóm trong log chạy (chỉ đọc) nên tài khoản giao diện tiếng Anh có số bài và tên sạch. Smoke bộ đọc (385 thẻ thật), service, logic, Electron/XLSX, hai typecheck và build đạt; **chưa đóng gói/phát hành**, không đổi DB/block (sửa block là việc riêng). [Hợp đồng](../FACEBOOK_SEARCH_GROUP_EXPORT_PLAN.md).
+
 - 03/11/2026: source trên `codex/windows-hardware-timeout` tăng giới hạn đọc hardware Windows v2/v3 từ 10 lên 30 giây, thêm thông báo timeout và diagnostic console đã lọc dữ liệu. Giữ công thức, selection, cache phiên, single-flight và cơ chế reset. 70 ca smoke, hai typecheck và build production local đạt; chưa kiểm chứng Windows khách thật, chưa đóng gói/phát hành, không đổi DB. [Hợp đồng](../DEVICE_IDENTITY_V3.md#windows-đọc-phần-cứng-chậm--source-03112026), [receipt kiểm chứng](../audits/windows-hardware-timeout/verification.json).
 
 - 03/11/2026: **akaAgent Desktop 9.2.0 Windows x64, Mac ARM64 và Mac Intel x64 đã build local từ repo chính** (`dev_3`/`d493dd9e`). Hai typecheck, ba build, version/kiến trúc/native/payload/credential checks đạt; Mac SQLite chạy qua packaged Electron (Intel qua Rosetta), host native giữ checksum. Windows chưa ký Authenticode/chưa chạy trên Windows thật; Mac ký ad-hoc, chưa notarize. Chưa upload/phát hành; V447 không đổi. [Audit và checksum](../audits/akaagent-9.2.0-20261103/README.md).

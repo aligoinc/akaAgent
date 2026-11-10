@@ -4,6 +4,8 @@ import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaig
 import * as campaignDraftRepo from '../../data/repositories/campaignDraftRepository'
 import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
+import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest } from '../../../shared/foundFacebookGroupCardsIpc'
+import { handleFoundFacebookGroupCardsRequest } from '../../services/foundFacebookGroupCardService'
 
 interface CampaignStatusController {
   requestCampaignStatus(
@@ -296,6 +298,10 @@ export function registerCampaignHandlers(
   ) => {
     return supabase.listCampaignRunEventsByCampaign(campaignId, options)
   })
+
+  // Xuất Excel "Data tìm được": đọc chữ gốc thẻ nhóm trong log chạy (chỉ đọc, không ném lỗi qua IPC).
+  ipcMain.handle(FOUND_FACEBOOK_GROUP_CARDS_IPC, (_, request: FoundFacebookGroupCardsRequest) =>
+    handleFoundFacebookGroupCardsRequest(request))
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN_DETAIL, async (_, actionData) => {
     return supabase.createCampaignDetail(actionData)

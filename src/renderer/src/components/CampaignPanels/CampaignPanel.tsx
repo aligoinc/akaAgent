@@ -57,7 +57,10 @@ import {
 import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
-import { buildFoundDataWorkbook, toFacebookGroupList, type FoundDataKind, type FoundFacebookGroup } from './foundDataExport'
+import {
+  applyFacebookGroupCards, buildFoundDataWorkbook, needsFacebookGroupCards, toFacebookGroupList,
+  type FoundDataExportItem, type FoundDataKind, type FoundFacebookGroup
+} from './foundDataExport'
 import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
 import CampaignAgentFormModal from './CampaignAgentFormModal'
@@ -211,6 +214,7 @@ interface FoundDataItem {
   facebookGroup?: FoundFacebookGroup
   groupUrl: string
   createdAt?: string
+  accountId?: number
 }
 
 interface FindDataLogRow {
@@ -2567,6 +2571,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [actionDetailPage, setActionDetailPage] = useState(1)
   const [actionDetailSort, setActionDetailSort] = useState<CampaignDetailSort>('created_desc')
   const [exportingCampaignDetails, setExportingCampaignDetails] = useState(false)
+  const [exportingFoundData, setExportingFoundData] = useState(false)
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
   const [openFilterDropdown, setOpenFilterDropdown] = useState<CampaignFilterDropdown | null>(null)
@@ -4233,7 +4238,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           name: group.name,
           facebookGroup: group,
           groupUrl,
-          createdAt
+          createdAt,
+          accountId: detail.accountId
         }))
       ]
     })
@@ -4697,7 +4703,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     }
   }
 
-  const handleExportFoundData = () => {
+  const handleExportFoundData = async () => {
     if (!selectedCampaign) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
@@ -4710,15 +4716,50 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       showAlert('Không có data phù hợp với tuỳ chọn xuất.', 'info')
       return
     }
+    if (exportingFoundData) return
 
+    const campaign = selectedCampaign
+    const accountNameById = new Map(accounts.map(account => [account.id, account.name]))
+    let items: FoundDataExportItem[] = selectedFoundDataItems.map(item => {
+      const accountName = item.accountId ? accountNameById.get(item.accountId) : undefined
+      return {
+        kind: item.kind,
+        value: item.value,
+        name: item.name,
+        facebookGroup: item.facebookGroup,
+        keywords: item.kind === 'facebookGroup' && item.groupUrl && item.groupUrl !== '-' ? [item.groupUrl] : [],
+        accountNames: accountName ? [accountName] : [],
+        foundAt: item.createdAt
+      }
+    })
+    setExportingFoundData(true)
     try {
-      const workbook = buildFoundDataWorkbook(selectedFoundDataItems, selectedCampaign.actionId)
-      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
-      writeFile(workbook, `found-data-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
-      showAlert('Đã xuất data tìm được ra Excel.', 'success')
+      // Chiến dịch tìm bằng search: đọc lại chữ gốc của thẻ nhóm trong log chạy để file đủ dữ liệu
+      // (số bài giao diện tiếng Anh, trạng thái tham gia, bạn bè...). Không đọc được vẫn xuất phần đã có.
+      let note = ''
+      if (campaign.actionId === FIND_DATA_SEARCH_ACTION_ID && needsFacebookGroupCards(items)) {
+        let result: Awaited<ReturnType<typeof window.electronAPI.getFoundFacebookGroupCards>> | null = null
+        try {
+          result = await window.electronAPI.getFoundFacebookGroupCards({ campaignId: campaign.id })
+        } catch (err) {
+          console.error('Failed to read found Facebook group cards:', err)
+        }
+        if (result && result.ok === true && Array.isArray(result.data?.cards)) {
+          items = applyFacebookGroupCards(items, result.data.cards)
+          if (result.data.truncated) note = ' Log chạy quá dài, một số nhóm cũ có thể thiếu cột thêm.'
+        } else {
+          note = ' Chưa đọc được log chạy nên một số cột thêm của nhóm có thể trống.'
+        }
+      }
+      const workbook = buildFoundDataWorkbook(items, campaign.actionId)
+      const name = sanitizeFileSegment(campaign.name || `campaign-${campaign.id}`)
+      writeFile(workbook, `found-data-${campaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert(`Đã xuất data tìm được ra Excel.${note}`, note ? 'info' : 'success')
     } catch (err) {
       console.error('Failed to export found data:', err)
       showAlert('Không thể xuất file Excel data tìm được.', 'error')
+    } finally {
+      setExportingFoundData(false)
     }
   }
 
@@ -7993,11 +8034,11 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                     </div>
                     <button
                       className="btn btn-secondary"
-                      onClick={handleExportFoundData}
-                      disabled={loadingCampaignDetails || selectedFoundDataItems.length === 0}
+                      onClick={() => { void handleExportFoundData() }}
+                      disabled={loadingCampaignDetails || exportingFoundData || selectedFoundDataItems.length === 0}
                       title="Xuất data tìm được ra Excel"
                     >
-                      <Download size={14} /> Xuất Excel
+                      <Download size={14} /> {exportingFoundData ? 'Đang xuất...' : 'Xuất Excel'}
                     </button>
                   </div>
                   {loadingCampaignDetails ? (

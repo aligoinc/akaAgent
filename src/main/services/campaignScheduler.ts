@@ -47,6 +47,7 @@ import { CampaignFailureCleanup, CampaignFailureCleanupPayload } from './campaig
 import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CreateCampaignDetailInput, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
+import { readFacebookSearchGroupCardFields, type FacebookSearchGroupCardFields } from '../../shared/facebookSearchGroupCard'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import {
   getRuntimeMediaDownloadExtensionForMimeType,
@@ -578,7 +579,7 @@ interface FindDataPhoneProfile {
   source: string
 }
 
-interface FindDataFacebookGroup {
+interface FindDataFacebookGroup extends FacebookSearchGroupCardFields {
   url: string
   name: string
   privacy?: string
@@ -12921,7 +12922,9 @@ export class CampaignScheduler {
       privacy: String(source.privacy || '').trim() || undefined,
       memberCount: numberOrUndefined(source.memberCount),
       postsPerDay: numberOrUndefined(source.postsPerDay),
-      keyword: String(source.keyword || '').trim() || undefined
+      keyword: String(source.keyword || '').trim() || undefined,
+      // Thông tin thêm của thẻ nhóm khi block gửi kèm; chỉ giữ trường hợp lệ (docs/FACEBOOK_SEARCH_GROUP_EXPORT_PLAN.md).
+      ...readFacebookSearchGroupCardFields(rawGroup)
     }
   }
 
