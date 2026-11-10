@@ -2,8 +2,19 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CircleHelp, MessageCircleQuestion, Sparkles, Stethoscope } from 'lucide-react'
 import { CAMPAIGN_SUPPORT_QUESTION, type CampaignAssistantMode } from '../../../../shared/campaignSupport'
+import type { AiChatProject } from '../../../../shared/aiChat'
 
-export default function CampaignAssistantMenu({ onSelect, canDiagnose = false }: { onSelect: (mode: CampaignAssistantMode) => void; canDiagnose?: boolean }) {
+type LegacyAssistantMode = Exclude<CampaignAssistantMode, 'agent'>
+
+export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, agents = [], agentState = null, onSelectAgent }: {
+  onSelect: (mode: LegacyAssistantMode) => void
+  canDiagnose?: boolean
+  /** Agent hỏi đáp AI (V488) áp dụng cho chiến dịch này; rỗng thì menu như cũ. */
+  agents?: AiChatProject[]
+  /** Chiến dịch có hội thoại đang chờ trả lời / có câu trả lời chưa xem. */
+  agentState?: 'pending' | 'unread' | null
+  onSelectAgent?: (project: AiChatProject) => void
+}) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
   const button = useRef<HTMLButtonElement>(null)
@@ -17,7 +28,7 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false }:
       top: anchor.bottom + rect.height + 8 <= window.innerHeight ? anchor.bottom + 6 : Math.max(8, anchor.top - rect.height - 6)
     })
     menu.current.querySelector<HTMLButtonElement>('button')?.focus()
-  }, [open])
+  }, [open, agents.length])
   useEffect(() => {
     if (!open) return
     const outside = (event: MouseEvent) => {
@@ -45,11 +56,12 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false }:
       window.removeEventListener('resize', close)
     }
   }, [open])
-  const select = (mode: CampaignAssistantMode) => { setOpen(false); button.current?.focus(); onSelect(mode) }
+  const select = (mode: LegacyAssistantMode) => { setOpen(false); button.current?.focus(); onSelect(mode) }
   return <>
     <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button"
       aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} title="Trợ lý AI">
       <Sparkles size={14} /><span>Trợ lý</span>
+      {agentState && <span className={`ai-chat-dot ${agentState}`} title={agentState === 'pending' ? 'Đang chờ trợ lý trả lời' : 'Có câu trả lời mới'} />}
     </button>
     {open && createPortal(<div ref={menu} role="menu" aria-label="Trợ lý AI" className="campaign-assistant-menu" style={position}
       onClick={event => event.stopPropagation()}>
@@ -57,6 +69,12 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false }:
       <button type="button" role="menuitem" onClick={() => select('ask')}><MessageCircleQuestion size={15} />Hỏi AI</button>
       <button type="button" role="menuitem" onClick={() => select('campaign_support')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION}</button>
       <button type="button" role="menuitem" onClick={() => select('campaign_support_dsh')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION} (2)</button>
+      {agents.length > 0 && <div className="campaign-assistant-menu-label" role="presentation">Hỏi đáp AI</div>}
+      {agents.map(project => <button type="button" role="menuitem" key={project.id} title={project.description} onClick={() => {
+        setOpen(false)
+        button.current?.focus()
+        onSelectAgent?.(project)
+      }}><Sparkles size={15} />{project.name}</button>)}
     </div>, document.body)}
   </>
 }

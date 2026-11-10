@@ -36,6 +36,7 @@ import { appAccessAPI } from './appAccessBridge'
 import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
+import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../shared/aiChatDesktop'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
@@ -221,6 +222,9 @@ const electronAPI = {
 
   chatCampaignAssistant: (request: CampaignAssistantChatRequest): Promise<CampaignAssistantChatResponse> =>
     ipcRenderer.invoke(IPC_EVENTS.AI_CAMPAIGN_ASSISTANT_CHAT, request),
+
+  aiChatCall: (action: AiChatDesktopAction, payload: Record<string, unknown>): Promise<AiChatIpcResult> =>
+    ipcRenderer.invoke(AI_CHAT_IPC.call, action, payload),
 
   openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),
