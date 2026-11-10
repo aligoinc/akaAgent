@@ -2,7 +2,7 @@
 
 ## Trạng thái — 10/11/2026
 
-- **Đã làm ở source Desktop** (nhánh `claude/festive-cannon-vpy9rt`): file Excel 14 cột; bảng trong tab có thêm cột
+- **Đã làm ở source Desktop** (nhánh `claude/festive-cannon-vpy9rt`, merge `dev_3` qua #630): file Excel 14 cột; bảng trong tab có thêm cột
   nhóm (thành viên, bài/ngày, riêng tư, tham gia, bài chưa đọc, tham gia từ, bạn bè trong nhóm), cột Link Facebook/Nguồn
   cho SĐT/UID và cột Tài khoản (mục 3b). Khi mở tab (và lúc Xuất nếu chưa đọc), app đọc lại chữ gốc của thẻ nhóm trong
   log chạy để điền dữ liệu mà kết quả chạy chưa lưu. **Chưa build bộ cài, chưa phát hành.** Không đổi DB, block hay
