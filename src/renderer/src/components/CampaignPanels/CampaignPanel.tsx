@@ -74,6 +74,7 @@ import CampaignDataUploadModal from './CampaignDataUploadModal'
 import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import AccountInfoModal from './AccountInfoModal'
+import CampaignAccountActionsTab from './CampaignAccountActionsTab'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
 import { buildCampaignContentPreview } from './campaignContentPreview'
@@ -112,7 +113,7 @@ interface CampaignPanelProps {
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
 
-type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
+type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'accountActions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
 type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'findDataLogScope'
@@ -2453,6 +2454,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const handledDiagnosticAction = useRef<string | null>(null)
   const [diagnosticAccount, setDiagnosticAccount] = useState<AutoAccount | null>(null)
   const [campaignAccountActions, setCampaignAccountActions] = useState<{ account: AutoAccount; campaign: CampaignListItem } | null>(null)
+  // Tab "Hành động": số hành động của chiến dịch đã tải và tín hiệu tải lại khi modal Hành động của tài khoản đóng.
+  const [accountActionsCount, setAccountActionsCount] = useState<{ campaignId: number; count: number | null } | null>(null)
+  const [accountActionsRevision, setAccountActionsRevision] = useState(0)
   const [diagnosticFacebookAccount, setDiagnosticFacebookAccount] = useState<AutoAccount | null>(null)
   const [diagnosticRandomAccount, setDiagnosticRandomAccount] = useState<AutoAccount | null>(null)
   const [campaignFormSection, setCampaignFormSection] = useState<'schedule' | undefined>()
@@ -6028,7 +6032,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           setDiagnosticAccount(null); onDiagnosticsChanged?.()
         }} />}
         {campaignAccountActions && <AccountInfoModal account={campaignAccountActions.account} campaign={campaignAccountActions.campaign}
-          onClose={() => { setCampaignAccountActions(null); onDiagnosticsChanged?.() }} />}
+          onClose={() => { setCampaignAccountActions(null); setAccountActionsRevision(value => value + 1); onDiagnosticsChanged?.() }} />}
         {diagnosticFacebookAccount && <FacebookCredentialsModal account={diagnosticFacebookAccount} onClose={() => {
           setDiagnosticFacebookAccount(null); onDiagnosticsChanged?.(); void loadAccounts()
         }} />}
@@ -6675,6 +6679,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 >
                   Tài khoản
                 </button>
+                {selectedCampaignSummary && (
+                  <button
+                    className={`detail-dock-tab ${detailTab === 'accountActions' ? 'active' : ''}`}
+                    onClick={() => setDetailTab('accountActions')}
+                  >
+                    Hành động{accountActionsCount?.campaignId === selectedCampaignSummary.id && accountActionsCount.count !== null ? ` (${accountActionsCount.count})` : ''}
+                  </button>
+                )}
                 {randomRunAccount && <button className={`detail-dock-tab ${detailTab === 'randomRun' ? 'active' : ''}`} onClick={() => setDetailTab('randomRun')}>Chạy ngẫu nhiên</button>}
                 {selectedCampaignSummary && (
                   <>
@@ -7901,6 +7913,18 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                     Không tìm thấy tài khoản
                   </div>
                 )
+              )}
+
+              {/* Tab: Hành động tài khoản mà chiến dịch đang chọn dùng (chỉ đọc, tải khi mở tab) */}
+              {detailTab === 'accountActions' && selectedCampaignSummary && (
+                <CampaignAccountActionsTab
+                  key={selectedCampaignSummary.id}
+                  campaign={selectedCampaignSummary}
+                  accountGroupName={selectedCampaignAccount?.accountGroupName}
+                  refreshKey={accountActionsRevision}
+                  onCount={(campaignId, count) => setAccountActionsCount({ campaignId, count })}
+                  onActionsChanged={() => onDiagnosticsChanged?.()}
+                />
               )}
 
               {/* Tab: Found data extracted by facebook_find_data_group */}

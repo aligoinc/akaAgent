@@ -37,6 +37,7 @@ import { registerCampaignHandlers } from './handlers/campaignHandlers'
 import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
 import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
+import { registerCampaignAccountActionsHandlers } from './handlers/campaignAccountActionsHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers, type AuthRenewalControl } from './handlers/authHandlers'
@@ -1499,6 +1500,7 @@ export function registerIpcHandlers(
     }
   })
   registerCampaignPendingReasonHandlers(mainWindow, campaignScheduler)
+  registerCampaignAccountActionsHandlers(mainWindow)
   registerCampaignHandlers(supabase, {
     requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)
