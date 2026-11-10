@@ -1,5 +1,7 @@
 # Chẩn đoán chiến dịch — v390
 
+> **10/11/2026:** mục Chẩn đoán (cùng Hỏi AI và hai câu hỗ trợ soạn sẵn) đang **ẩn khỏi menu Trợ lý** trên Desktop và Web; menu chỉ còn agent Hỏi đáp AI. Code, tab và RPC giữ nguyên; hiện lại bằng `LEGACY_CAMPAIGN_ASSISTANT_VISIBLE` trong `CampaignAssistantMenu.tsx`. `scripts/run-campaign-diagnostics-ui-smoke.cjs` tự bật lại khi build nên vẫn kiểm được phần dưới đây.
+
 Từ ngày 16/10/2026, **Chẩn đoán** nằm đầu menu **Trợ lý** của chiến dịch Facebook/Zalo/Email, mở trong panel bên phải. Đã bỏ tab Chẩn đoán khỏi chi tiết chiến dịch. Mở mục này tự kiểm tra; **Chẩn đoán AI** chỉ chạy khi bấm. Không có hội thoại, tự sửa cấu hình hoặc chạy thử chiến dịch.
 
 ## Hành vi

@@ -7,7 +7,7 @@ const {_electron}=require('playwright')
 async function main(){
  const dir=mkdtempSync(join(tmpdir(),'aka-diagnostics-ui-'));let app,page
  try{
-  await build({entryPoints:[join(__dirname,'campaign-diagnostics-ui-smoke.tsx')],outdir:dir,bundle:true,platform:'browser',format:'iife',jsx:'automatic',target:'chrome120',define:{'process.env.NODE_ENV':'"development"'},loader:{'.png':'dataurl','.svg':'dataurl'},logLevel:'warning'})
+  await build({entryPoints:[join(__dirname,'campaign-diagnostics-ui-smoke.tsx')],outdir:dir,bundle:true,platform:'browser',format:'iife',jsx:'automatic',target:'chrome120',define:{'process.env.NODE_ENV':'"development"','__AKA_LEGACY_CAMPAIGN_ASSISTANT__':'true'},loader:{'.png':'dataurl','.svg':'dataurl'},logLevel:'warning'})
   writeFileSync(join(dir,'index.html'),'<html lang="vi"><meta charset="utf-8"><link rel="stylesheet" href="campaign-diagnostics-ui-smoke.css"><body><div id="root"></div><script src="campaign-diagnostics-ui-smoke.js"></script></body></html>')
   writeFileSync(join(dir,'main.cjs'),`const{app,BrowserWindow}=require('electron');app.whenReady().then(()=>{const w=new BrowserWindow({show:false,width:1600,height:1000,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});w.webContents.session.webRequest.onBeforeRequest((d,c)=>c({cancel:/^https?:/.test(d.url)}));w.loadFile(${JSON.stringify(join(dir,'index.html'))})})`)
   const env={...process.env};delete env.ELECTRON_RUN_AS_NODE

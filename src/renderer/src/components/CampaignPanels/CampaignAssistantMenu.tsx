@@ -6,10 +6,18 @@ import type { AiChatProject } from '../../../../shared/aiChat'
 
 type LegacyAssistantMode = Exclude<CampaignAssistantMode, 'agent'>
 
+// Menu Trợ lý chỉ còn các agent Hỏi đáp AI (chốt 10/11/2026, cùng Web `campaignAssistantVisibility.ts`).
+// Chẩn đoán, Hỏi AI và hai câu hỗ trợ soạn sẵn ẩn khỏi menu, code và tab vẫn giữ: đổi `false` thành `true` là hiện lại.
+// Hai script smoke giao diện (scripts/*-ui-smoke.cjs) bật lại lúc build bằng esbuild `define` để vẫn kiểm được phần cũ.
+declare const __AKA_LEGACY_CAMPAIGN_ASSISTANT__: boolean | undefined
+const LEGACY_CAMPAIGN_ASSISTANT_VISIBLE: boolean = typeof __AKA_LEGACY_CAMPAIGN_ASSISTANT__ !== 'undefined'
+  ? __AKA_LEGACY_CAMPAIGN_ASSISTANT__ === true
+  : false
+
 export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, agents = [], agentState = null, onSelectAgent }: {
   onSelect: (mode: LegacyAssistantMode) => void
   canDiagnose?: boolean
-  /** Agent hỏi đáp AI (V488) áp dụng cho chiến dịch này; rỗng thì menu như cũ. */
+  /** Agent hỏi đáp AI (V488) áp dụng cho chiến dịch này; rỗng thì ô Trợ lý để trống khi các mục cũ đang ẩn. */
   agents?: AiChatProject[]
   /** Chiến dịch có hội thoại đang chờ trả lời / có câu trả lời chưa xem. */
   agentState?: 'pending' | 'unread' | null
@@ -57,6 +65,8 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, a
     }
   }, [open])
   const select = (mode: LegacyAssistantMode) => { setOpen(false); button.current?.focus(); onSelect(mode) }
+  const legacy = LEGACY_CAMPAIGN_ASSISTANT_VISIBLE
+  if (!legacy && agents.length === 0) return <span className="campaign-cell-muted">—</span>
   return <>
     <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button"
       aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} title="Trợ lý AI">
@@ -65,10 +75,10 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, a
     </button>
     {open && createPortal(<div ref={menu} role="menu" aria-label="Trợ lý AI" className="campaign-assistant-menu" style={position}
       onClick={event => event.stopPropagation()}>
-      {canDiagnose && <button type="button" role="menuitem" onClick={() => select('diagnostics')}><Stethoscope size={15} />Chẩn đoán</button>}
-      <button type="button" role="menuitem" onClick={() => select('ask')}><MessageCircleQuestion size={15} />Hỏi AI</button>
-      <button type="button" role="menuitem" onClick={() => select('campaign_support')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION}</button>
-      <button type="button" role="menuitem" onClick={() => select('campaign_support_dsh')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION} (2)</button>
+      {legacy && canDiagnose && <button type="button" role="menuitem" onClick={() => select('diagnostics')}><Stethoscope size={15} />Chẩn đoán</button>}
+      {legacy && <button type="button" role="menuitem" onClick={() => select('ask')}><MessageCircleQuestion size={15} />Hỏi AI</button>}
+      {legacy && <button type="button" role="menuitem" onClick={() => select('campaign_support')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION}</button>}
+      {legacy && <button type="button" role="menuitem" onClick={() => select('campaign_support_dsh')}><CircleHelp size={15} />{CAMPAIGN_SUPPORT_QUESTION} (2)</button>}
       {agents.length > 0 && <div className="campaign-assistant-menu-label" role="presentation">Hỏi đáp AI</div>}
       {agents.map(project => <button type="button" role="menuitem" key={project.id} title={project.description} onClick={() => {
         setOpen(false)
