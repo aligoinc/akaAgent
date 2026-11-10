@@ -178,6 +178,26 @@ Lỗi nạp còn lại đọc `edge_logs` của `/rest/v1/rpc/aka_agent_ingest_d
 (`response.status_code`, `response.origin_time`), đừng đo bằng `updated_at - created_at` của
 `auto_data_ingest_batches` (cùng `now()`). Theo dõi 7 ngày rồi mở rộng `organizationIds`.
 
+## Kiểm thử bằng dữ liệu thật (10/11/2026)
+
+Chép CHỈ ĐỌC từ production (SELECT qua MCP, không ghi gì) 10 nhóm data mẫu (gồm 1770), 910 chiến dịch, 79.599 input,
+95.716 origin, 7.150 contacts cùng định nghĩa 1.430 hàm, cột, index và trigger; dữ liệu nằm ở thư mục tạm, không commit.
+Ba cụm Postgres 17 cục bộ cùng dữ liệu: `old` (trước V484), `sync`, `async` (tổ chức 701). Chạy
+`python3 scripts/data-group-routing/test_realdata.py` (cần `REALDATA_DIR` đã chép bằng `extract_sql.py` + `save_bundle.py`).
+
+- Môi trường thử cũ (bản chụp 27/10) lệch production 81 hàm (có `aka_agent_lock_campaign_input_serialization`, lối vào
+  Desktop của bind/reactivate/stop) và thiếu 710 hàm chỉ có trên production (ví dụ
+  `private.aka_agent_assert_request_ownership`); bộ mới nạp đè định nghĩa production (`realload.py`, `drift_check.py`).
+- Nhóm 1770 (11 nguồn đang bật): nạp lại 85 thành viên (935 đã có), nạp 105 data thật mới từ nhóm anh em (1.133 input
+  mới, 22 đã có), nhập file 50 dòng, gửi lại đúng mã: trạng thái 11 bảng `old` = `sync` = `async` (sau worker) ở mọi
+  bước; kết quả lượt nạp async sau worker (`done`) = cách cũ. Thời gian một lời gọi: cũ 1,2–2,5 s, sync 0,5–1,05 s
+  (V486), async 0,09–0,12 s. 22/23 đạt.
+- Khác biệt tìm thấy: file có dòng trùng định danh (1 dòng) thì "đã có trong chiến dịch" của lượt nạp async ít hơn
+  cách cũ đúng số chiến dịch (539 so với 550): cách cũ đẩy dòng trùng hai lần, hàng đợi async gộp theo thành viên. Dữ
+  liệu giống hệt, chỉ khác con số báo cáo; chưa sửa.
+- Chưa thử: bật lại nguồn (10 nhóm mẫu không có nguồn tắt nào thuộc chiến dịch còn hiệu lực), nhập file nhiều phần
+  V485 và `group_access` V486 trên dữ liệu thật, kịch bản 630 chiến dịch cùng bật.
+
 ## Rollback (ngược thứ tự)
 
 1. V486: `rollback_v486_group_access_plan_cache.sql` (bất cứ lúc nào).
