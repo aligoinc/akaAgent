@@ -150,6 +150,14 @@ interface SchedulerStartOptions {
   initialDelayMs?: number
 }
 
+/** A steady limit-blocked campaign (its note already matches) that the queue skips until untilMs. */
+interface PreclaimLimitSkip {
+  accountId: number
+  campaignUpdatedAt: string
+  accountLimitKey: string
+  untilMs: number
+}
+
 interface DeliveryCooldownBatchResult {
   allowedInputDataIds: Set<number>
   pausedInputDataIds: Set<number>
@@ -690,6 +698,28 @@ const ZALO_RUNTIME_SHUTDOWN_UNCERTAIN_NOTE =
 const ZALO_RUNTIME_SHUTDOWN_NOTE = 'Runtime Zalo đang dừng.'
 const CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE = 'campaign_error_screenshot_diagnosis'
 const DEFAULT_RATE_LIMIT_MINUTES = 65
+// Nothing is sent while a Server campaign sleeps between targets, and the sleep
+// always ends with one more run-control check before the next target. The poll
+// interval only bounds how late an idle sleep notices pause/hard stop; at 5s it
+// was ~70 req/s from the Zalo Server VPS (10/11/2026).
+const SERVER_ZALO_SLEEP_CONTROL_POLL_MS = 15_000
+// A campaign whose preclaim limit note is already current is rechecked when its
+// retryAfter elapses, at most this long later. Editing the campaign or its
+// account group settings invalidates the skip at the next tick.
+const PRECLAIM_LIMIT_RECHECK_MAX_MS = 5 * 60_000
+// enable_due_auto_account_actions() is a global UPDATE (no staff filter; the
+// Server runs it as service_role). One call per process per 30s is enough: the
+// limit check already treats a past date_enable as enabled.
+const ENABLE_DUE_ACCOUNT_ACTIONS_MIN_INTERVAL_MS = 30_000
+let enableDueAccountActionsLastStartedAt = 0
+
+function claimEnableDueAccountActionsSlot(nowMs = Date.now()): boolean {
+  // A clock that moved backwards must not suppress the call indefinitely.
+  if (nowMs >= enableDueAccountActionsLastStartedAt
+    && nowMs - enableDueAccountActionsLastStartedAt < ENABLE_DUE_ACCOUNT_ACTIONS_MIN_INTERVAL_MS) return false
+  enableDueAccountActionsLastStartedAt = nowMs
+  return true
+}
 const CAMPAIGN_PAUSE_PENDING_NOTE = 'Đang chờ tạm dừng'
 const FIND_DATA_SOURCE_WAIT_NOTE = 'Đang chờ data từ chiến dịch tìm data'
 const DATA_GROUP_WAITING_NOTES = new Set(['Chờ data phù hợp', 'Chờ data mới'])
@@ -803,6 +833,7 @@ export class CampaignScheduler {
   private activeZaloRunStopReasons = new Map<number, ZaloRuntimeStopReason>()
   private pauseRequests = new Set<number>()
   private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
+  private preclaimLimitSkips = new Map<number, PreclaimLimitSkip>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
     signature: string; write: Promise<CampaignDetail | null>; helperDetail?: ZaloActionDetailOutput | null
@@ -1008,6 +1039,7 @@ export class CampaignScheduler {
   stop(): void {
     cancelFacebookRandomAi()
     this.lastTickAccounts = []
+    this.preclaimLimitSkips.clear()
     this.webEnrichment?.stop()
     this.requestZaloRuntimeStop('shutdown')
     this.cancelFailureCleanups()
@@ -1555,7 +1587,8 @@ export class CampaignScheduler {
         }
       }
       if (account && this.isServerZaloCampaign(account, campaign) && Date.now() >= nextServerControlCheckAt) {
-        nextServerControlCheckAt = Date.now() + 5000
+        // The check after this loop still runs before the next target.
+        nextServerControlCheckAt = Date.now() + SERVER_ZALO_SLEEP_CONTROL_POLL_MS
         const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
         if (this.isServerZaloBoundaryRequested(
           control.campaignStatus,
@@ -1619,19 +1652,27 @@ export class CampaignScheduler {
     this.wakeRequested = false
 
     try {
-      await this.getReadyRuntimeClock()
+      const tickClock = await this.getReadyRuntimeClock()
       if (!this.running) return
+      this.prunePreclaimLimitSkips()
 
-      await this.supabase.enableDueAccountActions().catch(err => {
-        console.error('Failed to enable due account actions:', err)
-      })
-      if (!this.running) return
+      if (claimEnableDueAccountActionsSlot()) {
+        await this.supabase.enableDueAccountActions().catch(err => {
+          console.error('Failed to enable due account actions:', err)
+        })
+        if (!this.running) return
+      }
 
       // 1. Get eligible accounts
       const accounts = await this.supabase.getEligibleAccounts()
       this.lastTickAccounts = accounts
       // Cache-only scheduling of optional work; background loads never delay campaigns.
       this.webEnrichment?.observe(accounts)
+
+      // One read for the accounts this tick would otherwise query one by one.
+      // An account missing from the map is read individually exactly as before.
+      const pendingByAccount = await this.loadPendingCampaignsForTick(accounts, tickClock.dbNow)
+      if (!this.running) return
 
       for (const account of accounts) {
         if (!this.running) break
@@ -1656,7 +1697,8 @@ export class CampaignScheduler {
         // Finalize an expired Data Group subscription before runtime eligibility
         // checks. Hard end is a database lifecycle boundary and must not depend on
         // the account being logged in or having a mounted browser tab.
-        const pendingCampaigns = await this.supabase.getPendingCampaigns(account.id, accountClock.dbNow)
+        const pendingCampaigns = pendingByAccount?.get(account.id)
+          ?? await this.supabase.getPendingCampaigns(account.id, accountClock.dbNow)
         const campaigns: Campaign[] = []
         for (const campaign of pendingCampaigns) {
           if (await this.finalizeDataGroupCampaignAtHardEnd(
@@ -1724,6 +1766,25 @@ export class CampaignScheduler {
           if (this.running) void this.tick()
         })
       }
+    }
+  }
+
+  private async loadPendingCampaignsForTick(
+    accounts: AutoAccount[],
+    dbNow: string
+  ): Promise<Map<number, Campaign[]> | null> {
+    // Same accounts that reach the per-account read in tick(); SMS uses its own path.
+    const accountIds = accounts
+      .filter(account => this.shouldProcessAccountForRuntime(account) && !this.isSmsAccount(account))
+      .map(account => account.id)
+    if (accountIds.length < 2) return null
+    try {
+      return await this.supabase.getPendingCampaignsForAccounts(accountIds, dbNow)
+    } catch (error) {
+      // Fall back to the original per-account reads; a connectivity failure
+      // surfaces there through the existing tick error handling.
+      console.error('Failed to batch-read pending campaigns; reading accounts individually:', error)
+      return null
     }
   }
 
@@ -1958,6 +2019,7 @@ export class CampaignScheduler {
       const runtimeClock = await this.getReadyRuntimeClock()
       if (!this.running) break
       if (!this.shouldProcessAccountForRuntime(account)) break
+      if (this.shouldSkipPreclaimLimitedCampaign(account, campaign)) continue
       const currentCampaign = await this.supabase.getCampaign(campaign.id)
       if (!this.running) break
       const businessNow = new Date(runtimeClock.dbNow)
@@ -3317,6 +3379,66 @@ export class CampaignScheduler {
     return limitResult.limitStatus
   }
 
+  private getPreclaimLimitAccountKey(account: AutoAccount): string {
+    // Account-group limits come from the account row read by every tick.
+    return JSON.stringify(account.accountGroupSettings ?? null)
+  }
+
+  /**
+   * A steady preclaim block (note already current) is recomputed every tick by
+   * ~10 reads that cannot change the outcome before retryAfter. Zalo only:
+   * Facebook queues also drive web enrichment from each executeCampaign return.
+   * A note that shows the remaining minutes is rechecked when that minute
+   * changes, so the note and its run-log line still update every minute.
+   */
+  private rememberPreclaimLimitSkip(
+    account: AutoAccount,
+    campaign: Campaign,
+    limitStatus: AccountActionLimitStatus,
+    showsRemainingMinutes = false
+  ): void {
+    if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo' || !campaign.updatedAt) return
+    const retryAfterMs = limitStatus.retryAfterMs
+    if (typeof retryAfterMs === 'number' && !(retryAfterMs > 0)) return
+    let waitMs = typeof retryAfterMs === 'number'
+      ? Math.min(retryAfterMs, PRECLAIM_LIMIT_RECHECK_MAX_MS)
+      : PRECLAIM_LIMIT_RECHECK_MAX_MS
+    if (showsRemainingMinutes && typeof retryAfterMs === 'number') {
+      // Time until Math.ceil(retryAfterMs / 60s), the shown minute, decreases.
+      waitMs = Math.min(waitMs, ((retryAfterMs - 1) % 60_000) + 1)
+    }
+    this.preclaimLimitSkips.set(campaign.id, {
+      accountId: account.id,
+      campaignUpdatedAt: campaign.updatedAt,
+      accountLimitKey: this.getPreclaimLimitAccountKey(account),
+      untilMs: Date.now() + waitMs
+    })
+  }
+
+  /** campaign is this tick's pending row; any edit changes updated_at and ends the skip. */
+  private shouldSkipPreclaimLimitedCampaign(account: AutoAccount, campaign: Campaign): boolean {
+    const skip = this.preclaimLimitSkips.get(campaign.id)
+    if (!skip) return false
+    const remainingMs = skip.untilMs - Date.now()
+    if (
+      remainingMs > 0 &&
+      remainingMs <= PRECLAIM_LIMIT_RECHECK_MAX_MS &&
+      skip.accountId === account.id &&
+      skip.campaignUpdatedAt === campaign.updatedAt &&
+      skip.accountLimitKey === this.getPreclaimLimitAccountKey(account)
+    ) return true
+    this.preclaimLimitSkips.delete(campaign.id)
+    return false
+  }
+
+  private prunePreclaimLimitSkips(): void {
+    const now = Date.now()
+    for (const [campaignId, skip] of this.preclaimLimitSkips) {
+      const remainingMs = skip.untilMs - now
+      if (remainingMs <= 0 || remainingMs > PRECLAIM_LIMIT_RECHECK_MAX_MS) this.preclaimLimitSkips.delete(campaignId)
+    }
+  }
+
   private executeCampaign(account: AutoAccount, campaign: Campaign): Promise<'concurrency_wait' | void> {
     return withActionResultRunContext(campaign.id, () => this.executeCampaignWithResultContext(account, campaign))
   }
@@ -3345,8 +3467,14 @@ export class CampaignScheduler {
         ? await this.getCampaignPreclaimLimitStatus(account, campaign, preclaimAction)
         : null
       if (preclaimLimitStatus) {
-        const preclaimLimitNote = await this.buildLimitPreflightNote(preclaimLimitStatus)
-        if (String(campaign.note || '').trim() === preclaimLimitNote.trim()) return
+        const {
+          note: preclaimLimitNote,
+          showsRemainingMinutes
+        } = await this.buildLimitPreflightNoteDetail(preclaimLimitStatus)
+        if (String(campaign.note || '').trim() === preclaimLimitNote.trim()) {
+          this.rememberPreclaimLimitSkip(account, campaign, preclaimLimitStatus, showsRemainingMinutes)
+          return
+        }
 
         await this.updateUnclaimedCampaignPreflightNote(campaign, preclaimLimitNote)
         return
@@ -9676,15 +9804,47 @@ export class CampaignScheduler {
   }
 
   private async buildLimitPreflightNote(limitStatus: AccountActionLimitStatus): Promise<string> {
+    return (await this.buildLimitPreflightNoteDetail(limitStatus)).note
+  }
+
+  /**
+   * The limit note, and whether it shows the remaining minutes (e.g. Zalo 127
+   * "tạm nghỉ gửi tin [x] phút"); such a note changes every minute.
+   */
+  private async buildLimitPreflightNoteDetail(
+    limitStatus: AccountActionLimitStatus
+  ): Promise<{ note: string; showsRemainingMinutes: boolean }> {
     const replacements = this.buildLimitReplacements(limitStatus)
 
     if (limitStatus.errorCode) {
       const policy = await this.supabase.getErrorPolicy(limitStatus.errorCode)
-      const message = this.renderPolicyMessage(policy?.notiCampaign || policy?.notiRunningProcess, replacements)
-      if (message) return this.addActionContextToMessage(message, replacements)
+      const template = policy?.notiCampaign || policy?.notiRunningProcess
+      const message = this.renderPolicyMessage(template, replacements)
+      if (message) {
+        // Render the same template one minute later; a different text means
+        // it shows the remaining minutes ([t], or [x] when there is no count).
+        const nextMinuteMessage = limitStatus.retryAfterMs
+          ? this.renderPolicyMessage(template, this.buildLimitReplacements({
+            ...limitStatus,
+            retryAfterMs: Math.max(0, limitStatus.retryAfterMs - 60_000)
+          }))
+          : message
+        return {
+          note: this.addActionContextToMessage(message, replacements),
+          showsRemainingMinutes: nextMinuteMessage !== message
+        }
+      }
     }
 
-    return this.addActionContextToMessage(limitStatus.reason || 'Không đủ điều kiện chạy', replacements)
+    return {
+      note: this.addActionContextToMessage(limitStatus.reason || 'Không đủ điều kiện chạy', replacements),
+      // The disabled-action reason without a stored text embeds "còn khoảng N phút".
+      showsRemainingMinutes: Boolean(
+        limitStatus.isActionDisabled &&
+        limitStatus.retryAfterMs &&
+        !String(limitStatus.disabledReason || '').trim()
+      )
+    }
   }
 
   private buildLimitReplacements(limitStatus: AccountActionLimitStatus): Record<string, string | undefined> {

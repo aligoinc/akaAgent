@@ -16,6 +16,7 @@ import { ZALO_PHONE_CHECK_IPC, type ZaloPhoneCheckRequest, type ZaloPhoneCheckEv
 import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQuery, AccountActionStatusReportDetailResult } from '../shared/actionStatusReport'
 import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcResponses, type EffectivenessIpcResult } from '../shared/effectivenessIpc'
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
+import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
@@ -49,6 +50,7 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
+import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -657,6 +659,9 @@ const electronAPI = {
   dataReport: <R extends DataReportIpcRequest>(request: R): Promise<DataReportIpcResult<DataReportIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(DATA_REPORT_IPC, request),
 
+  campaignRunReport: (request: CampaignRunReportIpcRequest): Promise<CampaignRunReportIpcResult> =>
+    ipcRenderer.invoke(CAMPAIGN_RUN_REPORT_IPC, request),
+
   // Campaign result automations
   listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AUTOMATION_LIST, query),
@@ -747,6 +752,10 @@ const electronAPI = {
 
   getAccountActionOverview: (accountId: number, actionCodes?: string[]): Promise<AccountActionOverview[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId, actionCodes),
+
+  /** Tab "Hành động" của chi tiết chiến dịch: chỉ đọc, không tạo/reset trạng thái hành động. */
+  getCampaignAccountActions: (campaignId: number): Promise<CampaignAccountActionsResult> =>
+    ipcRenderer.invoke(CAMPAIGN_ACCOUNT_ACTIONS_IPC, campaignId),
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),

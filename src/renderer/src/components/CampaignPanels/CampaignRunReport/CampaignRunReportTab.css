@@ -1,0 +1,257 @@
+/*
+ * Tab "Báo cáo" trong chi tiết chiến dịch. Mọi quy tắc nằm dưới .campaign-report-view, không dùng :has().
+ * Bảng màu trạng thái đã kiểm tra mù màu cho MỌI cặp (phần bằng 0 không vẽ nên hai màu bất kỳ có thể đứng
+ * cạnh nhau): Tốt · Đang chạy · Chờ · Xấu đạt cả nền sáng #fff/#f5f8fc/#e7eef7 và nền tối #12121a/#1a1a28.
+ * Trung tính cố ý gần xám; luôn đi kèm biểu tượng + chữ. Chép nguyên văn từ akaAgentWebApp apps/web/src/features/campaignReport/CampaignReportView.css
+ * (phương án màu: WebApp docs/CAMPAIGN_DETAIL_REPORT_TAB_PLAN.md mục 3.10); Desktop dùng cùng biến giao diện.
+ */
+.campaign-report-view {
+  --rpt-good: #1fad79; --rpt-progress: #3a86d6; --rpt-neutral: #6e6e88; --rpt-wait: #c7820a; --rpt-bad: #c2294f; --rpt-track: #2c2c3c;
+  --rpt-i-good: #1fad79; --rpt-i-progress: #5a9be0; --rpt-i-neutral: #a0a0b8; --rpt-i-wait: #d99a2b; --rpt-i-bad: #e0577a; --rpt-i-track: #a0a0b8;
+  --rpt-l-good: #0a0a0f; --rpt-l-progress: #ffffff; --rpt-l-neutral: #ffffff; --rpt-l-wait: #0a0a0f; --rpt-l-bad: #ffffff; --rpt-l-track: #e8e8f0;
+  --rpt-card: #1a1a28; --rpt-card-border: #2a2a3e; --rpt-divider: #26263a; --rpt-chip-bg: #222236; --rpt-chip-border: #2f2f45;
+  --rpt-link: #a5b4fc; --rpt-link-hover: rgba(124, 92, 252, .16); --rpt-meter-track: rgba(31, 173, 121, .2);
+  --rpt-tooltip-bg: #e8e8f0; --rpt-tooltip-fg: #0a0a0f; --rpt-row-hover: rgba(255, 255, 255, .05);
+  --rpt-funnel-1: #1c5cab; --rpt-funnel-2: #3987e5; --rpt-funnel-3: #86b6ef;
+  display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 20px; color: var(--text-primary); font-size: 13px;
+  /* Khung chi tiết đổi rộng theo cột Tiến trình (kéo được), nên bố cục theo bề rộng của tab chứ không theo màn hình. */
+  container: rpt / inline-size;
+}
+body.theme-light .campaign-report-view {
+  --rpt-good: #0f9466; --rpt-progress: #2a78d6; --rpt-neutral: #8796aa; --rpt-wait: #b06c00; --rpt-bad: #a61e4d; --rpt-track: #cfd8e5;
+  --rpt-i-good: #0f9466; --rpt-i-progress: #2a78d6; --rpt-i-neutral: #5a6b82; --rpt-i-wait: #b06c00; --rpt-i-bad: #a61e4d; --rpt-i-track: #5a6b82;
+  --rpt-l-good: #ffffff; --rpt-l-progress: #ffffff; --rpt-l-neutral: #0b1220; --rpt-l-wait: #ffffff; --rpt-l-bad: #ffffff; --rpt-l-track: #0b1220;
+  --rpt-card: #ffffff; --rpt-card-border: #d6e0eb; --rpt-divider: #e3eaf3; --rpt-chip-bg: #f8fafc; --rpt-chip-border: #d6e0eb;
+  --rpt-link: #4f46e5; --rpt-link-hover: #eef2ff; --rpt-meter-track: #d7eee4;
+  --rpt-tooltip-bg: #0f172a; --rpt-tooltip-fg: #f8fafc; --rpt-row-hover: #f1f5fb;
+}
+
+.campaign-report-view .rpt-f-good { background: var(--rpt-good); }
+.campaign-report-view .rpt-f-progress { background: var(--rpt-progress); }
+.campaign-report-view .rpt-f-neutral { background: var(--rpt-neutral); }
+.campaign-report-view .rpt-f-wait { background: var(--rpt-wait); }
+.campaign-report-view .rpt-f-bad { background: var(--rpt-bad); }
+.campaign-report-view .rpt-f-track { background: var(--rpt-track); }
+.campaign-report-view .rpt-i-good { color: var(--rpt-i-good); }
+.campaign-report-view .rpt-i-progress { color: var(--rpt-i-progress); }
+.campaign-report-view .rpt-i-neutral { color: var(--rpt-i-neutral); }
+.campaign-report-view .rpt-i-wait { color: var(--rpt-i-wait); }
+.campaign-report-view .rpt-i-bad { color: var(--rpt-i-bad); }
+.campaign-report-view .rpt-i-track { color: var(--rpt-i-track); }
+.campaign-report-view .rpt-l-good { color: var(--rpt-l-good); }
+.campaign-report-view .rpt-l-progress { color: var(--rpt-l-progress); }
+.campaign-report-view .rpt-l-neutral { color: var(--rpt-l-neutral); }
+.campaign-report-view .rpt-l-wait { color: var(--rpt-l-wait); }
+.campaign-report-view .rpt-l-bad { color: var(--rpt-l-bad); }
+.campaign-report-view .rpt-l-track { color: var(--rpt-l-track); }
+.campaign-report-view .rpt-glyph { display: inline-flex; flex: 0 0 auto; }
+.campaign-report-view button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* Thanh công cụ */
+.campaign-report-view .rpt-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.campaign-report-view .rpt-heading { display: flex; flex: 1 1 320px; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.campaign-report-view .rpt-heading h2 { margin: 0; color: var(--text-primary); font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.campaign-report-view .rpt-updated { flex-basis: 100%; color: var(--text-secondary); font-size: 12px; }
+.campaign-report-view .rpt-toolbar-actions { display: flex; gap: 8px; }
+.campaign-report-view .rpt-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.campaign-report-view .rpt-status > span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.campaign-report-view .rpt-status-good { color: color-mix(in srgb, var(--rpt-i-good) 78%, var(--text-primary)); background: color-mix(in srgb, var(--rpt-good) 14%, transparent); }
+.campaign-report-view .rpt-status-progress { color: color-mix(in srgb, var(--rpt-i-progress) 78%, var(--text-primary)); background: color-mix(in srgb, var(--rpt-progress) 14%, transparent); }
+.campaign-report-view .rpt-status-wait { color: color-mix(in srgb, var(--rpt-i-wait) 78%, var(--text-primary)); background: color-mix(in srgb, var(--rpt-wait) 14%, transparent); }
+.campaign-report-view .rpt-status-bad { color: color-mix(in srgb, var(--rpt-i-bad) 78%, var(--text-primary)); background: color-mix(in srgb, var(--rpt-bad) 14%, transparent); }
+.campaign-report-view .rpt-status-neutral { color: var(--text-secondary); background: color-mix(in srgb, var(--rpt-neutral) 18%, transparent); }
+.campaign-report-view .rpt-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 5px 8px 5px 12px; border: 1px solid color-mix(in srgb, var(--rpt-progress) 45%, var(--rpt-card-border)); border-radius: 8px; background: color-mix(in srgb, var(--rpt-progress) 10%, var(--rpt-card)); font-size: 12.5px; }
+.campaign-report-view .rpt-stale > svg { color: var(--rpt-i-progress); flex: 0 0 auto; }
+.campaign-report-view .rpt-stale > span { flex: 1 1 240px; }
+.campaign-report-view .rpt-error { flex-wrap: wrap; }
+.campaign-report-view .rpt-error .btn { margin-left: auto; }
+.campaign-report-view .rpt-link-btn { appearance: none; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--rpt-link); font: inherit; font-size: 12.5px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.campaign-report-view .rpt-link-btn:hover { background: var(--rpt-link-hover); }
+.campaign-report-view .rpt-body { display: flex; flex-direction: column; gap: 12px; transition: opacity .2s; }
+.campaign-report-view.is-refreshing .rpt-body { opacity: .55; }
+
+/* Ô số liệu chính */
+.campaign-report-view .rpt-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@container rpt (min-width: 480px) { .campaign-report-view .rpt-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } }
+@container rpt (min-width: 980px) { .campaign-report-view .rpt-kpis:not(.is-3) { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.campaign-report-view .rpt-kpi { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 11px 12px 12px; border: 1px solid var(--rpt-card-border); border-radius: 10px; background: var(--rpt-card); }
+/* Nhãn chữ thường (chữ hoa có dấu khó đọc ở cỡ nhỏ và làm nhãn dài xuống dòng, lệch hàng số). */
+.campaign-report-view .rpt-kpi-label { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; line-height: 1.3; }
+.campaign-report-view .rpt-kpi-label > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-report-view .rpt-kpi-value { color: var(--text-primary); font-size: 22px; font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
+.campaign-report-view .rpt-kpi-value span { color: var(--text-secondary); font-size: 12.5px; font-weight: 500; letter-spacing: 0; }
+.campaign-report-view .rpt-kpi-sub { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 11.5px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.campaign-report-view .rpt-meter { height: 6px; margin: 3px 0 2px; overflow: hidden; border-radius: 999px; background: var(--rpt-meter-track); }
+.campaign-report-view .rpt-meter > span { display: block; height: 100%; border-radius: inherit; }
+
+/* Cần chú ý */
+/* Hẹp: mỗi mục một dòng (chữ chính + chữ phụ cùng dòng khi đủ chỗ); rất rộng: ba mục trên một hàng. */
+.campaign-report-view .rpt-attention { display: flex; flex-direction: column; padding: 2px 14px; border: 1px solid var(--rpt-card-border); border-radius: 10px; background: var(--rpt-card); }
+.campaign-report-view .rpt-attention h3 { margin: 0; padding: 8px 0 6px; color: var(--text-secondary); font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.campaign-report-view .rpt-attention-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 0; border-top: 1px solid var(--rpt-divider); }
+.campaign-report-view .rpt-attention-text { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+.campaign-report-view .rpt-attention-text strong { font-size: 13px; font-weight: 600; }
+.campaign-report-view .rpt-attention-text span { color: var(--text-secondary); font-size: 12px; }
+@container rpt (min-width: 1240px) {
+  .campaign-report-view .rpt-attention { flex-direction: row; align-items: center; gap: 18px; padding: 10px 14px; }
+  .campaign-report-view .rpt-attention h3 { flex: 0 0 auto; padding: 0; }
+  .campaign-report-view .rpt-attention-item { flex: 1 1 0; padding: 0 0 0 14px; border-top: 0; border-left: 1px solid var(--rpt-divider); }
+  .campaign-report-view .rpt-attention-text { display: grid; }
+  .campaign-report-view .rpt-attention-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* Khối */
+.campaign-report-view .rpt-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; }
+.campaign-report-view .rpt-card { min-width: 0; padding: 12px 14px 14px; border: 1px solid var(--rpt-card-border); border-radius: 10px; background: var(--rpt-card); }
+.campaign-report-view .rpt-data { flex: 1 1 360px; }
+.campaign-report-view .rpt-actions { flex: 1.45 1 460px; }
+.campaign-report-view .rpt-card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 10px; }
+.campaign-report-view .rpt-card-title { display: flex; flex: 1 1 220px; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.campaign-report-view .rpt-card-title h3 { margin: 0; color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+.campaign-report-view .rpt-card-title span { color: var(--text-secondary); font-size: 12px; }
+.campaign-report-view .rpt-card-actions { display: flex; flex: 0 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 12px; margin-left: auto; }
+.campaign-report-view .rpt-note { margin: 8px 8px 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.5; }
+.campaign-report-view .rpt-muted { margin: 6px 0; color: var(--text-secondary); font-size: 12.5px; }
+.campaign-report-view .rpt-single { margin: 4px 0 2px; font-size: 13px; }
+
+/* Thanh phân đoạn */
+.campaign-report-view .rpt-bar { display: flex; gap: 2px; }
+.campaign-report-view .rpt-bar.is-tall { height: 28px; }
+.campaign-report-view .rpt-bar.is-thin { height: 8px; margin: 10px 0; }
+.campaign-report-view .rpt-seg { display: flex; flex: 1 1 0; align-items: center; min-width: 4px; overflow: hidden; border-radius: 4px; transition: opacity .15s; }
+.campaign-report-view .rpt-bar.is-thin .rpt-seg { min-width: 3px; border-radius: 999px; }
+.campaign-report-view .rpt-seg.is-dimmed { opacity: .35; }
+.campaign-report-view .rpt-seg-label { padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.campaign-report-view .rpt-bar-empty { flex: 1; border-radius: 4px; background: var(--rpt-track); }
+
+/* Danh sách có số */
+.campaign-report-view .rpt-rows { display: flex; flex-direction: column; gap: 1px; margin: 10px 0 0; padding: 0; list-style: none; }
+.campaign-report-view .rpt-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto 44px 16px; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border-radius: 8px; color: var(--text-primary); font: inherit; font-size: 13px; text-align: left; }
+.campaign-report-view .rpt-rows.is-static .rpt-row { align-items: start; padding: 6px 8px; }
+.campaign-report-view button.rpt-row { appearance: none; border: 0; background: transparent; cursor: pointer; }
+.campaign-report-view button.rpt-row:hover { background: var(--rpt-row-hover); }
+.campaign-report-view .rpt-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-row-label small { display: block; color: var(--text-secondary); font-size: 11.5px; line-height: 1.45; }
+.campaign-report-view .rpt-row-pct { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+.campaign-report-view .rpt-row-chevron { color: var(--text-tertiary); }
+.campaign-report-view .rpt-outcomes { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rpt-divider); }
+.campaign-report-view .rpt-outcomes h4 { margin: 0; font-size: 12.5px; font-weight: 600; }
+
+/* Hành động */
+.campaign-report-view .rpt-action-list { margin: 0; padding: 0; list-style: none; }
+.campaign-report-view .rpt-action { padding: 12px 0; border-top: 1px solid var(--rpt-divider); }
+.campaign-report-view .rpt-action.is-first { padding-top: 2px; border-top: 0; }
+.campaign-report-view .rpt-action-head { display: flex; align-items: center; gap: 10px; }
+.campaign-report-view .rpt-action-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px; background: var(--rpt-link-hover); color: var(--rpt-link); }
+.campaign-report-view .rpt-action-name { flex: 1; min-width: 0; }
+.campaign-report-view .rpt-action-name > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.campaign-report-view .rpt-action-name strong { font-size: 13.5px; font-weight: 600; }
+.campaign-report-view .rpt-action-name > span { color: var(--text-secondary); font-size: 12px; }
+.campaign-report-view .rpt-badge { padding: 0 7px; border: 1px solid var(--rpt-chip-border); border-radius: 999px; color: var(--text-secondary); font-size: 11px; line-height: 18px; }
+.campaign-report-view .rpt-action-rate { flex: 0 0 auto; text-align: right; }
+.campaign-report-view .rpt-action-rate strong { display: block; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-action-rate span { color: var(--text-secondary); font-size: 11.5px; }
+.campaign-report-view .rpt-action .rpt-bar.is-thin { margin: 10px 0 10px 40px; }
+.campaign-report-view .rpt-chips { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-left: 40px; }
+.campaign-report-view .rpt-chip-wrap { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; }
+.campaign-report-view .rpt-chip { appearance: none; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border: 1px solid var(--rpt-chip-border); border-radius: 999px; background: var(--rpt-chip-bg); color: var(--text-primary); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.campaign-report-view .rpt-chip:hover { border-color: var(--border-hover); }
+.campaign-report-view .rpt-chip.is-static { cursor: default; }
+.campaign-report-view .rpt-chip strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-sub-status { padding-left: 12px; color: var(--text-secondary); font-size: 11.5px; }
+
+/* Bảng */
+.campaign-report-view .rpt-table-scroll { overflow-x: auto; border: 1px solid var(--rpt-divider); border-radius: 8px; }
+.campaign-report-view .rpt-table-scroll.is-tall { max-height: 360px; overflow-y: auto; }
+.campaign-report-view .rpt-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-table th, .campaign-report-view .rpt-table td { padding: 7px 10px; border-bottom: 1px solid var(--rpt-divider); text-align: right; white-space: nowrap; }
+.campaign-report-view .rpt-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 600; }
+.campaign-report-view .rpt-table th:first-child { text-align: left; }
+.campaign-report-view .rpt-table tbody th { color: var(--text-primary); font-weight: 500; }
+.campaign-report-view .rpt-table .is-dim { color: var(--text-tertiary); }
+.campaign-report-view .rpt-table .is-strong { font-weight: 600; }
+.campaign-report-view .rpt-table tr.is-total th, .campaign-report-view .rpt-table tr.is-total td { border-bottom: 0; background: var(--bg-tertiary); font-weight: 600; }
+
+/* Dòng thời gian */
+.campaign-report-view .rpt-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; color: var(--text-secondary); font-size: 12px; list-style: none; }
+.campaign-report-view .rpt-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.campaign-report-view .rpt-swatch { display: inline-block; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; }
+.campaign-report-view .rpt-timeline { display: flex; gap: 8px; }
+.campaign-report-view .rpt-timeline-y { position: relative; flex: 0 0 38px; height: 200px; color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-timeline-y span { position: absolute; right: 0; line-height: 1; transform: translateY(50%); }
+.campaign-report-view .rpt-timeline-scroll { flex: 1; min-width: 0; }
+.campaign-report-view .rpt-timeline-scroll.is-scroll { overflow-x: auto; padding-bottom: 4px; }
+.campaign-report-view .rpt-timeline-plot { position: relative; height: 200px; }
+.campaign-report-view .rpt-timeline-grid { position: absolute; right: 0; left: 0; border-top: 1px solid var(--rpt-divider); }
+.campaign-report-view .rpt-timeline-cols { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 4px; }
+.campaign-report-view .rpt-col { appearance: none; display: flex; flex: 1 1 0; align-items: flex-end; justify-content: center; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; cursor: default; transition: opacity .15s; }
+.campaign-report-view .rpt-col.is-dimmed { opacity: .45; }
+.campaign-report-view .rpt-col-stack { display: flex; flex-direction: column-reverse; gap: 2px; width: 100%; max-width: 36px; }
+.campaign-report-view .rpt-col-seg { display: block; flex: 1 1 0; min-height: 2px; }
+.campaign-report-view .rpt-col-stack > .rpt-col-seg:last-child { border-radius: 3px 3px 0 0; }
+/* Tooltip neo ở đỉnh vùng vẽ, bên cạnh cột (không che cột, không tràn khỏi khung cuộn). */
+.campaign-report-view .rpt-tooltip { position: absolute; top: 4px; z-index: 2; display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px; background: var(--rpt-tooltip-bg); box-shadow: var(--shadow-md); color: var(--rpt-tooltip-fg); font-size: 12px; line-height: 1.5; white-space: nowrap; pointer-events: none; }
+.campaign-report-view .rpt-tooltip strong { margin-bottom: 2px; }
+.campaign-report-view .rpt-tooltip-row { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 6px; }
+.campaign-report-view .rpt-tooltip-row b { margin-left: 14px; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-tooltip-row.is-total { margin-top: 2px; padding-top: 2px; border-top: 1px solid color-mix(in srgb, var(--rpt-tooltip-fg) 25%, transparent); }
+.campaign-report-view .rpt-timeline-x { position: relative; height: 18px; margin-top: 6px; color: var(--text-secondary); font-size: 11px; }
+.campaign-report-view .rpt-timeline-x span { position: absolute; white-space: nowrap; transform: translateX(-50%); }
+.campaign-report-view .rpt-timeline-x span.is-first { left: 0 !important; transform: none; }
+.campaign-report-view .rpt-timeline-x span.is-last { right: 0; left: auto !important; transform: none; }
+
+/* Tương tác Zalo: một sắc xanh có thứ tự, tách khỏi màu trạng thái. */
+.campaign-report-view .rpt-funnels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; }
+.campaign-report-view .rpt-funnels h4 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; }
+.campaign-report-view .rpt-funnels .rpt-note { margin: 6px 0 0; }
+.campaign-report-view .rpt-funnel { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.campaign-report-view .rpt-funnel-row { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto 44px; align-items: center; gap: 8px; font-size: 12.5px; }
+.campaign-report-view .rpt-funnel-row strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.campaign-report-view .rpt-funnel-track { height: 10px; overflow: hidden; border-radius: 999px; background: var(--rpt-track); }
+.campaign-report-view .rpt-funnel-fill { display: block; height: 100%; border-radius: inherit; }
+.campaign-report-view .rpt-funnel-fill.is-1 { background: var(--rpt-funnel-1); }
+.campaign-report-view .rpt-funnel-fill.is-2 { background: var(--rpt-funnel-2); }
+.campaign-report-view .rpt-funnel-fill.is-3 { background: var(--rpt-funnel-3); }
+
+/* Rỗng, đang tải */
+.campaign-report-view .rpt-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 12px; color: var(--text-secondary); font-size: 13px; }
+.campaign-report-view .rpt-empty p { margin: 0; }
+.campaign-report-view .rpt-skeleton { display: flex; flex-direction: column; gap: 12px; }
+.campaign-report-view .rpt-skeleton .rpt-columns { align-items: stretch; }
+.campaign-report-view .rpt-skeleton-block { display: block; border: 1px solid var(--rpt-card-border); border-radius: 10px; background: linear-gradient(90deg, var(--rpt-card) 0%, var(--bg-tertiary) 50%, var(--rpt-card) 100%); background-size: 200% 100%; animation: rpt-shimmer 1.4s ease-in-out infinite; }
+.campaign-report-view .rpt-skeleton-block.is-kpi { height: 88px; }
+.campaign-report-view .rpt-skeleton-block.is-card { flex: 1 1 360px; height: 240px; }
+.campaign-report-view .rpt-skeleton-block.is-card.is-wide { flex: 1.45 1 460px; }
+.campaign-report-view .rpt-skeleton-block.is-chart { height: 220px; }
+@keyframes rpt-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .campaign-report-view .rpt-skeleton-block { animation: none; }
+  .campaign-report-view .rpt-seg, .campaign-report-view .rpt-col, .campaign-report-view .rpt-body { transition: none; }
+}
+
+/* Điện thoại */
+@media (max-width: 719px) {
+  .campaign-report-view { gap: 10px; padding: 4px 0 12px; }
+  .campaign-report-view .rpt-toolbar-actions { width: 100%; }
+  .campaign-report-view .rpt-toolbar-actions .btn { flex: 1 1 0; justify-content: center; min-height: 36px; }
+  .campaign-report-view .rpt-kpi { padding: 10px 11px; }
+  .campaign-report-view .rpt-kpi-value { font-size: 19px; }
+  .campaign-report-view .rpt-data, .campaign-report-view .rpt-actions { flex-basis: 100%; }
+  .campaign-report-view .rpt-card { padding: 11px 12px 12px; }
+  .campaign-report-view .rpt-action .rpt-bar.is-thin, .campaign-report-view .rpt-chips { margin-left: 0; }
+  .campaign-report-view .rpt-chip { min-height: 34px; }
+  .campaign-report-view .rpt-row { min-height: 40px; }
+  .campaign-report-view .rpt-timeline-y { flex-basis: 30px; }
+  /* Ma trận hành động × trạng thái thành thẻ. */
+  .campaign-report-view .rpt-table-scroll.is-cards { overflow: visible; }
+  .campaign-report-view .rpt-action-table thead { display: none; }
+  .campaign-report-view .rpt-action-table, .campaign-report-view .rpt-action-table tbody, .campaign-report-view .rpt-action-table tr { display: block; width: 100%; }
+  .campaign-report-view .rpt-action-table tr { padding: 6px 10px 8px; border-bottom: 1px solid var(--rpt-divider); }
+  .campaign-report-view .rpt-action-table tr:last-child { border-bottom: 0; }
+  .campaign-report-view .rpt-action-table tbody th { display: block; padding: 4px 0; border: 0; font-weight: 600; text-align: left; white-space: normal; }
+  .campaign-report-view .rpt-action-table td { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border: 0; white-space: normal; }
+  .campaign-report-view .rpt-action-table td::before { content: attr(data-label); color: var(--text-secondary); text-align: left; }
+  .campaign-report-view .rpt-action-table td.is-na { display: none; }
+  .campaign-report-view .rpt-action-table tr.is-total th, .campaign-report-view .rpt-action-table tr.is-total td { background: transparent; }
+  .campaign-report-view .rpt-action-table tr.is-total { background: var(--bg-tertiary); }
+}

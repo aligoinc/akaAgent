@@ -1,0 +1,206 @@
+{
+  "version": "9.5.1",
+  "product": "akaAgent Zalo Server",
+  "target": "Windows x64 internal",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent",
+  "source_branch": "claude/server-rest-request-reduction",
+  "source_commit": "d1400ddb37be5df697a3699085afe72bb1c7a29c",
+  "source_change_commit": "8e35255e",
+  "source_base_commit": "0700b2e4c8c90628ca059ecae3b9d6c579dfe953",
+  "source_base_ref": "dev_3 = origin/dev_3 (sau PR #622)",
+  "pushed": false,
+  "worktree_used": false,
+  "version_overlay": [],
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "working_tree_at_build": "chỉ CLAUDE.md của phiên khác chưa commit (không phải đầu vào build)",
+  "build_command": "npm run build:server:win:private",
+  "commands": [
+    {
+      "target": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "started_at": "2026-11-10T06:26:24.630687+00:00",
+      "finished_at": "2026-11-10T06:26:27.327212+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "started_at": "2026-11-10T06:26:24.630716+00:00",
+      "finished_at": "2026-11-10T06:26:52.802001+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "typecheck-node-full",
+      "command": "npx tsc --noEmit -p tsconfig.node.json --composite false --incremental false",
+      "started_at": "2026-11-10T06:27:24.730341+00:00",
+      "finished_at": "2026-11-10T06:27:29.734179+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "typecheck-web-full",
+      "command": "npx tsc --noEmit -p tsconfig.web.json --composite false --incremental false",
+      "started_at": "2026-11-10T06:27:24.730343+00:00",
+      "finished_at": "2026-11-10T06:27:50.733899+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "smoke-request-reduction",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "started_at": "2026-11-10T06:26:52.861386+00:00",
+      "finished_at": "2026-11-10T06:26:53.231667+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "smoke-zalo-web-session",
+      "command": "node scripts/zalo-web-session-recovery-smoke-test.cjs",
+      "started_at": "2026-11-10T06:26:53.277624+00:00",
+      "finished_at": "2026-11-10T06:26:53.983588+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "smoke-private-key-selection",
+      "command": "node scripts/staff-rls/server-private-package-smoke.cjs",
+      "started_at": "2026-11-10T06:26:54.031794+00:00",
+      "finished_at": "2026-11-10T06:26:54.067996+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "build-server",
+      "command": "npm run build:server:win:private",
+      "started_at": "2026-11-10T06:28:54.472556+00:00",
+      "finished_at": "2026-11-10T06:29:42.655459+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "server-private-verification",
+      "command": "node scripts/staff-rls/verify-private-server-build.cjs /Users/lequangnhut/Repos/akaAgent/dist-server/private/2026-11-10T06-28-54-835Z",
+      "started_at": "2026-11-10T06:30:01.627699+00:00",
+      "finished_at": "2026-11-10T06:30:10.290093+00:00",
+      "exit_code": 0
+    },
+    {
+      "target": "server-extra-verification",
+      "command": "node /Users/lequangnhut/.codex/builds/akaagent-server-9.5.1-20261110T062619Z/verify-server-extra.cjs",
+      "started_at": "2026-11-10T06:30:32.767612+00:00",
+      "finished_at": "2026-11-10T06:30:33.992369+00:00",
+      "exit_code": 0
+    }
+  ],
+  "build_input_manifest": {
+    "files": 1231,
+    "sha256": "9fe27e2ebb382d07d46cab55252edb674a174d4ec415b224238b337cda36e004",
+    "verified_unchanged_after_build": true
+  },
+  "server_graph_since_previous_server_build": {
+    "previous_server_version": "9.3.0",
+    "previous_server_commit": "646ddd981f37f4aa6fce68f3253cd39fb9dc3225",
+    "graph_files": 166,
+    "changed_files_in_graph": [
+      "src/main/data/repositories/campaignRepository.ts",
+      "src/main/data/repositories/dataGroupRepository.ts",
+      "src/main/services/campaignScheduler.ts",
+      "src/main/services/supabase.ts",
+      "src/shared/dataGroupIngestChunks.ts"
+    ]
+  },
+  "private_installer_verification": {
+    "verified_at": "2026-11-10T06:30:10.157Z",
+    "version": "9.5.1",
+    "installer": "dist-server/private/2026-11-10T06-28-54-835Z/akaAgent-Zalo-Server-Internal-Setup-9.5.1.exe",
+    "installer_bytes": 140360184,
+    "installer_sha256": "257a6a5b6b507ed12f4b99ab7ced675cb23d6ba963e7172df6f5252634744ca1",
+    "checks": {
+      "windows_x64": true,
+      "installer_payload_parity": true,
+      "clean_host_credential_loading": true,
+      "server_main_parity": true,
+      "credential_absent_from_source_desktop_and_js": true,
+      "source_and_output_files_scanned": 4076,
+      "git_ignored": true,
+      "existing_server_installers_unchanged": true,
+      "host_native_restored": true
+    },
+    "windows_runtime_tested": false,
+    "published": false,
+    "rls_activation_applied": false
+  },
+  "pe_version_verification": {
+    "installer": {
+      "version": "9.5.1",
+      "machine": "14c",
+      "authenticode_present": false,
+      "productName": "akaAgent Zalo Server",
+      "fileVersion": "9.5.1",
+      "productVersion": "9.5.1"
+    },
+    "app": {
+      "version": "9.5.1",
+      "machine": "8664",
+      "authenticode_present": false,
+      "productName": "akaAgent Zalo Server",
+      "fileVersion": "9.5.1",
+      "productVersion": "9.5.1.0"
+    }
+  },
+  "resource_version": "9.5.1",
+  "packaged_package": {
+    "name": "aka-biz-auto",
+    "version": "9.5.1",
+    "main": "out-server/main/index.js"
+  },
+  "change_markers_in_packaged_main": {
+    "getPendingCampaignsForAccounts": true,
+    "Failed to batch-read pending campaigns; reading accounts individually:": true,
+    "preclaimLimitSkips": true,
+    "claimEnableDueAccountActionsSlot": true,
+    "15e3": true
+  },
+  "packaged_file_token_scan": {
+    "files": 162,
+    "secret_outside_private_resource": 0,
+    "sb_secret_outside_private_resource": 0,
+    "jwt_paths": [
+      "resources/server-private/supabase-server-secret.key"
+    ],
+    "jwt_by_role": {
+      "service_role": 1
+    },
+    "note": "JWT duy nhất là credential backend trong resource riêng ngoài ASAR"
+  },
+  "host_native_sqlite_smoke": {
+    "electron": "33.4.11",
+    "architecture": "arm64",
+    "in_memory_select_1": true
+  },
+  "host_native_restored": true,
+  "existing_server_files_unchanged": 28,
+  "artifact": {
+    "path": "/Users/lequangnhut/Repos/akaAgent/dist-server/private/2026-11-10T06-28-54-835Z/akaAgent-Zalo-Server-Internal-Setup-9.5.1.exe",
+    "bytes": 140360184,
+    "sha256": "257a6a5b6b507ed12f4b99ab7ced675cb23d6ba963e7172df6f5252634744ca1",
+    "checksum_file": "/Users/lequangnhut/Repos/akaAgent/dist-server/private/2026-11-10T06-28-54-835Z/SHA256SUMS"
+  },
+  "handoff_copy": {
+    "path": "/Users/lequangnhut/Repos/akaAgent/dist-server/akaAgent-Zalo-Server-Internal-Setup-9.5.1.exe",
+    "sha256": "257a6a5b6b507ed12f4b99ab7ced675cb23d6ba963e7172df6f5252634744ca1",
+    "checksum_file": "/Users/lequangnhut/Repos/akaAgent/dist-server/akaAgent-Zalo-Server-Internal-Setup-9.5.1.exe.sha256"
+  },
+  "windows_execution_tested": false,
+  "installed_on_vps": false,
+  "published": false,
+  "uploaded": false,
+  "database_changed": false,
+  "desktop_rebuilt": false,
+  "limitations": [
+    "Installer và executable chưa ký Authenticode; chưa cài/chạy trên Windows thật.",
+    "Chưa cài lên VPS 103.153.72.222; chưa đo lại request REST sau khi cài.",
+    "Không chạy runtime nghiệp vụ, gửi tin hoặc chiến dịch; không đổi DB, không deploy service.",
+    "Bộ cài chứa credential backend ở resource riêng ngoài ASAR; chỉ dùng trên máy chủ quản lý, không upload công khai."
+  ],
+  "private_evidence": "/Users/lequangnhut/.codex/builds/akaagent-server-9.5.1-20261110T062619Z",
+  "verified_local": "2026-11-10T13:32:14+07:00"
+}

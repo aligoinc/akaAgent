@@ -3486,6 +3486,53 @@ export async function getPendingCampaigns(accountId: number, dbNow: string): Pro
   return (data || []).map(row => mapCampaignFromDB(row))
 }
 
+// Below the PostgREST max_rows (1000) so a full page is detectable as possibly truncated.
+const PENDING_CAMPAIGNS_BATCH_ROW_LIMIT = 500
+const PENDING_CAMPAIGNS_BATCH_MAX_ACCOUNTS = 200
+
+/**
+ * getPendingCampaigns for several accounts in one request: same filters and
+ * order, so each account keeps its own sequence. Returns null when the caller
+ * must read accounts individually (too many ids or a possibly truncated page).
+ */
+export async function getPendingCampaignsForAccounts(
+  accountIds: number[],
+  dbNow: string
+): Promise<Map<number, Campaign[]> | null> {
+  const u = requireCurrentUser()
+  const now = parseDatabaseNow(dbNow)
+  const currentVietnamTime = formatVietnamTimeForQuery(now)
+  const ids = [...new Set(accountIds)].filter(id => Number.isSafeInteger(id) && id > 0)
+  if (ids.length > PENDING_CAMPAIGNS_BATCH_MAX_ACCOUNTS) return null
+  const byAccount = new Map<number, Campaign[]>(ids.map(id => [id, []]))
+  // Same 23:59 daily drain rule as getPendingCampaigns.
+  if (ids.length === 0 || currentVietnamTime >= '23:59:00') return byAccount
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .select(CAMPAIGN_SELECT)
+    .in('account_id', ids)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'chờ xử lý')
+    .eq('is_delete', false)
+    .eq('provisioning_state', 'ready')
+    .not('action_id', 'in', `(${MOBILE_MANAGED_SMS_ACTION_IDS.join(',')})`)
+    .lte('schedule', now.toISOString())
+    .or(`daily_stop_time.is.null,daily_stop_time.gt.${currentVietnamTime}`)
+    .order('schedule', { ascending: true })
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(PENDING_CAMPAIGNS_BATCH_ROW_LIMIT)
+
+  if (error) throw new Error(`Failed to get pending campaigns: ${error.message}`)
+  const rows = data || []
+  if (rows.length >= PENDING_CAMPAIGNS_BATCH_ROW_LIMIT) return null
+  for (const row of rows) {
+    const campaign = mapCampaignFromDB(row)
+    byAccount.get(campaign.accountId)?.push(campaign)
+  }
+  return byAccount
+}
+
 /** Complete AI candidate inventory; the manual scheduler's existing read stays unchanged. */
 export async function getPendingCampaignsForRandomAi(accountId: number, dbNow: string): Promise<Array<Campaign & {
   randomRunInput: { any: boolean; due: boolean }
