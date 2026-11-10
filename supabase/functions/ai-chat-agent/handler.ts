@@ -26,7 +26,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 const REASON_MESSAGES: Record<string, string> = {
   not_waiting: 'Câu hỏi không còn ở trạng thái "chờ câu trả lời": agent khác đã nhận, khách đã hủy hoặc đã quá hạn.',
   not_found: 'Không tìm thấy câu hỏi.',
-  not_claimed: 'claimToken không khớp, hoặc câu hỏi đã được trả về hàng đợi. Gọi lại /list rồi /start.',
+  not_claimed: 'Câu hỏi chưa được nhận (chưa gọi /start), đã xử lý xong, hoặc đã được trả về hàng đợi. Gọi lại /list rồi /start.',
   cancelled: 'Khách đã hủy câu hỏi này. Bỏ qua, không trả lời nữa.',
   expired: 'Câu hỏi đã quá hạn chờ. Bỏ qua, khách sẽ bấm Thử lại nếu còn cần.',
 }
@@ -70,9 +70,13 @@ function messageIdOf(body: Record<string, unknown>): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
-function tokenOf(body: Record<string, unknown>): string | null {
-  const raw = typeof body.claimToken === 'string' ? body.claimToken.trim() : ''
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw) ? raw : null
+/** Trạng thái agent được phép đặt qua /status → tham số của RPC fail. */
+function statusChangeOf(raw: unknown): { stopped: boolean; retryable: boolean } | null {
+  const value = typeof raw === 'string' ? raw.normalize('NFC').trim().toLowerCase() : ''
+  if (value === 'lỗi') return { stopped: false, retryable: false }
+  if (value === 'dừng' || value === 'đã hủy') return { stopped: true, retryable: false }
+  if (value === 'chờ câu trả lời') return { stopped: false, retryable: true }
+  return null
 }
 
 function projectCodesOf(source: unknown): string[] | undefined {
@@ -108,8 +112,8 @@ export function createAiChatAgentHandler(options: AiChatAgentOptions): (req: Req
     if (agentKey !== '' && !sameKey(req.headers.get('x-agent-key') ?? '', agentKey)) {
       return fail(401, 'ai_chat_agent_key_invalid', 'Thiếu hoặc sai header x-agent-key.')
     }
-    if (!['list', 'start', 'answer', 'fail'].includes(route)) {
-      return fail(404, 'ai_chat_route_not_found', 'Đường dẫn không tồn tại. Dùng /list, /start, /answer hoặc /fail.')
+    if (!['list', 'start', 'answer', 'status'].includes(route)) {
+      return fail(404, 'ai_chat_route_not_found', 'Đường dẫn không tồn tại. Dùng /list, /start, /answer hoặc /status.')
     }
     if (req.method !== 'POST' && !(route === 'list' && req.method === 'GET')) {
       return fail(405, 'ai_chat_method_not_allowed', 'Dùng phương thức POST (riêng /list nhận cả GET).')
@@ -140,21 +144,26 @@ export function createAiChatAgentHandler(options: AiChatAgentOptions): (req: Req
       if (data.enabled === false) return fail(409, 'ai_chat_disabled', 'Hỏi đáp AI đang tắt (ai_chat.enabled = false).')
       const question = asItems(data)[0]
       if (!question) return fail(409, 'not_waiting', REASON_MESSAGES.not_waiting)
+      // API nội bộ không dùng token: các bước sau chỉ cần messageId.
+      delete question.claimToken
       return json(200, { ok: true, question, serverTime: data.serverTime ?? null })
     }
 
-    const claimToken = tokenOf(body)
-    if (claimToken === null) return fail(400, 'ai_chat_invalid_request', 'Thiếu claimToken (uuid nhận được ở bước /start).')
-
-    const result =
-      route === 'answer'
-        ? await options.rpc('answer', { messageId, claimToken, answer: body.answer, answerJson: body.answerJson ?? null, complete: true })
-        : await options.rpc('fail', {
-            messageId,
-            claimToken,
-            retryable: body.retry === true,
-            errorMessage: typeof body.message === 'string' ? body.message : undefined,
-          })
+    let result: RpcResult
+    if (route === 'answer') {
+      result = await options.rpc('answer', { messageId, answer: body.answer, answerJson: body.answerJson ?? null, complete: true })
+    } else {
+      const change = statusChangeOf(body.status)
+      if (change === null) {
+        return fail(400, 'ai_chat_invalid_status', 'status phải là "lỗi", "dừng" hoặc "chờ câu trả lời".')
+      }
+      result = await options.rpc('fail', {
+        messageId,
+        stopped: change.stopped,
+        retryable: change.retryable,
+        errorMessage: typeof body.message === 'string' ? body.message : undefined,
+      })
+    }
     if (result.error) return rpcFailure(result.error)
     const data = asObject(result.data)
     if (data.ok !== true) {

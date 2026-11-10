@@ -638,7 +638,7 @@ $$;
 
 -- 7. Hợp đồng của bộ trả lời (hộp đen): list (chỉ xem) | claim → progress → answer → complete | fail. Chỉ service_role/owner.
 -- claim nhận theo hàng đợi, hoặc đúng một câu khi có messageId; stage='working' thì vào thẳng 'đang tìm câu trả lời'.
--- Lệnh ghi chỉ có hiệu lực khi còn giữ đúng claimToken: worker treo rồi chạy lại không ghi đè được kết quả mới.
+-- Lệnh ghi kèm claimToken chỉ có hiệu lực khi token còn đúng: worker treo rồi chạy lại không ghi đè được kết quả mới.
 CREATE FUNCTION public.aka_agent_ai_chat_worker(p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
@@ -652,7 +652,7 @@ DECLARE
   r record;
   v_worker text; v_limit integer; v_lease integer; v_codes text[]; v_token uuid; v_rev bigint; v_n integer := 0;
   v_items jsonb := '[]'::jsonb; v_message_id bigint; v_thread_id bigint; v_status text; v_note text; v_answer text; v_json jsonb;
-  v_group_rules text; v_history jsonb; v_key text; v_code text; v_retry boolean; v_complete boolean; v_working boolean;
+  v_group_rules text; v_history jsonb; v_key text; v_code text; v_retry boolean; v_complete boolean; v_working boolean; v_stop boolean; v_by_id boolean;
 BEGIN
   IF jsonb_typeof(v_p) <> 'object' THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_invalid_request'; END IF;
 
@@ -753,12 +753,14 @@ BEGIN
   END IF;
   v_message_id := private.aka_agent_ai_chat_id(v_p -> 'messageId');
   v_token := private.aka_agent_ai_chat_uuid(v_p ->> 'claimToken');
-  IF v_message_id IS NULL OR v_token IS NULL THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_invalid_request'; END IF;
+  -- Không gửi claimToken = ghi theo messageId (đường nội bộ một agent, Edge Function ai-chat-agent): vẫn chỉ ghi được câu đang được nhận.
+  v_by_id := coalesce(jsonb_typeof(v_p -> 'claimToken'), 'null') = 'null';
+  IF v_message_id IS NULL OR (v_token IS NULL AND NOT v_by_id) THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_invalid_request'; END IF;
   SELECT x.thread_id INTO v_thread_id FROM public.ai_message x WHERE x.id = v_message_id;
   IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
   SELECT * INTO t FROM public.ai_message_thread WHERE id = v_thread_id FOR UPDATE;
   SELECT * INTO m FROM public.ai_message WHERE id = v_message_id;
-  IF m.claim_token IS DISTINCT FROM v_token OR NOT (m.status = ANY (v_claimed)) THEN
+  IF (NOT v_by_id AND m.claim_token IS DISTINCT FROM v_token) OR NOT (m.status = ANY (v_claimed)) THEN
     RETURN jsonb_build_object('ok', false, 'status', m.status,
       'reason', CASE WHEN m.status = 'đã hủy' THEN 'cancelled' WHEN m.error_code = 'ai_chat_timeout' THEN 'expired' ELSE 'not_claimed' END);
   END IF;
@@ -823,11 +825,14 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'status', 'hoàn thành', 'outputWebhookUrl', pr.output_webhook_url);
   END IF;
 
-  -- fail: retryable + còn lượt → trả về hàng đợi; còn lại báo lỗi cho khách (errorMessage là câu khách đọc được).
-  v_retry := coalesce(v_p ->> 'retryable', 'false') = 'true' AND m.attempt_count < 3;
-  v_code := coalesce(nullif(left(btrim(coalesce(v_p ->> 'errorCode', '')), 80), ''), 'ai_chat_answer_failed');
-  v_note := coalesce(nullif(left(btrim(coalesce(v_p ->> 'errorMessage', '')), 500), ''), 'Trợ lý chưa trả lời được câu hỏi này. Vui lòng bấm Thử lại.');
-  v_status := CASE WHEN v_retry THEN 'chờ câu trả lời' ELSE 'lỗi' END;
+  -- fail: stopped → 'đã hủy' (bộ trả lời chủ động dừng; khách thấy "Đã dừng" + errorMessage nếu có);
+  -- retryable + còn lượt → trả về hàng đợi; còn lại báo lỗi cho khách (errorMessage là câu khách đọc được).
+  v_stop := coalesce(v_p ->> 'stopped', 'false') = 'true';
+  v_retry := NOT v_stop AND coalesce(v_p ->> 'retryable', 'false') = 'true' AND m.attempt_count < 3;
+  v_code := coalesce(nullif(left(btrim(coalesce(v_p ->> 'errorCode', '')), 80), ''), CASE WHEN v_stop THEN 'ai_chat_stopped' ELSE 'ai_chat_answer_failed' END);
+  v_note := nullif(left(btrim(coalesce(v_p ->> 'errorMessage', '')), 500), '');
+  IF NOT v_stop THEN v_note := coalesce(v_note, 'Trợ lý chưa trả lời được câu hỏi này. Vui lòng bấm Thử lại.'); END IF;
+  v_status := CASE WHEN v_stop THEN 'đã hủy' WHEN v_retry THEN 'chờ câu trả lời' ELSE 'lỗi' END;
   UPDATE public.ai_message
      SET status = v_status, error_code = CASE WHEN v_retry THEN NULL ELSE v_code END, error_message = CASE WHEN v_retry THEN NULL ELSE v_note END,
          answer = NULL, answer_json = NULL, answered_at = NULL, started_at = NULL, progress_note = NULL, claim_token = NULL, lease_until = NULL,

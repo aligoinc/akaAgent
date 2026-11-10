@@ -294,6 +294,36 @@ SELECT pg_temp.worker('answer', jsonb_build_object('messageId', :dmid, 'claimTok
 SELECT pg_temp.ok(:'da'::jsonb ->> 'status' = 'hoàn thành' AND (:'da'::jsonb ->> 'answeredAt')::timestamptz = m.answered_at AND m.completed_at = m.answered_at
   AND m.answer = 'Chiến dịch chạy lại lúc 14:00.', 'answer + complete: trả về thời gian trả lời đã lưu') FROM public.ai_message m WHERE m.id = :dmid;
 
+-- 17c. Bộ trả lời chủ động dừng: 'đã hủy' kèm lý do, hội thoại chưa đọc, khách hỏi lại được.
+SELECT pg_temp.web(1, 1, 'ask', jsonb_build_object('threadId', :dtid, 'requestId', '00000000-0000-4000-8000-000000000041', 'question', 'Câu để dừng')) \gset sk_
+SELECT id AS smid FROM public.ai_message WHERE thread_id = :dtid AND question = 'Câu để dừng' \gset
+SELECT (pg_temp.worker('claim', jsonb_build_object('workerId', 'agent', 'messageId', :smid, 'stage', 'working')) #>> '{items,0,claimToken}') AS stok \gset
+SELECT pg_temp.ok(r ->> 'ok' = 'true' AND r ->> 'status' = 'đã hủy' AND r ->> 'requeued' = 'false', 'fail stopped: trả về đã hủy')
+  FROM pg_temp.worker('fail', jsonb_build_object('messageId', :smid, 'claimToken', :'stok', 'stopped', true, 'retryable', true, 'errorMessage', 'Trợ lý tạm dừng để bảo trì.')) r;
+SELECT pg_temp.ok(m.status = 'đã hủy' AND m.error_code = 'ai_chat_stopped' AND m.error_message = 'Trợ lý tạm dừng để bảo trì.' AND m.completed_at IS NOT NULL
+  AND m.claim_token IS NULL AND m.answer IS NULL AND t.last_message_status = 'đã hủy',
+  'fail stopped: lưu lý do, bỏ token') FROM public.ai_message m JOIN public.ai_message_thread t ON t.id = m.thread_id WHERE m.id = :smid;
+SELECT pg_temp.ok(r #>> '{thread,pending}' = 'false' AND x ->> 'status' = 'đã hủy' AND x ->> 'errorMessage' = 'Trợ lý tạm dừng để bảo trì.',
+  'fail stopped: app thấy trạng thái đã hủy kèm lý do')
+  FROM pg_temp.web(1, 1, 'sync', jsonb_build_object('threadId', :dtid)) r, jsonb_array_elements(r -> 'messages') x WHERE x ->> 'id' = :smid::text;
+SELECT pg_temp.ok(x ->> 'status' = 'chờ câu trả lời' AND x ->> 'errorMessage' IS NULL, 'fail stopped: khách bấm Hỏi lại thì câu về hàng đợi, xóa lý do cũ')
+  FROM pg_temp.web(1, 1, 'retry', jsonb_build_object('threadId', :dtid, 'messageId', :smid)) r, jsonb_array_elements(r -> 'messages') x WHERE x ->> 'id' = :smid::text;
+SELECT (pg_temp.worker('claim', jsonb_build_object('workerId', 'agent', 'messageId', :smid)) #>> '{items,0,claimToken}') AS stok2 \gset
+SELECT pg_temp.ok(r ->> 'status' = 'đã hủy' AND (SELECT error_message IS NULL FROM public.ai_message WHERE id = :smid), 'fail stopped: không kèm lý do thì để trống')
+  FROM pg_temp.worker('fail', jsonb_build_object('messageId', :smid, 'claimToken', :'stok2', 'stopped', true)) r;
+
+-- 17d. Ghi theo messageId, không claimToken (đường nội bộ): chỉ ghi được câu đang được nhận.
+SELECT pg_temp.web(1, 1, 'retry', jsonb_build_object('threadId', :dtid, 'messageId', :smid)) \gset nt_
+SELECT pg_temp.ok(r ->> 'ok' = 'false' AND r ->> 'reason' = 'not_claimed' AND r ->> 'status' = 'chờ câu trả lời', 'không token: câu chưa được nhận thì không ghi được')
+  FROM pg_temp.worker('answer', jsonb_build_object('messageId', :smid, 'answer', 'x', 'answerJson', '{"tom_tat":"x"}'::jsonb, 'complete', true)) r;
+SELECT pg_temp.worker('claim', jsonb_build_object('workerId', 'agent', 'messageId', :smid, 'stage', 'working')) \gset nc_
+SELECT pg_temp.ok(pg_temp.err($$SELECT pg_temp.worker('answer', jsonb_build_object('messageId', $$ || :smid || $$, 'claimToken', 'khong-phai-uuid', 'answer', 'x'))$$)
+  = 'ai_chat_invalid_request', 'claimToken sai dạng vẫn bị từ chối');
+SELECT pg_temp.ok(r ->> 'ok' = 'true' AND r ->> 'status' = 'hoàn thành', 'không token: câu đang được nhận thì ghi được câu trả lời')
+  FROM pg_temp.worker('answer', jsonb_build_object('messageId', :smid, 'answer', 'Đã chạy lại.', 'answerJson', '{"tom_tat":"Đã chạy lại."}'::jsonb, 'complete', true)) r;
+SELECT pg_temp.ok(r ->> 'ok' = 'false' AND r ->> 'status' = 'hoàn thành', 'không token: câu đã hoàn thành không ghi đè được')
+  FROM pg_temp.worker('fail', jsonb_build_object('messageId', :smid, 'stopped', true)) r;
+
 -- 18. Bất biến dữ liệu sau toàn bộ kịch bản.
 SELECT pg_temp.ok(NOT EXISTS (
   SELECT 1 FROM public.ai_message_thread t
