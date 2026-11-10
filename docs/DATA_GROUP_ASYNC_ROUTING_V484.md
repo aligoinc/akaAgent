@@ -152,6 +152,12 @@ WHERE key = 'data_groups.routing_mode';
 
 Tắt nhanh (không DDL): đặt lại `"mode":"sync"`. Việc đang chờ vẫn được worker làm tiếp.
 
+Kiểm lần đầu 10/11/2026 11:15 VN (chỉ đọc): worker 4.166/4.166 lượt thành công, lâu nhất 1,09 s, hàng đợi rỗng.
+Tổ chức 701 mới có 5 lượt gắn nhóm 1770 vào chiến dịch mới. Mỗi chiến dịch nhận 85 input sau 0,6–9,4 s, đúng bằng
+số input của các lượt gắn nhóm này lúc còn `sync`. Lệnh gắn trả về trung bình 238 ms (trước khi bật: 946 ms). Chưa có
+lượt thêm data vào nhóm nào của tổ chức 701, nên đường nạp chạy nền chưa chạy thật trên production. Chi tiết ở mục
+`trialChecks` của biên nhận.
+
 ## Theo dõi
 
 ```sql
