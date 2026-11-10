@@ -1,6 +1,6 @@
 # Tab "Báo cáo" của chi tiết chiến dịch trên Desktop + V489
 
-Trạng thái (10/11/2026): code Desktop trên nhánh `claude/campaign-run-report-desktop`, **chưa phát hành**. **V489 CHƯA apply** (chờ người dùng đồng ý). DB chưa có V489 thì tab báo "Báo cáo đang được cập nhật. Vui lòng thử lại sau." (lỗi `permission denied for function` được ánh xạ như hàm chưa có), các tab khác chạy như cũ.
+Trạng thái (10/11/2026): code Desktop đã merge `dev_3` (nhánh `claude/campaign-run-report-desktop`), **chưa phát hành**. **V489 ĐÃ apply akachat lúc 13:55:25 VN** (`20261110065525 / migration_v489_campaign_run_report_desktop`) theo yêu cầu của người dùng; **không apply lại** (preflight từ chối khi Desktop đã có quyền); md5 sổ migration = md5 file `2d86e15d9c654c92e78b347d66756097`. Biên nhận: [`migrations/snapshots/campaign-run-report-desktop-v489/apply-receipt.json`](../migrations/snapshots/campaign-run-report-desktop-v489/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn). Nếu V489 bị gỡ, tab báo "Báo cáo đang được cập nhật. Vui lòng thử lại sau." (lỗi `permission denied for function` được ánh xạ như hàm chưa có), các tab khác chạy như cũ.
 
 Bản Web (V487, API/Web, hợp đồng, số đo tải): [CAMPAIGN_RUN_REPORT_V487.md](CAMPAIGN_RUN_REPORT_V487.md) và akaAgentWebApp `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
 
@@ -18,7 +18,8 @@ GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_run_report(bigint,bigin
 - Không `COMMENT`, không `NOTIFY`: GRANT không kích hoạt `pgrst_ddl_watch` nên PostgREST không nạp lại schema; chạy giờ nào cũng được. Chú thích hàm của V487 vẫn ghi "service_role only" (đổi chú thích sẽ nạp lại schema).
 - Xác thực không đổi: `auto_assert_automation_identity` gọi `private.aka_agent_assert_request_ownership` (token Desktop phải thuộc đúng `p_staff_id`) rồi đòi đúng username/password tự động hóa của staff.
 - Gỡ: `migrations/rollback_v489_campaign_run_report_desktop.sql` (md5 `56731a6363f2762236721254645d8d19`) chỉ `REVOKE` quyền Desktop; WebApp API (`service_role`) vẫn đọc được.
-- Đọc chỉ đọc trên production 10/11/2026: hàm V487 có md5 `prosrc` `4bd734ca…`, ACL `{postgres, service_role}`, `aka_agent_desktop` chưa EXECUTE; sổ migration mới nhất là V488; không nhánh nào trong repo dùng số V489.
+- Preflight chỉ đọc trên production lúc 13:54:46 VN 10/11/2026: hàm V487 có md5 `prosrc` `4bd734ca…`, ACL `{postgres, service_role}`, `aka_agent_desktop` chưa EXECUTE; sổ migration mới nhất là V488; không nhánh nào trong repo dùng số V489.
+- Hậu kiểm sau apply: ACL `{postgres, service_role, aka_agent_desktop}`, `anon`/`authenticated` vẫn không EXECUTE, md5 `prosrc`/`pg_get_functiondef` và thuộc tính giữ nguyên, chú thích hàm không đổi. Gọi thử bằng đúng role `aka_agent_desktop` (claim không có `sub`): lời gọi đi vào hàm và bị chuỗi xác thực chặn bằng `42501 desktop_staff_scope_denied` (không còn `permission denied for function`), không ghi gì. PostgREST không nạp lại schema; phút apply và 4 phút sau 0 lỗi 503, p50 52–68 ms; 2 lỗi 500 trong cửa sổ không liên quan (hàm CRM hết 8 s lúc 06:54 UTC, trước khi apply; ghi tin của gateway chat cũ lúc 06:56 UTC, lỗi nền đã biết).
 
 ## Desktop
 
@@ -60,9 +61,9 @@ Tải DB như Web: một lượt RPC mỗi lần mở/làm mới, đọc nguội
 - `xvfb-run -a node scripts/run-campaign-run-report-ui-smoke.cjs` (CampaignPanel thật trong Electron + Playwright, IPC giả, chặn HTTP): **10/10** — KPI khớp số V487, đủ khối, không đọc lại khi chuyển tab, Làm mới, dạng bảng, Excel 4 sheet, bấm số mở tab đã lọc, sáng/tối/khung 980 px không tràn ngang, đổi chiến dịch, DB chưa sẵn sàng, kết quả muộn bị bỏ, menu "Xem báo cáo chi tiết", không lỗi renderer. Ảnh chụp ở `$REPORT_SMOKE_SCREENSHOT_DIR`.
 - Hồi quy giao diện CampaignPanel: `run-campaign-data-sort-ui-smoke.cjs` và `run-campaign-engagement-ui-smoke.cjs` đạt. Trong container cloud chụp ảnh phần tử của cửa sổ Electron ẩn dưới `xvfb-run` treo ("waiting for element to be stable", mã gốc `dev_3` cũng vậy) nên hai bài cũ chạy với preload chặn `screenshot`; bài mới phóng viewport rồi `page.screenshot({ clip })`.
 - `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `NODE_OPTIONS=--max-old-space-size=8192 npm run build`: đạt.
-- Chưa chạy: gọi RPC thật bằng phiên Desktop (cần V489 trên production), Windows/macOS thật.
+- Chưa chạy: gọi RPC thật bằng phiên Desktop đăng nhập thật (mới thử quyền bằng role `aka_agent_desktop` ở hậu kiểm), Windows/macOS thật.
 
 ## Còn lại
 
-1. Apply V489 (cần đồng ý; không cần đợi phát hành Desktop, không nạp lại schema). Sau apply không sửa file migration (sổ lưu nguyên văn).
-2. Phát hành Desktop trong bản sau. Desktop cũ không có tab nên không gọi hàm.
+1. Phát hành Desktop trong bản sau (V489 đã apply). Desktop cũ không có tab nên không gọi hàm.
+2. Sau khi phát hành: theo dõi `edge_logs` `rpc/aka_agent_read_campaign_run_report` theo IP khách (lượt Desktop) — số lượt, thời gian, lỗi 57014.

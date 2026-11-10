@@ -1,0 +1,58 @@
+{
+  "migration": "migration_v489_campaign_run_report_desktop",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261110065525",
+  "applied_at_vn": "2026-11-10T13:55:25+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user request 'apply V489 rồi pr và merge đi' (10/11/2026)",
+  "file_md5": "2d86e15d9c654c92e78b347d66756097",
+  "ledger_statements_md5": "2d86e15d9c654c92e78b347d66756097",
+  "ledger_rows_named_v489": 1,
+  "rollback_file": "migrations/rollback_v489_campaign_run_report_desktop.sql",
+  "rollback_md5": "56731a6363f2762236721254645d8d19",
+  "preflight_read_only_at_vn": "2026-11-10T13:54:46+07:00",
+  "preflight": {
+    "ledger_had_v489": false,
+    "ledger_last_version": "20261110051533 (V488)",
+    "prosrc_md5": "4bd734ca25612bfdade631c779373d42",
+    "functiondef_md5": "69c9d1edc07766dbacffbad56beae73a",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "config": ["search_path=pg_catalog, public", "statement_timeout=60s"],
+    "security_definer": true,
+    "volatility": "stable",
+    "owner": "postgres",
+    "aka_agent_desktop_execute": false,
+    "active_client_backends": 7
+  },
+  "postflight": {
+    "signature": "public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb) returns jsonb",
+    "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+    "execute": { "aka_agent_desktop": true, "service_role": true, "anon": false, "authenticated": false },
+    "prosrc_md5_unchanged": "4bd734ca25612bfdade631c779373d42",
+    "functiondef_md5_unchanged": "69c9d1edc07766dbacffbad56beae73a",
+    "config_unchanged": ["search_path=pg_catalog, public", "statement_timeout=60s"],
+    "comment_unchanged": "V487 text still says 'service_role only' (COMMENT would reload the PostgREST schema)",
+    "desktop_role_smoke": "SET LOCAL ROLE aka_agent_desktop + claims {\"role\":\"aka_agent_desktop\"} without sub: the call enters the reader and is refused by the identity chain with 42501 desktop_staff_scope_denied (not 'permission denied for function'); read only, nothing written"
+  },
+  "postgrest_reload": "none (GRANT does not fire pgrst_ddl_watch); postgrest_logs 06:45-07:00 UTC have no schema cache/PGRST lines",
+  "edge_logs_06_50_07_00_utc": {
+    "requests_per_minute": "50,033-54,520",
+    "p50_ms": "52-68.5",
+    "avg_ms": "59.8-98.1",
+    "http_503": 0,
+    "http_5xx": [
+      "06:54:04 POST rpc/crm_trial_campaign_signal_counts 500 after 8,013 ms (CRM backend 152.236.20.10), before the apply, unrelated",
+      "06:56:00 POST rpc/akachat_ingest_messages_v2 500 (old chat gateway 138.199.24.245), known background errors, unrelated"
+    ]
+  },
+  "observed_callers_of_v487": {
+    "window_utc": "2026-11-10T00:00:00Z..2026-11-10T07:10:00Z",
+    "webapp_api": "167.88.158.106, supabase-js/2.112.3 node 22: 12 calls 02:50:11-06:58:23 UTC (09:50-13:58 VN), all HTTP 200, avg 425 ms, max 933 ms => the WebApp API/Web with the report tab is deployed (no deploy receipt in this repo)",
+    "desktop": "none yet (Desktop with the tab is not released)"
+  },
+  "compatibility": [
+    "Grant only: no function body, attribute, table, index, policy, role/global timeout, pool or connection change.",
+    "Old Desktop builds do not have the tab and never call the reader.",
+    "Rollback revokes only the Desktop grant; the WebApp API (service_role) keeps working."
+  ]
+}

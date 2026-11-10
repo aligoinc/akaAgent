@@ -2,7 +2,7 @@
 
 Trạng thái: **ĐÃ apply akachat lúc 08:38:24 VN 10/11/2026** (`20261110013824 / migration_v487_campaign_run_report`), theo đồng ý của người dùng. **Không apply lại**: preflight từ chối khi hàm đã có. md5 sổ migration (`statements[1]`) = md5 file `55e0554a037ccc03496f042f402da018`; md5 `pg_get_functiondef` `69c9d1edc07766dbacffbad56beae73a`, md5 `prosrc` `4bd734ca25612bfdade631c779373d42`. Biên nhận: [`migrations/snapshots/campaign-run-report-v487/apply-receipt.json`](../migrations/snapshots/campaign-run-report-v487/apply-receipt.json). Sau khi apply không sửa file migration (sổ lưu nguyên văn).
 
-**API/Web chưa deploy**, nên chưa caller nào gọi hàm. Desktop: tab Báo cáo (nhánh `claude/campaign-run-report-desktop`, chưa phát hành) gọi hàm này bằng token Desktop sau **V489** (chỉ GRANT EXECUTE cho `aka_agent_desktop`, **chưa apply**): [CAMPAIGN_RUN_REPORT_DESKTOP_V489.md](CAMPAIGN_RUN_REPORT_DESKTOP_V489.md). Phía WebApp (API/Web, hợp đồng, kiểm thử): `aligoinc/akaAgentWebApp` #183 (nhánh `claude/loving-mccarthy-irdevx`, đã merge `dev`), tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
+**API WebApp đã gọi hàm từ 09:50:11 VN 10/11/2026** (`edge_logs`: IP API `167.88.158.106`, 12 lượt tới 13:58 VN, 100% HTTP 200, trung bình 425 ms, tối đa 933 ms) ⇒ API/Web có tab Báo cáo đã được deploy (repo chưa có biên nhận deploy). Desktop: tab Báo cáo (đã merge `dev_3`, chưa phát hành) gọi hàm này bằng token Desktop nhờ **V489** (chỉ GRANT EXECUTE cho `aka_agent_desktop`, **đã apply 13:55:25 VN 10/11**): [CAMPAIGN_RUN_REPORT_DESKTOP_V489.md](CAMPAIGN_RUN_REPORT_DESKTOP_V489.md). Phía WebApp (API/Web, hợp đồng, kiểm thử): `aligoinc/akaAgentWebApp` #183 (nhánh `claude/loving-mccarthy-irdevx`, đã merge `dev`), tài liệu `docs/CAMPAIGN_DETAIL_REPORT_TAB.md`.
 
 ## Thay đổi
 
@@ -69,7 +69,7 @@ Nhóm của một lượt: `report_group` đã lưu; NULL thì ánh xạ chữ t
 
 ## Còn lại
 
-- Deploy API/Web (cần người dùng đồng ý). API trả 503 "đang được cập nhật" khi DB thiếu hàm, nên thứ tự lệch không làm hỏng trang.
+- Deploy API/Web: đã có caller thật từ 09:50:11 VN 10/11 (xem đầu trang); biên nhận deploy nằm ở WebApp nếu có.
 - Theo dõi tương tác Zalo đang tắt từ 06/10/2026 (`zalo.campaign_engagement.enabled=false`), nên `engagement.messageTracked`/`friendTracked` của lượt gửi sau ngày đó bằng 0 và Web ẩn khối Tương tác Zalo.
 
 **Gỡ bỏ:** `migrations/rollback_v487_campaign_run_report.sql` chỉ `DROP FUNCTION` hàm mới (md5 file `6e08c744fa393d4c723df3c2e8f9ea74`); không có dữ liệu cần dọn. DROP là DDL nên PostgREST nạp lại schema: chạy ngoài giờ cao điểm.
