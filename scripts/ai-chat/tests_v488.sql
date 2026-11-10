@@ -60,7 +60,7 @@ SELECT pg_temp.ok(r ->> 'changed' = 'true' AND r ->> 'reused' = 'false' AND r ->
   AND r #>> '{messages,0,status}' = 'chờ câu trả lời' AND r #>> '{messages,0,seq}' = '1' AND r #>> '{messages,0,answer}' IS NULL
   AND r ? 'serverTime', 'open: ảnh chụp hội thoại + câu đầu') FROM (SELECT :'r1'::jsonb r) x;
 SELECT pg_temp.ok(t.customer_id = 9001 AND t.organization_id = 1 AND t.org_staff_id = 1 AND t.intake_data = '{"ghi_chu":"gấp"}'
-  AND t.project_version = 1 AND m.deadline_at = m.asked_at + interval '300 seconds' AND m.question = E'Tại sao chiến dịch\n không chạy?',
+  AND t.project_version = 1 AND m.deadline_at = m.asked_at + interval '1200 seconds' AND m.question = E'Tại sao chiến dịch\n không chạy?',
   'open: server tự điền khách hàng/tổ chức/nhân viên, hạn chót theo agent')
   FROM public.ai_message_thread t JOIN public.ai_message m ON m.thread_id = t.id WHERE t.id = :tid;
 SELECT pg_temp.ok((r #>> '{thread,id}')::bigint = :tid AND (SELECT count(*) FROM public.ai_message_thread) = 1 AND (SELECT count(*) FROM public.ai_message) = 1,
@@ -262,6 +262,37 @@ SELECT (public.aka_agent_ai_chat(1, 1, 'ha', 'pw1', 'open', jsonb_build_object('
 SELECT pg_temp.ok(:'dsrc' = 'desktop', 'Desktop: mở hội thoại ghi nguồn desktop');
 RESET ROLE;
 SELECT set_config('request.jwt.claims', '', false) \gset jw2_
+
+-- 17b. Đường của agent nội bộ (Edge Function ai-chat-agent): list chỉ xem → claim đúng một câu, vào thẳng 'đang tìm câu trả lời' → answer + complete.
+SELECT m.id AS dmid, m.thread_id AS dtid FROM public.ai_message m WHERE m.question = 'Từ Desktop' \gset
+SELECT revision AS drev FROM public.ai_message_thread WHERE id = :dtid \gset
+SELECT pg_temp.worker('list', '{"limit":50}') AS ls \gset
+SELECT pg_temp.ok(i ->> 'question' = 'Từ Desktop' AND i ->> 'status' = 'chờ câu trả lời' AND i #>> '{thread,campaignId}' = '33'
+  AND i #>> '{thread,staffId}' = '1' AND i #>> '{project,code}' = 'hoi-dap-chien-dich' AND NOT i ? 'claimToken' AND i ? 'deadlineAt',
+  'list: thấy câu đang chờ kèm chiến dịch, không kèm token')
+  FROM jsonb_array_elements(:'ls'::jsonb -> 'items') i WHERE i ->> 'messageId' = :dmid::text;
+SELECT pg_temp.ok((SELECT bool_and(i ->> 'status' = 'chờ câu trả lời') FROM jsonb_array_elements(:'ls'::jsonb -> 'items') i)
+  AND (SELECT status = 'chờ câu trả lời' AND claim_token IS NULL FROM public.ai_message WHERE id = :dmid)
+  AND (SELECT revision = :drev FROM public.ai_message_thread WHERE id = :dtid), 'list: chỉ trả câu đang chờ, không đổi trạng thái hay phiên bản');
+SELECT pg_temp.ok(c -> 'items' = '[]'::jsonb, 'list: lọc projectCodes') FROM pg_temp.worker('list', '{"projectCodes":["khac"]}') c;
+SELECT pg_temp.ok(pg_temp.err($$SELECT pg_temp.worker('claim', '{"workerId":"agent","messageId":"abc"}')$$) = 'ai_chat_invalid_request', 'claim: messageId sai dạng bị từ chối');
+SELECT pg_temp.ok(c -> 'items' = '[]'::jsonb, 'claim: messageId không tồn tại thì không nhận câu khác') FROM pg_temp.worker('claim', '{"workerId":"agent","messageId":999999999}') c;
+SELECT pg_temp.worker('claim', jsonb_build_object('workerId', 'agent', 'messageId', :dmid, 'stage', 'working', 'leaseSeconds', 900)) AS dc \gset
+SELECT (:'dc'::jsonb #>> '{items,0,claimToken}') AS dtok \gset
+SELECT pg_temp.ok(jsonb_array_length(c -> 'items') = 1 AND c #>> '{items,0,messageId}' = :dmid::text AND c #>> '{items,0,status}' = 'đang tìm câu trả lời'
+  AND c #>> '{items,0,project,rules}' <> '' AND c #> '{items,0,project,outputSchema,required}' = '["tom_tat"]'::jsonb,
+  'claim theo messageId: nhận đúng câu đó, vào thẳng đang tìm câu trả lời, kèm quy tắc + schema') FROM (SELECT :'dc'::jsonb c) x;
+SELECT pg_temp.ok(m.status = 'đang tìm câu trả lời' AND m.started_at IS NOT NULL AND m.worker_id = 'agent' AND t.revision = :drev + 1
+  AND t.last_message_status = 'đang tìm câu trả lời', 'claim theo messageId: app thấy trạng thái mới qua phiên bản')
+  FROM public.ai_message m JOIN public.ai_message_thread t ON t.id = m.thread_id WHERE m.id = :dmid;
+SELECT pg_temp.ok(c -> 'items' = '[]'::jsonb, 'claim theo messageId: câu đã có người nhận thì không nhận lần hai')
+  FROM pg_temp.worker('claim', jsonb_build_object('workerId', 'agent-2', 'messageId', :dmid, 'stage', 'working')) c;
+SELECT pg_temp.ok(NOT EXISTS (SELECT 1 FROM jsonb_array_elements(c -> 'items') i WHERE i ->> 'messageId' = :dmid::text), 'list: câu đang xử lý không còn trong danh sách')
+  FROM pg_temp.worker('list', '{}') c;
+SELECT pg_temp.worker('answer', jsonb_build_object('messageId', :dmid, 'claimToken', :'dtok', 'answer', 'Chiến dịch chạy lại lúc 14:00.',
+  'answerJson', '{"tom_tat":"Chạy lại lúc 14:00."}'::jsonb, 'complete', true)) AS da \gset
+SELECT pg_temp.ok(:'da'::jsonb ->> 'status' = 'hoàn thành' AND (:'da'::jsonb ->> 'answeredAt')::timestamptz = m.answered_at AND m.completed_at = m.answered_at
+  AND m.answer = 'Chiến dịch chạy lại lúc 14:00.', 'answer + complete: trả về thời gian trả lời đã lưu') FROM public.ai_message m WHERE m.id = :dmid;
 
 -- 18. Bất biến dữ liệu sau toàn bộ kịch bản.
 SELECT pg_temp.ok(NOT EXISTS (

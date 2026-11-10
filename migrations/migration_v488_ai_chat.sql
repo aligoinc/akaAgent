@@ -636,7 +636,8 @@ BEGIN
 END
 $$;
 
--- 7. Hợp đồng của bộ trả lời (hộp đen): claim → progress → answer → complete | fail. Chỉ service_role/owner.
+-- 7. Hợp đồng của bộ trả lời (hộp đen): list (chỉ xem) | claim → progress → answer → complete | fail. Chỉ service_role/owner.
+-- claim nhận theo hàng đợi, hoặc đúng một câu khi có messageId; stage='working' thì vào thẳng 'đang tìm câu trả lời'.
 -- Lệnh ghi chỉ có hiệu lực khi còn giữ đúng claimToken: worker treo rồi chạy lại không ghi đè được kết quả mới.
 CREATE FUNCTION public.aka_agent_ai_chat_worker(p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -651,14 +652,21 @@ DECLARE
   r record;
   v_worker text; v_limit integer; v_lease integer; v_codes text[]; v_token uuid; v_rev bigint; v_n integer := 0;
   v_items jsonb := '[]'::jsonb; v_message_id bigint; v_thread_id bigint; v_status text; v_note text; v_answer text; v_json jsonb;
-  v_group_rules text; v_history jsonb; v_key text; v_code text; v_retry boolean; v_complete boolean;
+  v_group_rules text; v_history jsonb; v_key text; v_code text; v_retry boolean; v_complete boolean; v_working boolean;
 BEGIN
   IF jsonb_typeof(v_p) <> 'object' THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_invalid_request'; END IF;
 
-  IF p_action = 'claim' THEN
-    v_worker := left(btrim(coalesce(v_p ->> 'workerId', '')), 80);
-    IF v_worker = '' THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_worker_id_required'; END IF;
-    v_limit := private.aka_agent_ai_chat_int(v_p -> 'limit', 1, 1, 10);
+  IF p_action IN ('claim', 'list') THEN
+    IF p_action = 'claim' THEN
+      v_worker := left(btrim(coalesce(v_p ->> 'workerId', '')), 80);
+      IF v_worker = '' THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_worker_id_required'; END IF;
+      v_limit := private.aka_agent_ai_chat_int(v_p -> 'limit', 1, 1, 10);
+      v_message_id := private.aka_agent_ai_chat_id(v_p -> 'messageId');
+      IF v_p ? 'messageId' AND v_message_id IS NULL THEN RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'ai_chat_invalid_request'; END IF;
+      v_working := coalesce(v_p ->> 'stage', '') = 'working';
+    ELSE
+      v_limit := private.aka_agent_ai_chat_int(v_p -> 'limit', 20, 1, 50);
+    END IF;
     v_lease := private.aka_agent_ai_chat_int(v_p -> 'leaseSeconds', 120, 30, 900);
     IF jsonb_typeof(v_p -> 'projectCodes') = 'array' AND jsonb_array_length(v_p -> 'projectCodes') > 0 THEN
       SELECT array_agg(value) INTO v_codes FROM jsonb_array_elements_text(v_p -> 'projectCodes');
@@ -685,8 +693,24 @@ BEGIN
     IF private.aka_agent_ai_chat_setting('ai_chat.enabled', 'true') <> 'true' THEN
       RETURN jsonb_build_object('items', '[]'::jsonb, 'enabled', false, 'serverTime', clock_timestamp());
     END IF;
+    IF p_action = 'list' THEN
+      -- Chỉ xem: không đổi trạng thái, không tăng phiên bản. Câu cũ nhất đứng trước.
+      SELECT coalesce(jsonb_agg(q.item ORDER BY q.queued_at, q.id), '[]'::jsonb) INTO v_items
+        FROM (SELECT x.id, x.queued_at, jsonb_build_object(
+                'messageId', x.id, 'threadId', s.id, 'seq', x.seq, 'question', x.question, 'status', x.status, 'attempt', x.attempt_count,
+                'askedAt', x.asked_at, 'deadlineAt', x.deadline_at,
+                'project', jsonb_build_object('code', p.code, 'name', p.name),
+                'thread', jsonb_build_object('organizationId', s.organization_id, 'staffId', s.org_staff_id, 'campaignId', s.campaign_id,
+                  'campaignName', s.campaign_name, 'accountId', s.auto_account_id, 'accountName', s.account_name)) AS item
+                FROM public.ai_message x
+                JOIN public.ai_message_thread s ON s.id = x.thread_id
+                JOIN public.ai_project p ON p.id = s.project_id
+               WHERE x.status = 'chờ câu trả lời' AND x.deadline_at > v_now AND (v_codes IS NULL OR p.code = ANY (v_codes))
+               ORDER BY x.queued_at, x.id LIMIT v_limit) q;
+      RETURN jsonb_build_object('items', v_items, 'enabled', true, 'serverTime', clock_timestamp());
+    END IF;
     FOR r IN SELECT x.id, x.thread_id FROM public.ai_message x
-              WHERE x.status = 'chờ câu trả lời'
+              WHERE x.status = 'chờ câu trả lời' AND (v_message_id IS NULL OR x.id = v_message_id)
                 AND (v_codes IS NULL OR EXISTS (SELECT 1 FROM public.ai_message_thread s JOIN public.ai_project p ON p.id = s.project_id
                                                  WHERE s.id = x.thread_id AND p.code = ANY (v_codes)))
               ORDER BY x.queued_at, x.id LIMIT v_limit * 3 LOOP
@@ -696,8 +720,10 @@ BEGIN
       v_token := gen_random_uuid();
       v_rev := t.revision + 1;
       UPDATE public.ai_message
-         SET status = 'đang lấy thông tin câu hỏi', claim_token = v_token, lease_until = v_now + make_interval(secs => v_lease),
-             claimed_at = v_now, attempt_count = attempt_count + 1, worker_id = v_worker, thread_rev = v_rev, updated_at = v_now
+         SET status = CASE WHEN v_working THEN 'đang tìm câu trả lời' ELSE 'đang lấy thông tin câu hỏi' END,
+             claim_token = v_token, lease_until = v_now + make_interval(secs => v_lease),
+             claimed_at = v_now, started_at = CASE WHEN v_working THEN v_now END,
+             attempt_count = attempt_count + 1, worker_id = v_worker, thread_rev = v_rev, updated_at = v_now
        WHERE id = r.id AND status = 'chờ câu trả lời' AND deadline_at > v_now
       RETURNING * INTO m;
       CONTINUE WHEN NOT FOUND;
@@ -709,7 +735,7 @@ BEGIN
         INTO v_history
         FROM public.ai_message h WHERE h.thread_id = t.id AND h.seq < m.seq AND h.seq >= m.seq - 20 AND h.status = 'hoàn thành';
       v_items := v_items || jsonb_build_object(
-        'messageId', m.id, 'claimToken', v_token, 'threadId', t.id, 'seq', m.seq, 'question', m.question, 'attempt', m.attempt_count,
+        'messageId', m.id, 'claimToken', v_token, 'threadId', t.id, 'seq', m.seq, 'question', m.question, 'status', m.status, 'attempt', m.attempt_count,
         'askedAt', m.asked_at, 'deadlineAt', m.deadline_at, 'leaseUntil', m.lease_until,
         'project', jsonb_build_object('id', pr.id, 'code', pr.code, 'name', pr.name, 'version', pr.version, 'groupRules', coalesce(v_group_rules, ''),
           'rules', pr.rules, 'outputSchema', pr.output_schema, 'outputWebhookUrl', pr.output_webhook_url),
@@ -786,7 +812,7 @@ BEGIN
     UPDATE public.ai_message_thread
        SET revision = v_rev, last_message_status = v_status, last_message_at = CASE WHEN v_complete THEN v_now ELSE last_message_at END, updated_at = v_now
      WHERE id = t.id;
-    RETURN jsonb_build_object('ok', true, 'status', v_status, 'outputWebhookUrl', pr.output_webhook_url);
+    RETURN jsonb_build_object('ok', true, 'status', v_status, 'answeredAt', v_now, 'outputWebhookUrl', pr.output_webhook_url);
 
   ELSIF p_action = 'complete' THEN
     IF m.status <> 'đã có câu trả lời' THEN RETURN jsonb_build_object('ok', false, 'status', m.status, 'reason', 'no_answer'); END IF;
@@ -826,7 +852,7 @@ SELECT g.id, 'hoi-dap-chien-dich', 'Hỏi đáp chiến dịch',
   '{"type":"object","required":["tom_tat"],"properties":{"tom_tat":{"type":"string"},"nguyen_nhan":{"type":"array","items":{"type":"object","required":["noi_dung"],"properties":{"noi_dung":{"type":"string"},"bang_chung":{"type":"string"}}}},"cach_xu_ly":{"type":"array","items":{"type":"string"}},"can_chuyen_vien":{"type":"boolean"},"do_tin_cay":{"type":"string","enum":["cao","trung_binh","thap"]},"cau_hoi_lam_ro":{"type":"string"},"thoi_diem_du_lieu":{"type":"string"}}}'::jsonb,
   'Tại sao chiến dịch không chạy?',
   '["Tại sao chiến dịch không chạy?","Hôm nay chiến dịch đã gửi được bao nhiêu?","Vì sao có nhiều lượt thất bại?","Khi nào chiến dịch chạy tiếp?"]'::jsonb,
-  'admin_akabiz', 300, 10
+  'admin_akabiz', 1200, 10
 FROM g;
 
 -- 9. Quyền hàm: thu hồi mặc định (PUBLIC + anon/authenticated/service_role) rồi cấp đúng chỗ.
