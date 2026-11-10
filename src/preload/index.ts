@@ -49,6 +49,7 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
+import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -747,6 +748,10 @@ const electronAPI = {
 
   getAccountActionOverview: (accountId: number, actionCodes?: string[]): Promise<AccountActionOverview[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_OVERVIEW, accountId, actionCodes),
+
+  /** Tab "Hành động" của chi tiết chiến dịch: chỉ đọc, không tạo/reset trạng thái hành động. */
+  getCampaignAccountActions: (campaignId: number): Promise<CampaignAccountActionsResult> =>
+    ipcRenderer.invoke(CAMPAIGN_ACCOUNT_ACTIONS_IPC, campaignId),
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),
