@@ -71,7 +71,8 @@ import { isAgentDraft } from '../../../../shared/campaignAgent'
 import CampaignDraftRow from './CampaignDraftRow'
 import CampaignAssistantMenu from './CampaignAssistantMenu'
 import type { CampaignAssistantMode, CampaignAssistantOpenRequest } from '../../../../shared/campaignSupport'
-import { AI_CHAT_CAMPAIGN_GROUP, aiChatProjectsForCampaign, type AiChatAgents, type AiChatProject, type AiChatSnapshot } from '../../../../shared/aiChat'
+import { aiChatProjectsForCampaign, type AiChatAgents, type AiChatProject, type AiChatSnapshot } from '../../../../shared/aiChat'
+import { AI_CHAT_DESKTOP_GROUP } from '../../../../shared/aiChatDesktop'
 import { AiChatStartModal } from '../AiChat/AiChatStartModal'
 import { aiChatAttention, useAiChatAttention } from '../AiChat/aiChatStore'
 import { useCampaignDrafts } from './useCampaignDrafts'
@@ -6487,11 +6488,16 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       </div>
                     </div>
                     <div className="campaign-col col-assistant" onClick={e => e.stopPropagation()}>
-                      <CampaignAssistantMenu canDiagnose={/^(facebook|zalo|email)_/.test(campaign.actionId)} onSelect={mode => handleAskAssistant(campaign, mode)}
-                        agents={aiChatAgents ? aiChatProjectsForCampaign(aiChatAgents, AI_CHAT_CAMPAIGN_GROUP, { platform: campaign.actionId.split('_')[0], actionId: campaign.actionId }) : []}
-                        agentState={aiChatAgents ? (aiChatAttentionState.items.find(thread => thread.campaignId === campaign.id)?.pending === true ? 'pending'
-                          : aiChatAttentionState.items.some(thread => thread.campaignId === campaign.id && thread.unread) ? 'unread' : null) : null}
-                        onSelectAgent={project => handleAskAiAgent(campaign, project)} />
+                      {(() => {
+                        // Desktop có nhóm agent riêng; chấm báo chỉ tính hội thoại của các agent trong menu này
+                        // (hội thoại hỏi từ Web/iOS thuộc agent khác, vẫn xem được ở Hội thoại gần đây).
+                        const aiProjects = aiChatAgents ? aiChatProjectsForCampaign(aiChatAgents, AI_CHAT_DESKTOP_GROUP, { platform: campaign.actionId.split('_')[0], actionId: campaign.actionId }) : []
+                        const aiThreads = aiChatAttentionState.items.filter(thread => thread.campaignId === campaign.id && aiProjects.some(project => project.id === thread.projectId))
+                        return <CampaignAssistantMenu canDiagnose={/^(facebook|zalo|email)_/.test(campaign.actionId)} onSelect={mode => handleAskAssistant(campaign, mode)}
+                          agents={aiProjects}
+                          agentState={aiThreads.some(thread => thread.pending) ? 'pending' : aiThreads.some(thread => thread.unread) ? 'unread' : null}
+                          onSelectAgent={project => handleAskAiAgent(campaign, project)} />
+                      })()}
                     </div>
                     <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
                       <div className="campaign-action-dropdown">

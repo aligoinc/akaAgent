@@ -7,6 +7,13 @@ import {
 
 export const AI_CHAT_IPC = { call: 'ai-chat:call' } as const
 
+/**
+ * Nhóm agent của app Desktop (`ai_project_group.code`), tách khỏi nhóm của Web/iOS (`AI_CHAT_CAMPAIGN_GROUP`):
+ * câu hỏi gửi từ Desktop thuộc agent riêng (`hoi-dap-chien-dich-desktop`) nên có quy tắc và bộ trả lời riêng.
+ * Không lùi về nhóm của Web khi nhóm này trống: tắt agent Desktop là ẩn hẳn mục Trợ lý trên Desktop.
+ */
+export const AI_CHAT_DESKTOP_GROUP = 'akaagent-desktop'
+
 /** Đúng các action phía app của RPC `aka_agent_ai_chat`; main process từ chối mọi action khác. */
 export const AI_CHAT_DESKTOP_ACTIONS = [
   'agents', 'open', 'ask', 'retry', 'sync', 'sync_pending', 'threads', 'messages', 'cancel', 'rate', 'mark_read'
