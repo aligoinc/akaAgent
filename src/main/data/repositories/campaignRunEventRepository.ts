@@ -112,6 +112,62 @@ export async function listCampaignRunEventsByCampaign(
   return latest ? events.reverse() : events
 }
 
+/** Event block `fb_collect_search_groups` ghi cho mỗi thẻ nhóm của Facebook Search, `debug_data.rawText` là chữ gốc của thẻ. */
+export const FACEBOOK_SEARCH_GROUP_CARD_EVENT = 'extract_facebook_group_data'
+
+export interface FacebookSearchGroupCardEventRow {
+  id: number
+  createdAt: string
+  targetUrl: string
+  rawText: string
+}
+
+const TIMESTAMP_CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/
+
+/**
+ * Một trang thẻ nhóm đã nhận (status success) của một chiến dịch, mới tới cũ. Chỉ lấy 4 cột, không kéo cả
+ * debug_data/extracted_data. Keyset theo (created_at, id) trên index `(campaign_id, created_at, id)`, không OFFSET.
+ * Một lượt chạy ghi cả loạt thẻ trong một lệnh nên nhiều dòng trùng hệt created_at (đo 10/11/2026: 522 dòng) ⇒ phải
+ * xét thêm id. Điều kiện `created_at <= con trỏ` đứng riêng để Postgres đưa vào Index Cond và nhảy thẳng tới con trỏ;
+ * chỉ viết `created_at < X OR (created_at = X AND id < Y)` thì mỗi trang quét lại mọi dòng mới hơn.
+ */
+export async function listFacebookSearchGroupCardEventPage(
+  campaignId: number,
+  options: { before?: { createdAt: string; id: number } | null; limit: number; signal: AbortSignal }
+): Promise<FacebookSearchGroupCardEventRow[]> {
+  let query = client()
+    .from('auto_campaign_run_events')
+    .select('id,created_at,target_url,raw_text:debug_data->>rawText')
+    .eq('campaign_id', campaignId)
+    .eq('event_type', FACEBOOK_SEARCH_GROUP_CARD_EVENT)
+    .eq('status', 'success')
+  const before = options.before
+  if (before) {
+    if (!TIMESTAMP_CURSOR.test(before.createdAt) || !Number.isSafeInteger(before.id)) {
+      throw new Error('Con trỏ đọc log chạy không hợp lệ.')
+    }
+    // Giá trị có dấu ":" "." nên đặt trong ngoặc kép theo cú pháp lọc lồng của PostgREST.
+    query = query.lte('created_at', before.createdAt)
+      .or(`created_at.lt."${before.createdAt}",id.lt.${before.id}`)
+  }
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(options.limit)
+    .abortSignal(options.signal)
+
+  if (error) throw new Error(`Failed to list Facebook search group cards: ${error.message}`)
+  return (data || []).map(item => {
+    const row = item as Record<string, unknown>
+    return {
+      id: Number(row.id),
+      createdAt: String(row.created_at || ''),
+      targetUrl: String(row.target_url || ''),
+      rawText: typeof row.raw_text === 'string' ? row.raw_text : ''
+    }
+  })
+}
+
 export async function listCampaignRunEventsByInputData(inputDataId: number, limit = 500): Promise<CampaignRunEvent[]> {
   const { data, error } = await client()
     .from('auto_campaign_run_events')

@@ -1,5 +1,9 @@
 # Xuất Excel nhóm Facebook tìm theo từ khóa
 
+> **Hướng dẫn hiện hành (10/11/2026):** mẫu 6 cột dưới đây đã được mở rộng thành 14 cột (6 cột đầu giữ nguyên), app đọc
+> thêm chữ gốc thẻ nhóm trong log chạy lúc xuất. Xem [tải đủ dữ liệu nhóm](FACEBOOK_SEARCH_GROUP_EXPORT_PLAN.md).
+> Nội dung bên dưới là lịch sử 02/11.
+
 Ngày 02/11/2026. Thay đổi source Desktop ở tab **Data tìm được**, dành cho
 `facebook_find_data_search`. Chưa đóng gói hoặc phát hành bộ cài.
 

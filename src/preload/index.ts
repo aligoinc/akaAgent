@@ -17,6 +17,7 @@ import type { AccountActionStatusReportResult, AccountActionStatusReportDetailQu
 import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcResponses, type EffectivenessIpcResult } from '../shared/effectivenessIpc'
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
 import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
+import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest, type FoundFacebookGroupCardsResult } from '../shared/foundFacebookGroupCardsIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
 import { CAMPAIGN_LIMITS_AI_IPC, type LimitsAiRequest, type LimitsAiResult } from '../shared/campaignLimitsAi'
@@ -484,6 +485,10 @@ const electronAPI = {
     options?: CampaignRunEventListOptions
   ): Promise<CampaignRunEvent[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_CAMPAIGN_RUN_EVENTS_BY_CAMPAIGN, campaignId, options),
+
+  /** Xuất Excel "Data tìm được": chữ gốc thẻ nhóm trong log chạy của chiến dịch tìm bằng search. */
+  getFoundFacebookGroupCards: (request: FoundFacebookGroupCardsRequest): Promise<FoundFacebookGroupCardsResult> =>
+    ipcRenderer.invoke(FOUND_FACEBOOK_GROUP_CARDS_IPC, request),
 
   createCampaignDetail: (data: Partial<CampaignDetail>): Promise<CampaignDetail> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_CREATE_CAMPAIGN_DETAIL, data),
